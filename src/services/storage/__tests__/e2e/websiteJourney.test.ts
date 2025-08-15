@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeAll, afterAll } from '@jest/globals'
+import { describe, test, expect, beforeAll, afterAll } from 'vitest'
 import { CompleteStorageSystem } from '../../CompleteStorageSystem'
 import { Organization, Group, PersonalUser } from '../../../../types/collaboration'
 

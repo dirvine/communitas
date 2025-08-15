@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeAll, afterAll } from '@jest/globals'
+import { describe, test, expect, beforeAll, afterAll } from 'vitest'
 import { StoragePipeline } from '../../storagePipeline'
 import { YjsMarkdownEditor } from '../../yjsCollaboration'
 import { ReedSolomonEncoder } from '../../reedSolomon'

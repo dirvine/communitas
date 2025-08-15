@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach, afterEach } from '@jest/globals'
+import { describe, test, expect, beforeEach, afterEach } from 'vitest'
 import { MarkdownWebPublisher } from '../markdownPublisher'
 import { FourWordIdentity } from '../../../types/collaboration'
 import { DHTStorage } from '../dhtStorage'

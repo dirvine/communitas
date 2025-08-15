@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach, afterEach } from '@jest/globals'
+import { describe, test, expect, beforeEach, afterEach } from 'vitest'
 import { DHTStorage, EncryptedBlock, BlockMetadata } from '../dhtStorage'
 import { FourWordIdentity } from '../../../types/collaboration'
 import * as crypto from 'crypto'

@@ -478,7 +478,7 @@ export class MarkdownWebPublisher {
   }
 
   private computeChecksum(data: Uint8Array): string {
-    return crypto.createHash('blake3', { outputLength: 32 })
+    return crypto.createHash('sha256')
       .update(data)
       .digest('hex')
   }

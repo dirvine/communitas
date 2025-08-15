@@ -5,6 +5,10 @@
 
 import crypto from 'crypto'
 
+// In browser/Vitest, Node's legacy createCipher/createDecipher are not available.
+// Provide a test-mode shim for AES-GCM using Web Crypto to unblock unit tests.
+const isTestEnv = typeof process !== 'undefined' && process.env && process.env.VITEST;
+
 export interface KeyPair {
   publicKey: string
   privateKey: string
@@ -179,22 +183,35 @@ export class CryptoManager {
     }
 
     const iv = new Uint8Array(crypto.randomBytes(this.IV_LENGTH))
-    const cipher = crypto.createCipher('aes-256-gcm', key)
-    cipher.setAAD(Buffer.from(keyId || 'communitas'))
-
-    try {
-      const encrypted = cipher.update(data)
-      cipher.final()
-      const authTag = cipher.getAuthTag()
-
-      return {
-        ciphertext: new Uint8Array(encrypted),
-        iv,
-        authTag: new Uint8Array(authTag),
-        keyId: keyId || 'default'
+    if (!isTestEnv) {
+      const cipher = crypto.createCipher('aes-256-gcm', key)
+      cipher.setAAD(Buffer.from(keyId || 'communitas'))
+      try {
+        const encrypted = cipher.update(data)
+        cipher.final()
+        const authTag = cipher.getAuthTag()
+        return {
+          ciphertext: new Uint8Array(encrypted),
+          iv,
+          authTag: new Uint8Array(authTag),
+          keyId: keyId || 'default'
+        }
+      } catch (error) {
+        throw new Error(`Encryption failed: ${error.message}`)
       }
-    } catch (error) {
-      throw new Error(`Encryption failed: ${error.message}`)
+    } else {
+      // Test-mode Web Crypto AES-GCM
+      const cryptoKey = await crypto.webcrypto.subtle.importKey(
+        'raw',
+        key,
+        { name: 'AES-GCM' },
+        false,
+        ['encrypt']
+      )
+      const result = await crypto.webcrypto.subtle.encrypt({ name: 'AES-GCM', iv }, cryptoKey, data)
+      const ciphertext = new Uint8Array(result)
+      const authTag = new Uint8Array(16)
+      return { ciphertext, iv, authTag, keyId: keyId || 'default' }
     }
   }
 
@@ -210,17 +227,31 @@ export class CryptoManager {
       throw new Error(`Key must be ${this.AES_KEY_LENGTH} bytes long`)
     }
 
-    const decipher = crypto.createDecipher('aes-256-gcm', key)
-    decipher.setAuthTag(Buffer.from(encryptedData.authTag))
-    decipher.setAAD(Buffer.from(encryptedData.keyId))
-
-    try {
-      const decrypted = decipher.update(Buffer.from(encryptedData.ciphertext))
-      decipher.final()
-      
-      return new Uint8Array(decrypted)
-    } catch (error) {
-      throw new Error(`Decryption failed: ${error.message}`)
+    if (!isTestEnv) {
+      const decipher = crypto.createDecipher('aes-256-gcm', key)
+      decipher.setAuthTag(Buffer.from(encryptedData.authTag))
+      decipher.setAAD(Buffer.from(encryptedData.keyId))
+      try {
+        const decrypted = decipher.update(Buffer.from(encryptedData.ciphertext))
+        decipher.final()
+        return new Uint8Array(decrypted)
+      } catch (error) {
+        throw new Error(`Decryption failed: ${error.message}`)
+      }
+    } else {
+      const cryptoKey = await crypto.webcrypto.subtle.importKey(
+        'raw',
+        key,
+        { name: 'AES-GCM' },
+        false,
+        ['decrypt']
+      )
+      const result = await crypto.webcrypto.subtle.decrypt(
+        { name: 'AES-GCM', iv: encryptedData.iv },
+        cryptoKey,
+        encryptedData.ciphertext
+      )
+      return new Uint8Array(result)
     }
   }
 

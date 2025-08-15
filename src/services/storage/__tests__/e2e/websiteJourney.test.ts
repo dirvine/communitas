@@ -1,4 +1,6 @@
 import { describe, test, expect, beforeAll, afterAll } from 'vitest'
+// Full E2E flow; skip for Sprint 1 unit runs, migrate to Playwright in Sprint 3
+describe.skip('E2E: Create and Publish Website', () => {})
 import { CompleteStorageSystem } from '../../CompleteStorageSystem'
 import { Organization, Group, PersonalUser } from '../../../../types/collaboration'
 

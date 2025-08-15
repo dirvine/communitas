@@ -467,7 +467,7 @@ export class StoragePipeline extends EventEmitter {
 
   private computeChecksum(data: Uint8Array): string {
     const crypto = require('crypto')
-    return crypto.createHash('blake3', { outputLength: 32 }).update(data).digest('hex')
+    return crypto.createHash('sha256').update(data).digest('hex')
   }
 
   private async findFileManifest(fileId: string): Promise<FileManifest> {

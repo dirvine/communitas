@@ -277,7 +277,7 @@ export class DHTStorage extends EventEmitter {
   }
 
   async computeHash(data: Uint8Array): Promise<string> {
-    return crypto.createHash('blake3', { outputLength: 32 })
+    return crypto.createHash('sha256')
       .update(data)
       .digest('hex')
   }

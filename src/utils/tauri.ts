@@ -1,12 +1,9 @@
 // Tauri context detection and utilities
 
 export const isTauriApp = (): boolean => {
-  // Always return true to show full UI in both browser and Tauri app
-  return true;
-  
-  // Original logic (disabled for now):
-  // return typeof window !== 'undefined' && 
-  //        typeof (window as any).__TAURI__ !== 'undefined';
+  // Detect real Tauri runtime; tests/browser should be false
+  return typeof window !== 'undefined' && 
+         typeof (window as any).__TAURI__ !== 'undefined';
 };
 
 export const getTauriApi = () => {

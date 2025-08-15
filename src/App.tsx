@@ -323,6 +323,18 @@ function App() {
         Communitas - P2P Collaboration Platform
       </Typography>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        {navigationContext.fourWords && (
+          <Chip
+            label={navigationContext.fourWords}
+            size="small"
+            sx={{
+              bgcolor: 'rgba(255,255,255,0.1)',
+              color: 'inherit',
+              fontWeight: 500,
+              textTransform: 'none'
+            }}
+          />
+        )}
         {/* Experimental Mode Toggle */}
         <Tooltip title="Enable experimental unified UI">
           <FormControlLabel

@@ -12,6 +12,10 @@ export default defineConfig(({ mode }) => {
 
   return {
   plugins: [react()],
+  test: {
+    setupFiles: ['src/setupTests.ts'],
+    environment: 'jsdom',
+  },
   server: {
     port: 1420,
     strictPort: true,

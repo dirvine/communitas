@@ -50,6 +50,7 @@ export class DHTStorage extends EventEmitter {
   private keyId: string
   private connectedNodes = new Map<string, DHTNode>()
   private storedBlocks = new Map<string, EncryptedBlock & { metadata?: BlockMetadata }>()
+  private metadataIndex: Array<{ blockId: string; metadata: BlockMetadata }> = []
   private isConnected = false
 
   constructor(config: DHTConfig) {
@@ -140,6 +141,7 @@ export class DHTStorage extends EventEmitter {
       block.metadata = metadata
       this.storedBlocks.set(blockId, block)
     }
+    this.metadataIndex.push({ blockId, metadata })
     
     return blockId
   }
@@ -156,18 +158,10 @@ export class DHTStorage extends EventEmitter {
 
   // Node discovery
   async findNodes(blockId: string): Promise<DHTNode[]> {
-    // Simulate finding nodes that store the block
-    const nodes: DHTNode[] = []
-    
-    for (const [nodeId, node] of this.connectedNodes) {
-      // Simple hash-based routing simulation
-      const distance = this.computeDistance(blockId, nodeId)
-      if (distance < this.replicationFactor) {
-        nodes.push(node)
-      }
-    }
-    
-    return nodes
+    const ranked = Array.from(this.connectedNodes.entries())
+      .map(([nodeId, node]) => ({ node, distance: this.computeDistance(blockId, nodeId) }))
+      .sort((a, b) => a.distance - b.distance)
+    return ranked.slice(0, this.replicationFactor).map(r => r.node)
   }
 
   // SECURITY: Secure encryption methods using cryptoManager
@@ -191,7 +185,7 @@ export class DHTStorage extends EventEmitter {
       throw new Error('Key pair not found for encryption')
     }
     
-    return {
+    const result: EncryptedBlock & { nonce?: Uint8Array } = {
       encryptedData: encryptionResult.ciphertext,
       iv: encryptionResult.iv,
       authTag: encryptionResult.authTag,
@@ -199,6 +193,8 @@ export class DHTStorage extends EventEmitter {
       keyId: this.keyId,
       publicKey: keyPair.publicKey
     }
+    ;(result as any).nonce = encryptionResult.iv
+    return result
   }
 
   async decrypt(block: EncryptedBlock, key?: Uint8Array): Promise<Uint8Array> {
@@ -309,18 +305,12 @@ export class DHTStorage extends EventEmitter {
   // Metadata indexing
   async findByMimeType(mimeType: string): Promise<QueryResult[]> {
     const results: QueryResult[] = []
-    
-    for (const [blockId, block] of this.storedBlocks) {
-      if (block.metadata?.mimeType === mimeType) {
-        const nodes = await this.findNodes(blockId)
-        results.push({
-          blockId,
-          nodes,
-          metadata: block.metadata
-        })
+    for (const entry of this.metadataIndex) {
+      if (entry.metadata.mimeType === mimeType) {
+        const nodes = await this.findNodes(entry.blockId)
+        results.push({ blockId: entry.blockId, nodes, metadata: entry.metadata })
       }
     }
-    
     return results
   }
 

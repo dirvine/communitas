@@ -19,7 +19,7 @@ use tokio::sync::RwLock;
 // Note: timeout import removed as it's not used
 // use tokio::time::timeout;
 
-use saorsa_core::dht::skademlia::SKademlia;
+use crate::dht_facade::DhtFacade;
 use super::reed_solomon_manager::{Shard, ShardDistributionPlan, EnhancedReedSolomonManager};
 
 /// Message types for shard communication
@@ -79,9 +79,8 @@ pub enum DistributionResult {
 
 /// Manages shard distribution across group members via P2P network
 #[derive(Debug)]
-pub struct ShardDistributor {
-    #[allow(dead_code)]
-    dht: Arc<SKademlia>,
+pub struct ShardDistributor<F: DhtFacade + 'static> {
+    dht: Arc<F>,
     reed_solomon: Arc<EnhancedReedSolomonManager>,
     active_distributions: Arc<RwLock<HashMap<String, DistributionStatus>>>,
     shard_cache: Arc<RwLock<HashMap<String, Vec<Shard>>>>,
@@ -90,9 +89,9 @@ pub struct ShardDistributor {
     max_retries: usize,
 }
 
-impl ShardDistributor {
+impl<F: DhtFacade + 'static> ShardDistributor<F> {
     pub fn new(
-        dht: Arc<SKademlia>,
+        dht: Arc<F>,
         reed_solomon: Arc<EnhancedReedSolomonManager>,
     ) -> Self {
         Self {
@@ -367,10 +366,11 @@ impl ShardDistributor {
             shard.index, member_id, shard.group_id
         );
 
+        let sender = self.dht.self_id().await;
         let message = ShardMessage::StoreShardRequest {
             shard: shard.clone(),
             group_id: shard.group_id.clone(),
-            sender_id: "self".to_string(), // TODO: Get actual node ID
+            sender_id: sender,
         };
 
         // Serialize message for network transmission
@@ -425,11 +425,12 @@ impl ShardDistributor {
     ) -> Result<Vec<Shard>> {
         debug!("Requesting shards from member {} for group {}", member_id, group_id);
 
+        let requester = self.dht.self_id().await;
         let message = ShardMessage::RetrieveShardRequest {
             group_id: group_id.clone(),
             data_id: data_id.clone(),
             shard_index: usize::MAX, // Request all shards
-            requester_id: "self".to_string(), // TODO: Get actual node ID
+            requester_id: requester,
         };
 
         let message_data = serde_json::to_vec(&message)
@@ -489,9 +490,12 @@ impl ShardDistributor {
         member_id: &str,
         message_data: &[u8],
     ) -> Result<Vec<u8>> {
-        // TODO: Implement proper DHT messaging once send_message method is available
-        debug!("Would send message to member {}: {} bytes", member_id, message_data.len());
-        Ok(vec![]) // Placeholder response
+        let response = self
+            .dht
+            .send(member_id.to_string(), "storage/shard".into(), message_data.to_vec())
+            .await
+            .map_err(|e| anyhow::anyhow!("DHT send failed: {}", e))?;
+        Ok(response)
     }
 
     fn deduplicate_shards(&self, shards: Vec<Shard>) -> Vec<Shard> {

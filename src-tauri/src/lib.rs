@@ -25,6 +25,8 @@ pub mod contacts;
 pub mod files;
 pub mod groups;
 pub mod identity;
+pub mod error;
+pub mod dht_facade;
 pub mod storage;
 pub mod stores;
 

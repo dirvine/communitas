@@ -31,7 +31,7 @@ pub mod metrics;
 pub mod entity_storage;  // Entity-aware storage for all 5 entity types
 
 use crate::identity::IdentityManager;
-use saorsa_core::dht::skademlia::SKademlia;
+use crate::dht_facade::DhtFacade;
 
 /// Storage allocation policy: Local:DHT:Public = 1:1:2
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -92,14 +92,14 @@ pub enum StorageClass {
 /// Production storage manager that coordinates all storage operations
 #[allow(dead_code)]
 #[derive(Debug)]
-pub struct ProductionStorageManager {
+pub struct ProductionStorageManager<F: DhtFacade + 'static> {
     allocation: StorageAllocation,
     usage: Arc<RwLock<StorageUsage>>,
-    dht: Arc<SKademlia>,
+    dht: Arc<F>,
     reed_solomon: Arc<reed_solomon_manager::EnhancedReedSolomonManager>,
     capacity_manager: Arc<capacity_manager::CapacityManager>,
     local_storage: Arc<local_storage::LocalStorageManager>,
-    shard_distributor: Arc<shard_distributor::ShardDistributor>,
+    shard_distributor: Arc<shard_distributor::ShardDistributor<F>>,
     metrics: Arc<metrics::StorageMetrics>,
     storage_root: PathBuf,
     identity_manager: Arc<IdentityManager>,

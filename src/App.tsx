@@ -70,6 +70,7 @@ import {
 import { TauriProvider } from './contexts/TauriContext'
 import { BrowserFallback } from './components/BrowserFallback'
 import { isTauriApp } from './utils/tauri'
+import { ensureIdentity } from './utils/identity'
 
 // WebRTC Communication
 import { SimpleCommunicationHub } from './components/webrtc'
@@ -140,7 +141,7 @@ function App() {
     fourWords?: string
   }>({
     mode: 'personal',
-    fourWords: 'ocean-forest-moon-star', // TODO: Generate from user identity
+    fourWords: undefined,
   })
 
   const [currentTab, setCurrentTab] = useState(0)
@@ -162,6 +163,13 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(defaultOpen)
 
   useEffect(() => {
+    // Load or generate identity
+    ensureIdentity().then(four => {
+      setNavigationContext(prev => ({ ...prev, fourWords: four }))
+    }).catch(() => {
+      // leave undefined; UI can handle missing identity
+    })
+
     // Initialize feature flags based on experimental mode
     if (experimentalMode) {
       featureFlags.enable('unified-design-system')
@@ -278,7 +286,7 @@ function App() {
     } else if (path === '/') {
       setNavigationContext({
         mode: 'personal',
-        fourWords: 'ocean-forest-moon-star',
+        fourWords: navigationContext.fourWords,
       })
     }
   }

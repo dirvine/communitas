@@ -28,6 +28,8 @@ mod geographic_routing;
 mod groups;
 mod identity;
 mod identity_commands;
+mod error;
+mod dht_facade;
 mod mcp_plugin;
 mod secure_storage;
 mod security;

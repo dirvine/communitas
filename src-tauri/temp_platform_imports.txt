@@ -1,0 +1,13 @@
+// Platform-specific implementations
+
+#[cfg(target_os = "macos")]
+use super::macos_keychain::MacOSKeychain;
+
+#[cfg(target_os = "windows")]
+use super::windows_credential_manager::WindowsCredentialManager;
+
+#[cfg(target_os = "linux")]
+use super::linux_secret_service::LinuxSecretService;
+
+use super::encrypted_file_storage::EncryptedFileStorage;
+EOF < /dev/null

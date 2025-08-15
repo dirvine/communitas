@@ -1,0 +1,123 @@
+//! Communitas Tauri Application Library
+//!
+//! This library provides the core functionality for the Communitas app including:
+//! - DHT integration for distributed content storage
+//! - Identity management with secure storage
+//! - P2P networking capabilities
+//! - Cross-platform native integrations
+
+pub mod dht;
+pub mod identity;
+
+// Re-export main types for easier access
+pub use dht::{Dht, DhtConfig, DhtStatus, NodeId, ContentId};
+pub use identity::{CommunidentityManager, identity_manager::IdentityInfo};
+
+use anyhow::Result;
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+
+use tracing::info;
+
+/// Main application state
+#[derive(Clone)]
+pub struct AppState {
+    /// DHT instance
+    pub dht: Option<Arc<Dht>>,
+    /// Identity manager
+    pub identity_manager: Arc<CommunidentityManager>,
+    /// Application configuration
+    pub config: AppConfig,
+}
+
+/// Application configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AppConfig {
+    /// DHT configuration
+    pub dht: DhtConfig,
+    /// Bootstrap nodes for DHT
+    pub bootstrap_nodes: Vec<String>,
+    /// Enable development mode features
+    pub development_mode: bool,
+    /// Logging level
+    pub log_level: String,
+}
+
+impl Default for AppConfig {
+    fn default() -> Self {
+        Self {
+            dht: DhtConfig::default(),
+            bootstrap_nodes: vec![
+                "quic.saorsalabs.com:8888".to_string(),
+            ],
+            development_mode: true,
+            log_level: "info".to_string(),
+        }
+    }
+}
+
+impl AppState {
+    /// Initialize the application state
+    pub async fn new() -> Result<Self> {
+        info!("Initializing Communitas application state");
+        
+        let config = AppConfig::default();
+        let core_config = saorsa_core::config::Config::default();
+        let identity_manager = Arc::new(CommunidentityManager::new(core_config).await?);
+        
+        Ok(Self {
+            dht: None,
+            identity_manager,
+            config,
+        })
+    }
+    
+    /// Initialize DHT with the current identity
+    pub async fn initialize_dht(&mut self) -> Result<()> {
+        info!("Initializing DHT system");
+        
+        // Get or create identity
+        let identity_info = self.identity_manager.get_current_identity().await
+            .ok_or_else(|| anyhow::anyhow!("No identity found"))?;
+        
+        // Create node ID from identity
+        let node_id = NodeId::from_hash(blake3::hash(identity_info.public_key_hex.as_bytes()));
+        
+        // Parse bootstrap nodes
+        let mut dht_config = self.config.dht.clone();
+        for bootstrap_str in &self.config.bootstrap_nodes {
+            if let Ok(addr) = bootstrap_str.parse() {
+                dht_config.bootstrap_nodes.push(addr);
+            }
+        }
+        
+        // Create and start DHT
+        let dht = Arc::new(Dht::new(node_id, dht_config).await?);
+        dht.start().await?;
+        
+        self.dht = Some(dht);
+        info!("DHT system initialized successfully");
+        
+        Ok(())
+    }
+    
+    /// Get DHT status
+    pub async fn dht_status(&self) -> Option<DhtStatus> {
+        if let Some(dht) = &self.dht {
+            Some(dht.status().await)
+        } else {
+            None
+        }
+    }
+    
+    /// Shutdown the application gracefully
+    pub async fn shutdown(&self) -> Result<()> {
+        info!("Shutting down Communitas application");
+        
+        if let Some(dht) = &self.dht {
+            dht.shutdown().await?;
+        }
+        
+        Ok(())
+    }
+}

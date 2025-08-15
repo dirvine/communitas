@@ -1,0 +1,16 @@
+[
+  {
+    "session_id": "8a446fe4-4338-4a70-abf7-cddb841b9f29",
+    "transcript_path": "/Users/davidirvine/.claude/projects/-Users-davidirvine-Desktop-Devel-projects-p2p/8a446fe4-4338-4a70-abf7-cddb841b9f29.jsonl",
+    "cwd": "/Users/davidirvine/Desktop/Devel/projects/p2p/apps/communitas/apps/communitas",
+    "hook_event_name": "Stop",
+    "stop_hook_active": false
+  },
+  {
+    "session_id": "e903588c-5c0a-4874-a5e1-543e59b9d6e2",
+    "transcript_path": "/Users/davidirvine/.claude/projects/-Users-davidirvine-Desktop-Devel-projects-p2p/e903588c-5c0a-4874-a5e1-543e59b9d6e2.jsonl",
+    "cwd": "/Users/davidirvine/Desktop/Devel/projects/p2p/apps/communitas/apps/communitas",
+    "hook_event_name": "Stop",
+    "stop_hook_active": false
+  }
+]

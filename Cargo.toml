@@ -1,0 +1,71 @@
+[package]
+name = "communitas"
+# Fixed four-word-networking import dependency issue
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+description = "A diagnostic chat application for the P2P Foundation network"
+keywords = ["p2p", "chat", "diagnostics", "networking", "tauri"]
+categories = ["network-programming", "command-line-utilities"]
+include = [
+    "src/**/*",
+    "Cargo.toml",
+    "README.md",
+    "SPECIFICATION.md",
+    "DESIGN.md",
+]
+
+# For crates.io publishing
+[package.metadata.tauri]
+identifier = "com.p2pfoundation.communitas"
+
+[dependencies]
+# P2P Foundation
+saorsa-core = { version = "0.2.6" }
+
+# Async runtime
+tokio = { version = "1.35", features = ["full"] }
+tokio-stream = "0.1"
+
+# CLI
+clap = { version = "4.5", features = ["derive"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Storage
+sled = "0.34"
+chrono = "0.4"
+
+# Property testing
+proptest = { version = "1.4", optional = true }
+
+# Additional dependencies
+uuid = { version = "1.6", features = ["v4", "serde"] }
+dirs = "5.0"
+
+# Tauri will be added when we set up the Tauri project
+# tauri = { version = "2.0.0-alpha", features = ["api-all"] }
+
+[dev-dependencies]
+proptest = "1.4"
+tempfile = "3.8"
+
+[features]
+default = []
+test-harness = ["proptest"]
+
+[lints]
+workspace = true

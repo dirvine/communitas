@@ -1,0 +1,81 @@
+body {
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  height: 100vh;
+  overflow: hidden;
+}
+
+#root {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Collaborative Editor Styles */
+.collaborator-cursor {
+  border-left: 2px solid currentColor !important;
+  opacity: 0.8;
+}
+
+.collaborator-selection {
+  opacity: 0.3;
+}
+
+.collaborator-glyph {
+  width: 4px !important;
+  background-color: currentColor;
+  border-radius: 2px;
+}
+
+/* Monaco Editor enhancements */
+.monaco-editor {
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace !important;
+}
+
+.monaco-editor .line-numbers {
+  color: rgba(0, 0, 0, 0.4) !important;
+}
+
+.monaco-editor.vs-dark .line-numbers {
+  color: rgba(255, 255, 255, 0.4) !important;
+}
+
+/* Responsive improvements */
+@media (max-width: 600px) {
+  .monaco-editor .monaco-scrollable-element > .scrollbar > .slider {
+    width: 8px !important;
+  }
+  
+  .monaco-editor .minimap {
+    display: none !important;
+  }
+}
+
+/* Document card hover effects */
+.document-card {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.document-card:hover {
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.12) !important;
+}
+
+/* Collaboration indicators */
+.collaboration-indicator {
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.7; }
+  100% { opacity: 1; }
+}

@@ -1,0 +1,58 @@
+# Communitas Bootstrap Node Configuration
+
+[network]
+# Listen on all interfaces, port 8888
+listen_address = "0.0.0.0:8888"
+public_address = "bootstrap.communitas.app:8888"
+
+# Bootstrap mode - this node IS the bootstrap
+bootstrap_mode = true
+bootstrap_peers = []
+
+# Connection limits
+max_connections = 1000
+connection_timeout = 30
+
+[dht]
+# DHT configuration for bootstrap node
+replication_factor = 8
+bucket_size = 20
+refresh_interval = 300
+
+# Storage path for DHT data
+storage_path = "/var/lib/saorsa/dht"
+
+[identity]
+# Bootstrap node identity
+node_name = "communitas-bootstrap"
+identity_file = "/var/lib/saorsa/identity.key"
+
+# Four-word addressing
+enable_four_word_addressing = true
+
+[logging]
+level = "info"
+file = "/var/log/saorsa/bootstrap.log"
+max_file_size = "100MB"
+max_files = 10
+
+[monitoring]
+# Health check endpoint
+health_check_port = 8888
+metrics_enabled = true
+
+[security]
+# TLS configuration
+tls_cert = "/etc/ssl/certs/communitas.crt"
+tls_key = "/etc/ssl/private/communitas.key"
+
+# Rate limiting
+rate_limit_per_ip = 100
+rate_limit_window = 60
+
+[persistence]
+# Database for persistent storage
+database_path = "/var/lib/saorsa/data"
+backup_interval = 3600
+max_backups = 24
+EOF < /dev/null

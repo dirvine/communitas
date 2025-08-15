@@ -129,7 +129,7 @@ impl EnhancedReedSolomonManager {
             group_id, config.data_shards, config.parity_shards
         );
 
-        // Create Reed Solomon codec
+        // Create Reed Solomon codec (saorsa-fec)
         let fec_params = FecParams::new(config.data_shards as u16, config.parity_shards as u16)
             .context("Failed to create FEC parameters")?;
         let codec = FecCodec::new(fec_params)
@@ -209,7 +209,7 @@ impl EnhancedReedSolomonManager {
             group_id, available_shards.len()
         );
 
-        // Create Reed Solomon codec
+        // Create Reed Solomon codec (saorsa-fec)
         let fec_params = FecParams::new(config.data_shards as u16, config.parity_shards as u16)
             .context("Failed to create FEC parameters")?;
         let codec = FecCodec::new(fec_params)

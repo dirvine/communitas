@@ -99,8 +99,8 @@ mime_guess = "2.0"
 keyring = "3.2"
 base64 = "0.22"
 
-# Reed Solomon FEC for storage
-saorsa-fec = { git = "https://github.com/dirvine/saorsa-fec-foundation.git" }
+# Reed Solomon FEC for storage (from crates.io)
+saorsa-fec = ">=0.1, <1.0"
 
 # Security and validation dependencies
 validator = { version = "0.18", features = ["derive"] }

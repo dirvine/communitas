@@ -36,6 +36,12 @@ impl LocalDht {
         let mut peers = self.peers.write().await;
         if !peers.contains(&peer_id) { peers.push(peer_id); }
     }
+
+    /// Test helper: drain all messages for a peer
+    pub async fn drain_inbox(&self, peer_id: &str) -> Vec<Vec<u8>> {
+        let mut inboxes = self.inboxes.write().await;
+        inboxes.remove(peer_id).unwrap_or_default()
+    }
 }
 
 #[async_trait]

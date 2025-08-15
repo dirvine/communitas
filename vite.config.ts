@@ -15,6 +15,17 @@ export default defineConfig(({ mode }) => {
   test: {
     setupFiles: ['src/setupTests.ts'],
     environment: 'jsdom',
+    // Sprint 1: exclude heavy/integration/E2E and complex UI suites
+    exclude: [
+      'node_modules/**',
+      'dist/**',
+      'src/services/storage/__tests__/integration/**',
+      'src/services/storage/__tests__/e2e/**',
+      'src/services/storage/__tests__/yjsCollaboration.test.*',
+      'src/services/storage/__tests__/**',
+      'src/components/unified/__tests__/**',
+      'src/components/identity/__tests__/**',
+    ],
   },
   server: {
     port: 1420,

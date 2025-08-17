@@ -241,7 +241,7 @@ impl SecureStorageManager {
         let key_entry = Entry::new(SERVICE_NAME, &format!("{}_{}_key", self.user_id, key_id))
             .context("Failed to create derived key entry")?;
             
-        if let Err(e) = key_entry.delete_password() {
+        if let Err(e) = key_entry.set_password("") {
             warn!("Failed to delete key data for {}: {}", key_id, e);
         }
 
@@ -249,7 +249,7 @@ impl SecureStorageManager {
         let metadata_entry = Entry::new(SERVICE_NAME, &format!("{}_{}_meta", self.user_id, key_id))
             .context("Failed to create key metadata entry")?;
             
-        if let Err(e) = metadata_entry.delete_password() {
+        if let Err(e) = metadata_entry.set_password("") {
             warn!("Failed to delete key metadata for {}: {}", key_id, e);
         }
 
@@ -264,21 +264,21 @@ impl SecureStorageManager {
         // Delete master key
         let master_key_entry = Entry::new(SERVICE_NAME, &format!("{}_master_key", self.user_id))
             .context("Failed to create master key entry")?;
-        if let Err(e) = master_key_entry.delete_password() {
+        if let Err(e) = master_key_entry.set_password("") {
             warn!("Failed to delete master key: {}", e);
         }
 
         // Delete key pair
         let key_pair_entry = Entry::new(SERVICE_NAME, &format!("{}_key_pair", self.user_id))
             .context("Failed to create key pair entry")?;
-        if let Err(e) = key_pair_entry.delete_password() {
+        if let Err(e) = key_pair_entry.set_password("") {
             warn!("Failed to delete key pair: {}", e);
         }
 
         // Delete metadata
         let metadata_entry = Entry::new(SERVICE_NAME, &format!("{}_metadata", self.user_id))
             .context("Failed to create metadata entry")?;
-        if let Err(e) = metadata_entry.delete_password() {
+        if let Err(e) = metadata_entry.set_password("") {
             warn!("Failed to delete metadata: {}", e);
         }
 
@@ -294,7 +294,7 @@ impl SecureStorageManager {
                 // Try to set and delete a test credential
                 match entry.set_password("test") {
                     Ok(_) => {
-                        let _ = entry.delete_password(); // Clean up
+                        let _ = entry.set_password(""); // Clean up
                         true
                     }
                     Err(_) => false,

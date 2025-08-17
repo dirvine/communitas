@@ -1,598 +1,639 @@
-// Tauri commands for rich messaging integration
-use saorsa_core::messaging::{
-    MessagingService, SendMessageRequest, RichMessage, MessageContent, 
-    ChannelId, MessageId, ThreadId, MarkdownContent, Attachment,
-    SearchQuery, DateRange, ReactionManager, ThreadManager,
-    MessageComposer, MessageSearch, MediaProcessor, RealtimeSync,
-    SecureMessaging, DhtClient, MessageStore,
-};
-use saorsa_core::identity::FourWordAddress;
-use serde::{Deserialize, Serialize};
-use std::sync::Arc;
-use tokio::sync::RwLock;
-use tauri::State;
-use anyhow::Result;
-use chrono::{DateTime, Utc};
+// Copyright (c) 2025 Saorsa Labs Limited
+
+// This file is part of the Saorsa P2P network.
+
+// Licensed under the AGPL-3.0 license:
+// <https://www.gnu.org/licenses/agpl-3.0.html>
+
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
+
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+
+//! # Messaging Commands for Tauri Integration
+//! 
+//! Provides secure P2P messaging functionality with saorsa-fec encryption.
+//! This module implements the Tauri command interface for the messaging system,
+//! ensuring all encryption operations go through the saorsa-fec crate.
+
 use std::collections::HashMap;
+use std::sync::Mutex;
+use tauri::State;
+use serde::{Deserialize, Serialize};
+use anyhow::{Result, Context};
+use tracing::{info, warn, error, debug};
+use chrono::{DateTime, Utc};
+use uuid::Uuid;
 
-/// Application state for messaging
-pub struct MessagingState {
-    pub service: Arc<RwLock<MessagingService>>,
-    pub channels: Arc<RwLock<HashMap<String, ChannelInfo>>>,
-    pub presence: Arc<RwLock<HashMap<String, UserPresence>>>,
+use crate::secure_fec::{SecureFecManager, FecConfig};
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD as BASE64;
+use blake3;
+
+/// Error types for messaging operations
+#[derive(Debug, thiserror::Error)]
+pub enum MessagingError {
+    #[error("Encryption failed: {0}")]
+    EncryptionFailed(String),
+    
+    #[error("Decryption failed: {0}")]
+    DecryptionFailed(String),
+    
+    #[error("Message not found")]
+    MessageNotFound,
+    
+    #[error("Invalid message format: {0}")]
+    InvalidFormat(String),
+    
+    #[error("Storage error: {0}")]
+    StorageError(String),
+    
+    #[error("Authentication failed: {0}")]
+    AuthenticationFailed(String),
+    
+    #[error("Permission denied: {0}")]
+    PermissionDenied(String),
 }
 
+/// Simple message structure for secure messaging
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChannelInfo {
+pub struct SecureMessage {
     pub id: String,
-    pub name: String,
-    #[serde(rename = "type")]
-    pub channel_type: String,
-    pub avatar: Option<String>,
-    pub last_message: Option<LastMessage>,
-    pub unread_count: u32,
-    pub members: Vec<String>,
-    pub is_online: bool,
-    pub is_muted: bool,
-    pub is_pinned: bool,
-    pub four_word_address: Option<String>,
+    pub sender: String,
+    pub recipient: Option<String>,
+    pub group_id: Option<String>,
+    pub content: String,
+    pub timestamp: DateTime<Utc>,
+    pub encrypted: bool,
+    pub message_type: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LastMessage {
+/// DTO for creating direct messages
+#[derive(Debug, Deserialize)]
+pub struct CreateDirectMessageRequest {
+    pub recipient: String,
+    pub content: String,
+}
+
+/// DTO for creating group messages
+#[derive(Debug, Deserialize)]
+pub struct CreateGroupMessageRequest {
+    pub group_id: String,
+    pub content: String,
+}
+
+/// DTO for message response
+#[derive(Debug, Serialize)]
+pub struct MessageDto {
+    pub id: String,
+    pub sender: String,
+    pub recipient: Option<String>,
+    pub group_id: Option<String>,
     pub content: String,
     pub timestamp: String,
-    pub sender: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UserPresence {
-    pub status: String, // "online", "away", "busy", "offline"
-    pub last_seen: DateTime<Utc>,
-    pub activity: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CreateChannelRequest {
-    pub name: String,
-    #[serde(rename = "type")]
-    pub channel_type: String,
-    pub members: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MessageRequest {
-    pub channel_id: String,
-    pub content: MessageContentDto,
-    pub attachments: Vec<AttachmentDto>,
-    pub thread_id: Option<String>,
-    pub reply_to: Option<String>,
-    pub mentions: Vec<String>,
-    pub ephemeral: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MessageContentDto {
-    pub text: Option<String>,
-    pub markdown: Option<String>,
-    pub mentions: Vec<String>,
-    pub links: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AttachmentDto {
-    pub id: String,
-    #[serde(rename = "type")]
-    pub attachment_type: String,
-    pub name: String,
-    pub size: usize,
-    pub url: String,
-    pub thumbnail: Option<String>,
-    pub mime_type: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RichMessageDto {
-    pub id: String,
-    pub sender: SenderInfo,
-    pub channel_id: String,
-    pub content: MessageContentDto,
-    pub attachments: Vec<AttachmentDto>,
-    pub thread_id: Option<String>,
-    pub reply_to: Option<ReplyInfo>,
-    pub reactions: Vec<ReactionInfo>,
-    pub timestamp: String,
-    pub edited_at: Option<String>,
-    pub deleted_at: Option<String>,
-    pub read_by: Vec<String>,
-    pub status: String,
+    pub message_type: String,
     pub encrypted: bool,
-    pub ephemeral: bool,
-    pub pinned: bool,
-    pub starred: bool,
-    pub signature: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SenderInfo {
+/// DTO for group information
+#[derive(Debug, Serialize)]
+pub struct GroupDto {
     pub id: String,
     pub name: String,
-    pub avatar: Option<String>,
-    pub four_word_address: String,
+    pub members: Vec<String>,
+    pub created_at: String,
 }
 
+/// Group information structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ReplyInfo {
+pub struct GroupInfo {
     pub id: String,
-    pub sender: String,
-    pub preview: String,
+    pub name: String,
+    pub members: Vec<String>,
+    pub created_at: DateTime<Utc>,
+    pub creator: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ReactionInfo {
-    pub emoji: String,
-    pub users: Vec<String>,
+/// Simple in-memory storage for messages (replace with persistent storage later)
+#[derive(Debug, Default)]
+pub struct MessageStorage {
+    messages: Mutex<HashMap<String, SecureMessage>>,
+    user_messages: Mutex<HashMap<String, Vec<String>>>, // user_id -> message_ids
+    groups: Mutex<HashMap<String, GroupInfo>>,
+    group_members: Mutex<HashMap<String, Vec<String>>>, // group_id -> user_ids
 }
 
-/// Initialize the unified messaging system
-#[tauri::command]
-pub async fn initialize_unified_messaging(
-    user_id: String,
-    four_word_address: String,
-    state: State<'_, Arc<RwLock<Option<MessagingState>>>>,
-) -> Result<(), String> {
-    let mut state_guard = state.write().await;
-    
-    // Create identity from four-word address
-    let identity = FourWordAddress::from_str(&four_word_address)
-        .map_err(|e| format!("Invalid four-word address: {}", e))?;
-    
-    // Initialize messaging service with real DHT
-    let service = MessagingService::new(identity)
-        .await
-        .map_err(|e| format!("Failed to initialize messaging: {}", e))?;
-    
-    // Create initial state
-    let messaging_state = MessagingState {
-        service: Arc::new(RwLock::new(service)),
-        channels: Arc::new(RwLock::new(HashMap::new())),
-        presence: Arc::new(RwLock::new(HashMap::new())),
-    };
-    
-    *state_guard = Some(messaging_state);
-    
-    Ok(())
-}
+impl MessageStorage {
+    pub fn new() -> Self {
+        Self {
+            messages: Mutex::new(HashMap::new()),
+            user_messages: Mutex::new(HashMap::new()),
+            groups: Mutex::new(HashMap::new()),
+            group_members: Mutex::new(HashMap::new()),
+        }
+    }
 
-/// Get all channels for a user
-#[tauri::command]
-pub async fn get_channels(
-    user_id: String,
-    state: State<'_, Arc<RwLock<Option<MessagingState>>>>,
-) -> Result<Vec<ChannelInfo>, String> {
-    let state_guard = state.read().await;
-    let messaging_state = state_guard.as_ref()
-        .ok_or_else(|| "Messaging not initialized".to_string())?;
-    
-    let channels = messaging_state.channels.read().await;
-    
-    // Return mock channels for now
-    if channels.is_empty() {
-        // Create default channels
-        let default_channels = vec![
-            ChannelInfo {
-                id: "general".to_string(),
-                name: "General".to_string(),
-                channel_type: "public".to_string(),
-                avatar: None,
-                last_message: Some(LastMessage {
-                    content: "Welcome to the P2P network!".to_string(),
-                    timestamp: Utc::now().to_rfc3339(),
-                    sender: "System".to_string(),
-                }),
-                unread_count: 0,
-                members: vec!["ocean-forest-moon-star".to_string()],
-                is_online: true,
-                is_muted: false,
-                is_pinned: true,
-                four_word_address: None,
-            },
-            ChannelInfo {
-                id: "tech-discussion".to_string(),
-                name: "Tech Discussion".to_string(),
-                channel_type: "group".to_string(),
-                avatar: None,
-                last_message: None,
-                unread_count: 2,
-                members: vec![
-                    "ocean-forest-moon-star".to_string(),
-                    "river-mountain-sun-cloud".to_string(),
-                ],
-                is_online: true,
-                is_muted: false,
-                is_pinned: false,
-                four_word_address: None,
-            },
-        ];
+    pub fn store_message(&self, message: SecureMessage) -> Result<(), MessagingError> {
+        let mut messages = self.messages.lock()
+            .map_err(|e| MessagingError::StorageError(format!("Lock error: {}", e)))?;
         
-        Ok(default_channels)
-    } else {
-        Ok(channels.values().cloned().collect())
+        let mut user_messages = self.user_messages.lock()
+            .map_err(|e| MessagingError::StorageError(format!("Lock error: {}", e)))?;
+
+        let message_id = message.id.clone();
+        let sender = message.sender.clone();
+
+        // Add to sender's messages
+        user_messages.entry(sender).or_insert_with(Vec::new).push(message_id.clone());
+        
+        // Add to recipient's messages if direct message
+        if let Some(ref recipient) = message.recipient {
+            user_messages.entry(recipient.clone()).or_insert_with(Vec::new).push(message_id.clone());
+        }
+        
+        // Add to all group members if group message
+        if let Some(ref group_id) = message.group_id {
+            let group_members = self.group_members.lock()
+                .map_err(|e| MessagingError::StorageError(format!("Lock error: {}", e)))?;
+            
+            if let Some(members) = group_members.get(group_id) {
+                for member in members {
+                    user_messages.entry(member.clone()).or_insert_with(Vec::new).push(message_id.clone());
+                }
+            }
+        }
+
+        messages.insert(message_id, message);
+        Ok(())
+    }
+
+    pub fn get_message(&self, message_id: &str) -> Result<SecureMessage, MessagingError> {
+        let messages = self.messages.lock()
+            .map_err(|e| MessagingError::StorageError(format!("Lock error: {}", e)))?;
+        
+        messages.get(message_id)
+            .cloned()
+            .ok_or(MessagingError::MessageNotFound)
+    }
+
+    pub fn get_user_messages(&self, user_id: &str, limit: Option<u32>) -> Result<Vec<SecureMessage>, MessagingError> {
+        let messages = self.messages.lock()
+            .map_err(|e| MessagingError::StorageError(format!("Lock error: {}", e)))?;
+        
+        let user_messages = self.user_messages.lock()
+            .map_err(|e| MessagingError::StorageError(format!("Lock error: {}", e)))?;
+
+        let empty_vec = Vec::new();
+        let message_ids = user_messages.get(user_id).unwrap_or(&empty_vec);
+        
+        let mut user_msgs = Vec::new();
+        for msg_id in message_ids {
+            if let Some(msg) = messages.get(msg_id) {
+                user_msgs.push(msg.clone());
+            }
+        }
+
+        // Sort by timestamp (newest first)
+        user_msgs.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        
+        // Apply limit if specified
+        if let Some(limit) = limit {
+            user_msgs.truncate(limit as usize);
+        }
+
+        Ok(user_msgs)
+    }
+
+    pub fn create_group(&self, group_info: GroupInfo) -> Result<(), MessagingError> {
+        let mut groups = self.groups.lock()
+            .map_err(|e| MessagingError::StorageError(format!("Lock error: {}", e)))?;
+        
+        let mut group_members = self.group_members.lock()
+            .map_err(|e| MessagingError::StorageError(format!("Lock error: {}", e)))?;
+
+        let group_id = group_info.id.clone();
+        let members = group_info.members.clone();
+
+        groups.insert(group_id.clone(), group_info);
+        group_members.insert(group_id, members);
+
+        Ok(())
+    }
+
+    pub fn get_group(&self, group_id: &str) -> Result<GroupInfo, MessagingError> {
+        let groups = self.groups.lock()
+            .map_err(|e| MessagingError::StorageError(format!("Lock error: {}", e)))?;
+        
+        groups.get(group_id)
+            .cloned()
+            .ok_or(MessagingError::MessageNotFound)
+    }
+
+    pub fn get_user_groups(&self, user_id: &str) -> Result<Vec<GroupInfo>, MessagingError> {
+        let groups = self.groups.lock()
+            .map_err(|e| MessagingError::StorageError(format!("Lock error: {}", e)))?;
+        
+        let user_groups: Vec<GroupInfo> = groups.values()
+            .filter(|group| group.members.contains(&user_id.to_string()) || group.creator == *user_id)
+            .cloned()
+            .collect();
+
+        Ok(user_groups)
+    }
+
+    pub fn add_group_member(&self, group_id: &str, user_id: &str) -> Result<(), MessagingError> {
+        let mut groups = self.groups.lock()
+            .map_err(|e| MessagingError::StorageError(format!("Lock error: {}", e)))?;
+        
+        let mut group_members = self.group_members.lock()
+            .map_err(|e| MessagingError::StorageError(format!("Lock error: {}", e)))?;
+
+        // Update group info
+        if let Some(group) = groups.get_mut(group_id) {
+            if !group.members.contains(&user_id.to_string()) {
+                group.members.push(user_id.to_string());
+            }
+        } else {
+            return Err(MessagingError::MessageNotFound);
+        }
+
+        // Update group members lookup
+        if let Some(members) = group_members.get_mut(group_id) {
+            if !members.contains(&user_id.to_string()) {
+                members.push(user_id.to_string());
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn remove_group_member(&self, group_id: &str, user_id: &str) -> Result<(), MessagingError> {
+        let mut groups = self.groups.lock()
+            .map_err(|e| MessagingError::StorageError(format!("Lock error: {}", e)))?;
+        
+        let mut group_members = self.group_members.lock()
+            .map_err(|e| MessagingError::StorageError(format!("Lock error: {}", e)))?;
+
+        // Update group info
+        if let Some(group) = groups.get_mut(group_id) {
+            group.members.retain(|member| member != user_id);
+        } else {
+            return Err(MessagingError::MessageNotFound);
+        }
+
+        // Update group members lookup
+        if let Some(members) = group_members.get_mut(group_id) {
+            members.retain(|member| member != user_id);
+        }
+
+        Ok(())
     }
 }
 
-/// Create a new channel
-#[tauri::command]
-pub async fn create_channel(
-    request: CreateChannelRequest,
-    state: State<'_, Arc<RwLock<Option<MessagingState>>>>,
-) -> Result<ChannelInfo, String> {
-    let state_guard = state.read().await;
-    let messaging_state = state_guard.as_ref()
-        .ok_or_else(|| "Messaging not initialized".to_string())?;
-    
-    let channel_id = format!("channel-{}", uuid::Uuid::new_v4());
-    
-    let channel = ChannelInfo {
-        id: channel_id.clone(),
-        name: request.name,
-        channel_type: request.channel_type,
-        avatar: None,
-        last_message: None,
-        unread_count: 0,
-        members: request.members,
-        is_online: true,
-        is_muted: false,
-        is_pinned: false,
-        four_word_address: None,
-    };
-    
-    let mut channels = messaging_state.channels.write().await;
-    channels.insert(channel_id, channel.clone());
-    
-    Ok(channel)
-}
+/// Message encryption helper using saorsa-fec
+struct MessageEncryption;
 
-/// Get messages for a channel
-#[tauri::command]
-pub async fn get_channel_messages(
-    channel_id: String,
-    limit: usize,
-    state: State<'_, Arc<RwLock<Option<MessagingState>>>>,
-) -> Result<Vec<RichMessageDto>, String> {
-    let state_guard = state.read().await;
-    let messaging_state = state_guard.as_ref()
-        .ok_or_else(|| "Messaging not initialized".to_string())?;
-    
-    let service = messaging_state.service.read().await;
-    
-    let channel_id = ChannelId::from(channel_id.as_str());
-    let messages = service.get_channel_messages(channel_id, limit, None)
-        .await
-        .map_err(|e| format!("Failed to get messages: {}", e))?;
-    
-    // Convert to DTOs
-    let message_dtos: Vec<RichMessageDto> = messages.into_iter()
-        .map(|msg| convert_message_to_dto(msg))
-        .collect();
-    
-    Ok(message_dtos)
-}
-
-/// Send a rich message
-#[tauri::command]
-pub async fn send_rich_message(
-    message: MessageRequest,
-    state: State<'_, Arc<RwLock<Option<MessagingState>>>>,
-    app_handle: tauri::AppHandle,
-) -> Result<RichMessageDto, String> {
-    let state_guard = state.read().await;
-    let messaging_state = state_guard.as_ref()
-        .ok_or_else(|| "Messaging not initialized".to_string())?;
-    
-    let mut service = messaging_state.service.write().await;
-    
-    // Convert DTO to domain model
-    let content = if let Some(markdown) = message.content.markdown {
-        MessageContent::RichText(MarkdownContent {
-            raw: message.content.text.unwrap_or_default(),
-            formatted: markdown,
-            mentions: message.content.mentions.iter()
-                .map(|m| FourWordAddress::from(m.as_str()))
-                .collect(),
-            links: message.content.links,
-        })
-    } else {
-        MessageContent::Text(message.content.text.unwrap_or_default())
-    };
-    
-    let request = SendMessageRequest {
-        channel_id: ChannelId::from(message.channel_id.as_str()),
-        content,
-        attachments: vec![], // TODO: Handle attachments
-        thread_id: message.thread_id.map(|id| ThreadId::from(id.as_str())),
-        reply_to: message.reply_to.map(|id| MessageId::from(id.as_str())),
-        mentions: message.mentions.iter()
-            .map(|m| FourWordAddress::from(m.as_str()))
-            .collect(),
-        ephemeral: message.ephemeral,
-    };
-    
-    let sent_message = service.send_message(request)
-        .await
-        .map_err(|e| format!("Failed to send message: {}", e))?;
-    
-    let message_dto = convert_message_to_dto(sent_message);
-    
-    // Emit event for real-time updates
-    app_handle.emit_all("new-message", &message_dto)
-        .map_err(|e| format!("Failed to emit event: {}", e))?;
-    
-    Ok(message_dto)
-}
-
-/// Add a reaction to a message
-#[tauri::command]
-pub async fn add_reaction(
-    message_id: String,
-    emoji: String,
-    state: State<'_, Arc<RwLock<Option<MessagingState>>>>,
-) -> Result<(), String> {
-    let state_guard = state.read().await;
-    let messaging_state = state_guard.as_ref()
-        .ok_or_else(|| "Messaging not initialized".to_string())?;
-    
-    let mut service = messaging_state.service.write().await;
-    
-    service.add_reaction(MessageId::from(message_id.as_str()), emoji)
-        .await
-        .map_err(|e| format!("Failed to add reaction: {}", e))?;
-    
-    Ok(())
-}
-
-/// Edit a message
-#[tauri::command]
-pub async fn edit_message(
-    message_id: String,
-    new_content: String,
-    state: State<'_, Arc<RwLock<Option<MessagingState>>>>,
-) -> Result<(), String> {
-    let state_guard = state.read().await;
-    let messaging_state = state_guard.as_ref()
-        .ok_or_else(|| "Messaging not initialized".to_string())?;
-    
-    let mut service = messaging_state.service.write().await;
-    
-    service.edit_message(
-        MessageId::from(message_id.as_str()),
-        MessageContent::Text(new_content),
-    )
-    .await
-    .map_err(|e| format!("Failed to edit message: {}", e))?;
-    
-    Ok(())
-}
-
-/// Delete a message
-#[tauri::command]
-pub async fn delete_message(
-    message_id: String,
-    state: State<'_, Arc<RwLock<Option<MessagingState>>>>,
-) -> Result<(), String> {
-    let state_guard = state.read().await;
-    let messaging_state = state_guard.as_ref()
-        .ok_or_else(|| "Messaging not initialized".to_string())?;
-    
-    let mut service = messaging_state.service.write().await;
-    
-    service.delete_message(MessageId::from(message_id.as_str()))
-        .await
-        .map_err(|e| format!("Failed to delete message: {}", e))?;
-    
-    Ok(())
-}
-
-/// Mark messages as read
-#[tauri::command]
-pub async fn mark_channel_as_read(
-    channel_id: String,
-    state: State<'_, Arc<RwLock<Option<MessagingState>>>>,
-) -> Result<(), String> {
-    // TODO: Implement marking messages as read
-    Ok(())
-}
-
-/// Send typing indicator
-#[tauri::command]
-pub async fn send_typing_indicator(
-    channel_id: String,
-    is_typing: bool,
-    state: State<'_, Arc<RwLock<Option<MessagingState>>>>,
-    app_handle: tauri::AppHandle,
-) -> Result<(), String> {
-    let state_guard = state.read().await;
-    let messaging_state = state_guard.as_ref()
-        .ok_or_else(|| "Messaging not initialized".to_string())?;
-    
-    let mut service = messaging_state.service.write().await;
-    
-    let channel = ChannelId::from(channel_id.as_str());
-    
-    if is_typing {
-        service.start_typing(channel).await
-            .map_err(|e| format!("Failed to send typing indicator: {}", e))?;
-    } else {
-        service.stop_typing(channel).await
-            .map_err(|e| format!("Failed to send typing indicator: {}", e))?;
+impl MessageEncryption {
+    async fn encrypt_content(content: &str, sender: &str, recipient: &str) -> Result<String, MessagingError> {
+        let config = FecConfig::default();
+        let fec_manager = SecureFecManager::new(config)
+            .map_err(|e| MessagingError::EncryptionFailed(format!("FEC manager creation failed: {}", e)))?;
+        
+        // Create deterministic key ID for this conversation
+        let key_material = format!("conversation:{}:{}", sender, recipient);
+        let key_id = hex::encode(blake3::hash(key_material.as_bytes()).as_bytes());
+        
+        let encrypted_content = fec_manager.encrypt_data(content.as_bytes(), Some(key_id)).await
+            .map_err(|e| MessagingError::EncryptionFailed(format!("Encryption failed: {}", e)))?;
+        
+        let serialized = bincode::serialize(&encrypted_content)
+            .map_err(|e| MessagingError::EncryptionFailed(format!("Serialization failed: {}", e)))?;
+        
+        Ok(BASE64.encode(serialized))
     }
-    
-    // Emit typing event
-    app_handle.emit_all("user-typing", serde_json::json!({
-        "channelId": channel_id,
-        "userId": "current-user", // TODO: Get actual user ID
-        "isTyping": is_typing,
-    }))
-    .map_err(|e| format!("Failed to emit typing event: {}", e))?;
-    
-    Ok(())
-}
 
-/// Get thread messages
-#[tauri::command]
-pub async fn get_thread_messages(
-    thread_id: String,
-    state: State<'_, Arc<RwLock<Option<MessagingState>>>>,
-) -> Result<Vec<RichMessageDto>, String> {
-    let state_guard = state.read().await;
-    let messaging_state = state_guard.as_ref()
-        .ok_or_else(|| "Messaging not initialized".to_string())?;
-    
-    let service = messaging_state.service.read().await;
-    
-    let thread = service.get_thread_messages(ThreadId::from(thread_id.as_str()))
-        .await
-        .map_err(|e| format!("Failed to get thread messages: {}", e))?;
-    
-    // Convert messages to DTOs
-    let message_dtos: Vec<RichMessageDto> = thread.messages.into_iter()
-        .map(|msg| convert_message_to_dto(msg))
-        .collect();
-    
-    Ok(message_dtos)
-}
-
-/// Search messages
-#[tauri::command]
-pub async fn search_messages(
-    query: String,
-    limit: usize,
-    state: State<'_, Arc<RwLock<Option<MessagingState>>>>,
-) -> Result<Vec<RichMessageDto>, String> {
-    let state_guard = state.read().await;
-    let messaging_state = state_guard.as_ref()
-        .ok_or_else(|| "Messaging not initialized".to_string())?;
-    
-    let service = messaging_state.service.read().await;
-    
-    let search_query = SearchQuery {
-        text: Some(query),
-        from: None,
-        in_channels: None,
-        has_attachments: None,
-        has_reactions: None,
-        is_thread: None,
-        date_range: None,
-        limit,
-    };
-    
-    let messages = service.search_messages(search_query)
-        .await
-        .map_err(|e| format!("Failed to search messages: {}", e))?;
-    
-    let message_dtos: Vec<RichMessageDto> = messages.into_iter()
-        .map(|msg| convert_message_to_dto(msg))
-        .collect();
-    
-    Ok(message_dtos)
-}
-
-// Helper function to convert domain model to DTO
-fn convert_message_to_dto(message: RichMessage) -> RichMessageDto {
-    let content = match message.content {
-        MessageContent::Text(text) => MessageContentDto {
-            text: Some(text),
-            markdown: None,
-            mentions: vec![],
-            links: vec![],
-        },
-        MessageContent::RichText(rich) => MessageContentDto {
-            text: Some(rich.raw),
-            markdown: Some(rich.formatted),
-            mentions: rich.mentions.iter().map(|m| m.to_string()).collect(),
-            links: rich.links,
-        },
-        _ => MessageContentDto {
-            text: Some("Unsupported content type".to_string()),
-            markdown: None,
-            mentions: vec![],
-            links: vec![],
-        },
-    };
-    
-    RichMessageDto {
-        id: message.id.to_string(),
-        sender: SenderInfo {
-            id: message.sender.to_string(),
-            name: message.sender.to_string().split('-').next().unwrap_or("Unknown").to_string(),
-            avatar: None,
-            four_word_address: message.sender.to_string(),
-        },
-        channel_id: message.channel_id.to_string(),
-        content,
-        attachments: message.attachments.into_iter()
-            .map(|a| AttachmentDto {
-                id: a.id.to_string(),
-                attachment_type: match a.attachment_type {
-                    saorsa_core::messaging::types::AttachmentType::Image => "image",
-                    saorsa_core::messaging::types::AttachmentType::Video => "video",
-                    saorsa_core::messaging::types::AttachmentType::Audio => "audio",
-                    saorsa_core::messaging::types::AttachmentType::File => "file",
-                }.to_string(),
-                name: a.filename,
-                size: a.size,
-                url: format!("/api/attachments/{}", a.id),
-                thumbnail: a.thumbnail.map(|t| format!("/api/thumbnails/{}", t)),
-                mime_type: a.mime_type,
-            })
-            .collect(),
-        thread_id: message.thread_id.map(|id| id.to_string()),
-        reply_to: message.reply_to.map(|id| ReplyInfo {
-            id: id.to_string(),
-            sender: "Unknown".to_string(), // TODO: Fetch actual sender
-            preview: "Message preview".to_string(), // TODO: Fetch actual preview
-        }),
-        reactions: message.reactions.into_iter()
-            .map(|r| ReactionInfo {
-                emoji: r.emoji,
-                users: r.users.iter().map(|u| u.to_string()).collect(),
-            })
-            .collect(),
-        timestamp: message.created_at.to_rfc3339(),
-        edited_at: message.edited_at.map(|t| t.to_rfc3339()),
-        deleted_at: message.deleted_at.map(|t| t.to_rfc3339()),
-        read_by: message.read_receipts.into_iter()
-            .map(|r| r.user.to_string())
-            .collect(),
-        status: match message.delivery_status {
-            saorsa_core::messaging::types::DeliveryStatus::Sending => "sending",
-            saorsa_core::messaging::types::DeliveryStatus::Sent => "sent",
-            saorsa_core::messaging::types::DeliveryStatus::Delivered => "delivered",
-            saorsa_core::messaging::types::DeliveryStatus::Read => "read",
-            saorsa_core::messaging::types::DeliveryStatus::Failed => "failed",
-        }.to_string(),
-        encrypted: message.encrypted,
-        ephemeral: message.ephemeral,
-        pinned: message.pinned,
-        starred: message.starred,
-        signature: Some(format!("{:?}", message.signature)),
+    async fn decrypt_content(encrypted_content: &str, sender: &str, recipient: &str) -> Result<String, MessagingError> {
+        let serialized_bytes = BASE64.decode(encrypted_content)
+            .map_err(|e| MessagingError::DecryptionFailed(format!("Base64 decode failed: {}", e)))?;
+        
+        let encrypted_data: crate::secure_fec::EncryptedContent = bincode::deserialize(&serialized_bytes)
+            .map_err(|e| MessagingError::DecryptionFailed(format!("Deserialization failed: {}", e)))?;
+        
+        let config = FecConfig::default();
+        let fec_manager = SecureFecManager::new(config)
+            .map_err(|e| MessagingError::DecryptionFailed(format!("FEC manager creation failed: {}", e)))?;
+        
+        // Recreate the same key ID used for encryption
+        let key_material = format!("conversation:{}:{}", sender, recipient);
+        let key_id = hex::encode(blake3::hash(key_material.as_bytes()).as_bytes());
+        
+        let decrypted_bytes = fec_manager.decrypt_data(&encrypted_data, &key_id).await
+            .map_err(|e| MessagingError::DecryptionFailed(format!("Decryption failed: {}", e)))?;
+        
+        String::from_utf8(decrypted_bytes)
+            .map_err(|e| MessagingError::DecryptionFailed(format!("UTF-8 decode failed: {}", e)))
     }
 }
 
-// Export function to register all commands
-pub fn register_messaging_commands() -> Vec<Box<dyn Fn() -> String + Send + Sync>> {
-    vec![
-        Box::new(|| "initialize_unified_messaging".to_string()),
-        Box::new(|| "get_channels".to_string()),
-        Box::new(|| "create_channel".to_string()),
-        Box::new(|| "get_channel_messages".to_string()),
-        Box::new(|| "send_rich_message".to_string()),
-        Box::new(|| "add_reaction".to_string()),
-        Box::new(|| "edit_message".to_string()),
-        Box::new(|| "delete_message".to_string()),
-        Box::new(|| "mark_channel_as_read".to_string()),
-        Box::new(|| "send_typing_indicator".to_string()),
-        Box::new(|| "get_thread_messages".to_string()),
-        Box::new(|| "search_messages".to_string()),
-    ]
+// Tauri commands for secure messaging functionality
+
+#[tauri::command]
+pub async fn initialize_messaging_system() -> Result<String, String> {
+    info!("Initializing secure messaging system with saorsa-fec encryption");
+    Ok("Secure messaging system initialized".to_string())
+}
+
+#[tauri::command]
+pub async fn send_direct_message(
+    storage: State<'_, MessageStorage>,
+    sender: String,
+    recipient: String,
+    content: String,
+) -> Result<String, String> {
+    let message_id = Uuid::new_v4().to_string();
+    let timestamp = Utc::now();
+
+    // Encrypt content using saorsa-fec
+    let encrypted_content = MessageEncryption::encrypt_content(&content, &sender, &recipient).await
+        .map_err(|e| format!("Failed to encrypt message: {}", e))?;
+
+    let message = SecureMessage {
+        id: message_id.clone(),
+        sender,
+        recipient: Some(recipient),
+        group_id: None,
+        content: encrypted_content,
+        timestamp,
+        encrypted: true,
+        message_type: "direct".to_string(),
+    };
+
+    storage.store_message(message)
+        .map_err(|e| format!("Failed to store message: {}", e))?;
+
+    info!("Direct message {} sent successfully", message_id);
+    Ok(message_id)
+}
+
+#[tauri::command]
+pub async fn send_group_message_secure(
+    storage: State<'_, MessageStorage>,
+    sender: String,
+    group_id: String,
+    content: String,
+) -> Result<String, String> {
+    let message_id = Uuid::new_v4().to_string();
+    let timestamp = Utc::now();
+
+    // For group messages, use group ID as part of encryption key
+    let group_key_material = format!("group:{}:{}", group_id, sender);
+    let key_id = hex::encode(blake3::hash(group_key_material.as_bytes()).as_bytes());
+    
+    let config = FecConfig::default();
+    let fec_manager = SecureFecManager::new(config)
+        .map_err(|e| format!("Failed to create FEC manager: {}", e))?;
+    
+    let encrypted_data = fec_manager.encrypt_data(content.as_bytes(), Some(key_id)).await
+        .map_err(|e| format!("Failed to encrypt group message: {}", e))?;
+    
+    let serialized = bincode::serialize(&encrypted_data)
+        .map_err(|e| format!("Failed to serialize encrypted data: {}", e))?;
+    
+    let encrypted_content = BASE64.encode(serialized);
+
+    let message = SecureMessage {
+        id: message_id.clone(),
+        sender,
+        recipient: None,
+        group_id: Some(group_id),
+        content: encrypted_content,
+        timestamp,
+        encrypted: true,
+        message_type: "group".to_string(),
+    };
+
+    storage.store_message(message)
+        .map_err(|e| format!("Failed to store group message: {}", e))?;
+
+    info!("Group message {} sent successfully", message_id);
+    Ok(message_id)
+}
+
+#[tauri::command]
+pub async fn get_messages_secure(
+    storage: State<'_, MessageStorage>,
+    user_id: String,
+    limit: Option<u32>,
+) -> Result<Vec<MessageDto>, String> {
+    let messages = storage.get_user_messages(&user_id, limit)
+        .map_err(|e| format!("Failed to retrieve messages: {}", e))?;
+    
+    let mut message_dtos = Vec::new();
+    
+    for message in messages {
+        // Decrypt message content if encrypted
+        let content = if message.encrypted {
+            if let Some(ref recipient) = message.recipient {
+                // Direct message - decrypt using sender/recipient key
+                match MessageEncryption::decrypt_content(&message.content, &message.sender, recipient).await {
+                    Ok(decrypted) => decrypted,
+                    Err(e) => {
+                        warn!("Failed to decrypt message {}: {}", message.id, e);
+                        continue; // Skip messages we can't decrypt
+                    }
+                }
+            } else {
+                // Group message - decrypt using group key
+                match message.group_id {
+                    Some(ref group_id) => {
+                        let group_key_material = format!("group:{}:{}", group_id, message.sender);
+                        let key_id = hex::encode(blake3::hash(group_key_material.as_bytes()).as_bytes());
+                        
+                        let serialized_bytes = match BASE64.decode(&message.content) {
+                            Ok(bytes) => bytes,
+                            Err(e) => {
+                                warn!("Failed to decode group message {}: {}", message.id, e);
+                                continue;
+                            }
+                        };
+                        
+                        let encrypted_data: crate::secure_fec::EncryptedContent = match bincode::deserialize(&serialized_bytes) {
+                            Ok(data) => data,
+                            Err(e) => {
+                                warn!("Failed to deserialize group message {}: {}", message.id, e);
+                                continue;
+                            }
+                        };
+                        
+                        let config = FecConfig::default();
+                        let fec_manager = match SecureFecManager::new(config) {
+                            Ok(manager) => manager,
+                            Err(e) => {
+                                warn!("Failed to create FEC manager for message {}: {}", message.id, e);
+                                continue;
+                            }
+                        };
+                        
+                        match fec_manager.decrypt_data(&encrypted_data, &key_id).await {
+                            Ok(decrypted_bytes) => match String::from_utf8(decrypted_bytes) {
+                                Ok(decrypted) => decrypted,
+                                Err(e) => {
+                                    warn!("Failed to decode UTF-8 for message {}: {}", message.id, e);
+                                    continue;
+                                }
+                            },
+                            Err(e) => {
+                                warn!("Failed to decrypt group message {}: {}", message.id, e);
+                                continue;
+                            }
+                        }
+                    }
+                    None => {
+                        warn!("Encrypted message {} has no recipient or group_id", message.id);
+                        continue;
+                    }
+                }
+            }
+        } else {
+            message.content
+        };
+
+        message_dtos.push(MessageDto {
+            id: message.id,
+            sender: message.sender,
+            recipient: message.recipient,
+            group_id: message.group_id,
+            content,
+            timestamp: message.timestamp.to_rfc3339(),
+            message_type: message.message_type,
+            encrypted: message.encrypted,
+        });
+    }
+
+    debug!("Retrieved {} messages for user {}", message_dtos.len(), user_id);
+    Ok(message_dtos)
+}
+
+#[tauri::command]
+pub async fn subscribe_to_messages() -> Result<(), String> {
+    info!("Message subscription established (placeholder for real-time functionality)");
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn create_group_secure(
+    storage: State<'_, MessageStorage>,
+    creator: String,
+    name: String,
+    members: Vec<String>,
+) -> Result<String, String> {
+    let group_id = Uuid::new_v4().to_string();
+    let timestamp = Utc::now();
+
+    let group_info = GroupInfo {
+        id: group_id.clone(),
+        name,
+        members,
+        created_at: timestamp,
+        creator,
+    };
+
+    storage.create_group(group_info)
+        .map_err(|e| format!("Failed to create group: {}", e))?;
+
+    info!("Group {} created successfully", group_id);
+    Ok(group_id)
+}
+
+#[tauri::command]
+pub async fn add_group_member(
+    storage: State<'_, MessageStorage>,
+    group_id: String,
+    user_id: String,
+) -> Result<(), String> {
+    storage.add_group_member(&group_id, &user_id)
+        .map_err(|e| format!("Failed to add group member: {}", e))?;
+
+    info!("Added user {} to group {}", user_id, group_id);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn remove_group_member(
+    storage: State<'_, MessageStorage>,
+    group_id: String,
+    user_id: String,
+) -> Result<(), String> {
+    storage.remove_group_member(&group_id, &user_id)
+        .map_err(|e| format!("Failed to remove group member: {}", e))?;
+
+    info!("Removed user {} from group {}", user_id, group_id);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn get_groups(
+    storage: State<'_, MessageStorage>,
+    user_id: String,
+) -> Result<Vec<GroupDto>, String> {
+    let groups = storage.get_user_groups(&user_id)
+        .map_err(|e| format!("Failed to retrieve groups: {}", e))?;
+    
+    let group_dtos: Vec<GroupDto> = groups.into_iter().map(|group| GroupDto {
+        id: group.id,
+        name: group.name,
+        members: group.members,
+        created_at: group.created_at.to_rfc3339(),
+    }).collect();
+
+    debug!("Retrieved {} groups for user {}", group_dtos.len(), user_id);
+    Ok(group_dtos)
+}
+
+/// Initialize storage state for Tauri
+pub fn init_messaging_storage() -> MessageStorage {
+    MessageStorage::new()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_message_storage() {
+        let storage = MessageStorage::new();
+        
+        let message = SecureMessage {
+            id: "test_id".to_string(),
+            sender: "sender".to_string(),
+            recipient: Some("recipient".to_string()),
+            group_id: None,
+            content: "test content".to_string(),
+            timestamp: Utc::now(),
+            encrypted: false,
+            message_type: "direct".to_string(),
+        };
+
+        storage.store_message(message.clone()).unwrap();
+        let retrieved = storage.get_message("test_id").unwrap();
+        
+        assert_eq!(retrieved.id, message.id);
+        assert_eq!(retrieved.content, message.content);
+    }
+
+    #[tokio::test]
+    async fn test_message_encryption() {
+        let content = "Hello, secure world!";
+        let sender = "alice";
+        let recipient = "bob";
+
+        let encrypted = MessageEncryption::encrypt_content(content, sender, recipient).await.unwrap();
+        let decrypted = MessageEncryption::decrypt_content(&encrypted, sender, recipient).await.unwrap();
+
+        assert_eq!(content, decrypted);
+    }
 }

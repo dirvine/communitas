@@ -28,7 +28,13 @@ pub mod identity;
 pub mod error;
 pub mod dht_facade;
 pub mod storage;
+pub mod saorsa_storage;
+pub mod saorsa_storage_commands;
 pub mod stores;
+
+// Add storage tests module
+// #[cfg(test)]
+// pub mod storage_tests;
 
 // Re-export main components
 pub use bootstrap::{run_bootstrap_node, BootstrapConfig, BootstrapNode, NodeStats};

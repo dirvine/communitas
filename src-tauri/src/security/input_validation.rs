@@ -9,9 +9,20 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
-use validator::{Validate, ValidationError, ValidationErrors};
-use secrecy::{ExposeSecret, Secret};
 use regex::Regex;
+use thiserror::Error;
+
+#[derive(Debug, Clone, Error)]
+pub enum ValidationError {
+    #[error("Input validation failed: {0}")]
+    InvalidInput(String),
+    #[error("Input too long: {current} > {max}")]
+    TooLong { current: usize, max: usize },
+    #[error("Input contains malicious content")]
+    MaliciousContent,
+    #[error("Invalid format")]
+    InvalidFormat,
+}
 
 /// Maximum allowed input sizes to prevent DoS attacks
 pub const MAX_MESSAGE_LENGTH: usize = 100_000;  // 100KB max message
@@ -54,27 +65,142 @@ impl InputValidator {
     }
 
     /// Validate and sanitize a four-word network identity
-    pub fn validate_four_words(&self, input: &str) -> Result<String> {
+    pub fn validate_four_words(&self, input: &str) -> Result<String, ValidationError> {
         if input.is_empty() {
-            return Err(anyhow::anyhow!("Four-word address cannot be empty"));
+            return Err(ValidationError::InvalidInput("Four-word address cannot be empty".to_string()));
         }
 
         if input.len() > MAX_FOUR_WORDS_LENGTH {
-            return Err(anyhow::anyhow!("Four-word address too long: {} > {}", input.len(), MAX_FOUR_WORDS_LENGTH));
+            return Err(ValidationError::TooLong { 
+                current: input.len(), 
+                max: MAX_FOUR_WORDS_LENGTH 
+            });
         }
 
         // Check for potential injection attempts
-        if self.contains_malicious_content(input)? {
-            return Err(anyhow::anyhow!("Four-word address contains potentially malicious content"));
+        if self.contains_malicious_content(input) {
+            return Err(ValidationError::MaliciousContent);
         }
 
         let sanitized = input.trim().to_lowercase();
 
         if !self.four_words_pattern.is_match(&sanitized) {
-            return Err(anyhow::anyhow!("Invalid four-word address format. Expected: word-word-word-word"));
+            return Err(ValidationError::InvalidFormat);
         }
 
         Ok(sanitized)
+    }
+
+    /// Validate four-word address format
+    pub fn validate_four_word_address(&self, input: &str) -> Result<String, ValidationError> {
+        self.validate_four_words(input)
+    }
+
+    /// Validate title field
+    pub fn validate_title(&self, input: &str) -> Result<String, ValidationError> {
+        if input.is_empty() {
+            return Err(ValidationError::InvalidInput("Title cannot be empty".to_string()));
+        }
+        if input.len() > 200 {
+            return Err(ValidationError::TooLong { current: input.len(), max: 200 });
+        }
+        if self.contains_malicious_content(input) {
+            return Err(ValidationError::MaliciousContent);
+        }
+        Ok(input.trim().to_string())
+    }
+
+    /// Validate description field
+    pub fn validate_description(&self, input: &str) -> Result<String, ValidationError> {
+        if input.len() > 1000 {
+            return Err(ValidationError::TooLong { current: input.len(), max: 1000 });
+        }
+        if self.contains_malicious_content(input) {
+            return Err(ValidationError::MaliciousContent);
+        }
+        Ok(input.trim().to_string())
+    }
+
+    /// Validate content field
+    pub fn validate_content(&self, input: &str) -> Result<String, ValidationError> {
+        if input.is_empty() {
+            return Err(ValidationError::InvalidInput("Content cannot be empty".to_string()));
+        }
+        if input.len() > 10 * 1024 * 1024 {
+            return Err(ValidationError::TooLong { current: input.len(), max: 10 * 1024 * 1024 });
+        }
+        if self.script_injection_pattern.is_match(input) {
+            return Err(ValidationError::MaliciousContent);
+        }
+        Ok(input.to_string())
+    }
+
+    /// Validate tags array
+    pub fn validate_tags(&self, tags: &[String]) -> Result<Vec<String>, ValidationError> {
+        if tags.len() > 10 {
+            return Err(ValidationError::TooLong { current: tags.len(), max: 10 });
+        }
+        
+        let mut validated_tags = Vec::new();
+        for tag in tags {
+            if tag.is_empty() {
+                continue; // Skip empty tags
+            }
+            if tag.len() > 50 {
+                return Err(ValidationError::TooLong { current: tag.len(), max: 50 });
+            }
+            if self.contains_malicious_content(tag) {
+                return Err(ValidationError::MaliciousContent);
+            }
+            validated_tags.push(tag.trim().to_lowercase());
+        }
+        Ok(validated_tags)
+    }
+
+    /// Validate file name
+    pub fn validate_file_name(&self, input: &str) -> Result<String, ValidationError> {
+        if input.is_empty() {
+            return Err(ValidationError::InvalidInput("File name cannot be empty".to_string()));
+        }
+        if input.len() > 255 {
+            return Err(ValidationError::TooLong { current: input.len(), max: 255 });
+        }
+        if input.contains('/') || input.contains('\\') || input.contains('\0') {
+            return Err(ValidationError::InvalidFormat);
+        }
+        if self.contains_malicious_content(input) {
+            return Err(ValidationError::MaliciousContent);
+        }
+        Ok(input.trim().to_string())
+    }
+
+    /// Validate content type
+    pub fn validate_content_type(&self, input: &str) -> Result<String, ValidationError> {
+        if input.is_empty() {
+            return Err(ValidationError::InvalidInput("Content type cannot be empty".to_string()));
+        }
+        if input.len() > 100 {
+            return Err(ValidationError::TooLong { current: input.len(), max: 100 });
+        }
+        if self.contains_malicious_content(input) {
+            return Err(ValidationError::MaliciousContent);
+        }
+        Ok(input.trim().to_lowercase())
+    }
+
+    /// Validate UUID format
+    pub fn validate_uuid(&self, input: &str) -> Result<String, ValidationError> {
+        if input.is_empty() {
+            return Err(ValidationError::InvalidInput("UUID cannot be empty".to_string()));
+        }
+        // Basic UUID format check
+        let uuid_pattern = Regex::new(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+            .map_err(|_| ValidationError::InvalidFormat)?;
+        
+        if !uuid_pattern.is_match(input) {
+            return Err(ValidationError::InvalidFormat);
+        }
+        Ok(input.to_lowercase())
     }
 
     /// Validate and sanitize a username
@@ -88,7 +214,7 @@ impl InputValidator {
         }
 
         // Check for potential injection attempts
-        if self.contains_malicious_content(input)? {
+        if self.contains_malicious_content(input) {
             return Err(anyhow::anyhow!("Username contains potentially malicious content"));
         }
 
@@ -170,23 +296,23 @@ impl InputValidator {
     }
 
     /// Check if input contains potentially malicious content
-    fn contains_malicious_content(&self, input: &str) -> Result<bool> {
+    fn contains_malicious_content(&self, input: &str) -> bool {
         // Check for SQL injection patterns
         if self.sql_injection_pattern.is_match(input) {
-            return Ok(true);
+            return true;
         }
 
         // Check for script injection patterns
         if self.script_injection_pattern.is_match(input) {
-            return Ok(true);
+            return true;
         }
 
         // Check for null bytes and control characters (except common whitespace)
         if input.contains('\0') || input.chars().any(|c| c.is_control() && c != '\n' && c != '\r' && c != '\t') {
-            return Ok(true);
+            return true;
         }
 
-        Ok(false)
+        false
     }
 
     /// Validate JSON input structure and size
@@ -217,7 +343,7 @@ impl InputValidator {
             return Err(anyhow::anyhow!("Input too long: {} > {}", input.len(), max_length));
         }
 
-        if self.contains_malicious_content(input)? {
+        if self.contains_malicious_content(input) {
             return Err(anyhow::anyhow!("Input contains potentially malicious content"));
         }
 
@@ -238,30 +364,24 @@ impl InputValidator {
 }
 
 /// Validated input types for common use cases
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidatedFourWords {
-    #[validate(length(min = 7, max = 100))] // minimum: "a-b-c-d"
     pub value: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidatedUsername {
-    #[validate(length(min = 3, max = 64))]
-    #[validate(regex = "USERNAME_REGEX")]
     pub value: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidatedMessage {
-    #[validate(length(min = 1, max = 100000))]
     pub content: String,
-    #[validate(length(max = 64))]
     pub message_type: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidatedPath {
-    #[validate(length(min = 1, max = 260))]
     pub path: String,
 }
 
@@ -271,7 +391,7 @@ lazy_static::lazy_static! {
 }
 
 /// Result type for validation operations
-pub type ValidationResult<T> = Result<T, ValidationErrors>;
+pub type ValidationResult<T> = Result<T, ValidationError>;
 
 /// Trait for types that can be validated
 pub trait ValidatedInput: Sized {
@@ -283,7 +403,6 @@ impl ValidatedInput for ValidatedFourWords {
     fn validate_with(validator: &InputValidator, input: &str) -> Result<Self> {
         let validated_value = validator.validate_four_words(input)?;
         let instance = Self { value: validated_value };
-        instance.validate().map_err(|e| anyhow::anyhow!("Validation failed: {:?}", e))?;
         Ok(instance)
     }
 }
@@ -292,7 +411,6 @@ impl ValidatedInput for ValidatedUsername {
     fn validate_with(validator: &InputValidator, input: &str) -> Result<Self> {
         let validated_value = validator.validate_username(input)?;
         let instance = Self { value: validated_value };
-        instance.validate().map_err(|e| anyhow::anyhow!("Validation failed: {:?}", e))?;
         Ok(instance)
     }
 }

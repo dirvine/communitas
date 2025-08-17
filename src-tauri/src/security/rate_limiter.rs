@@ -10,6 +10,17 @@ use anyhow::Result;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
+use thiserror::Error;
+
+#[derive(Debug, Clone, Error)]
+pub enum RateLimitError {
+    #[error("Rate limit exceeded")]
+    LimitExceeded,
+    #[error("Rate limiter lock error")]
+    LockError,
+    #[error("Configuration error")]
+    ConfigError,
+}
 
 /// Default rate limits
 pub const DEFAULT_REQUESTS_PER_MINUTE: u32 = 60;
@@ -101,14 +112,15 @@ impl RateLimiter {
     /// Check if a request is allowed for the given key (user ID, IP, etc.)
     pub fn is_allowed(&self, key: &str) -> Result<bool> {
         self.check_rate_limit(key, self.default_limit)
+            .map_err(|e| anyhow::anyhow!("Rate limit check failed: {}", e))
     }
 
     /// Check if a request is allowed with a custom limit
-    pub fn check_rate_limit(&self, key: &str, limit: u32) -> Result<bool> {
+    pub fn check_rate_limit(&self, key: &str, limit: u32) -> Result<bool, RateLimitError> {
         let now = Instant::now();
         
         let mut entries = self.entries.write()
-            .map_err(|_| anyhow::anyhow!("Failed to acquire rate limiter lock"))?;
+            .map_err(|_| RateLimitError::LockError)?;
 
         let entry = entries.entry(key.to_string())
             .or_insert_with(RateLimitEntry::new);
@@ -117,13 +129,13 @@ impl RateLimiter {
         
         if allowed {
             entry.add_request(now, self.window);
+            // Trigger cleanup if needed
+            drop(entries); // Release the write lock before cleanup
+            let _ = self.cleanup_old_entries(); // Ignore cleanup errors
+            Ok(true)
+        } else {
+            Err(RateLimitError::LimitExceeded)
         }
-
-        // Trigger cleanup if needed
-        drop(entries); // Release the write lock before cleanup
-        self.cleanup_old_entries()?;
-
-        Ok(allowed)
     }
 
     /// Record a request (for when you want to check and record separately)
@@ -237,6 +249,7 @@ pub struct RateLimiterStats {
 }
 
 /// Specialized rate limiters for different operation types
+#[derive(Debug)]
 pub struct RateLimiters {
     pub default: RateLimiter,
     pub auth: RateLimiter,

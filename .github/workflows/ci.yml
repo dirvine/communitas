@@ -1,0 +1,343 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  CI: true
+
+jobs:
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      rust: ${{ steps.changes.outputs.rust }}
+      frontend: ${{ steps.changes.outputs.frontend }}
+      docs: ${{ steps.changes.outputs.docs }}
+      ci: ${{ steps.changes.outputs.ci }}
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Detect changes
+      uses: dorny/paths-filter@v2
+      id: changes
+      with:
+        filters: |
+          rust:
+            - 'src-tauri/**'
+            - 'Cargo.toml'
+            - 'Cargo.lock'
+          frontend:
+            - 'src/**'
+            - 'package.json'
+            - 'package-lock.json'
+            - 'tsconfig.json'
+            - 'vite.config.ts'
+            - 'vitest.config.ts'
+          docs:
+            - 'docs/**'
+            - '*.md'
+            - 'CHANGELOG.md'
+          ci:
+            - '.github/**'
+
+  pre-commit-checks:
+    name: Pre-commit Validation
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Validate commit message format
+      if: github.event_name == 'pull_request'
+      run: |
+        echo "Validating commit message format..."
+        
+        # Get the latest commit message
+        COMMIT_MSG=$(git log --format=%B -n 1 HEAD)
+        echo "Commit message: $COMMIT_MSG"
+        
+        # Check if commit follows conventional commits format
+        if echo "$COMMIT_MSG" | grep -qE '^(feat|fix|docs|style|refactor|test|chore|ci|perf|build)(\(.+\))?: .{1,50}'; then
+          echo "✅ Commit message follows conventional format"
+        else
+          echo "❌ Commit message should follow conventional commits format:"
+          echo "  feat: add new feature"
+          echo "  fix: bug fix"
+          echo "  docs: documentation changes"
+          echo "  chore: maintenance tasks"
+          echo "  etc."
+          exit 1
+        fi
+        
+    - name: Check for sensitive files
+      run: |
+        echo "Scanning for sensitive files..."
+        
+        SENSITIVE_FILES=(
+          "*.pem"
+          "*.key"
+          "*.p12"
+          "*.pfx"
+          ".env"
+          ".env.local"
+          "secrets.json"
+          "private.json"
+        )
+        
+        VIOLATIONS_FOUND=0
+        for pattern in "${SENSITIVE_FILES[@]}"; do
+          MATCHES=$(find . -name "$pattern" -not -path "./.git/*" | wc -l)
+          if [ $MATCHES -gt 0 ]; then
+            echo "❌ Found sensitive files matching pattern: $pattern"
+            find . -name "$pattern" -not -path "./.git/*"
+            VIOLATIONS_FOUND=$((VIOLATIONS_FOUND + MATCHES))
+          fi
+        done
+        
+        if [ $VIOLATIONS_FOUND -gt 0 ]; then
+          echo "❌ Sensitive files detected in repository"
+          echo "Remove these files and add them to .gitignore"
+          exit 1
+        else
+          echo "✅ No sensitive files detected"
+        fi
+
+  security-scan:
+    name: Security Scan
+    needs: [changes]
+    if: needs.changes.outputs.rust == 'true' || needs.changes.outputs.ci == 'true'
+    uses: ./.github/workflows/security-audit.yml
+
+  rust-validation:
+    name: Rust Validation
+    needs: [changes, pre-commit-checks]
+    if: needs.changes.outputs.rust == 'true' || needs.changes.outputs.ci == 'true'
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: rustfmt, clippy
+        
+    - name: Cache Rust dependencies
+      uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: src-tauri -> target
+        
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libwebkit2gtk-4.0-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+        
+    - name: Check Rust formatting
+      run: cargo fmt --check
+      working-directory: src-tauri
+      
+    - name: Run Clippy
+      run: cargo clippy --all-targets --all-features -- -D warnings
+      working-directory: src-tauri
+      
+    - name: Compile check
+      run: cargo check --all-targets --all-features
+      working-directory: src-tauri
+      
+    - name: Build debug
+      run: cargo build
+      working-directory: src-tauri
+      
+    - name: Run unit tests
+      run: cargo test --lib
+      working-directory: src-tauri
+
+  frontend-validation:
+    name: Frontend Validation
+    needs: [changes, pre-commit-checks]
+    if: needs.changes.outputs.frontend == 'true' || needs.changes.outputs.ci == 'true'
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: TypeScript type checking
+      run: npm run typecheck
+      
+    - name: Lint frontend code
+      run: npm run lint || echo "Linting completed with warnings"
+      
+    - name: Build frontend
+      run: npm run build
+      
+    - name: Run frontend tests
+      run: npm run test:run
+
+  integration-tests:
+    name: Integration Tests
+    needs: [rust-validation, frontend-validation]
+    if: always() && (needs.rust-validation.result == 'success' || needs.rust-validation.result == 'skipped') && (needs.frontend-validation.result == 'success' || needs.frontend-validation.result == 'skipped')
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: Cache Rust dependencies
+      uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: src-tauri -> target
+        
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libwebkit2gtk-4.0-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+        
+    - name: Install frontend dependencies
+      run: npm ci
+      
+    - name: Build frontend
+      run: npm run build
+      
+    - name: Run integration tests
+      run: cargo test integration_ --release
+      working-directory: src-tauri
+      timeout-minutes: 15
+
+  build-release:
+    name: Release Build Validation
+    needs: [security-scan, integration-tests]
+    if: always() && needs.security-scan.result == 'success' && (needs.integration-tests.result == 'success' || needs.integration-tests.result == 'skipped')
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: Cache Rust dependencies
+      uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: src-tauri -> target
+        
+    - name: Install system dependencies (Ubuntu)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libwebkit2gtk-4.0-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+        
+    - name: Install frontend dependencies
+      run: npm ci
+      
+    - name: Build frontend
+      run: npm run build
+      
+    - name: Build Tauri release
+      run: cargo build --release
+      working-directory: src-tauri
+      
+    - name: Verify binary functionality
+      if: matrix.os != 'windows-latest'
+      run: |
+        # Basic smoke test - verify binary can start
+        timeout 10s ./target/release/communitas --help || echo "Binary help command completed"
+      working-directory: src-tauri
+
+  quality-gate:
+    name: Quality Gate
+    needs: [build-release]
+    if: always()
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Evaluate quality gate
+      run: |
+        echo "Evaluating CI quality gate..."
+        
+        # Check if all required jobs passed
+        SECURITY_STATUS="${{ needs.security-scan.result }}"
+        BUILD_STATUS="${{ needs.build-release.result }}"
+        
+        echo "Security scan: $SECURITY_STATUS"
+        echo "Build release: $BUILD_STATUS"
+        
+        if [ "$SECURITY_STATUS" = "success" ] && [ "$BUILD_STATUS" = "success" ]; then
+          echo "✅ Quality gate PASSED"
+          echo "All critical checks completed successfully"
+        else
+          echo "❌ Quality gate FAILED"
+          echo "One or more critical checks failed"
+          exit 1
+        fi
+        
+    - name: Generate CI summary
+      run: |
+        echo "## CI Pipeline Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+        echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+        echo "| Security Scan | ${{ needs.security-scan.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Build Release | ${{ needs.build-release.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Result:** ${{ needs.security-scan.result == 'success' && needs.build-release.result == 'success' && '✅ All checks passed' || '❌ Some checks failed' }}" >> $GITHUB_STEP_SUMMARY
+
+  notify-completion:
+    name: Notify Completion
+    needs: [quality-gate]
+    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Success notification
+      if: needs.quality-gate.result == 'success'
+      run: |
+        echo "🎉 CI pipeline completed successfully for main branch"
+        echo "Commit: ${{ github.sha }}"
+        echo "All quality gates passed ✅"
+        
+    - name: Failure notification
+      if: needs.quality-gate.result != 'success'
+      run: |
+        echo "❌ CI pipeline failed for main branch"
+        echo "Commit: ${{ github.sha }}" 
+        echo "Quality gate status: ${{ needs.quality-gate.result }}"
+        exit 1

@@ -85,8 +85,8 @@ export class MarkdownWebPublisher {
   }
 
   async initialize(): Promise<void> {
-    // Initialize DHT connection if needed
-    // Setup complete
+    // Ensure DHT is connected for storage operations
+    await this.dht.connect()
   }
 
   async destroy(): Promise<void> {
@@ -246,17 +246,33 @@ export class MarkdownWebPublisher {
   async generateManifest(options?: { entryPoint?: string; theme?: string }): Promise<WebsiteManifest> {
     const files = await this.scanWebDirectory()
     const entryPoint = options?.entryPoint || 'home.md'
-    
+
+    // Versioning: start at 1.0.0 and bump patch for subsequent publishes
+    const previousVersion = this.currentManifest?.version
+    const nextVersion = previousVersion ? this.bumpPatch(previousVersion) : '1.0.0'
+    const now = Date.now()
+
     return {
-      version: crypto.randomUUID(),
+      version: nextVersion,
       entryPoint,
       files,
       identity: this.identity,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
+      createdAt: now,
+      updatedAt: now,
       theme: options?.theme || 'auto',
-      previousVersion: this.currentManifest?.version
+      previousVersion
     }
+  }
+
+  private bumpPatch(version: string): string {
+    const match = version.match(/^(\d+)\.(\d+)\.(\d+)$/)
+    if (!match) {
+      return '1.0.0'
+    }
+    const major = parseInt(match[1], 10)
+    const minor = parseInt(match[2], 10)
+    const patch = parseInt(match[3], 10)
+    return `${major}.${minor}.${patch + 1}`
   }
 
   // Link processing

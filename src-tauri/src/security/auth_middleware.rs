@@ -21,7 +21,7 @@ pub const MAX_SESSION_DURATION: Duration = Duration::from_secs(3600);
 pub const SESSION_CLEANUP_INTERVAL: Duration = Duration::from_secs(300);
 
 /// Authentication session information
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct AuthSession {
     pub session_id: String,
     pub user_id: String,

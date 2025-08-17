@@ -345,19 +345,19 @@ async fn test_state_transitions() -> Result<()> {
 #[tokio::test]
 async fn test_complete_reed_solomon_v2_system() -> Result<()> {
     println!("🚀 Running complete Reed Solomon v2 system validation\n");
-    println!("=" .repeat(60));
+    println!("{}", "=".repeat(60));
     
     test_60_percent_availability_comprehensive().await?;
-    println!("=" .repeat(60));
+    println!("{}", "=".repeat(60));
     
     test_dynamic_membership_rebalancing().await?;
-    println!("=" .repeat(60));
+    println!("{}", "=".repeat(60));
     
     test_intelligent_shard_distribution().await?;
-    println!("=" .repeat(60));
+    println!("{}", "=".repeat(60));
     
     test_recovery_scenarios().await?;
-    println!("=" .repeat(60));
+    println!("{}", "=".repeat(60));
     
     println!("\n✅ All Reed Solomon v2 tests passed!");
     println!("📊 System validated for:");

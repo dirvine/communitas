@@ -1,0 +1,105 @@
+# cargo-deny configuration for security and license compliance
+
+[graph]
+targets = [
+    { triple = "x86_64-unknown-linux-gnu" },
+    { triple = "x86_64-apple-darwin" },
+    { triple = "x86_64-pc-windows-msvc" },
+]
+
+[advisories]
+# Security vulnerability database configuration
+version = 2
+db-path = "~/.cargo/advisory-db"
+db-urls = ["https://github.com/rustsec/advisory-db"]
+
+# Deny security vulnerabilities
+vulnerability = "deny"
+# Warn about unmaintained crates
+unmaintained = "warn"
+# Warn about unsound crates
+unsound = "warn"
+# Allow yanked crates for now (can be tightened)
+yanked = "allow"
+# Notice deprecated features
+notice = "warn"
+
+# Ignore specific advisories if needed (add as required)
+ignore = [
+    # Example: "RUSTSEC-2020-0001", 
+]
+
+[licenses]
+# License compliance configuration
+version = 2
+# Allow these licenses
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception", 
+    "MIT",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-DFS-2016",
+    "CC0-1.0",
+    "MPL-2.0",
+    "AGPL-3.0",  # Allow AGPL for Saorsa components
+]
+
+# Deny these licenses (copyleft licenses that could affect commercial use)
+deny = [
+    "GPL-2.0",
+    "GPL-3.0",
+    "LGPL-2.0",
+    "LGPL-2.1",
+    "LGPL-3.0",
+]
+
+# Warn on unclear or unlicensed code
+unlicensed = "deny"
+# Allow multiple licenses if all are allowed
+multiple-versions = "warn"
+
+# Private/proprietary crates (if any)
+private = { ignore = true }
+
+[bans]
+# Dependency banning configuration
+version = 2
+
+# Deny multiple versions of these crates (reduce dependency bloat)
+multiple-versions = "warn"
+wildcards = "allow"  # Allow wildcard dependencies for now
+
+# Specific crates to deny (security or quality issues)
+deny = [
+    # Add problematic crates here
+    # { name = "openssl", version = "*" },  # Example: prefer rustls
+]
+
+# Allow specific duplicates that are hard to avoid
+skip = [
+    # Example: { name = "windows-sys", version = "0.45" },
+]
+
+# Skip certain trees entirely
+skip-tree = [
+    # Example: { name = "windows", version = "0.43" },
+]
+
+[sources]
+# Source configuration (crates.io, git repositories, etc.)
+version = 2
+
+# Allow crates.io
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+
+# Allow git sources for development/private repositories
+allow-git = [
+    "https://github.com/dirvine/saorsa-core",
+    "https://github.com/joshuef/saorsa-core", 
+]
+
+# Unknown registries/sources
+unknown-registry = "deny"
+unknown-git = "warn"

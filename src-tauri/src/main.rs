@@ -31,9 +31,16 @@ mod identity_commands;
 mod error;
 mod dht_facade;
 mod mcp_plugin;
+mod messaging_commands;
+mod pqc_config;
 mod secure_storage;
 mod security;
+mod secure_fec;
 mod stores;
+mod saorsa_storage;
+mod saorsa_storage_commands;
+mod web_publishing;
+mod webrtc_presence;
 
 use contact_commands::init_contact_manager;
 use contacts::ContactManager;
@@ -43,6 +50,7 @@ use geographic_routing::GeographicRoutingManager;
 use groups::GroupManager;
 use identity::IdentityManager;
 use identity_commands::IdentityState;
+use dht_facade::LocalDht;
 use secure_storage::{SecureStorageManager, SecureKeyMetadata};
 use security::{AuthMiddleware, RateLimiters, InputValidator, EnhancedSecureStorage};
 use rustls;
@@ -75,6 +83,7 @@ pub struct AppState {
     pub organization_manager: Option<Arc<RwLock<OrganizationManager>>>,
     pub p2p_node: Option<Arc<RwLock<RealP2PNode>>>,
     pub dht_listener: Option<Arc<RwLock<DHTEventListener>>>,
+    pub dht_local: Option<Arc<LocalDht>>, // Local DHT facade for dev/tests
     pub geographic_manager: Arc<RwLock<Option<GeographicRoutingManager>>>,
     // Security components
     pub auth_middleware: Arc<AuthMiddleware>,
@@ -1081,16 +1090,18 @@ async fn setup_application_state() -> anyhow::Result<AppState> {
     info!("Auto-connecting to P2P network...");
     let mut p2p_node = None;
     let mut organization_manager = None;
+    let mut dht_local: Option<Arc<LocalDht>> = None;
     
     match auto_connect_p2p().await {
         Ok(node) => {
             info!("Successfully connected to P2P network");
             let node_arc = Arc::new(RwLock::new(node));
             
-            // Initialize organization manager with DHT
-            let dht = {
+            // Get peer ID and DHT in separate scopes
+            let (dht, self_id) = {
                 let node_guard = node_arc.read().await;
-                if let Some(dht_ref) = node_guard.node.dht() {
+                let peer_id = node_guard.peer_id.clone();
+                let dht = if let Some(dht_ref) = node_guard.node.dht() {
                     dht_ref.clone()
                 } else {
                     warn!("DHT not available in P2P node");
@@ -1100,17 +1111,20 @@ async fn setup_application_state() -> anyhow::Result<AppState> {
                         local_key,
                         saorsa_core::dht::DHTConfig::default()
                     )))
-                }
+                };
+                (dht, peer_id)
             };
+            
             organization_manager = Some(Arc::new(RwLock::new(
                 OrganizationManager::new(dht)
             )));
-            
+            dht_local = Some(Arc::new(LocalDht::new(self_id)));
             p2p_node = Some(node_arc);
         }
         Err(e) => {
             warn!("Failed to auto-connect to P2P network: {}. Will retry later.", e);
             // Continue without P2P connection - app works offline
+            dht_local = Some(Arc::new(LocalDht::new("local-dev".to_string())));
         }
     }
 
@@ -1124,6 +1138,7 @@ async fn setup_application_state() -> anyhow::Result<AppState> {
         organization_manager,
         p2p_node,
         dht_listener: None, // Will be initialized after app starts
+        dht_local,
         geographic_manager: Arc::new(RwLock::new(None)), // Will be initialized with P2P node
         // Initialize security components
         auth_middleware: Arc::new(AuthMiddleware::new()),
@@ -1137,7 +1152,7 @@ async fn main() -> anyhow::Result<()> {
     // Initialize crypto provider for rustls
     rustls::crypto::aws_lc_rs::default_provider()
         .install_default()
-        .map_err(|e| anyhow::anyhow!("Failed to install rustls crypto provider: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Failed to install rustls crypto provider: {:?}", e))?;
     
     // Initialize logging
     tracing_subscriber::fmt()
@@ -1165,7 +1180,17 @@ async fn main() -> anyhow::Result<()> {
             let state = app_state.read().await;
             state.geographic_manager.clone()
         })
-        .manage(identity_state);
+        .manage(identity_state)
+        .manage({
+            use web_publishing::WebPublishingState;
+            WebPublishingState::new()
+                .map_err(|e| anyhow::anyhow!("Failed to initialize web publishing state: {}", e))?
+        })
+        .manage({
+            use saorsa_storage_commands::StorageEngineState;
+            use dht_facade::LocalDht;
+            StorageEngineState::<LocalDht>::new()
+        });
 
     // Add MCP plugin in debug mode
     #[cfg(debug_assertions)]
@@ -1177,6 +1202,8 @@ async fn main() -> anyhow::Result<()> {
     }
 
     builder
+        .manage(messaging_commands::init_messaging_storage())
+        .manage(tokio::sync::RwLock::new(std::collections::HashMap::<String, identity_commands::PqcIdentity>::new()))
         .invoke_handler(tauri::generate_handler![
             // Node management
             get_node_info,
@@ -1190,6 +1217,34 @@ async fn main() -> anyhow::Result<()> {
             get_messages,
             send_group_message,
             create_group,
+            // Sprint 3: Secure messaging commands with saorsa-fec
+            messaging_commands::initialize_messaging_system,
+            messaging_commands::send_direct_message,
+            messaging_commands::send_group_message_secure,
+            messaging_commands::get_messages_secure,
+            messaging_commands::subscribe_to_messages,
+            messaging_commands::create_group_secure,
+            messaging_commands::add_group_member,
+            messaging_commands::remove_group_member,
+            messaging_commands::get_groups,
+            // Sprint 3: WebRTC-over-QUIC presence system with saorsa-fec encryption
+            webrtc_presence::start_presence_manager,
+            webrtc_presence::set_user_presence,
+            webrtc_presence::get_peer_presence,
+            webrtc_presence::connect_to_peer_presence,
+            webrtc_presence::disconnect_peer_presence,
+            webrtc_presence::get_all_peer_presences,
+            webrtc_presence::get_presence_network_metrics,
+            webrtc_presence::get_connection_cache_metrics,
+            webrtc_presence::get_bandwidth_optimization_metrics,
+            // Sprint 3: Connection quality metrics caching and monitoring system
+            webrtc_presence::get_metrics_monitoring_dashboard,
+            webrtc_presence::get_peer_metrics_history,
+            webrtc_presence::get_active_quality_alerts,
+            webrtc_presence::set_quality_alert_thresholds,
+            webrtc_presence::get_aggregated_peer_metrics,
+            webrtc_presence::export_metrics_data,
+            webrtc_presence::clear_resolved_alerts,
             // Geographic routing commands
             geographic_commands::get_geographic_status,
             geographic_commands::get_geographic_peers,
@@ -1248,7 +1303,7 @@ async fn main() -> anyhow::Result<()> {
             dht_events::subscribe_to_entity,
             dht_events::unsubscribe_from_entity,
             dht_events::get_sync_status,
-            // Four-word identity commands
+            // Four-word identity commands (legacy)
             identity_commands::generate_four_word_identity,
             identity_commands::validate_four_word_identity,
             identity_commands::check_identity_availability,
@@ -1265,6 +1320,35 @@ async fn main() -> anyhow::Result<()> {
             identity_commands::validate_word,
             identity_commands::batch_validate_identities,
             identity_commands::get_identity_statistics,
+            // Post-Quantum identity commands (ML-DSA-65)
+            identity_commands::generate_pqc_identity,
+            identity_commands::get_pqc_identity,
+            identity_commands::list_pqc_identities,
+            identity_commands::delete_pqc_identity,
+            identity_commands::create_pqc_identity_packet,
+            identity_commands::verify_pqc_identity_packet,
+            identity_commands::verify_pqc_identity,
+            identity_commands::calculate_dht_id_from_address,
+            identity_commands::validate_four_word_address_format,
+            identity_commands::sign_data_with_identity,
+            identity_commands::verify_data_signature,
+            // Web publishing commands
+            web_publishing::publish_web_content,
+            web_publishing::browse_entity_web,
+            web_publishing::store_web_file,
+            web_publishing::retrieve_file,
+            // Saorsa Storage System commands (temporarily disabled for compilation)
+            // saorsa_storage_commands::init_storage_engine,
+            // saorsa_storage_commands::store_content,
+            // saorsa_storage_commands::retrieve_content,
+            // saorsa_storage_commands::list_content,
+            // saorsa_storage_commands::delete_content,
+            // saorsa_storage_commands::get_storage_stats,
+            // saorsa_storage_commands::transition_content_policy,
+            // saorsa_storage_commands::perform_storage_maintenance,
+            // saorsa_storage_commands::validate_storage_policy,
+            // saorsa_storage_commands::generate_master_key,
+            // saorsa_storage_commands::is_storage_initialized,
         ])
         .setup(|_app| {
             info!("Communitas application setup complete");

@@ -15,6 +15,7 @@ pub trait DhtFacade: Send + Sync {
 }
 
 /// Simple in-memory DHT facade for local dev and tests
+#[derive(Debug)]
 pub struct LocalDht {
     self_id: String,
     store: Arc<RwLock<HashMap<Vec<u8>, Vec<u8>>>>,

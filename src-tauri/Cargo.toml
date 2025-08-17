@@ -55,7 +55,7 @@ tauri = { version = "2.6.1", features = [] }
 tauri-plugin-log = "2"
 
 # Saorsa Labs - Use GitHub dependencies
-saorsa-core = { git = "https://github.com/dirvine/saorsa-core-foundation.git", features = ["quantum-resistant"] }
+saorsa-core = "0.3.4"
 tokio = { version = "1.35", features = ["full"] }
 anyhow = "1.0"
 thiserror = "1.0"
@@ -83,11 +83,12 @@ chacha20poly1305 = "0.10"
 x25519-dalek = "2.0"
 ed25519-dalek = "2.0"
 hkdf = "0.12"
+hmac = "0.12"
 sha2 = "0.10"
 rand = "0.8"
 
 # Database and storage
-sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "sqlite", "chrono", "uuid"] }
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite", "chrono", "uuid"] }
 
 # Compression
 flate2 = "1.0"
@@ -99,8 +100,10 @@ mime_guess = "2.0"
 keyring = "3.2"
 base64 = "0.22"
 
-# Reed Solomon FEC for storage (from crates.io)
-saorsa-fec = ">=0.1, <1.0"
+# Saorsa ecosystem for P2P functionality (from crates.io)
+saorsa-fec = "0.2.2"
+saorsa-mls = "0.1.0"
+saorsa-rsps = "0.2.0"
 
 # Security and validation dependencies
 validator = { version = "0.18", features = ["derive"] }

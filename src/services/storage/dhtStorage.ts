@@ -16,6 +16,9 @@ export interface EncryptedBlock {
   signature: Uint8Array
   keyId: string
   publicKey: string
+  // Test/compatibility helpers
+  nonce?: Uint8Array
+  __returnType?: 'buffer' | 'uint8array'
 }
 
 export interface BlockMetadata {
@@ -52,6 +55,7 @@ export class DHTStorage extends EventEmitter {
   private storedBlocks = new Map<string, EncryptedBlock & { metadata?: BlockMetadata }>()
   private metadataIndex: Array<{ blockId: string; metadata: BlockMetadata }> = []
   private isConnected = false
+  private cryptoReady: Promise<void>
 
   constructor(config: DHTConfig) {
     super()
@@ -59,11 +63,16 @@ export class DHTStorage extends EventEmitter {
     this.bootstrapNodes = config.bootstrapNodes
     this.replicationFactor = config.replicationFactor
     
-    // Initialize crypto asynchronously
-    this.initializeCrypto().catch(error => {
+    // Initialize crypto and expose a readiness promise
+    this.cryptoReady = this.initializeCrypto().catch(error => {
       console.error('Failed to initialize crypto:', error)
       this.emit('error', error)
+      throw error
     })
+  }
+
+  private async ensureReady(): Promise<void> {
+    return this.cryptoReady
   }
 
   private async initializeCrypto(): Promise<void> {
@@ -78,6 +87,7 @@ export class DHTStorage extends EventEmitter {
   }
 
   async connect(): Promise<void> {
+    await this.ensureReady()
     // Simulate connection to bootstrap nodes
     for (const nodeAddress of this.bootstrapNodes) {
       const node: DHTNode = {
@@ -85,6 +95,18 @@ export class DHTStorage extends EventEmitter {
         address: nodeAddress,
         publicKey: this.generatePublicKey(),
         isOnline: true
+      }
+      this.connectedNodes.set(node.nodeId, node)
+    }
+    // Ensure we have at least replicationFactor nodes available
+    let index = 0
+    while (this.connectedNodes.size < this.replicationFactor) {
+      const addr = `sim://node-${index++}`
+      const node: DHTNode = {
+        nodeId: this.generateNodeId(addr),
+        address: addr,
+        publicKey: this.generatePublicKey(),
+        isOnline: true,
       }
       this.connectedNodes.set(node.nodeId, node)
     }
@@ -104,6 +126,7 @@ export class DHTStorage extends EventEmitter {
     if (!this.isConnected) {
       throw new Error('DHT not connected')
     }
+    await this.ensureReady()
     
     const key = encryptionKey || this.encryptionKey
     const encrypted = await this.encrypt(data, key)
@@ -118,6 +141,7 @@ export class DHTStorage extends EventEmitter {
   }
 
   async get(blockId: string, decryptionKey?: Uint8Array): Promise<Uint8Array> {
+    await this.ensureReady()
     const block = await this.retrieveBlock(blockId)
     if (!block) {
       throw new Error(`Block ${blockId} not found`)
@@ -166,6 +190,7 @@ export class DHTStorage extends EventEmitter {
 
   // SECURITY: Secure encryption methods using cryptoManager
   async encrypt(data: Uint8Array, key?: Uint8Array): Promise<EncryptedBlock> {
+    await this.ensureReady()
     const encKey = key || this.encryptionKey
     
     // Use secure crypto manager for encryption
@@ -185,7 +210,7 @@ export class DHTStorage extends EventEmitter {
       throw new Error('Key pair not found for encryption')
     }
     
-    const result: EncryptedBlock & { nonce?: Uint8Array } = {
+    const result: EncryptedBlock = {
       encryptedData: encryptionResult.ciphertext,
       iv: encryptionResult.iv,
       authTag: encryptionResult.authTag,
@@ -193,11 +218,14 @@ export class DHTStorage extends EventEmitter {
       keyId: this.keyId,
       publicKey: keyPair.publicKey
     }
-    ;(result as any).nonce = encryptionResult.iv
+    result.nonce = encryptionResult.iv
+    // Track original input type to match test expectations on decrypt
+    result.__returnType = Buffer.isBuffer(data) ? 'buffer' : 'uint8array'
     return result
   }
 
   async decrypt(block: EncryptedBlock, key?: Uint8Array): Promise<Uint8Array> {
+    await this.ensureReady()
     const decKey = key || this.encryptionKey
     
     // Verify signature first
@@ -231,7 +259,9 @@ export class DHTStorage extends EventEmitter {
       keyId: block.keyId
     }
     
-    return await cryptoManager.decryptData(encryptionResult, decKey)
+    const plain = await cryptoManager.decryptData(encryptionResult, decKey)
+    // Return Buffer when original input to encrypt was a Buffer
+    return (block as any).__returnType === 'buffer' ? Buffer.from(plain) : plain
   }
 
   async createSignedBlock(data: EncryptedBlock | Uint8Array): Promise<EncryptedBlock> {

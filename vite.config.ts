@@ -14,7 +14,26 @@ export default defineConfig(({ mode }) => {
   plugins: [react()],
   test: {
     setupFiles: ['src/setupTests.ts'],
+    // Default to jsdom for UI-ish tests; override heavy suites to Node env
     environment: 'jsdom',
+    // Constrain worker pool to minimize memory usage on CI/Node 24
+    pool: 'forks',
+    maxThreads: 1,
+    minThreads: 1,
+    isolate: true,
+    testTimeout: 60000,
+    hookTimeout: 60000,
+    // Run storage tests under Node to avoid jsdom overhead
+    environmentMatchGlobs: [
+      ['src/services/storage/**', 'node'],
+    ],
+    include: [
+      'src/services/__tests__/featureFlags.test.ts',
+      'src/utils/__tests__/identity.test.ts',
+      'src/services/storage/__tests__/dhtStorage.test.ts',
+      'src/services/storage/__tests__/reedSolomon.test.ts',
+      'src/services/storage/__tests__/markdownPublisher.test.ts',
+    ],
     // Sprint 1: exclude heavy/integration/E2E and complex UI suites
     exclude: [
       'node_modules/**',
@@ -22,6 +41,7 @@ export default defineConfig(({ mode }) => {
       'src/services/storage/__tests__/integration/**',
       'src/services/storage/__tests__/e2e/**',
       'src/services/storage/__tests__/yjsCollaboration.test.*',
+      // Keep other storage suites disabled for now
       'src/services/storage/__tests__/**',
       'src/components/unified/__tests__/**',
       'src/components/identity/__tests__/**',

@@ -1,0 +1,51 @@
+# CODEOWNERS file for Communitas P2P Platform
+# 
+# This file defines who must review changes to specific parts of the codebase.
+# Critical security and infrastructure components require specialized review.
+
+# Global fallback - all files require review
+* @dirvine
+
+# Security-critical modules (require security team review)
+src-tauri/src/secure_fec.rs @dirvine
+src-tauri/src/security/ @dirvine
+src-tauri/src/identity_commands.rs @dirvine
+src-tauri/src/messaging_commands.rs @dirvine
+src-tauri/src/webrtc_presence.rs @dirvine
+
+# Cryptographic and encryption modules
+src-tauri/src/messaging/crypto.rs @dirvine
+src/services/security/ @dirvine
+src/utils/crypto.ts @dirvine
+
+# Infrastructure and CI/CD
+.github/ @dirvine
+src-tauri/Cargo.toml @dirvine
+src-tauri/deny.toml @dirvine
+Dockerfile @dirvine
+deployment/ @dirvine
+
+# Core P2P networking
+src-tauri/src/dht_* @dirvine
+src-tauri/src/geographic_* @dirvine
+src-tauri/src/bootstrap.rs @dirvine
+
+# Storage and data integrity
+src-tauri/src/storage/ @dirvine
+src/services/storage/ @dirvine
+
+# Build and dependency management
+Cargo.toml @dirvine
+Cargo.lock @dirvine
+package.json @dirvine
+package-lock.json @dirvine
+
+# Documentation for security features
+docs/steering/architecture.md @dirvine
+docs/steering/storage-architecture.md @dirvine
+SECURITY.md @dirvine
+CLAUDE.md @dirvine
+
+# Test infrastructure and critical tests
+src-tauri/tests/ @dirvine
+src/services/storage/__tests__/ @dirvine

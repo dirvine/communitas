@@ -9,8 +9,8 @@
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
     "tauri": "tauri",
-    "test": "vitest",
-    "test:run": "vitest run src/services/__tests__/featureFlags.test.ts src/utils/__tests__/identity.test.ts",
+    "test": "NODE_OPTIONS=--max-old-space-size=4096 vitest --run --reporter=dot",
+    "test:run": "NODE_OPTIONS=--max-old-space-size=4096 vitest run --reporter=dot src/services/__tests__/featureFlags.test.ts src/utils/__tests__/identity.test.ts src/services/storage/__tests__/dhtStorage.test.ts src/services/storage/__tests__/reedSolomon.test.ts src/services/storage/__tests__/markdownPublisher.test.ts",
     "test:ui": "vitest --ui"
   },
   "dependencies": {

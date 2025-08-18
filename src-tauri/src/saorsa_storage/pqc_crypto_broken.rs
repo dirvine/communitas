@@ -15,9 +15,9 @@ use tokio::sync::RwLock;
 use rand::RngCore;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-// Use real saorsa-pqc 0.3.5 APIs - same pattern as pqc_bridge.rs
-use saorsa_pqc::api::{ml_kem_768, ChaCha20Poly1305};
-use saorsa_pqc::api::symmetric::{generate_nonce};
+// Use real saorsa-pqc 0.3.5 APIs
+use saorsa_pqc::api::{ml_kem_768, ml_dsa_65, ChaCha20Poly1305};
+use saorsa_pqc::api::symmetric::{generate_key, generate_nonce};
 use rand::rngs::OsRng;
 
 /// PQC configuration for storage operations
@@ -75,7 +75,7 @@ impl From<EncryptionMode> for PqcEncryptionMode {
     }
 }
 
-/// Real ML-KEM-768 keypair using saorsa-pqc - store as bytes like pqc_bridge.rs
+/// Real ML-KEM-768 keypair using saorsa-pqc
 #[derive(Debug, Clone, ZeroizeOnDrop)]
 pub struct MlKemKeypair {
     pub public_key: Vec<u8>,
@@ -121,10 +121,10 @@ pub struct MlKemEncapsulation {
 }
 
 impl MlKemEncapsulation {
-    /// Real ML-KEM-768 encapsulation using saorsa-pqc - use bytes like pqc_bridge.rs
-    pub fn encapsulate(public_key_bytes: &[u8]) -> StorageResult<Self> {
+    /// Real ML-KEM-768 encapsulation using saorsa-pqc
+    pub fn encapsulate(public_key: &[u8]) -> StorageResult<Self> {
         let kem = ml_kem_768();
-        let (shared_secret, ciphertext) = kem.encapsulate(public_key_bytes)
+        let (shared_secret, ciphertext) = kem.encapsulate(public_key)
             .map_err(|_| StorageError::Encryption {
                 source: crate::saorsa_storage::errors::EncryptionError::CipherInitializationFailed,
             })?;
@@ -145,10 +145,10 @@ impl MlKemEncapsulation {
         })
     }
     
-    /// Real ML-KEM-768 decapsulation using saorsa-pqc - use bytes like pqc_bridge.rs
-    pub fn decapsulate(ciphertext_bytes: &[u8], secret_key_bytes: &[u8]) -> StorageResult<[u8; 32]> {
+    /// Real ML-KEM-768 decapsulation using saorsa-pqc
+    pub fn decapsulate(ciphertext: &[u8], secret_key: &[u8]) -> StorageResult<[u8; 32]> {
         let kem = ml_kem_768();
-        let shared_secret = kem.decapsulate(secret_key_bytes, ciphertext_bytes)
+        let shared_secret = kem.decapsulate(secret_key, ciphertext)
             .map_err(|_| StorageError::Encryption {
                 source: crate::saorsa_storage::errors::EncryptionError::AuthenticationFailed,
             })?;
@@ -171,7 +171,7 @@ impl MlKemEncapsulation {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PqcEncryptedContent {
     pub ciphertext: Vec<u8>,
-    pub nonce: Vec<u8>, // Use Vec<u8> for nonce like pqc_bridge.rs
+    pub nonce: [u8; 24], // ChaCha20-Poly1305 nonce size (saorsa-pqc uses 24-byte nonces)
     pub ml_kem_ciphertext: Vec<u8>, // ML-KEM-768 encapsulated key
     pub content_address: String,
     pub algorithm: String, // "ML-KEM-768+ChaCha20-Poly1305"
@@ -236,9 +236,11 @@ impl PqcCryptoManager {
         // Encrypt content with ChaCha20-Poly1305 using the derived key
         let encrypted_data = self.encrypt_with_chacha20(&content, &final_key)?;
         
-        // Extract nonce from encrypted data - use the actual nonce size from generate_nonce()
-        let nonce_size = 24; // ChaCha20-Poly1305 nonce size
-        let nonce = encrypted_data[..nonce_size].to_vec();
+        // Extract nonce from encrypted data (first 24 bytes for saorsa-pqc)
+        let nonce = encrypted_data[..24].try_into()
+            .map_err(|_| StorageError::Encryption {
+                source: crate::saorsa_storage::errors::EncryptionError::InvalidNonce { length: 24 },
+            })?;
         
         let config = self.config.read().await;
         let key_derivation_info = PqcKeyDerivationInfo {
@@ -250,7 +252,7 @@ impl PqcCryptoManager {
         };
         
         Ok(PqcEncryptedContent {
-            ciphertext: encrypted_data[nonce_size..].to_vec(), // Skip nonce
+            ciphertext: encrypted_data[24..].to_vec(), // Skip nonce (24 bytes)
             nonce,
             ml_kem_ciphertext: encapsulation.ciphertext.clone(),
             content_address: self.generate_content_address(content),
@@ -285,7 +287,7 @@ impl PqcCryptoManager {
         let final_key = self.derive_final_key(&encryption_key, &shared_secret, mode).await?;
         
         // Reconstruct full encrypted data (nonce + ciphertext)
-        let mut encrypted_data = encrypted_content.nonce.clone();
+        let mut encrypted_data = encrypted_content.nonce.to_vec();
         encrypted_data.extend_from_slice(&encrypted_content.ciphertext);
         
         // Decrypt with ChaCha20-Poly1305
@@ -505,15 +507,14 @@ impl PqcCryptoManager {
     }
     
     fn decrypt_with_chacha20(&self, encrypted_data: &[u8], key: &[u8; 32]) -> StorageResult<Vec<u8>> {
-        let nonce_size = 24; // ChaCha20-Poly1305 nonce size
-        if encrypted_data.len() < nonce_size {
+        if encrypted_data.len() < 24 {
             return Err(StorageError::Encryption {
                 source: crate::saorsa_storage::errors::EncryptionError::InvalidNonce { length: encrypted_data.len() },
             });
         }
         
-        let nonce = &encrypted_data[..nonce_size];
-        let ciphertext = &encrypted_data[nonce_size..];
+        let nonce = &encrypted_data[..24];
+        let ciphertext = &encrypted_data[24..];
         
         let cipher = ChaCha20Poly1305::new(key);
         cipher.decrypt(nonce, ciphertext)

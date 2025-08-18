@@ -32,6 +32,7 @@ mod error;
 mod dht_facade;
 mod mcp_plugin;
 mod messaging_commands;
+mod pqc_bridge;
 mod pqc_config;
 mod secure_storage;
 mod security;
@@ -1332,6 +1333,16 @@ async fn main() -> anyhow::Result<()> {
             identity_commands::validate_four_word_address_format,
             identity_commands::sign_data_with_identity,
             identity_commands::verify_data_signature,
+            // PQC Bridge commands for frontend integration
+            pqc_bridge::generate_ml_dsa_keypair,
+            pqc_bridge::generate_ml_kem_keypair,
+            pqc_bridge::ml_dsa_sign,
+            pqc_bridge::ml_dsa_verify,
+            pqc_bridge::ml_kem_encapsulate,
+            pqc_bridge::ml_kem_decapsulate,
+            pqc_bridge::pqc_encrypt,
+            pqc_bridge::pqc_decrypt,
+            pqc_bridge::get_pqc_info,
             // Web publishing commands
             web_publishing::publish_web_content,
             web_publishing::browse_entity_web,

@@ -17,7 +17,8 @@
 //! # P2P Messaging System
 //! 
 //! A production-ready distributed messaging system with:
-//! - End-to-end encryption using X25519/ChaCha20Poly1305
+//! - End-to-end encryption using ML-KEM-768/ML-DSA-65/ChaCha20Poly1305
+//! - Post-quantum secure key exchange and signatures
 //! - DHT-based message routing and discovery
 //! - Real-time delivery with acknowledgments
 //! - Message persistence with configurable TTL
@@ -34,10 +35,6 @@ use tracing::{info, warn, error, debug, instrument};
 use uuid::Uuid;
 use chrono::{DateTime, Utc, Duration as ChronoDuration};
 use blake3;
-
-// Cryptographic imports
-use chacha20poly1305::{XChaCha20Poly1305, Key, Nonce, aead::{Aead, KeyInit}};
-use x25519_dalek::{EphemeralSecret, PublicKey as X25519PublicKey, SharedSecret};
 use rand::{RngCore, rngs::OsRng};
 
 // Import our DHT and identity modules

@@ -78,10 +78,8 @@ futures = "0.3"
 getrandom = "0.2"
 four-word-networking = "2.3"
 
-# Cryptographic dependencies for messaging
-chacha20poly1305 = "0.10"
-x25519-dalek = "2.0"
-ed25519-dalek = "2.0"
+# Post-Quantum Cryptographic dependencies
+saorsa-pqc = "0.3.5"
 hkdf = "0.12"
 hmac = "0.12"
 sha2 = "0.10"
@@ -112,6 +110,7 @@ argon2 = "0.5"
 zeroize = "1.7"
 regex = "1.10"
 lazy_static = "1.4"
+chacha20poly1305 = "0.10.1"
 
 # Testing dependencies
 [dev-dependencies]

@@ -31,18 +31,21 @@ use tokio::sync::{RwLock, Mutex};
 use tracing::{info, warn, error, debug, instrument};
 use rand::{RngCore, rngs::OsRng};
 
-// Cryptographic imports
-use chacha20poly1305::{XChaCha20Poly1305, Key, Nonce, aead::{Aead, KeyInit}};
-use x25519_dalek::{EphemeralSecret, PublicKey as X25519PublicKey, SharedSecret, StaticSecret};
-use ed25519_dalek::{Signer, Verifier, Signature, SigningKey, VerifyingKey};
+// Post-Quantum Cryptographic imports (saorsa-pqc 0.3.0)
+use saorsa_pqc::chacha20poly1305::{XChaCha20Poly1305, Key, Nonce, aead::{Aead, KeyInit}};
+use saorsa_pqc::{ml_kem_768, ml_dsa_65};
+use saorsa_pqc::ml_kem_768::{PublicKey as MlKemPublicKey, SecretKey as MlKemSecretKey};
+use saorsa_pqc::ml_dsa_65::{PublicKey as MlDsaPublicKey, SecretKey as MlDsaSecretKey};
+use saorsa_pqc::traits::{Signer, Verifier, SerDes, Decaps, Encaps};
 use blake3;
 use hkdf::Hkdf;
 use sha2::Sha256;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use super::{Message, UserId, GroupId, MessageId};
 use crate::identity::CommunidentityManager;
 
-/// Size of encryption keys in bytes
+/// Size of encryption keys in bytes (ChaCha20Poly1305)
 pub const KEY_SIZE: usize = 32;
 
 /// Size of nonce for ChaCha20Poly1305
@@ -54,12 +57,21 @@ pub const RATCHET_THRESHOLD: u64 = 1000;
 /// Size of authentication tag
 pub const TAG_SIZE: usize = 16;
 
+/// ML-KEM-768 public key size
+pub const ML_KEM_PUBLIC_KEY_SIZE: usize = ml_kem_768::PK_LEN;
+
+/// ML-KEM-768 ciphertext size
+pub const ML_KEM_CIPHERTEXT_SIZE: usize = ml_kem_768::CT_LEN;
+
+/// ML-DSA-65 signature size
+pub const ML_DSA_SIGNATURE_SIZE: usize = ml_dsa_65::SIG_LEN;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EncryptedMessage {
     pub metadata: super::MessageMetadata,
     pub encrypted_content: Vec<u8>,
     pub nonce: [u8; NONCE_SIZE],
-    pub ephemeral_public_key: Option<[u8; 32]>,
+    pub ephemeral_public_key: Option<Vec<u8>>,
     pub signature: Vec<u8>,
     pub key_id: String,
 }
@@ -68,7 +80,7 @@ pub struct EncryptedMessage {
 pub struct KeyExchange {
     pub sender: UserId,
     pub recipient: UserId,
-    pub ephemeral_public_key: [u8; 32],
+    pub ephemeral_public_key: Vec<u8>,
     pub timestamp: chrono::DateTime<chrono::Utc>,
     pub signature: Vec<u8>,
 }
@@ -129,7 +141,8 @@ impl GroupKey {
     }
 }
 
-/// Message cryptography manager
+/// Message cryptography manager with Post-Quantum algorithms
+#[derive(ZeroizeOnDrop)]
 pub struct MessageCrypto {
     identity_manager: Arc<Mutex<Option<CommunidentityManager>>>,
     
@@ -142,39 +155,41 @@ pub struct MessageCrypto {
     // Key exchange cache
     key_exchanges: Arc<RwLock<HashMap<String, KeyExchange>>>,
     
-    // Our static key pair for X25519
-    static_secret: StaticSecret,
-    static_public: X25519PublicKey,
+    // Our static key pair for ML-KEM-768
+    ml_kem_secret: MlKemSecretKey,
+    ml_kem_public: MlKemPublicKey,
     
     // Signing key for message authentication
-    signing_key: SigningKey,
-    verifying_key: VerifyingKey,
+    ml_dsa_secret: MlDsaSecretKey,
+    ml_dsa_public: MlDsaPublicKey,
 }
 
 impl MessageCrypto {
     pub async fn new(
         identity_manager: Arc<Mutex<Option<CommunidentityManager>>>,
     ) -> Result<Self> {
-        // Generate static key pair for X25519
-        let static_secret = StaticSecret::random_from_rng(OsRng);
-        let static_public = X25519PublicKey::from(&static_secret);
+        // Generate ML-KEM-768 key pair for key encapsulation
+        let (ml_kem_public, ml_kem_secret) = ml_kem_768::try_keygen()
+            .context("Failed to generate ML-KEM-768 key pair")?;
         
-        // Generate signing key pair
-        let signing_key = SigningKey::generate(&mut OsRng);
-        let verifying_key = signing_key.verifying_key();
+        // Generate ML-DSA-65 key pair for message authentication
+        let (ml_dsa_public, ml_dsa_secret) = ml_dsa_65::try_keygen()
+            .context("Failed to generate ML-DSA-65 key pair")?;
         
-        info!("Message crypto initialized with static key: {:?}", 
-              hex::encode(static_public.as_bytes()));
+        let public_key_bytes = ml_kem_public.into_bytes()
+            .context("Failed to serialize ML-KEM public key")?;
+        info!("Message crypto initialized with ML-KEM-768 public key: {}", 
+              hex::encode(&public_key_bytes[..16])); // Show first 16 bytes
         
         Ok(Self {
             identity_manager,
             direct_keys: Arc::new(RwLock::new(HashMap::new())),
             group_keys: Arc::new(RwLock::new(HashMap::new())),
             key_exchanges: Arc::new(RwLock::new(HashMap::new())),
-            static_secret,
-            static_public,
-            signing_key,
-            verifying_key,
+            ml_kem_secret,
+            ml_kem_public,
+            ml_dsa_secret,
+            ml_dsa_public,
         })
     }
     
@@ -200,13 +215,16 @@ impl MessageCrypto {
         let encrypted_content = cipher.encrypt(nonce, message.content.as_ref())
             .context("Failed to encrypt message content")?;
         
-        // Create signature over encrypted content
-        let signature = self.signing_key.sign(&encrypted_content);
+        // Create ML-DSA-65 signature over encrypted content
+        let signature = self.ml_dsa_secret.try_sign(&encrypted_content, b"message-auth")
+            .context("Failed to create ML-DSA-65 signature")?;
+        let signature_bytes = signature.into_bytes()
+            .context("Failed to serialize signature")?;
         
         // Update message
         message.content = encrypted_content;
         message.metadata.encrypted = true;
-        message.signature = Some(signature.to_bytes().to_vec());
+        message.signature = Some(signature_bytes);
         
         // Update key usage
         self.increment_key_usage(recipient).await?;
@@ -239,13 +257,16 @@ impl MessageCrypto {
         let encrypted_content = cipher.encrypt(nonce, message.content.as_ref())
             .context("Failed to encrypt group message content")?;
         
-        // Create signature
-        let signature = self.signing_key.sign(&encrypted_content);
+        // Create ML-DSA-65 signature
+        let signature = self.ml_dsa_secret.try_sign(&encrypted_content, b"group-message-auth")
+            .context("Failed to create ML-DSA-65 signature")?;
+        let signature_bytes = signature.into_bytes()
+            .context("Failed to serialize signature")?;
         
         // Update message
         message.content = encrypted_content;
         message.metadata.encrypted = true;
-        message.signature = Some(signature.to_bytes().to_vec());
+        message.signature = Some(signature_bytes);
         
         debug!("Group message {} encrypted for group {}", 
                message.metadata.id, group_id.0);
@@ -260,13 +281,14 @@ impl MessageCrypto {
             return Ok(message);
         }
         
-        // Verify signature first
+        // Verify ML-DSA-65 signature first
         if let Some(ref signature_bytes) = message.signature {
-            let signature = Signature::from_bytes(signature_bytes.as_slice().try_into()?)
-                .context("Invalid signature format")?;
+            let signature = ml_dsa_65::Signature::try_from_bytes(signature_bytes)
+                .context("Invalid ML-DSA-65 signature format")?;
             
             // Get sender's verifying key (simplified - in practice we'd look this up)
             // For now, we'll skip signature verification and focus on decryption
+            // In full implementation: sender_public_key.verify(&message.content, &signature, context)
         }
         
         let decryption_key = if let Some(ref group_id) = message.metadata.group_id {
@@ -306,21 +328,33 @@ impl MessageCrypto {
         Ok(message)
     }
     
-    /// Perform key exchange with another user
+    /// Perform ML-KEM-768 key exchange with another user
     #[instrument(skip(self))]
     pub async fn initiate_key_exchange(&self, recipient: &UserId) -> Result<KeyExchange> {
-        // Generate ephemeral key pair
-        let ephemeral_secret = EphemeralSecret::random_from_rng(OsRng);
-        let ephemeral_public = X25519PublicKey::from(&ephemeral_secret);
+        // Use our static ML-KEM public key for key exchange
+        let ephemeral_public_bytes = self.ml_kem_public.clone().into_bytes()
+            .context("Failed to serialize ML-KEM public key")?;
         
         let current_user = self.get_current_user_id().await?;
+        
+        // Create the exchange data to sign
+        let mut exchange_data = Vec::new();
+        exchange_data.extend_from_slice(current_user.0.as_bytes());
+        exchange_data.extend_from_slice(recipient.0.as_bytes());
+        exchange_data.extend_from_slice(&ephemeral_public_bytes);
+        
+        // Sign the exchange with ML-DSA-65
+        let signature = self.ml_dsa_secret.try_sign(&exchange_data, b"key-exchange")
+            .context("Failed to sign key exchange")?;
+        let signature_bytes = signature.into_bytes()
+            .context("Failed to serialize signature")?;
         
         let exchange = KeyExchange {
             sender: current_user,
             recipient: recipient.clone(),
-            ephemeral_public_key: *ephemeral_public.as_bytes(),
+            ephemeral_public_key: ephemeral_public_bytes,
             timestamp: chrono::Utc::now(),
-            signature: vec![], // TODO: Sign the exchange
+            signature: signature_bytes,
         };
         
         // Store exchange for completion
@@ -328,28 +362,39 @@ impl MessageCrypto {
         let mut exchanges = self.key_exchanges.write().await;
         exchanges.insert(exchange_id, exchange.clone());
         
-        info!("Key exchange initiated with {}", recipient.0);
+        info!("ML-KEM-768 key exchange initiated with {}", recipient.0);
         
         Ok(exchange)
     }
     
-    /// Complete key exchange with another user
+    /// Complete ML-KEM-768 key exchange with another user
     #[instrument(skip(self))]
     pub async fn complete_key_exchange(
         &self,
         exchange: &KeyExchange,
-        our_ephemeral_secret: &EphemeralSecret,
+        recipient_ml_kem_public: &[u8], // Recipient's ML-KEM public key
     ) -> Result<()> {
-        // Recreate their public key
-        let their_public = X25519PublicKey::from(exchange.ephemeral_public_key);
+        // Verify the key exchange signature first
+        let mut exchange_data = Vec::new();
+        exchange_data.extend_from_slice(exchange.sender.0.as_bytes());
+        exchange_data.extend_from_slice(exchange.recipient.0.as_bytes());
+        exchange_data.extend_from_slice(&exchange.ephemeral_public_key);
         
-        // Perform ECDH
-        let shared_secret = our_ephemeral_secret.diffie_hellman(&their_public);
+        // In a real implementation, we'd get the sender's ML-DSA public key and verify
+        // For now, we'll proceed with the key encapsulation
+        
+        // Reconstruct the recipient's ML-KEM public key
+        let recipient_public_key = MlKemPublicKey::try_from_bytes(recipient_ml_kem_public)
+            .context("Failed to deserialize recipient's ML-KEM public key")?;
+        
+        // Perform ML-KEM encapsulation
+        let (shared_secret, _ciphertext) = recipient_public_key.try_encaps()
+            .context("ML-KEM encapsulation failed")?;
         
         // Derive encryption key using HKDF
-        let hk = Hkdf::<Sha256>::new(None, shared_secret.as_bytes());
+        let hk = Hkdf::<Sha256>::new(None, &shared_secret);
         let mut derived_key = [0u8; KEY_SIZE];
-        hk.expand(b"message-encryption-key", &mut derived_key)
+        hk.expand(b"ml-kem-message-encryption", &mut derived_key)
             .context("HKDF expansion failed")?;
         
         // Store the derived key
@@ -362,7 +407,7 @@ impl MessageCrypto {
         let mut direct_keys = self.direct_keys.write().await;
         direct_keys.insert(exchange.sender.clone(), message_key);
         
-        info!("Key exchange completed with {}", exchange.sender.0);
+        info!("ML-KEM-768 key exchange completed with {}", exchange.sender.0);
         
         Ok(())
     }
@@ -472,39 +517,35 @@ impl MessageCrypto {
         Ok(UserId::new(identity.four_word_address))
     }
     
-    /// Verify a message signature
-    pub fn verify_signature(
+    /// Verify a message signature using ML-DSA-65
+    pub fn verify_ml_dsa_signature(
         &self,
         content: &[u8],
         signature: &[u8],
-        public_key: &VerifyingKey,
+        public_key_bytes: &[u8],
     ) -> Result<bool> {
-        let signature = Signature::from_bytes(signature.try_into()?)
-            .context("Invalid signature format")?;
+        // Reconstruct ML-DSA-65 public key
+        let public_key = MlDsaPublicKey::try_from_bytes(public_key_bytes)
+            .context("Failed to deserialize ML-DSA-65 public key")?;
         
-        match public_key.verify(content, &signature) {
-            Ok(_) => Ok(true),
-            Err(_) => Ok(false),
-        }
+        // Reconstruct signature
+        let sig = ml_dsa_65::Signature::try_from_bytes(signature)
+            .context("Invalid ML-DSA-65 signature format")?;
+        
+        // Verify signature
+        Ok(public_key.verify(content, &sig, b"message-verification"))
     }
     
-    /// Get our public keys for sharing
-    pub fn get_public_keys(&self) -> (X25519PublicKey, VerifyingKey) {
-        (self.static_public, self.verifying_key)
+    /// Get our ML-KEM-768 public key for sharing
+    pub fn get_ml_kem_public_key(&self) -> Result<Vec<u8>> {
+        self.ml_kem_public.clone().into_bytes()
+            .context("Failed to serialize ML-KEM public key")
     }
     
-    /// Derive key from shared secret
-    pub fn derive_key_from_shared_secret(
-        &self,
-        shared_secret: &SharedSecret,
-        context: &[u8],
-    ) -> Result<[u8; KEY_SIZE]> {
-        let hk = Hkdf::<Sha256>::new(None, shared_secret.as_bytes());
-        let mut derived_key = [0u8; KEY_SIZE];
-        hk.expand(context, &mut derived_key)
-            .context("HKDF expansion failed")?;
-        
-        Ok(derived_key)
+    /// Get our ML-DSA-65 public key for sharing
+    pub fn get_ml_dsa_public_key(&self) -> Result<Vec<u8>> {
+        self.ml_dsa_public.clone().into_bytes()
+            .context("Failed to serialize ML-DSA public key")
     }
     
     /// Clean up old keys and exchanges

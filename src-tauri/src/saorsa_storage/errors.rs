@@ -105,6 +105,9 @@ pub enum KeyDerivationError {
 
     #[error("Key rotation in progress")]
     KeyRotationInProgress,
+
+    #[error("ML-KEM key generation failed: {details}")]
+    MlKemKeyGeneration { details: String },
 }
 
 /// Encryption specific errors

@@ -1,6 +1,6 @@
 [package]
 name = "communitas-tauri"
-version = "0.1.0"
+version = "0.1.1"
 description = "Communitas P2P Chat & Diagnostics - Tauri Backend"
 authors = ["Saorsa Labs Limited <saorsalabs@gmail.com>"]
 license = "AGPL-3.0"

@@ -80,7 +80,7 @@ rust.analyzer = { level = "warn" }
 
 [workspace.package]
 edition = "2024"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Saorsa Labs Limited <saorsalabs@gmail.com>"]
 license = "AGPL-3.0"
 homepage = "https://github.com/dirvine/communitas-foundation"

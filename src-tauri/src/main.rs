@@ -112,12 +112,17 @@ impl RealP2PNode {
         let mut bootstrap_peers = vec![];
         
         // Parse bootstrap addresses with proper error handling
-        let bootstrap_addresses = [
-            "159.89.81.21:9001",
-            "159.89.81.21:9100", 
-            "159.89.81.21:9110",
-            "159.89.81.21:9120"
-        ];
+        // Use environment variable for local development, fallback to production bootstrap
+        let bootstrap_addresses = if let Ok(local_bootstrap) = std::env::var("COMMUNITAS_LOCAL_BOOTSTRAP") {
+            vec![local_bootstrap.as_str()]
+        } else {
+            vec![
+                "159.89.81.21:9001",
+                "159.89.81.21:9100",
+                "159.89.81.21:9110",
+                "159.89.81.21:9120"
+            ]
+        };
         
         for addr_str in bootstrap_addresses {
             match addr_str.parse() {

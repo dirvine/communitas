@@ -1,0 +1,50 @@
+# Communitas Bootstrap Node - Development/Testing
+FROM rust:1.85-slim-bookworm AS builder
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+# Copy source code
+COPY . .
+
+# Build the bootstrap node
+RUN cargo build --release --bin bootstrap
+
+# Production runtime image
+FROM debian:bookworm-slim
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN groupadd -r communitas && useradd -r -g communitas communitas
+
+# Set working directory
+WORKDIR /app
+
+# Copy the built bootstrap node
+COPY --from=builder /app/target/release/bootstrap /app/bootstrap
+
+# Switch to non-root user
+USER communitas
+
+# Set environment variables
+ENV RUST_LOG=info
+
+# Expose ports
+EXPOSE 9001 9100 9110 9120
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD nc -z localhost 9001 || exit 1
+
+# Run the bootstrap node
+CMD ["./bootstrap"]

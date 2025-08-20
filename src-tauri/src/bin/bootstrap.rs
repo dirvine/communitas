@@ -1,118 +1,151 @@
-// Copyright (c) 2025 Saorsa Labs Limited
-
-// This file is part of the Saorsa P2P network.
-
-// Licensed under the AGPL-3.0 license:
-// <https://www.gnu.org/licenses/agpl-3.0.html>
-
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-// GNU Affero General Public License for more details.
-
-// You should have received a copy of the GNU Affero General Public License
-// along with this program. If not, see <https://www.gnu.org/licenses/>.
-
-
-//! Standalone Bootstrap Node Binary for Communitas
-//!
-//! This binary runs the bootstrap node in production environments.
-
-use anyhow::Result;
-use clap::{Arg, Command};
 use std::net::SocketAddr;
-use std::path::PathBuf;
-use tracing::{error, info};
+use tokio::net::TcpListener;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tracing::{info, warn, error};
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
-use communitas_tauri::bootstrap::{run_bootstrap_node, BootstrapConfig};
+#[derive(Debug, Clone)]
+struct BootstrapState {
+    connected_peers: Arc<RwLock<HashMap<String, std::time::Instant>>>,
+}
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    let matches = Command::new("communitas-bootstrap")
-        .version("2.0.0")
-        .about("Communitas P2P Bootstrap Node")
-        .arg(
-            Arg::new("listen")
-                .long("listen")
-                .short('l')
-                .help("Listen address (e.g., 0.0.0.0:8888)")
-                .default_value("0.0.0.0:8888"),
-        )
-        .arg(
-            Arg::new("public-address")
-                .long("public-address")
-                .short('p')
-                .help("Public address for other nodes")
-                .default_value("bootstrap.communitas.app:8888"),
-        )
-        .arg(
-            Arg::new("data-dir")
-                .long("data-dir")
-                .short('d')
-                .help("Data storage directory")
-                .default_value("/var/lib/saorsa"),
-        )
-        .arg(
-            Arg::new("max-connections")
-                .long("max-connections")
-                .help("Maximum concurrent connections")
-                .default_value("1000"),
-        )
-        .arg(
-            Arg::new("health-port")
-                .long("health-port")
-                .help("Health check server port")
-                .default_value("8888"),
-        )
-        .get_matches();
-
-    // Initialize tracing
-    tracing_subscriber::fmt()
-        .with_env_filter("info,communitas=debug")
-        .init();
-
-    info!("Starting Communitas Bootstrap Node v2.0.0");
-
-    // Build configuration from CLI arguments
-    let listen_address: SocketAddr = matches.get_one::<String>("listen").unwrap().parse()?;
-
-    let public_address = matches
-        .get_one::<String>("public-address")
-        .unwrap()
-        .to_string();
-
-    let data_dir = PathBuf::from(matches.get_one::<String>("data-dir").unwrap());
-
-    let max_connections: usize = matches
-        .get_one::<String>("max-connections")
-        .unwrap()
-        .parse()?;
-
-    let health_check_port: u16 = matches.get_one::<String>("health-port").unwrap().parse()?;
-
-    let config = BootstrapConfig {
-        listen_address,
-        public_address,
-        max_connections,
-        data_dir: data_dir.clone(),
-        dht_storage_path: data_dir.join("dht"),
-        enable_health_check: true,
-        health_check_port,
-        connection_timeout: 30,
-    };
-
-    info!("Configuration loaded:");
-    info!("  Listen address: {}", config.listen_address);
-    info!("  Public address: {}", config.public_address);
-    info!("  Data directory: {}", config.data_dir.display());
-    info!("  Max connections: {}", config.max_connections);
-    info!("  Health check port: {}", config.health_check_port);
-
-    // Run the bootstrap node
-    if let Err(e) = run_bootstrap_node(config).await {
-        error!("Bootstrap node failed: {}", e);
-        std::process::exit(1);
+impl BootstrapState {
+    fn new() -> Self {
+        Self {
+            connected_peers: Arc::new(RwLock::new(HashMap::new())),
+        }
     }
 
+    async fn add_peer(&self, peer_addr: String) {
+        let mut peers = self.connected_peers.write().await;
+        peers.insert(peer_addr, std::time::Instant::now());
+        info!("Added peer: {} (Total peers: {})", peer_addr, peers.len());
+    }
+
+    async fn remove_peer(&self, peer_addr: &str) {
+        let mut peers = self.connected_peers.write().await;
+        peers.remove(peer_addr);
+        info!("Removed peer: {} (Total peers: {})", peer_addr, peers.len());
+    }
+
+    async fn get_peer_list(&self) -> Vec<String> {
+        let peers = self.connected_peers.read().await;
+        peers.keys().cloned().collect()
+    }
+
+    async fn cleanup_stale_peers(&self) {
+        let mut peers = self.connected_peers.write().await;
+        let now = std::time::Instant::now();
+        let stale_threshold = std::time::Duration::from_secs(300); // 5 minutes
+
+        let initial_count = peers.len();
+        peers.retain(|_, last_seen| now.duration_since(*last_seen) < stale_threshold);
+
+        if peers.len() != initial_count {
+            info!("Cleaned up stale peers. Active peers: {}", peers.len());
+        }
+    }
+}
+
+async fn handle_peer_connection(
+    mut socket: tokio::net::TcpStream,
+    peer_addr: std::net::SocketAddr,
+    state: BootstrapState,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let peer_id = peer_addr.to_string();
+    info!("Handling connection from {}", peer_id);
+
+    // Add peer to active list
+    state.add_peer(peer_id.clone()).await;
+
+    // Simple handshake
+    let handshake_msg = b"COMMUNITAS_BOOTSTRAP_V1\n";
+    if let Err(e) = socket.write_all(handshake_msg).await {
+        warn!("Failed to send handshake to {}: {}", peer_id, e);
+        state.remove_peer(&peer_id).await;
+        return Ok(());
+    }
+
+    // Read peer's handshake response
+    let mut buffer = [0u8; 1024];
+    match tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        socket.read(&mut buffer)
+    ).await {
+        Ok(Ok(n)) if n > 0 => {
+            let response = String::from_utf8_lossy(&buffer[..n]);
+            info!("Received handshake from {}: {}", peer_id, response.trim());
+
+            // Send peer list
+            let peer_list = state.get_peer_list().await;
+            let peer_list_msg = format!("PEERS:{}\n", peer_list.join(","));
+            if let Err(e) = socket.write_all(peer_list_msg.as_bytes()).await {
+                warn!("Failed to send peer list to {}: {}", peer_id, e);
+            }
+        }
+        Ok(Ok(_)) => {
+            warn!("Empty handshake from {}", peer_id);
+        }
+        Ok(Err(e)) => {
+            warn!("Failed to read handshake from {}: {}", peer_id, e);
+        }
+        Err(_) => {
+            warn!("Handshake timeout from {}", peer_id);
+        }
+    }
+
+    // Keep connection alive briefly
+    tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+
+    state.remove_peer(&peer_id).await;
     Ok(())
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Initialize tracing
+    tracing_subscriber::fmt()
+        .with_env_filter(std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string()))
+        .init();
+
+    let port = std::env::var("PORT").unwrap_or_else(|_| "9001".to_string());
+    let addr = format!("0.0.0.0:{}", port).parse::<SocketAddr>()?;
+
+    info!("Starting Communitas Bootstrap Node on {}", addr);
+    info!("Environment: {}", if cfg!(debug_assertions) { "debug" } else { "release" });
+
+    let listener = TcpListener::bind(addr).await?;
+    let state = BootstrapState::new();
+
+    // Start cleanup task
+    let cleanup_state = state.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+        loop {
+            interval.tick().await;
+            cleanup_state.cleanup_stale_peers().await;
+        }
+    });
+
+    info!("Bootstrap node ready. Waiting for connections...");
+
+    loop {
+        match listener.accept().await {
+            Ok((socket, peer_addr)) => {
+                info!("New connection from {}", peer_addr);
+                let state_clone = state.clone();
+
+                tokio::spawn(async move {
+                    if let Err(e) = handle_peer_connection(socket, peer_addr, state_clone).await {
+                        error!("Error handling peer connection: {}", e);
+                    }
+                });
+            }
+            Err(e) => {
+                warn!("Failed to accept connection: {}", e);
+            }
+        }
+    }
 }

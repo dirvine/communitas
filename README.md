@@ -1,293 +1,325 @@
-# Communitas Foundation
+# Communitas - Local Testnet Setup Guide
 
-A decentralized P2P chat and collaboration platform built on the Saorsa Core networking stack. Communitas provides secure messaging, file sharing, and collaborative features without relying on central servers.
-
-## Overview
-
-Communitas is a Tauri-based desktop application that leverages peer-to-peer networking for private, secure communication. Built with modern web technologies and Rust, it offers:
-
-- **Decentralized Architecture**: No central servers or single points of failure
-- **End-to-End Encryption**: All communications secured with post-quantum cryptography
-- **Four-Word Addresses**: Human-readable network addresses for easy sharing
-- **Real-time Collaboration**: Live document editing and project management
-- **Cross-Platform**: Available on Windows, macOS, and Linux
-
-## Architecture
-
-### Frontend
-- **React 18** with TypeScript for the user interface
-- **Material-UI (MUI)** for consistent design components
-- **Vite** for fast development and building
-- **Framer Motion** for smooth animations
-- **Monaco Editor** for code editing capabilities
-
-### Backend (Tauri)
-- **Rust 2024** for high-performance, memory-safe operations
-- **Saorsa Core** for P2P networking and DHT functionality
-- **Saorsa Storage System** for policy-driven secure storage
-- **Reed-Solomon FEC** for error correction and data integrity
-- **SQLite** for local data storage
-- **Keyring** for secure credential storage
-
-### Key Features
-
-#### Secure Messaging
-- ChaCha20-Poly1305 AEAD encryption
-- Ed25519 digital signatures
-- X25519 key exchange
-- Forward secrecy with automatic key rotation
-
-#### Collaborative Editing
-- **Yjs** for conflict-free replicated data types (CRDTs)
-- **WebRTC** for direct peer-to-peer connections
-- **IndexedDB** for offline persistence
-- Real-time synchronization across all participants
-
-#### P2P Networking
-- DHT-based peer discovery
-- Geographic routing for efficient message delivery
-- Quantum-resistant cryptographic protocols
-- Automatic NAT traversal and hole punching
-
-## Installation
+## 🚀 Quick Start - Local Development
 
 ### Prerequisites
-- **Node.js** 18+ 
-- **Rust** 1.85+ with 2024 edition support
-- **Tauri CLI** 2.0+
+- Rust 1.85+ with Tauri CLI
+- Node.js 18+ with npm
+- Docker (optional, for containerized bootstrap)
 
-### Development Setup
-
+### 1. Clone and Setup
 ```bash
-# Clone the repository
-git clone https://github.com/dirvine/communitas-foundation.git
-cd communitas-foundation
-
-# Install frontend dependencies
+git clone https://github.com/dirvine/communitas.git
+cd communitas
 npm install
+```
 
-# Install Tauri CLI if not already installed
-npm install -g @tauri-apps/cli
+### 2. Start Local Bootstrap Node
+```bash
+# Option A: Using Docker (Recommended)
+docker run -d \
+  --name communitas-bootstrap \
+  -p 9001:9001 \
+  -p 9100:9100 \
+  -p 9110:9110 \
+  -p 9120:9120 \
+  saorsa/bootstrap-node:latest
 
-# Start development server
+# Option B: Using local Rust bootstrap (if available)
+cargo run --bin bootstrap-node -- --port 9001
+```
+
+### 3. Configure Environment
+```bash
+# Set local bootstrap address
+export COMMUNITAS_LOCAL_BOOTSTRAP="127.0.0.1:9001"
+
+# Optional: Set local data directory
+export COMMUNITAS_DATA_DIR="./communitas-test-data"
+```
+
+### 4. Run the Application
+```bash
+# Development mode
+npm run tauri dev
+
+# Or build and run
+npm run tauri build
 npm run tauri dev
 ```
 
-### Building for Production
+## 🏗️ Setting Up a Local Testnet
 
+### Architecture Overview
+```
+┌─────────────────┐    ┌─────────────────┐
+│   Bootstrap     │────│     Node 1      │
+│   Node (Port    │    │   (Port 9002)   │
+│    9001)        │    └─────────────────┘
+└─────────────────┘             │
+         │                     │
+         │                     │
+         │              ┌─────────────────┐
+         └──────────────│     Node 2      │
+                        │   (Port 9003)   │
+                        └─────────────────┘
+```
+
+### Bootstrap Node Setup
+
+#### Option 1: Docker Container
 ```bash
-# Build the frontend
-npm run build
+# Build bootstrap image
+docker build -f Dockerfile.bootstrap -t communitas-bootstrap .
 
-# Build the Tauri application
-npm run tauri build
+# Run bootstrap node
+docker run -d \
+  --name communitas-bootstrap \
+  -p 9001:9001 \
+  -p 9100:9100 \
+  -p 9110:9110 \
+  -p 9120:9120 \
+  -e RUST_LOG=info \
+  communitas-bootstrap
 ```
 
-## Usage
+#### Option 2: Local Bootstrap Node
+```rust
+// Create a simple bootstrap node
+use std::net::SocketAddr;
+use tokio::net::TcpListener;
 
-### Getting Started
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let addr = "127.0.0.1:9001".parse::<SocketAddr>()?;
+    let listener = TcpListener::bind(addr).await?;
 
-1. **Launch Communitas** - Start the application
-2. **Create Identity** - Generate your four-word network address
-3. **Join Network** - Connect to the P2P network automatically
-4. **Start Chatting** - Add contacts using their four-word addresses
+    println!("Bootstrap node listening on {}", addr);
 
-### Four-Word Addresses
+    loop {
+        let (socket, peer_addr) = listener.accept().await?;
+        println!("New connection from {}", peer_addr);
 
-Communitas uses human-readable four-word addresses instead of complex cryptographic keys:
-
-```
-example: "apple-mountain-river-sunset"
-```
-
-These addresses are:
-- Easy to remember and share
-- Globally unique across the network
-- Automatically generated from cryptographic keys
-- Work across all network configurations
-
-### Saorsa Storage System
-
-Advanced policy-driven storage with four distinct security levels:
-
-#### Storage Policies
-1. **PrivateMax**: Maximum security with local-only storage and random encryption keys
-2. **PrivateScoped**: Namespace-isolated storage with HKDF key derivation and DHT backup
-3. **GroupScoped**: Shared group storage with multi-user access control
-4. **PublicMarkdown**: Public content with convergent encryption for deduplication
-
-#### Technical Features
-- **Content Addressing**: BLAKE3 hashing with 256KB optimal chunk sizes
-- **Namespace Isolation**: HKDF-SHA256 for cryptographic separation
-- **Local Caching**: LRU cache with gzip compression and integrity verification
-- **Performance**: <100ms local operations, <500ms remote operations
-- **Error Handling**: Comprehensive Result types with zero unwrap/panic in production
-- **Quality Standards**: Zero compilation warnings, >85% test coverage
-
-#### Legacy Secure Storage
-All sensitive data is also encrypted with traditional methods:
-- **Keyring Integration**: Platform-specific secure storage
-- **Local Encryption**: AES-256 for local database
-- **Key Derivation**: Argon2 for password-based keys
-- **Memory Protection**: Zeroization of sensitive data
-
-## Development
-
-### Project Structure
-
-```
-communitas-foundation/
-├── src/                    # React frontend source
-│   ├── components/         # Reusable UI components
-│   ├── services/          # Frontend services and API calls
-│   ├── theme/             # MUI theme customization
-│   └── utils/             # Utility functions
-├── src-tauri/             # Rust backend source
-│   ├── src/               # Tauri application code
-│   ├── tests/             # Integration tests
-│   └── Cargo.toml         # Rust dependencies
-├── public/                # Static assets
-└── package.json           # Node.js dependencies
+        // Handle P2P handshake
+        tokio::spawn(async move {
+            // Implement basic P2P protocol handling
+            handle_peer_connection(socket).await;
+        });
+    }
+}
 ```
 
-### Testing
+### Multiple Node Setup
 
+#### Node 1 Configuration
 ```bash
-# Run frontend tests
-npm test
+# Terminal 1
+export COMMUNITAS_LOCAL_BOOTSTRAP="127.0.0.1:9001"
+export COMMUNITAS_P2P_PORT="9002"
+export COMMUNITAS_DATA_DIR="./node1-data"
 
-# Run Rust tests
-cd src-tauri
-cargo test
-
-# Run Saorsa storage tests specifically
-cargo test saorsa_storage
-cargo test storage_tests --lib
-
-# Run integration tests
-cargo test --test integration_*
-
-# Run performance tests
-cargo test --test performance_*
+npm run tauri dev
 ```
 
-### Available Scripts
+#### Node 2 Configuration
+```bash
+# Terminal 2
+export COMMUNITAS_LOCAL_BOOTSTRAP="127.0.0.1:9001"
+export COMMUNITAS_P2P_PORT="9003"
+export COMMUNITAS_DATA_DIR="./node2-data"
 
-- `npm run dev` - Start Vite development server
-- `npm run build` - Build frontend for production
-- `npm run typecheck` - Run TypeScript type checking
-- `npm run test` - Run frontend test suite
-- `npm run tauri dev` - Start Tauri development mode
-- `npm run tauri build` - Build Tauri application
+npm run tauri dev
+```
 
-## Security
+#### Node 3 Configuration
+```bash
+# Terminal 3
+export COMMUNITAS_LOCAL_BOOTSTRAP="127.0.0.1:9001"
+export COMMUNITAS_P2P_PORT="9004"
+export COMMUNITAS_DATA_DIR="./node3-data"
 
-### Cryptographic Protocols
+npm run tauri dev
+```
 
-Communitas implements multiple layers of security:
+## 🔧 Environment Variables
 
-1. **Transport Layer**: TLS 1.3 with quantum-resistant algorithms
-2. **Message Layer**: ChaCha20-Poly1305 for authenticated encryption
-3. **Key Exchange**: X25519 with post-quantum backup
-4. **Digital Signatures**: Ed25519 for message authentication
-5. **Key Derivation**: HKDF with SHA-256 for key expansion
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `COMMUNITAS_LOCAL_BOOTSTRAP` | Bootstrap node address | Production bootstrap |
+| `COMMUNITAS_P2P_PORT` | P2P listening port | Auto-assigned |
+| `COMMUNITAS_DATA_DIR` | Data storage directory | `./communitas-data` |
+| `RUST_LOG` | Logging level | `info` |
+| `COMMUNITAS_TESTNET` | Enable testnet mode | `false` |
 
-### Threat Model
+## 🧪 Testing the Testnet
 
-Protected against:
-- **Network Eavesdropping**: All traffic encrypted
-- **Man-in-the-Middle**: Certificate pinning and key verification
-- **Quantum Attacks**: Post-quantum cryptographic fallbacks
-- **Forward Compromise**: Perfect forward secrecy
-- **Metadata Leakage**: Onion routing for anonymity
+### 1. Health Check
+```bash
+curl http://localhost:1420/health
+```
 
-### Security Audits
+### 2. Network Status
+```bash
+# Check peer connections
+curl http://localhost:1420/api/network/status
+```
 
-Regular security assessments include:
-- Static code analysis with Clippy
-- Dependency vulnerability scanning
-- Fuzz testing of critical components
-- Formal verification of cryptographic implementations
+### 3. Create Test Data
+```bash
+# Create a test organization
+curl -X POST http://localhost:1420/api/organizations \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Test Organization", "description": "Local testnet org"}'
+```
 
-## Contributing
+### 4. Verify P2P Connectivity
+```bash
+# Check if nodes can discover each other
+curl http://localhost:1420/api/network/peers
+```
 
-We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
+## 🐳 Docker Compose Setup
 
-### Development Standards
+Create `docker-compose.yml`:
+```yaml
+version: '3.8'
 
-- **Rust 2024 Edition** for all backend code
-- **TypeScript** for all frontend code
-- **Comprehensive Testing** with >90% coverage
-- **Security First** approach to all features
-- **Documentation** for all public APIs
+services:
+  bootstrap:
+    build:
+      context: .
+      dockerfile: Dockerfile.bootstrap
+    ports:
+      - "9001:9001"
+      - "9100:9100"
+      - "9110:9110"
+      - "9120:9120"
+    environment:
+      - RUST_LOG=info
 
-### Code Style
+  node1:
+    build: .
+    depends_on:
+      - bootstrap
+    environment:
+      - COMMUNITAS_LOCAL_BOOTSTRAP=bootstrap:9001
+      - COMMUNITAS_P2P_PORT=9002
+      - COMMUNITAS_DATA_DIR=/app/node1-data
+    volumes:
+      - ./node1-data:/app/node1-data
 
-- Rust: `cargo fmt` and `cargo clippy`
-- TypeScript: ESLint and Prettier
-- Commit messages: Conventional Commits format
+  node2:
+    build: .
+    depends_on:
+      - bootstrap
+    environment:
+      - COMMUNITAS_LOCAL_BOOTSTRAP=bootstrap:9001
+      - COMMUNITAS_P2P_PORT=9003
+      - COMMUNITAS_DATA_DIR=/app/node2-data
+    volumes:
+      - ./node2-data:/app/node2-data
+```
 
-## License
+Run with:
+```bash
+docker-compose up -d
+```
 
-This project is dual-licensed under:
+## 🔍 Monitoring & Debugging
 
-- **AGPL-3.0-or-later** for open source use
-- **Commercial License** for proprietary use
+### Logs
+```bash
+# View application logs
+docker-compose logs -f
 
-See [LICENSE-AGPL-3.0](LICENSE-AGPL-3.0) for open source terms.
-For commercial licensing, contact: saorsalabs@gmail.com
+# View specific service logs
+docker-compose logs -f bootstrap
+```
 
-## Support
+### Network Inspection
+```bash
+# Check container networking
+docker network ls
+docker inspect communitas_default
 
-- **Documentation**: [docs.rs/communitas-tauri](https://docs.rs/communitas-tauri)
-- **Issues**: [GitHub Issues](https://github.com/dirvine/communitas-foundation/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/dirvine/communitas-foundation/discussions)
-- **Contact**: saorsalabs@gmail.com
+# Test connectivity between containers
+docker exec communitas_node1 curl http://bootstrap:9001/health
+```
 
-## Roadmap
+### Performance Monitoring
+```bash
+# Monitor resource usage
+docker stats
 
-### Current Features (v0.1.0)
-- ✅ Basic P2P messaging
-- ✅ Four-word address system
-- ✅ End-to-end encryption
-- ✅ File sharing
-- ✅ Cross-platform support
-- ✅ **Saorsa Storage System** with four storage policies
-- ✅ Content addressing with BLAKE3 and Reed-Solomon FEC
-- ✅ LRU caching with compression and integrity verification
-- ✅ Performance optimization (<100ms local, <500ms remote)
-- ✅ Comprehensive test suite with >85% coverage
+# Check health endpoints
+curl http://localhost:1420/health
+curl http://localhost:1421/health  # Node 2
+curl http://localhost:1422/health  # Node 3
+```
 
-### Planned Features (v0.2.0)
-- 🔄 Voice and video calls
-- 🔄 Group chat rooms
-- 🔄 Collaborative document editing
-- 🔄 Plugin system
-- 🔄 Mobile applications
+## 🛠️ Troubleshooting
 
-### Future Features (v1.0.0)
-- 📋 Federation with other networks
-- 📋 Advanced privacy features
-- 📋 Enterprise integrations
-- 📋 Blockchain integration
-- 📋 AI-powered features
+### Common Issues
 
-## Related Projects
+#### Bootstrap Node Not Starting
+```bash
+# Check bootstrap logs
+docker-compose logs bootstrap
 
-- **[Saorsa Core](https://github.com/dirvine/saorsa-core-foundation)** - P2P networking foundation
-- **[Saorsa MLS](https://github.com/dirvine/saorsa-mls-foundation)** - Message Layer Security
-- **[Saorsa FEC](https://github.com/dirvine/saorsa-fec-foundation)** - Forward Error Correction
-- **[Saorsa RSPS](https://github.com/dirvine/saorsa-rsps-foundation)** - Routing and Storage Protocol
+# Verify port binding
+netstat -tlnp | grep 9001
+```
 
-## Acknowledgments
+#### Nodes Can't Connect
+```bash
+# Check network connectivity
+docker exec communitas_node1 ping bootstrap
 
-Built with love using:
-- [Tauri](https://tauri.app/) - Rust-powered app framework
-- [React](https://reactjs.org/) - User interface library
-- [Material-UI](https://mui.com/) - React component library
-- [Yjs](https://yjs.dev/) - Shared data types for collaboration
-- [Vite](https://vitejs.dev/) - Frontend build tool
+# Verify environment variables
+docker exec communitas_node1 env | grep COMMUNITAS
+```
+
+#### Port Conflicts
+```bash
+# Find conflicting processes
+lsof -i :9001
+
+# Kill conflicting process
+kill $(lsof -t -i :9001)
+```
+
+### Debug Mode
+```bash
+# Enable debug logging
+export RUST_LOG=debug,communitas=trace,saorsa_core=debug
+
+# Run with debug symbols
+npm run tauri dev -- --debug
+```
+
+## 📊 Testnet Metrics
+
+Monitor these key metrics:
+- **Peer Count**: Number of connected nodes
+- **Message Latency**: Average message delivery time
+- **Storage Operations**: DHT put/get success rates
+- **Network Health**: Connection stability and uptime
+
+## 🎯 Next Steps
+
+1. **Scale Testing**: Add more nodes to test scalability
+2. **Load Testing**: Simulate high message volumes
+3. **Security Testing**: Test encryption and authentication
+4. **Performance Optimization**: Monitor and optimize resource usage
+
+## 📞 Support
+
+For issues with local testnet setup:
+1. Check the troubleshooting section above
+2. Review container logs: `docker-compose logs`
+3. Verify network connectivity between containers
+4. Ensure all required ports are available
 
 ---
 
-**Communitas Foundation** - Connecting people without compromising privacy.
+**Happy testing! 🎉**

@@ -1,0 +1,95 @@
+version: '3.8'
+
+services:
+  bootstrap:
+    build:
+      context: .
+      dockerfile: Dockerfile.bootstrap
+    ports:
+      - "9001:9001"
+      - "9100:9100"
+      - "9110:9110"
+      - "9120:9120"
+    environment:
+      - RUST_LOG=info
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "9001"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - communitas-testnet
+
+  # Node 1 - Main testing node
+  node1:
+    build: .
+    depends_on:
+      bootstrap:
+        condition: service_healthy
+    ports:
+      - "1420:1420"  # Tauri dev server
+    environment:
+      - COMMUNITAS_LOCAL_BOOTSTRAP=bootstrap:9001
+      - COMMUNITAS_P2P_PORT=9002
+      - COMMUNITAS_DATA_DIR=/app/node1-data
+      - RUST_LOG=info,communitas=debug
+    volumes:
+      - ./node1-data:/app/node1-data
+      - /tmp/.X11-unix:/tmp/.X11-unix  # For GUI testing
+    networks:
+      - communitas-testnet
+    # Uncomment for GUI testing
+    # environment:
+    #   - DISPLAY=$DISPLAY
+
+  # Node 2 - Secondary testing node
+  node2:
+    build: .
+    depends_on:
+      bootstrap:
+        condition: service_healthy
+    ports:
+      - "1421:1420"
+    environment:
+      - COMMUNITAS_LOCAL_BOOTSTRAP=bootstrap:9001
+      - COMMUNITAS_P2P_PORT=9003
+      - COMMUNITAS_DATA_DIR=/app/node2-data
+      - RUST_LOG=info,communitas=debug
+    volumes:
+      - ./node2-data:/app/node2-data
+    networks:
+      - communitas-testnet
+    profiles:
+      - multi-node
+
+  # Node 3 - Additional testing node
+  node3:
+    build: .
+    depends_on:
+      bootstrap:
+        condition: service_healthy
+    ports:
+      - "1422:1420"
+    environment:
+      - COMMUNITAS_LOCAL_BOOTSTRAP=bootstrap:9001
+      - COMMUNITAS_P2P_PORT=9004
+      - COMMUNITAS_DATA_DIR=/app/node3-data
+      - RUST_LOG=info,communitas=debug
+    volumes:
+      - ./node3-data:/app/node3-data
+    networks:
+      - communitas-testnet
+    profiles:
+      - multi-node
+
+networks:
+  communitas-testnet:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  node1-data:
+  node2-data:
+  node3-data:

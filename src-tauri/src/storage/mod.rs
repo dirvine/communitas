@@ -365,7 +365,7 @@ impl ProductionStorageManager {
         use chacha20poly1305::aead::{Aead, KeyInit};
         use rand::RngCore;
 
-        let cipher = ChaCha20Poly1305::new(Key::from_slice(key));
+        let cipher = ChaCha20Poly1305::new(Key::from_slice(key).into());
         let mut nonce_bytes = [0u8; 12];
         rand::thread_rng().fill_bytes(&mut nonce_bytes);
         let nonce = Nonce::from_slice(&nonce_bytes);
@@ -390,7 +390,7 @@ impl ProductionStorageManager {
         let nonce = Nonce::from_slice(&encrypted_data[..12]);
         let ciphertext = &encrypted_data[12..];
 
-        let cipher = ChaCha20Poly1305::new(Key::from_slice(key));
+        let cipher = ChaCha20Poly1305::new(Key::from_slice(key).into());
         cipher.decrypt(nonce, ciphertext)
             .map_err(|e| anyhow::anyhow!("Decryption failed: {}", e))
     }

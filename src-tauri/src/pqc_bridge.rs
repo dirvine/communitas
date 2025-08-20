@@ -207,7 +207,7 @@ pub async fn pqc_encrypt(
     
     // Use shared secret as ChaCha20Poly1305 key (first 32 bytes)
     let key = &encap_result.shared_secret[..32];
-    let cipher = ChaCha20Poly1305::new(key);
+    let cipher = ChaCha20Poly1305::new(key.into());
     
     // Generate nonce using the provided function
     let nonce = generate_nonce();
@@ -237,7 +237,7 @@ pub async fn pqc_decrypt(
     
     // Use shared secret as ChaCha20Poly1305 key (first 32 bytes)
     let key = &shared_secret[..32];
-    let cipher = ChaCha20Poly1305::new(key);
+    let cipher = ChaCha20Poly1305::new(key.into());
     
     // Verify nonce length
     if nonce.len() != 24 {

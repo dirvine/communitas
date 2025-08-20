@@ -242,7 +242,7 @@ impl SecureFecManager {
         let nonce = Nonce::clone_from_slice(&nonce_bytes);
 
         // Encrypt using ChaCha20-Poly1305
-        let cipher = ChaCha20Poly1305::new(&key_material.key);
+        let cipher = ChaCha20Poly1305::new((&key_material.key).into());
         let encrypted_data = cipher.encrypt(&nonce, chunk_data)
             .map_err(|_| SecureFecError::EncryptionFailed)?;
 
@@ -274,7 +274,7 @@ impl SecureFecManager {
         let nonce = Nonce::clone_from_slice(&nonce_bytes);
 
         // Decrypt using ChaCha20-Poly1305
-        let cipher = ChaCha20Poly1305::new(&key_material.key);
+        let cipher = ChaCha20Poly1305::new((&key_material.key).into());
         let decrypted_data = cipher.decrypt(&nonce, encrypted_chunk.encrypted_data.as_slice())
             .map_err(|_| SecureFecError::DecryptionFailed)?;
 

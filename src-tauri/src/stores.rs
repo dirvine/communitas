@@ -98,7 +98,8 @@ async fn read_metadata() -> Result<Metadata> {
 
 async fn write_metadata(meta: &Metadata) -> Result<()> {
     let path = metadata_path();
-    let parent = path.parent().unwrap();
+    let parent = path.parent()
+        .ok_or_else(|| anyhow::anyhow!("Metadata path has no parent directory"))?;
     fs::create_dir_all(parent).await.ok();
     let data = serde_json::to_vec_pretty(meta).context("Failed to serialize metadata")?;
     fs::write(&path, data).await.context("Failed to write metadata.json")

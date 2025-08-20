@@ -163,7 +163,8 @@ pub async fn generate_four_word_address() -> Result<String, String> {
     // Generate encoding for a typical local address using core encoder
     let socket: SocketAddr = "127.0.0.1:9000"
         .parse()
-        .unwrap_or_else(|_| "127.0.0.1:0".parse().unwrap());
+        .or_else(|_| "127.0.0.1:0".parse())
+        .map_err(|e| format!("Failed to parse socket address: {}", e))?;
     let net = saorsa_core::NetworkAddress::from(socket);
     Ok(net.four_words().unwrap_or("").to_string())
 }

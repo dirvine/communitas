@@ -365,11 +365,134 @@ mod tests {
         let key = "test_user";
 
         assert_eq!(limiter.get_remaining(key, 5).unwrap(), 5);
-        
+
         limiter.record_request(key).unwrap();
         assert_eq!(limiter.get_remaining(key, 5).unwrap(), 4);
-        
+
         limiter.record_request(key).unwrap();
         assert_eq!(limiter.get_remaining(key, 5).unwrap(), 3);
+    }
+
+    #[test]
+    fn test_rate_limiter_cleanup() {
+        let limiter = RateLimiter::with_limit(1, Duration::from_millis(100));
+        let key = "test_user";
+
+        // Make a request
+        assert!(limiter.is_allowed(key).unwrap());
+
+        // Should be blocked immediately
+        assert!(!limiter.is_allowed(key).unwrap());
+
+        // Wait for cleanup interval (simulated)
+        thread::sleep(Duration::from_millis(150));
+
+        // Should be allowed again after window expires
+        assert!(limiter.is_allowed(key).unwrap());
+    }
+
+    #[test]
+    fn test_rate_limiter_stats() {
+        let limiter = RateLimiter::new();
+        let key1 = "user1";
+        let key2 = "user2";
+
+        // Make some requests
+        limiter.record_request(key1).unwrap();
+        limiter.record_request(key1).unwrap();
+        limiter.record_request(key2).unwrap();
+
+        let stats = limiter.get_stats().unwrap();
+        assert_eq!(stats.total_keys, 2);
+        assert_eq!(stats.total_requests, 3);
+        assert_eq!(stats.default_limit, DEFAULT_REQUESTS_PER_MINUTE);
+    }
+
+    #[test]
+    fn test_rate_limiter_reset() {
+        let limiter = RateLimiter::with_limit(2, Duration::from_secs(60));
+        let key = "test_user";
+
+        // Use up the limit
+        assert!(limiter.is_allowed(key).unwrap());
+        assert!(limiter.is_allowed(key).unwrap());
+        assert!(!limiter.is_allowed(key).unwrap());
+
+        // Reset the key
+        limiter.reset_key(key).unwrap();
+
+        // Should be allowed again
+        assert!(limiter.is_allowed(key).unwrap());
+    }
+
+    #[test]
+    fn test_rate_limiter_concurrent_access() {
+        let limiter = RateLimiter::with_limit(10, Duration::from_secs(60));
+        let key = "concurrent_user";
+        let mut handles = vec![];
+
+        // Spawn multiple threads making requests
+        for _ in 0..5 {
+            let limiter_clone = limiter.clone();
+            let key_clone = key.to_string();
+            let handle = thread::spawn(move || {
+                for _ in 0..2 {
+                    let _ = limiter_clone.is_allowed(&key_clone);
+                    thread::sleep(Duration::from_millis(10));
+                }
+            });
+            handles.push(handle);
+        }
+
+        // Wait for all threads to complete
+        for handle in handles {
+            handle.join().unwrap();
+        }
+
+        // Check that requests were properly tracked
+        let current_count = limiter.get_current_count(key).unwrap();
+        assert_eq!(current_count, 10); // 5 threads * 2 requests each
+    }
+
+    #[test]
+    fn test_rate_limiter_edge_cases() {
+        let limiter = RateLimiter::with_limit(1, Duration::from_secs(60));
+
+        // Test with empty key
+        assert!(limiter.is_allowed("").unwrap());
+        assert!(!limiter.is_allowed("").unwrap());
+
+        // Test with very long key
+        let long_key = "a".repeat(1000);
+        assert!(limiter.is_allowed(&long_key).unwrap());
+        assert!(!limiter.is_allowed(&long_key).unwrap());
+
+        // Test with special characters in key
+        let special_key = "user@domain.com!#$%^&*()";
+        assert!(limiter.is_allowed(special_key).unwrap());
+        assert!(!limiter.is_allowed(special_key).unwrap());
+    }
+
+    #[test]
+    fn test_rate_limiter_zero_limit() {
+        let limiter = RateLimiter::with_limit(0, Duration::from_secs(60));
+        let key = "zero_limit_user";
+
+        // Should always be blocked with zero limit
+        assert!(!limiter.is_allowed(key).unwrap());
+        assert!(!limiter.is_allowed(key).unwrap());
+    }
+
+    #[test]
+    fn test_rate_limiter_very_short_window() {
+        let limiter = RateLimiter::with_limit(1, Duration::from_millis(1));
+        let key = "short_window_user";
+
+        assert!(limiter.is_allowed(key).unwrap());
+        assert!(!limiter.is_allowed(key).unwrap());
+
+        // Wait for window to expire
+        thread::sleep(Duration::from_millis(10));
+        assert!(limiter.is_allowed(key).unwrap());
     }
 }

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use tokio::sync::RwLock;
 
-use crate::error::{AppError, AppResult};
+use crate::error::AppResult;
 
 #[async_trait]
 pub trait DhtFacade: Send + Sync {

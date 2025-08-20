@@ -55,7 +55,9 @@ impl IdentityManager {
     pub async fn create_or_load_identity(&self, _passphrase: String) -> Result<UserIdentity> {
         // Derive a stable local address for identity display; in production this should
         // map to the node's public reachable address(es)
-        let default_socket: std::net::SocketAddr = "127.0.0.1:9000".parse().unwrap();
+        let default_socket: std::net::SocketAddr = "127.0.0.1:9000"
+            .parse()
+            .map_err(|e| anyhow::anyhow!("Failed to parse default socket address: {}", e))?;
         let net = saorsa_core::NetworkAddress::from(default_socket);
         let four_word_address = net.four_words().unwrap_or("").to_string();
 

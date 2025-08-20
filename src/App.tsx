@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import {
   AppBar,
@@ -7,24 +7,15 @@ import {
   Box,
   IconButton,
   Button,
-  Fab,
   Tooltip,
-  Badge,
   Switch,
   FormControlLabel,
-  Paper,
   Chip,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
 } from '@mui/material'
-import { 
-  Menu as MenuIcon, 
+import {
+  Menu as MenuIcon,
   Person,
   Science as ExperimentalIcon,
-  Notifications,
-  Search,
 } from '@mui/icons-material'
 import { SnackbarProvider } from 'notistack'
 import { NetworkHealth } from './types'
@@ -47,23 +38,16 @@ import { EncryptionProvider, EncryptionStatus } from './components/encryption'
 import { ResponsiveLayout, useSidebarBehavior } from './components/responsive'
 
 // Navigation - both old and new
-import EnhancedNavigation from './components/navigation/EnhancedNavigation'
-import UnifiedNavigation from './components/navigation/UnifiedNavigation'
 import { WhatsAppStyleNavigation } from './components/navigation/WhatsAppStyleNavigation'
 import { NavigationProvider } from './contexts/NavigationContext'
 import BreadcrumbNavigation from './components/navigation/BreadcrumbNavigation'
 import ContextAwareSidebar from './components/navigation/ContextAwareSidebar'
 
-// Collaboration components
-import { UnifiedFileSharing } from './components/collaboration/UnifiedFileSharing'
-
 // Mock data for testing
-import { 
-  mockOrganizations, 
-  mockPersonalGroups, 
+import {
+  mockOrganizations,
+  mockPersonalGroups,
   mockPersonalUsers,
-  mockSharedFiles,
-  mockPublishedWebsite 
 } from './data/mockCollaborationData'
 
 // Tauri Context
@@ -75,6 +59,9 @@ import { ensureIdentity } from './utils/identity'
 // WebRTC Communication
 import { SimpleCommunicationHub } from './components/webrtc'
 
+// Error handling
+import ErrorBoundary from './components/ErrorBoundary'
+
 // Real-time Sync
 import { GlobalSyncBar } from './components/sync/GlobalSyncBar'
 
@@ -85,7 +72,6 @@ import OverviewDashboard from './components/OverviewDashboard'
 import IdentityTab from './components/tabs/IdentityTab'
 
 // Unified components
-import UnifiedHome from './components/unified/UnifiedHome'
 import { UnifiedDashboard } from './components/unified/UnifiedDashboard'
 import FirstRunWizard from './components/onboarding/FirstRunWizard'
 import QuickActionsBar from './components/QuickActionsBar'
@@ -128,7 +114,6 @@ function App() {
   })
   
   // Check which features are enabled
-  const useUnifiedUI = useFeatureFlag('unified-design-system', 'user_owner_123')
   const useContextNav = useFeatureFlag('context-aware-navigation', 'user_owner_123')
   
   // Navigation context for unified navigation
@@ -144,11 +129,10 @@ function App() {
     fourWords: undefined,
   })
 
-  const [currentTab, setCurrentTab] = useState(0)
+  const [_currentTab, _setCurrentTab] = useState(0)
   const [showOverview, setShowOverview] = useState(false)
   const [showIdentity, setShowIdentity] = useState(false)
-  const [selectedEntity, setSelectedEntity] = useState<any>(null)
-  const [showFileSharing, setShowFileSharing] = useState(false)
+  const [_selectedEntity, _setSelectedEntity] = useState<any>(null)
   const [showStorageWorkspace, setShowStorageWorkspace] = useState(false)
   const [networkHealth, setNetworkHealth] = useState<NetworkHealth>({
     status: 'Disconnected',
@@ -177,7 +161,7 @@ function App() {
       featureFlags.enable('four-word-identity')
       featureFlags.enable('unified-storage-ui')
     }
-  }, [])
+  }, [experimentalMode])
 
   // Listen for global storage workspace open requests (from dashboards, etc.)
   useEffect(() => {
@@ -210,19 +194,21 @@ function App() {
     return () => { mounted = false; clearInterval(id) }
   }, [])
 
-  const handleTabChange = (newValue: number) => {
-    // Handle special cases for Overview and Identity modals
-    if (newValue === 2) {
-      setShowOverview(true)
-    } else if (newValue === 3) {
-      setShowIdentity(true)
-    } else {
-      setCurrentTab(newValue)
-    }
-  }
+
 
   const handleToggleSidebar = () => {
     setSidebarOpen(!sidebarOpen)
+  }
+
+  const _handleTabChange = (_newValue: number) => {
+    // Handle special cases for Overview and Identity modals
+    if (_newValue === 2) {
+      setShowOverview(true)
+    } else if (_newValue === 3) {
+      setShowIdentity(true)
+    } else {
+      _setCurrentTab(_newValue)
+    }
   }
 
   // Collaboration feature handlers
@@ -243,7 +229,7 @@ function App() {
 
   const handleOpenFiles = (entityId: string, entityType: string) => {
     console.log('Opening files for', entityType, entityId)
-    setSelectedEntity({ id: entityId, type: entityType })
+    _setSelectedEntity({ id: entityId, type: entityType })
     // Use the unified storage workspace dialog instead of the basic file sharing dialog
     setShowStorageWorkspace(true)
   }
@@ -270,8 +256,8 @@ function App() {
 
   const handleWhatsAppNavigate = (path: string, entity: any) => {
     console.log('WhatsApp Navigation:', path, entity)
-    setSelectedEntity(entity)
-    
+    _setSelectedEntity(entity)
+
     // Update navigation context based on path
     if (path.startsWith('/org/')) {
       const parts = path.split('/')
@@ -407,12 +393,12 @@ function App() {
   }
 
   // Handle navigation from unified navigation
-  const handleUnifiedNavigate = (path: string) => {
-    console.log('Navigate to:', path)
-    
+  const _handleUnifiedNavigate = (_path: string) => {
+    console.log('Navigate to:', _path)
+
     // Parse the path to update context
-    if (path.startsWith('/org/')) {
-      const parts = path.split('/')
+    if (_path.startsWith('/org/')) {
+      const parts = _path.split('/')
       const orgId = parts[2]
       setNavigationContext({
         mode: 'organization',
@@ -420,8 +406,8 @@ function App() {
         organizationName: 'Acme Corp', // TODO: Fetch from store
         fourWords: 'acme-global-secure-network',
       })
-    } else if (path.startsWith('/project/')) {
-      const parts = path.split('/')
+    } else if (_path.startsWith('/project/')) {
+      const parts = _path.split('/')
       const projectId = parts[2]
       setNavigationContext({
         mode: 'project',
@@ -435,7 +421,7 @@ function App() {
         fourWords: 'ocean-forest-moon-star',
       })
     }
-    
+
     // TODO: Implement actual routing
   }
 
@@ -536,10 +522,10 @@ function App() {
               maxWidth="xl"
             >
               {/* Tab Panels */}
-              <TabPanel value={currentTab} index={0}>
+              <TabPanel value={_currentTab} index={0}>
                 <OrganizationTab />
               </TabPanel>
-              <TabPanel value={currentTab} index={1}>
+              <TabPanel value={_currentTab} index={1}>
                 <GroupsAndPeopleTab />
               </TabPanel>
               
@@ -632,13 +618,28 @@ function App() {
   );
 
   return (
-    <SnackbarProvider maxSnack={3} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
-      {experimentalMode ? (
-        <UnifiedThemeProvider theme={unifiedTheme.light}>{ThemedApp}</UnifiedThemeProvider>
-      ) : (
-        <ThemeProvider>{ThemedApp}</ThemeProvider>
-      )}
-    </SnackbarProvider>
+    <ErrorBoundary>
+      <SnackbarProvider maxSnack={3} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
+        <Box
+          component="main"
+          role="main"
+          aria-label="Communitas P2P Collaboration Platform"
+          sx={{
+            // Ensure proper focus management
+            '&:focus-visible': {
+              outline: 'none',
+            },
+          }}
+          tabIndex={-1}
+        >
+          {experimentalMode ? (
+            <UnifiedThemeProvider theme={unifiedTheme.light}>{ThemedApp}</UnifiedThemeProvider>
+          ) : (
+            <ThemeProvider>{ThemedApp}</ThemeProvider>
+          )}
+        </Box>
+      </SnackbarProvider>
+    </ErrorBoundary>
   )
 }
 

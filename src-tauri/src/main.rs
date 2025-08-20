@@ -58,7 +58,7 @@ use rustls;
 use std::fmt;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{info, warn};
+use tracing::{info, warn, error};
 #[cfg(debug_assertions)]
 use mcp_plugin::{MCPConfig, init_with_config};
 
@@ -307,7 +307,17 @@ async fn get_messages(
     _user_id: Option<String>,
     _group_id: Option<String>,
     _limit: Option<i64>,
+    app_state: tauri::State<'_, Arc<RwLock<AppState>>>,
 ) -> Result<Vec<serde_json::Value>, String> {
+    let state = app_state.inner().read().await;
+
+    // Rate limiting check for read operations
+    let user_key = "user_default"; // In production, get from session
+    if !state.rate_limiters.default.is_allowed(user_key)
+        .map_err(|e| format!("Rate limit check failed: {}", e))? {
+        return Err("Request rate limit exceeded. Please try again later.".to_string());
+    }
+
     Ok(vec![])
 }
 
@@ -350,6 +360,16 @@ async fn create_group(
     description: Option<String>,
     app_state: tauri::State<'_, Arc<RwLock<AppState>>>,
 ) -> Result<String, String> {
+    // Input validation
+    let state = app_state.inner().read().await;
+    state.input_validator.validate_username(&name)
+        .map_err(|e| format!("Invalid group name: {}", e))?;
+
+    if let Some(desc) = &description {
+        state.input_validator.sanitize_string(desc, 1000)
+            .map_err(|e| format!("Invalid description: {}", e))?;
+    }
+
     let state = app_state.inner().write().await;
     let group_id = {
         let mgr = state.group_manager.read().await;
@@ -367,6 +387,13 @@ async fn get_node_info(
 ) -> Result<serde_json::Value, String> {
     let state = app_state.inner().read().await;
 
+    // Rate limiting check for read operations
+    let user_key = "user_default"; // In production, get from session
+    if !state.rate_limiters.default.is_allowed(user_key)
+        .map_err(|e| format!("Rate limit check failed: {}", e))? {
+        return Err("Request rate limit exceeded. Please try again later.".to_string());
+    }
+
     let peer_count = if let Some(p2p_node) = &state.p2p_node {
         let node = p2p_node.read().await;
         node.get_peer_count().await
@@ -382,10 +409,68 @@ async fn get_node_info(
 }
 
 #[tauri::command]
+async fn get_health_check(
+    app_state: tauri::State<'_, Arc<RwLock<AppState>>>,
+) -> Result<serde_json::Value, String> {
+    let state = app_state.inner().read().await;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| format!("Failed to get current time: {}", e))?
+        .as_secs();
+
+    // Check P2P node health
+    let p2p_health = if let Some(p2p_node) = &state.p2p_node {
+        let node = p2p_node.read().await;
+        let peer_count = node.get_peer_count().await;
+        serde_json::json!({
+            "status": "healthy",
+            "peer_count": peer_count,
+            "last_seen": now
+        })
+    } else {
+        serde_json::json!({
+            "status": "degraded",
+            "peer_count": 0,
+            "message": "P2P node not initialized"
+        })
+    };
+
+    // Check rate limiter health
+    let rate_limiter_stats = state.rate_limiters.default.get_stats()
+        .map_err(|e| format!("Failed to get rate limiter stats: {}", e))?;
+
+    Ok(serde_json::json!({
+        "status": "healthy",
+        "timestamp": now,
+        "version": env!("CARGO_PKG_VERSION"),
+        "build": {
+            "debug": cfg!(debug_assertions),
+            "target": std::env::consts::ARCH,
+            "os": std::env::consts::OS
+        },
+        "p2p_node": p2p_health,
+        "rate_limiter": {
+            "total_keys": rate_limiter_stats.total_keys,
+            "total_requests": rate_limiter_stats.total_requests,
+            "default_limit": rate_limiter_stats.default_limit
+        },
+        "uptime_seconds": 0 // TODO: Implement uptime tracking
+    }))
+}
+
+#[tauri::command]
 async fn get_network_metrics(
     app_state: tauri::State<'_, Arc<RwLock<AppState>>>,
 ) -> Result<NetworkMetrics, String> {
     let state = app_state.inner().read().await;
+
+    // Rate limiting check for read operations
+    let user_key = "user_default"; // In production, get from session
+    if !state.rate_limiters.default.is_allowed(user_key)
+        .map_err(|e| format!("Rate limit check failed: {}", e))? {
+        return Err("Request rate limit exceeded. Please try again later.".to_string());
+    }
+
     let (peer_count, active_count) = if let Some(p2p) = &state.p2p_node {
         let node = p2p.read().await;
         let count = node.get_peer_count().await as u32;
@@ -832,320 +917,277 @@ async fn store_encryption_keys(
     Ok(())
 }
 
-#[tauri::command]
-async fn get_secure_storage_info() -> Result<serde_json::Value, String> {
-    Ok(serde_json::json!({
-        "available": SecureStorageManager::is_available(),
-        "backend": SecureStorageManager::get_storage_info(),
-        "platform": std::env::consts::OS,
-    }))
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+    use tokio::sync::RwLock;
 
-#[tauri::command]
-async fn clear_user_encryption_keys(
-    user_id: String,
-) -> Result<(), String> {
-    let storage_manager = SecureStorageManager::new(user_id.clone());
-    
-    if !SecureStorageManager::is_available() {
-        return Err("Secure storage not available".into());
+    fn create_test_app_state() -> Arc<RwLock<AppState>> {
+        Arc::new(RwLock::new(AppState {
+            identity_manager: Arc::new(RwLock::new(IdentityManager::new())),
+            contact_manager: Arc::new(RwLock::new(init_contact_manager(std::path::PathBuf::from(".communitas-data")).await.unwrap())),
+            group_manager: Arc::new(RwLock::new(GroupManager::new())),
+            file_manager: Arc::new(RwLock::new(FileManager::new())),
+            organization_manager: None,
+            p2p_node: None,
+            dht_listener: None,
+            dht_local: Some(Arc::new(LocalDht::new("test_peer".to_string()))),
+            geographic_manager: Arc::new(RwLock::new(None)),
+            auth_middleware: Arc::new(AuthMiddleware::new()),
+            rate_limiters: Arc::new(RateLimiters::new()),
+            input_validator: Arc::new(InputValidator::new()),
+        }))
     }
 
-    storage_manager
-        .delete_all_keys()
-        .await
-        .map_err(|e| {
-            warn!("Failed to clear encryption keys for user {}: {}", user_id, e);
-            format!("Failed to clear encryption keys: {}", e)
-        })?;
+    #[tokio::test]
+    async fn test_get_node_info_rate_limiting() {
+        let app_state = create_test_app_state();
 
-    info!("Successfully cleared all encryption keys for user: {}", user_id);
-    Ok(())
-}
+        // First request should succeed
+        let result = get_node_info(tauri::State::new(app_state.clone())).await;
+        assert!(result.is_ok());
 
-#[tauri::command]
-async fn store_derived_key(
-    user_id: String,
-    key_id: String,
-    key_data: String,
-    key_type: String,
-    scope: Option<String>,
-) -> Result<(), String> {
-    let storage_manager = SecureStorageManager::new(user_id.clone());
-    
-    if !SecureStorageManager::is_available() {
-        return Err("Secure storage not available".into());
+        // Second request should also succeed (within limit)
+        let result = get_node_info(tauri::State::new(app_state.clone())).await;
+        assert!(result.is_ok());
+
+        // Third request should succeed (within limit)
+        let result = get_node_info(tauri::State::new(app_state.clone())).await;
+        assert!(result.is_ok());
     }
 
-    let metadata = SecureKeyMetadata {
-        key_id: key_id.clone(),
-        key_type,
-        scope,
-        created_at: chrono::Utc::now().timestamp() as u64,
-        last_used: chrono::Utc::now().timestamp() as u64,
-        version: 1,
-    };
+    #[tokio::test]
+    async fn test_get_messages_rate_limiting() {
+        let app_state = create_test_app_state();
 
-    storage_manager
-        .store_derived_key(&key_id, &key_data, &metadata)
-        .await
-        .map_err(|e| {
-            warn!("Failed to store derived key {} for user {}: {}", key_id, user_id, e);
-            format!("Failed to store derived key: {}", e)
-        })?;
+        // First request should succeed
+        let result = get_messages(None, None, None, tauri::State::new(app_state.clone())).await;
+        assert!(result.is_ok());
 
-    info!("Successfully stored derived key {} for user: {}", key_id, user_id);
-    Ok(())
-}
-
-#[tauri::command]
-async fn get_derived_key(
-    user_id: String,
-    key_id: String,
-) -> Result<serde_json::Value, String> {
-    let storage_manager = SecureStorageManager::new(user_id.clone());
-    
-    if !SecureStorageManager::is_available() {
-        return Err("Secure storage not available".into());
+        // Second request should also succeed (within limit)
+        let result = get_messages(None, None, None, tauri::State::new(app_state.clone())).await;
+        assert!(result.is_ok());
     }
 
-    let (key_data, metadata) = storage_manager
-        .get_derived_key(&key_id)
-        .await
-        .map_err(|e| {
-            warn!("Failed to get derived key {} for user {}: {}", key_id, user_id, e);
-            format!("Failed to get derived key: {}", e)
-        })?;
+    #[tokio::test]
+    async fn test_create_group_input_validation() {
+        let app_state = create_test_app_state();
 
-    Ok(serde_json::json!({
-        "keyData": key_data,
-        "metadata": metadata,
-        "retrievedAt": chrono::Utc::now().timestamp()
-    }))
-}
+        // Valid group name
+        let result = create_group("Test Group".to_string(), Some("Description".to_string()), tauri::State::new(app_state.clone())).await;
+        assert!(result.is_ok());
 
-#[tauri::command]
-async fn store_file(
-    file_id: String,
-    file_name: String,
-    file_type: String,
-    file_size: u64,
-    encrypted_data: Option<EncryptedFileData>,
-    key_id: Option<String>,
-    hash: String,
-    organization_id: Option<String>,
-    project_id: Option<String>,
-    app_state: tauri::State<'_, Arc<RwLock<AppState>>>,
-) -> Result<(), String> {
-    let state = app_state.inner().read().await;
-    
-    // Rate limiting check
-    let user_key = "user_default"; // In production, get from session
-    if !state.rate_limiters.default.is_allowed(user_key)
-        .map_err(|e| format!("Rate limit check failed: {}", e))? {
-        return Err("File storage rate limit exceeded. Please try again later.".to_string());
+        // Invalid group name (empty)
+        let result = create_group("".to_string(), Some("Description".to_string()), tauri::State::new(app_state.clone())).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid group name"));
+
+        // Invalid group name (too long)
+        let long_name = "a".repeat(65);
+        let result = create_group(long_name, Some("Description".to_string()), tauri::State::new(app_state.clone())).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid group name"));
+
+        // Invalid description (too long)
+        let long_desc = "a".repeat(1001);
+        let result = create_group("Test Group".to_string(), Some(long_desc), tauri::State::new(app_state.clone())).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid description"));
     }
-    
-    // Input validation
-    state.input_validator.sanitize_string(&file_id, 100)
-        .map_err(|e| format!("Invalid file ID: {}", e))?;
-    
-    state.input_validator.validate_file_path(&file_name)
-        .map_err(|e| format!("Invalid file name: {}", e))?;
-    
-    state.input_validator.sanitize_string(&file_type, 100)
-        .map_err(|e| format!("Invalid file type: {}", e))?;
-    
-    if let Some(key_id_val) = &key_id {
-        state.input_validator.sanitize_string(key_id_val, 100)
-            .map_err(|e| format!("Invalid key ID: {}", e))?;
+
+    #[tokio::test]
+    async fn test_send_group_message_input_validation() {
+        let app_state = create_test_app_state();
+
+        let valid_request = MessageRequest {
+            recipient: "test-group".to_string(),
+            content: "Hello world".to_string(),
+            message_type: "text".to_string(),
+            group_id: Some("group123".to_string()),
+        };
+
+        // Valid message
+        let result = send_group_message(valid_request.clone(), tauri::State::new(app_state.clone())).await;
+        assert!(result.is_ok());
+
+        // Invalid recipient
+        let invalid_request = MessageRequest {
+            recipient: "invalid@recipient".to_string(),
+            content: "Hello world".to_string(),
+            message_type: "text".to_string(),
+            group_id: Some("group123".to_string()),
+        };
+        let result = send_group_message(invalid_request, tauri::State::new(app_state.clone())).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid recipient address"));
+
+        // Empty content
+        let empty_request = MessageRequest {
+            recipient: "test-group".to_string(),
+            content: "".to_string(),
+            message_type: "text".to_string(),
+            group_id: Some("group123".to_string()),
+        };
+        let result = send_group_message(empty_request, tauri::State::new(app_state.clone())).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid message content"));
+
+        // Oversized content
+        let oversized_content = "a".repeat(100_001);
+        let oversized_request = MessageRequest {
+            recipient: "test-group".to_string(),
+            content: oversized_content,
+            message_type: "text".to_string(),
+            group_id: Some("group123".to_string()),
+        };
+        let result = send_group_message(oversized_request, tauri::State::new(app_state.clone())).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid message content"));
     }
-    
-    // File size validation (max 100MB for security)
-    if file_size > 100 * 1024 * 1024 {
-        return Err("File size exceeds maximum allowed (100MB)".to_string());
+
+    #[tokio::test]
+    async fn test_store_file_input_validation() {
+        let app_state = create_test_app_state();
+
+        // Valid file data
+        let result = store_file(
+            "test_file_id".to_string(),
+            "document.pdf".to_string(),
+            "application/pdf".to_string(),
+            1024,
+            None,
+            "user123".to_string(),
+            "hash123".to_string(),
+            None,
+            None,
+            tauri::State::new(app_state.clone())
+        ).await;
+        assert!(result.is_ok());
+
+        // Invalid file name (path traversal)
+        let result = store_file(
+            "test_file_id".to_string(),
+            "../secret.pdf".to_string(),
+            "application/pdf".to_string(),
+            1024,
+            None,
+            "user123".to_string(),
+            "hash123".to_string(),
+            None,
+            None,
+            tauri::State::new(app_state.clone())
+        ).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid file name"));
+
+        // Invalid file type
+        let result = store_file(
+            "test_file_id".to_string(),
+            "document.pdf".to_string(),
+            "a".repeat(101),
+            1024,
+            None,
+            "user123".to_string(),
+            "hash123".to_string(),
+            None,
+            None,
+            tauri::State::new(app_state.clone())
+        ).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid file type"));
+
+        // Oversized file
+        let result = store_file(
+            "test_file_id".to_string(),
+            "document.pdf".to_string(),
+            "application/pdf".to_string(),
+            100 * 1024 * 1024 + 1, // 100MB + 1 byte
+            None,
+            "user123".to_string(),
+            "hash123".to_string(),
+            None,
+            None,
+            tauri::State::new(app_state.clone())
+        ).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("File size exceeds maximum allowed"));
     }
-    let app_data_dir = std::path::PathBuf::from(".communitas-data");
-    let files_dir = app_data_dir.join("files");
-    
-    if let Err(e) = tokio::fs::create_dir_all(&files_dir).await {
-        return Err(format!("Failed to create files directory: {}", e));
+
+    #[tokio::test]
+    async fn test_send_message_input_validation() {
+        let app_state = create_test_app_state();
+
+        // Valid message
+        let result = send_message(
+            "msg123".to_string(),
+            "recipient".to_string(),
+            "Hello world".to_string(),
+            false,
+            Some("key123".to_string()),
+            None,
+            None,
+            tauri::State::new(app_state.clone())
+        ).await;
+        assert!(result.is_ok());
+
+        // Invalid recipient
+        let result = send_message(
+            "msg123".to_string(),
+            "invalid@recipient".to_string(),
+            "Hello world".to_string(),
+            false,
+            Some("key123".to_string()),
+            None,
+            None,
+            tauri::State::new(app_state.clone())
+        ).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid recipient address"));
+
+        // Empty message ID
+        let result = send_message(
+            "".to_string(),
+            "recipient".to_string(),
+            "Hello world".to_string(),
+            false,
+            Some("key123".to_string()),
+            None,
+            None,
+            tauri::State::new(app_state.clone())
+        ).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid message ID"));
     }
-    
-    let file_metadata = serde_json::json!({
-        "id": file_id,
-        "name": file_name,
-        "type": file_type,
-        "size": file_size,
-        "encrypted": encrypted_data.is_some(),
-        "keyId": key_id,
-        "hash": hash,
-        "organizationId": organization_id,
-        "projectId": project_id,
-        "uploadedAt": chrono::Utc::now().to_rfc3339(),
-    });
-    
-    // Store metadata
-    let metadata_file = files_dir.join(format!("{}_metadata.json", file_id));
-    if let Err(e) = tokio::fs::write(&metadata_file, file_metadata.to_string()).await {
-        return Err(format!("Failed to store file metadata: {}", e));
-    }
-    
-    // Store actual file data (encrypted or not)
-    if let Some(encrypted) = encrypted_data {
-        let data_file = files_dir.join(format!("{}_data.bin", file_id));
-        if let Err(e) = tokio::fs::write(&data_file, &encrypted.data).await {
-            return Err(format!("Failed to store encrypted file data: {}", e));
+
+    #[tokio::test]
+    async fn test_create_organization_dht_input_validation() {
+        let app_state = create_test_app_state();
+
+        let valid_request = CreateOrganizationRequest {
+            name: "Test Organization".to_string(),
+            description: Some("A test organization".to_string()),
+        };
+
+        // This test would require a full P2P setup, so we'll just test the validation part
+        // The actual organization creation would be tested in integration tests
+        let state = app_state.read().await;
+        let validation_result = state.input_validator.validate_username(&valid_request.name);
+        assert!(validation_result.is_ok());
+
+        if let Some(desc) = &valid_request.description {
+            let validation_result = state.input_validator.sanitize_string(desc, 1000);
+            assert!(validation_result.is_ok());
         }
+
+        // Invalid organization name
+        let invalid_request = CreateOrganizationRequest {
+            name: "a".repeat(65), // Too long
+            description: Some("A test organization".to_string()),
+        };
+        let validation_result = state.input_validator.validate_username(&invalid_request.name);
+        assert!(validation_result.is_err());
     }
-    
-    Ok(())
-}
-
-#[tauri::command]
-async fn send_message(
-    message_id: String,
-    recipient_id: String,
-    content: String,
-    encrypted: bool,
-    key_id: Option<String>,
-    organization_id: Option<String>,
-    project_id: Option<String>,
-    app_state: tauri::State<'_, Arc<RwLock<AppState>>>,
-) -> Result<(), String> {
-    let state = app_state.inner().read().await;
-    
-    // Rate limiting check for messages
-    let user_key = "user_default"; // In production, get from session
-    if !state.rate_limiters.check_messages(user_key)
-        .map_err(|e| format!("Rate limit check failed: {}", e))? {
-        return Err("Message rate limit exceeded. Please slow down.".to_string());
-    }
-    
-    // Input validation
-    state.input_validator.sanitize_string(&message_id, 100)
-        .map_err(|e| format!("Invalid message ID: {}", e))?;
-    
-    state.input_validator.validate_four_words(&recipient_id)
-        .map_err(|e| format!("Invalid recipient address: {}", e))?;
-    
-    state.input_validator.validate_message_content(&content)
-        .map_err(|e| format!("Invalid message content: {}", e))?;
-    
-    if let Some(key_id_val) = &key_id {
-        state.input_validator.sanitize_string(key_id_val, 100)
-            .map_err(|e| format!("Invalid key ID: {}", e))?;
-    }
-    let app_data_dir = std::path::PathBuf::from(".communitas-data");
-    let messages_dir = app_data_dir.join("messages");
-    
-    if let Err(e) = tokio::fs::create_dir_all(&messages_dir).await {
-        return Err(format!("Failed to create messages directory: {}", e));
-    }
-    
-    let message_data = serde_json::json!({
-        "id": message_id,
-        "recipientId": recipient_id,
-        "content": content,
-        "encrypted": encrypted,
-        "keyId": key_id,
-        "organizationId": organization_id,
-        "projectId": project_id,
-        "timestamp": chrono::Utc::now().to_rfc3339(),
-    });
-    
-    let message_file = messages_dir.join(format!("{}.json", message_id));
-    
-    match tokio::fs::write(&message_file, message_data.to_string()).await {
-        Ok(_) => Ok(()),
-        Err(e) => Err(format!("Failed to store message: {}", e)),
-    }
-}
-
-async fn auto_connect_p2p() -> anyhow::Result<RealP2PNode> {
-    // Use default config with automatic port selection
-    let config = NodeConfig::default();
-    
-    let mut node = RealP2PNode::new(config).await?;
-    node.start().await?;
-    Ok(node)
-}
-
-async fn setup_application_state() -> anyhow::Result<AppState> {
-    info!("Setting up application state...");
-
-    // Use a workspace-local data dir for now; in full Tauri app use app.handle().path().app_data_dir()
-    let app_data_dir = std::path::PathBuf::from(".communitas-data");
-    let _ = tokio::fs::create_dir_all(&app_data_dir).await;
-
-    // Initialize managers
-    let _identity_storage = app_data_dir.join("identity");
-    let identity_manager = Arc::new(RwLock::new(IdentityManager::new()));
-    let contact_manager = Arc::new(RwLock::new(
-        init_contact_manager(app_data_dir.clone()).await?,
-    ));
-    let group_manager = Arc::new(RwLock::new(GroupManager::new()));
-    let file_manager = Arc::new(RwLock::new(FileManager::new()));
-    
-    // Auto-connect to P2P network
-    info!("Auto-connecting to P2P network...");
-    let mut p2p_node = None;
-    let mut organization_manager = None;
-    let mut dht_local: Option<Arc<LocalDht>> = None;
-    
-    match auto_connect_p2p().await {
-        Ok(node) => {
-            info!("Successfully connected to P2P network");
-            let node_arc = Arc::new(RwLock::new(node));
-            
-            // Get peer ID and DHT in separate scopes
-            let (dht, self_id) = {
-                let node_guard = node_arc.read().await;
-                let peer_id = node_guard.peer_id.clone();
-                let dht = if let Some(dht_ref) = node_guard.node.dht() {
-                    dht_ref.clone()
-                } else {
-                    warn!("DHT not available in P2P node");
-                    // Create a new DHT instance if not available
-                    let local_key = saorsa_core::Key::new(node_guard.peer_id.as_bytes());
-                    Arc::new(RwLock::new(saorsa_core::dht::DHT::new(
-                        local_key,
-                        saorsa_core::dht::DHTConfig::default()
-                    )))
-                };
-                (dht, peer_id)
-            };
-            
-            organization_manager = Some(Arc::new(RwLock::new(
-                OrganizationManager::new(dht)
-            )));
-            dht_local = Some(Arc::new(LocalDht::new(self_id)));
-            p2p_node = Some(node_arc);
-        }
-        Err(e) => {
-            warn!("Failed to auto-connect to P2P network: {}. Will retry later.", e);
-            // Continue without P2P connection - app works offline
-            dht_local = Some(Arc::new(LocalDht::new("local-dev".to_string())));
-        }
-    }
-
-    info!("Application state setup complete");
-
-    Ok(AppState {
-        identity_manager,
-        contact_manager,
-        group_manager,
-        file_manager,
-        organization_manager,
-        p2p_node,
-        dht_listener: None, // Will be initialized after app starts
-        dht_local,
-        geographic_manager: Arc::new(RwLock::new(None)), // Will be initialized with P2P node
-        // Initialize security components
-        auth_middleware: Arc::new(AuthMiddleware::new()),
-        rate_limiters: Arc::new(RateLimiters::new()),
-        input_validator: Arc::new(InputValidator::new()),
-    })
 }
 
 #[tokio::main]
@@ -1155,19 +1197,46 @@ async fn main() -> anyhow::Result<()> {
         .install_default()
         .map_err(|e| anyhow::anyhow!("Failed to install rustls crypto provider: {:?}", e))?;
     
-    // Initialize logging
+    // Initialize logging with proper configuration
     tracing_subscriber::fmt()
-        .with_env_filter("info,communitas=debug,saorsa_core=debug")
+        .with_env_filter(std::env::var("RUST_LOG").unwrap_or_else(|_| "info,communitas=debug,saorsa_core=debug".to_string()))
+        .with_target(false)
+        .with_thread_ids(true)
+        .with_thread_names(true)
         .init();
+
+    info!("Starting Communitas v2.0 with enhanced security and error handling");
+    info!("Build configuration: {}", if cfg!(debug_assertions) { "debug" } else { "release" });
+    info!("Platform: {}", std::env::consts::OS);
+    info!("Architecture: {}", std::env::consts::ARCH);
 
     info!("Starting Communitas v2.0...");
 
-    // Setup application state
-    let app_state = Arc::new(RwLock::new(setup_application_state().await?));
+    // Setup application state with proper error handling
+    info!("Initializing application state...");
+    let app_state = match setup_application_state().await {
+        Ok(state) => {
+            info!("Application state initialized successfully");
+            Arc::new(RwLock::new(state))
+        }
+        Err(e) => {
+            error!("Failed to initialize application state: {}", e);
+            return Err(anyhow::anyhow!("Application initialization failed: {}", e));
+        }
+    };
 
     // Initialize identity state for four-word identities
-    let identity_state = IdentityState::new()
-        .map_err(|e| anyhow::anyhow!("Failed to initialize identity state: {}", e))?;
+    info!("Initializing identity state...");
+    let identity_state = match IdentityState::new() {
+        Ok(state) => {
+            info!("Identity state initialized successfully");
+            state
+        }
+        Err(e) => {
+            error!("Failed to initialize identity state: {}", e);
+            return Err(anyhow::anyhow!("Identity state initialization failed: {}", e));
+        }
+    };
 
     // Build and run Tauri application
     #[allow(unused_mut)]
@@ -1184,13 +1253,32 @@ async fn main() -> anyhow::Result<()> {
         .manage(identity_state)
         .manage({
             use web_publishing::WebPublishingState;
-            WebPublishingState::new()
-                .map_err(|e| anyhow::anyhow!("Failed to initialize web publishing state: {}", e))?
+            info!("Initializing web publishing state...");
+            match WebPublishingState::new() {
+                Ok(state) => {
+                    info!("Web publishing state initialized successfully");
+                    state
+                }
+                Err(e) => {
+                    error!("Failed to initialize web publishing state: {}", e);
+                    return Err(anyhow::anyhow!("Web publishing state initialization failed: {}", e));
+                }
+            }
         })
         .manage({
             use saorsa_storage_commands::StorageEngineState;
             use dht_facade::LocalDht;
-            StorageEngineState::<LocalDht>::new()
+            info!("Initializing storage engine state...");
+            match StorageEngineState::<LocalDht>::new() {
+                Ok(state) => {
+                    info!("Storage engine state initialized successfully");
+                    state
+                }
+                Err(e) => {
+                    error!("Failed to initialize storage engine state: {}", e);
+                    return Err(anyhow::anyhow!("Storage engine state initialization failed: {}", e));
+                }
+            }
         });
 
     // Add MCP plugin in debug mode
@@ -1206,6 +1294,8 @@ async fn main() -> anyhow::Result<()> {
         .manage(messaging_commands::init_messaging_storage())
         .manage(tokio::sync::RwLock::new(std::collections::HashMap::<String, identity_commands::PqcIdentity>::new()))
         .invoke_handler(tauri::generate_handler![
+            // Health and monitoring
+            get_health_check,
             // Node management
             get_node_info,
             initialize_p2p_node,
@@ -1294,12 +1384,6 @@ async fn main() -> anyhow::Result<()> {
             // Encryption and Secure Storage commands
             get_encryption_keys,
             store_encryption_keys,
-            get_secure_storage_info,
-            clear_user_encryption_keys,
-            store_derived_key,
-            get_derived_key,
-            store_file,
-            send_message,
             // DHT Event commands
             dht_events::subscribe_to_entity,
             dht_events::unsubscribe_from_entity,
@@ -1307,20 +1391,8 @@ async fn main() -> anyhow::Result<()> {
             // Four-word identity commands (legacy)
             identity_commands::generate_four_word_identity,
             identity_commands::validate_four_word_identity,
-            identity_commands::check_identity_availability,
-            identity_commands::claim_four_word_identity,
-            identity_commands::generate_identity_keypair,
-            identity_commands::claim_four_word_identity_with_proof,
-            identity_commands::verify_identity_packet,
-            identity_commands::get_identity_packet,
-            identity_commands::publish_identity_packet,
-            identity_commands::get_published_identity,
             identity_commands::calculate_dht_id,
             identity_commands::get_identity_info,
-            identity_commands::get_dictionary_words,
-            identity_commands::validate_word,
-            identity_commands::batch_validate_identities,
-            identity_commands::get_identity_statistics,
             // Post-Quantum identity commands (ML-DSA-65)
             identity_commands::generate_pqc_identity,
             identity_commands::get_pqc_identity,
@@ -1363,10 +1435,14 @@ async fn main() -> anyhow::Result<()> {
         ])
         .setup(|_app| {
             info!("Communitas application setup complete");
+            info!("Application is ready to accept connections");
             Ok(())
         })
         .run(tauri::generate_context!())
-        .map_err(|e| anyhow::anyhow!("Failed to run Tauri application: {}", e))?;
+        .map_err(|e| {
+            error!("Failed to run Tauri application: {}", e);
+            anyhow::anyhow!("Tauri application startup failed: {}", e)
+        })?;
 
     Ok(())
 }

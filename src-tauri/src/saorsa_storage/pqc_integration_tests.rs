@@ -349,7 +349,7 @@ async fn test_pqc_legacy_compatibility() {
     use chacha20poly1305::{ChaCha20Poly1305, Key, KeyInit};
     use chacha20poly1305::aead::{Aead, AeadCore, OsRng};
     
-    let cipher = ChaCha20Poly1305::new(Key::from_slice(&legacy_key));
+    let cipher = ChaCha20Poly1305::new(Key::from_slice(&legacy_key).into());
     let nonce = ChaCha20Poly1305::generate_nonce(&mut OsRng);
     
     let ciphertext = cipher.encrypt(&nonce, test_content.as_ref()).unwrap();

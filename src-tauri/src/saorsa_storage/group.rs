@@ -501,7 +501,7 @@ impl GroupManager {
     ) -> GroupResult<EncryptedGroupKey> {
         // Use member's public key for encryption (simplified - would use proper key exchange)
         let member_key = Key::from_slice(&member.public_key[..32.min(member.public_key.len())]);
-        let cipher = ChaCha20Poly1305::new(member_key);
+        let cipher = ChaCha20Poly1305::new(member_key.into());
         
         let nonce = ChaCha20Poly1305::generate_nonce(&mut OsRng);
         let ciphertext = cipher
@@ -522,7 +522,7 @@ impl GroupManager {
         encrypted_key: &EncryptedGroupKey,
         user_private_key: &[u8; 32],
     ) -> GroupResult<[u8; 32]> {
-        let cipher = ChaCha20Poly1305::new(Key::from_slice(user_private_key));
+        let cipher = ChaCha20Poly1305::new(Key::from_slice(user_private_key).into());
         let nonce = Nonce::from_slice(&encrypted_key.nonce);
         
         let plaintext = cipher

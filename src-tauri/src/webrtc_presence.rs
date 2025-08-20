@@ -271,7 +271,11 @@ impl PeerConnectionPool {
         // If connection already exists, update it and move to front
         if connections.contains_key(&peer_id) {
             self.move_to_front(&peer_id, &mut connections).await?;
-            connections.get_mut(&peer_id).unwrap().connection = peer_connection;
+            if let Some(connection) = connections.get_mut(&peer_id) {
+                connection.connection = peer_connection;
+            } else {
+                return Err(anyhow::anyhow!("Connection not found after move_to_front"));
+            }
             return Ok(());
         }
         
@@ -2246,8 +2250,12 @@ pub async fn export_metrics_data(
     // TODO: Implement actual data export from persistent storage
     match format.as_str() {
         "json" => {
+            let export_timestamp = SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .map_err(|e| format!("Failed to get current timestamp: {}", e))?
+                .as_secs();
             let export_data = serde_json::json!({
-                "export_timestamp": SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs(),
+                "export_timestamp": export_timestamp,
                 "time_range_hours": hours,
                 "metrics_count": 144, // Mock count
                 "description": "Connection quality metrics export"

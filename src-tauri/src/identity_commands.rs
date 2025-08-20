@@ -3,7 +3,7 @@
 use blake3::Hasher;
 use four_word_networking::FourWordAdaptiveEncoder;
 // Use standardized API imports for saorsa-pqc 0.3.5
-use saorsa_pqc::api::ml_dsa_65;
+use saorsa_pqc::api::{ml_dsa_65, MlDsaVariant};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -143,8 +143,8 @@ impl PqcIdentity {
                 reason: format!("ML-DSA-65 key generation failed: {:?}", e),
             })?;
         
-        let public_key = pk.to_vec();
-        let secret_key = sk.to_vec();
+        let public_key = pk.to_bytes().to_vec();
+        let secret_key = sk.to_bytes().to_vec();
 
         // Generate four-word address using public key hash
         let four_word_address = Self::generate_four_word_address(&public_key)?;
@@ -237,20 +237,21 @@ impl PqcIdentity {
 
     /// Sign data with real ML-DSA-65 signature
     fn sign_data(&self, data: &[u8]) -> IdentityResult<Vec<u8>> {
-        // Reconstruct secret key from bytes
-        let secret_key = SecretKey::from(self.secret_key.as_slice().try_into()
-            .map_err(|_| IdentityError::CryptoError {
-                reason: "Invalid secret key size".to_string(),
-            })?);
+        // Reconstruct secret key from bytes using ML-DSA API
+        let secret_key = saorsa_pqc::api::MlDsaSecretKey::from_bytes(MlDsaVariant::MlDsa65, &self.secret_key)
+            .map_err(|e| IdentityError::CryptoError {
+                reason: format!("Invalid secret key reconstruction: {:?}", e),
+            })?;
         
-        // Create ML-DSA-65 signature  
-        let signature = secret_key.try_sign_with_rng(&mut OsRng, data, b"identity-packet")
+        // Create ML-DSA-65 signature using DSA instance
+        let dsa = ml_dsa_65();
+        let signature = dsa.sign_with_context(&secret_key, data, b"identity-packet")
             .map_err(|e| IdentityError::SignatureFailed {
                 reason: format!("ML-DSA-65 signing failed: {:?}", e),
             })?;
         
         // Convert signature to bytes
-        Ok(signature.to_vec())
+        Ok(signature.to_bytes().to_vec())
     }
 
     /// Verify this identity's cryptographic integrity
@@ -273,17 +274,15 @@ impl PqcIdentity {
         }
         
         // Verify keys are valid ML-DSA-65 keys
-        let pk_array: [u8; 1952] = self.public_key.as_slice().try_into()
-            .map_err(|_| IdentityError::CryptoError {
-                reason: "Invalid ML-DSA-65 public key size".to_string(),
+        let _public_key = saorsa_pqc::api::MlDsaPublicKey::from_bytes(MlDsaVariant::MlDsa65, &self.public_key)
+            .map_err(|e| IdentityError::CryptoError {
+                reason: format!("Invalid ML-DSA-65 public key: {:?}", e),
             })?;
-        let _public_key = PublicKey::from(pk_array);
         
-        let sk_array: [u8; 4032] = self.secret_key.as_slice().try_into()
-            .map_err(|_| IdentityError::CryptoError {
-                reason: "Invalid ML-DSA-65 secret key size".to_string(),
+        let _secret_key = saorsa_pqc::api::MlDsaSecretKey::from_bytes(MlDsaVariant::MlDsa65, &self.secret_key)
+            .map_err(|e| IdentityError::CryptoError {
+                reason: format!("Invalid ML-DSA-65 secret key: {:?}", e),
             })?;
-        let _secret_key = SecretKey::from(sk_array);
 
         Ok(true)
     }
@@ -369,21 +368,21 @@ impl PqcIdentityPacket {
     /// Verify ML-DSA-65 signature
     fn verify_ml_dsa_signature(&self, data: &[u8]) -> IdentityResult<bool> {
         // Reconstruct public key from bytes
-        let pk_array: [u8; 1952] = self.public_key.as_slice().try_into()
-            .map_err(|_| IdentityError::CryptoError {
-                reason: "Invalid public key size".to_string(),
+        let public_key = saorsa_pqc::api::MlDsaPublicKey::from_bytes(MlDsaVariant::MlDsa65, &self.public_key)
+            .map_err(|e| IdentityError::CryptoError {
+                reason: format!("Invalid public key: {:?}", e),
             })?;
-        let public_key = PublicKey::from(pk_array);
         
         // Reconstruct signature from bytes
-        let sig_array: [u8; 3309] = self.signature.as_slice().try_into()
-            .map_err(|_| IdentityError::VerificationFailed {
-                reason: "Invalid signature size".to_string(),
+        let signature = saorsa_pqc::api::MlDsaSignature::from_bytes(MlDsaVariant::MlDsa65, &self.signature)
+            .map_err(|e| IdentityError::VerificationFailed {
+                reason: format!("Invalid signature: {:?}", e),
             })?;
-        let signature = Signature::from(sig_array);
         
-        // Verify the signature
-        let is_valid = public_key.verify(data, &signature, b"identity-packet");
+        // Verify the signature using DSA instance
+        let dsa = ml_dsa_65();
+        let is_valid = dsa.verify_with_context(&public_key, data, &signature, b"identity-packet")
+            .unwrap_or(false);
         Ok(is_valid)
     }
 }

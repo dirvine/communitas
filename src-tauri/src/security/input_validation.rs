@@ -387,7 +387,8 @@ pub struct ValidatedPath {
 
 // Regex constants for validator derive macro
 lazy_static::lazy_static! {
-    static ref USERNAME_REGEX: Regex = Regex::new(r"^[a-zA-Z0-9_-]{3,64}$").unwrap();
+    static ref USERNAME_REGEX: Regex = Regex::new(r"^[a-zA-Z0-9_-]{3,64}$")
+        .expect("Failed to compile username regex pattern - this is a development error");
 }
 
 /// Result type for validation operations
@@ -485,11 +486,218 @@ mod tests {
     #[test]
     fn test_message_length_limits() {
         let validator = InputValidator::new();
-        
+
         let long_message = "a".repeat(MAX_MESSAGE_LENGTH + 1);
         assert!(validator.validate_message_content(&long_message).is_err());
-        
+
         let max_message = "a".repeat(MAX_MESSAGE_LENGTH);
         assert!(validator.validate_message_content(&max_message).is_ok());
+    }
+
+    #[test]
+    fn test_json_validation() {
+        let validator = InputValidator::new();
+
+        // Valid JSON
+        let valid_json = r#"{"name": "test", "value": 123}"#;
+        let result: Result<serde_json::Value, _> = validator.validate_json_input(valid_json);
+        assert!(result.is_ok());
+
+        // Invalid JSON
+        let invalid_json = r#"{"name": "test", "value": }"#;
+        let result: Result<serde_json::Value, _> = validator.validate_json_input(invalid_json);
+        assert!(result.is_err());
+
+        // Empty input
+        let empty_json = "";
+        let result: Result<serde_json::Value, _> = validator.validate_json_input(empty_json);
+        assert!(result.is_err());
+
+        // Oversized JSON
+        let oversized_json = format!(r#"{{"data": "{}"}}"#, "x".repeat(MAX_MESSAGE_LENGTH));
+        let result: Result<serde_json::Value, _> = validator.validate_json_input(&oversized_json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_sanitize_string() {
+        let validator = InputValidator::new();
+
+        // Normal string
+        let result = validator.sanitize_string("Hello World", 100);
+        assert_eq!(result.unwrap(), "Hello World");
+
+        // String with control characters
+        let result = validator.sanitize_string("Hello\n\r\tWorld\x00", 100);
+        assert_eq!(result.unwrap(), "Hello\n\r\tWorld");
+
+        // Empty string
+        let result = validator.sanitize_string("", 100);
+        assert!(result.is_err());
+
+        // Oversized string
+        let long_string = "a".repeat(101);
+        let result = validator.sanitize_string(&long_string, 100);
+        assert!(result.is_err());
+
+        // String that becomes empty after sanitization
+        let result = validator.sanitize_string("\x01\x02\x03", 100);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_title_validation() {
+        let validator = InputValidator::new();
+
+        // Valid title
+        let result = validator.validate_title("My Project Title");
+        assert_eq!(result.unwrap(), "My Project Title");
+
+        // Empty title
+        let result = validator.validate_title("");
+        assert!(result.is_err());
+
+        // Oversized title
+        let long_title = "a".repeat(201);
+        let result = validator.validate_title(&long_title);
+        assert!(result.is_err());
+
+        // Title with malicious content
+        let result = validator.validate_title("Project <script>alert('xss')</script>");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_description_validation() {
+        let validator = InputValidator::new();
+
+        // Valid description
+        let result = validator.validate_description("This is a project description");
+        assert_eq!(result.unwrap(), "This is a project description");
+
+        // Empty description (should be OK)
+        let result = validator.validate_description("");
+        assert_eq!(result.unwrap(), "");
+
+        // Oversized description
+        let long_desc = "a".repeat(1001);
+        let result = validator.validate_description(&long_desc);
+        assert!(result.is_err());
+
+        // Description with malicious content
+        let result = validator.validate_description("Description with <script>alert('xss')</script> code");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_content_validation() {
+        let validator = InputValidator::new();
+
+        // Valid content
+        let result = validator.validate_content("This is valid content");
+        assert_eq!(result.unwrap(), "This is valid content");
+
+        // Empty content
+        let result = validator.validate_content("");
+        assert!(result.is_err());
+
+        // Oversized content
+        let long_content = "a".repeat(10 * 1024 * 1024 + 1);
+        let result = validator.validate_content(&long_content);
+        assert!(result.is_err());
+
+        // Content with script tags
+        let result = validator.validate_content("Content with <script>alert('xss')</script> scripts");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_tags_validation() {
+        let validator = InputValidator::new();
+
+        // Valid tags
+        let tags = vec!["rust".to_string(), "security".to_string(), "p2p".to_string()];
+        let result = validator.validate_tags(&tags);
+        assert_eq!(result.unwrap().len(), 3);
+
+        // Too many tags
+        let many_tags = (0..11).map(|i| format!("tag{}", i)).collect::<Vec<_>>();
+        let result = validator.validate_tags(&many_tags);
+        assert!(result.is_err());
+
+        // Oversized tag
+        let oversized_tag = "a".repeat(51);
+        let tags = vec![oversized_tag];
+        let result = validator.validate_tags(&tags);
+        assert!(result.is_err());
+
+        // Tag with malicious content
+        let tags = vec!["normal".to_string(), "<script>alert('xss')</script>".to_string()];
+        let result = validator.validate_tags(&tags);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_file_name_validation() {
+        let validator = InputValidator::new();
+
+        // Valid file names
+        assert!(validator.validate_file_name("document.pdf").is_ok());
+        assert!(validator.validate_file_name("my-file_v2.txt").is_ok());
+
+        // Empty file name
+        assert!(validator.validate_file_name("").is_err());
+
+        // Oversized file name
+        let long_name = "a".repeat(256);
+        assert!(validator.validate_file_name(&long_name).is_err());
+
+        // File name with path traversal
+        assert!(validator.validate_file_name("../secret.txt").is_err());
+        assert!(validator.validate_file_name("../../../etc/passwd").is_err());
+
+        // File name with null bytes
+        assert!(validator.validate_file_name("file.txt\x00").is_err());
+
+        // File name with malicious content
+        assert!(validator.validate_file_name("file<script>.txt").is_err());
+    }
+
+    #[test]
+    fn test_content_type_validation() {
+        let validator = InputValidator::new();
+
+        // Valid content types
+        assert!(validator.validate_content_type("application/pdf").is_ok());
+        assert!(validator.validate_content_type("text/plain").is_ok());
+        assert!(validator.validate_content_type("image/jpeg").is_ok());
+
+        // Empty content type
+        assert!(validator.validate_content_type("").is_err());
+
+        // Oversized content type
+        let long_type = "a".repeat(101);
+        assert!(validator.validate_content_type(&long_type).is_err());
+
+        // Content type with malicious content
+        assert!(validator.validate_content_type("text/html<script>").is_err());
+    }
+
+    #[test]
+    fn test_uuid_validation() {
+        let validator = InputValidator::new();
+
+        // Valid UUID
+        let valid_uuid = "550e8400-e29b-41d4-a716-446655440000";
+        let result = validator.validate_uuid(valid_uuid);
+        assert_eq!(result.unwrap(), valid_uuid.to_lowercase());
+
+        // Empty UUID
+        assert!(validator.validate_uuid("").is_err());
+
+        // Invalid UUID format
+        assert!(validator.validate_uuid("not-a-uuid").is_err());
+        assert!(validator.validate_uuid("550e8400-e29b-41d4-a716").is_err()); // Too short
+        assert!(validator.validate_uuid("550e8400-e29b-41d4-a716-446655440000-extra").is_err()); // Too long
     }
 }

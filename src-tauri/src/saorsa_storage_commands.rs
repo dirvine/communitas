@@ -8,7 +8,7 @@ use crate::saorsa_storage::{
     StoragePolicy, StorageMetadata, StorageAddress, StorageEngineStats,
     ConfigManager, run_performance_smoke_test, run_comprehensive_performance_test, PerformanceTestRunner,
 };
-use crate::saorsa_storage::errors::{StorageError, StorageResult};
+use crate::saorsa_storage::errors::StorageError;
 use crate::dht_facade::{DhtFacade, LocalDht};
 use std::sync::Arc;
 use tokio::sync::RwLock;

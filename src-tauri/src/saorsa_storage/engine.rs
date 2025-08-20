@@ -628,7 +628,7 @@ impl<D: DhtFacade> StorageEngine<D> {
         use chacha20poly1305::{ChaCha20Poly1305, Key, KeyInit};
         use chacha20poly1305::aead::{Aead, AeadCore, OsRng};
 
-        let cipher = ChaCha20Poly1305::new(Key::from_slice(key));
+        let cipher = ChaCha20Poly1305::new(Key::from_slice(key).into());
         let nonce = ChaCha20Poly1305::generate_nonce(&mut OsRng);
         
         let ciphertext = cipher.encrypt(&nonce, data)
@@ -655,7 +655,7 @@ impl<D: DhtFacade> StorageEngine<D> {
         let nonce = Nonce::from_slice(&encrypted_data[..12]);
         let ciphertext = &encrypted_data[12..];
 
-        let cipher = ChaCha20Poly1305::new(Key::from_slice(key));
+        let cipher = ChaCha20Poly1305::new(Key::from_slice(key).into());
         cipher.decrypt(nonce, ciphertext)
             .map_err(|_| StorageError::Encryption {
                 source: crate::saorsa_storage::errors::EncryptionError::DecryptionFailed,

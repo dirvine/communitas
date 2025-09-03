@@ -1,5 +1,5 @@
-import crypto from 'crypto'
-import { EventEmitter } from 'events'
+// Browser-compatible DHT Storage implementation
+// Simplified for frontend use
 import { NetworkIdentity } from '../../types/collaboration'
 import { cryptoManager } from '../security/cryptoManager'
 
@@ -45,30 +45,24 @@ export interface QueryResult {
   metadata?: BlockMetadata
 }
 
-export class DHTStorage extends EventEmitter {
-  private identity: NetworkIdentity
-  private bootstrapNodes: string[]
-  private replicationFactor: number
+export class DHTStorage {
+  private config: DHTConfig
   private encryptionKey: Uint8Array
   private keyId: string
-  private connectedNodes = new Map<string, DHTNode>()
-  private storedBlocks = new Map<string, EncryptedBlock & { metadata?: BlockMetadata }>()
-  private metadataIndex: Array<{ blockId: string; metadata: BlockMetadata }> = []
   private isConnected = false
-  private cryptoReady: Promise<void>
+  private connectedNodes: Map<string, DHTNode> = new Map()
 
   constructor(config: DHTConfig) {
-    super()
-    this.identity = config.identity
-    this.bootstrapNodes = config.bootstrapNodes
-    this.replicationFactor = config.replicationFactor
-    
-    // Initialize crypto and expose a readiness promise
-    this.cryptoReady = this.initializeCrypto().catch(error => {
-      console.error('Failed to initialize crypto:', error)
-      this.emit('error', error)
-      throw error
-    })
+    this.config = config
+    this.encryptionKey = new Uint8Array(32)
+    this.keyId = 'test-key-id'
+    this.initialize()
+  }
+
+  private async initialize(): Promise<void> {
+    // Simple initialization for browser compatibility
+    crypto.getRandomValues(this.encryptionKey)
+    console.log(`DHT initialized with key ID: ${this.keyId}`)
   }
 
   private async ensureReady(): Promise<void> {
@@ -76,13 +70,17 @@ export class DHTStorage extends EventEmitter {
   }
 
   private async initializeCrypto(): Promise<void> {
-    // SECURITY: Generate secure encryption key using crypto manager
-    this.encryptionKey = cryptoManager.randomBytes(32) // AES-256 key
-    
-    // SECURITY: Generate strong key pair using secure crypto manager
-    const keyPair = await cryptoManager.generateRSAKeyPair()
-    this.keyId = keyPair.keyId
-    
+    // SECURITY: Generate secure encryption key using Web Crypto API
+    this.encryptionKey = new Uint8Array(32)
+    crypto.getRandomValues(this.encryptionKey)
+
+    // SECURITY: Generate key ID using Web Crypto API
+    const hashBuffer = await crypto.subtle.digest('SHA-256', this.encryptionKey)
+    const hashArray = new Uint8Array(hashBuffer)
+    this.keyId = Array.from(hashArray.slice(0, 16))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('')
+
     console.log(`DHT initialized with key ID: ${this.keyId}`)
   }
 
@@ -112,13 +110,13 @@ export class DHTStorage extends EventEmitter {
     }
     
     this.isConnected = true
-    this.emit('connected')
+    console.log('DHT connected')
   }
 
   async disconnect(): Promise<void> {
     this.connectedNodes.clear()
     this.isConnected = false
-    this.emit('disconnected')
+    console.log('DHT disconnected')
   }
 
   // Core DHT operations

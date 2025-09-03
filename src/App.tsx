@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import {
   AppBar,
   Toolbar,
@@ -76,6 +76,25 @@ import { UnifiedDashboard } from './components/unified/UnifiedDashboard'
 import FirstRunWizard from './components/onboarding/FirstRunWizard'
 import QuickActionsBar from './components/QuickActionsBar'
 import StorageWorkspaceDialog from './components/storage/StorageWorkspaceDialog'
+import { CollaborativeEditingTest } from './components/testing/CollaborativeEditingTest'
+import { SimpleCollaborationTest } from './components/testing/SimpleCollaborationTest'
+import { TestPage } from './components/testing/TestPage'
+import { SimpleTest } from './components/testing/SimpleTest'
+
+// Test button component that uses React Router navigation
+const TestButton: React.FC = () => {
+  const navigate = useNavigate();
+
+  return (
+    <Button
+      variant="contained"
+      onClick={() => navigate('/test/collaboration')}
+      sx={{ mt: 2 }}
+    >
+      🧪 Test Collaborative Editing
+    </Button>
+  );
+};
 
 interface TabPanelProps {
   children?: React.ReactNode
@@ -480,17 +499,22 @@ function App() {
                 <Box sx={{ flex: 1, overflow: 'auto', bgcolor: 'grey.50' }}>
                   <Routes>
                     <Route path="/" element={
-                      <Box sx={{ 
+                      <Box sx={{
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         height: '100%', flexDirection: 'column' }}>
                         <Typography variant="h5" color="text.secondary" gutterBottom>
                           Welcome to Communitas
                         </Typography>
-                        <Typography variant="body1" color="text.secondary">
+                        <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
                           Select a contact, group, or organization to start collaborating
                         </Typography>
+                        <TestButton />
                       </Box>
                     } />
+                    <Route path="/test" element={<SimpleTest />} />
+                    <Route path="/test/page" element={<TestPage />} />
+                    <Route path="/test/collaboration" element={<CollaborativeEditingTest />} />
+                    <Route path="/test/simple" element={<SimpleCollaborationTest />} />
                     <Route path="/org/:orgId/*" element={<UnifiedDashboard userId="user_owner_123" userName="Owner" />} />
                     <Route path="/project/:projectId/*" element={<UnifiedDashboard userId="user_owner_123" userName="Owner" />} />
                     <Route path="*" element={<Navigate to="/" replace />} />

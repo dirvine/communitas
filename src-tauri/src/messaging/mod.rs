@@ -76,8 +76,9 @@ impl MessageId {
     
     pub fn from_content(content: &[u8]) -> Self {
         let hash = blake3::hash(content);
-        let uuid_bytes = &hash.as_bytes()[..16];
-        let uuid = Uuid::from_slice(uuid_bytes).expect("Valid UUID from hash");
+        let mut bytes = [0u8; 16];
+        bytes.copy_from_slice(&hash.as_bytes()[..16]);
+        let uuid = Uuid::from_bytes(bytes);
         Self(uuid)
     }
 }

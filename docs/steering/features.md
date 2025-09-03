@@ -59,6 +59,7 @@ Based on the codebase analysis, this document outlines the current and planned f
   - Identity generation and validation
   - DHT mapping for address resolution
   - Secure key management
+  - Post-quantum cryptography (ML-DSA/ML-KEM)
 
 ### Security Features
 - ✅ **Encryption & Security**
@@ -66,6 +67,7 @@ Based on the codebase analysis, this document outlines the current and planned f
   - Ed25519 digital signatures
   - Secure storage via keyring
   - Rate limiting and input validation
+  - Threshold cryptography for group data
 
 ### Data Management
 - ✅ **Storage System**
@@ -73,6 +75,7 @@ Based on the codebase analysis, this document outlines the current and planned f
   - Reed-Solomon error correction
   - Markdown file management
   - Secure credential storage
+  - Four storage policies (PrivateMax, PrivateScoped, GroupScoped, PublicMarkdown)
 
 ### Organization Features
 - ✅ **Hierarchical Management**
@@ -81,40 +84,91 @@ Based on the codebase analysis, this document outlines the current and planned f
   - Resource sharing
   - Call session management
 
+### Communication Features
+- 🚧 **Voice/Video Calling**
+  - WebRTC integration foundation
+  - MLS messaging protocol
+  - Screen sharing preparation
+  - Call session management
+
+### Web Publishing
+- 🚧 **Markdown Internet**
+  - Four-word addressable websites
+  - Collaborative markdown editing
+  - Cross-site linking support
+  - DHT-based content distribution
+
 ## Planned Feature Categories
 
-### Community Management
-- 📅 **Enhanced User Profiles**
-  - Profile customization
-  - Activity tracking
-  - Reputation system
+### Hierarchical Organization Structure
+- 📅 **Top-Level Navigation**
+  - Organization section (corporate spaces)
+  - Groups & People section (personal spaces)
 
-- 📅 **Advanced Community Features**
-  - Community discovery
-  - Event scheduling
-  - Polls and voting
+- 📅 **Organization Hierarchy**
+  - Organizations → Projects, Groups, Channels, People
+  - Projects → Sub-projects, teams, resources
+  - Groups → Members, channels, shared resources
+  - Channels → Topic-based discussions, files
+  - People → Individual profiles, direct messaging
+
+### Entity Capabilities
+- 📅 **Communication Per Entity**
+  - Voice calls for all entities
+  - Video calls for all entities
+  - Screen sharing for all entities
+  - Text messaging with rich media
+
+- 📅 **Storage Per Entity**
+  - Secure file storage with encryption
+  - Collaborative document editing
+  - Version control and history
+  - Backup and recovery
+
+- 📅 **Web Presence Per Entity**
+  - Four-word addressable websites
+  - Markdown-based content
+  - Cross-entity linking
+  - Public and private content
 
 ### Communication Features
+- 📅 **Advanced Calling**
+  - Multi-party voice calls
+  - HD video conferencing
+  - Screen sharing with annotation
+  - Call recording and transcription
+
 - 📅 **Messaging Enhancements**
   - Group chat improvements
-  - Message search
-  - Rich media support
-
-- 📅 **Real-time Features**
-  - WebRTC video/audio calls
-  - Screen sharing
-  - Live collaboration
+  - Message search and filtering
+  - Rich media support (images, files, links)
+  - Message reactions and threading
 
 ### Collaboration Tools
 - 📅 **Document Collaboration**
-  - Yjs CRDT integration
-  - Real-time co-editing
-  - Version control
+  - Yjs CRDT integration for real-time editing
+  - Conflict-free collaborative editing
+  - Version control and history
+  - Commenting and review system
 
 - 📅 **Project Management**
-  - Task tracking
+  - Task tracking and assignment
   - Milestone management
   - Progress visualization
+  - Resource allocation
+
+### Markdown Internet Features
+- 📅 **Web Publishing**
+  - Four-word addressable websites
+  - Collaborative markdown editing
+  - Cross-site linking (entity-to-entity)
+  - Public content distribution via DHT
+
+- 📅 **Content Management**
+  - Markdown editor with live preview
+  - Image and media embedding
+  - Template system for common pages
+  - SEO and discoverability features
 
 ## Technical Capabilities
 

@@ -5,7 +5,7 @@
   "identifier": "com.p2pfoundation.communitas",
   "build": {
     "frontendDist": "../dist",
-    "devUrl": "http://localhost:1420",
+    "devUrl": "http://localhost:1422",
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build"
   },

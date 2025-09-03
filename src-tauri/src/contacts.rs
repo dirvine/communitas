@@ -245,9 +245,7 @@ impl ContactManager {
         let contacts = self.contacts.read().await;
         contacts
             .values()
-            .filter(|contact| {
-                status_filter.is_none() || contact.status == *status_filter.as_ref().unwrap()
-            })
+            .filter(|contact| status_filter.as_ref().map_or(true, |s| contact.status == *s))
             .cloned()
             .collect()
     }

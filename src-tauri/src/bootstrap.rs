@@ -21,7 +21,12 @@
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use std::{net::SocketAddr, path::PathBuf, sync::Arc, time::Duration};
+use std::{
+    net::{SocketAddr, SocketAddrV4, Ipv4Addr},
+    path::PathBuf,
+    sync::Arc,
+    time::Duration,
+};
 use tokio::{signal, sync::RwLock, time::interval};
 use tracing::{info, warn};
 
@@ -49,7 +54,7 @@ pub struct BootstrapConfig {
 impl Default for BootstrapConfig {
     fn default() -> Self {
         Self {
-            listen_address: "0.0.0.0:8888".parse().unwrap(),
+            listen_address: SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 8888)),
             public_address: "bootstrap.communitas.app:8888".to_string(),
             max_connections: 1000,
             connection_timeout: 30,

@@ -20,7 +20,7 @@ impl BootstrapState {
 
     async fn add_peer(&self, peer_addr: String) {
         let mut peers = self.connected_peers.write().await;
-        peers.insert(peer_addr, std::time::Instant::now());
+        peers.insert(peer_addr.clone(), std::time::Instant::now());
         info!("Added peer: {} (Total peers: {})", peer_addr, peers.len());
     }
 

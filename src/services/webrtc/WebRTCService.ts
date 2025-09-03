@@ -344,7 +344,77 @@ export class WebRTCService {
   }
 
   private async sendSignalingMessage(participantId: string, message: any): Promise<void> {
+    // For Phase 1: Use localStorage as a simple signaling mechanism
+    // In production, this would connect to a real signaling server
+    const signalingKey = `webrtc_signal_${participantId}`;
+    const signalingData = {
+      from: 'local',
+      to: participantId,
+      message,
+      timestamp: Date.now()
+    };
+
+    // Store in localStorage for demo purposes
+    localStorage.setItem(signalingKey, JSON.stringify(signalingData));
+
+    // Emit for UI updates
     this.emit('signalingMessage', { participantId, message });
+
+    // Simulate receiving answer after a short delay (for demo)
+    if (message.type === 'offer') {
+      setTimeout(() => {
+        this.handleIncomingAnswer(participantId, message);
+      }, 1000);
+    }
+  }
+
+  private async handleIncomingAnswer(participantId: string, offer: any): Promise<void> {
+    try {
+      // Create answer for demo purposes
+      const peerConnection = this.createPeerConnection(participantId);
+
+      // Add local stream if available
+      if (this.localStream) {
+        this.localStream.getTracks().forEach(track => {
+          peerConnection.addTrack(track, this.localStream!);
+        });
+      }
+
+      // Set remote description (simulated)
+      await peerConnection.setRemoteDescription(new RTCSessionDescription({
+        type: 'offer',
+        sdp: offer.sdp
+      }));
+
+      // Create and set local description
+      const answer = await peerConnection.createAnswer();
+      await peerConnection.setLocalDescription(answer);
+
+      // Simulate sending answer back
+      this.emit('signalingMessage', {
+        participantId,
+        message: { type: 'answer', sdp: answer }
+      });
+
+      // Add remote participant to call
+      if (this.currentCall) {
+        this.currentCall.participants.push({
+          id: participantId,
+          fourWordAddress: participantId,
+          displayName: participantId,
+          isAudioEnabled: true,
+          isVideoEnabled: offer.callType === 'video',
+          isScreenSharing: false,
+          connectionQuality: 'good'
+        });
+
+        this.emit('callUpdated', this.currentCall);
+      }
+
+    } catch (error) {
+      console.error('Failed to handle incoming answer:', error);
+      this.emit('error', error);
+    }
   }
 
   get isReady(): boolean {

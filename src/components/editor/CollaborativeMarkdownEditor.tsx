@@ -1,17 +1,14 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import * as monaco from 'monaco-editor'
 import { Box, Paper, IconButton, Toolbar, Typography, Chip, Avatar, Tooltip, Menu, MenuItem, Divider } from '@mui/material'
-import { 
-  Save, 
-  Preview, 
-  Fullscreen, 
-  FullscreenExit, 
-  People, 
-  Settings, 
+import {
+  Save,
+  Preview,
+  Fullscreen,
+  FullscreenExit,
+  Settings,
   History,
-  Share,
-  Download,
-  Upload
+  Share
 } from '@mui/icons-material'
 import { YjsMarkdownEditor } from '../../services/storage/yjsCollaboration'
 import { MarkdownWebPublisher } from '../../services/storage/markdownPublisher'
@@ -79,7 +76,6 @@ export const CollaborativeMarkdownEditor: React.FC<CollaborativeMarkdownEditorPr
   const [cursors, setCursors] = useState<CollaborationCursor[]>([])
   const [content, setContent] = useState(initialContent)
   const [renderedHtml, setRenderedHtml] = useState('')
-  const [validationErrors, setValidationErrors] = useState<string[]>([])
   const [settingsAnchor, setSettingsAnchor] = useState<null | HTMLElement>(null)
   const [historyAnchor, setHistoryAnchor] = useState<null | HTMLElement>(null)
 
@@ -165,7 +161,6 @@ export const CollaborativeMarkdownEditor: React.FC<CollaborativeMarkdownEditorPr
         } else {
           // Show validation errors to user
           console.error('Content validation failed:', sanitizationResult.errors)
-          setValidationErrors(sanitizationResult.errors)
         }
       } catch (error) {
         console.error('Content sanitization error:', error)
@@ -204,26 +199,41 @@ export const CollaborativeMarkdownEditor: React.FC<CollaborativeMarkdownEditorPr
           yjsEditor.replaceText(yjsEditor.getContent(), initialContent)
         }
 
-        // Listen for remote changes
-        yjsEditor.onContentChange((newContent) => {
+        // Set user info for collaboration
+        yjsEditor.setUserInfo({
+          name: currentUser.fourWords, // Use four-word address as display name
+          color: collaboratorColors[0] // Current user gets first color
+        })
+
+        // Listen for remote changes and sync with Monaco
+        const unsubscribeContent = yjsEditor.onContentChange((newContent) => {
           if (editorRef.current) {
             const currentPosition = editorRef.current.getPosition()
-            editorRef.current.setValue(newContent)
-            if (currentPosition) {
-              editorRef.current.setPosition(currentPosition)
+            const currentContent = editorRef.current.getValue()
+
+            // Only update if content actually changed to avoid loops
+            if (newContent !== currentContent) {
+              editorRef.current.setValue(newContent)
+              if (currentPosition) {
+                editorRef.current.setPosition(currentPosition)
+              }
+              setContent(newContent)
             }
-            setContent(newContent)
           }
         })
 
         // Listen for collaborator updates
-        yjsEditor.onUserJoin(() => {})
-        yjsEditor.onUserLeave(() => {})
-        const unsubscribe = yjsEditor.onContentChange(() => {})
-        yjsEditor.getOnlineUsers()
-        yjsEditor.onContentChange((newContent) => {})
-        
-        // Map online users to editor collaborators periodically (fallback)
+        const unsubscribeUserJoin = yjsEditor.onUserJoin((user) => {
+          console.log('User joined:', user.name)
+          updateCollaborators()
+        })
+
+        const unsubscribeUserLeave = yjsEditor.onUserLeave((userId) => {
+          console.log('User left:', userId)
+          updateCollaborators()
+        })
+
+        // Function to update collaborators list
         const updateCollaborators = () => {
           const users = yjsEditor.getOnlineUsers()
           const editorUsers: EditorUser[] = users.map((user, index) => ({
@@ -235,11 +245,49 @@ export const CollaborativeMarkdownEditor: React.FC<CollaborativeMarkdownEditorPr
           }))
           setCollaborators(editorUsers)
         }
+
+        // Initial collaborator update
         updateCollaborators()
 
-        // Listen for cursor updates
-        // Simplify cursor updates: derive from awareness cursor number if available
-        setCursors([])
+        // Set up periodic collaborator updates
+        const collaboratorInterval = setInterval(updateCollaborators, 5000)
+
+        // Listen for cursor updates from other users
+        const updateCursors = () => {
+          const users = yjsEditor.getOnlineUsers()
+          const collaborationCursors: CollaborationCursor[] = users
+            .filter(user => user.cursor !== undefined && user.id !== currentUser.fourWords)
+            .map(user => ({
+              userId: user.id,
+              username: user.name,
+              color: collaboratorColors[users.findIndex(u => u.id === user.id) % collaboratorColors.length],
+              position: new monaco.Position(
+                Math.max(1, Math.floor((user.cursor || 0) / 100) + 1), // Estimate line from cursor position
+                Math.max(1, (user.cursor || 0) % 100 + 1) // Estimate column
+              ),
+              selection: user.selection ? new monaco.Range(
+                Math.max(1, Math.floor(user.selection.start / 100) + 1),
+                Math.max(1, user.selection.start % 100 + 1),
+                Math.max(1, Math.floor(user.selection.end / 100) + 1),
+                Math.max(1, user.selection.end % 100 + 1)
+              ) : undefined
+            }))
+
+          setCursors(collaborationCursors)
+        }
+
+        // Update cursors periodically
+        const cursorInterval = setInterval(updateCursors, 1000)
+        updateCursors() // Initial update
+
+        // Cleanup function
+        return () => {
+          clearInterval(collaboratorInterval)
+          clearInterval(cursorInterval)
+          unsubscribeContent()
+          unsubscribeUserJoin()
+          unsubscribeUserLeave()
+        }
 
       } catch (error) {
         console.error('Failed to initialize collaboration:', error)
@@ -263,7 +311,7 @@ export const CollaborativeMarkdownEditor: React.FC<CollaborativeMarkdownEditorPr
     
     cursors.forEach(cursor => {
       // Add cursor decoration
-      const cursorDecoration = editorRef.current!.deltaDecorations([], [{
+      const cursorDecoration = editorRef.current!.createDecorationsCollection([{
         range: new monaco.Range(
           cursor.position.lineNumber,
           cursor.position.column,
@@ -279,22 +327,23 @@ export const CollaborativeMarkdownEditor: React.FC<CollaborativeMarkdownEditorPr
 
       // Add selection decoration if exists
       if (cursor.selection) {
-        const selectionDecoration = editorRef.current!.deltaDecorations([], [{
+        const selectionDecoration = editorRef.current!.createDecorationsCollection([{
           range: cursor.selection,
           options: {
             className: 'collaboration-selection',
             stickiness: monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges,
           }
         }])
-        decorations.push(...selectionDecoration)
+        decorations.push(...selectionDecoration.getRanges().map(() => ''))
       }
 
-      decorations.push(...cursorDecoration)
+      decorations.push(...cursorDecoration.getRanges().map(() => ''))
     })
 
     return () => {
       if (editorRef.current) {
-        editorRef.current.deltaDecorations(decorations, [])
+        // Clear all decorations by setting empty collections
+        editorRef.current.createDecorationsCollection([])
       }
     }
   }, [cursors])

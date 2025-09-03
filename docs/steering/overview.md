@@ -64,20 +64,30 @@ To create a desktop application that enables communities to organize, communicat
 - Development environment setup
 - Build system configuration
 - Cross-platform build capability
+- Four-word identity system
+- Saorsa storage integration
+- P2P networking foundation
+- Post-quantum cryptography setup
 
 ### 🚧 In Progress
+- Hierarchical navigation structure (Organization/Projects/Groups/Channels/People)
+- Voice/video calling integration (WebRTC)
+- Screen sharing capabilities
+- Advanced file browser with web tab
+- Collaborative markdown editing
+- Presence status and unread counts
 - Core UI component library
-- Basic navigation structure
 - IPC command patterns
 - Testing framework setup
 
 ### 📅 Planned
-- User authentication system
-- Community management features
-- Real-time messaging
-- File sharing capabilities
-- Local data persistence
-- Security and encryption
+- Complete WebRTC integration for calls
+- Advanced collaboration features (Yjs CRDTs)
+- Plugin system for extensions
+- Mobile responsive design
+- Local AI integration
+- Storage market integration
+- Federated search capabilities
 
 ## Project Structure
 

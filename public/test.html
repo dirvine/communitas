@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple HTML Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 10px 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🧪 Simple HTML Test Page</h1>
+        <p>This page tests if the server is working correctly without React.</p>
+
+        <h2>Server Status</h2>
+        <p>✅ Server is running on port 1422</p>
+        <p>✅ HTML files are being served correctly</p>
+
+        <h2>JavaScript Test</h2>
+        <button onclick="testAlert()">Test Alert</button>
+        <button onclick="testTime()">Show Time</button>
+        <p id="time-display"></p>
+
+        <h2>Next Steps</h2>
+        <ol>
+            <li>If this page loads: Server is working ✅</li>
+            <li>If buttons work: JavaScript is working ✅</li>
+            <li>If React page is blank: Issue is with React components ❌</li>
+        </ol>
+    </div>
+
+    <script>
+        function testAlert() {
+            alert('JavaScript is working correctly!');
+        }
+
+        function testTime() {
+            const timeElement = document.getElementById('time-display');
+            timeElement.textContent = 'Current time: ' + new Date().toLocaleTimeString();
+        }
+
+        // Auto-update time every second
+        setInterval(() => {
+            const timeElement = document.getElementById('time-display');
+            if (timeElement) {
+                timeElement.textContent = 'Current time: ' + new Date().toLocaleTimeString();
+            }
+        }, 1000);
+    </script>
+</body>
+</html>

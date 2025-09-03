@@ -423,6 +423,13 @@ async fn get_health_check(
         .map_err(|e| format!("Failed to get current time: {}", e))?
         .as_secs();
 
+    // Calculate uptime (simplified - in production you'd track actual start time)
+    static START_TIME: std::sync::OnceLock<std::time::SystemTime> = std::sync::OnceLock::new();
+    let start_time = START_TIME.get_or_init(|| std::time::SystemTime::now());
+    let uptime_seconds = start_time.elapsed()
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+
     // Check P2P node health
     let p2p_health = if let Some(p2p_node) = &state.p2p_node {
         let node = p2p_node.read().await;
@@ -459,7 +466,7 @@ async fn get_health_check(
             "total_requests": rate_limiter_stats.total_requests,
             "default_limit": rate_limiter_stats.default_limit
         },
-        "uptime_seconds": 0 // TODO: Implement uptime tracking
+        "uptime_seconds": uptime_seconds
     }))
 }
 

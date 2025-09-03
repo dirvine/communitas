@@ -1,4 +1,10 @@
-# Communitas - Technical Design Document
+# Communitas - Implementation Design Guide
+
+## Overview
+
+This document provides detailed implementation guidance for developers working on Communitas. It complements the master specification in `docs/system_spec.md` by focusing on concrete implementation patterns, code examples, and technical decisions.
+
+For the high-level system architecture and requirements, see [System Specification](docs/system_spec.md).
 
 ## Architecture Overview
 
@@ -18,7 +24,7 @@
 │  │            │  │Engine        │  │Controller   │  │
 │  └─────────────┘  └──────────────┘  └──────────────┘  │
 ├─────────────────────────────────────────────────────────┤
-│                    P2P Foundation                        │
+│                    Saorsa P2P Stack                      │
 │  ┌─────────────┐  ┌──────────────┐  ┌──────────────┐  │
 │  │Identity Mgr │  │DHT Storage   │  │QUIC Network  │  │
 │  │(4-word)     │  │(Kademlia)    │  │(ant-quic)    │  │
@@ -26,34 +32,48 @@
 └─────────────────────────────────────────────────────────┘
 ```
 
-## Component Design
+## Implementation Patterns
 
 ### 1. Core Application Structure
 
 ```rust
-// crates/communitas/src/lib.rs
-pub struct CommuniasApp {
-    // Core components
-    chat_service: ChatService,
-    diagnostics: DiagnosticsEngine,
-    test_harness: TestHarness,
-    
-    // P2P integration
-    node: Arc<P2pNode>,
-    identity: Identity,
-    
-    // UI state
-    ui_state: Arc<RwLock<UiState>>,
-    current_tab: Tab,
+// src-tauri/src/main.rs - Main Tauri Application
+use tauri::{Manager, State};
+use std::sync::Arc;
+use tokio::sync::RwLock;
+
+pub struct AppState {
+    pub storage_engine: Arc<StorageEngine>,
+    pub chat_service: Arc<ChatService>,
+    pub network_client: Arc<NetworkClient>,
+    pub diagnostics: Arc<DiagnosticsEngine>,
 }
 
-#[derive(Clone)]
-pub enum Tab {
-    Overview,
-    Messages,
-    Network,
-    Storage,
-    Advanced,
+#[tauri::command]
+async fn get_system_health(
+    state: State<'_, Arc<AppState>>
+) -> Result<SystemHealth, String> {
+    let health = SystemHealth {
+        storage: state.storage_engine.get_health().await?,
+        network: state.network_client.get_status().await?,
+        chat: state.chat_service.get_status().await?,
+    };
+    Ok(health)
+}
+
+fn main() {
+    tauri::Builder::default()
+        .setup(|app| {
+            let app_state = Arc::new(AppState::new()?);
+            app.manage(app_state);
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            get_system_health,
+            // ... other commands
+        ])
+        .run(tauri::generate_context())
+        .expect("error while running tauri application");
 }
 ```
 
@@ -237,33 +257,66 @@ fn main() {
 }
 ```
 
-### 6. React Frontend
+### 6. React Frontend Implementation
 
 ```typescript
-// src/App.tsx
+// src/App.tsx - Main Application Component
 import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/tauri';
-import { Tabs, Tab, Box, Paper } from '@mui/material';
+import { Tabs, Tab, Box, Paper, CircularProgress } from '@mui/material';
 import { Overview } from './components/Overview';
 import { Messages } from './components/Messages';
 import { Network } from './components/Network';
 import { Storage } from './components/Storage';
 import { Advanced } from './components/Advanced';
 
+interface SystemHealth {
+  storage: StorageHealth;
+  network: NetworkStatus;
+  chat: ChatStatus;
+}
+
 export const App: React.FC = () => {
   const [currentTab, setCurrentTab] = useState(0);
-  const [networkHealth, setNetworkHealth] = useState<NetworkHealth | null>(null);
+  const [systemHealth, setSystemHealth] = useState<SystemHealth | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchHealth = async () => {
-      const health = await invoke<NetworkHealth>('get_network_health');
-      setNetworkHealth(health);
+      try {
+        const health = await invoke<SystemHealth>('get_system_health');
+        setSystemHealth(health);
+        setError(null);
+      } catch (err) {
+        setError(err as string);
+      } finally {
+        setLoading(false);
+      }
     };
 
     fetchHealth();
-    const interval = setInterval(fetchHealth, 1000);
+    const interval = setInterval(fetchHealth, 5000); // Update every 5 seconds
     return () => clearInterval(interval);
   }, []);
+
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (error) {
+    return (
+      <Box sx={{ p: 2 }}>
+        <Paper sx={{ p: 2, bgcolor: 'error.main', color: 'error.contrastText' }}>
+          Error: {error}
+        </Paper>
+      </Box>
+    );
+  }
 
   return (
     <Box sx={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -276,9 +329,9 @@ export const App: React.FC = () => {
           <Tab label="Advanced" />
         </Tabs>
       </Paper>
-      
+
       <Box sx={{ flex: 1, p: 2 }}>
-        {currentTab === 0 && <Overview health={networkHealth} />}
+        {currentTab === 0 && <Overview health={systemHealth} />}
         {currentTab === 1 && <Messages />}
         {currentTab === 2 && <Network />}
         {currentTab === 3 && <Storage />}
@@ -449,43 +502,183 @@ impl NetworkIntegration {
 - CPU: <5% idle, <25% active
 - Bandwidth: Adaptive to available
 
+## Error Handling Patterns
+
+### Rust Backend Error Handling
+```rust
+// src-tauri/src/error.rs
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum CommunitasError {
+    #[error("Storage error: {0}")]
+    Storage(#[from] StorageError),
+
+    #[error("Network error: {0}")]
+    Network(#[from] NetworkError),
+
+    #[error("Authentication error: {0}")]
+    Auth(String),
+
+    #[error("Validation error: {0}")]
+    Validation(String),
+
+    #[error("Internal error: {0}")]
+    Internal(String),
+}
+
+impl From<CommunitasError> for String {
+    fn from(error: CommunitasError) -> String {
+        error.to_string()
+    }
+}
+
+// Usage in Tauri commands
+#[tauri::command]
+async fn create_group(
+    name: String,
+    state: State<'_, Arc<AppState>>
+) -> Result<Group, CommunitasError> {
+    // Validate input
+    if name.trim().is_empty() {
+        return Err(CommunitasError::Validation("Group name cannot be empty".to_string()));
+    }
+
+    // Create group through service
+    let group = state.chat_service.create_group(&name).await?;
+    Ok(group)
+}
+```
+
+### React Error Boundaries
+```typescript
+// src/components/ErrorBoundary.tsx
+import React, { Component, ReactNode } from 'react';
+import { Box, Paper, Typography, Button } from '@mui/material';
+
+interface Props {
+  children: ReactNode;
+  fallback?: ReactNode;
+}
+
+interface State {
+  hasError: boolean;
+  error?: Error;
+}
+
+export class ErrorBoundary extends Component<Props, State> {
+  constructor(props: Props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(error: Error): State {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('Error caught by boundary:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      if (this.props.fallback) {
+        return this.props.fallback;
+      }
+
+      return (
+        <Box sx={{ p: 2 }}>
+          <Paper sx={{ p: 2, bgcolor: 'error.main', color: 'error.contrastText' }}>
+            <Typography variant="h6">Something went wrong</Typography>
+            <Typography variant="body2" sx={{ mt: 1 }}>
+              {this.state.error?.message}
+            </Typography>
+            <Button
+              variant="contained"
+              sx={{ mt: 2 }}
+              onClick={() => this.setState({ hasError: false, error: undefined })}
+            >
+              Try Again
+            </Button>
+          </Paper>
+        </Box>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+```
+
 ## Testing Strategy
 
 ### Unit Tests
-- Component isolation
-- Mock P2P interfaces
-- Fast feedback cycle
+```rust
+// src-tauri/src/chat/service.rs
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::test;
+
+    #[test]
+    async fn test_create_group_validation() {
+        let service = ChatService::new();
+
+        // Test empty name
+        let result = service.create_group("").await;
+        assert!(result.is_err());
+
+        // Test valid name
+        let result = service.create_group("Test Group").await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().name, "Test Group");
+    }
+}
+```
 
 ### Integration Tests
 ```rust
 #[tokio::test]
 async fn test_multi_node_chat() {
     let mut nodes = TestHarness::spawn_nodes(5).await?;
-    
+
     // Form group
     let group = nodes[0].create_group("Test Group").await?;
     for node in &nodes[1..] {
         node.join_group(group.id).await?;
     }
-    
+
     // Exchange messages
     nodes[0].send_message(group.id, "Hello!").await?;
-    
-    // Verify delivery
+
+    // Verify delivery with timeout
     for node in &nodes[1..] {
-        assert_eq!(
-            node.get_messages(group.id).await?.last().unwrap().content,
-            "Hello!"
-        );
+        let messages = node.get_messages(group.id).await?;
+        assert_eq!(messages.last().unwrap().content, "Hello!");
     }
 }
 ```
 
 ### Property Tests
-- Message ordering
-- Network partitioning
-- Storage consistency
-- Concurrent operations
+```rust
+proptest! {
+    #[test]
+    fn message_ordering_preserved(
+        messages in prop::collection::vec(message_strategy(), 1..100)
+    ) {
+        let mut harness = TestHarness::new();
+        harness.test_message_ordering(messages)?;
+    }
+
+    #[test]
+    fn network_partition_recovery(
+        partition_size in 0.1f64..0.9f64
+    ) {
+        let mut harness = TestHarness::new();
+        harness.test_partition_recovery(partition_size)?;
+    }
+}
+```
 
 ## Deployment
 

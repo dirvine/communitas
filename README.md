@@ -1,4 +1,29 @@
-# Communitas - Local Testnet Setup Guide
+# Communitas - Decentralized P2P Collaboration Platform
+
+*Empowering Private, Decentralised Collaboration*
+
+Communitas rethinks online collaboration from the ground up. It combines messaging, voice and video calling, screen sharing and collaborative file storage into a single desktop application. Instead of relying on corporate servers, every connection is peer-to-peer and every identity is human-readable. With Communitas you chat, call and work together without surrendering your data to a third party. It's the privacy-first alternative to WhatsApp, Slack and Dropbox.
+
+## 🌟 Key Features
+
+### Human-Friendly Addresses
+At the heart of Communitas is a four-word identity system. Each user, organisation or project is identified by a unique combination of four words—such as `ocean-forest-mountain-river`—that map to a secure record in a distributed hash table. No more cryptic hashes or email-style usernames: sharing your address is as easy as sharing a memorable phrase.
+
+### Your Data, Your Control
+Communitas stores your files in a two-stage backup system:
+- **Local shards**: Data is split and distributed among your friends or colleagues
+- **Network storage**: Shards are published to the Saorsa network's decentralized storage using trust-weighted DHT and erasure coding
+
+Everything is encrypted end-to-end, and only you and your chosen collaborators can decrypt it.
+
+### Markdown-Powered Web
+Every storage container has a built-in web directory with Markdown files. Write your project plan in `home.md`, add images or videos, and publish it under your four-word address. Others can link to your pages using the same simple four-word format. It's a return to a text-first internet, free from ads and trackers.
+
+### Secure Communication
+- **Messaging Layer Security** with post-quantum keys
+- **Voice and video calls** over modern QUIC streams
+- **Screen sharing and file transfers** built-in
+- **End-to-end encryption** for all communications
 
 ## 🚀 Quick Start - Local Development
 
@@ -140,6 +165,32 @@ export COMMUNITAS_DATA_DIR="./node3-data"
 
 npm run tauri dev
 ```
+
+## 🏛️ System Architecture
+
+### Core Components
+Communitas is built on the Saorsa ecosystem with the following key components:
+
+- **Frontend**: React 18 + TypeScript + Material-UI
+- **Backend**: Rust with Tauri v2 for cross-platform desktop app
+- **P2P Network**: Saorsa Core with trust-weighted Kademlia DHT
+- **Cryptography**: Post-quantum cryptography (ML-KEM/ML-DSA)
+- **Storage**: Content-addressed storage with Reed-Solomon erasure coding
+- **Communication**: QUIC transport with PQC channel binding
+
+### Entity Types
+Communitas treats entities as first-class citizens:
+- **Individuals**: Single users with personal identity and storage
+- **Organisations**: Groupings of individuals with hierarchical structure
+- **Groups**: Small sets of identities (friends, colleagues)
+- **Channels**: Topic-based spaces within organisations
+- **Projects**: Containers for specific work items
+
+### Storage System
+- **Two-stage backup**: Local shards + network DHT storage
+- **Policy-based encryption**: Different security levels per use case
+- **Content addressing**: BLAKE3 hashing with optimal chunking
+- **Erasure coding**: Reed-Solomon FEC for data durability
 
 ## 🔧 Environment Variables
 
@@ -304,6 +355,32 @@ Monitor these key metrics:
 - **Message Latency**: Average message delivery time
 - **Storage Operations**: DHT put/get success rates
 - **Network Health**: Connection stability and uptime
+
+## 🗺️ Roadmap & Future Features
+
+### Current Status
+- ✅ Basic Tauri application structure
+- ✅ React frontend with TypeScript
+- ✅ Rust backend integration
+- ✅ Development environment setup
+- 🚧 Core UI component library
+- 📅 User authentication system
+- 📅 Real-time messaging
+- 📅 File sharing capabilities
+
+### Upcoming Features
+- **Real-time Collaboration**: Yjs CRDTs for collaborative editing
+- **Voice/Video Calling**: WebRTC integration with PQC
+- **Local AI Integration**: On-device language model for assistance
+- **Mobile Applications**: Native iOS/Android clients
+- **Storage Market**: Paid storage for large public datasets
+- **Federated Search**: Search across four-word identities
+
+### Long-term Vision
+- **Plugin System**: Extensible architecture for third-party integrations
+- **Advanced Collaboration**: Real-time collaborative document editing
+- **Cross-platform Sync**: Seamless experience across all devices
+- **Decentralized Governance**: Community-driven feature development
 
 ## 🎯 Next Steps
 

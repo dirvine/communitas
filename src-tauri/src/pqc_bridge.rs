@@ -1,13 +1,12 @@
+use rand::RngCore;
+use rand::rngs::OsRng;
+use saorsa_pqc::api::ChaCha20Poly1305;
+use saorsa_pqc::api::symmetric::{generate_key, generate_nonce};
 /**
  * PQC Bridge - Frontend Integration for Post-Quantum Cryptography
  * Exposes ML-KEM-768 and ML-DSA-65 operations through Tauri commands
  */
-
-use saorsa_pqc::api::{ml_kem_768, ml_dsa_65};
-use saorsa_pqc::api::symmetric::{generate_key, generate_nonce};
-use saorsa_pqc::api::ChaCha20Poly1305;
-use rand::rngs::OsRng;
-use rand::RngCore;
+use saorsa_pqc::api::{ml_dsa_65, ml_kem_768};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tauri::State;
@@ -64,18 +63,19 @@ pub type PqcBridgeStorage = RwLock<HashMap<String, PqcKeyPair>>;
 pub async fn generate_ml_dsa_keypair() -> Result<PqcKeyPair, String> {
     // Generate ML-DSA-65 key pair using the convenience function
     let dsa = ml_dsa_65();
-    let (public_key, secret_key) = dsa.generate_keypair()
+    let (public_key, secret_key) = dsa
+        .generate_keypair()
         .map_err(|e| format!("ML-DSA-65 key generation failed: {:?}", e))?;
-    
+
     // Keys are already in bytes format
     let public_key_bytes = public_key.to_vec();
     let secret_key_bytes = secret_key.to_vec();
-    
+
     let created_at = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|e| format!("Timestamp generation failed: {}", e))?
         .as_secs();
-    
+
     Ok(PqcKeyPair {
         public_key: public_key_bytes,
         secret_key: secret_key_bytes,
@@ -89,18 +89,19 @@ pub async fn generate_ml_dsa_keypair() -> Result<PqcKeyPair, String> {
 pub async fn generate_ml_kem_keypair() -> Result<PqcKeyPair, String> {
     // Generate ML-KEM-768 key pair using the convenience function
     let kem = ml_kem_768();
-    let (public_key, secret_key) = kem.generate_keypair()
+    let (public_key, secret_key) = kem
+        .generate_keypair()
         .map_err(|e| format!("ML-KEM-768 key generation failed: {:?}", e))?;
-    
-    // Keys are already in bytes format  
+
+    // Keys are already in bytes format
     let public_key_bytes = public_key.to_vec();
     let secret_key_bytes = secret_key.to_vec();
-    
+
     let created_at = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|e| format!("Timestamp generation failed: {}", e))?
         .as_secs();
-    
+
     Ok(PqcKeyPair {
         public_key: public_key_bytes,
         secret_key: secret_key_bytes,
@@ -118,12 +119,13 @@ pub async fn ml_dsa_sign(
 ) -> Result<PqcSignature, String> {
     // Sign the data using ML-DSA-65
     let dsa = ml_dsa_65();
-    let signature = dsa.sign(&secret_key_bytes, &data)
+    let signature = dsa
+        .sign(&secret_key_bytes, &data)
         .map_err(|e| format!("ML-DSA-65 signing failed: {:?}", e))?;
-    
+
     // Signature is already in bytes format
     let signature_bytes = signature.to_vec();
-    
+
     Ok(PqcSignature {
         signature: signature_bytes,
         algorithm: "ML-DSA-65".to_string(),
@@ -140,7 +142,7 @@ pub async fn ml_dsa_verify(
     context: String,
 ) -> Result<PqcVerificationResult, String> {
     let mut details = HashMap::new();
-    
+
     // Verify signature using ML-DSA-65
     let dsa = ml_dsa_65();
     let is_valid = match dsa.verify(&public_key_bytes, &data, &signature_bytes) {
@@ -150,11 +152,14 @@ pub async fn ml_dsa_verify(
             false
         }
     };
-    
+
     details.insert("context".to_string(), context);
     details.insert("data_size".to_string(), data.len().to_string());
-    details.insert("signature_size".to_string(), signature_bytes.len().to_string());
-    
+    details.insert(
+        "signature_size".to_string(),
+        signature_bytes.len().to_string(),
+    );
+
     Ok(PqcVerificationResult {
         is_valid,
         algorithm: "ML-DSA-65".to_string(),
@@ -169,12 +174,13 @@ pub async fn ml_kem_encapsulate(
 ) -> Result<PqcEncapsulationResult, String> {
     // Perform encapsulation using ML-KEM-768
     let kem = ml_kem_768();
-    let (shared_secret, ciphertext) = kem.encapsulate(&public_key_bytes)
+    let (shared_secret, ciphertext) = kem
+        .encapsulate(&public_key_bytes)
         .map_err(|e| format!("ML-KEM-768 encapsulation failed: {:?}", e))?;
-    
+
     // Convert to bytes
     let ciphertext_bytes = ciphertext.to_vec();
-    
+
     Ok(PqcEncapsulationResult {
         ciphertext: ciphertext_bytes,
         shared_secret: shared_secret.to_vec(),
@@ -190,9 +196,10 @@ pub async fn ml_kem_decapsulate(
 ) -> Result<Vec<u8>, String> {
     // Perform decapsulation using ML-KEM-768
     let kem = ml_kem_768();
-    let shared_secret = kem.decapsulate(&secret_key_bytes, &ciphertext_bytes)
+    let shared_secret = kem
+        .decapsulate(&secret_key_bytes, &ciphertext_bytes)
         .map_err(|e| format!("ML-KEM-768 decapsulation failed: {:?}", e))?;
-    
+
     Ok(shared_secret.to_vec())
 }
 
@@ -204,18 +211,19 @@ pub async fn pqc_encrypt(
 ) -> Result<PqcEncryptionResult, String> {
     // Encapsulate shared secret
     let encap_result = ml_kem_encapsulate(public_key_bytes).await?;
-    
+
     // Use shared secret as ChaCha20Poly1305 key (first 32 bytes)
     let key = &encap_result.shared_secret[..32];
     let cipher = ChaCha20Poly1305::new(key.into());
-    
+
     // Generate nonce using the provided function
     let nonce = generate_nonce();
-    
+
     // Encrypt data using the clearer API
-    let ciphertext = cipher.encrypt(&nonce, &data)
+    let ciphertext = cipher
+        .encrypt(&nonce, &data)
         .map_err(|e| format!("ChaCha20Poly1305 encryption failed: {}", e))?;
-    
+
     Ok(PqcEncryptionResult {
         ciphertext,
         nonce: nonce.to_vec(),
@@ -234,20 +242,21 @@ pub async fn pqc_decrypt(
 ) -> Result<Vec<u8>, String> {
     // Decapsulate shared secret
     let shared_secret = ml_kem_decapsulate(ml_kem_ciphertext, secret_key_bytes).await?;
-    
+
     // Use shared secret as ChaCha20Poly1305 key (first 32 bytes)
     let key = &shared_secret[..32];
     let cipher = ChaCha20Poly1305::new(key.into());
-    
+
     // Verify nonce length
     if nonce.len() != 24 {
         return Err("Invalid nonce length".to_string());
     }
-    
+
     // Decrypt data using the clearer API
-    let plaintext = cipher.decrypt(&nonce, &ciphertext)
+    let plaintext = cipher
+        .decrypt(&nonce, &ciphertext)
         .map_err(|e| format!("ChaCha20Poly1305 decryption failed: {}", e))?;
-    
+
     Ok(plaintext)
 }
 
@@ -255,22 +264,25 @@ pub async fn pqc_decrypt(
 #[tauri::command]
 pub async fn get_pqc_info() -> Result<HashMap<String, String>, String> {
     let mut info = HashMap::new();
-    
+
     // Standard sizes for ML-KEM-768
     info.insert("ml_kem_768_public_key_size".to_string(), "1184".to_string());
     info.insert("ml_kem_768_secret_key_size".to_string(), "2400".to_string());
     info.insert("ml_kem_768_ciphertext_size".to_string(), "1088".to_string());
-    
+
     // Standard sizes for ML-DSA-65
     info.insert("ml_dsa_65_public_key_size".to_string(), "1952".to_string());
     info.insert("ml_dsa_65_secret_key_size".to_string(), "4032".to_string());
     info.insert("ml_dsa_65_signature_size".to_string(), "3309".to_string());
-    
+
     info.insert("chacha20poly1305_key_size".to_string(), "32".to_string());
     info.insert("chacha20poly1305_nonce_size".to_string(), "24".to_string());
-    
-    info.insert("algorithms".to_string(), "ML-KEM-768,ML-DSA-65,ChaCha20Poly1305".to_string());
+
+    info.insert(
+        "algorithms".to_string(),
+        "ML-KEM-768,ML-DSA-65,ChaCha20Poly1305".to_string(),
+    );
     info.insert("version".to_string(), "0.3.0".to_string());
-    
+
     Ok(info)
 }

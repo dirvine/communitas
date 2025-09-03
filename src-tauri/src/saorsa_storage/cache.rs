@@ -2,14 +2,13 @@
  * Saorsa Storage System - Local Caching Layer
  * Implements LRU caching with compression and integrity verification
  */
-
 use crate::saorsa_storage::errors::*;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
-use tokio::sync::RwLock;
 use std::time::{Duration, Instant};
-use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc};
+use tokio::sync::RwLock;
 
 /// Cache entry with metadata
 #[derive(Debug, Clone)]
@@ -46,7 +45,7 @@ impl CacheEntry {
         let age_factor = self.last_accessed.elapsed().as_secs_f64();
         let frequency_factor = 1.0 / (self.access_count as f64 + 1.0);
         let size_factor = self.size as f64 / 1024.0; // Size in KB
-        
+
         // Higher score = more likely to be evicted
         age_factor * frequency_factor * (1.0 + size_factor / 1024.0)
     }
@@ -102,8 +101,8 @@ impl Default for CacheConfig {
             max_size_bytes: 100 * 1024 * 1024, // 100MB
             max_entries: 10000,
             default_ttl: Some(Duration::from_secs(3600)), // 1 hour
-            compress_threshold: 4096, // 4KB
-            cleanup_interval: Duration::from_secs(300), // 5 minutes
+            compress_threshold: 4096,                     // 4KB
+            cleanup_interval: Duration::from_secs(300),   // 5 minutes
             enable_integrity_check: true,
         }
     }
@@ -145,14 +144,9 @@ impl StorageCache {
     }
 
     /// Store data in cache
-    pub async fn put(
-        &self,
-        key: &str,
-        data: Vec<u8>,
-        ttl: Option<Duration>,
-    ) -> CacheResult<()> {
+    pub async fn put(&self, key: &str, data: Vec<u8>, ttl: Option<Duration>) -> CacheResult<()> {
         let start_time = Instant::now();
-        
+
         if key.is_empty() {
             return Err(CacheError::InvalidEntry);
         }
@@ -192,7 +186,7 @@ impl StorageCache {
         // Insert entry
         let mut entries = self.entries.write().await;
         let mut lru_order = self.lru_order.write().await;
-        
+
         // Remove existing entry if present
         if entries.contains_key(key) {
             self.remove_from_lru_order(&mut lru_order, key);
@@ -202,7 +196,8 @@ impl StorageCache {
         lru_order.push_front(key.to_string());
 
         // Update statistics
-        self.update_stats_after_put(original_size, is_compressed).await;
+        self.update_stats_after_put(original_size, is_compressed)
+            .await;
 
         // Cleanup if needed
         self.cleanup_if_needed().await?;
@@ -224,7 +219,7 @@ impl StorageCache {
                 entries.remove(key);
                 drop(entries);
                 drop(lru_order);
-                
+
                 self.update_stats_miss().await;
                 return Err(CacheError::CacheMiss {
                     key: key.to_string(),
@@ -240,14 +235,14 @@ impl StorageCache {
                     entries.remove(key);
                     drop(entries);
                     drop(lru_order);
-                    
+
                     return Err(CacheError::CacheCorruption);
                 }
             }
 
             // Update access information
             entry.touch();
-            
+
             // Move to front of LRU
             self.remove_from_lru_order(&mut lru_order, key);
             lru_order.push_front(key.to_string());
@@ -269,7 +264,7 @@ impl StorageCache {
         } else {
             drop(entries);
             drop(lru_order);
-            
+
             self.update_stats_miss().await;
             Err(CacheError::CacheMiss {
                 key: key.to_string(),
@@ -284,13 +279,13 @@ impl StorageCache {
 
         if let Some(entry) = entries.remove(key) {
             self.remove_from_lru_order(&mut lru_order, key);
-            
+
             // Update stats
             let mut stats = self.stats.write().await;
             stats.total_entries = stats.total_entries.saturating_sub(1);
             stats.total_size_bytes = stats.total_size_bytes.saturating_sub(entry.size);
             stats.last_updated = Utc::now();
-            
+
             Ok(true)
         } else {
             Ok(false)
@@ -311,7 +306,7 @@ impl StorageCache {
     pub async fn clear(&self) -> CacheResult<()> {
         let mut entries = self.entries.write().await;
         let mut lru_order = self.lru_order.write().await;
-        
+
         entries.clear();
         lru_order.clear();
 
@@ -379,7 +374,7 @@ impl StorageCache {
     /// Get keys matching pattern
     pub async fn get_keys_matching(&self, pattern: &str) -> Vec<String> {
         let entries = self.entries.read().await;
-        
+
         entries
             .keys()
             .filter(|key| key.contains(pattern))
@@ -455,20 +450,20 @@ impl StorageCache {
     }
 
     fn compress_data(&self, data: &[u8]) -> CacheResult<Vec<u8>> {
-        use flate2::write::GzEncoder;
         use flate2::Compression;
+        use flate2::write::GzEncoder;
         use std::io::Write;
 
         let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
-        encoder.write_all(data)
+        encoder
+            .write_all(data)
             .map_err(|e| CacheError::WriteFailed {
                 reason: format!("Compression failed: {}", e),
             })?;
 
-        encoder.finish()
-            .map_err(|e| CacheError::WriteFailed {
-                reason: format!("Compression finalization failed: {}", e),
-            })
+        encoder.finish().map_err(|e| CacheError::WriteFailed {
+            reason: format!("Compression finalization failed: {}", e),
+        })
     }
 
     fn decompress_data(&self, data: &[u8]) -> CacheResult<Vec<u8>> {
@@ -477,7 +472,8 @@ impl StorageCache {
 
         let mut decoder = GzDecoder::new(data);
         let mut decompressed = Vec::new();
-        decoder.read_to_end(&mut decompressed)
+        decoder
+            .read_to_end(&mut decompressed)
             .map_err(|e| CacheError::ReadFailed {
                 reason: format!("Decompression failed: {}", e),
             })?;
@@ -503,25 +499,28 @@ impl StorageCache {
         let mut stats = self.stats.write().await;
         stats.total_entries += 1;
         stats.total_size_bytes += size;
-        
+
         if is_compressed {
             // Update compression ratio estimate
-            let compressed_count = (stats.compression_ratio * (stats.total_entries - 1) as f32) + 1.0;
+            let compressed_count =
+                (stats.compression_ratio * (stats.total_entries - 1) as f32) + 1.0;
             stats.compression_ratio = compressed_count / stats.total_entries as f32;
         }
-        
+
         stats.last_updated = Utc::now();
     }
 
     async fn update_stats_hit(&self, access_time: Duration) {
         let mut stats = self.stats.write().await;
         stats.hit_count += 1;
-        
+
         // Update moving average of access time
         let total_requests = stats.hit_count + stats.miss_count;
         let new_time_ms = access_time.as_secs_f64() * 1000.0;
-        stats.avg_access_time_ms = ((stats.avg_access_time_ms * (total_requests - 1) as f64) + new_time_ms) / total_requests as f64;
-        
+        stats.avg_access_time_ms = ((stats.avg_access_time_ms * (total_requests - 1) as f64)
+            + new_time_ms)
+            / total_requests as f64;
+
         stats.last_updated = Utc::now();
     }
 
@@ -562,10 +561,10 @@ mod tests {
     #[tokio::test]
     async fn test_cache_miss() {
         let cache = StorageCache::new();
-        
+
         let result = cache.get("nonexistent").await;
         assert!(result.is_err());
-        
+
         if let Err(CacheError::CacheMiss { key }) = result {
             assert_eq!(key, "nonexistent");
         } else {
@@ -580,13 +579,13 @@ mod tests {
         let short_ttl = Duration::from_millis(50);
 
         cache.put("key1", data, Some(short_ttl)).await.unwrap();
-        
+
         // Should be available immediately
         assert!(cache.get("key1").await.is_ok());
-        
+
         // Wait for expiration
         sleep(Duration::from_millis(100)).await;
-        
+
         // Should be expired now
         assert!(cache.get("key1").await.is_err());
     }
@@ -595,13 +594,16 @@ mod tests {
     async fn test_cache_compression() {
         let mut config = CacheConfig::default();
         config.compress_threshold = 10; // Very low threshold for testing
-        
+
         let cache = StorageCache::with_config(config);
         let large_data = vec![42u8; 1000]; // 1KB of data
 
-        cache.put("large_key", large_data.clone(), None).await.unwrap();
+        cache
+            .put("large_key", large_data.clone(), None)
+            .await
+            .unwrap();
         let retrieved = cache.get("large_key").await.unwrap();
-        
+
         assert_eq!(retrieved, large_data);
     }
 
@@ -609,13 +611,13 @@ mod tests {
     async fn test_cache_lru_eviction() {
         let mut config = CacheConfig::default();
         config.max_entries = 2; // Very small cache
-        
+
         let cache = StorageCache::with_config(config);
-        
+
         cache.put("key1", b"data1".to_vec(), None).await.unwrap();
         cache.put("key2", b"data2".to_vec(), None).await.unwrap();
         cache.put("key3", b"data3".to_vec(), None).await.unwrap();
-        
+
         // key1 should be evicted
         assert!(cache.get("key1").await.is_err());
         assert!(cache.get("key2").await.is_ok());
@@ -625,11 +627,11 @@ mod tests {
     #[tokio::test]
     async fn test_cache_stats() {
         let cache = StorageCache::new();
-        
+
         cache.put("key1", b"data1".to_vec(), None).await.unwrap();
         cache.get("key1").await.unwrap(); // Hit
         cache.get("nonexistent").await.ok(); // Miss
-        
+
         let stats = cache.get_stats().await;
         assert_eq!(stats.total_entries, 1);
         assert_eq!(stats.hit_count, 1);
@@ -640,15 +642,15 @@ mod tests {
     #[tokio::test]
     async fn test_cache_clear() {
         let cache = StorageCache::new();
-        
+
         cache.put("key1", b"data1".to_vec(), None).await.unwrap();
         cache.put("key2", b"data2".to_vec(), None).await.unwrap();
-        
+
         let stats_before = cache.get_stats().await;
         assert_eq!(stats_before.total_entries, 2);
-        
+
         cache.clear().await.unwrap();
-        
+
         let stats_after = cache.get_stats().await;
         assert_eq!(stats_after.total_entries, 0);
         assert_eq!(stats_after.total_size_bytes, 0);
@@ -657,12 +659,12 @@ mod tests {
     #[tokio::test]
     async fn test_cache_contains() {
         let cache = StorageCache::new();
-        
+
         assert!(!cache.contains("key1").await);
-        
+
         cache.put("key1", b"data1".to_vec(), None).await.unwrap();
         assert!(cache.contains("key1").await);
-        
+
         cache.remove("key1").await.unwrap();
         assert!(!cache.contains("key1").await);
     }

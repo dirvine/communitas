@@ -2,12 +2,11 @@
  * Saorsa Storage System - Content Addressing and Chunking
  * Implements BLAKE3 content addressing with 256KB chunking and integrity verification
  */
-
 use crate::saorsa_storage::errors::*;
 use blake3::{Hash, Hasher};
-use std::io::{Read, Write};
-use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use std::io::{Read, Write};
 
 /// Standard chunk size: 256KB
 pub const CHUNK_SIZE: usize = 256 * 1024;
@@ -80,7 +79,11 @@ impl ContentAddressing {
     }
 
     /// Generate content address from data
-    pub fn address_content(&self, data: &[u8], content_type: &str) -> ContentResult<ContentAddress> {
+    pub fn address_content(
+        &self,
+        data: &[u8],
+        content_type: &str,
+    ) -> ContentResult<ContentAddress> {
         if data.is_empty() {
             return Err(ContentError::ContentSizeValidationFailed);
         }
@@ -98,15 +101,20 @@ impl ContentAddressing {
 
         // Split into chunks
         let chunks = self.create_chunks(&processed_data, &content_hash_str)?;
-        
+
         if chunks.len() > MAX_CHUNKS as usize {
             return Err(ContentError::ChunkingFailed {
-                reason: format!("Too many chunks: {} exceeds limit {}", chunks.len(), MAX_CHUNKS),
+                reason: format!(
+                    "Too many chunks: {} exceeds limit {}",
+                    chunks.len(),
+                    MAX_CHUNKS
+                ),
             });
         }
 
         // Collect chunk hashes for metadata
-        let chunk_hashes: Vec<String> = chunks.iter()
+        let chunk_hashes: Vec<String> = chunks
+            .iter()
             .map(|chunk| chunk.chunk_hash.clone())
             .collect();
 
@@ -135,7 +143,7 @@ impl ContentAddressing {
 
         let actual_hash = self.hash_content(data);
         let actual_hash_str = hex::encode(actual_hash.as_bytes());
-        
+
         Ok(actual_hash_str == expected_hash)
     }
 
@@ -147,7 +155,7 @@ impl ContentAddressing {
 
         let actual_hash = self.hash_content(&chunk.data);
         let actual_hash_str = hex::encode(actual_hash.as_bytes());
-        
+
         if actual_hash_str != chunk.chunk_hash {
             return Err(ContentError::ChecksumMismatch);
         }
@@ -160,7 +168,12 @@ impl ContentAddressing {
     }
 
     /// Start content reconstruction from chunks
-    pub fn start_reconstruction(&self, content_hash: &str, total_size: u64, total_chunks: u32) -> ReconstructionState {
+    pub fn start_reconstruction(
+        &self,
+        content_hash: &str,
+        total_size: u64,
+        total_chunks: u32,
+    ) -> ReconstructionState {
         ReconstructionState {
             total_chunks,
             received_chunks: std::collections::HashMap::new(),
@@ -188,9 +201,7 @@ impl ContentAddressing {
 
         // Verify chunk index is valid
         if chunk.index >= state.total_chunks {
-            return Err(ContentError::InvalidChunkIndex {
-                index: chunk.index,
-            });
+            return Err(ContentError::InvalidChunkIndex { index: chunk.index });
         }
 
         // Verify total chunks match
@@ -219,7 +230,7 @@ impl ContentAddressing {
 
         // Sort chunks by index and reconstruct
         let mut reconstructed = Vec::with_capacity(state.total_size as usize);
-        
+
         for i in 0..state.total_chunks {
             if let Some(chunk) = state.received_chunks.get(&i) {
                 reconstructed.extend_from_slice(&chunk.data);
@@ -235,7 +246,7 @@ impl ContentAddressing {
         if self.verify_integrity {
             let reconstructed_hash = self.hash_content(&reconstructed);
             let reconstructed_hash_str = hex::encode(reconstructed_hash.as_bytes());
-            
+
             if reconstructed_hash_str != state.content_hash {
                 return Err(ContentError::ChecksumMismatch);
             }
@@ -252,7 +263,7 @@ impl ContentAddressing {
         let mut hasher = Hasher::new();
         hasher.update(data);
         hasher.update(context.as_bytes());
-        
+
         let hash = hasher.finalize();
         hex::encode(hash.as_bytes())
     }
@@ -262,7 +273,7 @@ impl ContentAddressing {
         // Use rolling hash for fuzzy matching
         const WINDOW_SIZE: usize = 64;
         let mut fingerprint = Vec::new();
-        
+
         if data.len() < WINDOW_SIZE {
             // For small content, use full hash
             let hash = self.hash_content(data);
@@ -280,7 +291,12 @@ impl ContentAddressing {
     }
 
     /// Validate content type and size constraints
-    pub fn validate_content(&self, data: &[u8], content_type: &str, max_size: Option<u64>) -> ContentResult<()> {
+    pub fn validate_content(
+        &self,
+        data: &[u8],
+        content_type: &str,
+        max_size: Option<u64>,
+    ) -> ContentResult<()> {
         // Size validation
         if let Some(max) = max_size {
             if data.len() as u64 > max {
@@ -309,7 +325,7 @@ impl ContentAddressing {
     /// Get optimal chunk size for content
     pub fn get_optimal_chunk_size(&self, content_size: u64) -> usize {
         match content_size {
-            0..=1048576 => 64 * 1024,        // 64KB for small files
+            0..=1048576 => 64 * 1024,          // 64KB for small files
             1048577..=104857600 => CHUNK_SIZE, // 256KB for medium files
             _ => 512 * 1024,                   // 512KB for large files
         }
@@ -353,19 +369,19 @@ impl ContentAddressing {
             return Ok((data.to_vec(), None));
         }
 
-        use flate2::write::GzEncoder;
         use flate2::Compression;
+        use flate2::write::GzEncoder;
 
         let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
-        encoder.write_all(data)
+        encoder
+            .write_all(data)
             .map_err(|e| ContentError::ChunkingFailed {
                 reason: format!("Compression failed: {}", e),
             })?;
 
-        let compressed = encoder.finish()
-            .map_err(|e| ContentError::ChunkingFailed {
-                reason: format!("Compression finalization failed: {}", e),
-            })?;
+        let compressed = encoder.finish().map_err(|e| ContentError::ChunkingFailed {
+            reason: format!("Compression finalization failed: {}", e),
+        })?;
 
         let compression_ratio = compressed.len() as f32 / data.len() as f32;
 
@@ -381,12 +397,13 @@ impl ContentAddressing {
         // Simple heuristic: check if data starts with gzip magic number
         if data.len() > 2 && data[0] == 0x1f && data[1] == 0x8b {
             use flate2::read::GzDecoder;
-            
+
             let mut decoder = GzDecoder::new(data);
             let mut decompressed = Vec::new();
-            decoder.read_to_end(&mut decompressed)
+            decoder
+                .read_to_end(&mut decompressed)
                 .map_err(|_e| ContentError::ReconstructionFailed)?;
-            
+
             Ok(decompressed)
         } else {
             Ok(data.to_vec())
@@ -412,10 +429,10 @@ mod tests {
     fn test_content_addressing() {
         let addressing = ContentAddressing::new();
         let data = b"Hello, world! This is test content for chunking.";
-        
+
         let result = addressing.address_content(data, "text/plain");
         assert!(result.is_ok());
-        
+
         let address = result.unwrap();
         assert!(!address.hash.is_empty());
         assert_eq!(address.chunks.len(), 1); // Small content should be 1 chunk
@@ -425,14 +442,16 @@ mod tests {
     fn test_content_verification() {
         let addressing = ContentAddressing::new();
         let data = b"Test content for verification";
-        
+
         let address = addressing.address_content(data, "text/plain").unwrap();
         let is_valid = addressing.verify_content(data, &address.hash).unwrap();
         assert!(is_valid);
-        
+
         // Test with wrong data
         let wrong_data = b"Wrong content";
-        let is_invalid = addressing.verify_content(wrong_data, &address.hash).unwrap();
+        let is_invalid = addressing
+            .verify_content(wrong_data, &address.hash)
+            .unwrap();
         assert!(!is_invalid);
     }
 
@@ -440,24 +459,28 @@ mod tests {
     fn test_content_reconstruction() {
         let addressing = ContentAddressing::new();
         let data = vec![42u8; CHUNK_SIZE * 3]; // 3 chunks worth of data
-        
-        let address = addressing.address_content(&data, "application/octet-stream").unwrap();
+
+        let address = addressing
+            .address_content(&data, "application/octet-stream")
+            .unwrap();
         assert_eq!(address.chunks.len(), 3);
-        
+
         // Test reconstruction
         let mut state = addressing.start_reconstruction(
             &address.hash,
             data.len() as u64,
             address.chunks.len() as u32,
         );
-        
+
         // Add all chunks
         for chunk in address.chunks {
-            addressing.add_chunk_to_reconstruction(&mut state, chunk).unwrap();
+            addressing
+                .add_chunk_to_reconstruction(&mut state, chunk)
+                .unwrap();
         }
-        
+
         assert!(state.is_complete);
-        
+
         let reconstructed = addressing.reconstruct_content(&state).unwrap();
         assert_eq!(reconstructed, data);
     }
@@ -466,17 +489,17 @@ mod tests {
     fn test_chunk_verification() {
         let addressing = ContentAddressing::new();
         let data = b"Test chunk data";
-        
+
         let address = addressing.address_content(data, "text/plain").unwrap();
         let chunk = &address.chunks[0];
-        
+
         let is_valid = addressing.verify_chunk(chunk).unwrap();
         assert!(is_valid);
-        
+
         // Test with corrupted chunk
         let mut corrupted_chunk = chunk.clone();
         corrupted_chunk.data[0] ^= 1; // Flip a bit
-        
+
         let result = addressing.verify_chunk(&corrupted_chunk);
         assert!(result.is_err());
     }
@@ -486,10 +509,10 @@ mod tests {
         let addressing = ContentAddressing::new();
         let data1 = b"This is some test content for fingerprinting";
         let data2 = b"This is some test content for fingerprinting with changes";
-        
+
         let fp1 = addressing.calculate_fingerprint(data1).unwrap();
         let fp2 = addressing.calculate_fingerprint(data2).unwrap();
-        
+
         assert_ne!(fp1, fp2);
         assert!(!fp1.is_empty());
         assert!(!fp2.is_empty());
@@ -499,14 +522,14 @@ mod tests {
     fn test_content_validation() {
         let addressing = ContentAddressing::new();
         let data = b"Valid content";
-        
+
         let result = addressing.validate_content(data, "text/plain", Some(1024));
         assert!(result.is_ok());
-        
+
         // Test empty content
         let result = addressing.validate_content(&[], "text/plain", Some(1024));
         assert!(result.is_err());
-        
+
         // Test oversized content
         let result = addressing.validate_content(data, "text/plain", Some(5));
         assert!(result.is_err());
@@ -515,22 +538,25 @@ mod tests {
     #[test]
     fn test_optimal_chunk_size() {
         let addressing = ContentAddressing::new();
-        
+
         assert_eq!(addressing.get_optimal_chunk_size(1024), 64 * 1024);
         assert_eq!(addressing.get_optimal_chunk_size(1024 * 1024), CHUNK_SIZE);
-        assert_eq!(addressing.get_optimal_chunk_size(1024 * 1024 * 1024), 512 * 1024);
+        assert_eq!(
+            addressing.get_optimal_chunk_size(1024 * 1024 * 1024),
+            512 * 1024
+        );
     }
 
     #[test]
     fn test_content_id_generation() {
         let addressing = ContentAddressing::new();
         let data = b"Test content";
-        
+
         let id1 = addressing.generate_content_id(data, "context1");
         let id2 = addressing.generate_content_id(data, "context2");
         let id3 = addressing.generate_content_id(data, "context1");
-        
+
         assert_ne!(id1, id2); // Different contexts should produce different IDs
-        assert_eq!(id1, id3);  // Same data and context should produce same ID
+        assert_eq!(id1, id3); // Same data and context should produce same ID
     }
 }

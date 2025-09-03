@@ -1,15 +1,15 @@
 //! Secure storage wrapper that provides additional security layers
-//! 
+//!
 //! This module provides:
 //! - Additional validation before storing to keyring
 //! - Secure data sanitization
 //! - Access logging for security audits
 //! - Rate limiting for storage operations
 
-use anyhow::{Context, Result};
 use super::input_validation::InputValidator;
 use super::rate_limiter::RateLimiter;
-use crate::secure_storage::{SecureStorageManager, SecureKeyMetadata};
+use crate::secure_storage::{SecureKeyMetadata, SecureStorageManager};
+use anyhow::{Context, Result};
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::{info, warn};
@@ -41,7 +41,9 @@ impl EnhancedSecureStorage {
     ) -> Result<()> {
         // Rate limiting check
         if !self.rate_limiter.is_allowed(user_id)? {
-            return Err(anyhow::anyhow!("Rate limit exceeded for secure storage operations"));
+            return Err(anyhow::anyhow!(
+                "Rate limit exceeded for secure storage operations"
+            ));
         }
 
         // Input validation
@@ -50,11 +52,16 @@ impl EnhancedSecureStorage {
 
         // Additional security checks
         if master_key.len() < 32 {
-            return Err(anyhow::anyhow!("Master key too short for security requirements"));
+            return Err(anyhow::anyhow!(
+                "Master key too short for security requirements"
+            ));
         }
 
         // Log access for security audit
-        info!("Secure storage: Storing encryption keys for user: {}", user_id);
+        info!(
+            "Secure storage: Storing encryption keys for user: {}",
+            user_id
+        );
 
         // Store using the underlying storage manager
         self.storage_manager
@@ -67,11 +74,16 @@ impl EnhancedSecureStorage {
     pub async fn get_encryption_keys_secure(&self, user_id: &str) -> Result<serde_json::Value> {
         // Rate limiting check
         if !self.rate_limiter.is_allowed(user_id)? {
-            return Err(anyhow::anyhow!("Rate limit exceeded for secure storage operations"));
+            return Err(anyhow::anyhow!(
+                "Rate limit exceeded for secure storage operations"
+            ));
         }
 
         // Log access for security audit
-        info!("Secure storage: Retrieving encryption keys for user: {}", user_id);
+        info!(
+            "Secure storage: Retrieving encryption keys for user: {}",
+            user_id
+        );
 
         self.storage_manager
             .get_encryption_keys()
@@ -89,17 +101,22 @@ impl EnhancedSecureStorage {
     ) -> Result<()> {
         // Rate limiting check
         if !self.rate_limiter.is_allowed(user_id)? {
-            return Err(anyhow::anyhow!("Rate limit exceeded for secure storage operations"));
+            return Err(anyhow::anyhow!(
+                "Rate limit exceeded for secure storage operations"
+            ));
         }
 
         // Validate key ID format
         self.input_validator.sanitize_string(key_id, 100)?;
-        
+
         // Validate key data
         self.input_validator.sanitize_string(key_data, 10000)?;
 
         // Log access for security audit
-        info!("Secure storage: Storing derived key {} for user: {}", key_id, user_id);
+        info!(
+            "Secure storage: Storing derived key {} for user: {}",
+            key_id, user_id
+        );
 
         self.storage_manager
             .store_derived_key(key_id, key_data, metadata)
@@ -115,14 +132,19 @@ impl EnhancedSecureStorage {
     ) -> Result<(String, SecureKeyMetadata)> {
         // Rate limiting check
         if !self.rate_limiter.is_allowed(user_id)? {
-            return Err(anyhow::anyhow!("Rate limit exceeded for secure storage operations"));
+            return Err(anyhow::anyhow!(
+                "Rate limit exceeded for secure storage operations"
+            ));
         }
 
         // Validate key ID
         self.input_validator.sanitize_string(key_id, 100)?;
 
         // Log access for security audit
-        info!("Secure storage: Retrieving derived key {} for user: {}", key_id, user_id);
+        info!(
+            "Secure storage: Retrieving derived key {} for user: {}",
+            key_id, user_id
+        );
 
         self.storage_manager
             .get_derived_key(key_id)
@@ -133,8 +155,11 @@ impl EnhancedSecureStorage {
     /// Clear all keys for a user with enhanced security
     pub async fn delete_all_keys_secure(&self, user_id: &str) -> Result<()> {
         // Rate limiting check - use stricter limit for destructive operations
-        if !self.rate_limiter.check_rate_limit(user_id, 5)? { // Only 5 delete operations per hour
-            return Err(anyhow::anyhow!("Rate limit exceeded for destructive storage operations"));
+        if !self.rate_limiter.check_rate_limit(user_id, 5)? {
+            // Only 5 delete operations per hour
+            return Err(anyhow::anyhow!(
+                "Rate limit exceeded for destructive storage operations"
+            ));
         }
 
         // Log destructive operation for security audit
@@ -166,7 +191,7 @@ mod tests {
     async fn test_enhanced_secure_storage_rate_limiting() {
         let storage = EnhancedSecureStorage::new("test_user".to_string());
         let user_id = "test_user";
-        
+
         // Should work for first few requests
         for i in 0..5 {
             let result = storage.rate_limiter.is_allowed(user_id);
@@ -177,10 +202,20 @@ mod tests {
     #[tokio_test::tokio::test]
     async fn test_input_validation() {
         let storage = EnhancedSecureStorage::new("test_user".to_string());
-        
+
         // Test key validation
-        assert!(storage.input_validator.sanitize_string("valid_key", 100).is_ok());
+        assert!(
+            storage
+                .input_validator
+                .sanitize_string("valid_key", 100)
+                .is_ok()
+        );
         assert!(storage.input_validator.sanitize_string("", 100).is_err()); // Empty string
-        assert!(storage.input_validator.sanitize_string(&"x".repeat(101), 100).is_err()); // Too long
+        assert!(
+            storage
+                .input_validator
+                .sanitize_string(&"x".repeat(101), 100)
+                .is_err()
+        ); // Too long
     }
 }

@@ -1,5 +1,5 @@
 //! Post-Quantum Cryptography Configuration Module
-//! 
+//!
 //! This module provides centralized configuration management for all PQC operations
 //! across the Communitas platform, including ML-KEM-768 and ML-DSA-65 parameters,
 //! security policies, performance tuning, and hybrid mode support.
@@ -15,28 +15,28 @@ use thiserror::Error;
 pub enum PqcConfigError {
     #[error("Invalid security level: {level}. Must be between 1 and 5")]
     InvalidSecurityLevel { level: u8 },
-    
+
     #[error("Invalid ML-KEM parameter: {param} = {value}")]
     InvalidMlKemParameter { param: String, value: String },
-    
+
     #[error("Invalid ML-DSA parameter: {param} = {value}")]
     InvalidMlDsaParameter { param: String, value: String },
-    
+
     #[error("Configuration validation failed: {reason}")]
     ValidationFailed { reason: String },
-    
+
     #[error("Hybrid mode configuration error: {details}")]
     HybridModeError { details: String },
-    
+
     #[error("Performance profile '{profile}' not found")]
     ProfileNotFound { profile: String },
-    
+
     #[error("Serialization error: {details}")]
     SerializationError { details: String },
-    
+
     #[error("Platform compatibility error: {platform} does not support {feature}")]
     PlatformCompatibilityError { platform: String, feature: String },
-    
+
     #[error("Thread safety error: {operation} failed due to lock contention")]
     ThreadSafetyError { operation: String },
 }
@@ -91,28 +91,28 @@ impl MlKemConfig {
                 value: self.seed_entropy_bits.to_string(),
             });
         }
-        
+
         if !(256..=512).contains(&self.encap_randomness_bits) {
             return Err(PqcConfigError::InvalidMlKemParameter {
                 param: "encap_randomness_bits".to_string(),
                 value: self.encap_randomness_bits.to_string(),
             });
         }
-        
+
         if !(1000..=10000).contains(&self.key_derivation_iterations) {
             return Err(PqcConfigError::InvalidMlKemParameter {
                 param: "key_derivation_iterations".to_string(),
                 value: self.key_derivation_iterations.to_string(),
             });
         }
-        
+
         if !(1..=3).contains(&self.memory_optimization) {
             return Err(PqcConfigError::InvalidMlKemParameter {
                 param: "memory_optimization".to_string(),
                 value: self.memory_optimization.to_string(),
             });
         }
-        
+
         Ok(())
     }
 }
@@ -141,21 +141,21 @@ impl MlDsaConfig {
                 value: self.sig_randomness_bits.to_string(),
             });
         }
-        
+
         if !(1000..=5000).contains(&self.hash_iterations) {
             return Err(PqcConfigError::InvalidMlDsaParameter {
                 param: "hash_iterations".to_string(),
                 value: self.hash_iterations.to_string(),
             });
         }
-        
+
         if !(1..=3).contains(&self.verification_optimization) {
             return Err(PqcConfigError::InvalidMlDsaParameter {
                 param: "verification_optimization".to_string(),
                 value: self.verification_optimization.to_string(),
             });
         }
-        
+
         Ok(())
     }
 }
@@ -180,24 +180,33 @@ impl HybridModeConfig {
     pub fn validate(&self) -> Result<(), PqcConfigError> {
         if !(0.0..=1.0).contains(&self.transition_phase) {
             return Err(PqcConfigError::HybridModeError {
-                details: format!("transition_phase must be between 0.0 and 1.0, got {}", self.transition_phase),
+                details: format!(
+                    "transition_phase must be between 0.0 and 1.0, got {}",
+                    self.transition_phase
+                ),
             });
         }
-        
+
         let valid_algorithms = ["ECDH-P256", "ECDH-P384", "RSA-2048", "RSA-3072"];
         if !valid_algorithms.contains(&self.classical_algorithm.as_str()) {
             return Err(PqcConfigError::HybridModeError {
-                details: format!("unsupported classical algorithm: {}", self.classical_algorithm),
+                details: format!(
+                    "unsupported classical algorithm: {}",
+                    self.classical_algorithm
+                ),
             });
         }
-        
+
         let valid_methods = ["concatenate", "xor", "kdf"];
         if !valid_methods.contains(&self.combination_method.as_str()) {
             return Err(PqcConfigError::HybridModeError {
-                details: format!("unsupported combination method: {}", self.combination_method),
+                details: format!(
+                    "unsupported combination method: {}",
+                    self.combination_method
+                ),
             });
         }
-        
+
         Ok(())
     }
 }
@@ -227,25 +236,25 @@ impl PerformanceConfig {
                 reason: "target_latency_ms must be between 1 and 10000".to_string(),
             });
         }
-        
+
         if self.memory_limit_mb < 10 || self.memory_limit_mb > 4096 {
             return Err(PqcConfigError::ValidationFailed {
                 reason: "memory_limit_mb must be between 10 and 4096".to_string(),
             });
         }
-        
+
         if !(0.1..=1.0).contains(&self.cpu_utilization_target) {
             return Err(PqcConfigError::ValidationFailed {
                 reason: "cpu_utilization_target must be between 0.1 and 1.0".to_string(),
             });
         }
-        
+
         if self.worker_threads > 64 {
             return Err(PqcConfigError::ValidationFailed {
                 reason: "worker_threads must not exceed 64".to_string(),
             });
         }
-        
+
         Ok(())
     }
 }
@@ -394,7 +403,7 @@ impl PqcConfig {
             created_at: chrono::Utc::now(),
         }
     }
-    
+
     /// Create standard configuration for typical users
     pub fn standard() -> Self {
         Self {
@@ -457,7 +466,7 @@ impl PqcConfig {
             created_at: chrono::Utc::now(),
         }
     }
-    
+
     /// Create high security configuration for sensitive data
     pub fn high_security() -> Self {
         Self {
@@ -520,7 +529,7 @@ impl PqcConfig {
             created_at: chrono::Utc::now(),
         }
     }
-    
+
     /// Create maximum security configuration for critical operations
     pub fn maximum_security() -> Self {
         Self {
@@ -583,30 +592,32 @@ impl PqcConfig {
             created_at: chrono::Utc::now(),
         }
     }
-    
+
     /// Validate the entire configuration
     pub fn validate(&self) -> Result<(), PqcConfigError> {
         self.ml_kem.validate()?;
         self.ml_dsa.validate()?;
         self.hybrid_mode.validate()?;
         self.performance.validate()?;
-        
+
         // Cross-validation checks
-        if self.security_level == SecurityLevel::Development && self.hybrid_mode.transition_phase > 0.8 {
+        if self.security_level == SecurityLevel::Development
+            && self.hybrid_mode.transition_phase > 0.8
+        {
             return Err(PqcConfigError::ValidationFailed {
                 reason: "Development mode should not use high PQC transition phase".to_string(),
             });
         }
-        
+
         if self.security_level == SecurityLevel::Maximum && self.hybrid_mode.enabled {
             return Err(PqcConfigError::ValidationFailed {
                 reason: "Maximum security mode should use pure PQC, not hybrid".to_string(),
             });
         }
-        
+
         Ok(())
     }
-    
+
     /// Update configuration for specific security level
     pub fn update_security_level(&mut self, level: SecurityLevel) -> Result<(), PqcConfigError> {
         let new_config = match level {
@@ -615,7 +626,7 @@ impl PqcConfig {
             SecurityLevel::High => Self::high_security(),
             SecurityLevel::Maximum => Self::maximum_security(),
         };
-        
+
         *self = new_config;
         self.validate()?;
         Ok(())
@@ -632,128 +643,152 @@ impl PqcConfigManager {
     /// Create new configuration manager with standard settings
     pub fn new() -> Self {
         let mut profiles = HashMap::new();
-        
+
         // Add predefined performance profiles
-        profiles.insert("low_latency".to_string(), PerformanceConfig {
-            target_latency_ms: 50,
-            memory_limit_mb: 1024,
-            cpu_utilization_target: 0.9,
-            parallel_processing: true,
-            worker_threads: 0,
-            cache_size_mb: 256,
-        });
-        
-        profiles.insert("balanced".to_string(), PerformanceConfig {
-            target_latency_ms: 200,
-            memory_limit_mb: 512,
-            cpu_utilization_target: 0.7,
-            parallel_processing: true,
-            worker_threads: 0,
-            cache_size_mb: 128,
-        });
-        
-        profiles.insert("low_power".to_string(), PerformanceConfig {
-            target_latency_ms: 1000,
-            memory_limit_mb: 256,
-            cpu_utilization_target: 0.3,
-            parallel_processing: false,
-            worker_threads: 1,
-            cache_size_mb: 32,
-        });
-        
+        profiles.insert(
+            "low_latency".to_string(),
+            PerformanceConfig {
+                target_latency_ms: 50,
+                memory_limit_mb: 1024,
+                cpu_utilization_target: 0.9,
+                parallel_processing: true,
+                worker_threads: 0,
+                cache_size_mb: 256,
+            },
+        );
+
+        profiles.insert(
+            "balanced".to_string(),
+            PerformanceConfig {
+                target_latency_ms: 200,
+                memory_limit_mb: 512,
+                cpu_utilization_target: 0.7,
+                parallel_processing: true,
+                worker_threads: 0,
+                cache_size_mb: 128,
+            },
+        );
+
+        profiles.insert(
+            "low_power".to_string(),
+            PerformanceConfig {
+                target_latency_ms: 1000,
+                memory_limit_mb: 256,
+                cpu_utilization_target: 0.3,
+                parallel_processing: false,
+                worker_threads: 1,
+                cache_size_mb: 32,
+            },
+        );
+
         Self {
             config: Arc::new(RwLock::new(PqcConfig::standard())),
             performance_profiles: Arc::new(RwLock::new(profiles)),
         }
     }
-    
+
     /// Get current configuration (read-only)
     pub fn get_config(&self) -> Result<PqcConfig, PqcConfigError> {
-        self.config.read()
+        self.config
+            .read()
             .map_err(|_| PqcConfigError::ThreadSafetyError {
                 operation: "read_config".to_string(),
             })
             .map(|guard| guard.clone())
     }
-    
+
     /// Update configuration
     pub fn update_config(&self, new_config: PqcConfig) -> Result<(), PqcConfigError> {
         new_config.validate()?;
-        
-        let mut config = self.config.write()
+
+        let mut config = self
+            .config
+            .write()
             .map_err(|_| PqcConfigError::ThreadSafetyError {
                 operation: "write_config".to_string(),
             })?;
-        
+
         *config = new_config;
         Ok(())
     }
-    
+
     /// Update security level
     pub fn update_security_level(&self, level: SecurityLevel) -> Result<(), PqcConfigError> {
-        let mut config = self.config.write()
+        let mut config = self
+            .config
+            .write()
             .map_err(|_| PqcConfigError::ThreadSafetyError {
                 operation: "update_security_level".to_string(),
             })?;
-        
+
         config.update_security_level(level)?;
         Ok(())
     }
-    
+
     /// Apply performance profile
     pub fn apply_performance_profile(&self, profile_name: &str) -> Result<(), PqcConfigError> {
-        let profiles = self.performance_profiles.read()
-            .map_err(|_| PqcConfigError::ThreadSafetyError {
-                operation: "read_profiles".to_string(),
-            })?;
-        
-        let profile = profiles.get(profile_name)
+        let profiles =
+            self.performance_profiles
+                .read()
+                .map_err(|_| PqcConfigError::ThreadSafetyError {
+                    operation: "read_profiles".to_string(),
+                })?;
+
+        let profile = profiles
+            .get(profile_name)
             .ok_or_else(|| PqcConfigError::ProfileNotFound {
                 profile: profile_name.to_string(),
             })?
             .clone();
-        
+
         drop(profiles);
-        
-        let mut config = self.config.write()
+
+        let mut config = self
+            .config
+            .write()
             .map_err(|_| PqcConfigError::ThreadSafetyError {
                 operation: "apply_profile".to_string(),
             })?;
-        
+
         config.performance = profile;
         config.validate()?;
         Ok(())
     }
-    
+
     /// Add custom performance profile
-    pub fn add_performance_profile(&self, name: String, profile: PerformanceConfig) -> Result<(), PqcConfigError> {
+    pub fn add_performance_profile(
+        &self,
+        name: String,
+        profile: PerformanceConfig,
+    ) -> Result<(), PqcConfigError> {
         profile.validate()?;
-        
-        let mut profiles = self.performance_profiles.write()
-            .map_err(|_| PqcConfigError::ThreadSafetyError {
-                operation: "add_profile".to_string(),
-            })?;
-        
+
+        let mut profiles =
+            self.performance_profiles
+                .write()
+                .map_err(|_| PqcConfigError::ThreadSafetyError {
+                    operation: "add_profile".to_string(),
+                })?;
+
         profiles.insert(name, profile);
         Ok(())
     }
-    
+
     /// Serialize configuration to JSON
     pub fn serialize_config(&self) -> Result<String, PqcConfigError> {
         let config = self.get_config()?;
-        serde_json::to_string_pretty(&config)
-            .map_err(|e| PqcConfigError::SerializationError {
-                details: e.to_string(),
-            })
+        serde_json::to_string_pretty(&config).map_err(|e| PqcConfigError::SerializationError {
+            details: e.to_string(),
+        })
     }
-    
+
     /// Deserialize configuration from JSON
     pub fn deserialize_config(&self, json: &str) -> Result<(), PqcConfigError> {
-        let config: PqcConfig = serde_json::from_str(json)
-            .map_err(|e| PqcConfigError::SerializationError {
+        let config: PqcConfig =
+            serde_json::from_str(json).map_err(|e| PqcConfigError::SerializationError {
                 details: e.to_string(),
             })?;
-        
+
         self.update_config(config)?;
         Ok(())
     }
@@ -778,48 +813,46 @@ pub fn get_config_manager() -> &'static PqcConfigManager {
 pub mod tauri_commands {
     use super::*;
     use tauri::command;
-    
+
     #[command]
     pub async fn get_pqc_config() -> Result<PqcConfig, String> {
-        get_config_manager().get_config()
-            .map_err(|e| e.to_string())
+        get_config_manager().get_config().map_err(|e| e.to_string())
     }
-    
+
     #[command]
     pub async fn update_pqc_security_level(level: u8) -> Result<(), String> {
-        let security_level = SecurityLevel::from_u8(level)
-            .map_err(|e| e.to_string())?;
-        
-        get_config_manager().update_security_level(security_level)
+        let security_level = SecurityLevel::from_u8(level).map_err(|e| e.to_string())?;
+
+        get_config_manager()
+            .update_security_level(security_level)
             .map_err(|e| e.to_string())
     }
-    
+
     #[command]
     pub async fn apply_pqc_performance_profile(profile_name: String) -> Result<(), String> {
-        get_config_manager().apply_performance_profile(&profile_name)
+        get_config_manager()
+            .apply_performance_profile(&profile_name)
             .map_err(|e| e.to_string())
     }
-    
+
     #[command]
     pub async fn get_pqc_config_json() -> Result<String, String> {
-        get_config_manager().serialize_config()
+        get_config_manager()
+            .serialize_config()
             .map_err(|e| e.to_string())
     }
-    
+
     #[command]
     pub async fn load_pqc_config_json(json: String) -> Result<(), String> {
-        get_config_manager().deserialize_config(&json)
+        get_config_manager()
+            .deserialize_config(&json)
             .map_err(|e| e.to_string())
     }
-    
+
     #[command]
     pub async fn validate_pqc_config() -> Result<bool, String> {
         match get_config_manager().get_config() {
-            Ok(config) => {
-                config.validate()
-                    .map(|_| true)
-                    .map_err(|e| e.to_string())
-            }
+            Ok(config) => config.validate().map(|_| true).map_err(|e| e.to_string()),
             Err(e) => Err(e.to_string()),
         }
     }
@@ -828,7 +861,7 @@ pub mod tauri_commands {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_security_level_validation() {
         assert!(SecurityLevel::from_u8(1).is_ok());
@@ -838,128 +871,132 @@ mod tests {
         assert!(SecurityLevel::from_u8(2).is_err());
         assert!(SecurityLevel::from_u8(6).is_err());
     }
-    
+
     #[test]
     fn test_ml_kem_config_validation() {
         let mut config = PqcConfig::development().ml_kem;
         assert!(config.validate().is_ok());
-        
+
         config.seed_entropy_bits = 100; // Too low
         assert!(config.validate().is_err());
-        
+
         config.seed_entropy_bits = 600; // Too high
         assert!(config.validate().is_err());
     }
-    
+
     #[test]
     fn test_ml_dsa_config_validation() {
         let mut config = PqcConfig::development().ml_dsa;
         assert!(config.validate().is_ok());
-        
+
         config.hash_iterations = 500; // Too low
         assert!(config.validate().is_err());
-        
+
         config.hash_iterations = 6000; // Too high
         assert!(config.validate().is_err());
     }
-    
+
     #[test]
     fn test_hybrid_mode_validation() {
         let mut config = PqcConfig::development().hybrid_mode;
         assert!(config.validate().is_ok());
-        
+
         config.transition_phase = -0.1; // Invalid range
         assert!(config.validate().is_err());
-        
+
         config.transition_phase = 1.1; // Invalid range
         assert!(config.validate().is_err());
-        
+
         config.transition_phase = 0.5;
         config.classical_algorithm = "INVALID".to_string();
         assert!(config.validate().is_err());
     }
-    
+
     #[test]
     fn test_performance_config_validation() {
         let mut config = PqcConfig::development().performance;
         assert!(config.validate().is_ok());
-        
+
         config.target_latency_ms = 0; // Invalid
         assert!(config.validate().is_err());
-        
+
         config.target_latency_ms = 500;
         config.memory_limit_mb = 5; // Too low
         assert!(config.validate().is_err());
-        
+
         config.memory_limit_mb = 512;
         config.cpu_utilization_target = 1.5; // Too high
         assert!(config.validate().is_err());
     }
-    
+
     #[test]
     fn test_config_presets() {
         let dev_config = PqcConfig::development();
         assert!(dev_config.validate().is_ok());
         assert_eq!(dev_config.security_level, SecurityLevel::Development);
-        
+
         let std_config = PqcConfig::standard();
         assert!(std_config.validate().is_ok());
         assert_eq!(std_config.security_level, SecurityLevel::Standard);
-        
+
         let high_config = PqcConfig::high_security();
         assert!(high_config.validate().is_ok());
         assert_eq!(high_config.security_level, SecurityLevel::High);
-        
+
         let max_config = PqcConfig::maximum_security();
         assert!(max_config.validate().is_ok());
         assert_eq!(max_config.security_level, SecurityLevel::Maximum);
     }
-    
+
     #[test]
     fn test_config_manager() {
         let manager = PqcConfigManager::new();
-        
+
         // Test initial config
         let config = manager.get_config().expect("Failed to get config");
         assert_eq!(config.security_level, SecurityLevel::Standard);
-        
+
         // Test security level update
-        manager.update_security_level(SecurityLevel::High)
+        manager
+            .update_security_level(SecurityLevel::High)
             .expect("Failed to update security level");
-        
+
         let updated_config = manager.get_config().expect("Failed to get updated config");
         assert_eq!(updated_config.security_level, SecurityLevel::High);
-        
+
         // Test performance profile
-        manager.apply_performance_profile("low_latency")
+        manager
+            .apply_performance_profile("low_latency")
             .expect("Failed to apply performance profile");
-        
+
         let profile_config = manager.get_config().expect("Failed to get profile config");
         assert_eq!(profile_config.performance.target_latency_ms, 50);
     }
-    
+
     #[test]
     fn test_serialization() {
         let manager = PqcConfigManager::new();
-        
+
         // Test serialization
         let json = manager.serialize_config().expect("Failed to serialize");
         assert!(!json.is_empty());
-        
+
         // Test deserialization
-        manager.deserialize_config(&json).expect("Failed to deserialize");
-        
+        manager
+            .deserialize_config(&json)
+            .expect("Failed to deserialize");
+
         // Verify config is still valid
         let config = manager.get_config().expect("Failed to get config");
         assert!(config.validate().is_ok());
     }
-    
+
     #[test]
     fn test_cross_validation() {
         let mut config = PqcConfig::development();
         config.hybrid_mode.transition_phase = 0.9; // Too high for development
         assert!(config.validate().is_err());
-        
+
         let mut max_config = PqcConfig::maximum_security();
         max_config.hybrid_mode.enabled = true; // Should be false for maximum security
         assert!(max_config.validate().is_err());

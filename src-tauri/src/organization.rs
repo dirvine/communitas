@@ -1,9 +1,9 @@
 use anyhow::Result;
+use chrono::{DateTime, Utc};
+use saorsa_core::Key;
+use saorsa_core::dht::DHT;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use chrono::{DateTime, Utc};
-use saorsa_core::dht::DHT;
-use saorsa_core::Key;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -45,18 +45,18 @@ pub struct Organization {
     pub description: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
-    
+
     // Ownership and permissions
     pub owner_id: String,
     pub members: Vec<Member>,
-    
+
     // Storage and file system
     pub has_file_system: bool,
     pub storage_quota: StorageQuota,
-    
+
     // Settings
     pub settings: OrganizationSettings,
-    
+
     // Child entity IDs (stored separately in DHT)
     pub group_ids: Vec<String>,
     pub project_ids: Vec<String>,
@@ -85,15 +85,15 @@ pub struct Group {
     pub organization_id: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
-    
+
     // Ownership and permissions
     pub creator_id: String,
     pub members: Vec<Member>,
-    
+
     // Chat-only functionality
     pub has_file_system: bool,
     pub chat_settings: ChatSettings,
-    
+
     // Inherited permissions from organization
     pub inherited_permissions: bool,
 }
@@ -115,20 +115,20 @@ pub struct Project {
     pub parent_group_id: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
-    
+
     // Ownership and permissions
     pub owner_id: String,
     pub members: Vec<Member>,
-    
+
     // Project-specific file system
     pub has_file_system: bool,
     pub storage_quota: StorageQuota,
-    
+
     // Project management
     pub status: ProjectStatus,
     pub deadline: Option<DateTime<Utc>>,
     pub priority: Priority,
-    
+
     // Collaboration settings
     pub settings: ProjectSettings,
 }
@@ -220,7 +220,7 @@ impl OrganizationManager {
         owner_id: String,
     ) -> Result<Organization> {
         let org_id = format!("org_{}", uuid::Uuid::new_v4());
-        
+
         let organization = Organization {
             id: org_id.clone(),
             name: request.name,
@@ -257,7 +257,7 @@ impl OrganizationManager {
 
         // Store in DHT
         self.store_organization_in_dht(&organization).await?;
-        
+
         // Update cache
         let mut cache = self.cache.write().await;
         cache.insert(org_id.clone(), organization.clone());
@@ -277,14 +277,14 @@ impl OrganizationManager {
         // Fetch from DHT
         let dht_key = self.organization_dht_key(org_id);
         let dht = self.dht.read().await;
-        
+
         if let Some(record) = dht.get(&dht_key).await {
             let org: Organization = serde_json::from_slice(&record.value)?;
-            
+
             // Update cache
             let mut cache = self.cache.write().await;
             cache.insert(org_id.to_string(), org.clone());
-            
+
             Ok(Some(org))
         } else {
             Ok(None)
@@ -294,11 +294,11 @@ impl OrganizationManager {
     pub async fn update_organization(&self, organization: &Organization) -> Result<()> {
         // Update DHT
         self.store_organization_in_dht(organization).await?;
-        
+
         // Update cache
         let mut cache = self.cache.write().await;
         cache.insert(organization.id.clone(), organization.clone());
-        
+
         Ok(())
     }
 
@@ -309,12 +309,11 @@ impl OrganizationManager {
         let orgs: Vec<Organization> = cache
             .values()
             .filter(|org| {
-                org.owner_id == user_id || 
-                org.members.iter().any(|m| m.user_id == user_id)
+                org.owner_id == user_id || org.members.iter().any(|m| m.user_id == user_id)
             })
             .cloned()
             .collect();
-        
+
         Ok(orgs)
     }
 
@@ -326,15 +325,17 @@ impl OrganizationManager {
         creator_id: String,
     ) -> Result<Group> {
         let group_id = format!("grp_{}", uuid::Uuid::new_v4());
-        
+
         // Verify organization exists and user has permission
-        let org = self.get_organization(&request.organization_id).await?
+        let org = self
+            .get_organization(&request.organization_id)
+            .await?
             .ok_or_else(|| anyhow::anyhow!("Organization not found"))?;
-        
+
         if !self.user_has_permission(&org, &creator_id, "create_group") {
             return Err(anyhow::anyhow!("Permission denied"));
         }
-        
+
         let group = Group {
             id: group_id.clone(),
             name: request.name,
@@ -356,20 +357,20 @@ impl OrganizationManager {
 
         // Store in DHT
         self.store_group_in_dht(&group).await?;
-        
+
         // Update organization with new group
         let mut updated_org = org;
         updated_org.group_ids.push(group_id.clone());
         updated_org.updated_at = Utc::now();
         self.update_organization(&updated_org).await?;
-        
+
         Ok(group)
     }
 
     pub async fn get_group(&self, group_id: &str) -> Result<Option<Group>> {
         let dht_key = self.group_dht_key(group_id);
         let dht = self.dht.read().await;
-        
+
         if let Some(record) = dht.get(&dht_key).await {
             let group: Group = serde_json::from_slice(&record.value)?;
             Ok(Some(group))
@@ -386,15 +387,17 @@ impl OrganizationManager {
         owner_id: String,
     ) -> Result<Project> {
         let project_id = format!("prj_{}", uuid::Uuid::new_v4());
-        
+
         // Verify organization exists and user has permission
-        let org = self.get_organization(&request.organization_id).await?
+        let org = self
+            .get_organization(&request.organization_id)
+            .await?
             .ok_or_else(|| anyhow::anyhow!("Organization not found"))?;
-        
+
         if !self.user_has_permission(&org, &owner_id, "create_project") {
             return Err(anyhow::anyhow!("Permission denied"));
         }
-        
+
         let project = Project {
             id: project_id.clone(),
             name: request.name,
@@ -425,20 +428,20 @@ impl OrganizationManager {
 
         // Store in DHT
         self.store_project_in_dht(&project).await?;
-        
+
         // Update organization with new project
         let mut updated_org = org;
         updated_org.project_ids.push(project_id.clone());
         updated_org.updated_at = Utc::now();
         self.update_organization(&updated_org).await?;
-        
+
         Ok(project)
     }
 
     pub async fn get_project(&self, project_id: &str) -> Result<Option<Project>> {
         let dht_key = self.project_dht_key(project_id);
         let dht = self.dht.read().await;
-        
+
         if let Some(record) = dht.get(&dht_key).await {
             let project: Project = serde_json::from_slice(&record.value)?;
             Ok(Some(project))
@@ -450,9 +453,11 @@ impl OrganizationManager {
     // ============= Hierarchy Operations =============
 
     pub async fn get_organization_hierarchy(&self, org_id: &str) -> Result<OrganizationHierarchy> {
-        let organization = self.get_organization(org_id).await?
+        let organization = self
+            .get_organization(org_id)
+            .await?
             .ok_or_else(|| anyhow::anyhow!("Organization not found"))?;
-        
+
         // Fetch all groups
         let mut groups = Vec::new();
         for group_id in &organization.group_ids {
@@ -460,7 +465,7 @@ impl OrganizationManager {
                 groups.push(group);
             }
         }
-        
+
         // Fetch all projects
         let mut projects = Vec::new();
         let mut total_storage_used = 0.0;
@@ -470,10 +475,10 @@ impl OrganizationManager {
                 projects.push(project);
             }
         }
-        
+
         // Add organization's storage to total
         total_storage_used += organization.storage_quota.used_gb;
-        
+
         // Calculate total members (unique across all entities)
         let mut unique_members = std::collections::HashSet::new();
         for member in &organization.members {
@@ -489,7 +494,7 @@ impl OrganizationManager {
                 unique_members.insert(member.user_id.clone());
             }
         }
-        
+
         Ok(OrganizationHierarchy {
             organization,
             groups,
@@ -541,9 +546,9 @@ impl OrganizationManager {
 
     fn user_has_permission(&self, org: &Organization, user_id: &str, _permission: &str) -> bool {
         // For now, check if user is owner or admin
-        org.members.iter().any(|m| {
-            m.user_id == user_id && (m.role == Role::Owner || m.role == Role::Admin)
-        })
+        org.members
+            .iter()
+            .any(|m| m.user_id == user_id && (m.role == Role::Owner || m.role == Role::Admin))
     }
 }
 
@@ -586,7 +591,7 @@ impl OrganizationManager {
     pub async fn initiate_call(&self, request: CallRequest) -> Result<CallSession> {
         let session_id = format!("call_{}", uuid::Uuid::new_v4());
         let webrtc_room_id = format!("room_{}", uuid::Uuid::new_v4());
-        
+
         // Get participants based on entity type
         let participants = match request.entity_type {
             EntityType::Organization => {
@@ -614,7 +619,7 @@ impl OrganizationManager {
                 vec![request.initiator_id.clone(), request.entity_id.clone()]
             }
         };
-        
+
         let session = CallSession {
             id: session_id,
             entity_type: request.entity_type,
@@ -624,13 +629,13 @@ impl OrganizationManager {
             started_at: Utc::now(),
             webrtc_room_id,
         };
-        
+
         // Store call session in DHT for coordination
         let dht_key = Key::new(format!("call:{}", session.id).as_bytes());
         let data = serde_json::to_vec(&session)?;
         let dht = self.dht.write().await;
         dht.put(dht_key, data).await?;
-        
+
         Ok(session)
     }
 }

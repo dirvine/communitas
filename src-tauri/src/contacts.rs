@@ -13,7 +13,6 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-
 //! Enhanced Contact Management System for Communitas v2
 
 use anyhow::{Context, Result};
@@ -245,7 +244,11 @@ impl ContactManager {
         let contacts = self.contacts.read().await;
         contacts
             .values()
-            .filter(|contact| status_filter.as_ref().map_or(true, |s| contact.status == *s))
+            .filter(|contact| {
+                status_filter
+                    .as_ref()
+                    .map_or(true, |s| contact.status == *s)
+            })
             .cloned()
             .collect()
     }

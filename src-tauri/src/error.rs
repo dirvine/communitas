@@ -32,5 +32,7 @@ pub enum AppError {
 }
 
 impl From<anyhow::Error> for AppError {
-    fn from(e: anyhow::Error) -> Self { AppError::Other(e.to_string()) }
+    fn from(e: anyhow::Error) -> Self {
+        AppError::Other(e.to_string())
+    }
 }

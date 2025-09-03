@@ -3,17 +3,17 @@
 use blake3::Hasher;
 use four_word_networking::FourWordAdaptiveEncoder;
 // Use standardized API imports for saorsa-pqc 0.3.5
-use saorsa_pqc::api::{ml_dsa_65, MlDsaVariant};
+use crate::AppState;
+use rand::rngs::OsRng;
+use saorsa_pqc::api::{MlDsaVariant, ml_dsa_65};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::path::PathBuf;
+use std::sync::Arc;
 use std::sync::Mutex;
 use tauri::State;
 use tokio::fs;
-use std::path::PathBuf;
-use std::sync::Arc;
 use tokio::sync::RwLock as TokioRwLock;
-use crate::AppState;
-use rand::rngs::OsRng;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// Comprehensive error types for identity operations
@@ -103,11 +103,11 @@ pub struct IdentityVerification {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct IdentityPacket {
     pub four_words: String,
-    pub public_key: Vec<u8>,           // VerifyingKey bytes
-    pub signature: Vec<u8>,            // Signature bytes
-    pub dht_id: String,                // BLAKE3 hash of four words
-    pub created_at: u64,               // Unix timestamp
-    pub packet_version: u32,           // For future upgrades
+    pub public_key: Vec<u8>, // VerifyingKey bytes
+    pub signature: Vec<u8>,  // Signature bytes
+    pub dht_id: String,      // BLAKE3 hash of four words
+    pub created_at: u64,     // Unix timestamp
+    pub packet_version: u32, // For future upgrades
 }
 
 /// In-memory identity storage (for demo purposes - use secure storage in production)
@@ -124,7 +124,7 @@ impl IdentityState {
     pub fn new() -> Result<Self, String> {
         let encoder = FourWordAdaptiveEncoder::new()
             .map_err(|e| format!("Failed to create encoder: {}", e))?;
-        
+
         Ok(Self {
             claimed: Mutex::new(HashMap::new()),
             encoder: Mutex::new(encoder),
@@ -138,11 +138,12 @@ impl PqcIdentity {
     pub fn new(alias: Option<String>) -> IdentityResult<Self> {
         // Generate real ML-DSA-65 keypair
         let dsa = ml_dsa_65();
-        let (pk, sk) = dsa.generate_keypair()
+        let (pk, sk) = dsa
+            .generate_keypair()
             .map_err(|e| IdentityError::KeyGenerationFailed {
                 reason: format!("ML-DSA-65 key generation failed: {:?}", e),
             })?;
-        
+
         let public_key = pk.to_bytes().to_vec();
         let secret_key = sk.to_bytes().to_vec();
 
@@ -171,14 +172,14 @@ impl PqcIdentity {
 
     /// Generate four-word address from public key using four-word-networking
     fn generate_four_word_address(public_key: &[u8]) -> IdentityResult<String> {
-        let encoder = FourWordAdaptiveEncoder::new()
-            .map_err(|e| IdentityError::InvalidFourWordAddress {
+        let encoder =
+            FourWordAdaptiveEncoder::new().map_err(|e| IdentityError::InvalidFourWordAddress {
                 address: format!("Encoder creation failed: {}", e),
             })?;
 
         // Create deterministic address from public key hash
         let _hash = blake3::hash(public_key);
-        
+
         // Use random words for now (would use deterministic selection with actual four-word-networking API)
         let words = encoder.get_random_words(4);
         Ok(words.join("-"))
@@ -238,18 +239,20 @@ impl PqcIdentity {
     /// Sign data with real ML-DSA-65 signature
     fn sign_data(&self, data: &[u8]) -> IdentityResult<Vec<u8>> {
         // Reconstruct secret key from bytes using ML-DSA API
-        let secret_key = saorsa_pqc::api::MlDsaSecretKey::from_bytes(MlDsaVariant::MlDsa65, &self.secret_key)
-            .map_err(|e| IdentityError::CryptoError {
-                reason: format!("Invalid secret key reconstruction: {:?}", e),
-            })?;
-        
+        let secret_key =
+            saorsa_pqc::api::MlDsaSecretKey::from_bytes(MlDsaVariant::MlDsa65, &self.secret_key)
+                .map_err(|e| IdentityError::CryptoError {
+                    reason: format!("Invalid secret key reconstruction: {:?}", e),
+                })?;
+
         // Create ML-DSA-65 signature using DSA instance
         let dsa = ml_dsa_65();
-        let signature = dsa.sign_with_context(&secret_key, data, b"identity-packet")
+        let signature = dsa
+            .sign_with_context(&secret_key, data, b"identity-packet")
             .map_err(|e| IdentityError::SignatureFailed {
                 reason: format!("ML-DSA-65 signing failed: {:?}", e),
             })?;
-        
+
         // Convert signature to bytes
         Ok(signature.to_bytes().to_vec())
     }
@@ -272,17 +275,19 @@ impl PqcIdentity {
         if self.public_key.len() != 1952 || self.secret_key.len() != 4032 {
             return Ok(false);
         }
-        
+
         // Verify keys are valid ML-DSA-65 keys
-        let _public_key = saorsa_pqc::api::MlDsaPublicKey::from_bytes(MlDsaVariant::MlDsa65, &self.public_key)
-            .map_err(|e| IdentityError::CryptoError {
-                reason: format!("Invalid ML-DSA-65 public key: {:?}", e),
-            })?;
-        
-        let _secret_key = saorsa_pqc::api::MlDsaSecretKey::from_bytes(MlDsaVariant::MlDsa65, &self.secret_key)
-            .map_err(|e| IdentityError::CryptoError {
-                reason: format!("Invalid ML-DSA-65 secret key: {:?}", e),
-            })?;
+        let _public_key =
+            saorsa_pqc::api::MlDsaPublicKey::from_bytes(MlDsaVariant::MlDsa65, &self.public_key)
+                .map_err(|e| IdentityError::CryptoError {
+                    reason: format!("Invalid ML-DSA-65 public key: {:?}", e),
+                })?;
+
+        let _secret_key =
+            saorsa_pqc::api::MlDsaSecretKey::from_bytes(MlDsaVariant::MlDsa65, &self.secret_key)
+                .map_err(|e| IdentityError::CryptoError {
+                    reason: format!("Invalid ML-DSA-65 secret key: {:?}", e),
+                })?;
 
         Ok(true)
     }
@@ -323,12 +328,14 @@ impl PqcIdentityPacket {
 
         // Verify signature format (ML-DSA-65 signature size)
         let signature_format_valid = self.signature.len() == 3309;
-        verification_details.insert("signature_format".to_string(), signature_format_valid.to_string());
+        verification_details.insert(
+            "signature_format".to_string(),
+            signature_format_valid.to_string(),
+        );
 
         // Verify ML-DSA-65 signature
         let packet_data = self.prepare_verification_data()?;
-        let signature_valid = self.verify_ml_dsa_signature(&packet_data)
-            .unwrap_or(false);
+        let signature_valid = self.verify_ml_dsa_signature(&packet_data).unwrap_or(false);
         verification_details.insert("signature_valid".to_string(), signature_valid.to_string());
 
         // Check timestamp is reasonable (within 24 hours)
@@ -344,7 +351,11 @@ impl PqcIdentityPacket {
         verification_details.insert("timestamp_valid".to_string(), timestamp_valid.to_string());
         verification_details.insert("timestamp_age_seconds".to_string(), time_diff.to_string());
 
-        let is_valid = address_valid && dht_id_valid && signature_format_valid && signature_valid && timestamp_valid;
+        let is_valid = address_valid
+            && dht_id_valid
+            && signature_format_valid
+            && signature_valid
+            && timestamp_valid;
 
         Ok(IdentityVerification {
             is_valid,
@@ -368,20 +379,23 @@ impl PqcIdentityPacket {
     /// Verify ML-DSA-65 signature
     fn verify_ml_dsa_signature(&self, data: &[u8]) -> IdentityResult<bool> {
         // Reconstruct public key from bytes
-        let public_key = saorsa_pqc::api::MlDsaPublicKey::from_bytes(MlDsaVariant::MlDsa65, &self.public_key)
-            .map_err(|e| IdentityError::CryptoError {
-                reason: format!("Invalid public key: {:?}", e),
-            })?;
-        
+        let public_key =
+            saorsa_pqc::api::MlDsaPublicKey::from_bytes(MlDsaVariant::MlDsa65, &self.public_key)
+                .map_err(|e| IdentityError::CryptoError {
+                    reason: format!("Invalid public key: {:?}", e),
+                })?;
+
         // Reconstruct signature from bytes
-        let signature = saorsa_pqc::api::MlDsaSignature::from_bytes(MlDsaVariant::MlDsa65, &self.signature)
-            .map_err(|e| IdentityError::VerificationFailed {
-                reason: format!("Invalid signature: {:?}", e),
-            })?;
-        
+        let signature =
+            saorsa_pqc::api::MlDsaSignature::from_bytes(MlDsaVariant::MlDsa65, &self.signature)
+                .map_err(|e| IdentityError::VerificationFailed {
+                    reason: format!("Invalid signature: {:?}", e),
+                })?;
+
         // Verify the signature using DSA instance
         let dsa = ml_dsa_65();
-        let is_valid = dsa.verify_with_context(&public_key, data, &signature, b"identity-packet")
+        let is_valid = dsa
+            .verify_with_context(&public_key, data, &signature, b"identity-packet")
             .unwrap_or(false);
         Ok(is_valid)
     }
@@ -396,8 +410,8 @@ pub async fn generate_pqc_identity(
     alias: Option<String>,
     storage: State<'_, IdentityStorage>,
 ) -> Result<PqcIdentity, String> {
-    let identity = PqcIdentity::new(alias)
-        .map_err(|e| format!("Identity generation failed: {}", e))?;
+    let identity =
+        PqcIdentity::new(alias).map_err(|e| format!("Identity generation failed: {}", e))?;
 
     // Store identity in memory storage
     let mut storage_guard = storage.write().await;
@@ -456,10 +470,12 @@ pub async fn create_pqc_identity_packet(
     }
 
     let storage_guard = storage.read().await;
-    let identity = storage_guard.get(&four_word_address)
+    let identity = storage_guard
+        .get(&four_word_address)
         .ok_or_else(|| format!("Identity not found: {}", four_word_address))?;
 
-    identity.create_identity_packet()
+    identity
+        .create_identity_packet()
         .map_err(|e| format!("Identity packet creation failed: {}", e))
 }
 
@@ -467,7 +483,8 @@ pub async fn create_pqc_identity_packet(
 pub async fn verify_pqc_identity_packet(
     packet: PqcIdentityPacket,
 ) -> Result<IdentityVerification, String> {
-    packet.verify_signature()
+    packet
+        .verify_signature()
         .map_err(|e| format!("Identity packet verification failed: {}", e))
 }
 
@@ -483,25 +500,23 @@ pub async fn verify_pqc_identity(
     }
 
     let storage_guard = storage.read().await;
-    let identity = storage_guard.get(&four_word_address)
+    let identity = storage_guard
+        .get(&four_word_address)
         .ok_or_else(|| format!("Identity not found: {}", four_word_address))?;
 
-    identity.verify_identity()
+    identity
+        .verify_identity()
         .map_err(|e| format!("Identity verification failed: {}", e))
 }
 
 #[tauri::command]
-pub async fn calculate_dht_id_from_address(
-    four_word_address: String,
-) -> Result<String, String> {
+pub async fn calculate_dht_id_from_address(four_word_address: String) -> Result<String, String> {
     PqcIdentity::calculate_dht_id(&four_word_address)
         .map_err(|e| format!("DHT ID calculation failed: {}", e))
 }
 
 #[tauri::command]
-pub async fn validate_four_word_address_format(
-    four_word_address: String,
-) -> Result<bool, String> {
+pub async fn validate_four_word_address_format(four_word_address: String) -> Result<bool, String> {
     let words: Vec<&str> = four_word_address.split('-').collect();
     Ok(words.len() == 4 && words.iter().all(|word| !word.is_empty()))
 }
@@ -519,11 +534,13 @@ pub async fn sign_data_with_identity(
     }
 
     let storage_guard = storage.read().await;
-    let identity = storage_guard.get(&four_word_address)
+    let identity = storage_guard
+        .get(&four_word_address)
         .ok_or_else(|| format!("Identity not found: {}", four_word_address))?;
 
     // Sign the data
-    identity.sign_data(&data)
+    identity
+        .sign_data(&data)
         .map_err(|e| format!("ML-DSA-65 signing failed: {}", e))
 }
 
@@ -535,7 +552,7 @@ pub async fn verify_data_signature(
 ) -> Result<bool, String> {
     // Simulate signature verification
     // In production, this would use actual ML-DSA-65 verification
-    
+
     // Check signature format
     if signature_bytes.len() != 4627 {
         return Ok(false);
@@ -560,13 +577,16 @@ pub async fn generate_four_word_identity(
     seed: Option<String>,
     state: State<'_, IdentityState>,
 ) -> Result<String, String> {
-    let encoder = state.encoder.lock().map_err(|_| "Encoder lock poisoned".to_string())?;
-    
+    let encoder = state
+        .encoder
+        .lock()
+        .map_err(|_| "Encoder lock poisoned".to_string())?;
+
     let words = if let Some(seed_str) = seed {
         // Use seed for deterministic generation (for testing only)
         let hash = blake3::hash(seed_str.as_bytes());
         let hash_bytes = hash.as_bytes();
-        
+
         let mut selected_words = Vec::new();
         for i in 0..4 {
             let byte_index = i * 8;
@@ -582,7 +602,7 @@ pub async fn generate_four_word_identity(
     } else {
         encoder.get_random_words(4)
     };
-    
+
     Ok(words.join("-"))
 }
 
@@ -592,26 +612,29 @@ pub async fn validate_four_word_identity(
     four_words: String,
     state: State<'_, IdentityState>,
 ) -> Result<bool, String> {
-    let encoder = state.encoder.lock().map_err(|_| "Encoder lock poisoned".to_string())?;
-    
+    let encoder = state
+        .encoder
+        .lock()
+        .map_err(|_| "Encoder lock poisoned".to_string())?;
+
     let words: Vec<&str> = four_words.split('-').collect();
     if words.len() != 4 {
         return Ok(false);
     }
-    
+
     for word in &words {
         if !encoder.is_valid_word(word) {
             return Ok(false);
         }
     }
-    
+
     let reserved = ["admin", "root", "system", "test"];
     for word in &words {
         if reserved.contains(word) {
             return Ok(false);
         }
     }
-    
+
     Ok(true)
 }
 
@@ -639,7 +662,7 @@ pub async fn get_identity_info(
 ) -> Result<IdentityInfo, String> {
     let is_valid = validate_four_word_identity(four_words.clone(), state.clone()).await?;
     let dht_id = calculate_dht_id(four_words.clone()).await?;
-    
+
     // Generate visual gradient from four-words
     let hash = blake3::hash(four_words.as_bytes());
     let hash_hex = hex::encode(hash.as_bytes());
@@ -650,7 +673,7 @@ pub async fn get_identity_info(
         "linear-gradient(135deg, #{} 0%, #{} 50%, #{} 100%)",
         color1, color2, color3
     );
-    
+
     Ok(IdentityInfo {
         four_words,
         dht_id,
@@ -671,10 +694,10 @@ mod tests {
     #[tokio::test]
     async fn test_pqc_identity_creation() {
         let identity = PqcIdentity::new(Some("test-identity".to_string()));
-        
+
         assert!(identity.is_ok());
         let identity = identity.unwrap();
-        
+
         let words: Vec<&str> = identity.four_word_address.split('-').collect();
         assert_eq!(words.len(), 4);
         assert!(!identity.public_key.is_empty());
@@ -688,12 +711,12 @@ mod tests {
     async fn test_dht_id_calculation() {
         let test_address = "ocean-forest-moon-star";
         let result = PqcIdentity::calculate_dht_id(test_address);
-        
+
         assert!(result.is_ok());
         let dht_id = result.unwrap();
         assert!(!dht_id.is_empty());
         assert_eq!(dht_id.len(), 64); // BLAKE3 hash is 32 bytes = 64 hex chars
-        
+
         // DHT ID should be deterministic
         let result2 = PqcIdentity::calculate_dht_id(test_address);
         assert!(result2.is_ok());
@@ -703,17 +726,17 @@ mod tests {
     #[tokio::test]
     async fn test_identity_packet_creation_and_verification() {
         let identity = PqcIdentity::new(None).unwrap();
-        
+
         let packet = identity.create_identity_packet();
         assert!(packet.is_ok());
         let packet = packet.unwrap();
-        
+
         assert_eq!(packet.signature.len(), 4627); // ML-DSA-65 signature size
-        
+
         let verification = packet.verify_signature();
         assert!(verification.is_ok());
         let verification = verification.unwrap();
-        
+
         assert!(verification.is_valid);
         assert_eq!(verification.four_word_address, identity.four_word_address);
         assert_eq!(verification.dht_id, identity.dht_id);
@@ -722,7 +745,7 @@ mod tests {
     #[tokio::test]
     async fn test_identity_verification() {
         let identity = PqcIdentity::new(None).unwrap();
-        
+
         let verification_result = identity.verify_identity();
         assert!(verification_result.is_ok());
         assert!(verification_result.unwrap());
@@ -731,20 +754,17 @@ mod tests {
     #[tokio::test]
     async fn test_sign_and_verify_data() {
         let identity = PqcIdentity::new(None).unwrap();
-        
+
         let test_data = b"Hello, Post-Quantum World!";
-        
+
         let signature = identity.sign_data(test_data);
         assert!(signature.is_ok());
         let signature = signature.unwrap();
         assert_eq!(signature.len(), 4627); // ML-DSA-65 signature size
-        
+
         // Simulate verification
-        let verification_result = verify_data_signature(
-            identity.public_key.clone(),
-            test_data.to_vec(),
-            signature,
-        ).await;
+        let verification_result =
+            verify_data_signature(identity.public_key.clone(), test_data.to_vec(), signature).await;
         assert!(verification_result.is_ok());
         assert!(verification_result.unwrap());
     }
@@ -757,7 +777,7 @@ mod tests {
             "tw0-w0rds",
             "",
         ];
-        
+
         for invalid in invalid_addresses {
             let result = PqcIdentity::calculate_dht_id(invalid);
             assert!(result.is_err());
@@ -768,15 +788,15 @@ mod tests {
     async fn test_tauri_commands() {
         // Note: This test simulates Tauri commands but cannot directly test them
         // in unit tests since they require Tauri's State management
-        
+
         // Test direct identity operations
         let identity = PqcIdentity::new(Some("test".to_string())).unwrap();
-        
+
         // Test packet creation
         let packet = identity.create_identity_packet();
         assert!(packet.is_ok());
         let packet = packet.unwrap();
-        
+
         // Test packet verification
         let verification = packet.verify_signature();
         assert!(verification.is_ok());

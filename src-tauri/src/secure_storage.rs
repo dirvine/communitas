@@ -47,17 +47,13 @@ impl SecureStorageManager {
     }
 
     /// Store encryption keys securely
-    pub async fn store_encryption_keys(
-        &self,
-        master_key: &str,
-        key_pair: &str,
-    ) -> Result<()> {
+    pub async fn store_encryption_keys(&self, master_key: &str, key_pair: &str) -> Result<()> {
         debug!("Storing encryption keys for user: {}", self.user_id);
 
         // Store master key
         let master_key_entry = Entry::new(SERVICE_NAME, &format!("{}_master_key", self.user_id))
             .context("Failed to create master key entry")?;
-        
+
         master_key_entry
             .set_password(master_key)
             .context("Failed to store master key")?;
@@ -65,7 +61,7 @@ impl SecureStorageManager {
         // Store key pair
         let key_pair_entry = Entry::new(SERVICE_NAME, &format!("{}_key_pair", self.user_id))
             .context("Failed to create key pair entry")?;
-            
+
         key_pair_entry
             .set_password(key_pair)
             .context("Failed to store key pair")?;
@@ -80,7 +76,7 @@ impl SecureStorageManager {
 
         let metadata_entry = Entry::new(SERVICE_NAME, &format!("{}_metadata", self.user_id))
             .context("Failed to create metadata entry")?;
-            
+
         metadata_entry
             .set_password(&metadata.to_string())
             .context("Failed to store metadata")?;
@@ -109,16 +105,16 @@ impl SecureStorageManager {
     /// Get master key from secure storage
     async fn get_master_key(&self) -> Result<String> {
         let key_name = format!("{}_master_key", self.user_id);
-        let entry = Entry::new(SERVICE_NAME, &key_name)
-            .context("Failed to create master key entry")?;
-        
+        let entry =
+            Entry::new(SERVICE_NAME, &key_name).context("Failed to create master key entry")?;
+
         // Try multiple approaches to handle macOS Keychain behavior
         for attempt in 1..=3 {
             match entry.get_password() {
                 Ok(password) => return Ok(password),
                 Err(keyring::Error::NoEntry) => {
                     debug!("Master key not found on attempt {}", attempt);
-                    
+
                     if attempt < 3 {
                         // Progressive delay: 50ms, then 200ms
                         let delay_ms = if attempt == 1 { 50 } else { 200 };
@@ -130,23 +126,23 @@ impl SecureStorageManager {
                 }
             }
         }
-        
+
         Err(anyhow::anyhow!("Master key not found after {} attempts", 3))
     }
 
     /// Get key pair from secure storage
     async fn get_key_pair(&self) -> Result<String> {
         let key_name = format!("{}_key_pair", self.user_id);
-        let entry = Entry::new(SERVICE_NAME, &key_name)
-            .context("Failed to create key pair entry")?;
-        
+        let entry =
+            Entry::new(SERVICE_NAME, &key_name).context("Failed to create key pair entry")?;
+
         // Try multiple approaches to handle macOS Keychain behavior
         for attempt in 1..=3 {
             match entry.get_password() {
                 Ok(password) => return Ok(password),
                 Err(keyring::Error::NoEntry) => {
                     debug!("Key pair not found on attempt {}", attempt);
-                    
+
                     if attempt < 3 {
                         // Progressive delay: 50ms, then 200ms
                         let delay_ms = if attempt == 1 { 50 } else { 200 };
@@ -158,7 +154,7 @@ impl SecureStorageManager {
                 }
             }
         }
-        
+
         Err(anyhow::anyhow!("Key pair not found after {} attempts", 3))
     }
 
@@ -174,18 +170,18 @@ impl SecureStorageManager {
         // Store the key data
         let key_entry = Entry::new(SERVICE_NAME, &format!("{}_{}_key", self.user_id, key_id))
             .context("Failed to create derived key entry")?;
-            
+
         key_entry
             .set_password(key_data)
             .context("Failed to store derived key")?;
 
         // Store the metadata
-        let metadata_json = serde_json::to_string(metadata)
-            .context("Failed to serialize key metadata")?;
-            
+        let metadata_json =
+            serde_json::to_string(metadata).context("Failed to serialize key metadata")?;
+
         let metadata_entry = Entry::new(SERVICE_NAME, &format!("{}_{}_meta", self.user_id, key_id))
             .context("Failed to create key metadata entry")?;
-            
+
         metadata_entry
             .set_password(&metadata_json)
             .context("Failed to store key metadata")?;
@@ -196,12 +192,15 @@ impl SecureStorageManager {
 
     /// Retrieve a derived or session key
     pub async fn get_derived_key(&self, key_id: &str) -> Result<(String, SecureKeyMetadata)> {
-        debug!("Retrieving derived key: {} for user: {}", key_id, self.user_id);
+        debug!(
+            "Retrieving derived key: {} for user: {}",
+            key_id, self.user_id
+        );
 
         // Get key data
         let key_entry = Entry::new(SERVICE_NAME, &format!("{}_{}_key", self.user_id, key_id))
             .context("Failed to create derived key entry")?;
-            
+
         let key_data = key_entry
             .get_password()
             .context("Failed to retrieve derived key")?;
@@ -209,13 +208,13 @@ impl SecureStorageManager {
         // Get metadata
         let metadata_entry = Entry::new(SERVICE_NAME, &format!("{}_{}_meta", self.user_id, key_id))
             .context("Failed to create key metadata entry")?;
-            
+
         let metadata_json = metadata_entry
             .get_password()
             .context("Failed to retrieve key metadata")?;
-            
-        let metadata: SecureKeyMetadata = serde_json::from_str(&metadata_json)
-            .context("Failed to deserialize key metadata")?;
+
+        let metadata: SecureKeyMetadata =
+            serde_json::from_str(&metadata_json).context("Failed to deserialize key metadata")?;
 
         debug!("Successfully retrieved derived key: {}", key_id);
         Ok((key_data, metadata))
@@ -224,11 +223,11 @@ impl SecureStorageManager {
     /// List all stored keys for this user
     pub async fn list_stored_keys(&self) -> Result<Vec<SecureKeyMetadata>> {
         debug!("Listing stored keys for user: {}", self.user_id);
-        
+
         // Note: keyring doesn't provide a way to list all entries
         // In a production system, we'd maintain an index of key IDs
         // For now, we'll return the keys we know about from metadata
-        
+
         warn!("Key listing not fully implemented - keyring crate limitation");
         Ok(vec![])
     }
@@ -240,7 +239,7 @@ impl SecureStorageManager {
         // Delete key data
         let key_entry = Entry::new(SERVICE_NAME, &format!("{}_{}_key", self.user_id, key_id))
             .context("Failed to create derived key entry")?;
-            
+
         if let Err(e) = key_entry.set_password("") {
             warn!("Failed to delete key data for {}: {}", key_id, e);
         }
@@ -248,7 +247,7 @@ impl SecureStorageManager {
         // Delete metadata
         let metadata_entry = Entry::new(SERVICE_NAME, &format!("{}_{}_meta", self.user_id, key_id))
             .context("Failed to create key metadata entry")?;
-            
+
         if let Err(e) = metadata_entry.set_password("") {
             warn!("Failed to delete key metadata for {}: {}", key_id, e);
         }
@@ -308,20 +307,23 @@ impl SecureStorageManager {
     pub fn get_storage_info() -> String {
         #[cfg(target_os = "macos")]
         return "macOS Keychain".to_string();
-        
+
         #[cfg(target_os = "windows")]
         return "Windows Credential Manager".to_string();
-        
+
         #[cfg(target_os = "linux")]
         return "Linux Secret Service".to_string();
-        
+
         #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
         return "Unknown Platform".to_string();
     }
 
     /// Migrate from file-based storage to secure storage
     pub async fn migrate_from_file_storage(&self, app_data_dir: &std::path::Path) -> Result<bool> {
-        debug!("Attempting to migrate from file storage for user: {}", self.user_id);
+        debug!(
+            "Attempting to migrate from file storage for user: {}",
+            self.user_id
+        );
 
         let keys_dir = app_data_dir.join("encryption_keys");
         let user_keys_file = keys_dir.join(format!("{}_keys.json", self.user_id));
@@ -332,28 +334,33 @@ impl SecureStorageManager {
         }
 
         // Read existing file-based keys
-        let content = tokio::fs::read_to_string(&user_keys_file).await
+        let content = tokio::fs::read_to_string(&user_keys_file)
+            .await
             .context("Failed to read existing key file")?;
-            
-        let keys: serde_json::Value = serde_json::from_str(&content)
-            .context("Failed to parse existing key file")?;
+
+        let keys: serde_json::Value =
+            serde_json::from_str(&content).context("Failed to parse existing key file")?;
 
         // Extract keys
-        let master_key = keys.get("masterKey")
+        let master_key = keys
+            .get("masterKey")
             .and_then(|v| v.as_str())
             .context("Master key not found in file")?;
-            
-        let key_pair = keys.get("keyPair")
+
+        let key_pair = keys
+            .get("keyPair")
             .and_then(|v| v.as_str())
             .context("Key pair not found in file")?;
 
         // Store in secure storage
-        self.store_encryption_keys(master_key, key_pair).await
+        self.store_encryption_keys(master_key, key_pair)
+            .await
             .context("Failed to store keys in secure storage during migration")?;
 
         // Backup and remove old file
         let backup_file = user_keys_file.with_extension("json.backup");
-        tokio::fs::rename(&user_keys_file, &backup_file).await
+        tokio::fs::rename(&user_keys_file, &backup_file)
+            .await
             .context("Failed to backup old key file")?;
 
         debug!("Successfully migrated keys from file storage to secure storage");
@@ -371,7 +378,10 @@ mod tests {
         // This test just checks if secure storage is available
         let available = SecureStorageManager::is_available();
         println!("Secure storage available: {}", available);
-        println!("Storage backend: {}", SecureStorageManager::get_storage_info());
+        println!(
+            "Storage backend: {}",
+            SecureStorageManager::get_storage_info()
+        );
     }
 
     #[tokio::test]
@@ -383,15 +393,17 @@ mod tests {
 
         let test_user = format!("test_user_{}", Uuid::new_v4());
         let manager = SecureStorageManager::new(test_user.clone());
-        
+
         println!("Testing with user: {}", test_user);
-        
+
         // Clean up any existing test data
         let cleanup_result = manager.delete_all_keys().await;
         println!("Cleanup result: {:?}", cleanup_result);
 
         // Store test keys
-        let result = manager.store_encryption_keys("test_master_key", "test_key_pair").await;
+        let result = manager
+            .store_encryption_keys("test_master_key", "test_key_pair")
+            .await;
         if let Err(ref e) = result {
             println!("Store error: {}", e);
         }
@@ -406,12 +418,22 @@ mod tests {
         if let Err(ref e) = keys_result {
             println!("Retrieve error: {}", e);
         }
-        assert!(keys_result.is_ok(), "Failed to retrieve keys: {:?}", keys_result.err());
+        assert!(
+            keys_result.is_ok(),
+            "Failed to retrieve keys: {:?}",
+            keys_result.err()
+        );
 
         let keys = keys_result.unwrap();
         println!("Retrieved keys: {}", keys);
-        assert_eq!(keys.get("masterKey").unwrap().as_str().unwrap(), "test_master_key");
-        assert_eq!(keys.get("keyPair").unwrap().as_str().unwrap(), "test_key_pair");
+        assert_eq!(
+            keys.get("masterKey").unwrap().as_str().unwrap(),
+            "test_master_key"
+        );
+        assert_eq!(
+            keys.get("keyPair").unwrap().as_str().unwrap(),
+            "test_key_pair"
+        );
 
         // Clean up
         let cleanup_result = manager.delete_all_keys().await;

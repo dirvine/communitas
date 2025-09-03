@@ -1,17 +1,16 @@
+use std::collections::HashMap;
+use std::sync::Arc;
 /// Performance benchmarks for Saorsa Storage System
 /// Validates <100ms local and <500ms remote operation targets
-
 use std::time::{Duration, Instant};
-use std::sync::Arc;
-use std::collections::HashMap;
 
-use crate::saorsa_storage::StorageEngine;
 use crate::dht_facade::LocalDht;
+use crate::saorsa_storage::StorageEngine;
 
 #[derive(Debug, Clone)]
 pub struct BenchmarkConfig {
-    pub local_target_ms: u64,     // 100ms target for local operations
-    pub remote_target_ms: u64,    // 500ms target for remote operations
+    pub local_target_ms: u64,      // 100ms target for local operations
+    pub remote_target_ms: u64,     // 500ms target for remote operations
     pub content_sizes: Vec<usize>, // Various content sizes to test
     pub iterations: usize,         // Number of iterations per test
     pub warmup_iterations: usize,  // Warmup iterations to ignore
@@ -23,10 +22,10 @@ impl Default for BenchmarkConfig {
             local_target_ms: 100,
             remote_target_ms: 500,
             content_sizes: vec![
-                1024,           // 1KB
-                10 * 1024,      // 10KB
-                100 * 1024,     // 100KB
-                1024 * 1024,    // 1MB
+                1024,             // 1KB
+                10 * 1024,        // 10KB
+                100 * 1024,       // 100KB
+                1024 * 1024,      // 1MB
                 10 * 1024 * 1024, // 10MB
             ],
             iterations: 100,
@@ -65,19 +64,17 @@ impl StorageBenchmark {
     pub fn new(config: BenchmarkConfig) -> Result<Self, Box<dyn std::error::Error>> {
         // For benchmarking, we'll create a placeholder that doesn't need a real storage engine
         // This allows us to test the framework without requiring full engine initialization
-        Ok(Self { 
-            config,
-        })
+        Ok(Self { config })
     }
 
     // Create a mock storage engine for testing
     async fn create_mock_engine() -> Result<StorageEngine<LocalDht>, Box<dyn std::error::Error>> {
         use crate::saorsa_storage::config::ConfigManager;
-        
+
         let dht = Arc::new(LocalDht::new("benchmark".to_string()));
         let master_key = [0u8; 32];
         let config_manager = ConfigManager::new();
-        
+
         let engine = StorageEngine::new(dht, master_key, config_manager).await?;
         Ok(engine)
     }
@@ -88,7 +85,7 @@ impl StorageBenchmark {
 
         // Simulate basic performance benchmarks to validate the framework
         // In a real implementation, this would test actual storage operations
-        
+
         let policies = vec![
             ("PrivateMax", 1024),
             ("PrivateScoped", 10 * 1024),
@@ -98,19 +95,23 @@ impl StorageBenchmark {
 
         for (policy_name, content_size) in policies {
             // Simulate storage operation
-            let storage_result = self.simulate_operation(
-                &format!("store_{}", policy_name),
-                content_size,
-                50, // Base time in ms
-            ).await;
+            let storage_result = self
+                .simulate_operation(
+                    &format!("store_{}", policy_name),
+                    content_size,
+                    50, // Base time in ms
+                )
+                .await;
             results.push(storage_result);
 
             // Simulate retrieval operation
-            let retrieval_result = self.simulate_operation(
-                &format!("retrieve_{}", policy_name),
-                content_size,
-                30, // Retrieval is typically faster
-            ).await;
+            let retrieval_result = self
+                .simulate_operation(
+                    &format!("retrieve_{}", policy_name),
+                    content_size,
+                    30, // Retrieval is typically faster
+                )
+                .await;
             results.push(retrieval_result);
         }
 
@@ -119,7 +120,9 @@ impl StorageBenchmark {
         results.push(cache_result);
 
         // Simulate concurrent operations
-        let concurrent_result = self.simulate_operation("concurrent_storage_10_ops", 1024, 150).await;
+        let concurrent_result = self
+            .simulate_operation("concurrent_storage_10_ops", 1024, 150)
+            .await;
         results.push(concurrent_result);
 
         let total_duration = start_time.elapsed();
@@ -150,17 +153,22 @@ impl StorageBenchmark {
             // Simulate processing time with some variance
             let variance = rng.gen_range(-20.0..20.0); // ±20% variance
             let time_ms = ((base_time_ms as f64) * (1.0 + variance / 100.0)) as u64;
-            
+
             // Simulate the actual work
             tokio::time::sleep(std::time::Duration::from_millis(std::cmp::min(time_ms, 10))).await;
-            
+
             times.push(time_ms);
             successes += 1;
         }
 
-        self.analyze_benchmark_results(operation_name, content_size, times, successes, operation_name.contains("store"))
+        self.analyze_benchmark_results(
+            operation_name,
+            content_size,
+            times,
+            successes,
+            operation_name.contains("store"),
+        )
     }
-
 
     fn analyze_benchmark_results(
         &self,
@@ -235,7 +243,14 @@ impl BenchmarkReport {
     pub fn print_summary(&self) {
         println!("\n=== Saorsa Storage System Performance Benchmark Report ===");
         println!("Total Duration: {:.2}s", self.total_duration.as_secs_f64());
-        println!("Overall Success: {}", if self.overall_success { "✅ PASS" } else { "❌ FAIL" });
+        println!(
+            "Overall Success: {}",
+            if self.overall_success {
+                "✅ PASS"
+            } else {
+                "❌ FAIL"
+            }
+        );
         println!();
 
         println!("Performance Targets:");
@@ -251,10 +266,15 @@ impl BenchmarkReport {
         for result in &self.results {
             let status = if result.target_met { "✅" } else { "❌" };
             let size_str = format_size(result.content_size);
-            
+
             println!("{} {} ({})", status, result.operation, size_str);
-            println!("    P95: {}ms | P99: {}ms | Avg: {}ms | Success: {:.1}%",
-                result.p95_time_ms, result.p99_time_ms, result.avg_time_ms, result.success_rate * 100.0);
+            println!(
+                "    P95: {}ms | P99: {}ms | Avg: {}ms | Success: {:.1}%",
+                result.p95_time_ms,
+                result.p99_time_ms,
+                result.avg_time_ms,
+                result.success_rate * 100.0
+            );
 
             if result.target_met {
                 passed += 1;
@@ -266,7 +286,7 @@ impl BenchmarkReport {
 
         println!();
         println!("Summary: {}/{} tests passed", passed, passed + failed);
-        
+
         if !self.overall_success {
             println!("❌ Some performance targets were not met. Review failed tests above.");
         } else {
@@ -276,7 +296,7 @@ impl BenchmarkReport {
 
     pub fn export_metrics(&self) -> HashMap<String, f64> {
         let mut metrics = HashMap::new();
-        
+
         for result in &self.results {
             let prefix = format!("{}_{}", result.operation, format_size(result.content_size));
             metrics.insert(format!("{}_p95_ms", prefix), result.p95_time_ms as f64);
@@ -285,9 +305,15 @@ impl BenchmarkReport {
             metrics.insert(format!("{}_success_rate", prefix), result.success_rate);
         }
 
-        metrics.insert("overall_success".to_string(), if self.overall_success { 1.0 } else { 0.0 });
-        metrics.insert("total_duration_s".to_string(), self.total_duration.as_secs_f64());
-        
+        metrics.insert(
+            "overall_success".to_string(),
+            if self.overall_success { 1.0 } else { 0.0 },
+        );
+        metrics.insert(
+            "total_duration_s".to_string(),
+            self.total_duration.as_secs_f64(),
+        );
+
         metrics
     }
 }
@@ -295,7 +321,7 @@ impl BenchmarkReport {
 fn generate_test_content(size: usize) -> Vec<u8> {
     // Generate realistic test content
     let mut content = Vec::with_capacity(size);
-    
+
     if size < 1024 {
         // Small content: JSON-like structure
         let json_template = r#"{"id":"benchmark","data":"#;
@@ -307,7 +333,7 @@ fn generate_test_content(size: usize) -> Vec<u8> {
         // Larger content: Mix of text and binary-like data
         let text_portion = size / 4;
         let binary_portion = size - text_portion;
-        
+
         // Text portion
         let text = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. ";
         let text_bytes = text.as_bytes();
@@ -315,7 +341,7 @@ fn generate_test_content(size: usize) -> Vec<u8> {
             content.extend_from_slice(text_bytes);
         }
         content.extend_from_slice(&text_bytes[0..(text_portion % text_bytes.len())]);
-        
+
         // Binary-like portion
         for i in 0..binary_portion {
             content.push((i % 256) as u8);
@@ -351,7 +377,7 @@ mod tests {
 
         let mut benchmark = StorageBenchmark::new(config).unwrap();
         let report = benchmark.run_comprehensive_benchmarks().await;
-        
+
         // Should have at least some results
         assert!(!report.results.is_empty());
         report.print_summary();

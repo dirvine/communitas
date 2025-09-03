@@ -2,14 +2,13 @@
  * Saorsa Storage System - Policy Management
  * Implements storage policy validation, enforcement, and transitions
  */
-
 use crate::saorsa_storage::errors::*;
-use crate::saorsa_storage::{StoragePolicy, EncryptionMode, DeduplicationScope};
+use crate::saorsa_storage::{DeduplicationScope, EncryptionMode, StoragePolicy};
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc};
 
 /// Policy enforcement configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -65,21 +64,39 @@ impl PolicyManager {
     /// Create a new policy manager with default configuration
     pub fn new() -> Self {
         let mut transition_rules = HashMap::new();
-        
+
         // Define allowed policy transitions
         // PrivateMax -> PrivateScoped: Allowed (relaxing security)
-        transition_rules.insert(("PrivateMax".to_string(), "PrivateScoped".to_string()), true);
-        
+        transition_rules.insert(
+            ("PrivateMax".to_string(), "PrivateScoped".to_string()),
+            true,
+        );
+
         // PrivateScoped -> GroupScoped: Allowed (sharing with group)
-        transition_rules.insert(("PrivateScoped".to_string(), "GroupScoped".to_string()), true);
-        
+        transition_rules.insert(
+            ("PrivateScoped".to_string(), "GroupScoped".to_string()),
+            true,
+        );
+
         // GroupScoped -> PublicMarkdown: Allowed (making public)
-        transition_rules.insert(("GroupScoped".to_string(), "PublicMarkdown".to_string()), true);
-        
+        transition_rules.insert(
+            ("GroupScoped".to_string(), "PublicMarkdown".to_string()),
+            true,
+        );
+
         // Reverse transitions (tightening security): Generally not allowed
-        transition_rules.insert(("PublicMarkdown".to_string(), "GroupScoped".to_string()), false);
-        transition_rules.insert(("GroupScoped".to_string(), "PrivateScoped".to_string()), false);
-        transition_rules.insert(("PrivateScoped".to_string(), "PrivateMax".to_string()), false);
+        transition_rules.insert(
+            ("PublicMarkdown".to_string(), "GroupScoped".to_string()),
+            false,
+        );
+        transition_rules.insert(
+            ("GroupScoped".to_string(), "PrivateScoped".to_string()),
+            false,
+        );
+        transition_rules.insert(
+            ("PrivateScoped".to_string(), "PrivateMax".to_string()),
+            false,
+        );
 
         Self {
             config: PolicyConfig::default(),
@@ -108,7 +125,10 @@ impl PolicyManager {
         if let Some(max_size) = policy.max_content_size() {
             if content_size > max_size {
                 return Err(PolicyError::ValidationFailed {
-                    reason: format!("Content size {} exceeds policy limit {}", content_size, max_size),
+                    reason: format!(
+                        "Content size {} exceeds policy limit {}",
+                        content_size, max_size
+                    ),
                 });
             }
         }
@@ -129,7 +149,7 @@ impl PolicyManager {
                     parameter: "namespace".to_string(),
                 });
             }
-            
+
             // Validate namespace format
             if !self.is_valid_namespace(namespace) {
                 return Err(PolicyError::ValidationFailed {
@@ -145,11 +165,14 @@ impl PolicyManager {
                     parameter: "group_id".to_string(),
                 });
             }
-            
+
             // Validate user has access to group
             if !self.validate_group_access(user_id, group_id).await? {
                 return Err(PolicyError::ValidationFailed {
-                    reason: format!("User {} does not have access to group {}", user_id, group_id),
+                    reason: format!(
+                        "User {} does not have access to group {}",
+                        user_id, group_id
+                    ),
                 });
             }
         }
@@ -167,9 +190,15 @@ impl PolicyManager {
         action: &str,
     ) -> PolicyResult<()> {
         let start_time = std::time::Instant::now();
-        
+
         // Basic policy validation
-        self.validate_policy(policy, content.len() as u64, user_id, "application/octet-stream").await?;
+        self.validate_policy(
+            policy,
+            content.len() as u64,
+            user_id,
+            "application/octet-stream",
+        )
+        .await?;
 
         // Encryption requirement enforcement
         if self.config.encryption_required && !self.policy_requires_encryption(policy) {
@@ -209,7 +238,11 @@ impl PolicyManager {
         let duration = start_time.elapsed();
         if duration.as_millis() > 100 {
             // Log slow enforcement
-            tracing::warn!("Slow policy enforcement: {}ms for {}", duration.as_millis(), content_id);
+            tracing::warn!(
+                "Slow policy enforcement: {}ms for {}",
+                duration.as_millis(),
+                content_id
+            );
         }
 
         Ok(())
@@ -219,7 +252,7 @@ impl PolicyManager {
     pub fn is_transition_allowed(&self, from: &StoragePolicy, to: &StoragePolicy) -> bool {
         let from_type = self.policy_type_string(from);
         let to_type = self.policy_type_string(to);
-        
+
         self.transition_rules
             .get(&(from_type, to_type))
             .copied()
@@ -305,7 +338,7 @@ impl PolicyManager {
         group_id: Option<&str>,
     ) -> PolicyResult<DeduplicationScope> {
         let scope = policy.deduplication_scope();
-        
+
         match &scope {
             DeduplicationScope::None => Ok(scope),
             DeduplicationScope::Global => Ok(scope),
@@ -323,7 +356,10 @@ impl PolicyManager {
                         Ok(scope)
                     } else {
                         Err(PolicyError::ValidationFailed {
-                            reason: format!("Group mismatch: expected {}, got {}", required_group_id, gid),
+                            reason: format!(
+                                "Group mismatch: expected {}, got {}",
+                                required_group_id, gid
+                            ),
                         })
                     }
                 } else {
@@ -347,13 +383,13 @@ impl PolicyManager {
     }
 
     fn is_markdown_content(&self, content_type: &str) -> bool {
-        content_type.contains("markdown") 
+        content_type.contains("markdown")
             || content_type.contains("text/plain")
             || content_type.ends_with(".md")
     }
 
     fn is_valid_namespace(&self, namespace: &str) -> bool {
-        !namespace.is_empty() 
+        !namespace.is_empty()
             && namespace.len() <= 255
             && namespace.chars().all(|c| c.is_alphanumeric() || c == '_')
     }
@@ -387,7 +423,7 @@ impl PolicyManager {
 
     fn calculate_transition_cost(&self, from: &StoragePolicy, to: &StoragePolicy) -> f64 {
         let base_cost = 1.0;
-        
+
         // Re-encryption cost
         let encryption_cost = if from.encryption_mode() != to.encryption_mode() {
             2.0
@@ -448,7 +484,7 @@ mod tests {
         };
 
         assert!(manager.is_transition_allowed(&from, &to));
-        
+
         let transition = manager.plan_transition(&from, &to).unwrap();
         assert!(transition.requires_re_encryption);
     }
@@ -456,7 +492,7 @@ mod tests {
     #[test]
     fn test_policy_recommendations() {
         let manager = PolicyManager::new();
-        
+
         let policy = manager
             .recommend_policy(1024, "text/markdown", "public")
             .unwrap();
@@ -470,8 +506,7 @@ mod tests {
             group_id: "team1".to_string(),
         };
 
-        let result = manager
-            .validate_deduplication_scope(&policy, "user123", Some("team1"));
+        let result = manager.validate_deduplication_scope(&policy, "user123", Some("team1"));
         assert!(result.is_ok());
     }
 }

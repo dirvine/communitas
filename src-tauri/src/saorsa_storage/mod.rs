@@ -1,41 +1,47 @@
+use chrono::{DateTime, Utc};
 /**
  * Saorsa Storage System - Main Module
  * Implements the complete storage system from the Developer Guide specification
  */
-
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use chrono::{DateTime, Utc};
 
 // Re-export all public types - being specific to avoid conflicts
-pub use errors::*;
-pub use policy::{PolicyManager, PolicyTransition};
-pub use namespace::{NamespaceManager};
-pub use group::{GroupManager, GroupInfo, GroupMember, GroupRole, GroupKey};
-pub use engine::{StorageEngine, StorageRequest, StorageResponse, RetrievalRequest, RetrievalResponse, RetrievalSource, StorageEngineStats, StorageLocation};
-pub use content::{ContentAddressing, ContentAddress, ContentChunk as StorageContentChunk};
-pub use network::{NetworkManager, NetworkConfig as NetConfig, PeerInfo, NetworkStats};
-pub use cache::{StorageCache, CacheEntry, CacheStats, CacheConfig as CacheCfg};
+pub use benchmarks::{BenchmarkConfig, BenchmarkReport, BenchmarkResult, StorageBenchmark};
+pub use cache::{CacheConfig as CacheCfg, CacheEntry, CacheStats, StorageCache};
 pub use config::{ConfigManager, StorageConfig};
-pub use benchmarks::{BenchmarkConfig, StorageBenchmark, BenchmarkReport, BenchmarkResult};
-pub use profiler::{Profiler, ProfileGuard, OptimizationRecommendations};
-pub use performance_test::{PerformanceTestRunner, run_performance_smoke_test, run_comprehensive_performance_test};
-pub use pqc_crypto::{PqcCryptoManager, PqcEncryptedContent, PqcEncryptionMode, MlKemKeypair, MlKemEncapsulation};
+pub use content::{ContentAddress, ContentAddressing, ContentChunk as StorageContentChunk};
+pub use engine::{
+    RetrievalRequest, RetrievalResponse, RetrievalSource, StorageEngine, StorageEngineStats,
+    StorageLocation, StorageRequest, StorageResponse,
+};
+pub use errors::*;
+pub use group::{GroupInfo, GroupKey, GroupManager, GroupMember, GroupRole};
+pub use namespace::NamespaceManager;
+pub use network::{NetworkConfig as NetConfig, NetworkManager, NetworkStats, PeerInfo};
+pub use performance_test::{
+    PerformanceTestRunner, run_comprehensive_performance_test, run_performance_smoke_test,
+};
+pub use policy::{PolicyManager, PolicyTransition};
+pub use pqc_crypto::{
+    MlKemEncapsulation, MlKemKeypair, PqcCryptoManager, PqcEncryptedContent, PqcEncryptionMode,
+};
+pub use profiler::{OptimizationRecommendations, ProfileGuard, Profiler};
 
 // Sub-modules
-pub mod errors;
-pub mod policy;
-pub mod namespace;
-pub mod group;
-pub mod engine;
-pub mod content;
-pub mod network;
+pub mod benchmarks;
 pub mod cache;
 pub mod config;
-pub mod benchmarks;
-pub mod profiler;
+pub mod content;
+pub mod engine;
+pub mod errors;
+pub mod group;
+pub mod namespace;
+pub mod network;
 pub mod performance_test;
+pub mod policy;
 pub mod pqc_crypto;
+pub mod profiler;
 
 #[cfg(test)]
 pub mod pqc_integration_tests;
@@ -68,7 +74,9 @@ impl StoragePolicy {
     pub fn deduplication_scope(&self) -> DeduplicationScope {
         match self {
             StoragePolicy::PrivateMax => DeduplicationScope::None,
-            StoragePolicy::PrivateScoped { namespace } => DeduplicationScope::User(namespace.clone()),
+            StoragePolicy::PrivateScoped { namespace } => {
+                DeduplicationScope::User(namespace.clone())
+            }
             StoragePolicy::GroupScoped { group_id } => DeduplicationScope::Group(group_id.clone()),
             StoragePolicy::PublicMarkdown => DeduplicationScope::Global,
         }
@@ -76,7 +84,10 @@ impl StoragePolicy {
 
     /// Check if this policy allows content sharing
     pub fn allows_sharing(&self) -> bool {
-        matches!(self, StoragePolicy::GroupScoped { .. } | StoragePolicy::PublicMarkdown)
+        matches!(
+            self,
+            StoragePolicy::GroupScoped { .. } | StoragePolicy::PublicMarkdown
+        )
     }
 
     /// Check if this policy requires namespace key derivation
@@ -301,11 +312,17 @@ mod tests {
             EncryptionMode::ChaCha20Poly1305Local
         );
         assert_eq!(
-            StoragePolicy::PrivateScoped { namespace: "test".to_string() }.encryption_mode(),
+            StoragePolicy::PrivateScoped {
+                namespace: "test".to_string()
+            }
+            .encryption_mode(),
             EncryptionMode::ChaCha20Poly1305Derived
         );
         assert_eq!(
-            StoragePolicy::GroupScoped { group_id: "test".to_string() }.encryption_mode(),
+            StoragePolicy::GroupScoped {
+                group_id: "test".to_string()
+            }
+            .encryption_mode(),
             EncryptionMode::ChaCha20Poly1305Shared
         );
         assert_eq!(
@@ -321,11 +338,17 @@ mod tests {
             DeduplicationScope::None
         );
         assert_eq!(
-            StoragePolicy::PrivateScoped { namespace: "alice".to_string() }.deduplication_scope(),
+            StoragePolicy::PrivateScoped {
+                namespace: "alice".to_string()
+            }
+            .deduplication_scope(),
             DeduplicationScope::User("alice".to_string())
         );
         assert_eq!(
-            StoragePolicy::GroupScoped { group_id: "team".to_string() }.deduplication_scope(),
+            StoragePolicy::GroupScoped {
+                group_id: "team".to_string()
+            }
+            .deduplication_scope(),
             DeduplicationScope::Group("team".to_string())
         );
         assert_eq!(
@@ -343,12 +366,16 @@ mod tests {
         assert!(!private_max.requires_audit());
         assert!(private_max.allows_binary_content());
 
-        let private_scoped = StoragePolicy::PrivateScoped { namespace: "test".to_string() };
+        let private_scoped = StoragePolicy::PrivateScoped {
+            namespace: "test".to_string(),
+        };
         assert!(!private_scoped.allows_sharing());
         assert!(private_scoped.requires_namespace_key());
         assert!(!private_scoped.requires_group_key());
 
-        let group_scoped = StoragePolicy::GroupScoped { group_id: "test".to_string() };
+        let group_scoped = StoragePolicy::GroupScoped {
+            group_id: "test".to_string(),
+        };
         assert!(group_scoped.allows_sharing());
         assert!(!group_scoped.requires_namespace_key());
         assert!(group_scoped.requires_group_key());
@@ -361,9 +388,11 @@ mod tests {
 
     #[test]
     fn test_storage_address_creation() {
-        let policy = StoragePolicy::PrivateScoped { namespace: "test_ns".to_string() };
+        let policy = StoragePolicy::PrivateScoped {
+            namespace: "test_ns".to_string(),
+        };
         let address = StorageAddress::new("content_123".to_string(), policy.clone());
-        
+
         assert_eq!(address.content_id, "content_123");
         assert_eq!(address.policy, policy);
         assert_eq!(address.namespace, Some("test_ns".to_string()));

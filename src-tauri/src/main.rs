@@ -13,7 +13,6 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-
 // Communitas - P2P Collaboration Platform v2.0
 #![allow(dead_code)]
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
@@ -22,54 +21,53 @@ mod bootstrap;
 mod contact_commands;
 mod contacts;
 mod dht_events;
+mod dht_facade;
+mod error;
 mod files;
 mod geographic_commands;
 mod geographic_routing;
 mod groups;
 mod identity;
 mod identity_commands;
-mod error;
-mod dht_facade;
 mod mcp_plugin;
 mod messaging_commands;
 mod pqc_bridge;
 mod pqc_config;
-mod secure_storage;
-mod security;
-mod secure_fec;
-mod stores;
 mod saorsa_storage;
 mod saorsa_storage_commands;
+mod secure_fec;
+mod secure_storage;
+mod security;
+mod stores;
 mod web_publishing;
 mod webrtc_presence;
 
 use contact_commands::init_contact_manager;
 use contacts::ContactManager;
 use dht_events::{DHTEventListener, init_dht_events};
+use dht_facade::LocalDht;
 use files::FileManager;
 use geographic_routing::GeographicRoutingManager;
 use groups::GroupManager;
 use identity::IdentityManager;
 use identity_commands::IdentityState;
-use dht_facade::LocalDht;
-use secure_storage::{SecureStorageManager, SecureKeyMetadata};
-use security::{AuthMiddleware, RateLimiters, InputValidator, EnhancedSecureStorage};
+#[cfg(debug_assertions)]
+use mcp_plugin::{MCPConfig, init_with_config};
 use rustls;
+use secure_storage::{SecureKeyMetadata, SecureStorageManager};
+use security::{AuthMiddleware, EnhancedSecureStorage, InputValidator, RateLimiters};
 use std::fmt;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{info, warn, error};
-#[cfg(debug_assertions)]
-use mcp_plugin::{MCPConfig, init_with_config};
+use tracing::{error, info, warn};
 
 // Real P2P node integration with saorsa-core
 use saorsa_core::{NodeConfig, P2PNode, PeerId};
 
 mod organization;
 use organization::{
-    OrganizationManager, Organization, Group, Project, OrganizationHierarchy,
-    CreateOrganizationRequest, CreateGroupRequest, CreateProjectRequest,
-    CallRequest, CallSession,
+    CallRequest, CallSession, CreateGroupRequest, CreateOrganizationRequest, CreateProjectRequest,
+    Group, Organization, OrganizationHierarchy, OrganizationManager, Project,
 };
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -110,27 +108,34 @@ impl RealP2PNode {
 
         // Connect to Digital Ocean bootstrap node and some p2p nodes
         let mut bootstrap_peers = vec![];
-        
+
         // Parse bootstrap addresses with proper error handling
         // Use environment variable for local development, fallback to production bootstrap
-        let bootstrap_addresses = if let Ok(local_bootstrap) = std::env::var("COMMUNITAS_LOCAL_BOOTSTRAP") {
-            vec![local_bootstrap.as_str()]
-        } else {
-            vec![
-                "159.89.81.21:9001",
-                "159.89.81.21:9100",
-                "159.89.81.21:9110",
-                "159.89.81.21:9120"
-            ]
-        };
-        
+        let bootstrap_addresses =
+            if let Ok(local_bootstrap) = std::env::var("COMMUNITAS_LOCAL_BOOTSTRAP") {
+                vec![local_bootstrap.as_str()]
+            } else {
+                vec![
+                    "159.89.81.21:9001",
+                    "159.89.81.21:9100",
+                    "159.89.81.21:9110",
+                    "159.89.81.21:9120",
+                ]
+            };
+
         for addr_str in bootstrap_addresses {
             match addr_str.parse() {
                 Ok(addr) => bootstrap_peers.push(addr),
-                Err(e) => return Err(anyhow::anyhow!("Failed to parse bootstrap address {}: {}", addr_str, e)),
+                Err(e) => {
+                    return Err(anyhow::anyhow!(
+                        "Failed to parse bootstrap address {}: {}",
+                        addr_str,
+                        e
+                    ));
+                }
             }
         }
-        
+
         Ok(Self {
             node: Arc::new(node),
             peer_id,
@@ -318,8 +323,12 @@ async fn get_messages(
 
     // Rate limiting check for read operations
     let user_key = "user_default"; // In production, get from session
-    if !state.rate_limiters.default.is_allowed(user_key)
-        .map_err(|e| format!("Rate limit check failed: {}", e))? {
+    if !state
+        .rate_limiters
+        .default
+        .is_allowed(user_key)
+        .map_err(|e| format!("Rate limit check failed: {}", e))?
+    {
         return Err("Request rate limit exceeded. Please try again later.".to_string());
     }
 
@@ -332,29 +341,40 @@ async fn send_group_message(
     app_state: tauri::State<'_, Arc<RwLock<AppState>>>,
 ) -> Result<String, String> {
     let state = app_state.inner().read().await;
-    
+
     // Rate limiting check for messages
     let user_key = "user_default"; // In production, get from session
-    if !state.rate_limiters.check_messages(user_key)
-        .map_err(|e| format!("Rate limit check failed: {}", e))? {
+    if !state
+        .rate_limiters
+        .check_messages(user_key)
+        .map_err(|e| format!("Rate limit check failed: {}", e))?
+    {
         return Err("Message rate limit exceeded. Please slow down.".to_string());
     }
-    
+
     // Input validation
-    state.input_validator.validate_four_words(&request.recipient)
+    state
+        .input_validator
+        .validate_four_words(&request.recipient)
         .map_err(|e| format!("Invalid recipient address: {}", e))?;
-    
-    state.input_validator.validate_message_content(&request.content)
+
+    state
+        .input_validator
+        .validate_message_content(&request.content)
         .map_err(|e| format!("Invalid message content: {}", e))?;
-    
-    state.input_validator.sanitize_string(&request.message_type, 50)
+
+    state
+        .input_validator
+        .sanitize_string(&request.message_type, 50)
         .map_err(|e| format!("Invalid message type: {}", e))?;
-    
+
     if let Some(group_id) = &request.group_id {
-        state.input_validator.sanitize_string(group_id, 100)
+        state
+            .input_validator
+            .sanitize_string(group_id, 100)
             .map_err(|e| format!("Invalid group ID: {}", e))?;
     }
-    
+
     let id = uuid::Uuid::new_v4().to_string();
     Ok(id)
 }
@@ -367,11 +387,15 @@ async fn create_group(
 ) -> Result<String, String> {
     // Input validation
     let state = app_state.inner().read().await;
-    state.input_validator.validate_username(&name)
+    state
+        .input_validator
+        .validate_username(&name)
         .map_err(|e| format!("Invalid group name: {}", e))?;
 
     if let Some(desc) = &description {
-        state.input_validator.sanitize_string(desc, 1000)
+        state
+            .input_validator
+            .sanitize_string(desc, 1000)
             .map_err(|e| format!("Invalid description: {}", e))?;
     }
 
@@ -394,8 +418,12 @@ async fn get_node_info(
 
     // Rate limiting check for read operations
     let user_key = "user_default"; // In production, get from session
-    if !state.rate_limiters.default.is_allowed(user_key)
-        .map_err(|e| format!("Rate limit check failed: {}", e))? {
+    if !state
+        .rate_limiters
+        .default
+        .is_allowed(user_key)
+        .map_err(|e| format!("Rate limit check failed: {}", e))?
+    {
         return Err("Request rate limit exceeded. Please try again later.".to_string());
     }
 
@@ -426,9 +454,7 @@ async fn get_health_check(
     // Calculate uptime (simplified - in production you'd track actual start time)
     static START_TIME: std::sync::OnceLock<std::time::SystemTime> = std::sync::OnceLock::new();
     let start_time = START_TIME.get_or_init(|| std::time::SystemTime::now());
-    let uptime_seconds = start_time.elapsed()
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
+    let uptime_seconds = start_time.elapsed().map(|d| d.as_secs()).unwrap_or(0);
 
     // Check P2P node health
     let p2p_health = if let Some(p2p_node) = &state.p2p_node {
@@ -448,7 +474,10 @@ async fn get_health_check(
     };
 
     // Check rate limiter health
-    let rate_limiter_stats = state.rate_limiters.default.get_stats()
+    let rate_limiter_stats = state
+        .rate_limiters
+        .default
+        .get_stats()
         .map_err(|e| format!("Failed to get rate limiter stats: {}", e))?;
 
     Ok(serde_json::json!({
@@ -478,8 +507,12 @@ async fn get_network_metrics(
 
     // Rate limiting check for read operations
     let user_key = "user_default"; // In production, get from session
-    if !state.rate_limiters.default.is_allowed(user_key)
-        .map_err(|e| format!("Rate limit check failed: {}", e))? {
+    if !state
+        .rate_limiters
+        .default
+        .is_allowed(user_key)
+        .map_err(|e| format!("Rate limit check failed: {}", e))?
+    {
         return Err("Request rate limit exceeded. Please try again later.".to_string());
     }
 
@@ -503,8 +536,16 @@ async fn get_network_metrics(
     };
 
     Ok(NetworkMetrics {
-        bandwidth_up: if active_count > 0 { 850.0 + (active_count as f64 * 50.0) } else { 0.0 },
-        bandwidth_down: if active_count > 0 { 1200.0 + (active_count as f64 * 100.0) } else { 0.0 },
+        bandwidth_up: if active_count > 0 {
+            850.0 + (active_count as f64 * 50.0)
+        } else {
+            0.0
+        },
+        bandwidth_down: if active_count > 0 {
+            1200.0 + (active_count as f64 * 100.0)
+        } else {
+            0.0
+        },
         packet_loss: if active_count > 0 { 0.1 } else { 0.0 },
         jitter: if active_count > 0 { 5.2 } else { 0.0 },
         nat_type: nat_type.into(),
@@ -520,13 +561,13 @@ async fn get_peer_connections(
     app_state: tauri::State<'_, Arc<RwLock<AppState>>>,
 ) -> Result<Vec<PeerConnection>, String> {
     let state = app_state.inner().read().await;
-    
+
     let mut peers = Vec::new();
-    
+
     if let Some(p2p) = &state.p2p_node {
         let node = p2p.read().await;
         let peer_count = node.get_peer_count().await;
-        
+
         // Generate peer data based on actual connections
         if peer_count > 0 {
             // Add connected bootstrap node
@@ -541,7 +582,7 @@ async fn get_peer_connections(
                 last_seen: chrono::Utc::now().to_rfc3339(),
             });
         }
-        
+
         // Add any additional peers
         for i in 1..peer_count {
             peers.push(PeerConnection {
@@ -559,7 +600,7 @@ async fn get_peer_connections(
             });
         }
     }
-    
+
     // If no real peers, return empty list (no mock data)
     Ok(peers)
 }
@@ -576,9 +617,11 @@ async fn initialize_p2p_node(
         listen_addr: "0.0.0.0:0"
             .parse()
             .map_err(|e| format!("Invalid address: {}", e))?,
-        bootstrap_peers: vec!["159.89.81.21:9001"
-            .parse()
-            .map_err(|e| format!("Invalid bootstrap address: {}", e))?],
+        bootstrap_peers: vec![
+            "159.89.81.21:9001"
+                .parse()
+                .map_err(|e| format!("Invalid bootstrap address: {}", e))?,
+        ],
         ..Default::default()
     };
 
@@ -596,21 +639,19 @@ async fn initialize_p2p_node(
 
     // Initialize OrganizationManager and DHT event listener with DHT from P2P node
     let (organization_manager, dht_listener) = if let Some(dht) = p2p_node.node.dht() {
-        let org_manager = Some(Arc::new(RwLock::new(
-            OrganizationManager::new(dht.clone())
-        )));
-        
+        let org_manager = Some(Arc::new(RwLock::new(OrganizationManager::new(dht.clone()))));
+
         // Initialize DHT event listener
         let dht_listener = init_dht_events(dht.clone(), app_handle.inner().clone())
             .await
             .map_err(|e| format!("Failed to initialize DHT events: {}", e))?;
-        
+
         (org_manager, Some(dht_listener))
     } else {
         (None, None)
     };
 
-    // Initialize GeographicRoutingManager  
+    // Initialize GeographicRoutingManager
     let geographic_manager = match GeographicRoutingManager::new(None).await {
         Ok(mut manager) => {
             // Start the geographic routing services
@@ -644,29 +685,36 @@ async fn create_organization_dht(
     app_state: tauri::State<'_, Arc<RwLock<AppState>>>,
 ) -> Result<Organization, String> {
     let state = app_state.inner().read().await;
-    
+
     // Rate limiting check
     let user_key = "user_default"; // In production, get from session
-    if !state.rate_limiters.check_dht(user_key)
-        .map_err(|e| format!("Rate limit check failed: {}", e))? {
+    if !state
+        .rate_limiters
+        .check_dht(user_key)
+        .map_err(|e| format!("Rate limit check failed: {}", e))?
+    {
         return Err("Rate limit exceeded. Please try again later.".to_string());
     }
-    
+
     // Input validation
-    state.input_validator.validate_username(&request.name)
+    state
+        .input_validator
+        .validate_username(&request.name)
         .map_err(|e| format!("Invalid organization name: {}", e))?;
-    
+
     if let Some(desc) = &request.description {
-        state.input_validator.sanitize_string(desc, 1000)
+        state
+            .input_validator
+            .sanitize_string(desc, 1000)
             .map_err(|e| format!("Invalid organization description: {}", e))?;
     }
-    
+
     if let Some(org_manager) = &state.organization_manager {
         let manager = org_manager.read().await;
-        
+
         // For now, use a dummy user ID - in production, get from identity manager
         let owner_id = "user_default".to_string();
-        
+
         manager
             .create_organization(request, owner_id)
             .await
@@ -682,7 +730,7 @@ async fn update_organization_dht(
     app_state: tauri::State<'_, Arc<RwLock<AppState>>>,
 ) -> Result<(), String> {
     let state = app_state.inner().read().await;
-    
+
     if let Some(org_manager) = &state.organization_manager {
         let manager = org_manager.read().await;
         manager
@@ -700,11 +748,11 @@ async fn get_user_organizations_dht(
     app_state: tauri::State<'_, Arc<RwLock<AppState>>>,
 ) -> Result<Vec<Organization>, String> {
     let state = app_state.inner().read().await;
-    
+
     if let Some(org_manager) = &state.organization_manager {
         let manager = org_manager.read().await;
         let uid = user_id.unwrap_or_else(|| "user_default".to_string());
-        
+
         manager
             .get_user_organizations(&uid)
             .await
@@ -720,7 +768,7 @@ async fn get_organization_dht(
     app_state: tauri::State<'_, Arc<RwLock<AppState>>>,
 ) -> Result<Option<Organization>, String> {
     let state = app_state.inner().read().await;
-    
+
     if let Some(org_manager) = &state.organization_manager {
         let manager = org_manager.read().await;
         manager
@@ -738,11 +786,11 @@ async fn create_group_dht(
     app_state: tauri::State<'_, Arc<RwLock<AppState>>>,
 ) -> Result<Group, String> {
     let state = app_state.inner().read().await;
-    
+
     if let Some(org_manager) = &state.organization_manager {
         let manager = org_manager.read().await;
         let creator_id = "user_default".to_string();
-        
+
         manager
             .create_group(request, creator_id)
             .await
@@ -758,11 +806,11 @@ async fn create_project_dht(
     app_state: tauri::State<'_, Arc<RwLock<AppState>>>,
 ) -> Result<Project, String> {
     let state = app_state.inner().read().await;
-    
+
     if let Some(org_manager) = &state.organization_manager {
         let manager = org_manager.read().await;
         let owner_id = "user_default".to_string();
-        
+
         manager
             .create_project(request, owner_id)
             .await
@@ -778,7 +826,7 @@ async fn get_organization_hierarchy(
     app_state: tauri::State<'_, Arc<RwLock<AppState>>>,
 ) -> Result<OrganizationHierarchy, String> {
     let state = app_state.inner().read().await;
-    
+
     if let Some(org_manager) = &state.organization_manager {
         let manager = org_manager.read().await;
         manager
@@ -796,7 +844,7 @@ async fn initiate_call_dht(
     app_state: tauri::State<'_, Arc<RwLock<AppState>>>,
 ) -> Result<CallSession, String> {
     let state = app_state.inner().read().await;
-    
+
     if let Some(org_manager) = &state.organization_manager {
         let manager = org_manager.read().await;
         manager
@@ -814,7 +862,7 @@ async fn get_group_dht(
     app_state: tauri::State<'_, Arc<RwLock<AppState>>>,
 ) -> Result<Option<Group>, String> {
     let state = app_state.inner().read().await;
-    
+
     if let Some(org_manager) = &state.organization_manager {
         let manager = org_manager.read().await;
         manager
@@ -832,7 +880,7 @@ async fn get_project_dht(
     app_state: tauri::State<'_, Arc<RwLock<AppState>>>,
 ) -> Result<Option<Project>, String> {
     let state = app_state.inner().read().await;
-    
+
     if let Some(org_manager) = &state.organization_manager {
         let manager = org_manager.read().await;
         manager
@@ -857,11 +905,9 @@ struct EncryptedFileData {
 }
 
 #[tauri::command]
-async fn get_encryption_keys(
-    user_id: String,
-) -> Result<serde_json::Value, String> {
+async fn get_encryption_keys(user_id: String) -> Result<serde_json::Value, String> {
     let storage_manager = SecureStorageManager::new(user_id.clone());
-    
+
     // Check if secure storage is available
     if !SecureStorageManager::is_available() {
         return Err(format!(
@@ -873,18 +919,29 @@ async fn get_encryption_keys(
     // Try to get keys from secure storage first
     match storage_manager.get_encryption_keys().await {
         Ok(keys) => {
-            info!("Successfully retrieved keys from secure storage for user: {}", user_id);
+            info!(
+                "Successfully retrieved keys from secure storage for user: {}",
+                user_id
+            );
             Ok(keys)
         }
         Err(_) => {
             // Try to migrate from file storage
             let app_data_dir = std::path::PathBuf::from(".communitas-data");
-            
-            match storage_manager.migrate_from_file_storage(&app_data_dir).await {
+
+            match storage_manager
+                .migrate_from_file_storage(&app_data_dir)
+                .await
+            {
                 Ok(true) => {
-                    info!("Successfully migrated keys from file storage for user: {}", user_id);
+                    info!(
+                        "Successfully migrated keys from file storage for user: {}",
+                        user_id
+                    );
                     // Now get the keys from secure storage
-                    storage_manager.get_encryption_keys().await
+                    storage_manager
+                        .get_encryption_keys()
+                        .await
                         .map_err(|e| format!("Failed to retrieve keys after migration: {}", e))
                 }
                 Ok(false) => {
@@ -907,7 +964,7 @@ async fn store_encryption_keys(
     key_pair: String,
 ) -> Result<(), String> {
     let storage_manager = SecureStorageManager::new(user_id.clone());
-    
+
     // Check if secure storage is available
     if !SecureStorageManager::is_available() {
         return Err(format!(
@@ -921,11 +978,17 @@ async fn store_encryption_keys(
         .store_encryption_keys(&master_key, &key_pair)
         .await
         .map_err(|e| {
-            warn!("Failed to store encryption keys for user {}: {}", user_id, e);
+            warn!(
+                "Failed to store encryption keys for user {}: {}",
+                user_id, e
+            );
             format!("Failed to store encryption keys: {}", e)
         })?;
 
-    info!("Successfully stored encryption keys in secure storage for user: {}", user_id);
+    info!(
+        "Successfully stored encryption keys in secure storage for user: {}",
+        user_id
+    );
     Ok(())
 }
 
@@ -938,7 +1001,11 @@ mod tests {
     fn create_test_app_state() -> Arc<RwLock<AppState>> {
         Arc::new(RwLock::new(AppState {
             identity_manager: Arc::new(RwLock::new(IdentityManager::new())),
-            contact_manager: Arc::new(RwLock::new(init_contact_manager(std::path::PathBuf::from(".communitas-data")).await.unwrap())),
+            contact_manager: Arc::new(RwLock::new(
+                init_contact_manager(std::path::PathBuf::from(".communitas-data"))
+                    .await
+                    .unwrap(),
+            )),
             group_manager: Arc::new(RwLock::new(GroupManager::new())),
             file_manager: Arc::new(RwLock::new(FileManager::new())),
             organization_manager: None,
@@ -987,23 +1054,43 @@ mod tests {
         let app_state = create_test_app_state();
 
         // Valid group name
-        let result = create_group("Test Group".to_string(), Some("Description".to_string()), tauri::State::new(app_state.clone())).await;
+        let result = create_group(
+            "Test Group".to_string(),
+            Some("Description".to_string()),
+            tauri::State::new(app_state.clone()),
+        )
+        .await;
         assert!(result.is_ok());
 
         // Invalid group name (empty)
-        let result = create_group("".to_string(), Some("Description".to_string()), tauri::State::new(app_state.clone())).await;
+        let result = create_group(
+            "".to_string(),
+            Some("Description".to_string()),
+            tauri::State::new(app_state.clone()),
+        )
+        .await;
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Invalid group name"));
 
         // Invalid group name (too long)
         let long_name = "a".repeat(65);
-        let result = create_group(long_name, Some("Description".to_string()), tauri::State::new(app_state.clone())).await;
+        let result = create_group(
+            long_name,
+            Some("Description".to_string()),
+            tauri::State::new(app_state.clone()),
+        )
+        .await;
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Invalid group name"));
 
         // Invalid description (too long)
         let long_desc = "a".repeat(1001);
-        let result = create_group("Test Group".to_string(), Some(long_desc), tauri::State::new(app_state.clone())).await;
+        let result = create_group(
+            "Test Group".to_string(),
+            Some(long_desc),
+            tauri::State::new(app_state.clone()),
+        )
+        .await;
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Invalid description"));
     }
@@ -1020,7 +1107,8 @@ mod tests {
         };
 
         // Valid message
-        let result = send_group_message(valid_request.clone(), tauri::State::new(app_state.clone())).await;
+        let result =
+            send_group_message(valid_request.clone(), tauri::State::new(app_state.clone())).await;
         assert!(result.is_ok());
 
         // Invalid recipient
@@ -1030,7 +1118,8 @@ mod tests {
             message_type: "text".to_string(),
             group_id: Some("group123".to_string()),
         };
-        let result = send_group_message(invalid_request, tauri::State::new(app_state.clone())).await;
+        let result =
+            send_group_message(invalid_request, tauri::State::new(app_state.clone())).await;
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Invalid recipient address"));
 
@@ -1053,7 +1142,8 @@ mod tests {
             message_type: "text".to_string(),
             group_id: Some("group123".to_string()),
         };
-        let result = send_group_message(oversized_request, tauri::State::new(app_state.clone())).await;
+        let result =
+            send_group_message(oversized_request, tauri::State::new(app_state.clone())).await;
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Invalid message content"));
     }
@@ -1073,8 +1163,9 @@ mod tests {
             "hash123".to_string(),
             None,
             None,
-            tauri::State::new(app_state.clone())
-        ).await;
+            tauri::State::new(app_state.clone()),
+        )
+        .await;
         assert!(result.is_ok());
 
         // Invalid file name (path traversal)
@@ -1088,8 +1179,9 @@ mod tests {
             "hash123".to_string(),
             None,
             None,
-            tauri::State::new(app_state.clone())
-        ).await;
+            tauri::State::new(app_state.clone()),
+        )
+        .await;
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Invalid file name"));
 
@@ -1104,8 +1196,9 @@ mod tests {
             "hash123".to_string(),
             None,
             None,
-            tauri::State::new(app_state.clone())
-        ).await;
+            tauri::State::new(app_state.clone()),
+        )
+        .await;
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Invalid file type"));
 
@@ -1120,10 +1213,15 @@ mod tests {
             "hash123".to_string(),
             None,
             None,
-            tauri::State::new(app_state.clone())
-        ).await;
+            tauri::State::new(app_state.clone()),
+        )
+        .await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("File size exceeds maximum allowed"));
+        assert!(
+            result
+                .unwrap_err()
+                .contains("File size exceeds maximum allowed")
+        );
     }
 
     #[tokio::test]
@@ -1139,8 +1237,9 @@ mod tests {
             Some("key123".to_string()),
             None,
             None,
-            tauri::State::new(app_state.clone())
-        ).await;
+            tauri::State::new(app_state.clone()),
+        )
+        .await;
         assert!(result.is_ok());
 
         // Invalid recipient
@@ -1152,8 +1251,9 @@ mod tests {
             Some("key123".to_string()),
             None,
             None,
-            tauri::State::new(app_state.clone())
-        ).await;
+            tauri::State::new(app_state.clone()),
+        )
+        .await;
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Invalid recipient address"));
 
@@ -1166,8 +1266,9 @@ mod tests {
             Some("key123".to_string()),
             None,
             None,
-            tauri::State::new(app_state.clone())
-        ).await;
+            tauri::State::new(app_state.clone()),
+        )
+        .await;
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Invalid message ID"));
     }
@@ -1197,7 +1298,9 @@ mod tests {
             name: "a".repeat(65), // Too long
             description: Some("A test organization".to_string()),
         };
-        let validation_result = state.input_validator.validate_username(&invalid_request.name);
+        let validation_result = state
+            .input_validator
+            .validate_username(&invalid_request.name);
         assert!(validation_result.is_err());
     }
 }
@@ -1208,17 +1311,27 @@ async fn main() -> anyhow::Result<()> {
     rustls::crypto::aws_lc_rs::default_provider()
         .install_default()
         .map_err(|e| anyhow::anyhow!("Failed to install rustls crypto provider: {:?}", e))?;
-    
+
     // Initialize logging with proper configuration
     tracing_subscriber::fmt()
-        .with_env_filter(std::env::var("RUST_LOG").unwrap_or_else(|_| "info,communitas=debug,saorsa_core=debug".to_string()))
+        .with_env_filter(
+            std::env::var("RUST_LOG")
+                .unwrap_or_else(|_| "info,communitas=debug,saorsa_core=debug".to_string()),
+        )
         .with_target(false)
         .with_thread_ids(true)
         .with_thread_names(true)
         .init();
 
     info!("Starting Communitas v2.0 with enhanced security and error handling");
-    info!("Build configuration: {}", if cfg!(debug_assertions) { "debug" } else { "release" });
+    info!(
+        "Build configuration: {}",
+        if cfg!(debug_assertions) {
+            "debug"
+        } else {
+            "release"
+        }
+    );
     info!("Platform: {}", std::env::consts::OS);
     info!("Architecture: {}", std::env::consts::ARCH);
 
@@ -1246,7 +1359,10 @@ async fn main() -> anyhow::Result<()> {
         }
         Err(e) => {
             error!("Failed to initialize identity state: {}", e);
-            return Err(anyhow::anyhow!("Identity state initialization failed: {}", e));
+            return Err(anyhow::anyhow!(
+                "Identity state initialization failed: {}",
+                e
+            ));
         }
     };
 
@@ -1273,13 +1389,16 @@ async fn main() -> anyhow::Result<()> {
                 }
                 Err(e) => {
                     error!("Failed to initialize web publishing state: {}", e);
-                    return Err(anyhow::anyhow!("Web publishing state initialization failed: {}", e));
+                    return Err(anyhow::anyhow!(
+                        "Web publishing state initialization failed: {}",
+                        e
+                    ));
                 }
             }
         })
         .manage({
-            use saorsa_storage_commands::StorageEngineState;
             use dht_facade::LocalDht;
+            use saorsa_storage_commands::StorageEngineState;
             info!("Initializing storage engine state...");
             match StorageEngineState::<LocalDht>::new() {
                 Ok(state) => {
@@ -1288,7 +1407,10 @@ async fn main() -> anyhow::Result<()> {
                 }
                 Err(e) => {
                     error!("Failed to initialize storage engine state: {}", e);
-                    return Err(anyhow::anyhow!("Storage engine state initialization failed: {}", e));
+                    return Err(anyhow::anyhow!(
+                        "Storage engine state initialization failed: {}",
+                        e
+                    ));
                 }
             }
         });
@@ -1297,14 +1419,16 @@ async fn main() -> anyhow::Result<()> {
     #[cfg(debug_assertions)]
     {
         builder = builder.plugin(init_with_config(
-            MCPConfig::new("Communitas".to_string())
-                .tcp("127.0.0.1".to_string(), 4000)
+            MCPConfig::new("Communitas".to_string()).tcp("127.0.0.1".to_string(), 4000),
         ));
     }
 
     builder
         .manage(messaging_commands::init_messaging_storage())
-        .manage(tokio::sync::RwLock::new(std::collections::HashMap::<String, identity_commands::PqcIdentity>::new()))
+        .manage(tokio::sync::RwLock::new(std::collections::HashMap::<
+            String,
+            identity_commands::PqcIdentity,
+        >::new()))
         .invoke_handler(tauri::generate_handler![
             // Health and monitoring
             get_health_check,

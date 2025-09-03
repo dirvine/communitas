@@ -2,17 +2,16 @@
  * Saorsa Storage System - Group Management
  * Implements shared encryption keys and member management for group storage
  */
-
 use crate::saorsa_storage::errors::*;
+use chacha20poly1305::aead::{Aead, AeadCore, OsRng};
+use chacha20poly1305::{ChaCha20Poly1305, Key, KeyInit, Nonce};
+use chrono::{DateTime, Utc};
+use hkdf::Hkdf;
+use serde::{Deserialize, Serialize};
+use sha2::Sha256;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
-use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce, KeyInit};
-use chacha20poly1305::aead::{Aead, AeadCore, OsRng};
-use hkdf::Hkdf;
-use sha2::Sha256;
 // use rand::RngCore;  // Currently unused
 
 /// Group member with permissions and metadata
@@ -181,7 +180,7 @@ impl GroupManager {
             description: description.to_string(),
             created_at: Utc::now(),
             created_by: creator_id.to_string(),
-            max_members: 100, // Default limit
+            max_members: 100,               // Default limit
             key_rotation_interval_days: 90, // Rotate every 3 months
             require_approval: false,
         };
@@ -236,7 +235,8 @@ impl GroupManager {
         drop(groups);
 
         // Check if user adding has permission
-        self.verify_permission(group_id, added_by, "can_invite").await?;
+        self.verify_permission(group_id, added_by, "can_invite")
+            .await?;
 
         // Check if user is already a member
         let mut members = self.members.write().await;
@@ -297,14 +297,15 @@ impl GroupManager {
         removed_by: &str,
     ) -> GroupResult<()> {
         // Check permissions
-        self.verify_permission(group_id, removed_by, "can_remove").await?;
+        self.verify_permission(group_id, removed_by, "can_remove")
+            .await?;
 
         // Remove member
         let mut members = self.members.write().await;
         if let Some(group_members) = members.get_mut(group_id) {
             let initial_len = group_members.len();
             group_members.retain(|m| m.user_id != user_id);
-            
+
             if group_members.len() == initial_len {
                 return Err(GroupError::UserNotMember {
                     user_id: user_id.to_string(),
@@ -348,30 +349,27 @@ impl GroupManager {
     }
 
     /// Rotate group key (requires owner/admin permission)
-    pub async fn rotate_group_key(
-        &self,
-        group_id: &str,
-        rotated_by: &str,
-    ) -> GroupResult<()> {
+    pub async fn rotate_group_key(&self, group_id: &str, rotated_by: &str) -> GroupResult<()> {
         // Check permissions
-        self.verify_permission(group_id, rotated_by, "can_rotate_keys").await?;
+        self.verify_permission(group_id, rotated_by, "can_rotate_keys")
+            .await?;
 
         // Start rotation process
         let mut rotations = self.key_rotations.write().await;
-        rotations.insert(group_id.to_string(), KeyRotationStatus {
-            in_progress: true,
-            started_at: Some(Utc::now()),
-            completion_percentage: 0.0,
-            failed_members: Vec::new(),
-        });
+        rotations.insert(
+            group_id.to_string(),
+            KeyRotationStatus {
+                in_progress: true,
+                started_at: Some(Utc::now()),
+                completion_percentage: 0.0,
+                failed_members: Vec::new(),
+            },
+        );
         drop(rotations);
 
         // Get current version
         let group_keys = self.group_keys.read().await;
-        let current_version = group_keys
-            .get(group_id)
-            .map(|k| k.version)
-            .unwrap_or(0);
+        let current_version = group_keys.get(group_id).map(|k| k.version).unwrap_or(0);
         drop(group_keys);
 
         // Generate new key
@@ -379,7 +377,8 @@ impl GroupManager {
 
         // Get all members for re-encryption
         let members = self.members.read().await;
-        let group_members = members.get(group_id)
+        let group_members = members
+            .get(group_id)
             .ok_or_else(|| GroupError::GroupNotFound {
                 group_id: group_id.to_string(),
             })?
@@ -480,7 +479,7 @@ impl GroupManager {
         // Derive deterministic but secure group key
         let hkdf = Hkdf::<Sha256>::new(None, &self.master_key);
         let info = format!("group:{}:v{}", group_id, version);
-        
+
         let mut key_material = [0u8; 32];
         hkdf.expand(info.as_bytes(), &mut key_material)
             .map_err(|_| GroupError::KeyWrappingFailed)?;
@@ -502,7 +501,7 @@ impl GroupManager {
         // Use member's public key for encryption (simplified - would use proper key exchange)
         let member_key = Key::from_slice(&member.public_key[..32.min(member.public_key.len())]);
         let cipher = ChaCha20Poly1305::new(member_key.into());
-        
+
         let nonce = ChaCha20Poly1305::generate_nonce(&mut OsRng);
         let ciphertext = cipher
             .encrypt(&nonce, group_key.key_material.as_ref())
@@ -524,7 +523,7 @@ impl GroupManager {
     ) -> GroupResult<[u8; 32]> {
         let cipher = ChaCha20Poly1305::new(Key::from_slice(user_private_key).into());
         let nonce = Nonce::from_slice(&encrypted_key.nonce);
-        
+
         let plaintext = cipher
             .decrypt(nonce, encrypted_key.encrypted_key.as_ref())
             .map_err(|_| GroupError::KeyUnwrappingFailed)?;

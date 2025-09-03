@@ -1,27 +1,26 @@
+use crate::dht_facade::DhtFacade;
 /**
  * Saorsa Storage System - Main Storage Engine
  * Orchestrates all storage components and provides unified interface
  */
-
 use crate::saorsa_storage::errors::*;
 use crate::saorsa_storage::*;
 use crate::saorsa_storage::{
-    policy::PolicyManager,
-    namespace::NamespaceManager,
-    group::GroupManager,
-    content::ContentAddressing,
-    network::NetworkManager,
     cache::StorageCache,
     config::ConfigManager,
-    profiler::Profiler,
+    content::ContentAddressing,
+    group::GroupManager,
+    namespace::NamespaceManager,
+    network::NetworkManager,
+    policy::PolicyManager,
     pqc_crypto::{PqcCryptoManager, PqcEncryptedContent},
+    profiler::Profiler,
 };
-use crate::dht_facade::DhtFacade;
-use std::sync::Arc;
-use tokio::sync::RwLock;
-use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
 /// Storage operation request
 #[derive(Debug, Clone)]
@@ -129,30 +128,37 @@ impl<D: DhtFacade> StorageEngine<D> {
         config_manager: ConfigManager,
     ) -> StorageResult<Self> {
         let config = config_manager.get_config().clone();
-        
+
         // Initialize all components
         let policy_manager = Arc::new(PolicyManager::new());
         let namespace_manager = Arc::new(NamespaceManager::new(&master_key)?);
         let group_manager = Arc::new(GroupManager::new(master_key));
         let content_addressing = Arc::new(ContentAddressing::new());
         let pqc_crypto_manager = Arc::new(PqcCryptoManager::new(master_key)?);
-        
+
         // Configure network manager
         let network_config = crate::saorsa_storage::network::NetworkConfig {
-            operation_timeout: std::time::Duration::from_secs(config.network.operation_timeout_secs),
+            operation_timeout: std::time::Duration::from_secs(
+                config.network.operation_timeout_secs,
+            ),
             retry_attempts: config.network.retry_attempts,
             retry_backoff: std::time::Duration::from_millis(config.network.retry_backoff_ms),
             max_concurrent_operations: config.network.max_concurrent_operations,
             enable_geographic_routing: config.network.enable_geographic_routing,
-            peer_discovery_interval: std::time::Duration::from_secs(config.network.peer_discovery_interval_secs),
+            peer_discovery_interval: std::time::Duration::from_secs(
+                config.network.peer_discovery_interval_secs,
+            ),
         };
         let network_manager = Arc::new(NetworkManager::with_config(dht, network_config, None));
-        
+
         // Configure cache
         let cache_config = crate::saorsa_storage::cache::CacheConfig {
             max_size_bytes: config.cache.max_size_bytes,
             max_entries: config.cache.max_entries,
-            default_ttl: config.cache.default_ttl_secs.map(std::time::Duration::from_secs),
+            default_ttl: config
+                .cache
+                .default_ttl_secs
+                .map(std::time::Duration::from_secs),
             compress_threshold: config.cache.compress_threshold,
             cleanup_interval: std::time::Duration::from_secs(config.cache.cleanup_interval_secs),
             enable_integrity_check: config.cache.enable_integrity_check,
@@ -190,18 +196,20 @@ impl<D: DhtFacade> StorageEngine<D> {
     pub async fn store_content(&self, request: StorageRequest) -> StorageResult<StorageResponse> {
         let operation_id = self.generate_operation_id();
         let start_time = std::time::Instant::now();
-        
+
         // Track operation
-        self.start_operation(&operation_id, "store", &request.user_id).await;
+        self.start_operation(&operation_id, "store", &request.user_id)
+            .await;
 
         let result = self.store_content_internal(request).await;
-        
+
         // Complete operation tracking
         self.complete_operation(&operation_id, result.is_ok()).await;
-        
+
         match result {
             Ok(response) => {
-                self.update_stats_success("store", start_time.elapsed()).await;
+                self.update_stats_success("store", start_time.elapsed())
+                    .await;
                 Ok(response)
             }
             Err(error) => {
@@ -212,19 +220,24 @@ impl<D: DhtFacade> StorageEngine<D> {
     }
 
     /// Retrieve content by address
-    pub async fn retrieve_content(&self, request: RetrievalRequest) -> StorageResult<RetrievalResponse> {
+    pub async fn retrieve_content(
+        &self,
+        request: RetrievalRequest,
+    ) -> StorageResult<RetrievalResponse> {
         let operation_id = self.generate_operation_id();
         let start_time = std::time::Instant::now();
-        
-        self.start_operation(&operation_id, "retrieve", &request.user_id).await;
+
+        self.start_operation(&operation_id, "retrieve", &request.user_id)
+            .await;
 
         let result = self.retrieve_content_internal(request).await;
-        
+
         self.complete_operation(&operation_id, result.is_ok()).await;
-        
+
         match result {
             Ok(response) => {
-                self.update_stats_success("retrieve", start_time.elapsed()).await;
+                self.update_stats_success("retrieve", start_time.elapsed())
+                    .await;
                 Ok(response)
             }
             Err(error) => {
@@ -247,10 +260,14 @@ impl<D: DhtFacade> StorageEngine<D> {
     }
 
     /// Delete content by address
-    pub async fn delete_content(&self, address: &StorageAddress, user_id: &str) -> StorageResult<bool> {
+    pub async fn delete_content(
+        &self,
+        address: &StorageAddress,
+        user_id: &str,
+    ) -> StorageResult<bool> {
         let operation_id = self.generate_operation_id();
         let start_time = std::time::Instant::now();
-        
+
         self.start_operation(&operation_id, "delete", user_id).await;
 
         // Verify user has permission to delete
@@ -281,23 +298,24 @@ impl<D: DhtFacade> StorageEngine<D> {
         // For DHT content, this would involve sending delete requests
         // For now, consider it successful if we can remove from cache
         self.complete_operation(&operation_id, true).await;
-        self.update_stats_success("delete", start_time.elapsed()).await;
-        
+        self.update_stats_success("delete", start_time.elapsed())
+            .await;
+
         Ok(true)
     }
 
     /// Get storage engine statistics
     pub async fn get_stats(&self) -> StorageEngineStats {
         let mut stats = self.stats.read().await.clone();
-        
+
         // Update with current cache stats
         let cache_stats = self.cache.get_stats().await;
         stats.cache_hit_ratio = cache_stats.hit_ratio();
-        
+
         // Update with network stats
         let network_stats = self.network_manager.get_stats().await;
         stats.network_operations = network_stats.total_operations;
-        
+
         stats.last_updated = Utc::now();
         stats
     }
@@ -310,8 +328,10 @@ impl<D: DhtFacade> StorageEngine<D> {
         user_id: &str,
     ) -> StorageResult<StorageAddress> {
         // Check if transition is allowed
-        let transition = self.policy_manager.plan_transition(&address.policy, &new_policy)?;
-        
+        let transition = self
+            .policy_manager
+            .plan_transition(&address.policy, &new_policy)?;
+
         if transition.requires_re_encryption {
             // Retrieve content with old policy
             let retrieval_request = RetrievalRequest {
@@ -319,9 +339,9 @@ impl<D: DhtFacade> StorageEngine<D> {
                 user_id: user_id.to_string(),
                 decryption_key: None,
             };
-            
+
             let retrieval_response = self.retrieve_content_internal(retrieval_request).await?;
-            
+
             // Store with new policy
             let content_type = retrieval_response.metadata.content_type.clone();
             let storage_request = StorageRequest {
@@ -333,12 +353,12 @@ impl<D: DhtFacade> StorageEngine<D> {
                 group_id: None,
                 namespace: None,
             };
-            
+
             let storage_response = self.store_content_internal(storage_request).await?;
-            
+
             // Delete old content
             self.delete_content(address, user_id).await?;
-            
+
             Ok(storage_response.address)
         } else {
             // Simple policy update without re-encryption
@@ -351,16 +371,23 @@ impl<D: DhtFacade> StorageEngine<D> {
     /// Perform maintenance operations
     pub async fn maintenance(&self) -> StorageResult<()> {
         // Cache cleanup
-        self.cache.cleanup().await.map_err(|e| StorageError::CacheError {
-            reason: e.to_string(),
-        })?;
+        self.cache
+            .cleanup()
+            .await
+            .map_err(|e| StorageError::CacheError {
+                reason: e.to_string(),
+            })?;
 
         // Namespace key cleanup (remove old keys)
-        self.namespace_manager.cleanup_old_keys(90).await
+        self.namespace_manager
+            .cleanup_old_keys(90)
+            .await
             .map_err(|e| StorageError::from(e))?;
 
         // Network peer discovery
-        self.network_manager.discover_peers().await
+        self.network_manager
+            .discover_peers()
+            .await
             .map_err(|e| StorageError::Network { source: e })?;
 
         Ok(())
@@ -368,36 +395,42 @@ impl<D: DhtFacade> StorageEngine<D> {
 
     // Private implementation methods
 
-    async fn store_content_internal(&self, request: StorageRequest) -> StorageResult<StorageResponse> {
+    async fn store_content_internal(
+        &self,
+        request: StorageRequest,
+    ) -> StorageResult<StorageResponse> {
         let start_time = std::time::Instant::now();
         let mut guard = self.profiler.start_profile("store_content_internal").await;
         guard.add_size_metadata(request.content.len()).await;
-        
+
         // Validate policy and content
         {
             let _validate_guard = self.profiler.start_profile("policy_validation").await;
-            self.policy_manager.validate_policy(
-                &request.policy,
-                request.content.len() as u64,
-                &request.user_id,
-                &request.content_type,
-            ).await?;
+            self.policy_manager
+                .validate_policy(
+                    &request.policy,
+                    request.content.len() as u64,
+                    &request.user_id,
+                    &request.content_type,
+                )
+                .await?;
         }
 
         // Enforce policy constraints
-        self.policy_manager.enforce_policy(
-            &request.policy,
-            &request.metadata.checksum,
-            &request.content,
-            &request.user_id,
-            "store",
-        ).await?;
+        self.policy_manager
+            .enforce_policy(
+                &request.policy,
+                &request.metadata.checksum,
+                &request.content,
+                &request.user_id,
+                "store",
+            )
+            .await?;
 
         // Generate content address
-        let content_address = self.content_addressing.address_content(
-            &request.content,
-            &request.content_type,
-        )?;
+        let content_address = self
+            .content_addressing
+            .address_content(&request.content, &request.content_type)?;
 
         // Encrypt content based on policy
         let (encrypted_content, _encryption_key) = {
@@ -409,31 +442,40 @@ impl<D: DhtFacade> StorageEngine<D> {
         let storage_location = match &request.policy {
             StoragePolicy::PrivateMax => {
                 // Store only locally (would require local storage implementation)
-                self.store_local(&content_address, &encrypted_content).await?;
+                self.store_local(&content_address, &encrypted_content)
+                    .await?;
                 StorageLocation::Local
             }
             StoragePolicy::PrivateScoped { namespace } => {
                 // Store in DHT with namespace isolation
                 let dht_key = self.generate_dht_key(namespace, &content_address.hash);
-                self.network_manager.store_content(dht_key, encrypted_content.clone()).await?;
+                self.network_manager
+                    .store_content(dht_key, encrypted_content.clone())
+                    .await?;
                 StorageLocation::Dht { replicas: 3 }
             }
             StoragePolicy::GroupScoped { group_id } => {
                 // Distribute to group members
                 let members = self.group_manager.get_members(group_id).await?;
                 let member_ids: Vec<String> = members.iter().map(|m| m.user_id.clone()).collect();
-                
+
                 // For now, store in DHT with group key
                 let group_key = format!("group:{}", group_id);
                 let dht_key = self.generate_dht_key(&group_key, &content_address.hash);
-                self.network_manager.store_content(dht_key, encrypted_content.clone()).await?;
-                
-                StorageLocation::Group { members: member_ids }
+                self.network_manager
+                    .store_content(dht_key, encrypted_content.clone())
+                    .await?;
+
+                StorageLocation::Group {
+                    members: member_ids,
+                }
             }
             StoragePolicy::PublicMarkdown => {
                 // Store in public DHT
                 let public_key = format!("public:{}", content_address.hash);
-                self.network_manager.store_content(public_key.into_bytes(), encrypted_content.clone()).await?;
+                self.network_manager
+                    .store_content(public_key.into_bytes(), encrypted_content.clone())
+                    .await?;
                 StorageLocation::Public
             }
         };
@@ -443,10 +485,14 @@ impl<D: DhtFacade> StorageEngine<D> {
             content_address.hash.clone(),
             request.policy.clone(),
         ));
-        self.cache.put(&cache_key, request.content.clone(), None).await.ok();
+        self.cache
+            .put(&cache_key, request.content.clone(), None)
+            .await
+            .ok();
 
         // Update statistics
-        self.update_content_stats(&request.policy, request.content.len()).await;
+        self.update_content_stats(&request.policy, request.content.len())
+            .await;
 
         Ok(StorageResponse {
             address: StorageAddress::new(content_address.hash, request.policy),
@@ -458,9 +504,12 @@ impl<D: DhtFacade> StorageEngine<D> {
         })
     }
 
-    async fn retrieve_content_internal(&self, request: RetrievalRequest) -> StorageResult<RetrievalResponse> {
+    async fn retrieve_content_internal(
+        &self,
+        request: RetrievalRequest,
+    ) -> StorageResult<RetrievalResponse> {
         let start_time = std::time::Instant::now();
-        
+
         // Try cache first
         let cache_key = self.generate_cache_key(&request.address);
         if let Ok(cached_content) = self.cache.get(&cache_key).await {
@@ -474,7 +523,7 @@ impl<D: DhtFacade> StorageEngine<D> {
                 size: cached_content.len() as u64,
                 checksum: String::new(),
             };
-            
+
             return Ok(RetrievalResponse {
                 content: cached_content,
                 metadata,
@@ -492,7 +541,9 @@ impl<D: DhtFacade> StorageEngine<D> {
             StoragePolicy::PrivateScoped { namespace } => {
                 // Retrieve from DHT
                 let dht_key = self.generate_dht_key(namespace, &request.address.content_id);
-                self.network_manager.retrieve_content(dht_key).await?
+                self.network_manager
+                    .retrieve_content(dht_key)
+                    .await?
                     .ok_or_else(|| StorageError::NotFound {
                         address: request.address.content_id.clone(),
                     })?
@@ -501,7 +552,9 @@ impl<D: DhtFacade> StorageEngine<D> {
                 // Retrieve from group storage
                 let group_key = format!("group:{}", group_id);
                 let dht_key = self.generate_dht_key(&group_key, &request.address.content_id);
-                self.network_manager.retrieve_content(dht_key).await?
+                self.network_manager
+                    .retrieve_content(dht_key)
+                    .await?
                     .ok_or_else(|| StorageError::NotFound {
                         address: request.address.content_id.clone(),
                     })?
@@ -509,7 +562,9 @@ impl<D: DhtFacade> StorageEngine<D> {
             StoragePolicy::PublicMarkdown => {
                 // Retrieve from public DHT
                 let public_key = format!("public:{}", request.address.content_id);
-                self.network_manager.retrieve_content(public_key.into_bytes()).await?
+                self.network_manager
+                    .retrieve_content(public_key.into_bytes())
+                    .await?
                     .ok_or_else(|| StorageError::NotFound {
                         address: request.address.content_id.clone(),
                     })?
@@ -520,7 +575,9 @@ impl<D: DhtFacade> StorageEngine<D> {
         let decrypted_content = self.decrypt_content(&request, &encrypted_content).await?;
 
         // Verify content integrity
-        let computed_hash = self.content_addressing.generate_content_id(&decrypted_content, "verify");
+        let computed_hash = self
+            .content_addressing
+            .generate_content_id(&decrypted_content, "verify");
         if computed_hash != request.address.content_id {
             return Err(StorageError::IntegrityFailure {
                 address: request.address.content_id,
@@ -528,7 +585,10 @@ impl<D: DhtFacade> StorageEngine<D> {
         }
 
         // Cache the retrieved content
-        self.cache.put(&cache_key, decrypted_content.clone(), None).await.ok();
+        self.cache
+            .put(&cache_key, decrypted_content.clone(), None)
+            .await
+            .ok();
 
         // Create metadata (would normally be stored separately)
         let metadata = StorageMetadata {
@@ -549,45 +609,60 @@ impl<D: DhtFacade> StorageEngine<D> {
         })
     }
 
-    async fn encrypt_content(&self, request: &StorageRequest) -> StorageResult<(Vec<u8>, [u8; 32])> {
+    async fn encrypt_content(
+        &self,
+        request: &StorageRequest,
+    ) -> StorageResult<(Vec<u8>, [u8; 32])> {
         // Use PQC crypto manager for ML-KEM-768 enhanced encryption
-        let pqc_encrypted = self.pqc_crypto_manager.encrypt_content(
-            &request.content,
-            &request.policy,
-            &request.user_id,
-            request.namespace.as_deref(),
-            request.group_id.as_deref(),
-        ).await.map_err(|e| match e {
-            StorageError::Encryption { source } => StorageError::Encryption { source },
-            StorageError::KeyDerivation { source } => StorageError::KeyDerivation { source },
-            _ => StorageError::Encryption { 
-                source: crate::saorsa_storage::errors::EncryptionError::EncryptionFailed 
-            },
-        })?;
+        let pqc_encrypted = self
+            .pqc_crypto_manager
+            .encrypt_content(
+                &request.content,
+                &request.policy,
+                &request.user_id,
+                request.namespace.as_deref(),
+                request.group_id.as_deref(),
+            )
+            .await
+            .map_err(|e| match e {
+                StorageError::Encryption { source } => StorageError::Encryption { source },
+                StorageError::KeyDerivation { source } => StorageError::KeyDerivation { source },
+                _ => StorageError::Encryption {
+                    source: crate::saorsa_storage::errors::EncryptionError::EncryptionFailed,
+                },
+            })?;
 
         // Serialize PQC encrypted content to bytes
-        let serialized = bincode::serialize(&pqc_encrypted)
-            .map_err(|_| StorageError::Encryption {
+        let serialized =
+            bincode::serialize(&pqc_encrypted).map_err(|_| StorageError::Encryption {
                 source: crate::saorsa_storage::errors::EncryptionError::EncryptionFailed,
             })?;
 
         // Return serialized content and a derived key for backward compatibility
         let derived_key = self.derive_key_from_pqc_content(&pqc_encrypted);
-        
+
         Ok((serialized, derived_key))
     }
 
-    async fn decrypt_content(&self, request: &RetrievalRequest, encrypted_content: &[u8]) -> StorageResult<Vec<u8>> {
+    async fn decrypt_content(
+        &self,
+        request: &RetrievalRequest,
+        encrypted_content: &[u8],
+    ) -> StorageResult<Vec<u8>> {
         // Try to deserialize as PQC encrypted content first
         if let Ok(pqc_encrypted) = bincode::deserialize::<PqcEncryptedContent>(encrypted_content) {
             // Use PQC crypto manager for ML-KEM-768 enhanced decryption
-            return self.pqc_crypto_manager.decrypt_content(&pqc_encrypted, &request.user_id)
+            return self
+                .pqc_crypto_manager
+                .decrypt_content(&pqc_encrypted, &request.user_id)
                 .await
                 .map_err(|e| match e {
                     StorageError::Encryption { source } => StorageError::Encryption { source },
-                    StorageError::KeyDerivation { source } => StorageError::KeyDerivation { source },
-                    _ => StorageError::Encryption { 
-                        source: crate::saorsa_storage::errors::EncryptionError::DecryptionFailed 
+                    StorageError::KeyDerivation { source } => {
+                        StorageError::KeyDerivation { source }
+                    }
+                    _ => StorageError::Encryption {
+                        source: crate::saorsa_storage::errors::EncryptionError::DecryptionFailed,
                     },
                 });
         }
@@ -608,7 +683,9 @@ impl<D: DhtFacade> StorageEngine<D> {
                 }
                 StoragePolicy::GroupScoped { group_id } => {
                     let dummy_private_key = [0u8; 32];
-                    self.group_manager.get_group_key(group_id, &request.user_id, &dummy_private_key).await?
+                    self.group_manager
+                        .get_group_key(group_id, &request.user_id, &dummy_private_key)
+                        .await?
                 }
                 StoragePolicy::PublicMarkdown => {
                     // For public content, we need the original content to derive the convergent key
@@ -625,13 +702,14 @@ impl<D: DhtFacade> StorageEngine<D> {
 
     // Helper methods for encryption/decryption
     fn encrypt_with_key(&self, data: &[u8], key: &[u8; 32]) -> StorageResult<Vec<u8>> {
-        use chacha20poly1305::{ChaCha20Poly1305, Key, KeyInit};
         use chacha20poly1305::aead::{Aead, AeadCore, OsRng};
+        use chacha20poly1305::{ChaCha20Poly1305, Key, KeyInit};
 
         let cipher = ChaCha20Poly1305::new(Key::from_slice(key).into());
         let nonce = ChaCha20Poly1305::generate_nonce(&mut OsRng);
-        
-        let ciphertext = cipher.encrypt(&nonce, data)
+
+        let ciphertext = cipher
+            .encrypt(&nonce, data)
             .map_err(|_| StorageError::Encryption {
                 source: crate::saorsa_storage::errors::EncryptionError::EncryptionFailed,
             })?;
@@ -643,12 +721,14 @@ impl<D: DhtFacade> StorageEngine<D> {
     }
 
     fn decrypt_with_key(&self, encrypted_data: &[u8], key: &[u8; 32]) -> StorageResult<Vec<u8>> {
-        use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce, KeyInit};
         use chacha20poly1305::aead::Aead;
+        use chacha20poly1305::{ChaCha20Poly1305, Key, KeyInit, Nonce};
 
         if encrypted_data.len() < 12 {
             return Err(StorageError::Encryption {
-                source: crate::saorsa_storage::errors::EncryptionError::InvalidNonce { length: encrypted_data.len() },
+                source: crate::saorsa_storage::errors::EncryptionError::InvalidNonce {
+                    length: encrypted_data.len(),
+                },
             });
         }
 
@@ -656,7 +736,8 @@ impl<D: DhtFacade> StorageEngine<D> {
         let ciphertext = &encrypted_data[12..];
 
         let cipher = ChaCha20Poly1305::new(Key::from_slice(key).into());
-        cipher.decrypt(nonce, ciphertext)
+        cipher
+            .decrypt(nonce, ciphertext)
             .map_err(|_| StorageError::Encryption {
                 source: crate::saorsa_storage::errors::EncryptionError::DecryptionFailed,
             })
@@ -695,13 +776,13 @@ impl<D: DhtFacade> StorageEngine<D> {
     /// Helper method to derive a key from PQC encrypted content for backward compatibility
     fn derive_key_from_pqc_content(&self, pqc_content: &PqcEncryptedContent) -> [u8; 32] {
         use blake3::hash;
-        
+
         // Derive a deterministic key from PQC content for backward compatibility
         let mut key_material = Vec::new();
         key_material.extend_from_slice(&pqc_content.nonce);
         key_material.extend_from_slice(&pqc_content.ml_kem_ciphertext[..32]);
         key_material.extend_from_slice(pqc_content.content_address.as_bytes());
-        
+
         let hash = hash(&key_material);
         *hash.as_bytes()
     }
@@ -727,16 +808,18 @@ impl<D: DhtFacade> StorageEngine<D> {
     async fn update_stats_success(&self, _operation_type: &str, duration: std::time::Duration) {
         let mut stats = self.stats.write().await;
         stats.successful_operations += 1;
-        
+
         let total_ops = stats.successful_operations + stats.failed_operations;
         let duration_ms = duration.as_secs_f64() * 1000.0;
-        
+
         if total_ops == 1 {
             stats.avg_operation_time_ms = duration_ms;
         } else {
-            stats.avg_operation_time_ms = (stats.avg_operation_time_ms * (total_ops - 1) as f64 + duration_ms) / total_ops as f64;
+            stats.avg_operation_time_ms = (stats.avg_operation_time_ms * (total_ops - 1) as f64
+                + duration_ms)
+                / total_ops as f64;
         }
-        
+
         stats.last_updated = Utc::now();
     }
 
@@ -750,15 +833,19 @@ impl<D: DhtFacade> StorageEngine<D> {
         let mut stats = self.stats.write().await;
         stats.total_content_items += 1;
         stats.total_bytes_stored += size as u64;
-        
+
         let policy_key = format!("{:?}", policy);
         *stats.policy_distribution.entry(policy_key).or_insert(0) += 1;
-        
+
         stats.last_updated = Utc::now();
     }
 
     // Placeholder methods for local storage (would be implemented with actual storage backend)
-    async fn store_local(&self, _address: &crate::saorsa_storage::content::ContentAddress, _data: &[u8]) -> StorageResult<()> {
+    async fn store_local(
+        &self,
+        _address: &crate::saorsa_storage::content::ContentAddress,
+        _data: &[u8],
+    ) -> StorageResult<()> {
         // Would store to local filesystem/database
         Ok(())
     }
@@ -785,14 +872,16 @@ mod tests {
         let dht = Arc::new(LocalDht::new("test_node".to_string()));
         let master_key = [42u8; 32];
         let config_manager = ConfigManager::new();
-        
-        StorageEngine::new(dht, master_key, config_manager).await.unwrap()
+
+        StorageEngine::new(dht, master_key, config_manager)
+            .await
+            .unwrap()
     }
 
     #[tokio::test]
     async fn test_store_and_retrieve_private_max() {
         let engine = setup_storage_engine().await;
-        
+
         let content = b"test content for private max policy".to_vec();
         let metadata = StorageMetadata {
             content_type: "text/plain".to_string(),
@@ -821,7 +910,7 @@ mod tests {
     #[tokio::test]
     async fn test_store_private_scoped() {
         let engine = setup_storage_engine().await;
-        
+
         let content = b"test content for private scoped policy".to_vec();
         let metadata = StorageMetadata::default();
 
@@ -844,7 +933,7 @@ mod tests {
     #[tokio::test]
     async fn test_engine_stats() {
         let engine = setup_storage_engine().await;
-        
+
         let stats = engine.get_stats().await;
         assert_eq!(stats.total_content_items, 0);
         assert_eq!(stats.successful_operations, 0);
@@ -853,7 +942,7 @@ mod tests {
     #[tokio::test]
     async fn test_maintenance() {
         let engine = setup_storage_engine().await;
-        
+
         let result = engine.maintenance().await;
         assert!(result.is_ok());
     }
@@ -861,7 +950,7 @@ mod tests {
     #[tokio::test]
     async fn test_policy_validation() {
         let engine = setup_storage_engine().await;
-        
+
         let oversized_content = vec![0u8; 200 * 1024 * 1024]; // 200MB
         let metadata = StorageMetadata::default();
 

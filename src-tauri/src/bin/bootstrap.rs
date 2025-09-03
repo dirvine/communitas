@@ -1,10 +1,10 @@
-use std::net::SocketAddr;
-use tokio::net::TcpListener;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tracing::{info, warn, error};
 use std::collections::HashMap;
+use std::net::SocketAddr;
 use std::sync::Arc;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpListener;
 use tokio::sync::RwLock;
+use tracing::{error, info, warn};
 
 #[derive(Debug, Clone)]
 struct BootstrapState {
@@ -70,10 +70,7 @@ async fn handle_peer_connection(
 
     // Read peer's handshake response
     let mut buffer = [0u8; 1024];
-    match tokio::time::timeout(
-        std::time::Duration::from_secs(10),
-        socket.read(&mut buffer)
-    ).await {
+    match tokio::time::timeout(std::time::Duration::from_secs(10), socket.read(&mut buffer)).await {
         Ok(Ok(n)) if n > 0 => {
             let response = String::from_utf8_lossy(&buffer[..n]);
             info!("Received handshake from {}: {}", peer_id, response.trim());
@@ -114,7 +111,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = format!("0.0.0.0:{}", port).parse::<SocketAddr>()?;
 
     info!("Starting Communitas Bootstrap Node on {}", addr);
-    info!("Environment: {}", if cfg!(debug_assertions) { "debug" } else { "release" });
+    info!(
+        "Environment: {}",
+        if cfg!(debug_assertions) {
+            "debug"
+        } else {
+            "release"
+        }
+    );
 
     let listener = TcpListener::bind(addr).await?;
     let state = BootstrapState::new();

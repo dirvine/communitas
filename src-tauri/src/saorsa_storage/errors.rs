@@ -2,7 +2,6 @@
  * Saorsa Storage System - Error Types
  * Comprehensive error handling for all storage operations
  */
-
 use std::time::Duration;
 use thiserror::Error;
 
@@ -275,7 +274,10 @@ pub enum ContentError {
     InvalidChunkIndex { index: u32 },
 
     #[error("Missing chunks: {missing_count}/{total_count}")]
-    MissingChunks { missing_count: u32, total_count: u32 },
+    MissingChunks {
+        missing_count: u32,
+        total_count: u32,
+    },
 
     #[error("Content type validation failed")]
     ContentTypeValidationFailed,
@@ -430,17 +432,14 @@ mod tests {
             current: 1000,
             limit: 500,
         };
-        assert_eq!(
-            error.to_string(),
-            "Storage quota exceeded: 1000/500 bytes"
-        );
+        assert_eq!(error.to_string(), "Storage quota exceeded: 1000/500 bytes");
     }
 
     #[test]
     fn test_error_from_conversion() {
         let io_error = std::io::Error::new(std::io::ErrorKind::NotFound, "file not found");
         let storage_error = StorageError::from(io_error);
-        
+
         match storage_error {
             StorageError::IoError { reason } => {
                 assert!(reason.contains("file not found"));
@@ -455,7 +454,7 @@ mod tests {
             namespace: "system".to_string(),
         };
         let storage_error = StorageError::from(namespace_error);
-        
+
         match storage_error {
             StorageError::AccessDenied { namespace } => {
                 assert_eq!(namespace, "system");
@@ -471,7 +470,7 @@ mod tests {
             group_id: "team".to_string(),
         };
         let storage_error = StorageError::from(group_error);
-        
+
         match storage_error {
             StorageError::GroupAccessDenied { user_id, group_id } => {
                 assert_eq!(user_id, "alice");

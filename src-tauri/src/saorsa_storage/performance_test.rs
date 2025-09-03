@@ -1,12 +1,11 @@
 /// Performance testing utilities for Saorsa Storage System
 /// Validates that performance targets are met
-
 use crate::saorsa_storage::{
     benchmarks::{BenchmarkConfig, StorageBenchmark},
-    profiler::{Profiler, OptimizationRecommendations},
+    profiler::{OptimizationRecommendations, Profiler},
 };
-use std::time::{Duration, Instant};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 pub struct PerformanceTestRunner {
     benchmark_config: BenchmarkConfig,
@@ -29,17 +28,19 @@ impl PerformanceTestRunner {
     }
 
     /// Run comprehensive performance validation
-    pub async fn run_performance_validation(&mut self) -> Result<PerformanceReport, Box<dyn std::error::Error>> {
+    pub async fn run_performance_validation(
+        &mut self,
+    ) -> Result<PerformanceReport, Box<dyn std::error::Error>> {
         println!("🚀 Starting Saorsa Storage Performance Validation");
         println!("================================================");
-        
+
         let validation_start = Instant::now();
 
         // Step 1: Run comprehensive benchmarks
         println!("\n📊 Running Performance Benchmarks...");
         let mut benchmark = StorageBenchmark::new(self.benchmark_config.clone())?;
         let benchmark_report = benchmark.run_comprehensive_benchmarks().await;
-        
+
         // Print benchmark results
         benchmark_report.print_summary();
 
@@ -48,9 +49,10 @@ impl PerformanceTestRunner {
         let profile_results = self.profiler.get_results().await;
         if !profile_results.is_empty() {
             self.profiler.print_report().await;
-            
+
             // Generate optimization recommendations
-            let recommendations = OptimizationRecommendations::analyze_profile_results(&profile_results);
+            let recommendations =
+                OptimizationRecommendations::analyze_profile_results(&profile_results);
             recommendations.print_recommendations();
         } else {
             println!("ℹ️  No profile data available (profiling may not be enabled in benchmarks)");
@@ -59,7 +61,7 @@ impl PerformanceTestRunner {
         // Step 3: Validate performance targets
         println!("\n✅ Validating Performance Targets...");
         let validation_results = self.validate_performance_targets(&benchmark_report).await;
-        
+
         // Step 4: Generate comprehensive report
         let total_duration = validation_start.elapsed();
         let report = PerformanceReport {
@@ -67,7 +69,9 @@ impl PerformanceTestRunner {
             validation_results,
             total_duration,
             recommendations: if !profile_results.is_empty() {
-                Some(OptimizationRecommendations::analyze_profile_results(&profile_results))
+                Some(OptimizationRecommendations::analyze_profile_results(
+                    &profile_results,
+                ))
             } else {
                 None
             },
@@ -79,11 +83,16 @@ impl PerformanceTestRunner {
         Ok(report)
     }
 
-    async fn validate_performance_targets(&self, benchmark_report: &crate::saorsa_storage::benchmarks::BenchmarkReport) -> PerformanceValidationResults {
+    async fn validate_performance_targets(
+        &self,
+        benchmark_report: &crate::saorsa_storage::benchmarks::BenchmarkReport,
+    ) -> PerformanceValidationResults {
         let mut validations = Vec::new();
 
         // Validate local operation targets (<100ms)
-        let local_ops: Vec<_> = benchmark_report.results.iter()
+        let local_ops: Vec<_> = benchmark_report
+            .results
+            .iter()
             .filter(|r| r.operation.contains("cache") || r.operation.contains("local"))
             .collect();
 
@@ -100,7 +109,9 @@ impl PerformanceTestRunner {
         }
 
         // Validate remote operation targets (<500ms)
-        let remote_ops: Vec<_> = benchmark_report.results.iter()
+        let remote_ops: Vec<_> = benchmark_report
+            .results
+            .iter()
             .filter(|r| r.operation.contains("store") || r.operation.contains("retrieve"))
             .filter(|r| !r.operation.contains("cache"))
             .collect();
@@ -118,7 +129,9 @@ impl PerformanceTestRunner {
         }
 
         // Validate concurrent operations
-        let concurrent_ops: Vec<_> = benchmark_report.results.iter()
+        let concurrent_ops: Vec<_> = benchmark_report
+            .results
+            .iter()
             .filter(|r| r.operation.contains("concurrent"))
             .collect();
 
@@ -135,7 +148,9 @@ impl PerformanceTestRunner {
         }
 
         // Validate cache performance (ultra-fast operations)
-        let cache_ops: Vec<_> = benchmark_report.results.iter()
+        let cache_ops: Vec<_> = benchmark_report
+            .results
+            .iter()
             .filter(|r| r.operation.contains("cache"))
             .collect();
 
@@ -165,18 +180,31 @@ impl PerformanceTestRunner {
     fn print_validation_summary(&self, report: &PerformanceReport) {
         println!("\n📋 Performance Validation Summary");
         println!("===============================");
-        
+
         let validation = &report.validation_results;
-        println!("Overall Result: {}", 
-            if validation.overall_passed { "✅ PASSED" } else { "❌ FAILED" });
-        println!("Tests Passed: {}/{}", validation.passed_count, validation.total_count);
-        println!("Total Duration: {:.2}s", report.total_duration.as_secs_f64());
-        
+        println!(
+            "Overall Result: {}",
+            if validation.overall_passed {
+                "✅ PASSED"
+            } else {
+                "❌ FAILED"
+            }
+        );
+        println!(
+            "Tests Passed: {}/{}",
+            validation.passed_count, validation.total_count
+        );
+        println!(
+            "Total Duration: {:.2}s",
+            report.total_duration.as_secs_f64()
+        );
+
         if !validation.overall_passed {
             println!("\n❌ Failed Performance Validations:");
             for v in &validation.validations {
                 if !v.passed {
-                    println!("  • {} - {} (actual: {}ms, target: {}ms, success: {:.1}%)",
+                    println!(
+                        "  • {} - {} (actual: {}ms, target: {}ms, success: {:.1}%)",
                         v.operation,
                         v.target_description,
                         v.actual_p95_ms,
@@ -192,7 +220,7 @@ impl PerformanceTestRunner {
             println!("\n🎉 All performance targets met! System is production-ready.");
         } else {
             println!("\n⚠️  Performance optimization needed before production deployment.");
-            
+
             if let Some(_recommendations) = &report.recommendations {
                 println!("\n📝 See optimization recommendations above for improvement guidance.");
             }
@@ -235,7 +263,7 @@ pub struct PerformanceValidation {
 /// Quick performance smoke test for CI/CD
 pub async fn run_performance_smoke_test() -> Result<bool, Box<dyn std::error::Error>> {
     println!("🚄 Running Performance Smoke Test (Quick Validation)");
-    
+
     let config = BenchmarkConfig {
         iterations: 10,
         warmup_iterations: 2,
@@ -245,10 +273,11 @@ pub async fn run_performance_smoke_test() -> Result<bool, Box<dyn std::error::Er
 
     let mut runner = PerformanceTestRunner::with_config(config);
     let report = runner.run_performance_validation().await?;
-    
+
     // For smoke test, we're more lenient
-    let smoke_test_passed = report.validation_results.passed_count >= (report.validation_results.total_count * 4 / 5); // 80% pass rate
-    
+    let smoke_test_passed =
+        report.validation_results.passed_count >= (report.validation_results.total_count * 4 / 5); // 80% pass rate
+
     if smoke_test_passed {
         println!("✅ Performance smoke test PASSED");
     } else {
@@ -261,13 +290,14 @@ pub async fn run_performance_smoke_test() -> Result<bool, Box<dyn std::error::Er
 /// Comprehensive performance validation for release validation
 pub async fn run_comprehensive_performance_test() -> Result<bool, Box<dyn std::error::Error>> {
     println!("🏁 Running Comprehensive Performance Validation");
-    
+
     let mut runner = PerformanceTestRunner::new();
     let report = runner.run_performance_validation().await?;
-    
+
     // For comprehensive test, we require 100% pass rate
-    let comprehensive_passed = report.validation_results.overall_passed && report.benchmark_report.overall_success;
-    
+    let comprehensive_passed =
+        report.validation_results.overall_passed && report.benchmark_report.overall_success;
+
     if comprehensive_passed {
         println!("🎉 Comprehensive performance validation PASSED - Production Ready!");
     } else {
@@ -293,10 +323,10 @@ mod tests {
 
         let mut runner = PerformanceTestRunner::with_config(config);
         let result = runner.run_performance_validation().await;
-        
+
         // Test should complete without panicking
         assert!(result.is_ok());
-        
+
         let report = result.unwrap();
         assert!(!report.validation_results.validations.is_empty());
     }

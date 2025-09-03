@@ -1,6 +1,6 @@
+use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
-use async_trait::async_trait;
 use tokio::sync::RwLock;
 
 use crate::error::AppResult;
@@ -35,7 +35,9 @@ impl LocalDht {
 
     pub async fn add_peer(&self, peer_id: String) {
         let mut peers = self.peers.write().await;
-        if !peers.contains(&peer_id) { peers.push(peer_id); }
+        if !peers.contains(&peer_id) {
+            peers.push(peer_id);
+        }
     }
 
     /// Test helper: drain all messages for a peer
@@ -47,7 +49,9 @@ impl LocalDht {
 
 #[async_trait]
 impl DhtFacade for LocalDht {
-    async fn self_id(&self) -> String { self.self_id.clone() }
+    async fn self_id(&self) -> String {
+        self.self_id.clone()
+    }
 
     async fn put(&self, key: Vec<u8>, value: Vec<u8>) -> AppResult<()> {
         let mut store = self.store.write().await;

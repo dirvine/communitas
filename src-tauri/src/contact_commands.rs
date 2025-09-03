@@ -13,7 +13,6 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-
 //! Tauri Commands for Contact Management
 //!
 //! This module provides the Tauri command interface for the contact management system

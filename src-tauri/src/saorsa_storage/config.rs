@@ -2,12 +2,11 @@
  * Saorsa Storage System - Configuration Management
  * Implements configuration validation, persistence, and runtime updates
  */
-
 use crate::saorsa_storage::errors::*;
-use crate::saorsa_storage::{StoragePolicy, EncryptionMode};
+use crate::saorsa_storage::{EncryptionMode, StoragePolicy};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use serde::{Deserialize, Serialize};
 // use std::time::Duration;  // Currently unused
 use chrono::{DateTime, Utc};
 
@@ -199,13 +198,13 @@ impl ConfigManager {
     /// Load configuration from file
     pub fn load_from_file<P: AsRef<Path>>(path: P) -> StorageResult<Self> {
         let path_buf = path.as_ref().to_path_buf();
-        let content = std::fs::read_to_string(&path_buf)
-            .map_err(|e| StorageError::ConfigError {
+        let content =
+            std::fs::read_to_string(&path_buf).map_err(|e| StorageError::ConfigError {
                 reason: format!("Failed to read config file: {}", e),
             })?;
 
-        let config: StorageConfig = toml::from_str(&content)
-            .map_err(|e| StorageError::ConfigError {
+        let config: StorageConfig =
+            toml::from_str(&content).map_err(|e| StorageError::ConfigError {
                 reason: format!("Failed to parse config: {}", e),
             })?;
 
@@ -229,15 +228,14 @@ impl ConfigManager {
 
     /// Save configuration to file
     pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> StorageResult<()> {
-        let content = toml::to_string_pretty(&self.config)
-            .map_err(|e| StorageError::ConfigError {
+        let content =
+            toml::to_string_pretty(&self.config).map_err(|e| StorageError::ConfigError {
                 reason: format!("Failed to serialize config: {}", e),
             })?;
 
-        std::fs::write(path, content)
-            .map_err(|e| StorageError::ConfigError {
-                reason: format!("Failed to write config file: {}", e),
-            })?;
+        std::fs::write(path, content).map_err(|e| StorageError::ConfigError {
+            reason: format!("Failed to write config file: {}", e),
+        })?;
 
         Ok(())
     }
@@ -256,7 +254,7 @@ impl ConfigManager {
             last_loaded: None,
             watchers: Vec::new(),
         };
-        
+
         let validation = temp_manager.validate()?;
         if !validation.is_valid {
             return Err(StorageError::ConfigError {
@@ -265,7 +263,7 @@ impl ConfigManager {
         }
 
         self.config = new_config;
-        
+
         // Notify watchers
         for watcher in &self.watchers {
             watcher.on_config_changed(&self.config);
@@ -329,13 +327,18 @@ impl ConfigManager {
             errors.push("Rate limit must be greater than 0".to_string());
         }
 
-        if self.config.security.min_key_entropy < 0.0 || self.config.security.min_key_entropy > 8.0 {
+        if self.config.security.min_key_entropy < 0.0 || self.config.security.min_key_entropy > 8.0
+        {
             errors.push("Key entropy must be between 0.0 and 8.0".to_string());
         }
 
         // Check for conflicting settings
-        if !self.config.features.enable_reed_solomon && self.config.network.dht_replication_factor < 3 {
-            warnings.push("Low replication factor without Reed-Solomon may reduce reliability".to_string());
+        if !self.config.features.enable_reed_solomon
+            && self.config.network.dht_replication_factor < 3
+        {
+            warnings.push(
+                "Low replication factor without Reed-Solomon may reduce reliability".to_string(),
+            );
         }
 
         let is_valid = errors.is_empty();
@@ -353,7 +356,9 @@ impl ConfigManager {
             "policies.default_namespace" => Ok(self.config.policies.default_namespace.clone()),
             "encryption.default_mode" => Ok(format!("{:?}", self.config.encryption.default_mode)),
             "cache.max_size_bytes" => Ok(self.config.cache.max_size_bytes.to_string()),
-            "network.operation_timeout_secs" => Ok(self.config.network.operation_timeout_secs.to_string()),
+            "network.operation_timeout_secs" => {
+                Ok(self.config.network.operation_timeout_secs.to_string())
+            }
             _ => Err(StorageError::ConfigError {
                 reason: format!("Unknown config path: {}", path),
             }),
@@ -367,27 +372,32 @@ impl ConfigManager {
                 self.config.policies.default_namespace = value.to_string();
             }
             "cache.max_size_bytes" => {
-                self.config.cache.max_size_bytes = value.parse()
-                    .map_err(|_| StorageError::ConfigError {
+                self.config.cache.max_size_bytes =
+                    value.parse().map_err(|_| StorageError::ConfigError {
                         reason: "Invalid number for cache.max_size_bytes".to_string(),
                     })?;
             }
             "network.operation_timeout_secs" => {
-                self.config.network.operation_timeout_secs = value.parse()
-                    .map_err(|_| StorageError::ConfigError {
+                self.config.network.operation_timeout_secs =
+                    value.parse().map_err(|_| StorageError::ConfigError {
                         reason: "Invalid number for network.operation_timeout_secs".to_string(),
                     })?;
             }
-            _ => return Err(StorageError::ConfigError {
-                reason: format!("Unknown config path: {}", path),
-            }),
+            _ => {
+                return Err(StorageError::ConfigError {
+                    reason: format!("Unknown config path: {}", path),
+                });
+            }
         }
 
         // Validate after change
         let validation = self.validate()?;
         if !validation.is_valid {
             return Err(StorageError::ConfigError {
-                reason: format!("Configuration invalid after change: {:?}", validation.errors),
+                reason: format!(
+                    "Configuration invalid after change: {:?}",
+                    validation.errors
+                ),
             });
         }
 
@@ -403,20 +413,20 @@ impl ConfigManager {
     pub fn reload(&mut self) -> StorageResult<bool> {
         if let Some(config_path) = &self.config_path {
             let new_manager = Self::load_from_file(config_path)?;
-            
+
             // Check if configuration actually changed
             let changed = !self.configs_equal(&self.config, &new_manager.config);
-            
+
             if changed {
                 self.config = new_manager.config;
                 self.last_loaded = Some(Utc::now());
-                
+
                 // Notify watchers
                 for watcher in &self.watchers {
                     watcher.on_config_changed(&self.config);
                 }
             }
-            
+
             Ok(changed)
         } else {
             Err(StorageError::ConfigError {
@@ -427,10 +437,9 @@ impl ConfigManager {
 
     /// Get configuration as TOML string
     pub fn to_toml(&self) -> StorageResult<String> {
-        toml::to_string_pretty(&self.config)
-            .map_err(|e| StorageError::ConfigError {
-                reason: format!("Failed to serialize config: {}", e),
-            })
+        toml::to_string_pretty(&self.config).map_err(|e| StorageError::ConfigError {
+            reason: format!("Failed to serialize config: {}", e),
+        })
     }
 
     // Private helper methods
@@ -483,13 +492,13 @@ impl Default for StorageConfig {
                 max_size_bytes: 100 * 1024 * 1024, // 100MB
                 max_entries: 10000,
                 default_ttl_secs: Some(3600), // 1 hour
-                compress_threshold: 4096, // 4KB
-                cleanup_interval_secs: 300, // 5 minutes
+                compress_threshold: 4096,     // 4KB
+                cleanup_interval_secs: 300,   // 5 minutes
                 enable_integrity_check: true,
             },
             performance: PerformanceConfig {
                 chunk_size: 256 * 1024, // 256KB
-                max_chunks: 40960, // ~10GB max file
+                max_chunks: 40960,      // ~10GB max file
                 enable_compression: true,
                 compression_level: 6,
                 io_thread_pool_size: 4,
@@ -544,7 +553,7 @@ mod tests {
         let manager = ConfigManager::new();
         let toml_str = manager.to_toml().unwrap();
         assert!(!toml_str.is_empty());
-        
+
         // Should be able to parse it back
         let _config: StorageConfig = toml::from_str(&toml_str).unwrap();
     }
@@ -553,11 +562,11 @@ mod tests {
     fn test_config_file_operations() {
         let temp_file = NamedTempFile::new().unwrap();
         let manager = ConfigManager::new();
-        
+
         // Save to file
         let save_result = manager.save_to_file(temp_file.path());
         assert!(save_result.is_ok());
-        
+
         // Load from file
         let loaded_manager = ConfigManager::load_from_file(temp_file.path());
         assert!(loaded_manager.is_ok());
@@ -566,15 +575,15 @@ mod tests {
     #[test]
     fn test_config_value_access() {
         let mut manager = ConfigManager::new();
-        
+
         // Get value
         let namespace = manager.get_value("policies.default_namespace").unwrap();
         assert_eq!(namespace, "default");
-        
+
         // Set value
         let set_result = manager.set_value("policies.default_namespace", "test_namespace");
         assert!(set_result.is_ok());
-        
+
         let new_namespace = manager.get_value("policies.default_namespace").unwrap();
         assert_eq!(new_namespace, "test_namespace");
     }
@@ -583,14 +592,14 @@ mod tests {
     fn test_invalid_config_validation() {
         let mut config = StorageConfig::default();
         config.cache.max_size_bytes = 0; // Invalid
-        
+
         let manager = ConfigManager {
             config,
             config_path: None,
             last_loaded: None,
             watchers: Vec::new(),
         };
-        
+
         let validation = manager.validate().unwrap();
         assert!(!validation.is_valid);
         assert!(!validation.errors.is_empty());

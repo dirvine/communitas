@@ -9,18 +9,18 @@
 
 //! Shard distribution system for real P2P network communication
 
+use anyhow::{Context, Result, bail};
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
-use serde::{Deserialize, Serialize};
-use anyhow::{Result, Context, bail};
-use tracing::{debug, info, warn, error};
 use tokio::sync::RwLock;
+use tracing::{debug, error, info, warn};
 // Note: timeout import removed as it's not used
 // use tokio::time::timeout;
 
+use super::reed_solomon_manager::{EnhancedReedSolomonManager, Shard, ShardDistributionPlan};
 use crate::dht_facade::DhtFacade;
-use super::reed_solomon_manager::{Shard, ShardDistributionPlan, EnhancedReedSolomonManager};
 
 /// Message types for shard communication
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -90,10 +90,7 @@ pub struct ShardDistributor<F: DhtFacade + 'static> {
 }
 
 impl<F: DhtFacade + 'static> ShardDistributor<F> {
-    pub fn new(
-        dht: Arc<F>,
-        reed_solomon: Arc<EnhancedReedSolomonManager>,
-    ) -> Self {
+    pub fn new(dht: Arc<F>, reed_solomon: Arc<EnhancedReedSolomonManager>) -> Self {
         Self {
             dht,
             reed_solomon,
@@ -111,7 +108,9 @@ impl<F: DhtFacade + 'static> ShardDistributor<F> {
         shards: &[Shard],
         group_members: &[String],
     ) -> Result<ShardDistributionPlan> {
-        self.reed_solomon.create_distribution_plan(group_id, shards, group_members).await
+        self.reed_solomon
+            .create_distribution_plan(group_id, shards, group_members)
+            .await
     }
 
     /// Distribute shards to group members via P2P network
@@ -119,8 +118,12 @@ impl<F: DhtFacade + 'static> ShardDistributor<F> {
         &self,
         distribution_plan: &ShardDistributionPlan,
     ) -> Result<DistributionStatus> {
-        let distribution_id = format!("{}:{}", distribution_plan.group_id, chrono::Utc::now().timestamp());
-        
+        let distribution_id = format!(
+            "{}:{}",
+            distribution_plan.group_id,
+            chrono::Utc::now().timestamp()
+        );
+
         let mut status = DistributionStatus {
             group_id: distribution_plan.group_id.clone(),
             total_shards: distribution_plan.total_shards,
@@ -162,17 +165,18 @@ impl<F: DhtFacade + 'static> ShardDistributor<F> {
 
         // Process results
         for (member_id, result) in results.iter().enumerate() {
-            let member_key = distribution_plan.member_assignments.keys()
+            let member_key = distribution_plan
+                .member_assignments
+                .keys()
                 .nth(member_id)
                 .unwrap();
-                
+
             match result {
                 Ok(_) => {
                     status.successful_distributions += 1;
-                    status.member_responses.insert(
-                        member_key.clone(),
-                        DistributionResult::Success,
-                    );
+                    status
+                        .member_responses
+                        .insert(member_key.clone(), DistributionResult::Success);
                 }
                 Err(e) => {
                     status.failed_distributions += 1;
@@ -194,8 +198,9 @@ impl<F: DhtFacade + 'static> ShardDistributor<F> {
         }
 
         // Store distribution success/failure metrics
-        let success_rate = (status.successful_distributions as f32 / status.total_shards as f32) * 100.0;
-        
+        let success_rate =
+            (status.successful_distributions as f32 / status.total_shards as f32) * 100.0;
+
         if success_rate >= 75.0 {
             info!(
                 "Shard distribution completed for group {} with {:.1}% success rate",
@@ -220,7 +225,9 @@ impl<F: DhtFacade + 'static> ShardDistributor<F> {
     ) -> Result<Vec<Shard>> {
         debug!(
             "Collecting shards for group {} data {} from {} members",
-            group_id, data_id, group_members.len()
+            group_id,
+            data_id,
+            group_members.len()
         );
 
         // First check local cache
@@ -229,7 +236,11 @@ impl<F: DhtFacade + 'static> ShardDistributor<F> {
             let cache = self.shard_cache.read().await;
             if let Some(cached_shards) = cache.get(&cache_key) {
                 if !cached_shards.is_empty() {
-                    debug!("Found {} cached shards for {}", cached_shards.len(), cache_key);
+                    debug!(
+                        "Found {} cached shards for {}",
+                        cached_shards.len(),
+                        cache_key
+                    );
                     return Ok(cached_shards.clone());
                 }
             }
@@ -237,7 +248,7 @@ impl<F: DhtFacade + 'static> ShardDistributor<F> {
 
         // Collect shards from group members concurrently
         let mut collection_tasks = Vec::new();
-        
+
         for member_id in group_members {
             let task = self.request_shards_from_member(
                 member_id.clone(),
@@ -256,7 +267,11 @@ impl<F: DhtFacade + 'static> ShardDistributor<F> {
                 Ok(member_shards) => {
                     available_shards.extend(member_shards.iter().cloned());
                     successful_requests += 1;
-                    debug!("Collected {} shards from member {}", member_shards.len(), member_id);
+                    debug!(
+                        "Collected {} shards from member {}",
+                        member_shards.len(),
+                        member_id
+                    );
                 }
                 Err(e) => {
                     warn!("Failed to collect shards from member {}: {}", member_id, e);
@@ -275,7 +290,10 @@ impl<F: DhtFacade + 'static> ShardDistributor<F> {
 
         info!(
             "Collected {} unique shards from {}/{} members for group {}",
-            available_shards.len(), successful_requests, group_members.len(), group_id
+            available_shards.len(),
+            successful_requests,
+            group_members.len(),
+            group_id
         );
 
         Ok(available_shards)
@@ -288,10 +306,13 @@ impl<F: DhtFacade + 'static> ShardDistributor<F> {
         data_id: &str,
         group_members: &[String],
     ) -> Result<ShardHealthReport> {
-        debug!("Performing health check for group {} data {}", group_id, data_id);
+        debug!(
+            "Performing health check for group {} data {}",
+            group_id, data_id
+        );
 
         let mut health_tasks = Vec::new();
-        
+
         for member_id in group_members {
             let task = self.check_member_shard_health(
                 member_id.clone(),
@@ -318,7 +339,9 @@ impl<F: DhtFacade + 'static> ShardDistributor<F> {
                 Ok(member_health) => {
                     health_report.responsive_members += 1;
                     health_report.total_shards_found += member_health.available_shards.len();
-                    health_report.corrupted_shards.extend(&member_health.corrupted_shards);
+                    health_report
+                        .corrupted_shards
+                        .extend(&member_health.corrupted_shards);
                 }
                 Err(_) => {
                     health_report.missing_members.push(member_id.clone());
@@ -327,13 +350,17 @@ impl<F: DhtFacade + 'static> ShardDistributor<F> {
         }
 
         // Check if reconstruction is still possible
-        let reconstruction_status = self.reed_solomon.get_reconstruction_status(
-            group_id,
-            data_id,
-            &[], // We'll need to collect actual shards for this
-        ).await?;
+        let reconstruction_status = self
+            .reed_solomon
+            .get_reconstruction_status(
+                group_id,
+                data_id,
+                &[], // We'll need to collect actual shards for this
+            )
+            .await?;
 
-        health_report.reconstruction_possible = health_report.total_shards_found >= reconstruction_status.required_shards;
+        health_report.reconstruction_possible =
+            health_report.total_shards_found >= reconstruction_status.required_shards;
 
         info!(
             "Health check completed for group {}: {}/{} members responsive, {} shards found, reconstruction {}",
@@ -341,14 +368,21 @@ impl<F: DhtFacade + 'static> ShardDistributor<F> {
             health_report.responsive_members,
             health_report.total_members,
             health_report.total_shards_found,
-            if health_report.reconstruction_possible { "possible" } else { "impossible" }
+            if health_report.reconstruction_possible {
+                "possible"
+            } else {
+                "impossible"
+            }
         );
 
         Ok(health_report)
     }
 
     /// Get status of active distributions
-    pub async fn get_distribution_status(&self, distribution_id: &str) -> Option<DistributionStatus> {
+    pub async fn get_distribution_status(
+        &self,
+        distribution_id: &str,
+    ) -> Option<DistributionStatus> {
         let active = self.active_distributions.read().await;
         active.get(distribution_id).cloned()
     }
@@ -374,8 +408,8 @@ impl<F: DhtFacade + 'static> ShardDistributor<F> {
         };
 
         // Serialize message for network transmission
-        let message_data = serde_json::to_vec(&message)
-            .context("Failed to serialize shard storage message")?;
+        let message_data =
+            serde_json::to_vec(&message).context("Failed to serialize shard storage message")?;
 
         // Send via DHT with retry logic
         for attempt in 0..self.max_retries {
@@ -386,9 +420,14 @@ impl<F: DhtFacade + 'static> ShardDistributor<F> {
                         .context("Failed to parse shard storage response")?;
 
                     match response {
-                        ShardMessage::StoreShardResponse { success, message, .. } => {
+                        ShardMessage::StoreShardResponse {
+                            success, message, ..
+                        } => {
                             if success {
-                                debug!("Successfully stored shard {} with member {}", shard.index, member_id);
+                                debug!(
+                                    "Successfully stored shard {} with member {}",
+                                    shard.index, member_id
+                                );
                                 return Ok(());
                             } else {
                                 bail!("Member {} rejected shard storage: {}", member_id, message);
@@ -400,13 +439,16 @@ impl<F: DhtFacade + 'static> ShardDistributor<F> {
                 Err(e) => {
                     warn!(
                         "Attempt {}/{} failed to send shard to {}: {}",
-                        attempt + 1, self.max_retries, member_id, e
+                        attempt + 1,
+                        self.max_retries,
+                        member_id,
+                        e
                     );
-                    
+
                     if attempt == self.max_retries - 1 {
                         return Err(e);
                     }
-                    
+
                     // Exponential backoff
                     let delay = Duration::from_millis(100 * (1 << attempt));
                     tokio::time::sleep(delay).await;
@@ -423,7 +465,10 @@ impl<F: DhtFacade + 'static> ShardDistributor<F> {
         group_id: String,
         data_id: String,
     ) -> Result<Vec<Shard>> {
-        debug!("Requesting shards from member {} for group {}", member_id, group_id);
+        debug!(
+            "Requesting shards from member {} for group {}",
+            member_id, group_id
+        );
 
         let requester = self.dht.self_id().await;
         let message = ShardMessage::RetrieveShardRequest {
@@ -433,16 +478,22 @@ impl<F: DhtFacade + 'static> ShardDistributor<F> {
             requester_id: requester,
         };
 
-        let message_data = serde_json::to_vec(&message)
-            .context("Failed to serialize shard retrieval message")?;
+        let message_data =
+            serde_json::to_vec(&message).context("Failed to serialize shard retrieval message")?;
 
-        let response_data = self.send_message_to_member(&member_id, &message_data).await?;
-        
+        let response_data = self
+            .send_message_to_member(&member_id, &message_data)
+            .await?;
+
         let response: ShardMessage = serde_json::from_slice(&response_data)
             .context("Failed to parse shard retrieval response")?;
 
         match response {
-            ShardMessage::RetrieveShardResponse { shard, success, message } => {
+            ShardMessage::RetrieveShardResponse {
+                shard,
+                success,
+                message,
+            } => {
                 if success {
                     Ok(shard.into_iter().collect())
                 } else {
@@ -465,22 +516,25 @@ impl<F: DhtFacade + 'static> ShardDistributor<F> {
             shard_indices: vec![], // Check all shards
         };
 
-        let message_data = serde_json::to_vec(&message)
-            .context("Failed to serialize health check message")?;
+        let message_data =
+            serde_json::to_vec(&message).context("Failed to serialize health check message")?;
 
-        let response_data = self.send_message_to_member(&member_id, &message_data).await?;
-        
+        let response_data = self
+            .send_message_to_member(&member_id, &message_data)
+            .await?;
+
         let response: ShardMessage = serde_json::from_slice(&response_data)
             .context("Failed to parse health check response")?;
 
         match response {
-            ShardMessage::ShardHealthResponse { available_shards, corrupted_shards } => {
-                Ok(MemberShardHealth {
-                    member_id,
-                    available_shards,
-                    corrupted_shards,
-                })
-            }
+            ShardMessage::ShardHealthResponse {
+                available_shards,
+                corrupted_shards,
+            } => Ok(MemberShardHealth {
+                member_id,
+                available_shards,
+                corrupted_shards,
+            }),
             _ => bail!("Unexpected response type from member"),
         }
     }
@@ -492,7 +546,11 @@ impl<F: DhtFacade + 'static> ShardDistributor<F> {
     ) -> Result<Vec<u8>> {
         let response = self
             .dht
-            .send(member_id.to_string(), "storage/shard".into(), message_data.to_vec())
+            .send(
+                member_id.to_string(),
+                "storage/shard".into(),
+                message_data.to_vec(),
+            )
             .await
             .map_err(|e| anyhow::anyhow!("DHT send failed: {}", e))?;
         Ok(response)

@@ -13,7 +13,6 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -73,17 +72,32 @@ fn metadata_path() -> PathBuf {
 fn scope_dir(scope: &str) -> Result<PathBuf> {
     // Map scope to directory under DATA_DIR
     let dir = match scope.split('/').collect::<Vec<_>>().as_slice() {
-        ["contact", contact_id] => app_data_dir().join("contacts").join(contact_id).join("markdown"),
+        ["contact", contact_id] => app_data_dir()
+            .join("contacts")
+            .join(contact_id)
+            .join("markdown"),
         ["org", org_id] => app_data_dir().join("orgs").join(org_id).join("markdown"),
-        ["org", org_id, "group", group_id] => app_data_dir().join("orgs").join(org_id).join("groups").join(group_id).join("markdown"),
-        ["org", org_id, "project", project_id] => app_data_dir().join("orgs").join(org_id).join("projects").join(project_id).join("markdown"),
+        ["org", org_id, "group", group_id] => app_data_dir()
+            .join("orgs")
+            .join(org_id)
+            .join("groups")
+            .join(group_id)
+            .join("markdown"),
+        ["org", org_id, "project", project_id] => app_data_dir()
+            .join("orgs")
+            .join(org_id)
+            .join("projects")
+            .join(project_id)
+            .join("markdown"),
         _ => anyhow::bail!("Invalid scope: {}", scope),
     };
     Ok(dir)
 }
 
 async fn ensure_dir(path: &Path) -> Result<()> {
-    fs::create_dir_all(path).await.context("Failed to create directory")
+    fs::create_dir_all(path)
+        .await
+        .context("Failed to create directory")
 }
 
 async fn read_metadata() -> Result<Metadata> {
@@ -91,18 +105,23 @@ async fn read_metadata() -> Result<Metadata> {
     if !path.exists() {
         return Ok(Metadata::default());
     }
-    let bytes = fs::read(&path).await.context("Failed to read metadata.json")?;
+    let bytes = fs::read(&path)
+        .await
+        .context("Failed to read metadata.json")?;
     let meta: Metadata = serde_json::from_slice(&bytes).context("Failed to parse metadata.json")?;
     Ok(meta)
 }
 
 async fn write_metadata(meta: &Metadata) -> Result<()> {
     let path = metadata_path();
-    let parent = path.parent()
+    let parent = path
+        .parent()
         .ok_or_else(|| anyhow::anyhow!("Metadata path has no parent directory"))?;
     fs::create_dir_all(parent).await.ok();
     let data = serde_json::to_vec_pretty(meta).context("Failed to serialize metadata")?;
-    fs::write(&path, data).await.context("Failed to write metadata.json")
+    fs::write(&path, data)
+        .await
+        .context("Failed to write metadata.json")
 }
 
 #[tauri::command]
@@ -110,11 +129,17 @@ pub async fn init_local_stores() -> Result<String, String> {
     // Ensure base directories
     let base = app_data_dir();
     ensure_dir(&base).await.map_err(|e| e.to_string())?;
-    ensure_dir(&base.join("contacts")).await.map_err(|e| e.to_string())?;
-    ensure_dir(&base.join("orgs")).await.map_err(|e| e.to_string())?;
+    ensure_dir(&base.join("contacts"))
+        .await
+        .map_err(|e| e.to_string())?;
+    ensure_dir(&base.join("orgs"))
+        .await
+        .map_err(|e| e.to_string())?;
     // Ensure metadata exists
     if !metadata_path().exists() {
-        write_metadata(&Metadata::default()).await.map_err(|e| e.to_string())?;
+        write_metadata(&Metadata::default())
+            .await
+            .map_err(|e| e.to_string())?;
     }
     Ok(base.to_string_lossy().to_string())
 }
@@ -128,11 +153,18 @@ pub async fn get_metadata() -> Result<Metadata, String> {
 pub async fn create_organization(name: String) -> Result<OrganizationEntry, String> {
     let mut meta = read_metadata().await.map_err(|e| e.to_string())?;
     let id = uuid::Uuid::new_v4().to_string();
-    let org = OrganizationEntry { id: id.clone(), name, groups: vec![], projects: vec![] };
+    let org = OrganizationEntry {
+        id: id.clone(),
+        name,
+        groups: vec![],
+        projects: vec![],
+    };
     // Ensure org directories
     let base = app_data_dir().join("orgs").join(&id);
     for sub in ["markdown", "groups", "projects"] {
-        ensure_dir(&base.join(sub)).await.map_err(|e| e.to_string())?;
+        ensure_dir(&base.join(sub))
+            .await
+            .map_err(|e| e.to_string())?;
     }
     meta.organizations.push(org.clone());
     write_metadata(&meta).await.map_err(|e| e.to_string())?;
@@ -143,10 +175,19 @@ pub async fn create_organization(name: String) -> Result<OrganizationEntry, Stri
 pub async fn create_group_local(org_id: String, name: String) -> Result<NamedEntry, String> {
     let mut meta = read_metadata().await.map_err(|e| e.to_string())?;
     let id = uuid::Uuid::new_v4().to_string();
-    let entry = NamedEntry { id: id.clone(), name };
+    let entry = NamedEntry {
+        id: id.clone(),
+        name,
+    };
     // Ensure directories
-    let dir = app_data_dir().join("orgs").join(&org_id).join("groups").join(&id);
-    ensure_dir(&dir.join("markdown")).await.map_err(|e| e.to_string())?;
+    let dir = app_data_dir()
+        .join("orgs")
+        .join(&org_id)
+        .join("groups")
+        .join(&id);
+    ensure_dir(&dir.join("markdown"))
+        .await
+        .map_err(|e| e.to_string())?;
     if let Some(org) = meta.organizations.iter_mut().find(|o| o.id == org_id) {
         org.groups.push(entry.clone());
         write_metadata(&meta).await.map_err(|e| e.to_string())?;
@@ -160,9 +201,18 @@ pub async fn create_group_local(org_id: String, name: String) -> Result<NamedEnt
 pub async fn create_project(org_id: String, name: String) -> Result<NamedEntry, String> {
     let mut meta = read_metadata().await.map_err(|e| e.to_string())?;
     let id = uuid::Uuid::new_v4().to_string();
-    let entry = NamedEntry { id: id.clone(), name };
-    let dir = app_data_dir().join("orgs").join(&org_id).join("projects").join(&id);
-    ensure_dir(&dir.join("markdown")).await.map_err(|e| e.to_string())?;
+    let entry = NamedEntry {
+        id: id.clone(),
+        name,
+    };
+    let dir = app_data_dir()
+        .join("orgs")
+        .join(&org_id)
+        .join("projects")
+        .join(&id);
+    ensure_dir(&dir.join("markdown"))
+        .await
+        .map_err(|e| e.to_string())?;
     if let Some(org) = meta.organizations.iter_mut().find(|o| o.id == org_id) {
         org.projects.push(entry.clone());
         write_metadata(&meta).await.map_err(|e| e.to_string())?;
@@ -173,12 +223,21 @@ pub async fn create_project(org_id: String, name: String) -> Result<NamedEntry, 
 }
 
 #[tauri::command]
-pub async fn add_contact_local(display_name: String, four_word_address: String) -> Result<ContactEntry, String> {
+pub async fn add_contact_local(
+    display_name: String,
+    four_word_address: String,
+) -> Result<ContactEntry, String> {
     let mut meta = read_metadata().await.map_err(|e| e.to_string())?;
     let id = uuid::Uuid::new_v4().to_string();
-    let contact = ContactEntry { id: id.clone(), display_name, four_word_address };
+    let contact = ContactEntry {
+        id: id.clone(),
+        display_name,
+        four_word_address,
+    };
     let dir = app_data_dir().join("contacts").join(&id);
-    ensure_dir(&dir.join("markdown")).await.map_err(|e| e.to_string())?;
+    ensure_dir(&dir.join("markdown"))
+        .await
+        .map_err(|e| e.to_string())?;
     meta.contacts.push(contact.clone());
     write_metadata(&meta).await.map_err(|e| e.to_string())?;
     Ok(contact)
@@ -213,17 +272,33 @@ pub async fn read_markdown_file(path: String) -> Result<String, String> {
 #[tauri::command]
 pub async fn write_markdown_file(path: String, content: String) -> Result<(), String> {
     let p = PathBuf::from(&path);
-    if let Some(parent) = p.parent() { ensure_dir(parent).await.map_err(|e| e.to_string())?; }
-    fs::write(&p, content.as_bytes()).await.map_err(|e| e.to_string())
+    if let Some(parent) = p.parent() {
+        ensure_dir(parent).await.map_err(|e| e.to_string())?;
+    }
+    fs::write(&p, content.as_bytes())
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub async fn create_markdown(scope: ScopePath, name: String, initial_content: Option<String>) -> Result<String, String> {
+pub async fn create_markdown(
+    scope: ScopePath,
+    name: String,
+    initial_content: Option<String>,
+) -> Result<String, String> {
     let dir = scope_dir(&scope.scope).map_err(|e| e.to_string())?;
     ensure_dir(&dir).await.map_err(|e| e.to_string())?;
-    let safe_name = if name.ends_with(".md") { name } else { format!("{}.md", name) };
+    let safe_name = if name.ends_with(".md") {
+        name
+    } else {
+        format!("{}.md", name)
+    };
     let path = dir.join(safe_name);
-    if path.exists() { return Err("File already exists".into()); }
-    fs::write(&path, initial_content.unwrap_or_default()).await.map_err(|e| e.to_string())?;
+    if path.exists() {
+        return Err("File already exists".into());
+    }
+    fs::write(&path, initial_content.unwrap_or_default())
+        .await
+        .map_err(|e| e.to_string())?;
     Ok(path.to_string_lossy().to_string())
 }

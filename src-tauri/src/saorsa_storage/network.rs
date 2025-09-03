@@ -1,16 +1,15 @@
+use crate::dht_facade::DhtFacade;
 /**
  * Saorsa Storage System - P2P Network Integration
  * Implements DHT operations and geographic routing for content distribution
  */
-
 use crate::saorsa_storage::errors::*;
-use crate::dht_facade::DhtFacade;
 // use crate::error::AppResult;  // Currently unused
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::RwLock;
 use std::time::{Duration, Instant};
-use serde::{Deserialize, Serialize};
+use tokio::sync::RwLock;
 // use async_trait::async_trait;  // Currently unused
 
 /// Network operation timeout configuration
@@ -95,16 +94,16 @@ impl Location {
     /// Calculate distance to another location in kilometers
     pub fn distance_km(&self, other: &Location) -> f64 {
         const EARTH_RADIUS_KM: f64 = 6371.0;
-        
+
         let lat1_rad = self.latitude.to_radians();
         let lat2_rad = other.latitude.to_radians();
         let delta_lat = (other.latitude - self.latitude).to_radians();
         let delta_lon = (other.longitude - self.longitude).to_radians();
-        
+
         let a = (delta_lat / 2.0).sin().powi(2)
             + lat1_rad.cos() * lat2_rad.cos() * (delta_lon / 2.0).sin().powi(2);
         let c = 2.0 * a.sqrt().atan2((1.0 - a).sqrt());
-        
+
         EARTH_RADIUS_KM * c
     }
 }
@@ -124,8 +123,10 @@ impl<D: DhtFacade> NetworkManager<D> {
     /// Create a new network manager
     pub fn new(dht: Arc<D>) -> Self {
         let config = NetworkConfig::default();
-        let semaphore = Arc::new(tokio::sync::Semaphore::new(config.max_concurrent_operations));
-        
+        let semaphore = Arc::new(tokio::sync::Semaphore::new(
+            config.max_concurrent_operations,
+        ));
+
         Self {
             dht,
             config,
@@ -148,8 +149,10 @@ impl<D: DhtFacade> NetworkManager<D> {
 
     /// Create network manager with configuration and location
     pub fn with_config(dht: Arc<D>, config: NetworkConfig, location: Option<Location>) -> Self {
-        let semaphore = Arc::new(tokio::sync::Semaphore::new(config.max_concurrent_operations));
-        
+        let semaphore = Arc::new(tokio::sync::Semaphore::new(
+            config.max_concurrent_operations,
+        ));
+
         Self {
             dht,
             config,
@@ -171,33 +174,34 @@ impl<D: DhtFacade> NetworkManager<D> {
     }
 
     /// Store content in DHT with retry logic
-    pub async fn store_content(
-        &self,
-        key: Vec<u8>,
-        value: Vec<u8>,
-    ) -> NetworkResult<()> {
+    pub async fn store_content(&self, key: Vec<u8>, value: Vec<u8>) -> NetworkResult<()> {
         let operation_id = self.generate_operation_id();
         let start_time = Instant::now();
-        
+
         // Acquire semaphore to limit concurrent operations
-        let _permit = self.operation_semaphore.acquire().await
-            .map_err(|_| NetworkError::ConnectionFailed {
+        let _permit = self.operation_semaphore.acquire().await.map_err(|_| {
+            NetworkError::ConnectionFailed {
                 address: "semaphore".to_string(),
                 reason: "Failed to acquire operation permit".to_string(),
-            })?;
+            }
+        })?;
 
         let mut last_error = None;
-        
+
         // Retry logic
         for attempt in 0..self.config.retry_attempts {
             match tokio::time::timeout(
                 self.config.operation_timeout,
-                self.dht.put(key.clone(), value.clone())
-            ).await {
+                self.dht.put(key.clone(), value.clone()),
+            )
+            .await
+            {
                 Ok(Ok(_)) => {
                     // Success
-                    self.record_operation_success(&operation_id, "store", start_time).await;
-                    self.update_stats_success(start_time.elapsed(), value.len()).await;
+                    self.record_operation_success(&operation_id, "store", start_time)
+                        .await;
+                    self.update_stats_success(start_time.elapsed(), value.len())
+                        .await;
                     return Ok(());
                 }
                 Ok(Err(app_error)) => {
@@ -223,43 +227,43 @@ impl<D: DhtFacade> NetworkManager<D> {
         let error = last_error.unwrap_or(NetworkError::ProtocolError {
             reason: "Unknown error during store operation".to_string(),
         });
-        
-        self.record_operation_failure(&operation_id, "store", start_time, &error).await;
+
+        self.record_operation_failure(&operation_id, "store", start_time, &error)
+            .await;
         self.update_stats_failure().await;
-        
+
         Err(error)
     }
 
     /// Retrieve content from DHT with retry logic
-    pub async fn retrieve_content(
-        &self,
-        key: Vec<u8>,
-    ) -> NetworkResult<Option<Vec<u8>>> {
+    pub async fn retrieve_content(&self, key: Vec<u8>) -> NetworkResult<Option<Vec<u8>>> {
         let operation_id = self.generate_operation_id();
         let start_time = Instant::now();
-        
+
         // Acquire semaphore to limit concurrent operations
-        let _permit = self.operation_semaphore.acquire().await
-            .map_err(|_| NetworkError::ConnectionFailed {
+        let _permit = self.operation_semaphore.acquire().await.map_err(|_| {
+            NetworkError::ConnectionFailed {
                 address: "semaphore".to_string(),
                 reason: "Failed to acquire operation permit".to_string(),
-            })?;
+            }
+        })?;
 
         let mut last_error = None;
-        
+
         // Retry logic
         for attempt in 0..self.config.retry_attempts {
-            match tokio::time::timeout(
-                self.config.operation_timeout,
-                self.dht.get(key.clone())
-            ).await {
+            match tokio::time::timeout(self.config.operation_timeout, self.dht.get(key.clone()))
+                .await
+            {
                 Ok(Ok(result)) => {
                     // Success
-                    self.record_operation_success(&operation_id, "retrieve", start_time).await;
-                    
+                    self.record_operation_success(&operation_id, "retrieve", start_time)
+                        .await;
+
                     let data_size = result.as_ref().map(|v| v.len()).unwrap_or(0);
-                    self.update_stats_success(start_time.elapsed(), data_size).await;
-                    
+                    self.update_stats_success(start_time.elapsed(), data_size)
+                        .await;
+
                     return Ok(result);
                 }
                 Ok(Err(app_error)) => {
@@ -285,10 +289,11 @@ impl<D: DhtFacade> NetworkManager<D> {
         let error = last_error.unwrap_or(NetworkError::ProtocolError {
             reason: "Unknown error during retrieve operation".to_string(),
         });
-        
-        self.record_operation_failure(&operation_id, "retrieve", start_time, &error).await;
+
+        self.record_operation_failure(&operation_id, "retrieve", start_time, &error)
+            .await;
         self.update_stats_failure().await;
-        
+
         Err(error)
     }
 
@@ -301,28 +306,36 @@ impl<D: DhtFacade> NetworkManager<D> {
     ) -> NetworkResult<Vec<u8>> {
         let operation_id = self.generate_operation_id();
         let start_time = Instant::now();
-        
-        let _permit = self.operation_semaphore.acquire().await
-            .map_err(|_| NetworkError::ConnectionFailed {
+
+        let _permit = self.operation_semaphore.acquire().await.map_err(|_| {
+            NetworkError::ConnectionFailed {
                 address: peer_id.to_string(),
                 reason: "Failed to acquire operation permit".to_string(),
-            })?;
+            }
+        })?;
 
         match tokio::time::timeout(
             self.config.operation_timeout,
-            self.dht.send(peer_id.to_string(), topic.to_string(), payload.clone())
-        ).await {
+            self.dht
+                .send(peer_id.to_string(), topic.to_string(), payload.clone()),
+        )
+        .await
+        {
             Ok(Ok(response)) => {
-                self.record_operation_success(&operation_id, "send", start_time).await;
-                self.update_peer_success(peer_id, start_time.elapsed()).await;
-                self.update_stats_success(start_time.elapsed(), payload.len() + response.len()).await;
+                self.record_operation_success(&operation_id, "send", start_time)
+                    .await;
+                self.update_peer_success(peer_id, start_time.elapsed())
+                    .await;
+                self.update_stats_success(start_time.elapsed(), payload.len() + response.len())
+                    .await;
                 Ok(response)
             }
             Ok(Err(app_error)) => {
                 let error = NetworkError::PeerRejected {
                     reason: format!("Peer {} rejected request: {}", peer_id, app_error),
                 };
-                self.record_operation_failure(&operation_id, "send", start_time, &error).await;
+                self.record_operation_failure(&operation_id, "send", start_time, &error)
+                    .await;
                 self.update_peer_failure(peer_id).await;
                 self.update_stats_failure().await;
                 Err(error)
@@ -331,7 +344,8 @@ impl<D: DhtFacade> NetworkManager<D> {
                 let error = NetworkError::RequestTimeout {
                     timeout: self.config.operation_timeout,
                 };
-                self.record_operation_failure(&operation_id, "send", start_time, &error).await;
+                self.record_operation_failure(&operation_id, "send", start_time, &error)
+                    .await;
                 self.update_peer_failure(peer_id).await;
                 self.update_stats_failure().await;
                 Err(error)
@@ -346,17 +360,20 @@ impl<D: DhtFacade> NetworkManager<D> {
                 // Update peer information
                 let mut peers = self.peers.write().await;
                 let current_time = std::time::SystemTime::now();
-                
+
                 for peer_id in &peer_list {
-                    peers.entry(peer_id.clone()).or_insert_with(|| PeerInfo {
-                        peer_id: peer_id.clone(),
-                        location: None,
-                        distance_km: None,
-                        last_seen: current_time,
-                        response_time_ms: None,
-                        reliability_score: 0.5, // Start with neutral score
-                        available_storage: None,
-                    }).last_seen = current_time;
+                    peers
+                        .entry(peer_id.clone())
+                        .or_insert_with(|| PeerInfo {
+                            peer_id: peer_id.clone(),
+                            location: None,
+                            distance_km: None,
+                            last_seen: current_time,
+                            response_time_ms: None,
+                            reliability_score: 0.5, // Start with neutral score
+                            available_storage: None,
+                        })
+                        .last_seen = current_time;
                 }
 
                 // Update stats
@@ -367,7 +384,7 @@ impl<D: DhtFacade> NetworkManager<D> {
             }
             Err(app_error) => Err(NetworkError::ProtocolError {
                 reason: format!("Peer discovery failed: {}", app_error),
-            })
+            }),
         }
     }
 
@@ -393,7 +410,9 @@ impl<D: DhtFacade> NetworkManager<D> {
         peer_list.sort_by(|a, b| {
             let score_a = self.calculate_peer_score(a);
             let score_b = self.calculate_peer_score(b);
-            score_b.partial_cmp(&score_a).unwrap_or(std::cmp::Ordering::Equal)
+            score_b
+                .partial_cmp(&score_a)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
 
         peer_list.truncate(count);
@@ -418,22 +437,21 @@ impl<D: DhtFacade> NetworkManager<D> {
     /// Check network health
     pub async fn check_health(&self) -> NetworkResult<bool> {
         let stats = self.stats.read().await;
-        
+
         // Consider network healthy if:
         // - We have some active peers
         // - Success rate is above 70%
         // - Average response time is reasonable
-        
+
         let success_rate = if stats.total_operations > 0 {
             stats.successful_operations as f64 / stats.total_operations as f64
         } else {
             1.0 // No operations yet, assume healthy
         };
-        
-        let is_healthy = stats.active_peers > 0
-            && success_rate >= 0.7
-            && stats.avg_response_time_ms < 5000.0; // 5 seconds max
-        
+
+        let is_healthy =
+            stats.active_peers > 0 && success_rate >= 0.7 && stats.avg_response_time_ms < 5000.0; // 5 seconds max
+
         Ok(is_healthy)
     }
 
@@ -461,14 +479,20 @@ impl<D: DhtFacade> NetworkManager<D> {
 
         let mut operations = self.operations.write().await;
         operations.push(operation);
-        
+
         // Keep only recent operations (last 1000)
         if operations.len() > 1000 {
             operations.drain(0..100); // Remove oldest 100
         }
     }
 
-    async fn record_operation_failure(&self, op_id: &str, op_type: &str, start_time: Instant, error: &NetworkError) {
+    async fn record_operation_failure(
+        &self,
+        op_id: &str,
+        op_type: &str,
+        start_time: Instant,
+        error: &NetworkError,
+    ) {
         let operation = NetworkOperation {
             operation_id: op_id.to_string(),
             peer_id: "dht".to_string(),
@@ -481,7 +505,7 @@ impl<D: DhtFacade> NetworkManager<D> {
 
         let mut operations = self.operations.write().await;
         operations.push(operation);
-        
+
         // Keep only recent operations
         if operations.len() > 1000 {
             operations.drain(0..100);
@@ -493,13 +517,16 @@ impl<D: DhtFacade> NetworkManager<D> {
         stats.total_operations += 1;
         stats.successful_operations += 1;
         stats.total_bytes_sent += bytes_transferred as u64;
-        
+
         // Update moving average response time
         let response_time_ms = duration.as_secs_f64() * 1000.0;
         if stats.total_operations == 1 {
             stats.avg_response_time_ms = response_time_ms;
         } else {
-            stats.avg_response_time_ms = (stats.avg_response_time_ms * (stats.total_operations - 1) as f64 + response_time_ms) / stats.total_operations as f64;
+            stats.avg_response_time_ms = (stats.avg_response_time_ms
+                * (stats.total_operations - 1) as f64
+                + response_time_ms)
+                / stats.total_operations as f64;
         }
     }
 
@@ -514,7 +541,7 @@ impl<D: DhtFacade> NetworkManager<D> {
         if let Some(peer) = peers.get_mut(peer_id) {
             peer.response_time_ms = Some(response_time.as_millis() as u64);
             peer.last_seen = std::time::SystemTime::now();
-            
+
             // Improve reliability score
             peer.reliability_score = (peer.reliability_score * 0.9 + 0.1).min(1.0);
         }
@@ -530,19 +557,19 @@ impl<D: DhtFacade> NetworkManager<D> {
 
     fn calculate_peer_score(&self, peer: &PeerInfo) -> f64 {
         let mut score = peer.reliability_score;
-        
+
         // Factor in distance (closer is better)
         if let Some(distance) = peer.distance_km {
             let distance_factor = 1.0 / (1.0 + distance / 1000.0); // Normalize by 1000km
             score *= distance_factor;
         }
-        
+
         // Factor in response time (faster is better)
         if let Some(response_ms) = peer.response_time_ms {
             let response_factor = 1.0 / (1.0 + response_ms as f64 / 1000.0); // Normalize by 1 second
             score *= response_factor;
         }
-        
+
         score
     }
 }
@@ -580,19 +607,25 @@ mod tests {
     #[tokio::test]
     async fn test_peer_discovery() {
         let manager = setup_network_manager();
-        
+
         let peers = manager.discover_peers().await.unwrap();
         assert!(peers.is_empty()); // LocalDht starts with no peers
-        
+
         let peer_count = manager.get_active_peer_count().await;
         assert_eq!(peer_count, 0);
     }
 
     #[test]
     fn test_location_distance() {
-        let loc1 = Location { latitude: 40.7128, longitude: -74.0060 }; // NYC
-        let loc2 = Location { latitude: 34.0522, longitude: -118.2437 }; // LA
-        
+        let loc1 = Location {
+            latitude: 40.7128,
+            longitude: -74.0060,
+        }; // NYC
+        let loc2 = Location {
+            latitude: 34.0522,
+            longitude: -118.2437,
+        }; // LA
+
         let distance = loc1.distance_km(&loc2);
         assert!(distance > 3900.0 && distance < 4000.0); // Approximately 3944 km
     }
@@ -600,7 +633,7 @@ mod tests {
     #[tokio::test]
     async fn test_network_health() {
         let manager = setup_network_manager();
-        
+
         // Should be healthy initially (no operations)
         let health = manager.check_health().await.unwrap();
         assert!(health);
@@ -636,7 +669,10 @@ mod tests {
         let value = b"test_value".to_vec();
 
         // Perform some operations
-        manager.store_content(key.clone(), value.clone()).await.unwrap();
+        manager
+            .store_content(key.clone(), value.clone())
+            .await
+            .unwrap();
         manager.retrieve_content(key).await.unwrap();
 
         let stats = manager.get_stats().await;

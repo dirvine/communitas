@@ -32,24 +32,20 @@ impl SecureStorageManager {
     }
 
     /// Store encryption keys securely
-    pub async fn store_encryption_keys(
-        &self,
-        master_key: &str,
-        key_pair: &str,
-    ) -> Result<()> {
+    pub async fn store_encryption_keys(&self, master_key: &str, key_pair: &str) -> Result<()> {
         // Store master key
         let master_key_name = format!("{}_master_key", self.user_id);
         println!("Debug: Storing master key with name: {}", master_key_name);
-        
+
         let master_key_entry = Entry::new(SERVICE_NAME, &master_key_name)
             .context("Failed to create master key entry")?;
-        
+
         master_key_entry
             .set_password(master_key)
             .context("Failed to store master key")?;
-        
+
         println!("Debug: Successfully stored master key");
-        
+
         // Immediately verify the key was stored
         match master_key_entry.get_password() {
             Ok(retrieved) => println!("Debug: Immediate verification successful: {}", retrieved),
@@ -59,7 +55,7 @@ impl SecureStorageManager {
         // Store key pair
         let key_pair_entry = Entry::new(SERVICE_NAME, &format!("{}_key_pair", self.user_id))
             .context("Failed to create key pair entry")?;
-            
+
         key_pair_entry
             .set_password(key_pair)
             .context("Failed to store key pair")?;
@@ -74,7 +70,7 @@ impl SecureStorageManager {
 
         let metadata_entry = Entry::new(SERVICE_NAME, &format!("{}_metadata", self.user_id))
             .context("Failed to create metadata entry")?;
-            
+
         metadata_entry
             .set_password(&metadata.to_string())
             .context("Failed to store metadata")?;
@@ -100,11 +96,11 @@ impl SecureStorageManager {
     async fn get_master_key(&self) -> Result<String> {
         let key_name = format!("{}_master_key", self.user_id);
         println!("Debug: Getting master key with name: {}", key_name);
-        
-        let entry = Entry::new(SERVICE_NAME, &key_name)
-            .context("Failed to create master key entry")?;
-        
-        println!("Debug: Created entry, attempting to get password...");    
+
+        let entry =
+            Entry::new(SERVICE_NAME, &key_name).context("Failed to create master key entry")?;
+
+        println!("Debug: Created entry, attempting to get password...");
         match entry.get_password() {
             Ok(password) => {
                 println!("Debug: Successfully got password: {}", password);
@@ -121,9 +117,8 @@ impl SecureStorageManager {
     async fn get_key_pair(&self) -> Result<String> {
         let entry = Entry::new(SERVICE_NAME, &format!("{}_key_pair", self.user_id))
             .context("Failed to create key pair entry")?;
-            
-        entry.get_password()
-            .context("Failed to retrieve key pair")
+
+        entry.get_password().context("Failed to retrieve key pair")
     }
 
     /// Delete all keys for this user (cleanup)
@@ -168,13 +163,13 @@ impl SecureStorageManager {
     pub fn get_storage_info() -> String {
         #[cfg(target_os = "macos")]
         return "macOS Keychain".to_string();
-        
+
         #[cfg(target_os = "windows")]
         return "Windows Credential Manager".to_string();
-        
+
         #[cfg(target_os = "linux")]
         return "Linux Secret Service".to_string();
-        
+
         #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
         return "Unknown Platform".to_string();
     }
@@ -183,24 +178,27 @@ impl SecureStorageManager {
 #[tokio::main]
 async fn main() {
     println!("=== Secure Storage Test ===");
-    
+
     // Test availability
     println!("Testing secure storage availability...");
     let available = SecureStorageManager::is_available();
     println!("Secure storage available: {}", available);
-    println!("Storage backend: {}", SecureStorageManager::get_storage_info());
-    
+    println!(
+        "Storage backend: {}",
+        SecureStorageManager::get_storage_info()
+    );
+
     if !available {
         println!("❌ Secure storage not available, skipping tests");
         return;
     }
-    
+
     // Test store and retrieve
     let test_user = format!("test_user_{}", Uuid::new_v4());
     let manager = SecureStorageManager::new(test_user.clone());
-    
+
     println!("\nTesting with user: {}", test_user);
-    
+
     // Clean up any existing test data
     println!("Cleaning up existing data...");
     let cleanup_result = manager.delete_all_keys().await;
@@ -208,12 +206,14 @@ async fn main() {
 
     // Store test keys
     println!("Storing encryption keys...");
-    let result = manager.store_encryption_keys("test_master_key", "test_key_pair").await;
+    let result = manager
+        .store_encryption_keys("test_master_key", "test_key_pair")
+        .await;
     match &result {
         Ok(_) => println!("✓ Successfully stored keys"),
         Err(e) => println!("❌ Store error: {}", e),
     }
-    
+
     if result.is_err() {
         println!("❌ Failed to store keys, aborting test");
         return;
@@ -228,17 +228,24 @@ async fn main() {
     match &keys_result {
         Ok(keys) => {
             println!("✓ Successfully retrieved keys: {}", keys);
-            
+
             // Verify the keys match
-            if keys.get("masterKey").and_then(|v| v.as_str()) == Some("test_master_key") &&
-               keys.get("keyPair").and_then(|v| v.as_str()) == Some("test_key_pair") {
+            if keys.get("masterKey").and_then(|v| v.as_str()) == Some("test_master_key")
+                && keys.get("keyPair").and_then(|v| v.as_str()) == Some("test_key_pair")
+            {
                 println!("✅ Key verification passed!");
             } else {
                 println!("❌ Key verification failed");
                 println!("  Expected masterKey: test_master_key");
-                println!("  Actual masterKey: {:?}", keys.get("masterKey").and_then(|v| v.as_str()));
+                println!(
+                    "  Actual masterKey: {:?}",
+                    keys.get("masterKey").and_then(|v| v.as_str())
+                );
                 println!("  Expected keyPair: test_key_pair");
-                println!("  Actual keyPair: {:?}", keys.get("keyPair").and_then(|v| v.as_str()));
+                println!(
+                    "  Actual keyPair: {:?}",
+                    keys.get("keyPair").and_then(|v| v.as_str())
+                );
             }
         }
         Err(e) => println!("❌ Retrieve error: {}", e),
@@ -248,6 +255,6 @@ async fn main() {
     println!("Final cleanup...");
     let cleanup_result = manager.delete_all_keys().await;
     println!("Final cleanup result: {:?}", cleanup_result);
-    
+
     println!("=== Test Complete ===");
 }

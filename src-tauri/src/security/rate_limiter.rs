@@ -1,5 +1,5 @@
 //! Rate limiting module to prevent DoS attacks and abuse
-//! 
+//!
 //! This module provides:
 //! - Request rate limiting per user/IP
 //! - Sliding window rate limiting
@@ -24,8 +24,8 @@ pub enum RateLimitError {
 
 /// Default rate limits
 pub const DEFAULT_REQUESTS_PER_MINUTE: u32 = 60;
-pub const AUTH_REQUESTS_PER_MINUTE: u32 = 5;  // Lower limit for auth operations
-pub const DHT_REQUESTS_PER_MINUTE: u32 = 30;  // Moderate limit for DHT operations
+pub const AUTH_REQUESTS_PER_MINUTE: u32 = 5; // Lower limit for auth operations
+pub const DHT_REQUESTS_PER_MINUTE: u32 = 30; // Moderate limit for DHT operations
 pub const MESSAGE_REQUESTS_PER_MINUTE: u32 = 120; // Higher limit for messages
 
 /// Time window for rate limiting
@@ -54,7 +54,7 @@ impl RateLimitEntry {
         // Clean up old requests outside the window
         let cutoff = now - window;
         self.requests.retain(|&request_time| request_time > cutoff);
-        
+
         // Add the new request
         self.requests.push(now);
         self.last_cleanup = now;
@@ -63,17 +63,20 @@ impl RateLimitEntry {
     /// Check if adding a new request would exceed the limit
     fn would_exceed_limit(&self, limit: u32, now: Instant, window: Duration) -> bool {
         let cutoff = now - window;
-        let current_requests = self.requests.iter()
+        let current_requests = self
+            .requests
+            .iter()
             .filter(|&&request_time| request_time > cutoff)
             .count();
-        
+
         current_requests >= limit as usize
     }
 
     /// Get current request count within the window
     fn current_count(&self, now: Instant, window: Duration) -> u32 {
         let cutoff = now - window;
-        self.requests.iter()
+        self.requests
+            .iter()
             .filter(|&&request_time| request_time > cutoff)
             .count() as u32
     }
@@ -118,15 +121,18 @@ impl RateLimiter {
     /// Check if a request is allowed with a custom limit
     pub fn check_rate_limit(&self, key: &str, limit: u32) -> Result<bool, RateLimitError> {
         let now = Instant::now();
-        
-        let mut entries = self.entries.write()
+
+        let mut entries = self
+            .entries
+            .write()
             .map_err(|_| RateLimitError::LockError)?;
 
-        let entry = entries.entry(key.to_string())
+        let entry = entries
+            .entry(key.to_string())
             .or_insert_with(RateLimitEntry::new);
 
         let allowed = !entry.would_exceed_limit(limit, now, self.window);
-        
+
         if allowed {
             entry.add_request(now, self.window);
             // Trigger cleanup if needed
@@ -141,11 +147,14 @@ impl RateLimiter {
     /// Record a request (for when you want to check and record separately)
     pub fn record_request(&self, key: &str) -> Result<()> {
         let now = Instant::now();
-        
-        let mut entries = self.entries.write()
+
+        let mut entries = self
+            .entries
+            .write()
             .map_err(|_| anyhow::anyhow!("Failed to acquire rate limiter lock"))?;
 
-        let entry = entries.entry(key.to_string())
+        let entry = entries
+            .entry(key.to_string())
             .or_insert_with(RateLimitEntry::new);
 
         entry.add_request(now, self.window);
@@ -155,11 +164,14 @@ impl RateLimiter {
     /// Get current request count for a key
     pub fn get_current_count(&self, key: &str) -> Result<u32> {
         let now = Instant::now();
-        
-        let entries = self.entries.read()
+
+        let entries = self
+            .entries
+            .read()
             .map_err(|_| anyhow::anyhow!("Failed to acquire rate limiter lock"))?;
 
-        let count = entries.get(key)
+        let count = entries
+            .get(key)
             .map(|entry| entry.current_count(now, self.window))
             .unwrap_or(0);
 
@@ -175,12 +187,14 @@ impl RateLimiter {
     /// Clean up old entries that haven't been used recently
     fn cleanup_old_entries(&self) -> Result<()> {
         let now = Instant::now();
-        
+
         // Check if cleanup is needed
         {
-            let last_cleanup = self.last_cleanup.read()
+            let last_cleanup = self
+                .last_cleanup
+                .read()
                 .map_err(|_| anyhow::anyhow!("Failed to acquire cleanup lock"))?;
-            
+
             if now.duration_since(*last_cleanup) < CLEANUP_INTERVAL {
                 return Ok(()); // Cleanup not needed yet
             }
@@ -188,16 +202,20 @@ impl RateLimiter {
 
         // Perform cleanup
         {
-            let mut entries = self.entries.write()
+            let mut entries = self
+                .entries
+                .write()
                 .map_err(|_| anyhow::anyhow!("Failed to acquire rate limiter lock"))?;
-            
+
             let cutoff = now - self.window - CLEANUP_INTERVAL;
             entries.retain(|_, entry| entry.last_cleanup > cutoff);
         }
 
         // Update last cleanup time
         {
-            let mut last_cleanup = self.last_cleanup.write()
+            let mut last_cleanup = self
+                .last_cleanup
+                .write()
                 .map_err(|_| anyhow::anyhow!("Failed to acquire cleanup lock"))?;
             *last_cleanup = now;
         }
@@ -207,22 +225,24 @@ impl RateLimiter {
 
     /// Reset rate limit for a specific key (admin function)
     pub fn reset_key(&self, key: &str) -> Result<()> {
-        let mut entries = self.entries.write()
+        let mut entries = self
+            .entries
+            .write()
             .map_err(|_| anyhow::anyhow!("Failed to acquire rate limiter lock"))?;
-        
+
         entries.remove(key);
         Ok(())
     }
 
     /// Get statistics about the rate limiter
     pub fn get_stats(&self) -> Result<RateLimiterStats> {
-        let entries = self.entries.read()
+        let entries = self
+            .entries
+            .read()
             .map_err(|_| anyhow::anyhow!("Failed to acquire rate limiter lock"))?;
 
         let total_keys = entries.len();
-        let total_requests: usize = entries.values()
-            .map(|entry| entry.requests.len())
-            .sum();
+        let total_requests: usize = entries.values().map(|entry| entry.requests.len()).sum();
 
         Ok(RateLimiterStats {
             total_keys,
@@ -294,15 +314,15 @@ impl Default for RateLimiters {
 macro_rules! check_rate_limit {
     ($rate_limiter:expr, $key:expr) => {
         match $rate_limiter.is_allowed($key) {
-            Ok(true) => {},
+            Ok(true) => {}
             Ok(false) => return Err("Rate limit exceeded. Please try again later.".to_string()),
             Err(e) => return Err(format!("Rate limit check failed: {}", e)),
         }
     };
-    
+
     ($rate_limiter:expr, $key:expr, $limit:expr) => {
         match $rate_limiter.check_rate_limit($key, $limit) {
-            Ok(true) => {},
+            Ok(true) => {}
             Ok(false) => return Err("Rate limit exceeded. Please try again later.".to_string()),
             Err(e) => return Err(format!("Rate limit check failed: {}", e)),
         }
@@ -351,10 +371,10 @@ mod tests {
         let key = "test_user";
 
         assert_eq!(limiter.get_current_count(key).unwrap(), 0);
-        
+
         limiter.record_request(key).unwrap();
         assert_eq!(limiter.get_current_count(key).unwrap(), 1);
-        
+
         limiter.record_request(key).unwrap();
         assert_eq!(limiter.get_current_count(key).unwrap(), 2);
     }

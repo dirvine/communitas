@@ -1,5 +1,5 @@
 //! Authentication middleware for Tauri commands
-//! 
+//!
 //! This module provides:
 //! - Session-based authentication
 //! - Role-based access control
@@ -7,12 +7,12 @@
 //! - Protection against unauthorized command execution
 
 use anyhow::{Context, Result};
+use secrecy::{ExposeSecret, Secret};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 use uuid::Uuid;
-use secrecy::{ExposeSecret, Secret};
 
 /// Maximum session duration (1 hour)
 pub const MAX_SESSION_DURATION: Duration = Duration::from_secs(3600);
@@ -73,9 +73,9 @@ pub struct Permission {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum PermissionScope {
-    Own,      // Only own resources
-    Shared,   // Shared resources with appropriate access
-    All,      // All resources (admin level)
+    Own,    // Only own resources
+    Shared, // Shared resources with appropriate access
+    All,    // All resources (admin level)
 }
 
 impl Permission {
@@ -91,10 +91,10 @@ impl Permission {
     pub fn allows(&self, required: &Permission) -> bool {
         // Resource must match (or this permission is for all resources)
         let resource_match = self.resource == "*" || self.resource == required.resource;
-        
+
         // Action must match (or this permission allows all actions)
         let action_match = self.action == "*" || self.action == required.action;
-        
+
         // Scope must be sufficient
         let scope_match = match (&self.scope, &required.scope) {
             (PermissionScope::All, _) => true,
@@ -131,12 +131,19 @@ impl AuthMiddleware {
     }
 
     /// Create a new authenticated session
-    pub fn create_session(&self, user_id: String, four_words_identity: String, permissions: Vec<Permission>) -> Result<String> {
+    pub fn create_session(
+        &self,
+        user_id: String,
+        four_words_identity: String,
+        permissions: Vec<Permission>,
+    ) -> Result<String> {
         let session = AuthSession::new(user_id, four_words_identity, permissions);
         let session_id = session.session_id.clone();
 
         {
-            let mut sessions = self.sessions.write()
+            let mut sessions = self
+                .sessions
+                .write()
                 .map_err(|_| anyhow::anyhow!("Failed to acquire sessions lock"))?;
             sessions.insert(session_id.clone(), session);
         }
@@ -149,10 +156,13 @@ impl AuthMiddleware {
 
     /// Validate a session and return the session information
     pub fn validate_session(&self, session_id: &str) -> Result<AuthSession> {
-        let mut sessions = self.sessions.write()
+        let mut sessions = self
+            .sessions
+            .write()
             .map_err(|_| anyhow::anyhow!("Failed to acquire sessions lock"))?;
 
-        let session = sessions.get_mut(session_id)
+        let session = sessions
+            .get_mut(session_id)
             .ok_or_else(|| anyhow::anyhow!("Invalid session ID"))?;
 
         if !session.is_valid() {
@@ -165,18 +175,26 @@ impl AuthMiddleware {
     }
 
     /// Check if a session has the required permission
-    pub fn check_permission(&self, session_id: &str, required_permission: &Permission) -> Result<bool> {
+    pub fn check_permission(
+        &self,
+        session_id: &str,
+        required_permission: &Permission,
+    ) -> Result<bool> {
         let session = self.validate_session(session_id)?;
         Ok(session.has_permission(required_permission))
     }
 
     /// Require a specific permission for a session (returns error if not authorized)
-    pub fn require_permission(&self, session_id: &str, required_permission: &Permission) -> Result<AuthSession> {
+    pub fn require_permission(
+        &self,
+        session_id: &str,
+        required_permission: &Permission,
+    ) -> Result<AuthSession> {
         let session = self.validate_session(session_id)?;
-        
+
         if !session.has_permission(required_permission) {
             return Err(anyhow::anyhow!(
-                "Insufficient permissions. Required: {:?}", 
+                "Insufficient permissions. Required: {:?}",
                 required_permission
             ));
         }
@@ -186,16 +204,20 @@ impl AuthMiddleware {
 
     /// End a session (logout)
     pub fn end_session(&self, session_id: &str) -> Result<()> {
-        let mut sessions = self.sessions.write()
+        let mut sessions = self
+            .sessions
+            .write()
             .map_err(|_| anyhow::anyhow!("Failed to acquire sessions lock"))?;
-        
+
         sessions.remove(session_id);
         Ok(())
     }
 
     /// Get all active sessions (admin function)
     pub fn get_active_sessions(&self) -> Result<Vec<AuthSession>> {
-        let sessions = self.sessions.read()
+        let sessions = self
+            .sessions
+            .read()
             .map_err(|_| anyhow::anyhow!("Failed to acquire sessions lock"))?;
 
         let active_sessions: Vec<AuthSession> = sessions
@@ -210,12 +232,14 @@ impl AuthMiddleware {
     /// Clean up expired sessions
     pub fn cleanup_expired_sessions(&self) -> Result<()> {
         let now = Instant::now();
-        
+
         // Check if cleanup is needed
         {
-            let last_cleanup = self.last_cleanup.read()
+            let last_cleanup = self
+                .last_cleanup
+                .read()
                 .map_err(|_| anyhow::anyhow!("Failed to acquire cleanup lock"))?;
-            
+
             if now.duration_since(*last_cleanup) < SESSION_CLEANUP_INTERVAL {
                 return Ok(()); // Cleanup not needed yet
             }
@@ -223,15 +247,19 @@ impl AuthMiddleware {
 
         // Perform cleanup
         {
-            let mut sessions = self.sessions.write()
+            let mut sessions = self
+                .sessions
+                .write()
                 .map_err(|_| anyhow::anyhow!("Failed to acquire sessions lock"))?;
-            
+
             sessions.retain(|_, session| session.is_valid());
         }
 
         // Update last cleanup time
         {
-            let mut last_cleanup = self.last_cleanup.write()
+            let mut last_cleanup = self
+                .last_cleanup
+                .write()
                 .map_err(|_| anyhow::anyhow!("Failed to acquire cleanup lock"))?;
             *last_cleanup = now;
         }
@@ -241,7 +269,9 @@ impl AuthMiddleware {
 
     /// Get session statistics
     pub fn get_stats(&self) -> Result<SessionStats> {
-        let sessions = self.sessions.read()
+        let sessions = self
+            .sessions
+            .read()
             .map_err(|_| anyhow::anyhow!("Failed to acquire sessions lock"))?;
 
         let total_sessions = sessions.len();
@@ -327,7 +357,7 @@ mod tests {
     fn test_permission_matching() {
         let admin_perm = Permission::new("*", "*", PermissionScope::All);
         let read_messages = Permission::new("messages", "read", PermissionScope::Shared);
-        
+
         assert!(admin_perm.allows(&read_messages));
         assert!(!read_messages.allows(&admin_perm));
     }
@@ -336,12 +366,14 @@ mod tests {
     fn test_session_creation_and_validation() {
         let auth = AuthMiddleware::new();
         let permissions = vec![permissions::read_messages(), permissions::send_messages()];
-        
-        let session_id = auth.create_session(
-            "test_user".to_string(),
-            "hello-world-test-net".to_string(),
-            permissions
-        ).unwrap();
+
+        let session_id = auth
+            .create_session(
+                "test_user".to_string(),
+                "hello-world-test-net".to_string(),
+                permissions,
+            )
+            .unwrap();
 
         let session = auth.validate_session(&session_id).unwrap();
         assert_eq!(session.user_id, "test_user");
@@ -352,27 +384,38 @@ mod tests {
     fn test_permission_checking() {
         let auth = AuthMiddleware::new();
         let permissions = vec![permissions::read_messages()];
-        
-        let session_id = auth.create_session(
-            "test_user".to_string(),
-            "hello-world-test-net".to_string(),
-            permissions
-        ).unwrap();
 
-        assert!(auth.check_permission(&session_id, &permissions::read_messages()).unwrap());
-        assert!(!auth.check_permission(&session_id, &permissions::admin_operations()).unwrap());
+        let session_id = auth
+            .create_session(
+                "test_user".to_string(),
+                "hello-world-test-net".to_string(),
+                permissions,
+            )
+            .unwrap();
+
+        assert!(
+            auth.check_permission(&session_id, &permissions::read_messages())
+                .unwrap()
+        );
+        assert!(
+            !auth
+                .check_permission(&session_id, &permissions::admin_operations())
+                .unwrap()
+        );
     }
 
     #[test]
     fn test_session_expiry() {
         let auth = AuthMiddleware::new();
         let permissions = vec![permissions::read_messages()];
-        
-        let session_id = auth.create_session(
-            "test_user".to_string(),
-            "hello-world-test-net".to_string(),
-            permissions
-        ).unwrap();
+
+        let session_id = auth
+            .create_session(
+                "test_user".to_string(),
+                "hello-world-test-net".to_string(),
+                permissions,
+            )
+            .unwrap();
 
         // Session should be valid initially
         assert!(auth.validate_session(&session_id).is_ok());

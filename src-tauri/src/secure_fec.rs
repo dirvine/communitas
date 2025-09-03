@@ -1,18 +1,18 @@
 // Secure FEC implementation using saorsa-fec crate for encryption operations
 // This module handles all cryptographic operations for file storage and sharing
 
+use blake3;
+use rand::{RngCore, rngs::OsRng};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use blake3;
-use rand::{rngs::OsRng, RngCore};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 // Security: Encryption operations using ChaCha20-Poly1305
 use chacha20poly1305::{
+    ChaCha20Poly1305, Key, Nonce,
     aead::{Aead, AeadCore, KeyInit},
-    ChaCha20Poly1305, Nonce, Key,
 };
 
 /// Security: Custom error type that prevents information leakage
@@ -94,14 +94,14 @@ impl SecureKeyMaterial {
     pub fn new() -> Result<Self, SecureFecError> {
         let mut key_bytes = [0u8; 32];
         OsRng.fill_bytes(&mut key_bytes);
-        
+
         let key = Key::clone_from_slice(&key_bytes);
-        
+
         let key_id = hex::encode(blake3::hash(&key_bytes).as_bytes());
-        
+
         // Security: Zero the temporary key bytes
         key_bytes.zeroize();
-        
+
         Ok(Self {
             key_id,
             key,
@@ -156,12 +156,14 @@ impl SecureFecManager {
 
         // Security: Get or generate secure key material
         let key_material = if let Some(id) = key_id {
-            self.get_key_material(&id).await
+            self.get_key_material(&id)
+                .await
                 .ok_or(SecureFecError::AuthenticationFailed)?
         } else {
             let material = SecureKeyMaterial::new()?;
             let id = material.key_id.clone();
-            self.store_key_material(id.clone(), material.clone()).await?;
+            self.store_key_material(id.clone(), material.clone())
+                .await?;
             material
         };
 
@@ -171,7 +173,9 @@ impl SecureFecManager {
         let chunk_count = (total_size + self.config.chunk_size - 1) / self.config.chunk_size;
 
         for (chunk_index, chunk_data) in data.chunks(self.config.chunk_size).enumerate() {
-            let encrypted_chunk = self.encrypt_chunk(chunk_data, &key_material, chunk_index).await?;
+            let encrypted_chunk = self
+                .encrypt_chunk(chunk_data, &key_material, chunk_index)
+                .await?;
             encrypted_chunks.push(encrypted_chunk);
         }
 
@@ -204,7 +208,9 @@ impl SecureFecManager {
         }
 
         // Security: Get key material with authentication
-        let key_material = self.get_key_material(key_id).await
+        let key_material = self
+            .get_key_material(key_id)
+            .await
             .ok_or(SecureFecError::AuthenticationFailed)?;
 
         // Security: Verify content integrity
@@ -215,7 +221,7 @@ impl SecureFecManager {
 
         // Decrypt chunks in order
         let mut decrypted_data = Vec::with_capacity(encrypted_content.total_size);
-        
+
         for chunk in &encrypted_content.encrypted_chunks {
             let chunk_data = self.decrypt_chunk(chunk, &key_material).await?;
             decrypted_data.extend_from_slice(&chunk_data);
@@ -243,7 +249,8 @@ impl SecureFecManager {
 
         // Encrypt using ChaCha20-Poly1305
         let cipher = ChaCha20Poly1305::new((&key_material.key).into());
-        let encrypted_data = cipher.encrypt(&nonce, chunk_data)
+        let encrypted_data = cipher
+            .encrypt(&nonce, chunk_data)
             .map_err(|_| SecureFecError::EncryptionFailed)?;
 
         let chunk_id = hex::encode(blake3::hash(chunk_data).as_bytes());
@@ -268,14 +275,17 @@ impl SecureFecManager {
             return Err(SecureFecError::DecryptionFailed);
         }
 
-        let nonce_bytes: [u8; 12] = encrypted_chunk.nonce.as_slice()
+        let nonce_bytes: [u8; 12] = encrypted_chunk
+            .nonce
+            .as_slice()
             .try_into()
             .map_err(|_| SecureFecError::DecryptionFailed)?;
         let nonce = Nonce::clone_from_slice(&nonce_bytes);
 
         // Decrypt using ChaCha20-Poly1305
         let cipher = ChaCha20Poly1305::new((&key_material.key).into());
-        let decrypted_data = cipher.decrypt(&nonce, encrypted_chunk.encrypted_data.as_slice())
+        let decrypted_data = cipher
+            .decrypt(&nonce, encrypted_chunk.encrypted_data.as_slice())
             .map_err(|_| SecureFecError::DecryptionFailed)?;
 
         // Security: Verify chunk integrity
@@ -295,13 +305,13 @@ impl SecureFecManager {
     /// Generate deterministic content ID from encrypted chunks
     fn generate_content_id(&self, chunks: &[EncryptedChunk]) -> Result<String, SecureFecError> {
         let mut hasher = blake3::Hasher::new();
-        
+
         for chunk in chunks {
             hasher.update(&chunk.chunk_id.as_bytes());
             hasher.update(&chunk.chunk_index.to_le_bytes());
             hasher.update(&chunk.original_size.to_le_bytes());
         }
-        
+
         Ok(hex::encode(hasher.finalize().as_bytes()))
     }
 
@@ -323,7 +333,10 @@ impl SecureFecManager {
     }
 
     /// Security: Clear expired keys from memory
-    pub async fn cleanup_expired_keys(&self, max_age_seconds: u64) -> Result<usize, SecureFecError> {
+    pub async fn cleanup_expired_keys(
+        &self,
+        max_age_seconds: u64,
+    ) -> Result<usize, SecureFecError> {
         let mut cache = self.key_cache.write().await;
         let current_time = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -359,7 +372,7 @@ mod tests {
     async fn test_secure_fec_manager_creation() {
         let config = FecConfig::default();
         let manager = SecureFecManager::new(config).expect("Failed to create FEC manager");
-        
+
         assert_eq!(manager.get_config().data_shards, 8);
         assert_eq!(manager.get_config().parity_shards, 4);
     }
@@ -368,31 +381,39 @@ mod tests {
     async fn test_encryption_decryption_roundtrip() {
         let config = FecConfig::default();
         let manager = SecureFecManager::new(config).expect("Failed to create FEC manager");
-        
+
         let test_data = b"Hello, secure world! This is a test of encryption.";
-        
+
         // Encrypt data
-        let encrypted_content = manager.encrypt_data(test_data, None).await
+        let encrypted_content = manager
+            .encrypt_data(test_data, None)
+            .await
             .expect("Failed to encrypt data");
-        
+
         assert!(!encrypted_content.content_id.is_empty());
         assert!(!encrypted_content.encrypted_chunks.is_empty());
         assert_eq!(encrypted_content.total_size, test_data.len());
-        
+
         // Get the key ID from the first encryption
         let key_material = SecureKeyMaterial::new().expect("Failed to create key material");
         let key_id = key_material.key_id.clone();
-        manager.store_key_material(key_id.clone(), key_material).await
+        manager
+            .store_key_material(key_id.clone(), key_material)
+            .await
             .expect("Failed to store key material");
-        
+
         // Re-encrypt with the specific key
-        let encrypted_content = manager.encrypt_data(test_data, Some(key_id.clone())).await
+        let encrypted_content = manager
+            .encrypt_data(test_data, Some(key_id.clone()))
+            .await
             .expect("Failed to encrypt data");
-        
+
         // Decrypt data
-        let decrypted_data = manager.decrypt_data(&encrypted_content, &key_id).await
+        let decrypted_data = manager
+            .decrypt_data(&encrypted_content, &key_id)
+            .await
             .expect("Failed to decrypt data");
-        
+
         assert_eq!(decrypted_data, test_data);
     }
 
@@ -400,11 +421,11 @@ mod tests {
     async fn test_invalid_input_rejection() {
         let config = FecConfig::default();
         let manager = SecureFecManager::new(config).expect("Failed to create FEC manager");
-        
+
         // Test empty data
         let result = manager.encrypt_data(&[], None).await;
         assert!(result.is_err());
-        
+
         // Test oversized data
         let large_data = vec![0u8; 200 * 1024 * 1024]; // 200MB > 100MB limit
         let result = manager.encrypt_data(&large_data, None).await;
@@ -415,15 +436,19 @@ mod tests {
     async fn test_authentication_failure() {
         let config = FecConfig::default();
         let manager = SecureFecManager::new(config).expect("Failed to create FEC manager");
-        
+
         let test_data = b"Test data";
-        
+
         // Encrypt with one key
-        let encrypted_content = manager.encrypt_data(test_data, None).await
+        let encrypted_content = manager
+            .encrypt_data(test_data, None)
+            .await
             .expect("Failed to encrypt data");
-        
+
         // Try to decrypt with wrong key ID
-        let result = manager.decrypt_data(&encrypted_content, "wrong-key-id").await;
+        let result = manager
+            .decrypt_data(&encrypted_content, "wrong-key-id")
+            .await;
         assert!(result.is_err());
     }
 
@@ -431,19 +456,23 @@ mod tests {
     async fn test_content_integrity_verification() {
         let config = FecConfig::default();
         let manager = SecureFecManager::new(config).expect("Failed to create FEC manager");
-        
+
         let test_data = b"Test data for integrity";
         let key_material = SecureKeyMaterial::new().expect("Failed to create key material");
         let key_id = key_material.key_id.clone();
-        manager.store_key_material(key_id.clone(), key_material).await
+        manager
+            .store_key_material(key_id.clone(), key_material)
+            .await
             .expect("Failed to store key material");
-        
-        let mut encrypted_content = manager.encrypt_data(test_data, Some(key_id.clone())).await
+
+        let mut encrypted_content = manager
+            .encrypt_data(test_data, Some(key_id.clone()))
+            .await
             .expect("Failed to encrypt data");
-        
+
         // Tamper with content ID
         encrypted_content.content_id = "tampered-id".to_string();
-        
+
         // Decryption should fail due to integrity check
         let result = manager.decrypt_data(&encrypted_content, &key_id).await;
         assert!(result.is_err());
@@ -453,17 +482,21 @@ mod tests {
     async fn test_key_cleanup() {
         let config = FecConfig::default();
         let manager = SecureFecManager::new(config).expect("Failed to create FEC manager");
-        
+
         // Add some key material
         let key_material = SecureKeyMaterial::new().expect("Failed to create key material");
         let key_id = key_material.key_id.clone();
-        manager.store_key_material(key_id, key_material).await
+        manager
+            .store_key_material(key_id, key_material)
+            .await
             .expect("Failed to store key material");
-        
+
         // Cleanup with 0 max age (should remove all keys)
-        let cleaned = manager.cleanup_expired_keys(0).await
+        let cleaned = manager
+            .cleanup_expired_keys(0)
+            .await
             .expect("Failed to cleanup keys");
-        
+
         assert_eq!(cleaned, 1);
     }
 
@@ -471,13 +504,28 @@ mod tests {
     async fn test_configuration_validation() {
         // Test invalid configurations
         let invalid_configs = vec![
-            FecConfig { data_shards: 0, ..Default::default() },
-            FecConfig { parity_shards: 0, ..Default::default() },
-            FecConfig { chunk_size: 0, ..Default::default() },
-            FecConfig { chunk_size: 20 * 1024 * 1024, ..Default::default() }, // Too large
-            FecConfig { max_content_size: 0, ..Default::default() },
+            FecConfig {
+                data_shards: 0,
+                ..Default::default()
+            },
+            FecConfig {
+                parity_shards: 0,
+                ..Default::default()
+            },
+            FecConfig {
+                chunk_size: 0,
+                ..Default::default()
+            },
+            FecConfig {
+                chunk_size: 20 * 1024 * 1024,
+                ..Default::default()
+            }, // Too large
+            FecConfig {
+                max_content_size: 0,
+                ..Default::default()
+            },
         ];
-        
+
         for config in invalid_configs {
             let result = SecureFecManager::new(config);
             assert!(result.is_err(), "Invalid config should be rejected");

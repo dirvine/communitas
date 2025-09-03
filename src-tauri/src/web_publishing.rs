@@ -1,16 +1,16 @@
 // Web publishing commands with saorsa-fec encryption and security hardening
 // This module provides secure web content publishing and browsing capabilities
 
+use crate::secure_fec::{FecConfig, SecureFecError, SecureFecManager};
+use crate::security::input_validation::{InputValidator, ValidationError};
+use crate::security::rate_limiter::{RateLimitError, RateLimiter};
+use blake3;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tokio::sync::RwLock;
-use tauri::State;
-use uuid::Uuid;
-use blake3;
 use std::time::Duration;
-use crate::secure_fec::{SecureFecManager, FecConfig, SecureFecError};
-use crate::security::rate_limiter::{RateLimiter, RateLimitError};
-use crate::security::input_validation::{InputValidator, ValidationError};
+use tauri::State;
+use tokio::sync::RwLock;
+use uuid::Uuid;
 
 /// Security: Custom error type with sanitized messages
 #[derive(Debug, Clone, thiserror::Error, Serialize)]
@@ -134,19 +134,19 @@ impl WebPublishingState {
             max_content_size: 10 * 1024 * 1024, // 10MB limit for web content
             ..Default::default()
         };
-        
+
         let fec_manager = Arc::new(
             SecureFecManager::new(fec_config)
-                .map_err(|_| WebPublishingError::ConfigurationError)?
+                .map_err(|_| WebPublishingError::ConfigurationError)?,
         );
-        
+
         let rate_limiter = Arc::new(RwLock::new(
-            RateLimiter::with_limit(10, std::time::Duration::from_secs(60)) // 10 requests per minute
+            RateLimiter::with_limit(10, std::time::Duration::from_secs(60)), // 10 requests per minute
         ));
-        
+
         let input_validator = Arc::new(InputValidator::new());
         let content_cache = Arc::new(RwLock::new(std::collections::HashMap::new()));
-        
+
         Ok(Self {
             fec_manager,
             rate_limiter,
@@ -170,7 +170,9 @@ pub async fn publish_web_content(
 
     // Security: Validate all input parameters
     state.input_validator.validate_title(&request.title)?;
-    state.input_validator.validate_description(&request.description)?;
+    state
+        .input_validator
+        .validate_description(&request.description)?;
     state.input_validator.validate_content(&request.content)?;
     state.input_validator.validate_tags(&request.tags)?;
 
@@ -189,7 +191,7 @@ pub async fn publish_web_content(
     // Create content metadata
     let content_id = generate_content_id(&request)?;
     let now = chrono::Utc::now().to_rfc3339();
-    
+
     let metadata = WebContentMetadata {
         content_id: content_id.clone(),
         title: request.title.clone(),
@@ -204,12 +206,10 @@ pub async fn publish_web_content(
     };
 
     // Security: Encrypt content using saorsa-fec
-    let content_bytes = serde_json::to_vec(&metadata)
-        .map_err(|_| WebPublishingError::StorageError)?;
-    
-    let encrypted_content = state.fec_manager
-        .encrypt_data(&content_bytes, None)
-        .await?;
+    let content_bytes =
+        serde_json::to_vec(&metadata).map_err(|_| WebPublishingError::StorageError)?;
+
+    let encrypted_content = state.fec_manager.encrypt_data(&content_bytes, None).await?;
 
     // Store encrypted content (in production, this would go to DHT)
     {
@@ -219,7 +219,7 @@ pub async fn publish_web_content(
 
     // TODO: Distribute encrypted chunks to DHT peers with geographic routing
     // For now, we simulate successful distribution
-    
+
     Ok(content_id)
 }
 
@@ -236,7 +236,9 @@ pub async fn browse_entity_web(
     }
 
     // Security: Validate four-word address format
-    state.input_validator.validate_four_word_address(&four_word_address)?;
+    state
+        .input_validator
+        .validate_four_word_address(&four_word_address)?;
 
     // Generate content ID from four-word address
     let content_id = calculate_content_id_from_address(&four_word_address)?;
@@ -275,7 +277,8 @@ pub async fn store_web_file(
     if file_data.is_empty() {
         return Err(WebPublishingError::InvalidInput);
     }
-    if file_data.len() > 100 * 1024 * 1024 { // 100MB limit
+    if file_data.len() > 100 * 1024 * 1024 {
+        // 100MB limit
         return Err(WebPublishingError::ContentTooLarge);
     }
 
@@ -283,13 +286,11 @@ pub async fn store_web_file(
     let file_id = Uuid::new_v4().to_string();
 
     // Security: Encrypt file data using saorsa-fec
-    let encrypted_content = state.fec_manager
-        .encrypt_data(&file_data, None)
-        .await?;
+    let encrypted_content = state.fec_manager.encrypt_data(&file_data, None).await?;
 
     // TODO: Distribute encrypted chunks to DHT with Reed-Solomon encoding
     // TODO: Implement geographic distribution for optimal retrieval
-    
+
     // For now, simulate successful storage
     Ok(file_id)
 }
@@ -312,7 +313,7 @@ pub async fn retrieve_file(
     // TODO: Retrieve encrypted chunks from DHT
     // TODO: Decrypt using appropriate key
     // TODO: Verify integrity and reconstruct original file
-    
+
     // For now, return empty data to prevent compilation errors
     // In production, this would decrypt and return the actual file data
     Err(WebPublishingError::ContentNotFound)
@@ -323,13 +324,14 @@ fn generate_content_id(request: &PublishContentRequest) -> Result<String, WebPub
     let mut hasher = blake3::Hasher::new();
     hasher.update(request.title.as_bytes());
     hasher.update(request.content.as_bytes());
-    hasher.update(&serde_json::to_vec(&request.content_type)
-        .map_err(|_| WebPublishingError::StorageError)?);
-    
+    hasher.update(
+        &serde_json::to_vec(&request.content_type).map_err(|_| WebPublishingError::StorageError)?,
+    );
+
     for tag in &request.tags {
         hasher.update(tag.as_bytes());
     }
-    
+
     Ok(hex::encode(hasher.finalize().as_bytes()))
 }
 
@@ -348,7 +350,7 @@ fn sanitize_markdown(content: &str) -> Result<String, WebPublishingError> {
         .replace('>', "&gt;")
         .replace('"', "&quot;")
         .replace('\'', "&#x27;");
-    
+
     Ok(sanitized)
 }
 
@@ -356,10 +358,8 @@ fn sanitize_markdown(content: &str) -> Result<String, WebPublishingError> {
 fn sanitize_html(content: &str) -> Result<String, WebPublishingError> {
     // TODO: Implement comprehensive HTML sanitization
     // For now, strip all HTML tags
-    let sanitized = content
-        .replace('<', "&lt;")
-        .replace('>', "&gt;");
-    
+    let sanitized = content.replace('<', "&lt;").replace('>', "&gt;");
+
     Ok(sanitized)
 }
 
@@ -371,7 +371,7 @@ fn sanitize_plain_text(content: &str) -> Result<String, WebPublishingError> {
         .replace('>', "&gt;")
         .replace('"', "&quot;")
         .replace('\'', "&#x27;");
-    
+
     Ok(sanitized)
 }
 
@@ -382,7 +382,7 @@ mod tests {
     #[tokio::test]
     async fn test_web_publishing_state_creation() {
         let state = WebPublishingState::new().expect("Failed to create web publishing state");
-        
+
         // Verify state components are initialized
         assert!(state.fec_manager.get_config().max_content_size > 0);
     }
@@ -399,7 +399,7 @@ mod tests {
         };
 
         let content_id = generate_content_id(&request).expect("Failed to generate content ID");
-        
+
         // Should be a valid hex string
         assert_eq!(content_id.len(), 64);
         assert!(content_id.chars().all(|c| c.is_ascii_hexdigit()));
@@ -412,43 +412,48 @@ mod tests {
     #[tokio::test]
     async fn test_content_sanitization() {
         let malicious_content = "<script>alert('xss')</script>Hello <b>world</b>";
-        
-        let sanitized_markdown = sanitize_markdown(malicious_content)
-            .expect("Failed to sanitize markdown");
+
+        let sanitized_markdown =
+            sanitize_markdown(malicious_content).expect("Failed to sanitize markdown");
         assert!(!sanitized_markdown.contains("<script>"));
         assert!(!sanitized_markdown.contains("<b>"));
 
-        let sanitized_html = sanitize_html(malicious_content)
-            .expect("Failed to sanitize HTML");
+        let sanitized_html = sanitize_html(malicious_content).expect("Failed to sanitize HTML");
         assert!(!sanitized_html.contains("<script>"));
         assert!(!sanitized_html.contains("<b>"));
 
-        let sanitized_text = sanitize_plain_text(malicious_content)
-            .expect("Failed to sanitize plain text");
+        let sanitized_text =
+            sanitize_plain_text(malicious_content).expect("Failed to sanitize plain text");
         assert!(!sanitized_text.contains("<script>"));
         assert!(!sanitized_text.contains("<b>"));
     }
 
     #[tokio::test]
     async fn test_content_type_validation() {
-        assert_eq!(ContentType::from_str("markdown").unwrap(), ContentType::Markdown);
+        assert_eq!(
+            ContentType::from_str("markdown").unwrap(),
+            ContentType::Markdown
+        );
         assert_eq!(ContentType::from_str("html").unwrap(), ContentType::Html);
-        assert_eq!(ContentType::from_str("plain_text").unwrap(), ContentType::PlainText);
-        
+        assert_eq!(
+            ContentType::from_str("plain_text").unwrap(),
+            ContentType::PlainText
+        );
+
         assert!(ContentType::from_str("invalid").is_err());
     }
 
     #[tokio::test]
     async fn test_address_to_content_id() {
         let address = "ocean-forest-moon-star";
-        let content_id = calculate_content_id_from_address(address)
-            .expect("Failed to calculate content ID");
-        
+        let content_id =
+            calculate_content_id_from_address(address).expect("Failed to calculate content ID");
+
         // Should be deterministic
-        let content_id2 = calculate_content_id_from_address(address)
-            .expect("Failed to calculate content ID");
+        let content_id2 =
+            calculate_content_id_from_address(address).expect("Failed to calculate content ID");
         assert_eq!(content_id, content_id2);
-        
+
         // Different address should produce different ID
         let different_id = calculate_content_id_from_address("mountain-river-sky-earth")
             .expect("Failed to calculate content ID");

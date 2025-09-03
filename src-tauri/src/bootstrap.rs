@@ -13,7 +13,6 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-
 //! Bootstrap Node Implementation for Communitas
 //!
 //! This module provides the bootstrap node functionality using the saorsa-core library.
@@ -22,7 +21,7 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::{
-    net::{SocketAddr, SocketAddrV4, Ipv4Addr},
+    net::{Ipv4Addr, SocketAddr, SocketAddrV4},
     path::PathBuf,
     sync::Arc,
     time::Duration,

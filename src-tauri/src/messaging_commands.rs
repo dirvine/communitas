@@ -13,23 +13,22 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-
 //! # Messaging Commands for Tauri Integration
-//! 
+//!
 //! Provides secure P2P messaging functionality with saorsa-fec encryption.
 //! This module implements the Tauri command interface for the messaging system,
 //! ensuring all encryption operations go through the saorsa-fec crate.
 
+use anyhow::{Context, Result};
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Mutex;
 use tauri::State;
-use serde::{Deserialize, Serialize};
-use anyhow::{Result, Context};
-use tracing::{info, warn, error, debug};
-use chrono::{DateTime, Utc};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
-use crate::secure_fec::{SecureFecManager, FecConfig};
+use crate::secure_fec::{FecConfig, SecureFecManager};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use blake3;
@@ -39,22 +38,22 @@ use blake3;
 pub enum MessagingError {
     #[error("Encryption failed: {0}")]
     EncryptionFailed(String),
-    
+
     #[error("Decryption failed: {0}")]
     DecryptionFailed(String),
-    
+
     #[error("Message not found")]
     MessageNotFound,
-    
+
     #[error("Invalid message format: {0}")]
     InvalidFormat(String),
-    
+
     #[error("Storage error: {0}")]
     StorageError(String),
-    
+
     #[error("Authentication failed: {0}")]
     AuthenticationFailed(String),
-    
+
     #[error("Permission denied: {0}")]
     PermissionDenied(String),
 }
@@ -138,31 +137,46 @@ impl MessageStorage {
     }
 
     pub fn store_message(&self, message: SecureMessage) -> Result<(), MessagingError> {
-        let mut messages = self.messages.lock()
+        let mut messages = self
+            .messages
+            .lock()
             .map_err(|e| MessagingError::StorageError(format!("Lock error: {}", e)))?;
-        
-        let mut user_messages = self.user_messages.lock()
+
+        let mut user_messages = self
+            .user_messages
+            .lock()
             .map_err(|e| MessagingError::StorageError(format!("Lock error: {}", e)))?;
 
         let message_id = message.id.clone();
         let sender = message.sender.clone();
 
         // Add to sender's messages
-        user_messages.entry(sender).or_insert_with(Vec::new).push(message_id.clone());
-        
+        user_messages
+            .entry(sender)
+            .or_insert_with(Vec::new)
+            .push(message_id.clone());
+
         // Add to recipient's messages if direct message
         if let Some(ref recipient) = message.recipient {
-            user_messages.entry(recipient.clone()).or_insert_with(Vec::new).push(message_id.clone());
+            user_messages
+                .entry(recipient.clone())
+                .or_insert_with(Vec::new)
+                .push(message_id.clone());
         }
-        
+
         // Add to all group members if group message
         if let Some(ref group_id) = message.group_id {
-            let group_members = self.group_members.lock()
+            let group_members = self
+                .group_members
+                .lock()
                 .map_err(|e| MessagingError::StorageError(format!("Lock error: {}", e)))?;
-            
+
             if let Some(members) = group_members.get(group_id) {
                 for member in members {
-                    user_messages.entry(member.clone()).or_insert_with(Vec::new).push(message_id.clone());
+                    user_messages
+                        .entry(member.clone())
+                        .or_insert_with(Vec::new)
+                        .push(message_id.clone());
                 }
             }
         }
@@ -172,24 +186,35 @@ impl MessageStorage {
     }
 
     pub fn get_message(&self, message_id: &str) -> Result<SecureMessage, MessagingError> {
-        let messages = self.messages.lock()
+        let messages = self
+            .messages
+            .lock()
             .map_err(|e| MessagingError::StorageError(format!("Lock error: {}", e)))?;
-        
-        messages.get(message_id)
+
+        messages
+            .get(message_id)
             .cloned()
             .ok_or(MessagingError::MessageNotFound)
     }
 
-    pub fn get_user_messages(&self, user_id: &str, limit: Option<u32>) -> Result<Vec<SecureMessage>, MessagingError> {
-        let messages = self.messages.lock()
+    pub fn get_user_messages(
+        &self,
+        user_id: &str,
+        limit: Option<u32>,
+    ) -> Result<Vec<SecureMessage>, MessagingError> {
+        let messages = self
+            .messages
+            .lock()
             .map_err(|e| MessagingError::StorageError(format!("Lock error: {}", e)))?;
-        
-        let user_messages = self.user_messages.lock()
+
+        let user_messages = self
+            .user_messages
+            .lock()
             .map_err(|e| MessagingError::StorageError(format!("Lock error: {}", e)))?;
 
         let empty_vec = Vec::new();
         let message_ids = user_messages.get(user_id).unwrap_or(&empty_vec);
-        
+
         let mut user_msgs = Vec::new();
         for msg_id in message_ids {
             if let Some(msg) = messages.get(msg_id) {
@@ -199,7 +224,7 @@ impl MessageStorage {
 
         // Sort by timestamp (newest first)
         user_msgs.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
-        
+
         // Apply limit if specified
         if let Some(limit) = limit {
             user_msgs.truncate(limit as usize);
@@ -209,10 +234,14 @@ impl MessageStorage {
     }
 
     pub fn create_group(&self, group_info: GroupInfo) -> Result<(), MessagingError> {
-        let mut groups = self.groups.lock()
+        let mut groups = self
+            .groups
+            .lock()
             .map_err(|e| MessagingError::StorageError(format!("Lock error: {}", e)))?;
-        
-        let mut group_members = self.group_members.lock()
+
+        let mut group_members = self
+            .group_members
+            .lock()
             .map_err(|e| MessagingError::StorageError(format!("Lock error: {}", e)))?;
 
         let group_id = group_info.id.clone();
@@ -225,20 +254,28 @@ impl MessageStorage {
     }
 
     pub fn get_group(&self, group_id: &str) -> Result<GroupInfo, MessagingError> {
-        let groups = self.groups.lock()
+        let groups = self
+            .groups
+            .lock()
             .map_err(|e| MessagingError::StorageError(format!("Lock error: {}", e)))?;
-        
-        groups.get(group_id)
+
+        groups
+            .get(group_id)
             .cloned()
             .ok_or(MessagingError::MessageNotFound)
     }
 
     pub fn get_user_groups(&self, user_id: &str) -> Result<Vec<GroupInfo>, MessagingError> {
-        let groups = self.groups.lock()
+        let groups = self
+            .groups
+            .lock()
             .map_err(|e| MessagingError::StorageError(format!("Lock error: {}", e)))?;
-        
-        let user_groups: Vec<GroupInfo> = groups.values()
-            .filter(|group| group.members.contains(&user_id.to_string()) || group.creator == *user_id)
+
+        let user_groups: Vec<GroupInfo> = groups
+            .values()
+            .filter(|group| {
+                group.members.contains(&user_id.to_string()) || group.creator == *user_id
+            })
             .cloned()
             .collect();
 
@@ -246,10 +283,14 @@ impl MessageStorage {
     }
 
     pub fn add_group_member(&self, group_id: &str, user_id: &str) -> Result<(), MessagingError> {
-        let mut groups = self.groups.lock()
+        let mut groups = self
+            .groups
+            .lock()
             .map_err(|e| MessagingError::StorageError(format!("Lock error: {}", e)))?;
-        
-        let mut group_members = self.group_members.lock()
+
+        let mut group_members = self
+            .group_members
+            .lock()
             .map_err(|e| MessagingError::StorageError(format!("Lock error: {}", e)))?;
 
         // Update group info
@@ -272,10 +313,14 @@ impl MessageStorage {
     }
 
     pub fn remove_group_member(&self, group_id: &str, user_id: &str) -> Result<(), MessagingError> {
-        let mut groups = self.groups.lock()
+        let mut groups = self
+            .groups
+            .lock()
             .map_err(|e| MessagingError::StorageError(format!("Lock error: {}", e)))?;
-        
-        let mut group_members = self.group_members.lock()
+
+        let mut group_members = self
+            .group_members
+            .lock()
             .map_err(|e| MessagingError::StorageError(format!("Lock error: {}", e)))?;
 
         // Update group info
@@ -298,42 +343,60 @@ impl MessageStorage {
 struct MessageEncryption;
 
 impl MessageEncryption {
-    async fn encrypt_content(content: &str, sender: &str, recipient: &str) -> Result<String, MessagingError> {
+    async fn encrypt_content(
+        content: &str,
+        sender: &str,
+        recipient: &str,
+    ) -> Result<String, MessagingError> {
         let config = FecConfig::default();
-        let fec_manager = SecureFecManager::new(config)
-            .map_err(|e| MessagingError::EncryptionFailed(format!("FEC manager creation failed: {}", e)))?;
-        
+        let fec_manager = SecureFecManager::new(config).map_err(|e| {
+            MessagingError::EncryptionFailed(format!("FEC manager creation failed: {}", e))
+        })?;
+
         // Create deterministic key ID for this conversation
         let key_material = format!("conversation:{}:{}", sender, recipient);
         let key_id = hex::encode(blake3::hash(key_material.as_bytes()).as_bytes());
-        
-        let encrypted_content = fec_manager.encrypt_data(content.as_bytes(), Some(key_id)).await
+
+        let encrypted_content = fec_manager
+            .encrypt_data(content.as_bytes(), Some(key_id))
+            .await
             .map_err(|e| MessagingError::EncryptionFailed(format!("Encryption failed: {}", e)))?;
-        
-        let serialized = bincode::serialize(&encrypted_content)
-            .map_err(|e| MessagingError::EncryptionFailed(format!("Serialization failed: {}", e)))?;
-        
+
+        let serialized = bincode::serialize(&encrypted_content).map_err(|e| {
+            MessagingError::EncryptionFailed(format!("Serialization failed: {}", e))
+        })?;
+
         Ok(BASE64.encode(serialized))
     }
 
-    async fn decrypt_content(encrypted_content: &str, sender: &str, recipient: &str) -> Result<String, MessagingError> {
-        let serialized_bytes = BASE64.decode(encrypted_content)
-            .map_err(|e| MessagingError::DecryptionFailed(format!("Base64 decode failed: {}", e)))?;
-        
-        let encrypted_data: crate::secure_fec::EncryptedContent = bincode::deserialize(&serialized_bytes)
-            .map_err(|e| MessagingError::DecryptionFailed(format!("Deserialization failed: {}", e)))?;
-        
+    async fn decrypt_content(
+        encrypted_content: &str,
+        sender: &str,
+        recipient: &str,
+    ) -> Result<String, MessagingError> {
+        let serialized_bytes = BASE64.decode(encrypted_content).map_err(|e| {
+            MessagingError::DecryptionFailed(format!("Base64 decode failed: {}", e))
+        })?;
+
+        let encrypted_data: crate::secure_fec::EncryptedContent =
+            bincode::deserialize(&serialized_bytes).map_err(|e| {
+                MessagingError::DecryptionFailed(format!("Deserialization failed: {}", e))
+            })?;
+
         let config = FecConfig::default();
-        let fec_manager = SecureFecManager::new(config)
-            .map_err(|e| MessagingError::DecryptionFailed(format!("FEC manager creation failed: {}", e)))?;
-        
+        let fec_manager = SecureFecManager::new(config).map_err(|e| {
+            MessagingError::DecryptionFailed(format!("FEC manager creation failed: {}", e))
+        })?;
+
         // Recreate the same key ID used for encryption
         let key_material = format!("conversation:{}:{}", sender, recipient);
         let key_id = hex::encode(blake3::hash(key_material.as_bytes()).as_bytes());
-        
-        let decrypted_bytes = fec_manager.decrypt_data(&encrypted_data, &key_id).await
+
+        let decrypted_bytes = fec_manager
+            .decrypt_data(&encrypted_data, &key_id)
+            .await
             .map_err(|e| MessagingError::DecryptionFailed(format!("Decryption failed: {}", e)))?;
-        
+
         String::from_utf8(decrypted_bytes)
             .map_err(|e| MessagingError::DecryptionFailed(format!("UTF-8 decode failed: {}", e)))
     }
@@ -358,7 +421,8 @@ pub async fn send_direct_message(
     let timestamp = Utc::now();
 
     // Encrypt content using saorsa-fec
-    let encrypted_content = MessageEncryption::encrypt_content(&content, &sender, &recipient).await
+    let encrypted_content = MessageEncryption::encrypt_content(&content, &sender, &recipient)
+        .await
         .map_err(|e| format!("Failed to encrypt message: {}", e))?;
 
     let message = SecureMessage {
@@ -372,7 +436,8 @@ pub async fn send_direct_message(
         message_type: "direct".to_string(),
     };
 
-    storage.store_message(message)
+    storage
+        .store_message(message)
         .map_err(|e| format!("Failed to store message: {}", e))?;
 
     info!("Direct message {} sent successfully", message_id);
@@ -392,17 +457,19 @@ pub async fn send_group_message_secure(
     // For group messages, use group ID as part of encryption key
     let group_key_material = format!("group:{}:{}", group_id, sender);
     let key_id = hex::encode(blake3::hash(group_key_material.as_bytes()).as_bytes());
-    
+
     let config = FecConfig::default();
     let fec_manager = SecureFecManager::new(config)
         .map_err(|e| format!("Failed to create FEC manager: {}", e))?;
-    
-    let encrypted_data = fec_manager.encrypt_data(content.as_bytes(), Some(key_id)).await
+
+    let encrypted_data = fec_manager
+        .encrypt_data(content.as_bytes(), Some(key_id))
+        .await
         .map_err(|e| format!("Failed to encrypt group message: {}", e))?;
-    
+
     let serialized = bincode::serialize(&encrypted_data)
         .map_err(|e| format!("Failed to serialize encrypted data: {}", e))?;
-    
+
     let encrypted_content = BASE64.encode(serialized);
 
     let message = SecureMessage {
@@ -416,7 +483,8 @@ pub async fn send_group_message_secure(
         message_type: "group".to_string(),
     };
 
-    storage.store_message(message)
+    storage
+        .store_message(message)
         .map_err(|e| format!("Failed to store group message: {}", e))?;
 
     info!("Group message {} sent successfully", message_id);
@@ -429,17 +497,24 @@ pub async fn get_messages_secure(
     user_id: String,
     limit: Option<u32>,
 ) -> Result<Vec<MessageDto>, String> {
-    let messages = storage.get_user_messages(&user_id, limit)
+    let messages = storage
+        .get_user_messages(&user_id, limit)
         .map_err(|e| format!("Failed to retrieve messages: {}", e))?;
-    
+
     let mut message_dtos = Vec::new();
-    
+
     for message in messages {
         // Decrypt message content if encrypted
         let content = if message.encrypted {
             if let Some(ref recipient) = message.recipient {
                 // Direct message - decrypt using sender/recipient key
-                match MessageEncryption::decrypt_content(&message.content, &message.sender, recipient).await {
+                match MessageEncryption::decrypt_content(
+                    &message.content,
+                    &message.sender,
+                    recipient,
+                )
+                .await
+                {
                     Ok(decrypted) => decrypted,
                     Err(e) => {
                         warn!("Failed to decrypt message {}: {}", message.id, e);
@@ -451,8 +526,9 @@ pub async fn get_messages_secure(
                 match message.group_id {
                     Some(ref group_id) => {
                         let group_key_material = format!("group:{}:{}", group_id, message.sender);
-                        let key_id = hex::encode(blake3::hash(group_key_material.as_bytes()).as_bytes());
-                        
+                        let key_id =
+                            hex::encode(blake3::hash(group_key_material.as_bytes()).as_bytes());
+
                         let serialized_bytes = match BASE64.decode(&message.content) {
                             Ok(bytes) => bytes,
                             Err(e) => {
@@ -460,29 +536,39 @@ pub async fn get_messages_secure(
                                 continue;
                             }
                         };
-                        
-                        let encrypted_data: crate::secure_fec::EncryptedContent = match bincode::deserialize(&serialized_bytes) {
-                            Ok(data) => data,
-                            Err(e) => {
-                                warn!("Failed to deserialize group message {}: {}", message.id, e);
-                                continue;
-                            }
-                        };
-                        
+
+                        let encrypted_data: crate::secure_fec::EncryptedContent =
+                            match bincode::deserialize(&serialized_bytes) {
+                                Ok(data) => data,
+                                Err(e) => {
+                                    warn!(
+                                        "Failed to deserialize group message {}: {}",
+                                        message.id, e
+                                    );
+                                    continue;
+                                }
+                            };
+
                         let config = FecConfig::default();
                         let fec_manager = match SecureFecManager::new(config) {
                             Ok(manager) => manager,
                             Err(e) => {
-                                warn!("Failed to create FEC manager for message {}: {}", message.id, e);
+                                warn!(
+                                    "Failed to create FEC manager for message {}: {}",
+                                    message.id, e
+                                );
                                 continue;
                             }
                         };
-                        
+
                         match fec_manager.decrypt_data(&encrypted_data, &key_id).await {
                             Ok(decrypted_bytes) => match String::from_utf8(decrypted_bytes) {
                                 Ok(decrypted) => decrypted,
                                 Err(e) => {
-                                    warn!("Failed to decode UTF-8 for message {}: {}", message.id, e);
+                                    warn!(
+                                        "Failed to decode UTF-8 for message {}: {}",
+                                        message.id, e
+                                    );
                                     continue;
                                 }
                             },
@@ -493,7 +579,10 @@ pub async fn get_messages_secure(
                         }
                     }
                     None => {
-                        warn!("Encrypted message {} has no recipient or group_id", message.id);
+                        warn!(
+                            "Encrypted message {} has no recipient or group_id",
+                            message.id
+                        );
                         continue;
                     }
                 }
@@ -514,7 +603,11 @@ pub async fn get_messages_secure(
         });
     }
 
-    debug!("Retrieved {} messages for user {}", message_dtos.len(), user_id);
+    debug!(
+        "Retrieved {} messages for user {}",
+        message_dtos.len(),
+        user_id
+    );
     Ok(message_dtos)
 }
 
@@ -542,7 +635,8 @@ pub async fn create_group_secure(
         creator,
     };
 
-    storage.create_group(group_info)
+    storage
+        .create_group(group_info)
         .map_err(|e| format!("Failed to create group: {}", e))?;
 
     info!("Group {} created successfully", group_id);
@@ -555,7 +649,8 @@ pub async fn add_group_member(
     group_id: String,
     user_id: String,
 ) -> Result<(), String> {
-    storage.add_group_member(&group_id, &user_id)
+    storage
+        .add_group_member(&group_id, &user_id)
         .map_err(|e| format!("Failed to add group member: {}", e))?;
 
     info!("Added user {} to group {}", user_id, group_id);
@@ -568,7 +663,8 @@ pub async fn remove_group_member(
     group_id: String,
     user_id: String,
 ) -> Result<(), String> {
-    storage.remove_group_member(&group_id, &user_id)
+    storage
+        .remove_group_member(&group_id, &user_id)
         .map_err(|e| format!("Failed to remove group member: {}", e))?;
 
     info!("Removed user {} from group {}", user_id, group_id);
@@ -580,15 +676,19 @@ pub async fn get_groups(
     storage: State<'_, MessageStorage>,
     user_id: String,
 ) -> Result<Vec<GroupDto>, String> {
-    let groups = storage.get_user_groups(&user_id)
+    let groups = storage
+        .get_user_groups(&user_id)
         .map_err(|e| format!("Failed to retrieve groups: {}", e))?;
-    
-    let group_dtos: Vec<GroupDto> = groups.into_iter().map(|group| GroupDto {
-        id: group.id,
-        name: group.name,
-        members: group.members,
-        created_at: group.created_at.to_rfc3339(),
-    }).collect();
+
+    let group_dtos: Vec<GroupDto> = groups
+        .into_iter()
+        .map(|group| GroupDto {
+            id: group.id,
+            name: group.name,
+            members: group.members,
+            created_at: group.created_at.to_rfc3339(),
+        })
+        .collect();
 
     debug!("Retrieved {} groups for user {}", group_dtos.len(), user_id);
     Ok(group_dtos)
@@ -606,7 +706,7 @@ mod tests {
     #[tokio::test]
     async fn test_message_storage() {
         let storage = MessageStorage::new();
-        
+
         let message = SecureMessage {
             id: "test_id".to_string(),
             sender: "sender".to_string(),
@@ -620,7 +720,7 @@ mod tests {
 
         storage.store_message(message.clone()).unwrap();
         let retrieved = storage.get_message("test_id").unwrap();
-        
+
         assert_eq!(retrieved.id, message.id);
         assert_eq!(retrieved.content, message.content);
     }
@@ -631,8 +731,12 @@ mod tests {
         let sender = "alice";
         let recipient = "bob";
 
-        let encrypted = MessageEncryption::encrypt_content(content, sender, recipient).await.unwrap();
-        let decrypted = MessageEncryption::decrypt_content(&encrypted, sender, recipient).await.unwrap();
+        let encrypted = MessageEncryption::encrypt_content(content, sender, recipient)
+            .await
+            .unwrap();
+        let decrypted = MessageEncryption::decrypt_content(&encrypted, sender, recipient)
+            .await
+            .unwrap();
 
         assert_eq!(content, decrypted);
     }

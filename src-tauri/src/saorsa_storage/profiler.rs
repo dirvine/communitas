@@ -1,9 +1,8 @@
-/// Performance profiler for Saorsa Storage System
-/// Identifies bottlenecks and optimization opportunities
-
-use std::time::{Duration, Instant};
 use std::collections::HashMap;
 use std::sync::Arc;
+/// Performance profiler for Saorsa Storage System
+/// Identifies bottlenecks and optimization opportunities
+use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 
 #[derive(Debug, Clone)]
@@ -78,7 +77,9 @@ impl Profiler {
         let mut points = self.points.write().await;
         if let Some(profile_points) = points.get_mut(name) {
             if let Some(last_point) = profile_points.last_mut() {
-                last_point.metadata.insert(key.to_string(), value.to_string());
+                last_point
+                    .metadata
+                    .insert(key.to_string(), value.to_string());
             }
         }
     }
@@ -139,7 +140,7 @@ impl Profiler {
 
     pub async fn print_report(&self) {
         let results = self.get_results().await;
-        
+
         println!("\n=== Performance Profile Report ===");
         if results.is_empty() {
             println!("No profile data collected");
@@ -151,7 +152,8 @@ impl Profiler {
 
         for (i, result) in results.iter().enumerate().take(10) {
             println!("{}. {} ({} calls)", i + 1, result.name, result.call_count);
-            println!("   Avg: {:>8.2}ms | Min: {:>8.2}ms | Max: {:>8.2}ms | Total: {:>8.2}ms",
+            println!(
+                "   Avg: {:>8.2}ms | Min: {:>8.2}ms | Max: {:>8.2}ms | Total: {:>8.2}ms",
                 result.avg_duration.as_secs_f64() * 1000.0,
                 result.min_duration.as_secs_f64() * 1000.0,
                 result.max_duration.as_secs_f64() * 1000.0,
@@ -178,20 +180,26 @@ impl Profiler {
 
         // Identify slow operations
         let slow_threshold = Duration::from_millis(100);
-        let slow_ops: Vec<_> = results.iter()
+        let slow_ops: Vec<_> = results
+            .iter()
             .filter(|r| r.avg_duration > slow_threshold)
             .collect();
 
         if !slow_ops.is_empty() {
             println!("⚠️  Slow operations (>100ms average):");
             for op in slow_ops {
-                println!("   {} - {:.2}ms average", op.name, op.avg_duration.as_secs_f64() * 1000.0);
+                println!(
+                    "   {} - {:.2}ms average",
+                    op.name,
+                    op.avg_duration.as_secs_f64() * 1000.0
+                );
             }
             println!();
         }
 
         // Identify high-variance operations
-        let high_variance_ops: Vec<_> = results.iter()
+        let high_variance_ops: Vec<_> = results
+            .iter()
             .filter(|r| {
                 let variance_ratio = r.max_duration.as_secs_f64() / r.min_duration.as_secs_f64();
                 variance_ratio > 10.0 && r.call_count > 5
@@ -208,15 +216,17 @@ impl Profiler {
         }
 
         // Total time analysis
-        let total_time = results.iter()
-            .map(|r| r.total_duration)
-            .sum::<Duration>();
+        let total_time = results.iter().map(|r| r.total_duration).sum::<Duration>();
 
         println!("Total profiled time: {:.2}s", total_time.as_secs_f64());
-        
+
         if let Some(top_op) = results.first() {
-            let percentage = (top_op.total_duration.as_secs_f64() / total_time.as_secs_f64()) * 100.0;
-            println!("Top operation '{}' accounts for {:.1}% of total time", top_op.name, percentage);
+            let percentage =
+                (top_op.total_duration.as_secs_f64() / total_time.as_secs_f64()) * 100.0;
+            println!(
+                "Top operation '{}' accounts for {:.1}% of total time",
+                top_op.name, percentage
+            );
         }
     }
 }
@@ -263,10 +273,10 @@ impl Drop for ProfileGuard {
 
         if let Some(mut point) = self.point.take() {
             point.duration = Some(point.start_time.elapsed());
-            
+
             let profiler = self.profiler.clone();
             let name = point.name.clone();
-            
+
             // Spawn a task to avoid blocking in Drop
             tokio::spawn(async move {
                 let mut points = profiler.write().await;
@@ -283,7 +293,7 @@ macro_rules! profile {
         let _guard = $profiler.start_profile($name).await;
         $block
     }};
-    
+
     ($profiler:expr, $name:expr, $block:block, $($meta_key:expr => $meta_value:expr),+) => {{
         let mut _guard = $profiler.start_profile($name).await;
         $(
@@ -328,9 +338,9 @@ pub enum Priority {
 
 #[derive(Debug, Clone)]
 pub enum ImpactLevel {
-    Minor,      // <10% improvement
-    Moderate,   // 10-30% improvement
-    Major,      // 30-50% improvement
+    Minor,       // <10% improvement
+    Moderate,    // 10-30% improvement
+    Major,       // 30-50% improvement
     Significant, // >50% improvement
 }
 
@@ -383,7 +393,8 @@ impl OptimizationRecommendations {
             }
 
             // Check for high variance
-            let variance_ratio = result.max_duration.as_secs_f64() / result.min_duration.as_secs_f64();
+            let variance_ratio =
+                result.max_duration.as_secs_f64() / result.min_duration.as_secs_f64();
             if variance_ratio > 10.0 && result.call_count > 5 {
                 recommendations.push(Recommendation {
                     category: RecommendationCategory::Caching,
@@ -414,7 +425,10 @@ impl OptimizationRecommendations {
         }
 
         // General recommendations based on patterns
-        if results.iter().any(|r| r.name.contains("mutex") || r.name.contains("lock")) {
+        if results
+            .iter()
+            .any(|r| r.name.contains("mutex") || r.name.contains("lock"))
+        {
             recommendations.push(Recommendation {
                 category: RecommendationCategory::Concurrency,
                 priority: Priority::Medium,
@@ -432,7 +446,7 @@ impl OptimizationRecommendations {
 
     pub fn print_recommendations(&self) {
         println!("\n=== Performance Optimization Recommendations ===");
-        
+
         if self.recommendations.is_empty() {
             println!("✅ No optimization recommendations - performance looks good!");
             return;
@@ -453,9 +467,18 @@ impl OptimizationRecommendations {
                 ImpactLevel::Minor => "Minor impact",
             };
 
-            println!("{}. {} {} - {}", i + 1, priority_icon, rec.title, impact_desc);
+            println!(
+                "{}. {} {} - {}",
+                i + 1,
+                priority_icon,
+                rec.title,
+                impact_desc
+            );
             println!("   {}", rec.description);
-            println!("   Category: {:?} | Priority: {:?}", rec.category, rec.priority);
+            println!(
+                "   Category: {:?} | Priority: {:?}",
+                rec.category, rec.priority
+            );
             println!();
         }
     }
@@ -464,12 +487,12 @@ impl OptimizationRecommendations {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::time::{sleep, Duration};
+    use tokio::time::{Duration, sleep};
 
     #[tokio::test]
     async fn test_profiler_basic() {
         let profiler = Profiler::new();
-        
+
         {
             let _guard = profiler.start_profile("test_operation").await;
             sleep(Duration::from_millis(10)).await;
@@ -485,7 +508,7 @@ mod tests {
     #[tokio::test]
     async fn test_profiler_with_metadata() {
         let profiler = Profiler::new();
-        
+
         {
             let mut guard = profiler.start_profile("test_with_metadata").await;
             guard.add_metadata("test_key", "test_value").await;
@@ -500,7 +523,7 @@ mod tests {
     #[tokio::test]
     async fn test_multiple_calls() {
         let profiler = Profiler::new();
-        
+
         for _ in 0..5 {
             let _guard = profiler.start_profile("repeated_operation").await;
             sleep(Duration::from_millis(1)).await;
@@ -513,22 +536,22 @@ mod tests {
 
     #[test]
     fn test_optimization_recommendations() {
-        let results = vec![
-            ProfileResult {
-                name: "slow_encryption".to_string(),
-                total_duration: Duration::from_millis(1000),
-                call_count: 10,
-                avg_duration: Duration::from_millis(100),
-                min_duration: Duration::from_millis(50),
-                max_duration: Duration::from_millis(150),
-                metadata: HashMap::new(),
-            }
-        ];
+        let results = vec![ProfileResult {
+            name: "slow_encryption".to_string(),
+            total_duration: Duration::from_millis(1000),
+            call_count: 10,
+            avg_duration: Duration::from_millis(100),
+            min_duration: Duration::from_millis(50),
+            max_duration: Duration::from_millis(150),
+            metadata: HashMap::new(),
+        }];
 
         let recommendations = OptimizationRecommendations::analyze_profile_results(&results);
         assert!(!recommendations.recommendations.is_empty());
-        
-        let crypto_rec = recommendations.recommendations.iter()
+
+        let crypto_rec = recommendations
+            .recommendations
+            .iter()
             .find(|r| matches!(r.category, RecommendationCategory::Encryption));
         assert!(crypto_rec.is_some());
     }

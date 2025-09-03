@@ -1,5 +1,5 @@
 //! Comprehensive input validation and sanitization service
-//! 
+//!
 //! This module provides:
 //! - Input validation using the validator crate
 //! - Sanitization against injection attacks
@@ -7,9 +7,9 @@
 //! - Content-type validation
 
 use anyhow::{Context, Result};
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
-use regex::Regex;
 use thiserror::Error;
 
 #[derive(Debug, Clone, Error)]
@@ -25,9 +25,9 @@ pub enum ValidationError {
 }
 
 /// Maximum allowed input sizes to prevent DoS attacks
-pub const MAX_MESSAGE_LENGTH: usize = 100_000;  // 100KB max message
+pub const MAX_MESSAGE_LENGTH: usize = 100_000; // 100KB max message
 pub const MAX_USERNAME_LENGTH: usize = 64;
-pub const MAX_PATH_LENGTH: usize = 260;  // Windows MAX_PATH compatible
+pub const MAX_PATH_LENGTH: usize = 260; // Windows MAX_PATH compatible
 pub const MAX_FOUR_WORDS_LENGTH: usize = 100;
 
 /// Input validation service providing secure input processing
@@ -67,13 +67,15 @@ impl InputValidator {
     /// Validate and sanitize a four-word network identity
     pub fn validate_four_words(&self, input: &str) -> Result<String, ValidationError> {
         if input.is_empty() {
-            return Err(ValidationError::InvalidInput("Four-word address cannot be empty".to_string()));
+            return Err(ValidationError::InvalidInput(
+                "Four-word address cannot be empty".to_string(),
+            ));
         }
 
         if input.len() > MAX_FOUR_WORDS_LENGTH {
-            return Err(ValidationError::TooLong { 
-                current: input.len(), 
-                max: MAX_FOUR_WORDS_LENGTH 
+            return Err(ValidationError::TooLong {
+                current: input.len(),
+                max: MAX_FOUR_WORDS_LENGTH,
             });
         }
 
@@ -99,10 +101,15 @@ impl InputValidator {
     /// Validate title field
     pub fn validate_title(&self, input: &str) -> Result<String, ValidationError> {
         if input.is_empty() {
-            return Err(ValidationError::InvalidInput("Title cannot be empty".to_string()));
+            return Err(ValidationError::InvalidInput(
+                "Title cannot be empty".to_string(),
+            ));
         }
         if input.len() > 200 {
-            return Err(ValidationError::TooLong { current: input.len(), max: 200 });
+            return Err(ValidationError::TooLong {
+                current: input.len(),
+                max: 200,
+            });
         }
         if self.contains_malicious_content(input) {
             return Err(ValidationError::MaliciousContent);
@@ -113,7 +120,10 @@ impl InputValidator {
     /// Validate description field
     pub fn validate_description(&self, input: &str) -> Result<String, ValidationError> {
         if input.len() > 1000 {
-            return Err(ValidationError::TooLong { current: input.len(), max: 1000 });
+            return Err(ValidationError::TooLong {
+                current: input.len(),
+                max: 1000,
+            });
         }
         if self.contains_malicious_content(input) {
             return Err(ValidationError::MaliciousContent);
@@ -124,10 +134,15 @@ impl InputValidator {
     /// Validate content field
     pub fn validate_content(&self, input: &str) -> Result<String, ValidationError> {
         if input.is_empty() {
-            return Err(ValidationError::InvalidInput("Content cannot be empty".to_string()));
+            return Err(ValidationError::InvalidInput(
+                "Content cannot be empty".to_string(),
+            ));
         }
         if input.len() > 10 * 1024 * 1024 {
-            return Err(ValidationError::TooLong { current: input.len(), max: 10 * 1024 * 1024 });
+            return Err(ValidationError::TooLong {
+                current: input.len(),
+                max: 10 * 1024 * 1024,
+            });
         }
         if self.script_injection_pattern.is_match(input) {
             return Err(ValidationError::MaliciousContent);
@@ -138,16 +153,22 @@ impl InputValidator {
     /// Validate tags array
     pub fn validate_tags(&self, tags: &[String]) -> Result<Vec<String>, ValidationError> {
         if tags.len() > 10 {
-            return Err(ValidationError::TooLong { current: tags.len(), max: 10 });
+            return Err(ValidationError::TooLong {
+                current: tags.len(),
+                max: 10,
+            });
         }
-        
+
         let mut validated_tags = Vec::new();
         for tag in tags {
             if tag.is_empty() {
                 continue; // Skip empty tags
             }
             if tag.len() > 50 {
-                return Err(ValidationError::TooLong { current: tag.len(), max: 50 });
+                return Err(ValidationError::TooLong {
+                    current: tag.len(),
+                    max: 50,
+                });
             }
             if self.contains_malicious_content(tag) {
                 return Err(ValidationError::MaliciousContent);
@@ -160,10 +181,15 @@ impl InputValidator {
     /// Validate file name
     pub fn validate_file_name(&self, input: &str) -> Result<String, ValidationError> {
         if input.is_empty() {
-            return Err(ValidationError::InvalidInput("File name cannot be empty".to_string()));
+            return Err(ValidationError::InvalidInput(
+                "File name cannot be empty".to_string(),
+            ));
         }
         if input.len() > 255 {
-            return Err(ValidationError::TooLong { current: input.len(), max: 255 });
+            return Err(ValidationError::TooLong {
+                current: input.len(),
+                max: 255,
+            });
         }
         if input.contains('/') || input.contains('\\') || input.contains('\0') {
             return Err(ValidationError::InvalidFormat);
@@ -177,10 +203,15 @@ impl InputValidator {
     /// Validate content type
     pub fn validate_content_type(&self, input: &str) -> Result<String, ValidationError> {
         if input.is_empty() {
-            return Err(ValidationError::InvalidInput("Content type cannot be empty".to_string()));
+            return Err(ValidationError::InvalidInput(
+                "Content type cannot be empty".to_string(),
+            ));
         }
         if input.len() > 100 {
-            return Err(ValidationError::TooLong { current: input.len(), max: 100 });
+            return Err(ValidationError::TooLong {
+                current: input.len(),
+                max: 100,
+            });
         }
         if self.contains_malicious_content(input) {
             return Err(ValidationError::MaliciousContent);
@@ -191,12 +222,16 @@ impl InputValidator {
     /// Validate UUID format
     pub fn validate_uuid(&self, input: &str) -> Result<String, ValidationError> {
         if input.is_empty() {
-            return Err(ValidationError::InvalidInput("UUID cannot be empty".to_string()));
+            return Err(ValidationError::InvalidInput(
+                "UUID cannot be empty".to_string(),
+            ));
         }
         // Basic UUID format check
-        let uuid_pattern = Regex::new(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
-            .map_err(|_| ValidationError::InvalidFormat)?;
-        
+        let uuid_pattern = Regex::new(
+            r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+        )
+        .map_err(|_| ValidationError::InvalidFormat)?;
+
         if !uuid_pattern.is_match(input) {
             return Err(ValidationError::InvalidFormat);
         }
@@ -210,18 +245,26 @@ impl InputValidator {
         }
 
         if input.len() > MAX_USERNAME_LENGTH {
-            return Err(anyhow::anyhow!("Username too long: {} > {}", input.len(), MAX_USERNAME_LENGTH));
+            return Err(anyhow::anyhow!(
+                "Username too long: {} > {}",
+                input.len(),
+                MAX_USERNAME_LENGTH
+            ));
         }
 
         // Check for potential injection attempts
         if self.contains_malicious_content(input) {
-            return Err(anyhow::anyhow!("Username contains potentially malicious content"));
+            return Err(anyhow::anyhow!(
+                "Username contains potentially malicious content"
+            ));
         }
 
         let sanitized = input.trim();
 
         if !self.username_pattern.is_match(sanitized) {
-            return Err(anyhow::anyhow!("Invalid username format. Only alphanumeric characters, hyphens, and underscores allowed"));
+            return Err(anyhow::anyhow!(
+                "Invalid username format. Only alphanumeric characters, hyphens, and underscores allowed"
+            ));
         }
 
         Ok(sanitized.to_string())
@@ -234,12 +277,18 @@ impl InputValidator {
         }
 
         if input.len() > MAX_MESSAGE_LENGTH {
-            return Err(anyhow::anyhow!("Message too long: {} > {}", input.len(), MAX_MESSAGE_LENGTH));
+            return Err(anyhow::anyhow!(
+                "Message too long: {} > {}",
+                input.len(),
+                MAX_MESSAGE_LENGTH
+            ));
         }
 
         // Check for script injection attempts
         if self.script_injection_pattern.is_match(input) {
-            return Err(anyhow::anyhow!("Message content contains potentially malicious scripts"));
+            return Err(anyhow::anyhow!(
+                "Message content contains potentially malicious scripts"
+            ));
         }
 
         // Sanitize the message by removing null bytes and control characters
@@ -258,12 +307,22 @@ impl InputValidator {
         }
 
         if input.len() > MAX_PATH_LENGTH {
-            return Err(anyhow::anyhow!("File path too long: {} > {}", input.len(), MAX_PATH_LENGTH));
+            return Err(anyhow::anyhow!(
+                "File path too long: {} > {}",
+                input.len(),
+                MAX_PATH_LENGTH
+            ));
         }
 
         // Check for directory traversal patterns
-        if input.contains("..") || input.contains("./") || input.contains("\\..") || input.contains(".\\") {
-            return Err(anyhow::anyhow!("Path contains directory traversal patterns"));
+        if input.contains("..")
+            || input.contains("./")
+            || input.contains("\\..")
+            || input.contains(".\\")
+        {
+            return Err(anyhow::anyhow!(
+                "Path contains directory traversal patterns"
+            ));
         }
 
         // Check for absolute paths (we only allow relative paths)
@@ -277,13 +336,15 @@ impl InputValidator {
         }
 
         let path = PathBuf::from(input);
-        
+
         // Verify the path doesn't escape when canonicalized
         match path.canonicalize() {
             Ok(canonical) => {
                 // This is a simplistic check - in production you'd check against allowed directories
                 if canonical.to_string_lossy().contains("..") {
-                    return Err(anyhow::anyhow!("Canonicalized path contains traversal patterns"));
+                    return Err(anyhow::anyhow!(
+                        "Canonicalized path contains traversal patterns"
+                    ));
                 }
             }
             Err(_) => {
@@ -308,7 +369,11 @@ impl InputValidator {
         }
 
         // Check for null bytes and control characters (except common whitespace)
-        if input.contains('\0') || input.chars().any(|c| c.is_control() && c != '\n' && c != '\r' && c != '\t') {
+        if input.contains('\0')
+            || input
+                .chars()
+                .any(|c| c.is_control() && c != '\n' && c != '\r' && c != '\t')
+        {
             return true;
         }
 
@@ -316,7 +381,7 @@ impl InputValidator {
     }
 
     /// Validate JSON input structure and size
-    pub fn validate_json_input<T>(&self, input: &str) -> Result<T> 
+    pub fn validate_json_input<T>(&self, input: &str) -> Result<T>
     where
         T: for<'de> Deserialize<'de>,
     {
@@ -325,12 +390,15 @@ impl InputValidator {
         }
 
         if input.len() > MAX_MESSAGE_LENGTH {
-            return Err(anyhow::anyhow!("JSON input too large: {} > {}", input.len(), MAX_MESSAGE_LENGTH));
+            return Err(anyhow::anyhow!(
+                "JSON input too large: {} > {}",
+                input.len(),
+                MAX_MESSAGE_LENGTH
+            ));
         }
 
         // Parse JSON safely
-        serde_json::from_str(input)
-            .with_context(|| "Failed to parse JSON input")
+        serde_json::from_str(input).with_context(|| "Failed to parse JSON input")
     }
 
     /// Sanitize and validate a generic string input
@@ -340,11 +408,17 @@ impl InputValidator {
         }
 
         if input.len() > max_length {
-            return Err(anyhow::anyhow!("Input too long: {} > {}", input.len(), max_length));
+            return Err(anyhow::anyhow!(
+                "Input too long: {} > {}",
+                input.len(),
+                max_length
+            ));
         }
 
         if self.contains_malicious_content(input) {
-            return Err(anyhow::anyhow!("Input contains potentially malicious content"));
+            return Err(anyhow::anyhow!(
+                "Input contains potentially malicious content"
+            ));
         }
 
         // Remove control characters except common whitespace
@@ -403,7 +477,9 @@ pub trait ValidatedInput: Sized {
 impl ValidatedInput for ValidatedFourWords {
     fn validate_with(validator: &InputValidator, input: &str) -> Result<Self> {
         let validated_value = validator.validate_four_words(input)?;
-        let instance = Self { value: validated_value };
+        let instance = Self {
+            value: validated_value,
+        };
         Ok(instance)
     }
 }
@@ -411,7 +487,9 @@ impl ValidatedInput for ValidatedFourWords {
 impl ValidatedInput for ValidatedUsername {
     fn validate_with(validator: &InputValidator, input: &str) -> Result<Self> {
         let validated_value = validator.validate_username(input)?;
-        let instance = Self { value: validated_value };
+        let instance = Self {
+            value: validated_value,
+        };
         Ok(instance)
     }
 }
@@ -423,28 +501,44 @@ mod tests {
     #[test]
     fn test_four_words_validation() {
         let validator = InputValidator::new();
-        
+
         // Valid four-words addresses
-        assert!(validator.validate_four_words("hello-world-test-network").is_ok());
+        assert!(
+            validator
+                .validate_four_words("hello-world-test-network")
+                .is_ok()
+        );
         assert!(validator.validate_four_words("a-b-c-d").is_ok());
-        
+
         // Invalid formats
         assert!(validator.validate_four_words("hello-world-test").is_err()); // Only 3 words
-        assert!(validator.validate_four_words("hello_world_test_network").is_err()); // Underscores
-        assert!(validator.validate_four_words("hello world test network").is_err()); // Spaces
+        assert!(
+            validator
+                .validate_four_words("hello_world_test_network")
+                .is_err()
+        ); // Underscores
+        assert!(
+            validator
+                .validate_four_words("hello world test network")
+                .is_err()
+        ); // Spaces
         assert!(validator.validate_four_words("").is_err()); // Empty
-        assert!(validator.validate_four_words("Hello-World-Test-Network").is_ok()); // Uppercase (gets lowercased)
+        assert!(
+            validator
+                .validate_four_words("Hello-World-Test-Network")
+                .is_ok()
+        ); // Uppercase (gets lowercased)
     }
 
     #[test]
     fn test_username_validation() {
         let validator = InputValidator::new();
-        
+
         // Valid usernames
         assert!(validator.validate_username("user123").is_ok());
         assert!(validator.validate_username("test-user").is_ok());
         assert!(validator.validate_username("user_name").is_ok());
-        
+
         // Invalid usernames
         assert!(validator.validate_username("ab").is_err()); // Too short
         assert!(validator.validate_username("user@example.com").is_err()); // Invalid characters
@@ -455,14 +549,18 @@ mod tests {
     #[test]
     fn test_path_validation() {
         let validator = InputValidator::new();
-        
+
         // Valid paths
         assert!(validator.validate_file_path("documents/test.md").is_ok());
         assert!(validator.validate_file_path("file.txt").is_ok());
-        
+
         // Invalid paths (directory traversal)
         assert!(validator.validate_file_path("../etc/passwd").is_err());
-        assert!(validator.validate_file_path("documents/../../../secret").is_err());
+        assert!(
+            validator
+                .validate_file_path("documents/../../../secret")
+                .is_err()
+        );
         assert!(validator.validate_file_path("/absolute/path").is_err());
         assert!(validator.validate_file_path("").is_err());
     }
@@ -470,17 +568,37 @@ mod tests {
     #[test]
     fn test_malicious_content_detection() {
         let validator = InputValidator::new();
-        
+
         // SQL injection attempts
-        assert!(validator.validate_username("admin'; DROP TABLE users;--").is_err());
-        assert!(validator.validate_message_content("SELECT * FROM secrets").is_err());
-        
+        assert!(
+            validator
+                .validate_username("admin'; DROP TABLE users;--")
+                .is_err()
+        );
+        assert!(
+            validator
+                .validate_message_content("SELECT * FROM secrets")
+                .is_err()
+        );
+
         // Script injection attempts
-        assert!(validator.validate_message_content("<script>alert('xss')</script>").is_err());
-        assert!(validator.validate_message_content("javascript:alert('xss')").is_err());
-        
+        assert!(
+            validator
+                .validate_message_content("<script>alert('xss')</script>")
+                .is_err()
+        );
+        assert!(
+            validator
+                .validate_message_content("javascript:alert('xss')")
+                .is_err()
+        );
+
         // Clean content should pass
-        assert!(validator.validate_message_content("This is a normal message").is_ok());
+        assert!(
+            validator
+                .validate_message_content("This is a normal message")
+                .is_ok()
+        );
     }
 
     #[test]
@@ -585,7 +703,8 @@ mod tests {
         assert!(result.is_err());
 
         // Description with malicious content
-        let result = validator.validate_description("Description with <script>alert('xss')</script> code");
+        let result =
+            validator.validate_description("Description with <script>alert('xss')</script> code");
         assert!(result.is_err());
     }
 
@@ -607,7 +726,8 @@ mod tests {
         assert!(result.is_err());
 
         // Content with script tags
-        let result = validator.validate_content("Content with <script>alert('xss')</script> scripts");
+        let result =
+            validator.validate_content("Content with <script>alert('xss')</script> scripts");
         assert!(result.is_err());
     }
 
@@ -616,7 +736,11 @@ mod tests {
         let validator = InputValidator::new();
 
         // Valid tags
-        let tags = vec!["rust".to_string(), "security".to_string(), "p2p".to_string()];
+        let tags = vec![
+            "rust".to_string(),
+            "security".to_string(),
+            "p2p".to_string(),
+        ];
         let result = validator.validate_tags(&tags);
         assert_eq!(result.unwrap().len(), 3);
 
@@ -632,7 +756,10 @@ mod tests {
         assert!(result.is_err());
 
         // Tag with malicious content
-        let tags = vec!["normal".to_string(), "<script>alert('xss')</script>".to_string()];
+        let tags = vec![
+            "normal".to_string(),
+            "<script>alert('xss')</script>".to_string(),
+        ];
         let result = validator.validate_tags(&tags);
         assert!(result.is_err());
     }
@@ -680,7 +807,11 @@ mod tests {
         assert!(validator.validate_content_type(&long_type).is_err());
 
         // Content type with malicious content
-        assert!(validator.validate_content_type("text/html<script>").is_err());
+        assert!(
+            validator
+                .validate_content_type("text/html<script>")
+                .is_err()
+        );
     }
 
     #[test]
@@ -698,6 +829,10 @@ mod tests {
         // Invalid UUID format
         assert!(validator.validate_uuid("not-a-uuid").is_err());
         assert!(validator.validate_uuid("550e8400-e29b-41d4-a716").is_err()); // Too short
-        assert!(validator.validate_uuid("550e8400-e29b-41d4-a716-446655440000-extra").is_err()); // Too long
+        assert!(
+            validator
+                .validate_uuid("550e8400-e29b-41d4-a716-446655440000-extra")
+                .is_err()
+        ); // Too long
     }
 }

@@ -13,7 +13,6 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-
 //! Communitas P2P Collaboration Platform Library
 //!
 //! This library provides the core functionality for the Communitas platform,
@@ -22,14 +21,14 @@
 pub mod bootstrap;
 pub mod contact_commands;
 pub mod contacts;
+pub mod dht_facade;
+pub mod error;
 pub mod files;
 pub mod groups;
 pub mod identity;
-pub mod error;
-pub mod dht_facade;
-pub mod storage;
 pub mod saorsa_storage;
 pub mod saorsa_storage_commands;
+pub mod storage;
 pub mod stores;
 
 // Add storage tests module
@@ -37,14 +36,14 @@ pub mod stores;
 // pub mod storage_tests;
 
 // Re-export main components
-pub use bootstrap::{run_bootstrap_node, BootstrapConfig, BootstrapNode, NodeStats};
-pub use contact_commands::{init_contact_manager, ContactManagerState};
+pub use bootstrap::{BootstrapConfig, BootstrapNode, NodeStats, run_bootstrap_node};
+pub use contact_commands::{ContactManagerState, init_contact_manager};
 pub use contacts::{
     ContactInvitation, ContactManager, ContactPreferences, ContactProfile, ContactStatus,
 };
 // Store API re-exports
 pub use stores::{
-    init_local_stores, get_metadata, create_organization, create_group_local as create_group, create_project,
-    add_contact_local, list_markdown, read_markdown_file, write_markdown_file,
-    create_markdown, Metadata, ScopePath, MarkdownFileInfo,
+    MarkdownFileInfo, Metadata, ScopePath, add_contact_local, create_group_local as create_group,
+    create_markdown, create_organization, create_project, get_metadata, init_local_stores,
+    list_markdown, read_markdown_file, write_markdown_file,
 };

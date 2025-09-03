@@ -2,7 +2,7 @@
 // Licensed under the AGPL-3.0 license
 
 //! Entity-aware storage system for Communitas
-//! 
+//!
 //! Provides standardized storage structure for all entity types:
 //! Person, Organization, Project, Group, Channel
 
@@ -39,13 +39,13 @@ impl FourWordIdentity {
     pub fn four_words(&self) -> String {
         self.words.join("-")
     }
-    
+
     pub fn from_words(words: &str) -> Result<Self> {
         let parts: Vec<&str> = words.split('-').collect();
         if parts.len() != 4 {
             anyhow::bail!("Four-word address must have exactly 4 words separated by hyphens");
         }
-        
+
         Ok(Self {
             words: [
                 parts[0].to_string(),
@@ -78,10 +78,10 @@ pub struct EntityInfo {
 #[derive(Debug, Clone)]
 pub struct EntityStorageStructure {
     pub root: PathBuf,
-    pub web: PathBuf,           // Public markdown website
-    pub shared: PathBuf,        // Collaborative files
-    pub metadata: PathBuf,      // Hidden DHT metadata
-    pub private: PathBuf,       // Private files (owner only)
+    pub web: PathBuf,      // Public markdown website
+    pub shared: PathBuf,   // Collaborative files
+    pub metadata: PathBuf, // Hidden DHT metadata
+    pub private: PathBuf,  // Private files (owner only)
 }
 
 impl EntityStorageStructure {
@@ -106,7 +106,8 @@ impl EntityStorageStructure {
         ];
 
         for dir in directories.iter() {
-            tokio::fs::create_dir_all(dir).await
+            tokio::fs::create_dir_all(dir)
+                .await
                 .with_context(|| format!("Failed to create directory: {}", dir.display()))?;
         }
 
@@ -116,14 +117,18 @@ impl EntityStorageStructure {
         self.create_metadata_subdirectories().await?;
         self.create_private_subdirectories().await?;
 
-        debug!("Created entity storage structure at {}", self.root.display());
+        debug!(
+            "Created entity storage structure at {}",
+            self.root.display()
+        );
         Ok(())
     }
 
     async fn create_web_subdirectories(&self) -> Result<()> {
         let subdirs = ["assets", "pages"];
         for subdir in &subdirs {
-            tokio::fs::create_dir_all(self.web.join(subdir)).await
+            tokio::fs::create_dir_all(self.web.join(subdir))
+                .await
                 .with_context(|| format!("Failed to create web subdirectory: {}", subdir))?;
         }
         Ok(())
@@ -132,7 +137,8 @@ impl EntityStorageStructure {
     async fn create_shared_subdirectories(&self) -> Result<()> {
         let subdirs = ["documents", "projects", "resources"];
         for subdir in &subdirs {
-            tokio::fs::create_dir_all(self.shared.join(subdir)).await
+            tokio::fs::create_dir_all(self.shared.join(subdir))
+                .await
                 .with_context(|| format!("Failed to create shared subdirectory: {}", subdir))?;
         }
         Ok(())
@@ -146,7 +152,8 @@ impl EntityStorageStructure {
     async fn create_private_subdirectories(&self) -> Result<()> {
         let subdirs = ["personal"];
         for subdir in &subdirs {
-            tokio::fs::create_dir_all(self.private.join(subdir)).await
+            tokio::fs::create_dir_all(self.private.join(subdir))
+                .await
                 .with_context(|| format!("Failed to create private subdirectory: {}", subdir))?;
         }
         Ok(())
@@ -155,16 +162,22 @@ impl EntityStorageStructure {
     /// Initialize the home.md file in the web directory with entity-specific content
     pub async fn initialize_home_markdown(&self, entity_info: &EntityInfo) -> Result<()> {
         let home_file = self.web.join("home.md");
-        
+
         // Only create if it doesn't exist (don't overwrite existing content)
         if !home_file.exists() {
             let default_content = self.generate_default_markdown(entity_info);
-            
-            tokio::fs::write(&home_file, default_content).await
-                .with_context(|| format!("Failed to create home.md file: {}", home_file.display()))?;
-            
-            debug!("Created default home.md file for {} at {}", 
-                   entity_info.four_word_address, home_file.display());
+
+            tokio::fs::write(&home_file, default_content)
+                .await
+                .with_context(|| {
+                    format!("Failed to create home.md file: {}", home_file.display())
+                })?;
+
+            debug!(
+                "Created default home.md file for {} at {}",
+                entity_info.four_word_address,
+                home_file.display()
+            );
         }
 
         Ok(())
@@ -172,7 +185,8 @@ impl EntityStorageStructure {
 
     fn generate_default_markdown(&self, entity_info: &EntityInfo) -> String {
         match entity_info.entity_type {
-            EntityType::Person => format!(r#"# Welcome to {}'s Digital Space
+            EntityType::Person => format!(
+                r#"# Welcome to {}'s Digital Space
 Address: {}
 
 ## About Me
@@ -196,14 +210,18 @@ This is my personal corner of the markdown internet. All content here is:
 - Self-hosted without traditional servers
 
 Start exploring or [contact me directly]({}/contact)!
-"#, 
+"#,
                 entity_info.display_name,
                 entity_info.four_word_address,
-                entity_info.description.as_deref().unwrap_or("Welcome to my digital space."),
+                entity_info
+                    .description
+                    .as_deref()
+                    .unwrap_or("Welcome to my digital space."),
                 entity_info.four_word_address
             ),
 
-            EntityType::Organization => format!(r#"# {}
+            EntityType::Organization => format!(
+                r#"# {}
 Address: {}
 
 ## About Our Organization
@@ -229,12 +247,16 @@ Visit us at [{}]({}) for more information.
 "#,
                 entity_info.display_name,
                 entity_info.four_word_address,
-                entity_info.description.as_deref().unwrap_or("Welcome to our organization."),
+                entity_info
+                    .description
+                    .as_deref()
+                    .unwrap_or("Welcome to our organization."),
                 entity_info.four_word_address,
                 entity_info.four_word_address
             ),
 
-            EntityType::Project => format!(r#"# Project: {}
+            EntityType::Project => format!(
+                r#"# Project: {}
 Address: {}
 
 ## Project Overview
@@ -263,12 +285,16 @@ Visit [{}]({}) for the latest updates.
 "#,
                 entity_info.display_name,
                 entity_info.four_word_address,
-                entity_info.description.as_deref().unwrap_or("Welcome to our project space."),
+                entity_info
+                    .description
+                    .as_deref()
+                    .unwrap_or("Welcome to our project space."),
                 entity_info.four_word_address,
                 entity_info.four_word_address
             ),
 
-            EntityType::Group => format!(r#"# Group: {}
+            EntityType::Group => format!(
+                r#"# Group: {}
 Address: {}
 
 ## About This Group
@@ -297,12 +323,16 @@ Contact us at [{}]({}) to learn more.
 "#,
                 entity_info.display_name,
                 entity_info.four_word_address,
-                entity_info.description.as_deref().unwrap_or("Welcome to our group space."),
+                entity_info
+                    .description
+                    .as_deref()
+                    .unwrap_or("Welcome to our group space."),
                 entity_info.four_word_address,
                 entity_info.four_word_address
             ),
 
-            EntityType::Channel => format!(r#"# Channel: {}
+            EntityType::Channel => format!(
+                r#"# Channel: {}
 Address: {}
 
 ## Channel Information
@@ -330,7 +360,10 @@ All channel data is cryptographically secured and distributed for privacy.
 "#,
                 entity_info.display_name,
                 entity_info.four_word_address,
-                entity_info.description.as_deref().unwrap_or("Welcome to this communication channel."),
+                entity_info
+                    .description
+                    .as_deref()
+                    .unwrap_or("Welcome to this communication channel."),
                 entity_info.four_word_address,
                 entity_info.four_word_address
             ),
@@ -351,7 +384,8 @@ impl EntityStorageManager {
         local_storage: Arc<LocalStorageManager>,
         storage_root: PathBuf,
     ) -> Result<Self> {
-        tokio::fs::create_dir_all(&storage_root).await
+        tokio::fs::create_dir_all(&storage_root)
+            .await
             .context("Failed to create entity storage root")?;
 
         let manager = Self {
@@ -363,7 +397,10 @@ impl EntityStorageManager {
         // Load existing entities
         manager.load_entities().await?;
 
-        info!("Entity storage manager initialized at {}", manager.storage_root.display());
+        info!(
+            "Entity storage manager initialized at {}",
+            manager.storage_root.display()
+        );
         Ok(manager)
     }
 
@@ -377,7 +414,7 @@ impl EntityStorageManager {
     ) -> Result<EntityInfo> {
         let entity_id = Uuid::new_v4().to_string();
         let identity = FourWordIdentity::from_words(&four_word_address)?;
-        
+
         let entity_info = EntityInfo {
             id: entity_id.clone(),
             entity_type: entity_type.clone(),
@@ -406,8 +443,12 @@ impl EntityStorageManager {
             entities.insert(entity_id.clone(), entity_info.clone());
         }
 
-        info!("Created {} entity: {} ({})", 
-              entity_type_name(&entity_type), four_word_address, entity_id);
+        info!(
+            "Created {} entity: {} ({})",
+            entity_type_name(&entity_type),
+            four_word_address,
+            entity_id
+        );
 
         Ok(entity_info)
     }
@@ -415,7 +456,8 @@ impl EntityStorageManager {
     /// Get entity by four-word address
     pub async fn get_entity_by_address(&self, four_word_address: &str) -> Option<EntityInfo> {
         let entities = self.entities.read().await;
-        entities.values()
+        entities
+            .values()
             .find(|entity| entity.four_word_address == four_word_address)
             .cloned()
     }
@@ -429,7 +471,8 @@ impl EntityStorageManager {
     /// List entities by type
     pub async fn list_entities_by_type(&self, entity_type: &EntityType) -> Vec<EntityInfo> {
         let entities = self.entities.read().await;
-        entities.values()
+        entities
+            .values()
             .filter(|entity| &entity.entity_type == entity_type)
             .cloned()
             .collect()
@@ -450,20 +493,26 @@ impl EntityStorageManager {
     ) -> Result<()> {
         let structure = self.get_entity_storage_structure(entity_id);
         let file_path = structure.root.join(relative_path);
-        
+
         // Ensure parent directory exists
         if let Some(parent) = file_path.parent() {
             tokio::fs::create_dir_all(parent).await?;
         }
 
-        tokio::fs::write(&file_path, content).await
+        tokio::fs::write(&file_path, content)
+            .await
             .with_context(|| format!("Failed to write file: {}", file_path.display()))?;
 
         // Update used storage
-        self.update_entity_storage_usage(entity_id, content.len() as i64).await?;
+        self.update_entity_storage_usage(entity_id, content.len() as i64)
+            .await?;
 
-        debug!("Stored file for entity {}: {} ({} bytes)", 
-               entity_id, relative_path, content.len());
+        debug!(
+            "Stored file for entity {}: {} ({} bytes)",
+            entity_id,
+            relative_path,
+            content.len()
+        );
         Ok(())
     }
 
@@ -475,8 +524,9 @@ impl EntityStorageManager {
     ) -> Result<Vec<u8>> {
         let structure = self.get_entity_storage_structure(entity_id);
         let file_path = structure.root.join(relative_path);
-        
-        tokio::fs::read(&file_path).await
+
+        tokio::fs::read(&file_path)
+            .await
             .with_context(|| format!("Failed to read file: {}", file_path.display()))
     }
 
@@ -529,8 +579,14 @@ impl EntityStorageManager {
         let metadata_file = metadata_dir.join(format!("{}.json", entity_info.id));
         let metadata_json = serde_json::to_string_pretty(entity_info)?;
 
-        tokio::fs::write(&metadata_file, metadata_json).await
-            .with_context(|| format!("Failed to save entity metadata: {}", metadata_file.display()))?;
+        tokio::fs::write(&metadata_file, metadata_json)
+            .await
+            .with_context(|| {
+                format!(
+                    "Failed to save entity metadata: {}",
+                    metadata_file.display()
+                )
+            })?;
 
         Ok(())
     }
@@ -567,21 +623,20 @@ mod tests {
     #[tokio::test]
     async fn test_entity_storage_creation() -> Result<()> {
         let temp_dir = TempDir::new()?;
-        let local_storage = Arc::new(
-            LocalStorageManager::new(temp_dir.path().join("local"), 1024 * 1024).await?
-        );
-        
-        let entity_storage = EntityStorageManager::new(
-            local_storage,
-            temp_dir.path().join("entities"),
-        ).await?;
+        let local_storage =
+            Arc::new(LocalStorageManager::new(temp_dir.path().join("local"), 1024 * 1024).await?);
 
-        let entity = entity_storage.create_entity(
-            EntityType::Person,
-            "ocean-forest-mountain-star".to_string(),
-            "Alice".to_string(),
-            Some("Software developer".to_string()),
-        ).await?;
+        let entity_storage =
+            EntityStorageManager::new(local_storage, temp_dir.path().join("entities")).await?;
+
+        let entity = entity_storage
+            .create_entity(
+                EntityType::Person,
+                "ocean-forest-mountain-star".to_string(),
+                "Alice".to_string(),
+                Some("Software developer".to_string()),
+            )
+            .await?;
 
         assert_eq!(entity.four_word_address, "ocean-forest-mountain-star");
         assert_eq!(entity.display_name, "Alice");
@@ -606,35 +661,31 @@ mod tests {
     #[tokio::test]
     async fn test_entity_file_operations() -> Result<()> {
         let temp_dir = TempDir::new()?;
-        let local_storage = Arc::new(
-            LocalStorageManager::new(temp_dir.path().join("local"), 1024 * 1024).await?
-        );
-        
-        let entity_storage = EntityStorageManager::new(
-            local_storage,
-            temp_dir.path().join("entities"),
-        ).await?;
+        let local_storage =
+            Arc::new(LocalStorageManager::new(temp_dir.path().join("local"), 1024 * 1024).await?);
 
-        let entity = entity_storage.create_entity(
-            EntityType::Organization,
-            "company-blue-tech-labs".to_string(),
-            "Blue Tech Labs".to_string(),
-            None,
-        ).await?;
+        let entity_storage =
+            EntityStorageManager::new(local_storage, temp_dir.path().join("entities")).await?;
+
+        let entity = entity_storage
+            .create_entity(
+                EntityType::Organization,
+                "company-blue-tech-labs".to_string(),
+                "Blue Tech Labs".to_string(),
+                None,
+            )
+            .await?;
 
         // Store a file
         let file_content = b"Hello, world!";
-        entity_storage.store_entity_file(
-            &entity.id,
-            "web/pages/about.md",
-            file_content,
-        ).await?;
+        entity_storage
+            .store_entity_file(&entity.id, "web/pages/about.md", file_content)
+            .await?;
 
         // Retrieve the file
-        let retrieved = entity_storage.retrieve_entity_file(
-            &entity.id,
-            "web/pages/about.md",
-        ).await?;
+        let retrieved = entity_storage
+            .retrieve_entity_file(&entity.id, "web/pages/about.md")
+            .await?;
 
         assert_eq!(retrieved, file_content);
 
@@ -644,21 +695,20 @@ mod tests {
     #[tokio::test]
     async fn test_entity_lookup() -> Result<()> {
         let temp_dir = TempDir::new()?;
-        let local_storage = Arc::new(
-            LocalStorageManager::new(temp_dir.path().join("local"), 1024 * 1024).await?
-        );
-        
-        let entity_storage = EntityStorageManager::new(
-            local_storage,
-            temp_dir.path().join("entities"),
-        ).await?;
+        let local_storage =
+            Arc::new(LocalStorageManager::new(temp_dir.path().join("local"), 1024 * 1024).await?);
 
-        let entity = entity_storage.create_entity(
-            EntityType::Project,
-            "project-quantum-secure".to_string(),
-            "Quantum Security Project".to_string(),
-            Some("Post-quantum cryptography research".to_string()),
-        ).await?;
+        let entity_storage =
+            EntityStorageManager::new(local_storage, temp_dir.path().join("entities")).await?;
+
+        let entity = entity_storage
+            .create_entity(
+                EntityType::Project,
+                "project-quantum-secure".to_string(),
+                "Quantum Security Project".to_string(),
+                Some("Post-quantum cryptography research".to_string()),
+            )
+            .await?;
 
         // Test lookup by address
         let found_by_address = entity_storage
@@ -670,7 +720,10 @@ mod tests {
         // Test lookup by ID
         let found_by_id = entity_storage.get_entity_by_id(&entity.id).await;
         assert!(found_by_id.is_some());
-        assert_eq!(found_by_id.unwrap().four_word_address, "project-quantum-secure");
+        assert_eq!(
+            found_by_id.unwrap().four_word_address,
+            "project-quantum-secure"
+        );
 
         Ok(())
     }

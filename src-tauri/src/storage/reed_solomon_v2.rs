@@ -5,13 +5,13 @@
 
 #![allow(dead_code)]
 
+use anyhow::Result;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
-use serde::{Deserialize, Serialize};
-use anyhow::Result;
-use tracing::{info, warn};
 use tokio::sync::RwLock;
-use chrono::{DateTime, Utc};
+use tracing::{info, warn};
 
 /// Target availability percentage (60% of members need to be online)
 const TARGET_AVAILABILITY: f32 = 0.60;
@@ -50,7 +50,7 @@ impl HybridLogicalClock {
     pub fn update(&mut self, other: &HybridLogicalClock) {
         let now = Utc::now().timestamp_millis();
         let max_time = now.max(self.physical_time).max(other.physical_time);
-        
+
         if max_time > self.physical_time {
             self.physical_time = max_time;
             self.logical_counter = 0;
@@ -65,17 +65,17 @@ impl HybridLogicalClock {
 pub struct OptimalReedSolomonConfig {
     pub data_shards: usize,      // k - minimum shards needed
     pub parity_shards: usize,    // m - redundancy shards
-    pub shard_size: usize,        // bytes per shard
-    pub member_count: usize,      // current group size
-    pub availability_ratio: f32,  // k/(k+m) - should be ~0.6
-    pub generation: u64,          // configuration version
+    pub shard_size: usize,       // bytes per shard
+    pub member_count: usize,     // current group size
+    pub availability_ratio: f32, // k/(k+m) - should be ~0.6
+    pub generation: u64,         // configuration version
 }
 
 impl OptimalReedSolomonConfig {
     /// Calculate optimal k,m values for 60% availability target
     pub fn for_group_size(member_count: usize) -> Self {
         let (k, m) = Self::calculate_optimal_shards(member_count);
-        
+
         Self {
             data_shards: k,
             parity_shards: m,
@@ -90,13 +90,13 @@ impl OptimalReedSolomonConfig {
         // Calculate total shards based on group size
         // We want each member to hold 1-3 shards ideally
         let total_shards = match member_count {
-            1..=3 => 3,      // Minimum viable
-            4..=6 => 5,      // Small group
-            7..=10 => 7,     // Medium group
-            11..=20 => 12,   // Large group
-            21..=50 => 20,   // XL group
-            51..=100 => 30,  // XXL group
-            _ => 50,         // Massive group
+            1..=3 => 3,     // Minimum viable
+            4..=6 => 5,     // Small group
+            7..=10 => 7,    // Medium group
+            11..=20 => 12,  // Large group
+            21..=50 => 20,  // XL group
+            51..=100 => 30, // XXL group
+            _ => 50,        // Massive group
         };
 
         // Calculate k to achieve ~60% availability
@@ -113,9 +113,9 @@ impl OptimalReedSolomonConfig {
 
     fn calculate_shard_size(member_count: usize) -> usize {
         match member_count {
-            1..=10 => 4096,     // 4KB for small groups
-            11..=50 => 8192,    // 8KB for medium groups
-            _ => 16384,         // 16KB for large groups
+            1..=10 => 4096,  // 4KB for small groups
+            11..=50 => 8192, // 8KB for medium groups
+            _ => 16384,      // 16KB for large groups
         }
     }
 
@@ -133,8 +133,8 @@ impl OptimalReedSolomonConfig {
 
     pub fn is_within_tolerance(&self) -> bool {
         let ratio = self.availability_ratio;
-        ratio >= (TARGET_AVAILABILITY - AVAILABILITY_TOLERANCE) &&
-        ratio <= (TARGET_AVAILABILITY + AVAILABILITY_TOLERANCE)
+        ratio >= (TARGET_AVAILABILITY - AVAILABILITY_TOLERANCE)
+            && ratio <= (TARGET_AVAILABILITY + AVAILABILITY_TOLERANCE)
     }
 }
 
@@ -168,9 +168,10 @@ impl MemberReliability {
             self.successful_retrievals += 1;
             if let Some(time) = response_time_ms {
                 // Rolling average
-                self.average_response_time_ms = 
-                    ((self.average_response_time_ms as u64 * self.successful_retrievals + time as u64) /
-                    (self.successful_retrievals + 1)) as u32;
+                self.average_response_time_ms =
+                    ((self.average_response_time_ms as u64 * self.successful_retrievals
+                        + time as u64)
+                        / (self.successful_retrievals + 1)) as u32;
             }
         } else {
             self.failed_retrievals += 1;
@@ -194,9 +195,10 @@ impl MemberReliability {
             1.0 - (hours_since_seen as f32 / 168.0).min(1.0) // 168 hours = 1 week
         };
 
-        self.reliability_score = (success_rate * 0.5 + response_factor * 0.3 + recency_factor * 0.2)
-            .max(0.0)
-            .min(1.0);
+        self.reliability_score =
+            (success_rate * 0.5 + response_factor * 0.3 + recency_factor * 0.2)
+                .max(0.0)
+                .min(1.0);
     }
 }
 
@@ -254,11 +256,11 @@ pub struct VersionedShard {
     pub data: Vec<u8>,
     pub group_id: String,
     pub data_id: String,
-    pub generation: u64,           // Configuration version
+    pub generation: u64, // Configuration version
     pub integrity_hash: String,
     pub created_at: DateTime<Utc>,
-    pub hlc: HybridLogicalClock,   // For causal ordering
-    pub holder_id: String,          // Current holder
+    pub hlc: HybridLogicalClock,     // For causal ordering
+    pub holder_id: String,           // Current holder
     pub backup_holders: Vec<String>, // Backup holders
 }
 
@@ -279,13 +281,13 @@ pub struct IntelligentShardDistributor {
 #[derive(Debug, Clone)]
 pub struct ConsistentHashRing {
     ring: Vec<(u64, String)>, // (hash, member_id)
-    virtual_nodes: usize,      // Virtual nodes per member for better distribution
+    virtual_nodes: usize,     // Virtual nodes per member for better distribution
 }
 
 impl ConsistentHashRing {
     pub fn new(members: &[String], virtual_nodes: usize) -> Self {
         let mut ring = Vec::new();
-        
+
         for member in members {
             for i in 0..virtual_nodes {
                 let key = format!("{}:{}", member, i);
@@ -296,10 +298,13 @@ impl ConsistentHashRing {
                 ring.push((hash, member.clone()));
             }
         }
-        
+
         ring.sort_by_key(|&(hash, _)| hash);
-        
-        Self { ring, virtual_nodes }
+
+        Self {
+            ring,
+            virtual_nodes,
+        }
     }
 
     pub fn get_nodes_for_shard(&self, shard_id: &str, count: usize) -> Vec<String> {
@@ -312,7 +317,9 @@ impl ConsistentHashRing {
             .map(u64::from_le_bytes)
             .unwrap_or(0);
 
-        let start_pos = self.ring.binary_search_by_key(&hash, |&(h, _)| h)
+        let start_pos = self
+            .ring
+            .binary_search_by_key(&hash, |&(h, _)| h)
             .unwrap_or_else(|x| x % self.ring.len());
 
         let mut selected = HashSet::new();
@@ -344,9 +351,7 @@ impl IntelligentShardDistributor {
     pub fn new() -> Self {
         Self {
             member_reliability: Arc::new(RwLock::new(HashMap::new())),
-            consistent_hash_ring: Arc::new(RwLock::new(
-                ConsistentHashRing::new(&[], 3)
-            )),
+            consistent_hash_ring: Arc::new(RwLock::new(ConsistentHashRing::new(&[], 3))),
             distribution_history: Arc::new(RwLock::new(VecDeque::with_capacity(100))),
         }
     }
@@ -359,9 +364,10 @@ impl IntelligentShardDistributor {
         data_id: &str,
     ) -> Result<ShardDistributionPlan> {
         let reliability_scores = self.member_reliability.read().await;
-        
+
         // Sort members by reliability score
-        let mut sorted_members: Vec<_> = members.iter()
+        let mut sorted_members: Vec<_> = members
+            .iter()
             .map(|id| {
                 let score = reliability_scores
                     .get(id)
@@ -370,7 +376,7 @@ impl IntelligentShardDistributor {
                 (id.clone(), score)
             })
             .collect();
-        
+
         sorted_members.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
 
         // Distribute shards with preference for reliable members
@@ -382,7 +388,8 @@ impl IntelligentShardDistributor {
         for i in 0..config.data_shards {
             let member_idx = i % sorted_members.len();
             let member_id = &sorted_members[member_idx].0;
-            assignments.entry(member_id.clone())
+            assignments
+                .entry(member_id.clone())
                 .or_insert_with(Vec::new)
                 .push(i);
         }
@@ -392,7 +399,8 @@ impl IntelligentShardDistributor {
             let shard_idx = config.data_shards + i;
             let member_idx = (i + config.data_shards) % sorted_members.len();
             let member_id = &sorted_members[member_idx].0;
-            assignments.entry(member_id.clone())
+            assignments
+                .entry(member_id.clone())
                 .or_insert_with(Vec::new)
                 .push(shard_idx);
         }
@@ -418,12 +426,12 @@ impl IntelligentShardDistributor {
         total_shards: usize,
     ) -> HashMap<usize, String> {
         let mut primary = HashMap::new();
-        
+
         for shard_idx in 0..total_shards {
             let member_idx = shard_idx % sorted_members.len();
             primary.insert(shard_idx, sorted_members[member_idx].0.clone());
         }
-        
+
         primary
     }
 
@@ -433,11 +441,11 @@ impl IntelligentShardDistributor {
         total_shards: usize,
     ) -> HashMap<usize, Vec<String>> {
         let mut backups = HashMap::new();
-        
+
         for shard_idx in 0..total_shards {
             let primary_idx = shard_idx % sorted_members.len();
             let mut shard_backups = Vec::new();
-            
+
             // Add 2 backup holders
             for i in 1..=2 {
                 let backup_idx = (primary_idx + i) % sorted_members.len();
@@ -445,10 +453,10 @@ impl IntelligentShardDistributor {
                     shard_backups.push(sorted_members[backup_idx].0.clone());
                 }
             }
-            
+
             backups.insert(shard_idx, shard_backups);
         }
-        
+
         backups
     }
 
@@ -460,8 +468,9 @@ impl IntelligentShardDistributor {
         response_time_ms: Option<u32>,
     ) {
         let mut reliability = self.member_reliability.write().await;
-        
-        reliability.entry(member_id.to_string())
+
+        reliability
+            .entry(member_id.to_string())
             .and_modify(|r| r.update_reliability(success, response_time_ms))
             .or_insert_with(|| {
                 let mut r = MemberReliability::new(member_id.to_string());
@@ -514,14 +523,14 @@ impl DynamicMembershipManager {
         current_members: &[String],
     ) -> Result<bool> {
         let states = self.group_states.read().await;
-        
+
         if let Some(state) = states.get(group_id) {
             match state {
                 GroupState::Stable { config, members } => {
                     // Check if membership size changed significantly
                     let size_change = (current_members.len() as f32 - members.len() as f32).abs();
                     let change_ratio = size_change / members.len() as f32;
-                    
+
                     if change_ratio > REBALANCE_THRESHOLD {
                         info!(
                             "Group {} needs rebalancing: size changed from {} to {} ({}% change)",
@@ -534,9 +543,11 @@ impl DynamicMembershipManager {
                     }
 
                     // Check if configuration is still optimal for current size
-                    let optimal_config = OptimalReedSolomonConfig::for_group_size(current_members.len());
-                    if !config.is_within_tolerance() || 
-                       config.data_shards != optimal_config.data_shards {
+                    let optimal_config =
+                        OptimalReedSolomonConfig::for_group_size(current_members.len());
+                    if !config.is_within_tolerance()
+                        || config.data_shards != optimal_config.data_shards
+                    {
                         info!(
                             "Group {} needs rebalancing: configuration no longer optimal",
                             group_id
@@ -555,21 +566,17 @@ impl DynamicMembershipManager {
     }
 
     /// Handle member joining
-    pub async fn handle_member_join(
-        &self,
-        group_id: &str,
-        new_member: String,
-    ) -> Result<()> {
+    pub async fn handle_member_join(&self, group_id: &str, new_member: String) -> Result<()> {
         let mut states = self.group_states.write().await;
         let mut hlc = self.hlc.write().await;
         let timestamp = hlc.tick();
 
-        let state = states.entry(group_id.to_string()).or_insert_with(|| {
-            GroupState::Stable {
+        let state = states
+            .entry(group_id.to_string())
+            .or_insert_with(|| GroupState::Stable {
                 config: OptimalReedSolomonConfig::for_group_size(1),
                 members: vec![],
-            }
-        });
+            });
 
         match state {
             GroupState::Stable { config, members } => {
@@ -581,17 +588,25 @@ impl DynamicMembershipManager {
                 };
                 info!("Member {} joining group {}", new_member, group_id);
             }
-            GroupState::GracePeriod { pending_changes, .. } => {
+            GroupState::GracePeriod {
+                pending_changes, ..
+            } => {
                 pending_changes.push(MembershipChange {
                     change_type: MembershipChangeType::Join,
                     member_id: new_member.clone(),
                     timestamp: Utc::now(),
                     hlc: timestamp,
                 });
-                info!("Member {} queued to join group {} during grace period", new_member, group_id);
+                info!(
+                    "Member {} queued to join group {} during grace period",
+                    new_member, group_id
+                );
             }
             _ => {
-                warn!("Cannot add member {} to group {} in current state", new_member, group_id);
+                warn!(
+                    "Cannot add member {} to group {} in current state",
+                    new_member, group_id
+                );
             }
         }
 
@@ -601,13 +616,18 @@ impl DynamicMembershipManager {
     /// Process grace period and decide on rebalancing
     pub async fn process_grace_period(&self, group_id: &str) -> Result<()> {
         let mut states = self.group_states.write().await;
-        
+
         if let Some(state) = states.get_mut(group_id) {
-            if let GroupState::GracePeriod { config, pending_changes, grace_period_ends } = state {
+            if let GroupState::GracePeriod {
+                config,
+                pending_changes,
+                grace_period_ends,
+            } = state
+            {
                 if Utc::now() >= *grace_period_ends {
                     // Apply all pending changes
                     let mut current_members: HashSet<String> = HashSet::new();
-                    
+
                     // Start with current config members
                     // Note: In grace period, we don't have access to previous members
                     // They should be tracked separately or passed in pending_changes
@@ -628,8 +648,9 @@ impl DynamicMembershipManager {
                     let new_config = OptimalReedSolomonConfig::for_group_size(member_vec.len());
 
                     // Check if rebalancing is actually needed
-                    if config.data_shards != new_config.data_shards ||
-                       !new_config.is_within_tolerance() {
+                    if config.data_shards != new_config.data_shards
+                        || !new_config.is_within_tolerance()
+                    {
                         *state = GroupState::Rebalancing {
                             old_config: config.clone(),
                             new_config,
@@ -642,7 +663,10 @@ impl DynamicMembershipManager {
                             config: config.clone(),
                             members: member_vec,
                         };
-                        info!("No rebalancing needed for group {}, returning to stable", group_id);
+                        info!(
+                            "No rebalancing needed for group {}, returning to stable",
+                            group_id
+                        );
                     }
                 }
             }
@@ -660,20 +684,26 @@ mod tests {
     fn test_60_percent_availability() {
         // Test various group sizes for ~60% availability
         let test_cases = vec![
-            (5, 3, 2),    // 5 members: 3 data + 2 parity = 60% required
-            (10, 4, 3),   // 10 members: 4 data + 3 parity = 57% required
-            (20, 7, 5),   // 20 members: 7 data + 5 parity = 58% required
-            (50, 12, 8),  // 50 members: 12 data + 8 parity = 60% required
+            (5, 3, 2),   // 5 members: 3 data + 2 parity = 60% required
+            (10, 4, 3),  // 10 members: 4 data + 3 parity = 57% required
+            (20, 7, 5),  // 20 members: 7 data + 5 parity = 58% required
+            (50, 12, 8), // 50 members: 12 data + 8 parity = 60% required
         ];
 
         for (members, expected_k, expected_m) in test_cases {
             let config = OptimalReedSolomonConfig::for_group_size(members);
-            
-            assert_eq!(config.data_shards, expected_k, 
-                "Failed for {} members: expected k={}", members, expected_k);
-            assert_eq!(config.parity_shards, expected_m,
-                "Failed for {} members: expected m={}", members, expected_m);
-            
+
+            assert_eq!(
+                config.data_shards, expected_k,
+                "Failed for {} members: expected k={}",
+                members, expected_k
+            );
+            assert_eq!(
+                config.parity_shards, expected_m,
+                "Failed for {} members: expected m={}",
+                members, expected_m
+            );
+
             let availability = config.data_shards as f32 / config.total_shards() as f32;
             assert!(
                 (availability - TARGET_AVAILABILITY).abs() <= AVAILABILITY_TOLERANCE,
@@ -687,17 +717,17 @@ mod tests {
     #[test]
     fn test_member_reliability_scoring() {
         let mut reliability = MemberReliability::new("member1".to_string());
-        
+
         // Simulate successful operations
         for _ in 0..8 {
             reliability.update_reliability(true, Some(100));
         }
-        
+
         // Simulate failures
         for _ in 0..2 {
             reliability.update_reliability(false, None);
         }
-        
+
         // Score should be around 0.8 (80% success rate)
         assert!(reliability.reliability_score > 0.7 && reliability.reliability_score < 0.9);
     }
@@ -709,13 +739,13 @@ mod tests {
             "member2".to_string(),
             "member3".to_string(),
         ];
-        
+
         let ring = ConsistentHashRing::new(&members, 3);
-        
+
         // Should get consistent results for same shard
         let nodes1 = ring.get_nodes_for_shard("shard1", 2);
         let nodes2 = ring.get_nodes_for_shard("shard1", 2);
-        
+
         assert_eq!(nodes1, nodes2);
         assert_eq!(nodes1.len(), 2);
     }
@@ -723,29 +753,52 @@ mod tests {
     #[tokio::test]
     async fn test_rebalancing_decision() {
         let manager = DynamicMembershipManager::new("node1".to_string());
-        
+
         // Create initial group
         let group_id = "test_group";
         let initial_members = vec!["m1".to_string(), "m2".to_string(), "m3".to_string()];
-        
+
         {
             let mut states = manager.group_states.write().await;
-            states.insert(group_id.to_string(), GroupState::Stable {
-                config: OptimalReedSolomonConfig::for_group_size(3),
-                members: initial_members.clone(),
-            });
+            states.insert(
+                group_id.to_string(),
+                GroupState::Stable {
+                    config: OptimalReedSolomonConfig::for_group_size(3),
+                    members: initial_members.clone(),
+                },
+            );
         }
-        
+
         // Small change shouldn't trigger rebalancing
-        let slightly_changed = vec!["m1".to_string(), "m2".to_string(), "m3".to_string(), "m4".to_string()];
-        assert!(!manager.should_rebalance(group_id, &slightly_changed).await.unwrap());
-        
+        let slightly_changed = vec![
+            "m1".to_string(),
+            "m2".to_string(),
+            "m3".to_string(),
+            "m4".to_string(),
+        ];
+        assert!(
+            !manager
+                .should_rebalance(group_id, &slightly_changed)
+                .await
+                .unwrap()
+        );
+
         // Large change should trigger rebalancing
         let significantly_changed = vec![
-            "m1".to_string(), "m2".to_string(), "m3".to_string(),
-            "m4".to_string(), "m5".to_string(), "m6".to_string(),
-            "m7".to_string(), "m8".to_string(),
+            "m1".to_string(),
+            "m2".to_string(),
+            "m3".to_string(),
+            "m4".to_string(),
+            "m5".to_string(),
+            "m6".to_string(),
+            "m7".to_string(),
+            "m8".to_string(),
         ];
-        assert!(manager.should_rebalance(group_id, &significantly_changed).await.unwrap());
+        assert!(
+            manager
+                .should_rebalance(group_id, &significantly_changed)
+                .await
+                .unwrap()
+        );
     }
 }

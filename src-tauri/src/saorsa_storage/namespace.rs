@@ -2,18 +2,17 @@
  * Saorsa Storage System - Namespace Management
  * Implements cryptographic namespace isolation using HKDF and HMAC
  */
-
 use crate::saorsa_storage::errors::*;
 use blake3::Hasher;
+use chrono::{DateTime, Utc};
 use hkdf::Hkdf;
 use hmac::{Hmac, Mac};
+use lazy_static::lazy_static;
+use regex::Regex;
 use sha2::Sha256;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use chrono::{DateTime, Utc};
-use regex::Regex;
-use lazy_static::lazy_static;
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -67,11 +66,12 @@ impl NamespaceManager {
             return Err(KeyDerivationError::KeyCorruption)?;
         }
 
-        let master_key_array: [u8; 32] = master_key.try_into().map_err(|_| {
-            KeyDerivationError::InvalidKeyLength {
-                length: master_key.len(),
-            }
-        })?;
+        let master_key_array: [u8; 32] =
+            master_key
+                .try_into()
+                .map_err(|_| KeyDerivationError::InvalidKeyLength {
+                    length: master_key.len(),
+                })?;
 
         let hkdf = Hkdf::<Sha256>::new(None, &master_key_array);
 
@@ -233,7 +233,9 @@ impl NamespaceManager {
 
         // Store current key in historical keys
         let mut historical = self.historical_keys.write().await;
-        let historical_list = historical.entry(namespace.to_string()).or_insert_with(Vec::new);
+        let historical_list = historical
+            .entry(namespace.to_string())
+            .or_insert_with(Vec::new);
         historical_list.push(HistoricalKey {
             key: current_key,
             version: current_version,
@@ -388,19 +390,19 @@ impl NamespaceManager {
             let mut hasher = Hasher::new();
             hasher.update(key);
             hasher.update(&nonce.to_le_bytes());
-            
+
             let hash = hasher.finalize();
             if hash.as_bytes()[0] == 0 {
                 return nonce.to_le_bytes().to_vec();
             }
             nonce += 1;
-            
+
             // Prevent infinite loops
             if nonce > 1_000_000 {
                 break;
             }
         }
-        
+
         // Fallback nonce
         vec![0, 0, 0, 0]
     }
@@ -439,11 +441,11 @@ mod tests {
     fn test_namespace_key_derivation_deterministic() {
         let master_key = [42u8; 32];
         let manager = NamespaceManager::new(&master_key).unwrap();
-        
+
         let namespace = "test_namespace";
         let key1 = manager.derive_namespace_key(namespace).unwrap();
         let key2 = manager.derive_namespace_key(namespace).unwrap();
-        
+
         assert_eq!(key1, key2);
         assert_ne!(key1, master_key);
     }
@@ -452,10 +454,10 @@ mod tests {
     fn test_different_namespaces_different_keys() {
         let master_key = [42u8; 32];
         let manager = NamespaceManager::new(&master_key).unwrap();
-        
+
         let key1 = manager.derive_namespace_key("namespace1").unwrap();
         let key2 = manager.derive_namespace_key("namespace2").unwrap();
-        
+
         assert_ne!(key1, key2);
     }
 
@@ -463,18 +465,24 @@ mod tests {
     fn test_object_key_derivation() {
         let master_key = [42u8; 32];
         let manager = NamespaceManager::new(&master_key).unwrap();
-        
+
         let namespace = "test_namespace";
         let content_id = "content_123";
         let context = "file";
-        
-        let key1 = manager.derive_object_key(namespace, content_id, context).unwrap();
-        let key2 = manager.derive_object_key(namespace, content_id, context).unwrap();
-        
+
+        let key1 = manager
+            .derive_object_key(namespace, content_id, context)
+            .unwrap();
+        let key2 = manager
+            .derive_object_key(namespace, content_id, context)
+            .unwrap();
+
         assert_eq!(key1, key2); // Deterministic
-        
+
         // Different context should produce different key
-        let key3 = manager.derive_object_key(namespace, content_id, "message").unwrap();
+        let key3 = manager
+            .derive_object_key(namespace, content_id, "message")
+            .unwrap();
         assert_ne!(key1, key3);
     }
 
@@ -482,13 +490,13 @@ mod tests {
     fn test_dht_key_derivation() {
         let master_key = [42u8; 32];
         let manager = NamespaceManager::new(&master_key).unwrap();
-        
+
         let object_key = [123u8; 32];
         let salt = [45u8; 16];
-        
+
         let dht_key1 = manager.derive_dht_key(&object_key, &salt);
         let dht_key2 = manager.derive_dht_key(&object_key, &salt);
-        
+
         assert_eq!(dht_key1, dht_key2); // Deterministic
         assert_eq!(dht_key1.len(), 20); // Truncated to 160 bits
     }
@@ -497,12 +505,12 @@ mod tests {
     fn test_namespace_validation() {
         let master_key = [42u8; 32];
         let manager = NamespaceManager::new(&master_key).unwrap();
-        
+
         // Valid namespaces
         assert!(manager.validate_namespace("user_alice").is_ok());
         assert!(manager.validate_namespace("project_123").is_ok());
         assert!(manager.validate_namespace("a").is_ok());
-        
+
         // Invalid namespaces
         assert!(manager.validate_namespace("").is_err()); // Empty
         assert!(manager.validate_namespace("user with spaces").is_err()); // Spaces
@@ -515,7 +523,7 @@ mod tests {
     fn test_info_parameter() {
         let master_key = [42u8; 32];
         let manager = NamespaceManager::new(&master_key).unwrap();
-        
+
         let info = manager.get_info_parameter("any_namespace");
         assert_eq!(info, "saorsa:ns:user:v1");
     }
@@ -524,7 +532,7 @@ mod tests {
     fn test_namespace_enumeration() {
         let master_key = [42u8; 32];
         let manager = NamespaceManager::new(&master_key).unwrap();
-        
+
         assert!(manager.is_namespace_enumerable("public_docs"));
         assert!(manager.is_namespace_enumerable("public_test"));
         assert!(!manager.is_namespace_enumerable("private_user"));
@@ -535,13 +543,13 @@ mod tests {
     fn test_key_integrity_validation() {
         let master_key = [42u8; 32];
         let manager = NamespaceManager::new(&master_key).unwrap();
-        
+
         let valid_key = [42u8; 32];
         assert!(manager.validate_key_integrity(&valid_key).is_ok());
-        
+
         let corrupted_key = [0u8; 32];
         assert!(manager.validate_key_integrity(&corrupted_key).is_err());
-        
+
         let corrupted_key2 = [0xFFu8; 32];
         assert!(manager.validate_key_integrity(&corrupted_key2).is_err());
     }
@@ -550,19 +558,19 @@ mod tests {
     async fn test_key_rotation() {
         let master_key = [42u8; 32];
         let manager = NamespaceManager::new(&master_key).unwrap();
-        
+
         let namespace = "test_rotation";
         let original_key = manager.derive_namespace_key(namespace).unwrap();
-        
+
         let version1 = manager.get_key_version(namespace).await.unwrap();
         assert_eq!(version1, 1);
-        
+
         let rotated_key = manager.rotate_namespace_key(namespace).await.unwrap();
         assert_ne!(original_key, rotated_key);
-        
+
         let version2 = manager.get_key_version(namespace).await.unwrap();
         assert_eq!(version2, 2);
-        
+
         // Should be able to retrieve historical key
         let historical = manager.get_historical_key(namespace, 1).await.unwrap();
         assert_eq!(historical, original_key);
@@ -572,7 +580,7 @@ mod tests {
     fn test_entropy_calculation() {
         let master_key = [42u8; 32];
         let manager = NamespaceManager::new(&master_key).unwrap();
-        
+
         // Generate multiple keys
         let keys: Vec<Vec<u8>> = (0..10)
             .map(|i| {
@@ -582,7 +590,7 @@ mod tests {
                     .to_vec()
             })
             .collect();
-        
+
         let entropy = manager.calculate_entropy(&keys);
         assert!(entropy > 7.0); // Should have high entropy for random keys
     }

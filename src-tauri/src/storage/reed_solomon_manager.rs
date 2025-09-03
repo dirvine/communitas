@@ -9,15 +9,15 @@
 
 //! Enhanced Reed Solomon manager for group and organization data
 
+use anyhow::{Context, Result, bail};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use serde::{Deserialize, Serialize};
-use anyhow::{Result, Context, bail};
-use tracing::{debug, info, warn, error};
 use tokio::sync::RwLock;
+use tracing::{debug, error, info, warn};
 
-use saorsa_fec::{FecCodec, FecParams};
 use blake3;
+use saorsa_fec::{FecCodec, FecParams};
 
 /// Shard identifier and metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -41,9 +41,9 @@ pub enum ShardType {
 /// Reed Solomon configuration based on group size
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReedSolomonConfig {
-    pub data_shards: usize,    // k
-    pub parity_shards: usize,  // m
-    pub shard_size: usize,     // bytes per shard
+    pub data_shards: usize,               // k
+    pub parity_shards: usize,             // m
+    pub shard_size: usize,                // bytes per shard
     pub group_size_range: (usize, usize), // min/max group members for this config
 }
 
@@ -73,7 +73,7 @@ impl ReedSolomonConfig {
                 parity_shards: 8,
                 shard_size: 8192,
                 group_size_range: (51, usize::MAX),
-            }
+            },
         }
     }
 
@@ -117,7 +117,7 @@ impl EnhancedReedSolomonManager {
     ) -> Result<Vec<Shard>> {
         // Select optimal configuration for group size
         let config = ReedSolomonConfig::for_group_size(group_member_count);
-        
+
         // Store configuration for this group
         {
             let mut configs = self.configs.write().await;
@@ -132,26 +132,20 @@ impl EnhancedReedSolomonManager {
         // Create Reed Solomon codec (saorsa-fec)
         let fec_params = FecParams::new(config.data_shards as u16, config.parity_shards as u16)
             .context("Failed to create FEC parameters")?;
-        let codec = FecCodec::new(fec_params)
-            .context("Failed to create Reed Solomon codec")?;
+        let codec = FecCodec::new(fec_params).context("Failed to create Reed Solomon codec")?;
 
         // Calculate padding needed to make data divisible by shard size
         let padded_data = self.pad_data_for_encoding(data, &config)?;
-        
+
         // Split data into chunks of shard_size
         let chunks: Vec<&[u8]> = padded_data.chunks(config.shard_size).collect();
         let mut all_shards = Vec::new();
 
         // Process each chunk
         for (chunk_index, chunk) in chunks.iter().enumerate() {
-            let chunk_shards = self.encode_chunk(
-                chunk, 
-                &config, 
-                &codec,
-                group_id,
-                data_id,
-                chunk_index,
-            ).await?;
+            let chunk_shards = self
+                .encode_chunk(chunk, &config, &codec, group_id, data_id, chunk_index)
+                .await?;
             all_shards.extend(chunk_shards);
         }
 
@@ -165,18 +159,23 @@ impl EnhancedReedSolomonManager {
         // Track integrity status
         {
             let mut tracker = self.integrity_tracker.write().await;
-            tracker.insert(format!("{}:{}", group_id, data_id), IntegrityStatus {
-                total_shards: all_shards.len(),
-                created_at: chrono::Utc::now(),
-                last_verified: chrono::Utc::now(),
-                verification_count: 0,
-                corruption_detected: false,
-            });
+            tracker.insert(
+                format!("{}:{}", group_id, data_id),
+                IntegrityStatus {
+                    total_shards: all_shards.len(),
+                    created_at: chrono::Utc::now(),
+                    last_verified: chrono::Utc::now(),
+                    verification_count: 0,
+                    corruption_detected: false,
+                },
+            );
         }
 
         info!(
             "Successfully encoded {} bytes into {} shards for group {}",
-            data.len(), all_shards.len(), group_id
+            data.len(),
+            all_shards.len(),
+            group_id
         );
 
         Ok(all_shards)
@@ -192,28 +191,29 @@ impl EnhancedReedSolomonManager {
         // Get configuration for this group
         let config = {
             let configs = self.configs.read().await;
-            configs.get(group_id)
-                .cloned()
-                .ok_or_else(|| anyhow::anyhow!("No Reed Solomon configuration found for group {}", group_id))?
+            configs.get(group_id).cloned().ok_or_else(|| {
+                anyhow::anyhow!("No Reed Solomon configuration found for group {}", group_id)
+            })?
         };
 
         if available_shards.len() < config.data_shards {
             bail!(
                 "Insufficient shards for reconstruction: have {}, need {}",
-                available_shards.len(), config.data_shards
+                available_shards.len(),
+                config.data_shards
             );
         }
 
         debug!(
             "Decoding data for group {} using {} available shards",
-            group_id, available_shards.len()
+            group_id,
+            available_shards.len()
         );
 
         // Create Reed Solomon codec (saorsa-fec)
         let fec_params = FecParams::new(config.data_shards as u16, config.parity_shards as u16)
             .context("Failed to create FEC parameters")?;
-        let codec = FecCodec::new(fec_params)
-            .context("Failed to create Reed Solomon codec")?;
+        let codec = FecCodec::new(fec_params).context("Failed to create Reed Solomon codec")?;
 
         // Group shards by chunk index
         let mut chunks_map: HashMap<usize, Vec<&Shard>> = HashMap::new();
@@ -226,21 +226,20 @@ impl EnhancedReedSolomonManager {
 
         // Decode each chunk
         for chunk_index in 0..chunks_map.len() {
-            let chunk_shards = chunks_map.get(&chunk_index)
+            let chunk_shards = chunks_map
+                .get(&chunk_index)
                 .ok_or_else(|| anyhow::anyhow!("Missing chunk {} shards", chunk_index))?;
 
             if chunk_shards.len() < config.data_shards {
                 bail!(
                     "Insufficient shards for chunk {}: have {}, need {}",
-                    chunk_index, chunk_shards.len(), config.data_shards
+                    chunk_index,
+                    chunk_shards.len(),
+                    config.data_shards
                 );
             }
 
-            let decoded_chunk = self.decode_chunk(
-                chunk_shards,
-                &config,
-                &codec,
-            ).await?;
+            let decoded_chunk = self.decode_chunk(chunk_shards, &config, &codec).await?;
 
             decoded_chunks.push(decoded_chunk);
         }
@@ -256,7 +255,9 @@ impl EnhancedReedSolomonManager {
 
         info!(
             "Successfully decoded {} bytes from {} shards for group {}",
-            original_data.len(), available_shards.len(), group_id
+            original_data.len(),
+            available_shards.len(),
+            group_id
         );
 
         Ok(original_data)
@@ -272,7 +273,7 @@ impl EnhancedReedSolomonManager {
                 "Shard integrity check failed for group {} shard {}",
                 shard.group_id, shard.index
             );
-            
+
             // Update integrity tracker
             let mut tracker = self.integrity_tracker.write().await;
             let key = format!("{}:{}", shard.group_id, shard.data_id);
@@ -302,7 +303,8 @@ impl EnhancedReedSolomonManager {
 
         let config = {
             let configs = self.configs.read().await;
-            configs.get(group_id)
+            configs
+                .get(group_id)
                 .cloned()
                 .ok_or_else(|| anyhow::anyhow!("No configuration found for group {}", group_id))?
         };
@@ -317,17 +319,18 @@ impl EnhancedReedSolomonManager {
         // Distribute shards evenly across members
         // Prioritize giving each member at least one data shard
         let mut member_index = 0;
-        
+
         for (shard_index, shard) in shards.iter().enumerate() {
             let member_id = &group_members[member_index];
-            
-            distribution.member_assignments
+
+            distribution
+                .member_assignments
                 .entry(member_id.clone())
                 .or_insert_with(Vec::new)
                 .push(shard.clone());
 
             member_index = (member_index + 1) % group_members.len();
-            
+
             debug!(
                 "Assigned shard {} (type: {:?}) to member {}",
                 shard_index, shard.shard_type, member_id
@@ -349,16 +352,19 @@ impl EnhancedReedSolomonManager {
     ) -> Result<ReconstructionStatus> {
         let config = {
             let configs = self.configs.read().await;
-            configs.get(group_id)
+            configs
+                .get(group_id)
                 .cloned()
                 .ok_or_else(|| anyhow::anyhow!("No configuration found for group {}", group_id))?
         };
 
-        let data_shards_available = available_shards.iter()
+        let data_shards_available = available_shards
+            .iter()
             .filter(|s| s.shard_type == ShardType::Data)
             .count();
-        
-        let parity_shards_available = available_shards.iter()
+
+        let parity_shards_available = available_shards
+            .iter()
             .filter(|s| s.shard_type == ShardType::Parity)
             .count();
 
@@ -388,7 +394,8 @@ impl EnhancedReedSolomonManager {
         chunk_index: usize,
     ) -> Result<Vec<Shard>> {
         // Use FecCodec to encode the chunk
-        let encoded_shares = codec.encode(chunk)
+        let encoded_shares = codec
+            .encode(chunk)
             .map_err(|e| anyhow::anyhow!("Reed Solomon encoding failed: {:?}", e))?;
 
         let mut shards = Vec::new();
@@ -447,7 +454,8 @@ impl EnhancedReedSolomonManager {
         }
 
         // Decode using Reed Solomon
-        let decoded_data = codec.decode(&shares)
+        let decoded_data = codec
+            .decode(&shares)
             .map_err(|e| anyhow::anyhow!("Reed Solomon decoding failed: {:?}", e))?;
 
         Ok(decoded_data)
@@ -455,7 +463,7 @@ impl EnhancedReedSolomonManager {
 
     fn pad_data_for_encoding(&self, data: &[u8], config: &ReedSolomonConfig) -> Result<Vec<u8>> {
         let mut padded = data.to_vec();
-        
+
         // Calculate how much padding needed to make data divisible by shard_size
         let remainder = data.len() % config.shard_size;
         if remainder != 0 {
@@ -467,7 +475,7 @@ impl EnhancedReedSolomonManager {
         let original_len = data.len() as u64;
         let len_bytes = original_len.to_le_bytes();
         let padding_start = data.len();
-        
+
         if padded.len() >= padding_start + 8 {
             padded[padding_start..padding_start + 8].copy_from_slice(&len_bytes);
         }
@@ -485,7 +493,7 @@ impl EnhancedReedSolomonManager {
         for i in (0..padded_data.len().saturating_sub(8)).rev() {
             let len_bytes = &padded_data[i..i + 8];
             let potential_len = u64::from_le_bytes(len_bytes.try_into().unwrap()) as usize;
-            
+
             if potential_len <= padded_data.len() && potential_len > 0 {
                 return Ok(padded_data[..potential_len].to_vec());
             }
@@ -499,9 +507,10 @@ impl EnhancedReedSolomonManager {
         // Chunk index is encoded in the shard index
         // For config with k+m shards per chunk, chunk_index = shard.index / (k+m)
         let configs = futures::executor::block_on(self.configs.read());
-        let config = configs.get(&shard.group_id)
-            .ok_or_else(|| anyhow::anyhow!("No configuration found for group {}", shard.group_id))?;
-        
+        let config = configs.get(&shard.group_id).ok_or_else(|| {
+            anyhow::anyhow!("No configuration found for group {}", shard.group_id)
+        })?;
+
         Ok(shard.index / config.total_shards())
     }
 
@@ -511,7 +520,11 @@ impl EnhancedReedSolomonManager {
         config: &ReedSolomonConfig,
     ) -> Result<()> {
         // Verify each member has at least one shard
-        if plan.member_assignments.values().any(|shards| shards.is_empty()) {
+        if plan
+            .member_assignments
+            .values()
+            .any(|shards| shards.is_empty())
+        {
             bail!("Distribution plan has members with no shards assigned");
         }
 
@@ -520,7 +533,8 @@ impl EnhancedReedSolomonManager {
         if members_count < config.data_shards {
             bail!(
                 "Too few members ({}) for Reed Solomon configuration (need at least {})",
-                members_count, config.data_shards
+                members_count,
+                config.data_shards
             );
         }
 
@@ -538,7 +552,7 @@ impl EnhancedReedSolomonManager {
         8 // Default Reed Solomon configuration uses 8 data shards
     }
 
-    /// Simplified encode_data method for compatibility 
+    /// Simplified encode_data method for compatibility
     pub async fn encode_data(&self, data: &[u8]) -> Result<Vec<Shard>> {
         // Use default group settings for simplified interface
         self.encode_group_data("default", "default", data, 8).await

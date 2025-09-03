@@ -1,20 +1,19 @@
+use crate::dht_facade::{DhtFacade, LocalDht};
+use crate::saorsa_storage::errors::StorageError;
 /**
  * Saorsa Storage System - Tauri Commands
  * Exposes storage functionality to the frontend through Tauri commands
  */
-
 use crate::saorsa_storage::{
-    StorageEngine, StorageRequest, StorageResponse, RetrievalRequest, RetrievalResponse,
-    StoragePolicy, StorageMetadata, StorageAddress, StorageEngineStats,
-    ConfigManager, run_performance_smoke_test, run_comprehensive_performance_test, PerformanceTestRunner,
+    ConfigManager, PerformanceTestRunner, RetrievalRequest, RetrievalResponse, StorageAddress,
+    StorageEngine, StorageEngineStats, StorageMetadata, StoragePolicy, StorageRequest,
+    StorageResponse, run_comprehensive_performance_test, run_performance_smoke_test,
 };
-use crate::saorsa_storage::errors::StorageError;
-use crate::dht_facade::{DhtFacade, LocalDht};
-use std::sync::Arc;
-use tokio::sync::RwLock;
-use serde::{Deserialize, Serialize};
-use tauri::State;
 use chrono::Utc;
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use tauri::State;
+use tokio::sync::RwLock;
 
 /// Global storage engine state
 pub struct StorageEngineState<D: DhtFacade + Send + Sync> {
@@ -90,8 +89,8 @@ pub async fn init_storage_engine(
     state: State<'_, StorageEngineState<LocalDht>>,
 ) -> Result<bool, StorageErrorResponse> {
     // Parse master key
-    let master_key_bytes = hex::decode(&request.master_key_hex)
-        .map_err(|e| StorageErrorResponse {
+    let master_key_bytes =
+        hex::decode(&request.master_key_hex).map_err(|e| StorageErrorResponse {
             error_type: "InvalidMasterKey".to_string(),
             message: format!("Invalid master key hex: {}", e),
             details: None,
@@ -100,7 +99,10 @@ pub async fn init_storage_engine(
     if master_key_bytes.len() != 32 {
         return Err(StorageErrorResponse {
             error_type: "InvalidMasterKey".to_string(),
-            message: format!("Master key must be 32 bytes, got {}", master_key_bytes.len()),
+            message: format!(
+                "Master key must be 32 bytes, got {}",
+                master_key_bytes.len()
+            ),
             details: None,
         });
     }
@@ -165,7 +167,8 @@ pub async fn store_content(
         namespace: request.namespace,
     };
 
-    engine.store_content(storage_request)
+    engine
+        .store_content(storage_request)
         .await
         .map_err(StorageErrorResponse::from)
 }
@@ -185,12 +188,11 @@ pub async fn retrieve_content(
 
     // Parse decryption key if provided
     let decryption_key = if let Some(key_hex) = request.decryption_key_hex {
-        let key_bytes = hex::decode(&key_hex)
-            .map_err(|e| StorageErrorResponse {
-                error_type: "InvalidDecryptionKey".to_string(),
-                message: format!("Invalid decryption key hex: {}", e),
-                details: None,
-            })?;
+        let key_bytes = hex::decode(&key_hex).map_err(|e| StorageErrorResponse {
+            error_type: "InvalidDecryptionKey".to_string(),
+            message: format!("Invalid decryption key hex: {}", e),
+            details: None,
+        })?;
 
         if key_bytes.len() != 32 {
             return Err(StorageErrorResponse {
@@ -214,7 +216,8 @@ pub async fn retrieve_content(
         decryption_key,
     };
 
-    engine.retrieve_content(retrieval_request)
+    engine
+        .retrieve_content(retrieval_request)
         .await
         .map_err(StorageErrorResponse::from)
 }
@@ -232,7 +235,8 @@ pub async fn list_content(
         details: None,
     })?;
 
-    engine.list_content(&request.user_id, request.policy_filter, request.limit)
+    engine
+        .list_content(&request.user_id, request.policy_filter, request.limit)
         .await
         .map_err(StorageErrorResponse::from)
 }
@@ -251,7 +255,8 @@ pub async fn delete_content(
         details: None,
     })?;
 
-    engine.delete_content(&address, &user_id)
+    engine
+        .delete_content(&address, &user_id)
         .await
         .map_err(StorageErrorResponse::from)
 }
@@ -286,7 +291,8 @@ pub async fn transition_content_policy(
         details: None,
     })?;
 
-    engine.transition_policy(&address, new_policy, &user_id)
+    engine
+        .transition_policy(&address, new_policy, &user_id)
         .await
         .map_err(StorageErrorResponse::from)
 }
@@ -303,7 +309,8 @@ pub async fn perform_storage_maintenance(
         details: None,
     })?;
 
-    engine.maintenance()
+    engine
+        .maintenance()
         .await
         .map_err(StorageErrorResponse::from)?;
 
@@ -319,13 +326,16 @@ pub async fn validate_storage_policy(
     content_type: String,
 ) -> Result<bool, StorageErrorResponse> {
     // Basic validation without requiring engine state
-    
+
     // Check content size limits
     if let Some(max_size) = policy.max_content_size() {
         if content_size > max_size {
             return Err(StorageErrorResponse {
                 error_type: "ContentTooLarge".to_string(),
-                message: format!("Content size {} exceeds policy limit {}", content_size, max_size),
+                message: format!(
+                    "Content size {} exceeds policy limit {}",
+                    content_size, max_size
+                ),
                 details: None,
             });
         }
@@ -356,10 +366,10 @@ pub async fn validate_storage_policy(
 #[tauri::command]
 pub async fn generate_master_key() -> Result<String, StorageErrorResponse> {
     use rand::RngCore;
-    
+
     let mut key = [0u8; 32];
     rand::thread_rng().fill_bytes(&mut key);
-    
+
     Ok(hex::encode(key))
 }
 
@@ -435,7 +445,7 @@ pub async fn run_storage_performance_test_custom(
     config: PerformanceTestConfig,
 ) -> Result<PerformanceTestResultSummary, StorageErrorResponse> {
     use crate::saorsa_storage::benchmarks::BenchmarkConfig;
-    
+
     let benchmark_config = BenchmarkConfig {
         iterations: config.iterations,
         warmup_iterations: config.warmup_iterations,
@@ -445,8 +455,9 @@ pub async fn run_storage_performance_test_custom(
     };
 
     let mut runner = PerformanceTestRunner::with_config(benchmark_config);
-    
-    let report = runner.run_performance_validation()
+
+    let report = runner
+        .run_performance_validation()
         .await
         .map_err(|e| StorageErrorResponse {
             error_type: "PerformanceTestFailed".to_string(),
@@ -454,10 +465,17 @@ pub async fn run_storage_performance_test_custom(
             details: Some(format!("{:#?}", e)),
         })?;
 
-    let failed_operations: Vec<String> = report.validation_results.validations
+    let failed_operations: Vec<String> = report
+        .validation_results
+        .validations
         .iter()
         .filter(|v| !v.passed)
-        .map(|v| format!("{} ({}ms > {}ms)", v.operation, v.actual_p95_ms, v.target_ms))
+        .map(|v| {
+            format!(
+                "{} ({}ms > {}ms)",
+                v.operation, v.actual_p95_ms, v.target_ms
+            )
+        })
         .collect();
 
     let recommendations: Vec<String> = if let Some(recs) = report.recommendations {
@@ -483,29 +501,29 @@ pub async fn run_storage_performance_test_custom(
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_storage_error_response_conversion() {
         let storage_error = StorageError::NotFound {
             address: "test_address".to_string(),
         };
-        
+
         let error_response = StorageErrorResponse::from(storage_error);
         assert!(error_response.message.contains("test_address"));
         assert!(error_response.error_type.contains("NotFound"));
     }
-    
+
     #[test]
     fn test_master_key_validation() {
         // Test valid key
         let valid_key = "a".repeat(64); // 32 bytes in hex
         assert_eq!(hex::decode(&valid_key).unwrap().len(), 32);
-        
+
         // Test invalid key
         let invalid_key = "a".repeat(30); // 15 bytes in hex
         assert_ne!(hex::decode(&invalid_key).unwrap().len(), 32);
     }
-    
+
     #[tokio::test]
     async fn test_policy_validation() {
         let result = validate_storage_policy(
@@ -513,18 +531,20 @@ mod tests {
             1000,
             "test_user".to_string(),
             "text/plain".to_string(),
-        ).await;
-        
+        )
+        .await;
+
         assert!(result.is_ok());
-        
+
         // Test content too large
         let result = validate_storage_policy(
             StoragePolicy::PrivateMax,
             200 * 1024 * 1024, // 200MB, exceeds 100MB limit
             "test_user".to_string(),
             "text/plain".to_string(),
-        ).await;
-        
+        )
+        .await;
+
         assert!(result.is_err());
     }
 }

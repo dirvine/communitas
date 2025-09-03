@@ -8,30 +8,30 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 //! Production-ready storage management with DHT integration and Reed Solomon erasure coding
-//! 
+//!
 //! This module replaces all mock storage implementations with a real DHT-backed storage system
 //! that implements the 1:1:2 storage allocation policy (local:DHT:public).
 
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use serde::{Deserialize, Serialize};
 // NOTE: Tracing and Result imports removed as they're not used with ProductionStorageManager commented out
 // use anyhow::Result;
 // use tracing::{debug, info, warn};
 
 pub mod capacity_manager;
 pub mod dht_storage;
-pub mod reed_solomon_manager;
-pub mod reed_solomon_v2;  // Enhanced version with 60% availability
+pub mod entity_storage;
 pub mod local_storage;
-pub mod shard_distributor;
 pub mod metrics;
-pub mod entity_storage;  // Entity-aware storage for all 5 entity types
+pub mod reed_solomon_manager;
+pub mod reed_solomon_v2; // Enhanced version with 60% availability
+pub mod shard_distributor; // Entity-aware storage for all 5 entity types
 
-use crate::identity::IdentityManager;
 use crate::dht_facade::DhtFacade;
+use crate::identity::IdentityManager;
 
 /// Storage allocation policy: Local:DHT:Public = 1:1:2
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -58,11 +58,11 @@ impl StorageAllocation {
             total_capacity: user_storage_commitment * 5, // Total = local + dht + shards + public
         }
     }
-    
+
     pub fn utilization_percentage(&self, current_usage: &StorageUsage) -> f32 {
-        let total_used = current_usage.personal_local + 
-                        current_usage.group_shards + 
-                        current_usage.public_dht_used;
+        let total_used = current_usage.personal_local
+            + current_usage.group_shards
+            + current_usage.public_dht_used;
         (total_used as f32 / self.total_capacity as f32) * 100.0
     }
 }
@@ -178,7 +178,7 @@ impl ProductionStorageManager {
         let user_key = self.identity_manager.get_encryption_key(user_id)?;
         let encrypted_data = self.encrypt_data(data, &user_key)?;
         let dht_key = self.generate_personal_dht_key(user_id, data_id);
-        
+
         self.dht.store(dht_key, encrypted_data).await
             .context("Failed to store personal data in DHT")?;
 
@@ -218,7 +218,7 @@ impl ProductionStorageManager {
         let group_key = self.derive_group_key(group_id)?;
         let encrypted_backup = self.encrypt_data(data, &group_key)?;
         let dht_backup_key = self.generate_group_backup_key(group_id, data_id);
-        
+
         self.dht.store(dht_backup_key, encrypted_backup).await
             .context("Failed to store group backup in DHT")?;
 
@@ -226,7 +226,7 @@ impl ProductionStorageManager {
         self.metrics.record_group_storage(group_id, data.len(), shards.len()).await;
 
         info!(
-            "Stored group data for group {} with {} shards distributed to {} members", 
+            "Stored group data for group {} with {} shards distributed to {} members",
             group_id, shards.len(), group_members.len()
         );
 
@@ -273,7 +273,7 @@ impl ProductionStorageManager {
             // Reconstruct data from shards
             let reconstructed_data = self.reed_solomon.decode_data(&available_shards)
                 .context("Failed to reconstruct group data from shards")?;
-            
+
             self.metrics.record_reed_solomon_success().await;
             return Ok(reconstructed_data);
         }

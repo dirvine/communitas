@@ -9,11 +9,11 @@
 
 //! Capacity management for the 1:1:2 storage allocation policy
 
+use super::{StorageAllocation, StorageUsage};
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
-use super::{StorageAllocation, StorageUsage};
 
 /// Manages storage capacity according to the 1:1:2 allocation policy
 /// Personal:DHT:Public = 1:1:2 ratio
@@ -43,15 +43,15 @@ impl CapacityManager {
     pub async fn can_store_personal(&self, size: usize) -> bool {
         let usage = self.current_usage.read().await;
         let available_personal = self.available_personal_capacity(&usage);
-        
+
         // Need space for both local and DHT copy
         let required_space = size * 2;
-        
+
         debug!(
-            "Personal storage check: need {} bytes, available {} bytes", 
+            "Personal storage check: need {} bytes, available {} bytes",
             required_space, available_personal
         );
-        
+
         available_personal >= required_space
     }
 
@@ -59,12 +59,12 @@ impl CapacityManager {
     pub async fn can_accept_group_shard(&self, shard_size: usize) -> bool {
         let usage = self.current_usage.read().await;
         let available_shard_space = self.available_group_shard_capacity(&usage);
-        
+
         debug!(
-            "Group shard check: need {} bytes, available {} bytes", 
+            "Group shard check: need {} bytes, available {} bytes",
             shard_size, available_shard_space
         );
-        
+
         available_shard_space >= shard_size
     }
 
@@ -72,19 +72,19 @@ impl CapacityManager {
     pub async fn can_accept_dht_data(&self, data_size: usize) -> bool {
         let usage = self.current_usage.read().await;
         let available_dht_space = self.available_public_dht_capacity(&usage);
-        
+
         debug!(
-            "DHT storage check: need {} bytes, available {} bytes", 
+            "DHT storage check: need {} bytes, available {} bytes",
             data_size, available_dht_space
         );
-        
+
         available_dht_space >= data_size
     }
 
     /// Update usage statistics
     pub async fn update_usage(&self, usage_update: StorageUsageUpdate) {
         let mut usage = self.current_usage.write().await;
-        
+
         match usage_update {
             StorageUsageUpdate::PersonalStored { size } => {
                 usage.personal_local += size;
@@ -107,9 +107,9 @@ impl CapacityManager {
                 usage.public_dht_used = usage.public_dht_used.saturating_sub(size);
             }
         }
-        
+
         usage.last_updated = chrono::Utc::now();
-        
+
         // Log warnings if approaching capacity limits
         self.check_capacity_warnings(&usage);
     }
@@ -117,7 +117,7 @@ impl CapacityManager {
     /// Get current capacity status
     pub async fn get_capacity_status(&self) -> CapacityStatus {
         let usage = self.current_usage.read().await;
-        
+
         CapacityStatus {
             allocation: self.allocation.clone(),
             usage: usage.clone(),
@@ -133,11 +133,11 @@ impl CapacityManager {
     /// Calculate storage efficiency metrics
     pub async fn get_efficiency_metrics(&self) -> EfficiencyMetrics {
         let usage = self.current_usage.read().await;
-        
+
         // Calculate Reed Solomon efficiency
         let total_personal_and_groups = usage.personal_local + usage.group_shards;
         let total_capacity_used = total_personal_and_groups + usage.public_dht_used;
-        
+
         let storage_efficiency = if self.allocation.total_capacity > 0 {
             (total_capacity_used as f32 / self.allocation.total_capacity as f32) * 100.0
         } else {
@@ -158,7 +158,7 @@ impl CapacityManager {
             dht_participation_ratio_percent: dht_participation_ratio,
             reed_solomon_overhead_percent: self.calculate_reed_solomon_overhead(),
             deduplication_savings_percent: 0.0, // TODO: Implement deduplication
-            compression_ratio: 1.0, // TODO: Implement compression
+            compression_ratio: 1.0,             // TODO: Implement compression
         }
     }
 
@@ -168,24 +168,30 @@ impl CapacityManager {
         let used = usage.personal_local;
         let allocated = self.allocation.personal_local;
         let safety_reserve = (allocated as f32 * self.safety_margin) as usize;
-        
-        allocated.saturating_sub(used).saturating_sub(safety_reserve)
+
+        allocated
+            .saturating_sub(used)
+            .saturating_sub(safety_reserve)
     }
 
     fn available_group_shard_capacity(&self, usage: &StorageUsage) -> usize {
         let used = usage.group_shards;
         let allocated = self.allocation.group_shard_allocation;
         let safety_reserve = (allocated as f32 * self.safety_margin) as usize;
-        
-        allocated.saturating_sub(used).saturating_sub(safety_reserve)
+
+        allocated
+            .saturating_sub(used)
+            .saturating_sub(safety_reserve)
     }
 
     fn available_public_dht_capacity(&self, usage: &StorageUsage) -> usize {
         let used = usage.public_dht_used;
         let allocated = self.allocation.public_dht_allocation;
         let safety_reserve = (allocated as f32 * self.safety_margin) as usize;
-        
-        allocated.saturating_sub(used).saturating_sub(safety_reserve)
+
+        allocated
+            .saturating_sub(used)
+            .saturating_sub(safety_reserve)
     }
 
     fn calculate_personal_utilization(&self, usage: &StorageUsage) -> f32 {
@@ -222,12 +228,12 @@ impl CapacityManager {
         let personal_utilization = self.calculate_personal_utilization(usage);
         let group_utilization = self.calculate_group_shard_utilization(usage);
         let dht_utilization = self.calculate_dht_utilization(usage);
-        
+
         // Consider healthy if no category exceeds 90%
-        overall_utilization < 90.0 && 
-        personal_utilization < 90.0 && 
-        group_utilization < 90.0 && 
-        dht_utilization < 90.0
+        overall_utilization < 90.0
+            && personal_utilization < 90.0
+            && group_utilization < 90.0
+            && dht_utilization < 90.0
     }
 
     fn check_capacity_warnings(&self, usage: &StorageUsage) {
@@ -236,13 +242,22 @@ impl CapacityManager {
         let dht_utilization = self.calculate_dht_utilization(usage);
 
         if personal_utilization > 80.0 {
-            warn!("Personal storage utilization high: {:.1}%", personal_utilization);
+            warn!(
+                "Personal storage utilization high: {:.1}%",
+                personal_utilization
+            );
         }
         if group_utilization > 80.0 {
-            warn!("Group shard storage utilization high: {:.1}%", group_utilization);
+            warn!(
+                "Group shard storage utilization high: {:.1}%",
+                group_utilization
+            );
         }
         if dht_utilization > 80.0 {
-            warn!("DHT participation storage utilization high: {:.1}%", dht_utilization);
+            warn!(
+                "DHT participation storage utilization high: {:.1}%",
+                dht_utilization
+            );
         }
     }
 
@@ -258,15 +273,22 @@ impl CapacityManager {
         }
 
         if group_util > 85.0 {
-            recommendations.push("Review group membership - some shards may be for inactive groups".to_string());
+            recommendations.push(
+                "Review group membership - some shards may be for inactive groups".to_string(),
+            );
         }
 
         if dht_util < 20.0 {
-            recommendations.push("Low DHT participation - consider accepting more public storage requests".to_string());
+            recommendations.push(
+                "Low DHT participation - consider accepting more public storage requests"
+                    .to_string(),
+            );
         }
 
         if dht_util > 95.0 {
-            recommendations.push("DHT storage nearly full - may need to reject new storage requests".to_string());
+            recommendations.push(
+                "DHT storage nearly full - may need to reject new storage requests".to_string(),
+            );
         }
 
         if recommendations.is_empty() {

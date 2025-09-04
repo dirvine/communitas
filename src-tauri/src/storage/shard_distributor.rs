@@ -146,31 +146,28 @@ impl<F: DhtFacade + 'static> ShardDistributor<F> {
             distribution_plan.member_assignments.len()
         );
 
-        // Distribute shards to each member
-        let mut distribution_tasks = Vec::new();
-
+        // Build tasks that carry member_id for safe result association
+        let mut tasks = Vec::new();
         for (member_id, member_shards) in &distribution_plan.member_assignments {
             for shard in member_shards {
-                let task = self.distribute_shard_to_member(
-                    member_id.clone(),
-                    shard.clone(),
-                    distribution_id.clone(),
-                );
-                distribution_tasks.push(task);
+                let member_id_cloned = member_id.clone();
+                let shard_cloned = shard.clone();
+                let dist_id = distribution_id.clone();
+                let fut = async move {
+                    let res = self
+                        .distribute_shard_to_member(member_id_cloned.clone(), shard_cloned, dist_id)
+                        .await;
+                    (member_id_cloned, res)
+                };
+                tasks.push(fut);
             }
         }
 
         // Execute all distributions concurrently
-        let results = futures::future::join_all(distribution_tasks).await;
+        let results = futures::future::join_all(tasks).await;
 
-        // Process results
-        for (member_id, result) in results.iter().enumerate() {
-            let member_key = distribution_plan
-                .member_assignments
-                .keys()
-                .nth(member_id)
-                .unwrap();
-
+        // Process results with associated member IDs
+        for (member_key, result) in results {
             match result {
                 Ok(_) => {
                     status.successful_distributions += 1;
@@ -180,10 +177,9 @@ impl<F: DhtFacade + 'static> ShardDistributor<F> {
                 }
                 Err(e) => {
                     status.failed_distributions += 1;
-                    status.member_responses.insert(
-                        member_key.clone(),
-                        DistributionResult::Failed(e.to_string()),
-                    );
+                    status
+                        .member_responses
+                        .insert(member_key.clone(), DistributionResult::Failed(e.to_string()));
                     warn!("Failed to distribute shard to {}: {}", member_key, e);
                 }
             }

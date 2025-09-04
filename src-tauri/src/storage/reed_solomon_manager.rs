@@ -492,7 +492,10 @@ impl EnhancedReedSolomonManager {
         // Look for length marker in the last few bytes
         for i in (0..padded_data.len().saturating_sub(8)).rev() {
             let len_bytes = &padded_data[i..i + 8];
-            let potential_len = u64::from_le_bytes(len_bytes.try_into().unwrap()) as usize;
+            // Avoid unwrap by copying into a fixed array
+            let mut arr = [0u8; 8];
+            arr.copy_from_slice(len_bytes);
+            let potential_len = u64::from_le_bytes(arr) as usize;
 
             if potential_len <= padded_data.len() && potential_len > 0 {
                 return Ok(padded_data[..potential_len].to_vec());

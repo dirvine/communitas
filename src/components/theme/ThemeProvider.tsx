@@ -46,10 +46,34 @@ const globalStyles = {
     transition: 'background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease !important',
   },
   
-  // Enhanced focus styles
+  // Enhanced focus styles for accessibility
   '.MuiFocusVisible-root': {
     outline: (theme: any) => `2px solid ${theme.palette.primary.main}`,
     outlineOffset: '2px',
+  },
+
+  // High contrast focus for better accessibility
+  '*:focus-visible': {
+    outline: (theme: any) => `2px solid ${theme.palette.primary.main}`,
+    outlineOffset: '2px',
+  },
+
+  // Ensure sufficient color contrast
+  'button, [role="button"]': {
+    '&:focus-visible': {
+      outline: (theme: any) => `2px solid ${theme.palette.primary.main}`,
+      outlineOffset: '2px',
+    },
+  },
+
+  // Improve readability
+  'p, span, div': {
+    lineHeight: 1.5,
+  },
+
+  // Ensure interactive elements have proper cursor
+  'button, [role="button"], [tabindex]:not([tabindex="-1"])': {
+    cursor: 'pointer',
   },
   
   // Custom animations
@@ -147,8 +171,8 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
     return (savedPreset as ColorPreset) || 'professional';
   });
 
-  // Create theme based on current mode and preset
-  const theme = createCustomTheme(mode, colorPreset);
+  // Create theme based on current mode and preset with performance optimization
+  const theme = React.useMemo(() => createCustomTheme(mode, colorPreset), [mode, colorPreset]);
 
   // Toggle between light and dark modes
   const toggleMode = () => {

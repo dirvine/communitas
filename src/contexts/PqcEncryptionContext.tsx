@@ -204,7 +204,8 @@ const PqcEncryptionContext = createContext<PqcEncryptionContextType | undefined>
 // Provider component
 export function PqcEncryptionProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(pqcReducer, initialState);
-  const { user } = useAuth();
+  const { authState } = useAuth();
+  const user = authState.user;
 
   // Initialize PQC when user logs in
   const initializePqc = useCallback(async (user: UserIdentity): Promise<boolean> => {

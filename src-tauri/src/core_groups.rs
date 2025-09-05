@@ -111,7 +111,7 @@ pub async fn core_group_add_member(
         let out = hasher.finalize();
         DhtKey::from(*out.as_bytes())
     };
-    let msg = group_identity_canonical_sign_bytes(&gip.id.into(), &new_root.into());
+    let msg = group_identity_canonical_sign_bytes(&gip.id.clone().into(), &new_root.into());
 
     let id_hex = hex::encode(gip.id.as_bytes());
     let kp = ctx
@@ -167,7 +167,7 @@ pub async fn core_group_remove_member(
         let out = hasher.finalize();
         DhtKey::from(*out.as_bytes())
     };
-    let msg = group_identity_canonical_sign_bytes(&gip.id.into(), &new_root.into());
+    let msg = group_identity_canonical_sign_bytes(&gip.id.clone().into(), &new_root.into());
     let id_hex = hex::encode(gip.id.as_bytes());
     let kp = ctx
         .group_keys

@@ -356,6 +356,16 @@ export class CompleteStorageSystem extends EventEmitter {
   private generateId(): string {
     return `id_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
   }
+
+  getStats(): any {
+    return {
+      entities: this.entities.size,
+      storages: this.storages.size,
+      publishers: this.publishers.size,
+      pipelines: this.pipelines.size,
+      initialized: this.initialized
+    }
+  }
 }
 
 class EntityStorageImpl implements EntityStorage {

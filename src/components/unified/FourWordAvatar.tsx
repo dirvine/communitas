@@ -19,7 +19,9 @@ export interface FourWordAvatarProps {
   type?: 'personal' | 'organization' | 'project'
   gradient?: 'radial' | 'linear' | 'conic'
   animated?: boolean
+  interactive?: boolean
   onClick?: () => void
+  onKeyDown?: (event: React.KeyboardEvent) => void
 }
 
 const pulse = keyframes`
@@ -57,7 +59,9 @@ export const FourWordAvatar = forwardRef<HTMLDivElement, FourWordAvatarProps>(
       type = 'personal',
       gradient: gradientType = 'linear',
       animated = false,
+      interactive = false,
       onClick,
+      onKeyDown,
     },
     ref
   ) => {
@@ -116,9 +120,19 @@ export const FourWordAvatar = forwardRef<HTMLDivElement, FourWordAvatarProps>(
         variant="dot"
         color={presence ? presenceColorMap[presence] : 'default'}
         invisible={!presence}
+        sx={{
+          '& .MuiBadge-badge': {
+            width: dimension * 0.25,
+            height: dimension * 0.25,
+            borderRadius: '50%',
+            border: `2px solid ${theme.palette.background.paper}`,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+            animation: presence === 'online' && animated ? `${pulse} 2s ease-in-out infinite` : 'none',
+          },
+        }}
         componentsProps={{
           badge: {
-            'aria-label': presence,
+            'aria-label': presence ? `${presence} status` : undefined,
           },
         }}
       >
@@ -131,12 +145,24 @@ export const FourWordAvatar = forwardRef<HTMLDivElement, FourWordAvatarProps>(
             fontWeight: 600,
             fontSize: dimension / 3,
             border: getBorder(),
-            boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
-            cursor: onClick ? 'pointer' : 'default',
+            boxShadow: theme.shadows[4],
+            cursor: (onClick || interactive) ? 'pointer' : 'default',
+            transition: 'all 0.2s ease-in-out',
+            '&:hover': {
+              transform: (onClick || interactive) ? 'scale(1.05)' : 'none',
+              boxShadow: (onClick || interactive) ? theme.shadows[8] : theme.shadows[4],
+            },
+            '&:focus-visible': {
+              outline: `2px solid ${theme.palette.primary.main}`,
+              outlineOffset: 2,
+            },
             ...getAnimationStyles(),
           }}
           onClick={onClick}
-          aria-label={fourWords}
+          onKeyDown={onKeyDown}
+          tabIndex={(onClick || interactive) ? 0 : undefined}
+          role={(onClick || interactive) ? 'button' : undefined}
+          aria-label={`${fourWords} avatar${presence ? `, ${presence} status` : ''}`}
         >
           {initials}
         </Avatar>

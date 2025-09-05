@@ -5,6 +5,7 @@ import { lightThemeOptions } from './light';
 import { darkThemeOptions } from './dark';
 import { components } from './components';
 import { typography } from './typography';
+import { getTokens, createCssVariables } from './tokens';
 
 export type ThemeMode = 'light' | 'dark' | 'auto';
 
@@ -29,14 +30,81 @@ export interface CustomThemeOptions extends ThemeOptions {
 
 export const createCustomTheme = (mode: ThemeMode, colorPreset?: string): Theme => {
   const isDark = mode === 'dark' || (mode === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-  
-  // Base configuration
+  const themeMode: 'light' | 'dark' = isDark ? 'dark' : 'light';
+
+  // Get design tokens for the current mode
+  const tokens = getTokens(themeMode);
+
+  // Base configuration with tokens
   const baseOptions: CustomThemeOptions = deepmerge(baseThemeOptions, {
     palette: {
-      mode: isDark ? 'dark' : 'light',
+      mode: themeMode,
+      primary: {
+        main: tokens.colors.brand.primary,
+        light: tokens.colors.brand.primary, // Will be overridden by preset
+        dark: tokens.colors.brand.primary,  // Will be overridden by preset
+        contrastText: tokens.colors.semantic.text.inverse,
+      },
+      secondary: {
+        main: tokens.colors.brand.secondary,
+        light: tokens.colors.brand.secondary,
+        dark: tokens.colors.brand.secondary,
+        contrastText: tokens.colors.semantic.text.inverse,
+      },
+      error: {
+        main: tokens.colors.brand.error,
+        light: tokens.colors.brand.error,
+        dark: tokens.colors.brand.error,
+        contrastText: tokens.colors.semantic.text.inverse,
+      },
+      warning: {
+        main: tokens.colors.brand.warning,
+        light: tokens.colors.brand.warning,
+        dark: tokens.colors.brand.warning,
+        contrastText: tokens.colors.semantic.text.primary,
+      },
+      info: {
+        main: tokens.colors.brand.info,
+        light: tokens.colors.brand.info,
+        dark: tokens.colors.brand.info,
+        contrastText: tokens.colors.semantic.text.inverse,
+      },
+      success: {
+        main: tokens.colors.brand.success,
+        light: tokens.colors.brand.success,
+        dark: tokens.colors.brand.success,
+        contrastText: tokens.colors.semantic.text.inverse,
+      },
+      background: {
+        default: tokens.colors.semantic.background.primary,
+        paper: tokens.colors.semantic.surface.primary,
+      },
+      text: {
+        primary: tokens.colors.semantic.text.primary,
+        secondary: tokens.colors.semantic.text.secondary,
+        disabled: tokens.colors.semantic.text.tertiary,
+      },
+      divider: tokens.colors.semantic.border.primary,
+      action: {
+        active: tokens.colors.semantic.text.secondary,
+        hover: tokens.colors.semantic.background.secondary,
+        selected: tokens.colors.semantic.background.tertiary,
+        disabled: tokens.colors.semantic.text.tertiary,
+        disabledBackground: tokens.colors.semantic.surface.secondary,
+        focus: tokens.colors.semantic.border.focus,
+      },
     },
     typography,
     components,
+    // Add custom gradients and shadows from tokens
+    gradients: tokens.colors.semantic.background,
+    customShadows: {
+      card: tokens.shadows.sm,
+      dropdown: tokens.shadows.md,
+      modal: tokens.shadows.lg,
+      fab: tokens.shadows.lg,
+      navigation: tokens.shadows.xs,
+    },
   });
 
   // Apply mode-specific options
@@ -46,7 +114,26 @@ export const createCustomTheme = (mode: ThemeMode, colorPreset?: string): Theme 
   // Apply color preset if specified
   if (colorPreset) {
     const presetOptions = getColorPreset(colorPreset, isDark);
-    return createTheme(deepmerge(themeOptions, presetOptions));
+    const finalTheme = createTheme(deepmerge(themeOptions, presetOptions));
+
+    // Inject CSS custom properties for design tokens
+    const cssVariables = createCssVariables(tokens);
+    const rootVars = Object.entries(cssVariables)
+      .map(([key, value]) => `${key}: ${value}`)
+      .join('; ');
+
+    // Add CSS variables to document head
+    if (typeof document !== 'undefined') {
+      let styleElement = document.getElementById('design-tokens');
+      if (!styleElement) {
+        styleElement = document.createElement('style');
+        styleElement.id = 'design-tokens';
+        document.head.appendChild(styleElement);
+      }
+      styleElement.textContent = `:root { ${rootVars} }`;
+    }
+
+    return finalTheme;
   }
 
   return createTheme(themeOptions);

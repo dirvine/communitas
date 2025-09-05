@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Box,
   Paper,
@@ -17,6 +17,7 @@ import {
   Menu,
   MenuItem,
   Tooltip,
+  CircularProgress,
 } from '@mui/material';
 import {
   Send as SendIcon,
@@ -30,6 +31,11 @@ import {
   DoneAll as DoneAllIcon,
   Search as SearchIcon,
 } from '@mui/icons-material';
+import { useDHTSync, DHTSyncEvent } from '../../hooks/useDHTSync';
+import { useSnackbar } from 'notistack';
+
+// Mock user ID for demo - in real app this would come from auth context
+const MOCK_USER_ID = 'user-1';
 
 interface Message {
   id: string;
@@ -116,6 +122,23 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Real-time DHT sync for this chat
+  const { connected, peerCount, pendingEvents, clearPendingEvents } = useDHTSync({
+    userId: MOCK_USER_ID,
+    entityIds: [chatId],
+    onEvent: useCallback((event: DHTSyncEvent) => {
+      // Handle real-time collaboration events
+      console.log('Real-time event received:', event);
+
+      // For now, simulate real-time message updates
+      // In production, this would handle actual P2P message broadcasts
+      if (event.type === 'PeerConnected') {
+        // Show connection status updates
+        console.log(`Peer connected: ${event.address}`);
+      }
+    }, []),
+  });
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -223,9 +246,14 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
             <Typography variant="h6" component="div">
               {chatName}
             </Typography>
-            <Typography variant="caption" color="text.secondary">
-              {chatType === 'group' ? `${participants} participants` : 'Active now'}
-            </Typography>
+             <Typography variant="caption" color="text.secondary">
+               {chatType === 'group' ? `${participants} participants` : 'Active now'}
+               {connected && (
+                 <Typography variant="caption" color="success.main" sx={{ ml: 1 }}>
+                   • {peerCount} peers online
+                 </Typography>
+               )}
+             </Typography>
           </Box>
         </Box>
         <Box>
@@ -427,5 +455,3 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   );
 };
 
-// Add missing import
-import { CircularProgress } from '@mui/material';

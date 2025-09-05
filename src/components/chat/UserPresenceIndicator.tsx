@@ -13,12 +13,13 @@ import {
   Chip,
   Divider,
 } from '@mui/material'
-import { 
+import {
   Circle as CircleIcon,
   Schedule as ScheduleIcon,
   DoNotDisturb as DoNotDisturbIcon,
-  OfflinePin as OfflinePinIcon 
+  OfflinePin as OfflinePinIcon
 } from '@mui/icons-material'
+import { useDHTSync, DHTSyncEvent } from '../../hooks/useDHTSync'
 
 // User presence types
 interface UserPresence {

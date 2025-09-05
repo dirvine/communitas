@@ -71,7 +71,7 @@ impl CoreContext {
             .map_err(|e| format!("Storage init failed: {}", e))?;
 
         // Chat manager backed by storage and identity
-        let chat = ChatManager::new(storage, enhanced_identity.clone());
+        let chat = ChatManager::new(storage.clone(), enhanced_identity.clone());
 
         // Messaging service
         let messaging = MessagingService::new(

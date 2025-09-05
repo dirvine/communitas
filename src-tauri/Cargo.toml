@@ -93,11 +93,13 @@ zeroize = "1.7"
 regex = "1.10"
 lazy_static = "1.4"
 
-# Testing dependencies
-[dev-dependencies]
+# Test harness dependencies
 tempfile = "3.0"
-proptest = "1.4"
-tokio-test = "0.4"
+
+ # Testing dependencies
+ [dev-dependencies]
+ proptest = "1.4"
+ tokio-test = "0.4"
 
 [features]
 default = ["custom-protocol"]

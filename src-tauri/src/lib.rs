@@ -17,3 +17,4 @@
 //! Intentional minimal surface; the Tauri binary exports commands.
 
 pub mod error;
+pub mod test_harness;

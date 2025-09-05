@@ -64,8 +64,8 @@ pub async fn core_create_channel(
     if !name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == ' ') {
         return Err("Channel name contains invalid characters".to_string());
     }
-    let guard = shared.read().await;
-    let ctx = guard.as_ref().ok_or_else(|| "Core not initialized".to_string())?;
+    let mut guard = shared.write().await;
+    let ctx = guard.as_mut().ok_or_else(|| "Core not initialized".to_string())?;
     let chat = &mut ctx.chat;
     chat
         .create_channel(name, description, ChannelType::Public, None)
@@ -78,8 +78,8 @@ pub async fn core_create_channel(
 pub async fn core_get_channels(
     shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
 ) -> Result<Vec<Channel>, String> {
-    let guard = shared.read().await;
-    let ctx = guard.as_ref().ok_or_else(|| "Core not initialized".to_string())?;
+    let mut guard = shared.write().await;
+    let ctx = guard.as_mut().ok_or_else(|| "Core not initialized".to_string())?;
     let chat = &mut ctx.chat;
     let ids = chat
         .get_user_channels()
@@ -104,8 +104,8 @@ pub async fn core_add_reaction(
     message_id: String,
     emoji: String,
 ) -> Result<bool, String> {
-    let guard = shared.read().await;
-    let ctx = guard.as_ref().ok_or_else(|| "Core not initialized".to_string())?;
+    let mut guard = shared.write().await;
+    let ctx = guard.as_mut().ok_or_else(|| "Core not initialized".to_string())?;
     let chat = &mut ctx.chat;
     chat
         .add_reaction(&ChannelId(channel_id), &MessageId(message_id), emoji)
@@ -142,216 +142,63 @@ pub async fn core_send_message_to_recipients(
             return Err(format!("Invalid recipient format: {}", recipient));
         }
     }
-    let guard = shared.read().await;
-    let ctx = guard.as_ref().ok_or_else(|| "Core not initialized".to_string())?;
+    let mut guard = shared.write().await;
+    let ctx = guard.as_mut().ok_or_else(|| "Core not initialized".to_string())?;
+    let messaging = &mut ctx.messaging;
+
     let mapped: Vec<FourWordAddress> = recipients.into_iter().map(FourWordAddress).collect();
     let channel_uuid = uuid::Uuid::parse_str(&channel_id)
         .map_err(|e| format!("Invalid channel ID format: {}", e))?;
-    let (msg_id, _receipt) = ctx
-        .messaging
+    let (msg_id, _receipt) = ctx.messaging
         .send_message(mapped, saorsa_core::messaging::MessageContent::Text(text), MessagingChannelId(channel_uuid), Default::default())
         .await
         .map_err(|e| format!("send_message failed: {}", e))?;
     Ok(msg_id.to_string())
 }
 
-/// Send a message to all channel members via saorsa-core's channel delivery
+/// Create a thread under a parent message in a channel
+#[tauri::command]
+pub async fn core_create_thread(
+    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+    channel_id: String,
+    parent_message_id: String,
+) -> Result<Thread, String> {
+    let mut guard = shared.write().await;
+    let ctx = guard.as_mut().ok_or_else(|| "Core not initialized".to_string())?;
+    let chat = &mut ctx.chat;
+    chat
+        .create_thread(&ChannelId(channel_id), &MessageId(parent_message_id))
+        .await
+        .map_err(|e| format!("create_thread failed: {}", e))
+}
+
+/// Send a message to all channel members
 #[tauri::command]
 pub async fn core_send_message_to_channel(
     shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
     channel_id: String,
     text: String,
 ) -> Result<String, String> {
-    let guard = shared.read().await;
-    let ctx = guard.as_ref().ok_or_else(|| "Core not initialized".to_string())?;
-    let channel_uuid = uuid::Uuid::parse_str(&channel_id)
-        .map_err(|e| format!("Invalid channel ID format: {}", e))?;
+    let mut guard = shared.write().await;
+    let ctx = guard.as_mut().ok_or_else(|| "Core not initialized".to_string())?;
     let (msg_id, _receipt) = ctx
         .messaging
-        .send_message_to_channel(MessagingChannelId(channel_uuid), saorsa_core::messaging::MessageContent::Text(text), Default::default())
+        .send_message_to_channel(MessagingChannelId(uuid::Uuid::parse_str(&channel_id).unwrap_or_default()), saorsa_core::messaging::MessageContent::Text(text), Default::default())
         .await
         .map_err(|e| format!("send_message_to_channel failed: {}", e))?;
     Ok(msg_id.to_string())
 }
 
-/// Get channel recipients (four-word addresses)
+/// Get channel recipients
 #[tauri::command]
 pub async fn core_channel_recipients(channel_id: String) -> Result<Vec<String>, String> {
-    let channel_uuid = uuid::Uuid::parse_str(&channel_id)
-        .map_err(|e| format!("Invalid channel ID format: {}", e))?;
-    let recips = saorsa_core::messaging::service::channel_recipients(&MessagingChannelId(channel_uuid))
+    let recips = saorsa_core::messaging::service::channel_recipients(&MessagingChannelId(uuid::Uuid::parse_str(&channel_id).unwrap_or_default()))
         .await
         .map_err(|e| format!("channel_recipients failed: {}", e))?;
     Ok(recips.into_iter().map(|fw| fw.0).collect())
 }
 
-// --------------- Virtual Disk wrappers ---------------
-
-#[derive(serde::Deserialize)]
-pub struct DiskWriteInput {
-    pub entity_hex: String,
-    pub disk_type: String,
-    pub path: String,
-    pub content_base64: String,
-    pub mime_type: Option<String>,
-}
-
-fn parse_disk_type(s: &str) -> Result<saorsa_core::virtual_disk::DiskType, String> {
-    match s {
-        "Private" | "private" => Ok(saorsa_core::virtual_disk::DiskType::Private),
-        "Public" | "public" => Ok(saorsa_core::virtual_disk::DiskType::Public),
-        "Shared" | "shared" => Ok(saorsa_core::virtual_disk::DiskType::Shared),
-        other => Err(format!("Unknown disk type: {}", other)),
-    }
-}
-
-#[tauri::command]
-pub async fn core_disk_write(input: DiskWriteInput) -> Result<serde_json::Value, String> {
-    use saorsa_core::virtual_disk as vd;
-    let entity = parse_hex_key(&input.entity_hex)?;
-    let dt = parse_disk_type(&input.disk_type)?;
-    let handle = match vd::disk_mount(entity.clone().into(), dt).await {
-        Ok(h) => h,
-        Err(_) => vd::disk_create(entity.clone().into(), dt, vd::DiskConfig::default()).await.map_err(|e| e.to_string())?,
-    };
-    let content = base64::engine::general_purpose::STANDARD.decode(&input.content_base64).map_err(|e| format!("invalid base64: {}", e))?;
-    let meta = vd::FileMetadata { mime_type: input.mime_type, attributes: std::collections::HashMap::new(), permissions: 0o644 };
-    let receipt = vd::disk_write(&handle, &input.path, &content, meta).await.map_err(|e| e.to_string())?;
-    serde_json::to_value(&receipt).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub async fn core_disk_read(entity_hex: String, disk_type: String, path: String) -> Result<Vec<u8>, String> {
-    use saorsa_core::virtual_disk as vd;
-    let entity = parse_hex_key(&entity_hex)?;
-    let dt = parse_disk_type(&disk_type)?;
-    let handle = vd::disk_mount(entity.into(), dt).await.map_err(|e| e.to_string())?;
-    vd::disk_read(&handle, &path).await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub async fn core_disk_list(entity_hex: String, disk_type: String, path: String, recursive: bool) -> Result<serde_json::Value, String> {
-    use saorsa_core::virtual_disk as vd;
-    let entity = parse_hex_key(&entity_hex)?;
-    let dt = parse_disk_type(&disk_type)?;
-    let handle = vd::disk_mount(entity.into(), dt).await.map_err(|e| e.to_string())?;
-    let entries = vd::disk_list(&handle, &path, recursive).await.map_err(|e| e.to_string())?;
-    serde_json::to_value(&entries).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub async fn core_disk_delete(entity_hex: String, disk_type: String, path: String) -> Result<bool, String> {
-    use saorsa_core::virtual_disk as vd;
-    let entity = parse_hex_key(&entity_hex)?;
-    let dt = parse_disk_type(&disk_type)?;
-    let handle = vd::disk_mount(entity.into(), dt).await.map_err(|e| e.to_string())?;
-    vd::disk_delete(&handle, &path).await.map_err(|e| e.to_string())?;
-    Ok(true)
-}
-
-#[tauri::command]
-pub async fn core_disk_sync(entity_hex: String, disk_type: String) -> Result<serde_json::Value, String> {
-    use saorsa_core::virtual_disk as vd;
-    let entity = parse_hex_key(&entity_hex)?;
-    let dt = parse_disk_type(&disk_type)?;
-    let handle = vd::disk_mount(entity.into(), dt).await.map_err(|e| e.to_string())?;
-    let status = vd::disk_sync(&handle).await.map_err(|e| e.to_string())?;
-    serde_json::to_value(&status).map_err(|e| e.to_string())
-}
-
-#[derive(serde::Deserialize)]
-pub struct WebsiteAssetInput { pub path: String, pub content_base64: String, pub mime_type: String }
-
-#[tauri::command]
-pub async fn core_website_set_home(entity_hex: String, markdown_content: String, assets: Vec<WebsiteAssetInput>) -> Result<bool, String> {
-    use saorsa_core::virtual_disk as vd;
-
-    // Validate input sizes
-    if markdown_content.len() > 10 * 1024 * 1024 { // 10MB limit
-        return Err("Markdown content too large (max 10MB)".to_string());
-    }
-
-    if assets.len() > 100 { // Reasonable limit on number of assets
-        return Err("Too many assets (max 100)".to_string());
-    }
-
-    // Validate total asset size
-    let total_asset_size: usize = assets.iter()
-        .map(|a| a.content_base64.len() * 3 / 4) // Rough base64 to binary conversion
-        .sum();
-    if total_asset_size > 50 * 1024 * 1024 { // 50MB total limit
-        return Err("Total asset size too large (max 50MB)".to_string());
-    }
-
-    let entity = parse_hex_key(&entity_hex)?;
-    let handle = match vd::disk_mount(entity.clone().into(), vd::DiskType::Public).await {
-        Ok(h) => h,
-        Err(_) => vd::disk_create(entity.clone().into(), vd::DiskType::Public, vd::DiskConfig::default()).await.map_err(|e| e.to_string())?,
-    };
-    let asset_vec: Vec<vd::Asset> = assets
-        .into_iter()
-        .map(|a| {
-            let content = base64::engine::general_purpose::STANDARD.decode(&a.content_base64)
-                .map_err(|e| format!("Invalid base64 content for asset {}: {}", a.path, e))?;
-            Ok(vd::Asset { path: a.path, content, mime_type: a.mime_type })
-        })
-        .collect::<Result<Vec<_>, String>>()?;
-    vd::website_set_home(&handle, &markdown_content, asset_vec).await.map_err(|e| e.to_string())?;
-    Ok(true)
-}
-
-/// Update identity's website_root using a detached ML-DSA signature (hex inputs)
-#[tauri::command]
-pub async fn core_identity_set_website_root(id_hex: String, website_root_hex: String, sig_hex: String) -> Result<bool, String> {
-    use saorsa_core::api::{identity_set_website_root};
-    use saorsa_core::auth::Sig;
-
-    let id = parse_hex_key(&id_hex)?;
-    let root = parse_hex_key(&website_root_hex)?;
-    let sig_bytes = hex::decode(sig_hex).map_err(|e| e.to_string())?;
-    let sig = Sig::new(sig_bytes);
-    identity_set_website_root(id.into(), root.into(), sig).await.map_err(|e| e.to_string())?;
-    Ok(true)
-}
-
-/// Publish a website and return a publish receipt
-#[tauri::command]
-pub async fn core_website_publish_receipt(entity_hex: String, website_root_hex: String) -> Result<serde_json::Value, String> {
-    use saorsa_core::virtual_disk as vd;
-    let entity = parse_hex_key(&entity_hex)?;
-    let website_root = parse_hex_key(&website_root_hex)?;
-    let receipt = vd::website_publish(entity.into(), website_root.into()).await.map_err(|e| e.to_string())?;
-    serde_json::to_value(&receipt).map_err(|e| e.to_string())
-}
-
-/// Publish a website and optionally update identity.website_root if signature provided
-#[tauri::command]
-pub async fn core_website_publish_and_update_identity(
-    entity_hex: String,
-    website_root_hex: String,
-    sig_hex: Option<String>,
-) -> Result<serde_json::Value, String> {
-    use saorsa_core::virtual_disk as vd;
-    use saorsa_core::api::{identity_set_website_root};
-    use saorsa_core::auth::Sig;
-    let entity = parse_hex_key(&entity_hex)?;
-    let website_root = parse_hex_key(&website_root_hex)?;
-    let receipt = vd::website_publish(entity.clone().into(), website_root.clone().into())
-        .await
-        .map_err(|e| e.to_string())?;
-
-    if let Some(sig_h) = sig_hex {
-        let sig_bytes = hex::decode(sig_h).map_err(|e| e.to_string())?;
-        let sig = Sig::new(sig_bytes);
-        identity_set_website_root(entity.into(), website_root.into(), sig)
-            .await
-            .map_err(|e| e.to_string())?;
-    }
-
-    serde_json::to_value(&receipt).map_err(|e| e.to_string())
-}
-
-/// Subscribe to messages (emits `message-received` events). Optional channel filter.
+/// Subscribe to messages
 #[tauri::command]
 pub async fn core_subscribe_messages(
     app: AppHandle,
@@ -373,7 +220,6 @@ pub async fn core_subscribe_messages(
         loop {
             match rx.recv().await {
                 Ok(rec) => {
-                    // Try to decrypt; fall back to encrypted payload marker
                     let payload = {
                         let guard = shared_clone.read().await;
                         if let Some(ctx) = guard.as_ref() {
@@ -397,80 +243,7 @@ pub async fn core_subscribe_messages(
     Ok(true)
 }
 
-fn parse_hex_key(hexstr: &str) -> Result<DhtKey, String> {
-    // Validate input length (64 hex chars = 32 bytes)
-    if hexstr.len() != 64 {
-        return Err(format!("hex key must be exactly 64 characters (32 bytes), got {}", hexstr.len()));
-    }
-
-    // Validate hex format
-    if !hexstr.chars().all(|c| c.is_ascii_hexdigit()) {
-        return Err("hex key contains invalid characters".to_string());
-    }
-
-    let bytes = hex::decode(hexstr).map_err(|e| format!("invalid hex: {}", e))?;
-
-    // Double-check length after decoding
-    if bytes.len() != 32 {
-        return Err(format!("decoded key must be 32 bytes, got {}", bytes.len()));
-    }
-
-    let mut arr = [0u8;32];
-    arr.copy_from_slice(&bytes);
-    Ok(DhtKey::from(arr))
-}
-
-#[derive(serde::Deserialize)]
-pub struct WebsiteManifestInput {
-    pub object_hex: String,
-    pub k: u16,
-    pub m: u16,
-    pub shard_size: u32,
-    pub assets_hex: Vec<String>,
-    pub sealed_meta_hex: Option<String>,
-}
-
-/// Publish a website container manifest to the DHT (does not modify identity.website_root)
-#[tauri::command]
-pub async fn core_website_publish(manifest: WebsiteManifestInput) -> Result<bool, String> {
-    let object = parse_hex_key(&manifest.object_hex)?;
-    let assets: Result<Vec<DhtKey>, String> = manifest
-        .assets_hex
-        .iter()
-        .map(|h| parse_hex_key(h))
-        .collect();
-    let assets = assets?;
-    let sealed_meta = match manifest.sealed_meta_hex {
-        Some(h) => Some(parse_hex_key(&h)?),
-        None => None,
-    };
-
-    let cm = ContainerManifestV1 {
-        v: 1,
-        object: object.into(),
-        fec: FecParams { k: manifest.k, m: manifest.m, shard_size: manifest.shard_size },
-        assets: assets.into_iter().map(|a| a.into()).collect(),
-        sealed_meta: sealed_meta.map(|s| s.into()),
-    };
-
-    let pol = PutPolicy { quorum: 3, ttl: None, auth: Box::new(DelegatedWriteAuth::new(vec![])) };
-    container_manifest_put(&cm, &pol)
-        .await
-        .map_err(|e| format!("manifest_put failed: {}", e))?;
-    Ok(true)
-}
-
-/// Fetch a website container manifest by object key
-#[tauri::command]
-pub async fn core_website_get_manifest(object_hex: String) -> Result<serde_json::Value, String> {
-    let object = parse_hex_key(&object_hex)?;
-    let cm = container_manifest_fetch(&object)
-        .await
-        .map_err(|e| format!("manifest_fetch failed: {}", e))?;
-    serde_json::to_value(&cm).map_err(|e| format!("serialize failed: {}", e))
-}
-
-/// Store private encrypted content under a namespaced key
+/// Store private encrypted content
 #[tauri::command]
 pub async fn core_private_put(
     shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
@@ -486,7 +259,7 @@ pub async fn core_private_put(
     Ok(true)
 }
 
-/// Retrieve private encrypted content by key
+/// Retrieve private encrypted content
 #[tauri::command]
 pub async fn core_private_get(
     shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
@@ -498,49 +271,4 @@ pub async fn core_private_get(
         .get_encrypted::<Vec<u8>>(&key)
         .await
         .map_err(|e| format!("get_encrypted failed: {}", e))
-}
-
-/// Post a text message to a channel (optionally in a thread)
-#[tauri::command]
-pub async fn core_post_message(
-    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
-    channel_id: String,
-    text: String,
-    thread_id: Option<String>,
-) -> Result<Message, String> {
-    let guard = shared.read().await;
-    let ctx = guard.as_ref().ok_or_else(|| "Core not initialized".to_string())?;
-    let chat = &mut ctx.chat;
-
-    // Map provided thread id string into ThreadId if present
-    let thread_opt = thread_id.map(|t| saorsa_core::chat::ThreadId(t));
-
-    let msg = chat
-        .send_message(
-            &saorsa_core::chat::ChannelId(channel_id),
-            saorsa_core::chat::MessageContent::Text(text),
-            thread_opt,
-            Vec::<Attachment>::new(),
-        )
-        .await
-        .map_err(|e| format!("send_message failed: {}", e))?;
-
-    // Optional: attempt network delivery via MessagingService if needed in future
-    Ok(msg)
-}
-
-/// Create a thread under a parent message in a channel
-#[tauri::command]
-pub async fn core_create_thread(
-    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
-    channel_id: String,
-    parent_message_id: String,
-) -> Result<Thread, String> {
-    let guard = shared.read().await;
-    let ctx = guard.as_ref().ok_or_else(|| "Core not initialized".to_string())?;
-    let chat = &mut ctx.chat;
-    chat
-        .create_thread(&ChannelId(channel_id), &MessageId(parent_message_id))
-        .await
-        .map_err(|e| format!("create_thread failed: {}", e))
 }

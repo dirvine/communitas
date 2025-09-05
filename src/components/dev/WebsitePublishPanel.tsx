@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react'
 import { Box, Button, TextField, Typography, Alert, Stack, Divider } from '@mui/material'
 import { buildWebsiteRootCanonicalHex, applyWebsiteRootWithSignature, publishWebsiteAndSetRoot } from '../../services/website'
-import { invoke } from '@tauri-apps/api/tauri'
+import { invoke } from '@tauri-apps/api/core'
 
 export const WebsitePublishPanel: React.FC = () => {
   const [entityHex, setEntityHex] = useState('')

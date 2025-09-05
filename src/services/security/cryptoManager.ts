@@ -158,7 +158,7 @@ export class CryptoManager {
 
     const iv = new Uint8Array(crypto.randomBytes(this.IV_LENGTH));
     if (!isTestEnv) {
-      const cipher = crypto.createCipher("aes-256-gcm", key);
+      const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
       cipher.setAAD(Buffer.from(keyId || "communitas"));
       try {
         const encrypted = cipher.update(data);
@@ -206,7 +206,7 @@ export class CryptoManager {
     }
 
     if (!isTestEnv) {
-      const decipher = crypto.createDecipher("aes-256-gcm", key);
+      const decipher = crypto.createDecipheriv("aes-256-gcm", key, Buffer.from(encryptedData.iv));
       decipher.setAuthTag(Buffer.from(encryptedData.authTag));
       decipher.setAAD(Buffer.from(encryptedData.keyId));
       try {

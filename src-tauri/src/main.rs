@@ -13,7 +13,6 @@ mod core_context;
 mod core_commands;
 mod core_groups;
 
-use rustls;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::info;
@@ -29,10 +28,8 @@ async fn health() -> Result<serde_json::Value, String> {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // Initialize rustls crypto provider
-    rustls::crypto::aws_lc_rs::default_provider()
-        .install_default()
-        .map_err(|e| anyhow::anyhow!("Failed to install rustls crypto provider: {:?}", e))?;
+    // Initialize PQC crypto provider
+    // Note: saorsa-pqc handles its own crypto provider initialization
 
     // Tracing
     tracing_subscriber::fmt()

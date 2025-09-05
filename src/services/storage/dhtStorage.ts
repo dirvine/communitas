@@ -16,6 +16,7 @@ export interface EncryptedBlock {
   signature: Uint8Array
   keyId: string
   publicKey: string
+  metadata?: BlockMetadata
   // Test/compatibility helpers
   nonce?: Uint8Array
   __returnType?: 'buffer' | 'uint8array'
@@ -51,11 +52,22 @@ export class DHTStorage {
   private keyId: string
   private isConnected = false
   private connectedNodes: Map<string, DHTNode> = new Map()
+  private cryptoReady: Promise<void>
+  private bootstrapNodes: string[]
+  private replicationFactor: number
+  private storedBlocks: Map<string, EncryptedBlock> = new Map()
+  private metadataIndex: Map<string, BlockMetadata> = new Map()
+  private identity: NetworkIdentity
+  private eventListeners: Map<string, ((data: any) => void)[]> = new Map()
 
   constructor(config: DHTConfig) {
     this.config = config
     this.encryptionKey = new Uint8Array(32)
     this.keyId = 'test-key-id'
+    this.bootstrapNodes = config.bootstrapNodes
+    this.replicationFactor = config.replicationFactor
+    this.identity = config.identity
+    this.cryptoReady = this.initialize()
     this.initialize()
   }
 
@@ -75,7 +87,7 @@ export class DHTStorage {
     crypto.getRandomValues(this.encryptionKey)
 
     // SECURITY: Generate key ID using Web Crypto API
-    const hashBuffer = await crypto.subtle.digest('SHA-256', this.encryptionKey)
+    const hashBuffer = await crypto.subtle.digest('SHA-256', new Uint8Array(this.encryptionKey))
     const hashArray = new Uint8Array(hashBuffer)
     this.keyId = Array.from(hashArray.slice(0, 16))
       .map(b => b.toString(16).padStart(2, '0'))
@@ -89,7 +101,7 @@ export class DHTStorage {
     // Simulate connection to bootstrap nodes
     for (const nodeAddress of this.bootstrapNodes) {
       const node: DHTNode = {
-        nodeId: this.generateNodeId(nodeAddress),
+        nodeId: await this.generateNodeId(nodeAddress),
         address: nodeAddress,
         publicKey: this.generatePublicKey(),
         isOnline: true
@@ -101,7 +113,7 @@ export class DHTStorage {
     while (this.connectedNodes.size < this.replicationFactor) {
       const addr = `sim://node-${index++}`
       const node: DHTNode = {
-        nodeId: this.generateNodeId(addr),
+        nodeId: await this.generateNodeId(addr),
         address: addr,
         publicKey: this.generatePublicKey(),
         isOnline: true,
@@ -163,7 +175,7 @@ export class DHTStorage {
       block.metadata = metadata
       this.storedBlocks.set(blockId, block)
     }
-    this.metadataIndex.push({ blockId, metadata })
+    this.metadataIndex.set(blockId, metadata)
     
     return blockId
   }
@@ -297,13 +309,15 @@ export class DHTStorage {
 
   // Utility methods
   async generateEncryptionKey(): Promise<Uint8Array> {
-    return new Uint8Array(crypto.randomBytes(32))
+    const key = new Uint8Array(32)
+    crypto.getRandomValues(key)
+    return key
   }
 
   async computeHash(data: Uint8Array): Promise<string> {
-    return crypto.createHash('sha256')
-      .update(data)
-      .digest('hex')
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer)
+    const hashArray = new Uint8Array(hashBuffer)
+    return Array.from(hashArray, byte => byte.toString(16).padStart(2, '0')).join('')
   }
 
   private computeDistance(hash1: string, hash2: string): number {
@@ -333,10 +347,10 @@ export class DHTStorage {
   // Metadata indexing
   async findByMimeType(mimeType: string): Promise<QueryResult[]> {
     const results: QueryResult[] = []
-    for (const entry of this.metadataIndex) {
-      if (entry.metadata.mimeType === mimeType) {
-        const nodes = await this.findNodes(entry.blockId)
-        results.push({ blockId: entry.blockId, nodes, metadata: entry.metadata })
+    for (const [blockId, metadata] of this.metadataIndex) {
+      if (metadata.mimeType === mimeType) {
+        const nodes = await this.findNodes(blockId)
+        results.push({ blockId, nodes, metadata })
       }
     }
     return results
@@ -372,7 +386,7 @@ export class DHTStorage {
     for (const [, node] of this.connectedNodes) {
       node.isOnline = true
     }
-    this.emit('networkHealed')
+    this.emit('networkHealed', {})
   }
 
   // Batch operations
@@ -420,14 +434,23 @@ export class DHTStorage {
     return null
   }
 
-  private generateNodeId(address: string): string {
-    return crypto.createHash('sha256')
-      .update(address)
-      .digest('hex')
+  private async generateNodeId(address: string): Promise<string> {
+    const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(address))
+    const hashArray = new Uint8Array(hashBuffer)
+    return Array.from(hashArray, byte => byte.toString(16).padStart(2, '0')).join('')
   }
 
   private generatePublicKey(): string {
-    return crypto.randomBytes(32).toString('hex')
+    const key = new Uint8Array(32)
+    crypto.getRandomValues(key)
+    return Array.from(key, byte => byte.toString(16).padStart(2, '0')).join('')
+  }
+
+  private emit(event: string, data: any): void {
+    const listeners = this.eventListeners.get(event)
+    if (listeners) {
+      listeners.forEach(listener => listener(data))
+    }
   }
 
   // Performance and monitoring

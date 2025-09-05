@@ -5,33 +5,61 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Communitas — Agents API</title>
     <meta name="description" content="Authoritative Agents API for Communitas + saorsa-core. Canonical signing, automation, and end-to-end flows." />
-    <link rel="stylesheet" href="/styles.css" />
+    
+    <!-- Inter Font - Same as saorsalabs.com -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="styles.css">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   </head>
   <body>
-    <header class="hero">
-      <div class="wrap">
-        <div class="logo" aria-hidden="true"></div>
-        <h1 class="title">Agents API</h1>
-        <p class="subtitle">Communitas + saorsa-core: complete automation and security model for humans and AIs.</p>
-        <div class="cta">
-          <a class="btn" href="/">← Home</a>
-          <a class="btn" href="https://github.com/dirvine/communitas-foundation/blob/main/AGENTS_API.md" target="_blank" rel="noopener">View on GitHub</a>
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <a href="index.html" style="text-decoration: none; color: inherit;">
+                    <span class="logo-text">Communitas</span>
+                </a>
+            </div>
+            <ul class="nav-menu">
+                <li><a href="index.html">Home</a></li>
+                <li><a href="index.html#features">Features</a></li>
+                <li><a href="agents.html" style="color: var(--text-primary); font-weight: 600;">Agents API</a></li>
+                <li><a href="agents-core.html">Core API</a></li>
+                <li><a href="https://github.com/dirvine/communitas" target="_blank" rel="noopener">GitHub</a></li>
+            </ul>
         </div>
-      </div>
-    </header>
+    </nav>
 
-    <main class="wrap">
-      <div class="panel" id="md-panel">
-        <div id="loading" class="muted">Loading AGENTS_API.md…</div>
-        <article id="content" class="md" hidden></article>
-      </div>
+    <main style="padding-top: 80px;">
+        <section class="hero" style="padding: 4rem 0 3rem;">
+            <div class="hero-container">
+                <h1 style="font-size: 2.5rem;">Agents API</h1>
+                <p class="hero-subtitle">Complete automation and security model for humans and AIs</p>
+                <div class="hero-buttons">
+                    <a href="https://github.com/dirvine/communitas-foundation/blob/main/AGENTS_API.md" class="btn btn-primary" target="_blank" rel="noopener">View on GitHub</a>
+                    <a href="agents-core.html" class="btn btn-secondary">Core API</a>
+                </div>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="container">
+                <div class="cta-section">
+                    <div id="loading" style="color: var(--text-secondary);">Loading AGENTS_API.md…</div>
+                    <article id="content" style="text-align: left; display: none;"></article>
+                </div>
+            </div>
+        </section>
     </main>
 
     <footer class="footer">
-      <div class="wrap">
-        <div>© 2025 Saorsa Labs Limited — Dual‑licensed (AGPL‑3.0‑or‑later & Commercial)</div>
-      </div>
+        <div class="container">
+            <div class="footer-bottom">
+                <p>&copy; 2024 Saorsa Labs Limited. Dual-licensed under AGPL-3.0 and Commercial terms.</p>
+            </div>
+        </div>
     </footer>
 
     <script>
@@ -44,8 +72,8 @@
           if (!res.ok) throw new Error('HTTP ' + res.status);
           const md = await res.text();
           content.innerHTML = marked.parse(md);
-          loading.hidden = true;
-          content.hidden = false;
+          loading.style.display = 'none';
+          content.style.display = 'block';
         } catch (e) {
           loading.textContent = 'Failed to load AGENTS_API.md: ' + (e && e.message ? e.message : e);
         }
@@ -53,4 +81,3 @@
     </script>
   </body>
   </html>
-

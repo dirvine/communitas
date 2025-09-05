@@ -1,111 +1,214 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Communitas — Local‑First PQC Collaboration</title>
-    <meta name="description" content="Local‑first PQC collaboration with per‑entity virtual disks and DNS‑free websites using Four‑Word identities. Powered by saorsa-core." />
-    <meta property="og:title" content="Communitas — Local‑First PQC Collaboration" />
-    <meta property="og:description" content="Messaging, channels, projects, and DNS‑free websites on a human‑verifiable network." />
-    <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://communitas.life/" />
-    <link rel="stylesheet" href="/styles.css" />
-  </head>
-  <body>
-    <header class="hero">
-      <div class="wrap">
-        <div class="logo" aria-hidden="true"></div>
-        <h1 class="title">Communitas</h1>
-        <p class="subtitle">
-          Local‑first collaboration for people and organizations — quantum‑secure messaging,
-          channels, projects, and per‑entity virtual disks. Publish DNS‑free websites bound to
-          Four‑Word identities. Powered by <strong>saorsa-core</strong>.
-        </p>
-        <div class="cta">
-          <a class="btn primary" href="https://github.com/dirvine/communitas-foundation" target="_blank" rel="noopener">GitHub</a>
-          <a class="btn" href="/agents.html">Agents API</a>
-          <a class="btn" href="/agents-core.html">saorsa-core API</a>
-          <a class="btn" href="mailto:saorsalabs@gmail.com">Contact</a>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Communitas - Local-First Collaboration Platform</title>
+    <meta name="description" content="Secure, decentralized collaboration platform with quantum-resistant cryptography, Four-Word identities, and DNS-free websites.">
+    <meta property="og:title" content="Communitas - Local-First Collaboration">
+    <meta property="og:description" content="Messaging, channels, projects, and DNS-free websites on a human-verifiable network.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://communitas.life/">
+    
+    <!-- Inter Font - Same as saorsalabs.com -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <span class="logo-text">Communitas</span>
+            </div>
+            <ul class="nav-menu">
+                <li><a href="#about">About</a></li>
+                <li><a href="#features">Features</a></li>
+                <li><a href="#technology">Technology</a></li>
+                <li><a href="https://github.com/dirvine/communitas" target="_blank" rel="noopener">GitHub</a></li>
+                <li><a href="agents.html">Agents</a></li>
+                <li><a href="mailto:saorsalabs@gmail.com" class="nav-contact">Contact</a></li>
+            </ul>
         </div>
-      </div>
-    </header>
+    </nav>
 
     <main>
-      <section class="wrap" style="padding-bottom: 8px;">
-        <div class="panel" style="margin-bottom:16px;">
-          <h2 style="margin-top:0; margin-bottom: 6px;">Imagine • Dream • Demand • Publish • Welcome</h2>
-          <div class="grid">
-            <div class="card"><h3>Imagine</h3><p class="muted">A world where you are completely private.</p></div>
-            <div class="card"><h3>Dream</h3><p class="muted">No third parties control or access your data and communications.</p></div>
-            <div class="card"><h3>Demand</h3><p class="muted">Your sovereignty. It’s yours — your family deserves protection too.</p></div>
-            <div class="card"><h3>Publish</h3><p class="muted">Your websites, blogs, and stories — never monetized or polluted with snoopers or ads.</p></div>
-            <div class="card"><h3>Welcome</h3><p class="muted">To Communitas — an ultra‑modern platform built on quantum‑proof cryptography, giving you WhatsApp, Dropbox, Zoom, and Slack in one.</p></div>
-          </div>
-          <p style="margin-top:12px;" class="muted">A network where you are 100% in control. Every person, group, project, organization — even conversation streams — can have a free website. Share secure comms, video conference, and screen share directly. No middleman, no snooping, no gatekeepers.</p>
-          <p class="muted"><strong>This is the Internet we all wanted and the web we all deserve — let’s take it.</strong></p>
-        </div>
-        <div class="grid" style="margin-bottom: 16px;">
-          <div class="card">
-            <h3>Four‑Word Identities</h3>
-            <p class="muted">Memorable, human‑verifiable addresses for people and entities. No centralized DNS, no phishing.</p>
-          </div>
-          <div class="card">
-            <h3>Virtual Disks per Entity</h3>
-            <p class="muted">Private (encrypted) and public (website) disks for orgs, groups, channels, projects, and individuals.</p>
-          </div>
-          <div class="card">
-            <h3>Quantum‑Secure Messaging</h3>
-            <p class="muted">Group messaging with threads, reactions, mentions — delivered over QUIC with PQC crypto.</p>
-          </div>
-          <div class="card">
-            <h3>DNS‑Free Websites</h3>
-            <p class="muted">Publish sites by updating <code>identity.website_root</code> with ML‑DSA signatures. Link via FWN.</p>
-          </div>
-        </div>
-      </section>
+        <section class="hero">
+            <div class="hero-container">
+                <h1 class="hero-title">Local-First Collaboration</h1>
+                <p class="hero-subtitle">
+                    Secure, decentralized platform for teams and organizations. Built with quantum-resistant 
+                    cryptography and Four-Word identities on the Saorsa networking stack.
+                </p>
+                <div class="hero-buttons">
+                    <a href="https://github.com/dirvine/communitas/releases" class="btn btn-primary">Download</a>
+                    <a href="#features" class="btn btn-secondary">Learn More</a>
+                </div>
+            </div>
+        </section>
 
-      <section class="wrap">
-        <div class="panel">
-          <h2 style="margin-top:0">For Developers & Agents</h2>
-          <p class="muted">Everything is scriptable through a clean Tauri IPC and saorsa-core APIs. No panics in production, explicit errors, canonical signing for sensitive updates.</p>
-          <div class="code" style="margin-top:12px;">
-            // Send a message to a channel
-            await invoke('core_send_message_to_channel', { channelId, text: 'Hello world' })
+        <section id="about" class="section">
+            <div class="container">
+                <div class="section-header">
+                    <h2>Imagine • Dream • Demand • Publish • Welcome</h2>
+                    <p class="lead">The Internet we all wanted and the web we all deserve.</p>
+                </div>
+                
+                <div class="features-grid">
+                    <div class="feature-card">
+                        <h3>Imagine</h3>
+                        <p>A world where you are completely private, with no surveillance or data harvesting.</p>
+                    </div>
+                    <div class="feature-card">
+                        <h3>Dream</h3>
+                        <p>No third parties control or access your data and communications — ever.</p>
+                    </div>
+                    <div class="feature-card">
+                        <h3>Demand</h3>
+                        <p>Your sovereignty. It's yours — your family deserves protection too.</p>
+                    </div>
+                    <div class="feature-card">
+                        <h3>Publish</h3>
+                        <p>Your websites, blogs, and stories — never monetized or polluted with ads.</p>
+                    </div>
+                    <div class="feature-card">
+                        <h3>Welcome</h3>
+                        <p>To Communitas — quantum-proof collaboration combining messaging, storage, and publishing.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
 
-            // Publish website + update identity
-            const canonicalHex = buildWebsiteRootCanonicalHex(entityHex, pkHex, websiteRootHex)
-            const sigHex = await mySigner(canonicalHex)
-            await invoke('core_identity_set_website_root', { idHex: entityHex, websiteRootHex, sigHex })
-          </div>
-          <p style="margin-top:12px;">
-            Docs: <a href="https://github.com/dirvine/communitas-foundation/blob/main/AGENTS_API.md" target="_blank" rel="noopener">AGENTS_API.md</a> · Core: <a href="https://github.com/dirvine/saorsa-core-foundation/blob/main/AGENTS_API.md" target="_blank" rel="noopener">saorsa-core/AGENTS_API.md</a>
-          </p>
-        </div>
-      </section>
+        <section id="features" class="section section-alt">
+            <div class="container">
+                <div class="section-header">
+                    <h2>Core Features</h2>
+                    <p>Everything you need for secure, decentralized collaboration</p>
+                </div>
+                
+                <div class="features-list">
+                    <div class="feature-item">
+                        <div class="feature-content">
+                            <h3>🔐 Four-Word Identities</h3>
+                            <p>Human-memorable addresses like "ocean-forest-moon-star" replace complex cryptographic keys. No DNS required, no phishing possible, completely decentralized identity system.</p>
+                        </div>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-content">
+                            <h3>🛡️ Quantum-Resistant Security</h3>
+                            <p>ML-KEM and ML-DSA algorithms protect your data against future quantum computers. Military-grade encryption with forward secrecy and perfect deniability.</p>
+                        </div>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-content">
+                            <h3>💾 Virtual Disks per Entity</h3>
+                            <p>Every person, group, project, and organization gets private encrypted storage and public website hosting. Distributed with Reed-Solomon error correction.</p>
+                        </div>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-content">
+                            <h3>🌐 DNS-Free Websites</h3>
+                            <p>Publish websites directly to Four-Word addresses. No domain registration, no hosting fees, no censorship. Websites are cryptographically bound to identities.</p>
+                        </div>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-content">
+                            <h3>💬 Secure Messaging</h3>
+                            <p>WhatsApp-style messaging with groups, channels, threads, reactions, and mentions. Everything end-to-end encrypted with post-quantum cryptography.</p>
+                        </div>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-content">
+                            <h3>📹 Direct Communication</h3>
+                            <p>Video calls, screen sharing, and file transfer directly between peers. No servers, no intermediaries, no surveillance possible.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
 
-      <section class="wrap" style="padding-top: 8px;">
-        <div class="grid">
-          <div class="card">
-            <h3>The New Web</h3>
-            <p class="muted">No centralized DNS. Identities bind website roots, verified by ML‑DSA. Human‑readable links via Four‑Word Networking.</p>
-          </div>
-          <div class="card">
-            <h3>Entity‑Scoped Collaboration</h3>
-            <p class="muted">Channels, projects, and groups each with their own disks and permissions. Markdown‑first, FEC‑sealed content.</p>
-          </div>
-          <div class="card">
-            <h3>Future: Personal AI</h3>
-            <p class="muted">On‑device transcription, summarization, and TTS — personalized Jarvis‑like tools, privacy by design.</p>
-          </div>
-        </div>
-      </section>
+        <section id="technology" class="section">
+            <div class="container">
+                <div class="section-header">
+                    <h2>Built on Saorsa Core</h2>
+                    <p>Enterprise-grade networking technology from Saorsa Labs</p>
+                </div>
+                
+                <div class="tech-grid">
+                    <div class="tech-card">
+                        <h3>🚀 High Performance</h3>
+                        <p>Written in Rust for maximum speed and safety. Native performance with zero-cost abstractions.</p>
+                    </div>
+                    <div class="tech-card">
+                        <h3>🔄 CRDT Collaboration</h3>
+                        <p>Yjs-powered real-time collaboration with automatic conflict resolution and offline support.</p>
+                    </div>
+                    <div class="tech-card">
+                        <h3>🗺️ Geographic Routing</h3>
+                        <p>Intelligent peer selection based on geographic proximity for optimal performance.</p>
+                    </div>
+                    <div class="tech-card">
+                        <h3>🔧 Developer Friendly</h3>
+                        <p>Clean APIs for agents and automation. Everything scriptable through Tauri IPC.</p>
+                    </div>
+                </div>
+
+                <div class="cta-section">
+                    <h3>Ready to take back control?</h3>
+                    <p>Join the movement for truly private, decentralized collaboration.</p>
+                    <div class="hero-buttons">
+                        <a href="https://github.com/dirvine/communitas" class="btn btn-primary">View on GitHub</a>
+                        <a href="agents.html" class="btn btn-secondary">Explore APIs</a>
+                    </div>
+                </div>
+            </div>
+        </section>
     </main>
 
     <footer class="footer">
-      <div class="wrap">
-        <div>© 2025 Saorsa Labs Limited — Dual‑licensed (AGPL‑3.0‑or‑later & Commercial)</div>
-        <div>Contact: <a href="mailto:saorsalabs@gmail.com">saorsalabs@gmail.com</a></div>
-      </div>
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h3>Communitas</h3>
+                    <p>Local-first collaboration platform powered by Saorsa Core technology.</p>
+                    <div class="footer-links">
+                        <a href="https://github.com/dirvine/communitas" target="_blank" rel="noopener">GitHub</a>
+                        <a href="https://saorsalabs.com" target="_blank" rel="noopener">Saorsa Labs</a>
+                    </div>
+                </div>
+                <div class="footer-section">
+                    <h4>Resources</h4>
+                    <ul>
+                        <li><a href="agents.html">Agents API</a></li>
+                        <li><a href="agents-core.html">Core API</a></li>
+                        <li><a href="https://github.com/dirvine/communitas/wiki">Documentation</a></li>
+                        <li><a href="https://github.com/dirvine/communitas/issues">Support</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h4>Technology</h4>
+                    <ul>
+                        <li><a href="https://github.com/dirvine/saorsa-core">Saorsa Core</a></li>
+                        <li><a href="https://tauri.app">Tauri Framework</a></li>
+                        <li><a href="https://www.rust-lang.org">Rust</a></li>
+                        <li><a href="https://reactjs.org">React</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h4>Legal</h4>
+                    <ul>
+                        <li><a href="https://github.com/dirvine/communitas/blob/main/LICENSE-AGPL-3.0">AGPL License</a></li>
+                        <li><a href="https://github.com/dirvine/communitas/blob/main/LICENSE-COMMERCIAL.md">Commercial License</a></li>
+                        <li><a href="mailto:saorsalabs@gmail.com">Contact</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2024 Saorsa Labs Limited. Dual-licensed under AGPL-3.0 and Commercial terms.</p>
+            </div>
+        </div>
     </footer>
-  </body>
-  </html>
+</body>
+</html>

@@ -1,9 +1,9 @@
 [package]
 name = "communitas-tauri"
 version = "0.1.1"
-description = "Communitas P2P Chat & Diagnostics - Tauri Backend"
+description = "Communitas desktop app backend (Tauri) — local-first PQC collaboration with per-entity virtual disks and DNS-free websites"
 authors = ["Saorsa Labs Limited <saorsalabs@gmail.com>"]
-license = "AGPL-3.0"
+license = "AGPL-3.0-or-later"
 repository = "https://github.com/dirvine/communitas-foundation"
 homepage = "https://github.com/dirvine/communitas-foundation"
 documentation = "https://docs.rs/communitas-tauri"
@@ -19,29 +19,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 name = "communitas-tauri"
 path = "src/main.rs"
 
-[[bin]]
-name = "bootstrap"
-path = "src/bin/bootstrap.rs"
-
-[[bin]]
-name = "test_keyring"
-path = "test_keyring.rs"
-
-[[bin]]
-name = "test_secure_storage_isolated"
-path = "test_secure_storage_isolated.rs"
-
-[[bin]]
-name = "test_keyring_detailed"
-path = "test_keyring_detailed.rs"
-
-[[bin]]
-name = "test_secure_storage_final"
-path = "test_secure_storage_final.rs"
-
-[[bin]]
-name = "debug_keyring"
-path = "debug_keyring.rs"
+ 
 
 [build-dependencies]
 tauri-build = { version = "2.3.0", features = [] }
@@ -54,14 +32,14 @@ log = "0.4"
 tauri = { version = "2.6.1", features = [] }
 tauri-plugin-log = "2"
 
-# Saorsa Labs - Use GitHub dependencies
-saorsa-core = "0.2.6"
+# Saorsa Labs - Updated to latest version
+saorsa-core = "0.3.17"
 tokio = { version = "1.39", features = ["full"] }
 anyhow = "1.0"
 thiserror = "1.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-rustls = { version = "0.23", features = ["aws_lc_rs"] }
+
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.5", features = ["derive"] }
@@ -79,22 +57,21 @@ getrandom = "0.2"
 four-word-networking = "2.3"
 
 # Post-Quantum Cryptographic dependencies
-saorsa-pqc = "0.3.5"
-hkdf = "0.12"
-hmac = "0.12"
-sha2 = "0.10"
+saorsa-pqc = "0.3.12"
+saorsa-seal = "0.1.2"
 rand = "0.8"
 
 # Database and storage
-sqlx = { version = "0.8", features = [
-    "runtime-tokio-rustls",
-    "sqlite",
-    "chrono",
-    "uuid",
-] }
+# Using rusqlite to match saorsa-core 0.3.16 dependencies
+rusqlite = { version = "0.37", features = ["chrono", "serde_json", "uuid", "bundled"] }
+deadpool-sqlite = "0.12.1"
+# Note: sqlx removed to avoid SQLite version conflicts with rusqlite
 
 # Compression
 flate2 = "1.0"
+
+# HTTP client for auto-updater
+reqwest = { version = "0.12", features = ["json"] }
 
 # File type detection
 mime_guess = "2.0"
@@ -103,9 +80,9 @@ mime_guess = "2.0"
 keyring = "3.2"
 base64 = "0.22"
 
-# Saorsa ecosystem for P2P functionality (from crates.io)
-saorsa-fec = "0.2.2"
-saorsa-mls = "0.1.0"
+# Saorsa ecosystem for P2P functionality (from crates.io) - updated to latest
+saorsa-fec = "0.4.11"
+saorsa-mls = "0.1.5"
 saorsa-rsps = "0.2.0"
 
 # Security and validation dependencies
@@ -115,7 +92,6 @@ argon2 = "0.5"
 zeroize = "1.7"
 regex = "1.10"
 lazy_static = "1.4"
-chacha20poly1305 = "0.10.1"
 
 # Testing dependencies
 [dev-dependencies]

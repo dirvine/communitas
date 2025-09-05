@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Communitas — Agents API</title>
+    <meta name="description" content="Authoritative Agents API for Communitas + saorsa-core. Canonical signing, automation, and end-to-end flows." />
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  </head>
+  <body>
+    <header class="hero">
+      <div class="wrap">
+        <div class="logo" aria-hidden="true"></div>
+        <h1 class="title">Agents API</h1>
+        <p class="subtitle">Communitas + saorsa-core: complete automation and security model for humans and AIs.</p>
+        <div class="cta">
+          <a class="btn" href="/">← Home</a>
+          <a class="btn" href="https://github.com/dirvine/communitas-foundation/blob/main/AGENTS_API.md" target="_blank" rel="noopener">View on GitHub</a>
+        </div>
+      </div>
+    </header>
+
+    <main class="wrap">
+      <div class="panel" id="md-panel">
+        <div id="loading" class="muted">Loading AGENTS_API.md…</div>
+        <article id="content" class="md" hidden></article>
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="wrap">
+        <div>© 2025 Saorsa Labs Limited — Dual‑licensed (AGPL‑3.0‑or‑later & Commercial)</div>
+      </div>
+    </footer>
+
+    <script>
+      (async function() {
+        const RAW_URL = 'https://raw.githubusercontent.com/dirvine/communitas-foundation/main/AGENTS_API.md';
+        const loading = document.getElementById('loading');
+        const content = document.getElementById('content');
+        try {
+          const res = await fetch(RAW_URL, { cache: 'no-cache' });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          const md = await res.text();
+          content.innerHTML = marked.parse(md);
+          loading.hidden = true;
+          content.hidden = false;
+        } catch (e) {
+          loading.textContent = 'Failed to load AGENTS_API.md: ' + (e && e.message ? e.message : e);
+        }
+      })();
+    </script>
+  </body>
+  </html>
+

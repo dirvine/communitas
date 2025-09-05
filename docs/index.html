@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Communitas — Local‑First PQC Collaboration</title>
+    <meta name="description" content="Local‑first PQC collaboration with per‑entity virtual disks and DNS‑free websites using Four‑Word identities. Powered by saorsa-core." />
+    <meta property="og:title" content="Communitas — Local‑First PQC Collaboration" />
+    <meta property="og:description" content="Messaging, channels, projects, and DNS‑free websites on a human‑verifiable network." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://communitas.life/" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="hero">
+      <div class="wrap">
+        <div class="logo" aria-hidden="true"></div>
+        <h1 class="title">Communitas</h1>
+        <p class="subtitle">
+          Local‑first collaboration for people and organizations — quantum‑secure messaging,
+          channels, projects, and per‑entity virtual disks. Publish DNS‑free websites bound to
+          Four‑Word identities. Powered by <strong>saorsa-core</strong>.
+        </p>
+        <div class="cta">
+          <a class="btn primary" href="https://github.com/dirvine/communitas-foundation" target="_blank" rel="noopener">GitHub</a>
+          <a class="btn" href="/agents.html">Agents API</a>
+          <a class="btn" href="/agents-core.html">saorsa-core API</a>
+          <a class="btn" href="mailto:saorsalabs@gmail.com">Contact</a>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="wrap" style="padding-bottom: 8px;">
+        <div class="panel" style="margin-bottom:16px;">
+          <h2 style="margin-top:0; margin-bottom: 6px;">Imagine • Dream • Demand • Publish • Welcome</h2>
+          <div class="grid">
+            <div class="card"><h3>Imagine</h3><p class="muted">A world where you are completely private.</p></div>
+            <div class="card"><h3>Dream</h3><p class="muted">No third parties control or access your data and communications.</p></div>
+            <div class="card"><h3>Demand</h3><p class="muted">Your sovereignty. It’s yours — your family deserves protection too.</p></div>
+            <div class="card"><h3>Publish</h3><p class="muted">Your websites, blogs, and stories — never monetized or polluted with snoopers or ads.</p></div>
+            <div class="card"><h3>Welcome</h3><p class="muted">To Communitas — an ultra‑modern platform built on quantum‑proof cryptography, giving you WhatsApp, Dropbox, Zoom, and Slack in one.</p></div>
+          </div>
+          <p style="margin-top:12px;" class="muted">A network where you are 100% in control. Every person, group, project, organization — even conversation streams — can have a free website. Share secure comms, video conference, and screen share directly. No middleman, no snooping, no gatekeepers.</p>
+          <p class="muted"><strong>This is the Internet we all wanted and the web we all deserve — let’s take it.</strong></p>
+        </div>
+        <div class="grid" style="margin-bottom: 16px;">
+          <div class="card">
+            <h3>Four‑Word Identities</h3>
+            <p class="muted">Memorable, human‑verifiable addresses for people and entities. No centralized DNS, no phishing.</p>
+          </div>
+          <div class="card">
+            <h3>Virtual Disks per Entity</h3>
+            <p class="muted">Private (encrypted) and public (website) disks for orgs, groups, channels, projects, and individuals.</p>
+          </div>
+          <div class="card">
+            <h3>Quantum‑Secure Messaging</h3>
+            <p class="muted">Group messaging with threads, reactions, mentions — delivered over QUIC with PQC crypto.</p>
+          </div>
+          <div class="card">
+            <h3>DNS‑Free Websites</h3>
+            <p class="muted">Publish sites by updating <code>identity.website_root</code> with ML‑DSA signatures. Link via FWN.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="wrap">
+        <div class="panel">
+          <h2 style="margin-top:0">For Developers & Agents</h2>
+          <p class="muted">Everything is scriptable through a clean Tauri IPC and saorsa-core APIs. No panics in production, explicit errors, canonical signing for sensitive updates.</p>
+          <div class="code" style="margin-top:12px;">
+            // Send a message to a channel
+            await invoke('core_send_message_to_channel', { channelId, text: 'Hello world' })
+
+            // Publish website + update identity
+            const canonicalHex = buildWebsiteRootCanonicalHex(entityHex, pkHex, websiteRootHex)
+            const sigHex = await mySigner(canonicalHex)
+            await invoke('core_identity_set_website_root', { idHex: entityHex, websiteRootHex, sigHex })
+          </div>
+          <p style="margin-top:12px;">
+            Docs: <a href="https://github.com/dirvine/communitas-foundation/blob/main/AGENTS_API.md" target="_blank" rel="noopener">AGENTS_API.md</a> · Core: <a href="https://github.com/dirvine/saorsa-core-foundation/blob/main/AGENTS_API.md" target="_blank" rel="noopener">saorsa-core/AGENTS_API.md</a>
+          </p>
+        </div>
+      </section>
+
+      <section class="wrap" style="padding-top: 8px;">
+        <div class="grid">
+          <div class="card">
+            <h3>The New Web</h3>
+            <p class="muted">No centralized DNS. Identities bind website roots, verified by ML‑DSA. Human‑readable links via Four‑Word Networking.</p>
+          </div>
+          <div class="card">
+            <h3>Entity‑Scoped Collaboration</h3>
+            <p class="muted">Channels, projects, and groups each with their own disks and permissions. Markdown‑first, FEC‑sealed content.</p>
+          </div>
+          <div class="card">
+            <h3>Future: Personal AI</h3>
+            <p class="muted">On‑device transcription, summarization, and TTS — personalized Jarvis‑like tools, privacy by design.</p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="wrap">
+        <div>© 2025 Saorsa Labs Limited — Dual‑licensed (AGPL‑3.0‑or‑later & Commercial)</div>
+        <div>Contact: <a href="mailto:saorsalabs@gmail.com">saorsalabs@gmail.com</a></div>
+      </div>
+    </footer>
+  </body>
+  </html>

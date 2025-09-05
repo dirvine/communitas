@@ -7,7 +7,7 @@ authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 repository.workspace = true
-description = "A diagnostic chat application for the P2P Foundation network"
+description = "Local-first PQC collaboration app with per-entity virtual disks and DNS-free websites (saorsa-core)"
 keywords = ["p2p", "chat", "diagnostics", "networking", "tauri"]
 categories = ["network-programming", "command-line-utilities"]
 include = [
@@ -23,8 +23,8 @@ include = [
 identifier = "com.p2pfoundation.communitas"
 
 [dependencies]
-# P2P Foundation
-saorsa-core = "0.2.6"
+# P2P Foundation - Updated to latest version
+saorsa-core = "0.3.17"
 
 # Async runtime
 tokio = { version = "1.39", features = ["full"] }
@@ -74,12 +74,11 @@ workspace = true
 members = ["src-tauri"]
 
 [workspace.lints]
-rust.analyzer = { level = "warn" }
 
 [workspace.package]
 edition = "2024"
 version = "0.1.1"
 authors = ["Saorsa Labs Limited <saorsalabs@gmail.com>"]
-license = "AGPL-3.0"
+license = "AGPL-3.0-or-later"
 homepage = "https://github.com/dirvine/communitas-foundation"
 repository = "https://github.com/dirvine/communitas-foundation"

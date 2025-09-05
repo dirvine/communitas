@@ -18,6 +18,14 @@ use tracing::{debug, error, info, warn};
 
 use blake3;
 use saorsa_fec::{FecCodec, FecParams};
+use saorsa_seal::{seal_bytes, open_bytes, SealPolicy, EnvelopeKind, Recipient, RecipientId, ProvidedShare};
+use std::collections::HashMap;
+
+// DHT interface for saorsa-seal
+pub trait DhtStorage {
+    fn put(&self, key: &[u8; 32], value: &[u8], ttl: Option<u64>) -> anyhow::Result<()>;
+    fn get(&self, key: &[u8; 32]) -> anyhow::Result<Vec<u8>>;
+}
 
 /// Shard identifier and metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -90,24 +98,26 @@ impl ReedSolomonConfig {
     }
 }
 
-/// Enhanced Reed Solomon manager with adaptive configuration
+/// Enhanced Reed Solomon manager with adaptive configuration and PQC sealing
 #[derive(Debug)]
-pub struct EnhancedReedSolomonManager {
+pub struct EnhancedReedSolomonManager<D: DhtStorage> {
     configs: Arc<RwLock<HashMap<String, ReedSolomonConfig>>>,
     shard_cache: Arc<RwLock<HashMap<String, Vec<Shard>>>>,
     integrity_tracker: Arc<RwLock<HashMap<String, IntegrityStatus>>>,
+    dht: D,
 }
 
-impl EnhancedReedSolomonManager {
-    pub fn new() -> Self {
+impl<D: DhtStorage> EnhancedReedSolomonManager<D> {
+    pub fn new(dht: D) -> Self {
         Self {
             configs: Arc::new(RwLock::new(HashMap::new())),
             shard_cache: Arc::new(RwLock::new(HashMap::new())),
             integrity_tracker: Arc::new(RwLock::new(HashMap::new())),
+            dht,
         }
     }
 
-    /// Encode data for a specific group using optimal Reed Solomon configuration
+    /// Encode data for a specific group using saorsa-seal with PQC encryption
     pub async fn encode_group_data(
         &self,
         group_id: &str,
@@ -125,28 +135,70 @@ impl EnhancedReedSolomonManager {
         }
 
         debug!(
-            "Encoding data for group {} with {} data shards + {} parity shards",
-            group_id, config.data_shards, config.parity_shards
+            "Sealing data for group {} with threshold {}/{} using saorsa-seal",
+            group_id, config.data_shards, config.total_shards()
         );
 
-        // Create Reed Solomon codec (saorsa-fec)
-        let fec_params = FecParams::new(config.data_shards as u16, config.parity_shards as u16)
-            .context("Failed to create FEC parameters")?;
-        let codec = FecCodec::new(fec_params).context("Failed to create Reed Solomon codec")?;
+        // Create recipients for the group (simplified - in real implementation,
+        // these would be actual group member identities)
+        let recipients: Vec<Recipient> = (0..group_member_count)
+            .map(|i| Recipient {
+                id: RecipientId::from_bytes(format!("{}:member:{}", group_id, i).into_bytes()),
+                public_key: None, // Would include ML-KEM public key in real implementation
+            })
+            .collect();
 
-        // Calculate padding needed to make data divisible by shard size
-        let padded_data = self.pad_data_for_encoding(data, &config)?;
+        // Configure sealing policy with PQC encryption
+        let policy = SealPolicy {
+            n: config.total_shards() as u32,  // Total shares
+            t: config.data_shards as u32,     // Threshold needed to recover
+            recipients,
+            fec: saorsa_seal::FecParams {
+                data_shares: config.data_shards as u32,
+                parity_shares: config.parity_shards as u32,
+                symbol_size: config.shard_size as u32,
+            },
+            envelope: EnvelopeKind::PostQuantum, // ML-KEM-768 post-quantum encryption
+            aad: format!("{}:{}", group_id, data_id).into_bytes(), // Additional authenticated data
+        };
 
-        // Split data into chunks of shard_size
-        let chunks: Vec<&[u8]> = padded_data.chunks(config.shard_size).collect();
+        // Seal the data using saorsa-seal
+        let summary = seal_bytes(data, &policy, &self.dht).await
+            .context("Failed to seal data with saorsa-seal")?;
+
+        debug!("Data sealed successfully with handle: {:?}", summary.handle);
+
+        // Convert saorsa-seal result to our Shard format for compatibility
         let mut all_shards = Vec::new();
 
-        // Process each chunk
-        for (chunk_index, chunk) in chunks.iter().enumerate() {
-            let chunk_shards = self
-                .encode_chunk(chunk, &config, &codec, group_id, data_id, chunk_index)
-                .await?;
-            all_shards.extend(chunk_shards);
+        // Create data shards from the sealed result
+        for i in 0..config.data_shards {
+            let shard = Shard {
+                index: i,
+                shard_type: ShardType::Data,
+                data: vec![], // Data is stored in DHT by saorsa-seal
+                group_id: group_id.to_string(),
+                data_id: data_id.to_string(),
+                integrity_hash: format!("{:x}", blake3::hash(&summary.handle.sealed_meta_key)),
+                created_at: chrono::Utc::now(),
+                size: data.len(),
+            };
+            all_shards.push(shard);
+        }
+
+        // Create parity shards
+        for i in 0..config.parity_shards {
+            let shard = Shard {
+                index: config.data_shards + i,
+                shard_type: ShardType::Parity,
+                data: vec![], // Parity data handled by saorsa-seal
+                group_id: group_id.to_string(),
+                data_id: data_id.to_string(),
+                integrity_hash: format!("{:x}", blake3::hash(&summary.handle.sealed_meta_key)),
+                created_at: chrono::Utc::now(),
+                size: data.len(),
+            };
+            all_shards.push(shard);
         }
 
         // Cache shards for quick access

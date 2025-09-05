@@ -1,138 +1,31 @@
-# Communitas - Decentralized P2P Collaboration Platform
+# Communitas — The Local‑First Collaboration App (saorsa-core)
 
-*Empowering Private, Decentralised Collaboration*
+Communitas is a local‑first, PQC‑ready collaboration app that merges the best of WhatsApp, Dropbox, Zoom, and Slack into one experience — without centralized servers or DNS. Identities are human‑verifiable four words, storage is per‑entity virtual disks (org, group, channel, project, individual), and websites are published without DNS via identity‑bound website roots.
 
-Communitas rethinks online collaboration from the ground up. It combines messaging, voice and video calling, screen sharing and collaborative file storage into a single desktop application. Instead of relying on corporate servers, every connection is peer-to-peer and every identity is human-readable. With Communitas you chat, call and work together without surrendering your data to a third party. It's the privacy-first alternative to WhatsApp, Slack and Dropbox.
+Two apps, one core:
+- Desktop app (Tauri v2): rich UI with Tauri commands for automation
+- Headless node: bootstrap/seeding and personal nodes (future rewards)
 
-## 🌟 Key Features
+Backed by Saorsa Core (crates.io `saorsa-core`, v0.3.17): DHT, QUIC, identities, groups, messaging, virtual disks, and security.
 
-### Human-Friendly Addresses
-At the heart of Communitas is a four-word identity system. Each user, organisation or project is identified by a unique combination of four words—such as `ocean-forest-mountain-river`—that map to a secure record in a distributed hash table. No more cryptic hashes or email-style usernames: sharing your address is as easy as sharing a memorable phrase.
+## 🚀 Quick Start (Desktop Dev)
 
-### Your Data, Your Control
-Communitas stores your files in a two-stage backup system:
-- **Local shards**: Data is split and distributed among your friends or colleagues
-- **Network storage**: Shards are published to the Saorsa network's decentralized storage using trust-weighted DHT and erasure coding
+Prerequisites
+- Node 20+
+- Rust 1.85+
+- Platform deps for Tauri
 
-Everything is encrypted end-to-end, and only you and your chosen collaborators can decrypt it.
-
-### Markdown-Powered Web
-Every storage container has a built-in web directory with Markdown files. Write your project plan in `home.md`, add images or videos, and publish it under your four-word address. Others can link to your pages using the same simple four-word format. It's a return to a text-first internet, free from ads and trackers.
-
-### Secure Communication
-- **Messaging Layer Security** with post-quantum keys
-- **Voice and video calls** over modern QUIC streams
-- **Screen sharing and file transfers** built-in
-- **End-to-end encryption** for all communications
-
-## 🚀 Quick Start - Local Development
-
-### Prerequisites
-- Rust 1.85+ with Tauri CLI
-- Node.js 18+ with npm
-- Docker (optional, for containerized bootstrap)
-
-### 1. Clone and Setup
+Setup & Run
 ```bash
 git clone https://github.com/dirvine/communitas.git
 cd communitas
 npm install
-```
-
-### 2. Start Local Bootstrap Node
-```bash
-# Option A: Using Docker (Recommended)
-docker run -d \
-  --name communitas-bootstrap \
-  -p 9001:9001 \
-  -p 9100:9100 \
-  -p 9110:9110 \
-  -p 9120:9120 \
-  saorsa/bootstrap-node:latest
-
-# Option B: Using local Rust bootstrap (if available)
-cargo run --bin bootstrap-node -- --port 9001
-```
-
-### 3. Configure Environment
-```bash
-# Set local bootstrap address
-export COMMUNITAS_LOCAL_BOOTSTRAP="127.0.0.1:9001"
-
-# Optional: Set local data directory
-export COMMUNITAS_DATA_DIR="./communitas-test-data"
-```
-
-### 4. Run the Application
-```bash
-# Development mode
-npm run tauri dev
-
-# Or build and run
-npm run tauri build
 npm run tauri dev
 ```
 
-## 🏗️ Setting Up a Local Testnet
+## Headless Nodes & Testnet
 
-### Architecture Overview
-```
-┌─────────────────┐    ┌─────────────────┐
-│   Bootstrap     │────│     Node 1      │
-│   Node (Port    │    │   (Port 9002)   │
-│    9001)        │    └─────────────────┘
-└─────────────────┘             │
-         │                     │
-         │                     │
-         │              ┌─────────────────┐
-         └──────────────│     Node 2      │
-                        │   (Port 9003)   │
-                        └─────────────────┘
-```
-
-### Bootstrap Node Setup
-
-#### Option 1: Docker Container
-```bash
-# Build bootstrap image
-docker build -f Dockerfile.bootstrap -t communitas-bootstrap .
-
-# Run bootstrap node
-docker run -d \
-  --name communitas-bootstrap \
-  -p 9001:9001 \
-  -p 9100:9100 \
-  -p 9110:9110 \
-  -p 9120:9120 \
-  -e RUST_LOG=info \
-  communitas-bootstrap
-```
-
-#### Option 2: Local Bootstrap Node
-```rust
-// Create a simple bootstrap node
-use std::net::SocketAddr;
-use tokio::net::TcpListener;
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let addr = "127.0.0.1:9001".parse::<SocketAddr>()?;
-    let listener = TcpListener::bind(addr).await?;
-
-    println!("Bootstrap node listening on {}", addr);
-
-    loop {
-        let (socket, peer_addr) = listener.accept().await?;
-        println!("New connection from {}", peer_addr);
-
-        // Handle P2P handshake
-        tokio::spawn(async move {
-            // Implement basic P2P protocol handling
-            handle_peer_connection(socket).await;
-        });
-    }
-}
-```
+Deploy seeds and personal nodes across regions with systemd and cloud‑init. See `finalise/DEPLOY_TESTNET.md` for DigitalOcean templates, ports, and four‑word endpoints.
 
 ### Multiple Node Setup
 
@@ -166,58 +59,47 @@ export COMMUNITAS_DATA_DIR="./node3-data"
 npm run tauri dev
 ```
 
-## 🏛️ System Architecture
+## Architecture (at a glance)
 
-### Core Components
-Communitas is built on the Saorsa ecosystem with the following key components:
+- Frontend: React + TypeScript + MUI (Tauri WebView)
+- Backend: Rust (Tauri v2)
+- Core: saorsa-core (DHT, QUIC, identities, groups, messaging, virtual disks)
+- Crypto: PQC (ML‑DSA/ML‑KEM); XChaCha20‑Poly1305 for sealing
+- Storage: content addressed, FEC‑sealed objects, per‑entity virtual disks
 
-- **Frontend**: React 18 + TypeScript + Material-UI
-- **Backend**: Rust with Tauri v2 for cross-platform desktop app
-- **P2P Network**: Saorsa Core with trust-weighted Kademlia DHT
-- **Cryptography**: Post-quantum cryptography (ML-KEM/ML-DSA)
-- **Storage**: Content-addressed storage with Reed-Solomon erasure coding
-- **Communication**: QUIC transport with PQC channel binding
+## Docs & Automation
 
-### Entity Types
-Communitas treats entities as first-class citizens:
-- **Individuals**: Single users with personal identity and storage
-- **Organisations**: Groupings of individuals with hierarchical structure
-- **Groups**: Small sets of identities (friends, colleagues)
-- **Channels**: Topic-based spaces within organisations
-- **Projects**: Containers for specific work items
+- Communitas agents API: `AGENTS_API.md`
+- Saorsa core agents API: `../saorsa-core/AGENTS_API.md`
+- Testnet & bootstrap: `finalise/DEPLOY_TESTNET.md`
 
-### Storage System
-- **Two-stage backup**: Local shards + network DHT storage
-- **Policy-based encryption**: Different security levels per use case
-- **Content addressing**: BLAKE3 hashing with optimal chunking
-- **Erasure coding**: Reed-Solomon FEC for data durability
+## Security & Lint Policy
 
-## 🔧 Environment Variables
+- No panics/unwrap/expect in production code
+- Clippy policy:
+  - `cargo clippy --all-features -- -D clippy::panic -D clippy::unwrap_used -D clippy::expect_used`
+- Formatting: `cargo fmt --all` before commits/CI
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `COMMUNITAS_LOCAL_BOOTSTRAP` | Bootstrap node address | Production bootstrap |
-| `COMMUNITAS_P2P_PORT` | P2P listening port | Auto-assigned |
-| `COMMUNITAS_DATA_DIR` | Data storage directory | `./communitas-data` |
-| `RUST_LOG` | Logging level | `info` |
-| `COMMUNITAS_TESTNET` | Enable testnet mode | `false` |
+## Contributing
 
-## 🧪 Testing the Testnet
+- Conventional commits (`feat:`, `fix:`, `docs:`, `chore:`, etc.)
+- Ensure:
+  - `npm run typecheck`
+  - `cargo fmt --all`
+  - `cargo clippy --all-features -- -D clippy::panic -D clippy::unwrap_used -D clippy::expect_used`
 
-### 1. Health Check
-```bash
-curl http://localhost:1420/health
-```
+## License
 
-### 2. Network Status
-```bash
-# Check peer connections
-curl http://localhost:1420/api/network/status
-```
+AGPL‑3.0 for open collaboration. Commercial licensing available via Saorsa Labs.
 
-### 3. Create Test Data
-```bash
-# Create a test organization
+---
+
+### Repository settings (for maintainers)
+
+- Suggested GitHub description:
+  - “Local‑first PQC collaboration: messaging, channels, virtual disks per entity, and DNS‑free websites with Four‑Word identities. Powered by saorsa-core.”
+- Suggested topics:
+  - `p2p`, `quic`, `post-quantum`, `tauri`, `webrtc`, `dht`, `decentralized`, `collaboration`, `virtual-disk`, `dnsless-web`
 curl -X POST http://localhost:1420/api/organizations \
   -H "Content-Type: application/json" \
   -d '{"name": "Test Organization", "description": "Local testnet org"}'

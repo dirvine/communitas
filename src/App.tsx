@@ -80,6 +80,8 @@ import { CollaborativeEditingTest } from './components/testing/CollaborativeEdit
 import { SimpleCollaborationTest } from './components/testing/SimpleCollaborationTest'
 import { TestPage } from './components/testing/TestPage'
 import { SimpleTest } from './components/testing/SimpleTest'
+import { MessageConsole } from './components/dev/MessageConsole'
+import WebsitePublishPanel from './components/dev/WebsitePublishPanel'
 
 // Test button component that uses React Router navigation
 const TestButton: React.FC = () => {
@@ -515,6 +517,8 @@ function App() {
                     <Route path="/test/page" element={<TestPage />} />
                     <Route path="/test/collaboration" element={<CollaborativeEditingTest />} />
                     <Route path="/test/simple" element={<SimpleCollaborationTest />} />
+                    <Route path="/dev/console" element={<MessageConsole />} />
+                    <Route path="/dev/website" element={<WebsitePublishPanel />} />
                     <Route path="/org/:orgId/*" element={<UnifiedDashboard userId="user_owner_123" userName="Owner" />} />
                     <Route path="/project/:projectId/*" element={<UnifiedDashboard userId="user_owner_123" userName="Owner" />} />
                     <Route path="*" element={<Navigate to="/" replace />} />

@@ -36,3 +36,9 @@ impl From<anyhow::Error> for AppError {
         AppError::Other(e.to_string())
     }
 }
+
+impl From<toml::de::Error> for AppError {
+    fn from(e: toml::de::Error) -> Self {
+        AppError::Other(format!("TOML error: {}", e))
+    }
+}

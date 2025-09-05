@@ -4,11 +4,10 @@
  * Provides a controlled testing environment for P2P operations,
  * storage, messaging, and DHT functionality.
  */
-
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::RwLock;
 use tempfile::TempDir;
+use tokio::sync::RwLock;
 
 /// Simulated network node for testing
 pub struct TestNode {
@@ -53,7 +52,10 @@ impl NetworkSimulator {
     }
 
     pub fn are_connected(&self, node1: usize, node2: usize) -> bool {
-        self.connections.get(&(node1, node2)).copied().unwrap_or(false)
+        self.connections
+            .get(&(node1, node2))
+            .copied()
+            .unwrap_or(false)
     }
 
     pub async fn get_node(&self, id: usize) -> Option<Arc<RwLock<TestNode>>> {
@@ -72,10 +74,7 @@ impl TestHarness {
         let temp_dir = TempDir::new()?;
         let network = Arc::new(RwLock::new(NetworkSimulator::new()));
 
-        let mut harness = TestHarness {
-            network,
-            temp_dir,
-        };
+        let mut harness = TestHarness { network, temp_dir };
 
         // Create and add nodes
         for i in 0..node_count {
@@ -98,11 +97,17 @@ impl TestHarness {
         Ok(())
     }
 
-    pub async fn get_storage_engine(&self, _node_id: usize) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn get_storage_engine(
+        &self,
+        _node_id: usize,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         Ok(())
     }
 
-    pub async fn get_user_storage(&self, _username: &str) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn get_user_storage(
+        &self,
+        _username: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         Ok(())
     }
 

@@ -290,7 +290,7 @@ export class StoragePipeline extends EventEmitter {
     // Decode using Reed-Solomon
     if (availableShards.length >= 10) { // Minimum data shards needed
       const decoded = await this.encoder.decode(availableShards)
-      return { data: decoded.data.slice(0, manifest.size) }
+      return { data: decoded.slice(0, manifest.size) }
     }
     
     throw new Error(`Insufficient shards available: need 10, have ${availableShards.length}`)

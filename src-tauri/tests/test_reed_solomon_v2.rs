@@ -4,7 +4,10 @@
 //! Comprehensive tests for Reed Solomon v2 with 60% availability
 
 use anyhow::Result;
-use communitas_tauri::storage::reed_solomon_v2::*;
+use communitas_tauri::storage::*;
+use saorsa_core::quantum_crypto::*;
+use saorsa_fec::*;
+use saorsa_mls::*;
 
 #[tokio::test]
 async fn test_60_percent_availability_comprehensive() -> Result<()> {

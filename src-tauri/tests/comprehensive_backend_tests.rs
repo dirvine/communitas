@@ -16,18 +16,13 @@
 /// - Pure PQC cryptography (ML-DSA, Kyber, etc.)
 /// - Network communication
 /// - Error handling and edge cases
-
 use anyhow::Result;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use communitas_tauri::{
-    commands::*,
-    storage::*,
-    security::*,
-    network::*,
-};
+use communitas_tauri::{core_commands::*, security::*, storage::*, test_harness::*};
+use saorsa_core::{chat::*, dht::*, identity::*, messaging::*, quantum_crypto::*, storage::*};
 
 // Mock network state for testing
 #[derive(Clone)]
@@ -151,8 +146,12 @@ mod comprehensive_backend_tests {
         let shard_id = "shard-001";
 
         if let Some(storage) = &harness.storage_manager {
-            storage.store_group_shard_test(group_id, shard_id, shard_data).await?;
-            let retrieved_shard = storage.retrieve_group_shard_test(group_id, shard_id).await?;
+            storage
+                .store_group_shard_test(group_id, shard_id, shard_data)
+                .await?;
+            let retrieved_shard = storage
+                .retrieve_group_shard_test(group_id, shard_id)
+                .await?;
             assert_eq!(retrieved_shard, shard_data);
             println!("✅ Group shard storage test PASSED");
         }
@@ -219,9 +218,9 @@ mod comprehensive_backend_tests {
 
         // Test configuration for different group sizes
         let test_configs = vec![
-            (3, 3, 2),    // Small group
-            (8, 8, 4),    // Medium group
-            (20, 12, 6),  // Large group
+            (3, 3, 2),   // Small group
+            (8, 8, 4),   // Medium group
+            (20, 12, 6), // Large group
         ];
 
         for (group_size, expected_data, expected_parity) in test_configs {
@@ -243,7 +242,9 @@ mod comprehensive_backend_tests {
 
         // Create test peers
         for i in 0..5 {
-            harness.create_mock_peer(&format!("dht-peer-{:03}", i)).await?;
+            harness
+                .create_mock_peer(&format!("dht-peer-{:03}", i))
+                .await?;
         }
 
         // Test DHT key generation and storage simulation
@@ -358,7 +359,9 @@ mod comprehensive_backend_tests {
         // Create multiple peers for performance testing
         let start_time = std::time::Instant::now();
         for i in 0..10 {
-            harness.create_mock_peer(&format!("perf-peer-{:03}", i)).await?;
+            harness
+                .create_mock_peer(&format!("perf-peer-{:03}", i))
+                .await?;
         }
         let peer_creation_time = start_time.elapsed();
 
@@ -369,7 +372,9 @@ mod comprehensive_backend_tests {
             let start_time = std::time::Instant::now();
             for i in 0..5 {
                 let test_data = format!("Performance test data {}", i).into_bytes();
-                storage.store_personal_data(&format!("perf-test-{}", i), &test_data).await?;
+                storage
+                    .store_personal_data(&format!("perf-test-{}", i), &test_data)
+                    .await?;
             }
             let storage_time = start_time.elapsed();
             println!("✅ Stored 5 items in {:?}", storage_time);
@@ -393,7 +398,9 @@ mod comprehensive_backend_tests {
         for i in 0..5 {
             let harness_clone = Arc::clone(&harness);
             let handle = tokio::spawn(async move {
-                harness_clone.create_mock_peer(&format!("concurrent-peer-{:03}", i)).await
+                harness_clone
+                    .create_mock_peer(&format!("concurrent-peer-{:03}", i))
+                    .await
             });
             handles.push(handle);
         }
@@ -416,7 +423,9 @@ mod comprehensive_backend_tests {
                 let storage_clone = Arc::clone(&storage_arc);
                 let handle = tokio::spawn(async move {
                     let test_data = format!("Concurrent test data {}", i).into_bytes();
-                    storage_clone.store_personal_data(&format!("concurrent-test-{}", i), &test_data).await
+                    storage_clone
+                        .store_personal_data(&format!("concurrent-test-{}", i), &test_data)
+                        .await
                 });
                 handles.push(handle);
             }
@@ -440,7 +449,9 @@ mod comprehensive_backend_tests {
         // Create a complete system scenario
         // 1. Create peers
         for i in 0..3 {
-            harness.create_mock_peer(&format!("integration-peer-{:03}", i)).await?;
+            harness
+                .create_mock_peer(&format!("integration-peer-{:03}", i))
+                .await?;
         }
 
         // 2. Connect peers
@@ -453,7 +464,9 @@ mod comprehensive_backend_tests {
         // 3. Store data
         if let Some(storage) = &harness.storage_manager {
             let test_data = b"Integration test data";
-            storage.store_personal_data("integration-test", test_data).await?;
+            storage
+                .store_personal_data("integration-test", test_data)
+                .await?;
             let retrieved = storage.retrieve_personal_data("integration-test").await?;
             assert_eq!(retrieved, test_data);
         }
@@ -494,7 +507,9 @@ async fn test_full_backend_integration() -> Result<()> {
     // Initialize all components
     println!("1. Initializing network components...");
     for i in 0..5 {
-        harness.create_mock_peer(&format!("full-test-peer-{:03}", i)).await?;
+        harness
+            .create_mock_peer(&format!("full-test-peer-{:03}", i))
+            .await?;
     }
 
     println!("2. Setting up network topology...");
@@ -505,7 +520,7 @@ async fn test_full_backend_integration() -> Result<()> {
             for j in (i + 1)..5 {
                 state.connect_peers(
                     &format!("full-test-peer-{:03}", i),
-                    &format!("full-test-peer-{:03}", j)
+                    &format!("full-test-peer-{:03}", j),
                 );
             }
         }
@@ -517,12 +532,18 @@ async fn test_full_backend_integration() -> Result<()> {
         let personal_data = b"Personal document";
         let group_data = b"Group shared data";
 
-        storage.store_personal_data("personal-doc", personal_data).await?;
-        storage.store_group_shard_test("test-group", "shard-001", group_data).await?;
+        storage
+            .store_personal_data("personal-doc", personal_data)
+            .await?;
+        storage
+            .store_group_shard_test("test-group", "shard-001", group_data)
+            .await?;
 
         // Verify storage
         let retrieved_personal = storage.retrieve_personal_data("personal-doc").await?;
-        let retrieved_group = storage.retrieve_group_shard_test("test-group", "shard-001").await?;
+        let retrieved_group = storage
+            .retrieve_group_shard_test("test-group", "shard-001")
+            .await?;
 
         assert_eq!(retrieved_personal, personal_data);
         assert_eq!(retrieved_group, group_data);

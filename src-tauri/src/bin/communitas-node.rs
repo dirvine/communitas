@@ -120,7 +120,11 @@ impl Default for Config {
                 fec_m: 4,
             },
             network: NetworkConfig {
-                listen_addrs: vec!["0.0.0.0:443".parse().expect("Failed to parse default listen address")],
+                listen_addrs: vec![
+                    "0.0.0.0:443"
+                        .parse()
+                        .expect("Failed to parse default listen address"),
+                ],
                 enable_ipv6: true,
                 enable_webrtc: false,
                 quic_idle_timeout_ms: 30000,

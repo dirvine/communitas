@@ -38,7 +38,8 @@
                 <h1 style="font-size: 2.5rem;">Saorsa Core API</h1>
                 <p class="hero-subtitle">Core primitives for Communitas: DHT, QUIC, identities, groups, messaging, and virtual disks</p>
                 <div class="hero-buttons">
-                    <a href="https://github.com/dirvine/saorsa-core-foundation/blob/main/AGENTS_API.md" class="btn btn-primary" target="_blank" rel="noopener">View on GitHub</a>
+                    <a href="https://github.com/dirvine/saorsa-core" class="btn btn-primary" target="_blank" rel="noopener">View on GitHub</a>
+                    <a href="https://docs.rs/saorsa-core" class="btn btn-secondary" target="_blank" rel="noopener">Rust Docs</a>
                     <a href="agents.html" class="btn btn-secondary">Communitas API</a>
                 </div>
             </div>
@@ -64,18 +65,68 @@
 
     <script>
       (async function() {
-        const RAW_URL = 'https://raw.githubusercontent.com/dirvine/saorsa-core-foundation/main/AGENTS_API.md';
         const loading = document.getElementById('loading');
         const content = document.getElementById('content');
+        
+        // Since saorsa-core is a separate repository, we'll show a helpful message with links
+        const coreContent = `
+          <h2>Saorsa Core API Documentation</h2>
+          <p>Saorsa Core is the foundational library that powers Communitas, providing:</p>
+          
+          <h3>Core Components</h3>
+          <ul>
+            <li><strong>Identity System</strong> - Four-Word addresses with ML-DSA signatures</li>
+            <li><strong>Groups</strong> - Threshold-ready group identities with membership management</li>
+            <li><strong>Messaging</strong> - End-to-end encrypted messaging with channel support</li>
+            <li><strong>Virtual Disks</strong> - Per-entity storage with Private/Public/Shared policies</li>
+            <li><strong>DHT</strong> - Trust-weighted Kademlia with quorum and telemetry</li>
+            <li><strong>Transport</strong> - QUIC via ant-quic, WebRTC DataChannel bridge</li>
+            <li><strong>Cryptography</strong> - Post-quantum (ML-DSA/ML-KEM) with ChaCha20-Poly1305</li>
+          </ul>
+          
+          <h3>Key APIs</h3>
+          <h4>Identity Operations</h4>
+          <pre><code>identity_claim(words, pubkey, sig) -> Result<()>
+identity_fetch(id: Key) -> IdentityPacketV1
+identity_set_website_root(id, website_root, sig) -> Result<()></code></pre>
+          
+          <h4>Group Management</h4>
+          <pre><code>group_identity_create(words, members) -> (GroupIdentityPacketV1, GroupKeyPair)
+group_identity_update_members_signed(id, new_members, group_pk, group_sig) -> Result<()>
+group_member_add(id, member, group_pk, group_sig) -> Result<()></code></pre>
+          
+          <h4>Messaging Service</h4>
+          <pre><code>MessagingService::new(four_word_addr, DhtClient) -> Self
+send_message_to_channel(channel_id, content, options) -> (MessageId, DeliveryReceipt)
+subscribe_messages(channel_filter) -> broadcast::Receiver<ReceivedMessage></code></pre>
+          
+          <h4>Virtual Disk & Website</h4>
+          <pre><code>disk_create(entity_id, DiskType, DiskConfig) -> DiskHandle
+disk_write(&handle, path, content, FileMetadata) -> WriteReceipt
+website_publish(entity_id, website_root) -> PublishReceipt</code></pre>
+          
+          <h3>Resources</h3>
+          <ul>
+            <li><a href="https://docs.rs/saorsa-core" target="_blank" rel="noopener">📚 Full API Documentation on docs.rs</a></li>
+            <li><a href="https://crates.io/crates/saorsa-core" target="_blank" rel="noopener">📦 Package on crates.io</a></li>
+            <li><a href="https://github.com/dirvine/saorsa-core" target="_blank" rel="noopener">💻 Source Code on GitHub</a></li>
+          </ul>
+          
+          <h3>Version</h3>
+          <p>Current version: <strong>0.3.17</strong></p>
+          
+          <h3>Installation</h3>
+          <pre><code># Add to Cargo.toml
+[dependencies]
+saorsa-core = "0.3.17"</code></pre>
+        `;
+        
         try {
-          const res = await fetch(RAW_URL, { cache: 'no-cache' });
-          if (!res.ok) throw new Error('HTTP ' + res.status);
-          const md = await res.text();
-          content.innerHTML = marked.parse(md);
+          content.innerHTML = marked.parse(coreContent);
           loading.style.display = 'none';
           content.style.display = 'block';
         } catch (e) {
-          loading.textContent = 'Failed to load saorsa-core/AGENTS_API.md: ' + (e && e.message ? e.message : e);
+          loading.textContent = 'Failed to render content: ' + (e && e.message ? e.message : e);
         }
       })();
     </script>

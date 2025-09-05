@@ -1,3 +1,4 @@
+// @ts-ignore - Tauri API import for desktop builds
 import { invoke } from '@tauri-apps/api/tauri'
 
 // Build canonical message bytes per saorsa-core for identity.website_root update

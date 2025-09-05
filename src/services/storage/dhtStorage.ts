@@ -63,7 +63,7 @@ export class DHTStorage {
   constructor(config: DHTConfig) {
     this.config = config
     this.encryptionKey = new Uint8Array(32)
-    this.keyId = 'test-key-id'
+    this.keyId = config.identity.publicKey // Use the real public key from identity
     this.bootstrapNodes = config.bootstrapNodes
     this.replicationFactor = config.replicationFactor
     this.identity = config.identity
@@ -129,6 +129,26 @@ export class DHTStorage {
     this.connectedNodes.clear()
     this.isConnected = false
     console.log('DHT disconnected')
+  }
+
+  /**
+    * Generate a new encryption key using the PQC crypto manager
+    */
+  async generateEncryptionKey(): Promise<Uint8Array> {
+    await this.ensureReady()
+
+    // If we don't have a real key pair yet, generate one using PQC
+    if (this.keyId === this.config.identity.publicKey) {
+      // Generate a real PQC key pair using crypto manager
+      const keyPair = await cryptoManager.generateKeyPair() // Now uses PQC ML-DSA-65
+      this.keyId = keyPair.keyId
+    }
+
+    // Generate a secure encryption key
+    const encryptionKey = new Uint8Array(32)
+    crypto.getRandomValues(encryptionKey)
+
+    return encryptionKey
   }
 
   // Core DHT operations
@@ -308,11 +328,6 @@ export class DHTStorage {
   }
 
   // Utility methods
-  async generateEncryptionKey(): Promise<Uint8Array> {
-    const key = new Uint8Array(32)
-    crypto.getRandomValues(key)
-    return key
-  }
 
   async computeHash(data: Uint8Array): Promise<string> {
     const hashBuffer = await crypto.subtle.digest('SHA-256', data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer)
@@ -324,15 +339,31 @@ export class DHTStorage {
     // XOR distance for DHT routing
     const buf1 = Buffer.from(hash1, 'hex')
     const buf2 = Buffer.from(hash2, 'hex')
-    
+
     let distance = 0
     const minLength = Math.min(buf1.length, buf2.length)
-    
+
     for (let i = 0; i < minLength; i++) {
       distance += this.hammingWeight(buf1[i] ^ buf2[i])
     }
-    
+
     return distance
+  }
+
+  /**
+   * Find blocks by MIME type
+   */
+  async findByMimeType(mimeType: string): Promise<EncryptedBlock[]> {
+    const results: EncryptedBlock[] = []
+
+    for (const [blockId, block] of this.storedBlocks.entries()) {
+      const metadata = this.metadataIndex.get(blockId)
+      if (metadata && metadata.mimeType === mimeType) {
+        results.push(block)
+      }
+    }
+
+    return results
   }
 
   private hammingWeight(n: number): number {
@@ -344,17 +375,7 @@ export class DHTStorage {
     return count
   }
 
-  // Metadata indexing
-  async findByMimeType(mimeType: string): Promise<QueryResult[]> {
-    const results: QueryResult[] = []
-    for (const [blockId, metadata] of this.metadataIndex) {
-      if (metadata.mimeType === mimeType) {
-        const nodes = await this.findNodes(blockId)
-        results.push({ blockId, nodes, metadata })
-      }
-    }
-    return results
-  }
+
 
   // Replication and self-healing
   private async replicateToNodes(blockId: string, block: EncryptedBlock): Promise<void> {

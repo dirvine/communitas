@@ -11,10 +11,9 @@ mod storage_policy_tests {
     use tokio_test;
 
     // These imports will fail until implementation
-    use crate::storage::{
-        DeduplicationScope, EncryptionMode, GroupManager, NamespaceManager, PolicyManager,
-        StorageError, StoragePolicy,
-    };
+    use communitas_tauri::storage::*;
+    use saorsa_core::error::*;
+    use saorsa_core::storage::*;
 
     #[test]
     fn test_storage_policy_creation() {

@@ -346,7 +346,7 @@ export class CryptoManager {
     if (keyData instanceof ArrayBuffer) {
       return await crypto.subtle.importKey('raw', keyData, { name: algorithm }, false, usages)
     }
-    // JWK import requires algorithm-specific params; default to RSA SPKI/PKCS8 is not supported via JWK here
+    // JWK import requires algorithm-specific params; PQC algorithms use raw key format, not JWK
     // Limit JWK to symmetric AES-GCM keys
     return await crypto.subtle.importKey('jwk' as any, keyData as JsonWebKey, { name: algorithm }, false, usages)
   }

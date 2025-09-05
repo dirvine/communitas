@@ -8,10 +8,10 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod error;
-mod core_context;
 mod core_commands;
+mod core_context;
 mod core_groups;
+mod error;
 
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -34,7 +34,8 @@ async fn main() -> anyhow::Result<()> {
     // Tracing
     tracing_subscriber::fmt()
         .with_env_filter(
-            std::env::var("RUST_LOG").unwrap_or_else(|_| "info,communitas=debug,saorsa_core=debug".to_string()),
+            std::env::var("RUST_LOG")
+                .unwrap_or_else(|_| "info,communitas=debug,saorsa_core=debug".to_string()),
         )
         .with_target(false)
         .with_thread_ids(true)
@@ -45,7 +46,9 @@ async fn main() -> anyhow::Result<()> {
 
     tauri::Builder::default()
         // Shared saorsa-core context (initialized via core_initialize)
-        .manage(Arc::new(RwLock::new(Option::<core_context::CoreContext>::None)))
+        .manage(Arc::new(RwLock::new(
+            Option::<core_context::CoreContext>::None,
+        )))
         .invoke_handler(tauri::generate_handler![
             core_commands::core_initialize,
             core_commands::core_create_channel,

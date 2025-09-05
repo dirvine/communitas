@@ -21,10 +21,10 @@ use crate::{
     chat::{Group, Message},
 };
 use anyhow::Result;
-use std::sync::Arc;
-use tokio::sync::RwLock;
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
+use tokio::sync::RwLock;
 
 /// Peer connection information
 #[derive(Debug, Clone)]
@@ -147,7 +147,7 @@ impl NetworkIntegration {
 
     /// Broadcast message to group with real-time delivery
     pub async fn broadcast_message(&self, message: &Message, group: &Group) -> Result<()> {
-        use tokio::time::{timeout, Duration};
+        use tokio::time::{Duration, timeout};
 
         // Broadcast to all group members via P2P network with timeout
         let mut success_count = 0;
@@ -157,8 +157,9 @@ impl NetworkIntegration {
             if member != &self.get_identity().await?.four_word_address {
                 let result = timeout(
                     Duration::from_millis(100), // 100ms timeout for real-time delivery
-                    self.send_message_to_peer(member, message)
-                ).await;
+                    self.send_message_to_peer(member, message),
+                )
+                .await;
 
                 match result {
                     Ok(Ok(_)) => success_count += 1,
@@ -176,7 +177,8 @@ impl NetworkIntegration {
         );
 
         // Emit real-time event for UI updates
-        self.emit_realtime_event("MessageBroadcast", message).await?;
+        self.emit_realtime_event("MessageBroadcast", message)
+            .await?;
 
         Ok(())
     }
@@ -185,8 +187,8 @@ impl NetworkIntegration {
     async fn send_message_to_peer(&self, peer_address: &str, message: &Message) -> Result<()> {
         // TODO: Implement actual P2P message sending
         // For now, simulate network latency and potential failures
-        use tokio::time::{sleep, Duration};
         use rand::Rng;
+        use tokio::time::{Duration, sleep};
 
         let mut rng = rand::thread_rng();
         let latency = rng.gen_range(10..50); // 10-50ms simulated latency
@@ -204,7 +206,11 @@ impl NetworkIntegration {
     /// Emit real-time event for UI updates
     async fn emit_realtime_event(&self, event_type: &str, data: &Message) -> Result<()> {
         // TODO: Implement actual event emission to frontend
-        tracing::debug!("Emitted real-time event: {} for message {}", event_type, data.id.0);
+        tracing::debug!(
+            "Emitted real-time event: {} for message {}",
+            event_type,
+            data.id.0
+        );
         Ok(())
     }
 
@@ -323,8 +329,11 @@ impl NetworkIntegration {
         }
 
         stats.active_connections = healthy_count;
-        tracing::info!("Health check completed: {}/{} peers healthy",
-                      healthy_count, peers.len());
+        tracing::info!(
+            "Health check completed: {}/{} peers healthy",
+            healthy_count,
+            peers.len()
+        );
 
         Ok(())
     }
@@ -336,7 +345,11 @@ impl NetworkIntegration {
     }
 
     /// Update peer connection quality
-    pub async fn update_peer_quality(&self, peer_address: &str, quality: ConnectionQuality) -> Result<()> {
+    pub async fn update_peer_quality(
+        &self,
+        peer_address: &str,
+        quality: ConnectionQuality,
+    ) -> Result<()> {
         let mut peers = self.peers.write().await;
         if let Some(peer) = peers.get_mut(peer_address) {
             peer.connection_quality = quality;

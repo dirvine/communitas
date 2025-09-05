@@ -262,7 +262,7 @@ export class PqcCryptoManager {
       secretKey
     );
     
-    return new File([decryptedData], originalName, { type: mimeType });
+    return new File([decryptedData as any], originalName, { type: mimeType });
   }
 
   /**

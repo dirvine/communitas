@@ -346,7 +346,9 @@ export class ReedSolomonEncoder {
   }
 
   private generateSessionId(): string {
-    return crypto.randomBytes(8).toString('hex')
+    const bytes = new Uint8Array(8);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
   }
 
   private computeChecksum(data: Uint8Array): string {

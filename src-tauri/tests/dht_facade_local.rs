@@ -1,4 +1,5 @@
-use communitas_tauri::dht_facade::{DhtFacade, LocalDht};
+use communitas_tauri::test_harness::*;
+use saorsa_core::dht::*;
 
 #[tokio::test]
 async fn local_dht_put_get_send() {

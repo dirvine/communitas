@@ -38,7 +38,7 @@
                 <h1 style="font-size: 2.5rem;">Agents API</h1>
                 <p class="hero-subtitle">Complete automation and security model for humans and AIs</p>
                 <div class="hero-buttons">
-                    <a href="https://github.com/dirvine/communitas-foundation/blob/main/AGENTS_API.md" class="btn btn-primary" target="_blank" rel="noopener">View on GitHub</a>
+                    <a href="https://github.com/dirvine/communitas/blob/main/AGENTS_API.md" class="btn btn-primary" target="_blank" rel="noopener">View on GitHub</a>
                     <a href="agents-core.html" class="btn btn-secondary">Core API</a>
                 </div>
             </div>
@@ -64,13 +64,28 @@
 
     <script>
       (async function() {
-        const RAW_URL = 'https://raw.githubusercontent.com/dirvine/communitas-foundation/main/AGENTS_API.md';
+        // Try local file first, fallback to GitHub
+        const LOCAL_URL = 'AGENTS_API.md';
+        const GITHUB_URL = 'https://raw.githubusercontent.com/dirvine/communitas/main/AGENTS_API.md';
         const loading = document.getElementById('loading');
         const content = document.getElementById('content');
-        try {
-          const res = await fetch(RAW_URL, { cache: 'no-cache' });
+        
+        async function loadMarkdown(url) {
+          const res = await fetch(url, { cache: 'no-cache' });
           if (!res.ok) throw new Error('HTTP ' + res.status);
-          const md = await res.text();
+          return await res.text();
+        }
+        
+        try {
+          // Try local first
+          let md;
+          try {
+            md = await loadMarkdown(LOCAL_URL);
+          } catch (localError) {
+            // Fallback to GitHub
+            md = await loadMarkdown(GITHUB_URL);
+          }
+          
           content.innerHTML = marked.parse(md);
           loading.style.display = 'none';
           content.style.display = 'block';

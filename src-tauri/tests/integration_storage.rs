@@ -11,11 +11,10 @@ mod integration_storage_tests {
     use tokio;
 
     // These imports will fail until implementation
-    use crate::storage::{
-        CacheManager, NamespaceManager, NetworkClient, PolicyManager, StorageAddress,
-        StorageEngine, StorageMetadata, StoragePolicy,
-    };
-    use crate::test_harness::{DhtSimulator, NetworkSimulator, TestHarness, TestNode};
+    use communitas_tauri::storage::*;
+    use communitas_tauri::test_harness::*;
+    use saorsa_core::dht::*;
+    use saorsa_core::storage::*;
 
     #[tokio::test]
     async fn test_complete_storage_lifecycle() -> Result<(), Box<dyn std::error::Error>> {

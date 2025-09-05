@@ -17,9 +17,11 @@ use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
 use blake3;
+use hex;
 use saorsa_fec::{FecCodec, FecParams};
-use saorsa_seal::{seal_bytes, open_bytes, SealPolicy, EnvelopeKind, Recipient, RecipientId, ProvidedShare};
-use std::collections::HashMap;
+use saorsa_seal::{
+    EnvelopeKind, ProvidedShare, Recipient, RecipientId, SealPolicy, open_bytes, seal_bytes,
+};
 
 // DHT interface for saorsa-seal
 pub trait DhtStorage {
@@ -100,14 +102,14 @@ impl ReedSolomonConfig {
 
 /// Enhanced Reed Solomon manager with adaptive configuration and PQC sealing
 #[derive(Debug)]
-pub struct EnhancedReedSolomonManager<D: DhtStorage> {
+pub struct EnhancedReedSolomonManager<D: DhtStorage + saorsa_seal::Dht> {
     configs: Arc<RwLock<HashMap<String, ReedSolomonConfig>>>,
     shard_cache: Arc<RwLock<HashMap<String, Vec<Shard>>>>,
     integrity_tracker: Arc<RwLock<HashMap<String, IntegrityStatus>>>,
     dht: D,
 }
 
-impl<D: DhtStorage> EnhancedReedSolomonManager<D> {
+impl<D: DhtStorage + saorsa_seal::Dht> EnhancedReedSolomonManager<D> {
     pub fn new(dht: D) -> Self {
         Self {
             configs: Arc::new(RwLock::new(HashMap::new())),
@@ -136,7 +138,9 @@ impl<D: DhtStorage> EnhancedReedSolomonManager<D> {
 
         debug!(
             "Sealing data for group {} with threshold {}/{} using saorsa-seal",
-            group_id, config.data_shards, config.total_shards()
+            group_id,
+            config.data_shards,
+            config.total_shards()
         );
 
         // Create recipients for the group (simplified - in real implementation,
@@ -150,20 +154,21 @@ impl<D: DhtStorage> EnhancedReedSolomonManager<D> {
 
         // Configure sealing policy with PQC encryption
         let policy = SealPolicy {
-            n: config.total_shards() as u32,  // Total shares
-            t: config.data_shards as u32,     // Threshold needed to recover
+            n: config.total_shards(), // Total shares
+            t: config.data_shards,    // Threshold needed to recover
             recipients,
             fec: saorsa_seal::FecParams {
-                data_shares: config.data_shards as u32,
-                parity_shares: config.parity_shards as u32,
-                symbol_size: config.shard_size as u32,
+                data_shares: config.data_shards,
+                parity_shares: config.parity_shards,
+                symbol_size: config.shard_size,
             },
             envelope: EnvelopeKind::PostQuantum, // ML-KEM-768 post-quantum encryption
             aad: format!("{}:{}", group_id, data_id).into_bytes(), // Additional authenticated data
         };
 
         // Seal the data using saorsa-seal
-        let summary = seal_bytes(data, &policy, &self.dht).await
+        let summary = seal_bytes(data, &policy, &self.dht)
+            .await
             .context("Failed to seal data with saorsa-seal")?;
 
         debug!("Data sealed successfully with handle: {:?}", summary.handle);
@@ -179,7 +184,9 @@ impl<D: DhtStorage> EnhancedReedSolomonManager<D> {
                 data: vec![], // Data is stored in DHT by saorsa-seal
                 group_id: group_id.to_string(),
                 data_id: data_id.to_string(),
-                integrity_hash: format!("{:x}", blake3::hash(&summary.handle.sealed_meta_key)),
+                integrity_hash: hex::encode(
+                    blake3::hash(&summary.handle.sealed_meta_key).as_bytes(),
+                ),
                 created_at: chrono::Utc::now(),
                 size: data.len(),
             };
@@ -194,7 +201,9 @@ impl<D: DhtStorage> EnhancedReedSolomonManager<D> {
                 data: vec![], // Parity data handled by saorsa-seal
                 group_id: group_id.to_string(),
                 data_id: data_id.to_string(),
-                integrity_hash: format!("{:x}", blake3::hash(&summary.handle.sealed_meta_key)),
+                integrity_hash: hex::encode(
+                    blake3::hash(&summary.handle.sealed_meta_key).as_bytes(),
+                ),
                 created_at: chrono::Utc::now(),
                 size: data.len(),
             };
@@ -646,10 +655,4 @@ pub struct IntegrityStatus {
     pub last_verified: chrono::DateTime<chrono::Utc>,
     pub verification_count: u64,
     pub corruption_detected: bool,
-}
-
-impl Default for EnhancedReedSolomonManager {
-    fn default() -> Self {
-        Self::new()
-    }
 }

@@ -1,12 +1,14 @@
-
 use saorsa_core::chat::ChatManager;
+use saorsa_core::identity::IdentityManager;
 use saorsa_core::identity::enhanced::{DeviceType, EnhancedIdentity, EnhancedIdentityManager};
-use saorsa_core::identity::{IdentityManager};
 use saorsa_core::identity::manager::IdentityManagerConfig;
-use saorsa_core::messaging::service::MessagingService;
 use saorsa_core::messaging::DhtClient;
+use saorsa_core::messaging::service::MessagingService;
 use saorsa_core::storage::StorageManager;
-use saorsa_core::{identity::FourWordAddress, dht::core_engine::{DhtCoreEngine, NodeId}};
+use saorsa_core::{
+    dht::core_engine::{DhtCoreEngine, NodeId},
+    identity::FourWordAddress,
+};
 use std::collections::HashMap;
 
 // Group key storage for membership updates
@@ -35,7 +37,9 @@ impl CoreContext {
         // Basic validation of four-word address (delegate to saorsa-core when possible)
         let words: Vec<&str> = four_words.split('-').collect();
         if words.len() != 4 {
-            return Err("Four-word address must contain exactly 4 words separated by hyphens".to_string());
+            return Err(
+                "Four-word address must contain exactly 4 words separated by hyphens".to_string(),
+            );
         }
         let word_array = [
             words[0].to_string(),
@@ -71,15 +75,18 @@ impl CoreContext {
             .map_err(|e| format!("Storage init failed: {}", e))?;
 
         // Chat manager backed by storage and identity
-        let chat = ChatManager::new(storage.clone(), enhanced_identity.clone());
+        // Note: StorageManager doesn't implement Clone, so we create a new instance
+        let dht_engine_chat = DhtCoreEngine::new(NodeId::from_bytes([43u8; 32]))
+            .map_err(|e| format!("DHT engine creation for chat failed: {}", e))?;
+        let storage_chat = StorageManager::new(dht_engine_chat, &enhanced_identity)
+            .map_err(|e| format!("Storage init for chat failed: {}", e))?;
+        let chat = ChatManager::new(storage_chat, enhanced_identity.clone());
 
         // Messaging service
-        let messaging = MessagingService::new(
-            FourWordAddress(four_words.clone()),
-            dht_client.clone(),
-        )
-        .await
-        .map_err(|e| format!("Messaging init failed: {}", e))?;
+        let messaging =
+            MessagingService::new(FourWordAddress(four_words.clone()), dht_client.clone())
+                .await
+                .map_err(|e| format!("Messaging init failed: {}", e))?;
 
         Ok(Self {
             four_words,

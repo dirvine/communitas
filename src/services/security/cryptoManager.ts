@@ -4,6 +4,7 @@
  */
 
 import crypto from "crypto";
+import { pqcCrypto } from "../../utils/pqcCrypto";
 
 // In browser/Vitest, Node's legacy createCipher/createDecipher are not available.
 // Provide a test-mode shim for AES-GCM using Web Crypto to unblock unit tests.
@@ -51,7 +52,6 @@ export class CryptoManager {
   private readonly IV_LENGTH = 12; // 96 bits for GCM
   private readonly TAG_LENGTH = 16; // 128 bits for GCM
   private readonly PBKDF2_ITERATIONS = 100000;
-  private readonly RSA_KEY_SIZE = 4096; // Strong key size
 
   static getInstance(): CryptoManager {
     if (!CryptoManager.instance) {
@@ -61,38 +61,25 @@ export class CryptoManager {
   }
 
   /**
-   * Generate a secure RSA key pair for digital signatures
-   */
-  async generateRSAKeyPair(keyId?: string): Promise<KeyPair> {
+    * Generate a secure PQC key pair for digital signatures using ML-DSA-65
+    */
+  async generateKeyPair(keyId?: string): Promise<KeyPair> {
     const id = keyId || crypto.randomUUID();
 
-    try {
-      const { publicKey, privateKey } = crypto.generateKeyPairSync("rsa", {
-        modulusLength: this.RSA_KEY_SIZE,
-        publicKeyEncoding: {
-          type: "spki",
-          format: "pem",
-        },
-        privateKeyEncoding: {
-          type: "pkcs8",
-          format: "pem",
-        },
-      });
+    // Use PQC ML-DSA-65 for quantum-resistant signatures
+    const pqcKeyPair = await pqcCrypto.generateSigningKeyPair();
 
-      const keyPair: KeyPair = {
-        publicKey,
-        privateKey,
-        keyId: id,
-        algorithm: "RSA-4096",
-        createdAt: Date.now(),
-        expiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000, // 1 year
-      };
+    const keyPair: KeyPair = {
+      publicKey: JSON.stringify(pqcKeyPair.public_key), // Store as JSON string
+      privateKey: JSON.stringify(pqcKeyPair.secret_key), // Store as JSON string
+      keyId: id,
+      algorithm: "ML-DSA-65",
+      createdAt: Date.now(),
+      expiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000, // 1 year
+    };
 
-      this.keyStore.set(id, keyPair);
-      return keyPair;
-    } catch (error) {
-      throw new Error(`Failed to generate RSA key pair: ${error.message}`);
-    }
+    this.keyStore.set(id, keyPair);
+    return keyPair;
   }
 
   /**
@@ -236,8 +223,8 @@ export class CryptoManager {
   }
 
   /**
-   * Sign data using private key
-   */
+    * Sign data using PQC private key (ML-DSA-65)
+    */
   async signData(data: Uint8Array, keyId: string): Promise<Uint8Array> {
     const keyPair = this.keyStore.get(keyId);
     if (!keyPair) {
@@ -249,49 +236,42 @@ export class CryptoManager {
       throw new Error(`Key pair ${keyId} has expired`);
     }
 
-    try {
-      const signature = crypto.sign(null, data, {
-        key: keyPair.privateKey,
-        padding: keyPair.algorithm.startsWith("RSA")
-          ? crypto.constants.RSA_PKCS1_PSS_PADDING
-          : undefined,
-        saltLength: keyPair.algorithm.startsWith("RSA")
-          ? crypto.constants.RSA_PSS_SALTLEN_DIGEST
-          : undefined,
-      });
+    // Only support PQC ML-DSA-65
+    if (keyPair.algorithm !== "ML-DSA-65") {
+      throw new Error(`Unsupported algorithm: ${keyPair.algorithm}. Only ML-DSA-65 is supported.`);
+    }
 
-      return new Uint8Array(signature);
+    try {
+      // Use PQC signing
+      const secretKey = JSON.parse(keyPair.privateKey);
+      const signature = await pqcCrypto.signData(data, secretKey, "dht-storage");
+      return new Uint8Array(signature.signature);
     } catch (error) {
-      throw new Error(`Signing failed: ${error.message}`);
+      throw new Error(`PQC signing failed: ${error.message}`);
     }
   }
 
   /**
-   * Verify signature using public key
-   */
+    * Verify signature using PQC public key (ML-DSA-65)
+    */
   async verifySignature(
     data: Uint8Array,
     signature: Uint8Array,
     publicKey: string,
     algorithm: string,
   ): Promise<boolean> {
+    // Only support PQC ML-DSA-65
+    if (algorithm !== "ML-DSA-65") {
+      throw new Error(`Unsupported algorithm: ${algorithm}. Only ML-DSA-65 is supported.`);
+    }
+
     try {
-      return crypto.verify(
-        null,
-        data,
-        {
-          key: publicKey,
-          padding: algorithm.startsWith("RSA")
-            ? crypto.constants.RSA_PKCS1_PSS_PADDING
-            : undefined,
-          saltLength: algorithm.startsWith("RSA")
-            ? crypto.constants.RSA_PSS_SALTLEN_DIGEST
-            : undefined,
-        },
-        signature,
-      );
+      // Use PQC verification
+      const publicKeyArray = JSON.parse(publicKey);
+      const result = await pqcCrypto.verifySignature(data, Array.from(signature), publicKeyArray, "dht-storage");
+      return result.is_valid;
     } catch (error) {
-      console.error("Signature verification failed:", error);
+      console.error("PQC signature verification failed:", error);
       return false;
     }
   }
@@ -432,9 +412,11 @@ export class CryptoManager {
     }
 
     // Check algorithm strength
-    if (keyPair.algorithm.includes("RSA-2048")) {
-      issues.push("RSA-2048 is becoming weak");
-      recommendations.push("Upgrade to RSA-4096");
+    if (keyPair.algorithm === "ML-DSA-65") {
+      // PQC algorithms are considered strong by design
+    } else {
+      issues.push(`Unsupported algorithm: ${keyPair.algorithm}`);
+      recommendations.push("Only ML-DSA-65 is supported for quantum-resistant security");
     }
 
     // Check expiration

@@ -11,6 +11,9 @@ on:
         required: true
         default: 'latest'
 
+permissions:
+  contents: write
+
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-D warnings"
@@ -89,12 +92,12 @@ jobs:
     - name: Create universal binaries
       run: |
         cd src-tauri/target
-        mkdir -p release/universal-apple-darwin
-        lipo release/x86_64-apple-darwin/release/communitas-headless release/aarch64-apple-darwin/release/communitas-headless -create -output release/universal-apple-darwin/communitas-headless
+        mkdir -p universal-apple-darwin
+        lipo x86_64-apple-darwin/release/communitas-headless aarch64-apple-darwin/release/communitas-headless -create -output universal-apple-darwin/communitas-headless
 
     - name: Create macOS archive
       run: |
-        cd src-tauri/target/release/universal-apple-darwin
+        cd src-tauri/target/universal-apple-darwin
         tar -czf communitas-headless-macos-universal.tar.gz \
           communitas-headless
 
@@ -102,7 +105,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: communitas-headless-macos-universal
-        path: src-tauri/target/release/universal-apple-darwin/communitas-headless-macos-universal.tar.gz
+        path: src-tauri/target/universal-apple-darwin/communitas-headless-macos-universal.tar.gz
 
   build-windows:
     name: Build Windows Binaries

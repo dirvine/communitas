@@ -23,9 +23,7 @@ path = "src/main.rs"
 name = "communitas-node"
 path = "src/bin/communitas-node.rs"
 
-[[bin]]
-name = "communitas-autoupdater"
-path = "src/bin/communitas-autoupdater.rs"
+
 
 [[bin]]
 name = "bootstrap"
@@ -43,6 +41,7 @@ serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
 tauri = { version = "2.6.1", features = [] }
 tauri-plugin-log = "2"
+tauri-plugin-updater = "2"
 
 # Saorsa Labs - Updated to latest version
 saorsa-core = "0.3.18"
@@ -84,6 +83,9 @@ flate2 = "1.0"
 
 # HTTP client for auto-updater
 reqwest = { version = "0.12", features = ["json"] }
+
+# Self-update for headless CLI
+self_update = "0.41"
 
 # File type detection
 mime_guess = "2.0"

@@ -10,6 +10,19 @@ use tokio::signal;
 use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
 
+/// Try to self-update the binary using GitHub releases
+pub fn try_self_update() -> Result<Option<String>> {
+    use self_update::cargo_crate_version;
+    let status = self_update::backends::github::Update::configure()
+        .repo_owner("dirvine")
+        .repo_name("communitas")
+        .bin_name("communitas-node")
+        .current_version(cargo_crate_version!())
+        .build()?
+        .update()?;
+    Ok(Some(status.version().to_string()))
+}
+
 #[derive(Parser, Debug)]
 #[command(name = "communitas-node")]
 #[command(about = "Headless Communitas P2P node", long_about = None)]
@@ -219,6 +232,25 @@ async fn run_node(args: Args) -> Result<()> {
     // Load or create config
     let config = load_or_create_config(&args.config).await?;
     info!("Loaded configuration from {:?}", args.config);
+
+    // Try self-update if enabled
+    if config.update.auto_update {
+        info!("Checking for updates...");
+        match try_self_update() {
+            Ok(Some(new_version)) => {
+                info!("Successfully updated to version {}", new_version);
+                info!("Please restart the application to use the new version");
+                // In production, you might want to restart automatically
+                // or notify the user through other means
+            }
+            Ok(None) => {
+                info!("No updates available");
+            }
+            Err(e) => {
+                warn!("Failed to check for updates: {:#}", e);
+            }
+        }
+    }
 
     // Setup storage
     tokio::fs::create_dir_all(&config.storage.base_dir)

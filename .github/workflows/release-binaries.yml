@@ -1,4 +1,4 @@
-name: Release Binaries
+name: Release Binaries (Multi-Platform)
 
 on:
   push:
@@ -16,10 +16,9 @@ env:
   RUSTFLAGS: "-D warnings"
 
 jobs:
-  build-binaries:
+  build-linux:
     name: Build Linux Binaries
     runs-on: ubuntu-latest
-
     steps:
     - uses: actions/checkout@v4
 
@@ -34,11 +33,7 @@ jobs:
           curl \
           wget \
           libssl-dev \
-          pkg-config \
-          libwebkit2gtk-4.1-dev \
-          libgtk-3-dev \
-          libayatana-appindicator3-dev \
-          librsvg2-dev
+          pkg-config
 
     - name: Cache Cargo registry
       uses: actions/cache@v4
@@ -49,59 +44,129 @@ jobs:
           target
         key: linux-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-    - name: Build communitas-node binary
+    - name: Build binaries
       run: |
         cd src-tauri
         cargo build --release --bin communitas-node
-
-    - name: Build bootstrap binary
-      run: |
-        cd src-tauri
         cargo build --release --bin bootstrap
-
-    - name: Build communitas-autoupdater binary
-      run: |
-        cd src-tauri
-        cargo build --release --bin communitas-autoupdater
 
     - name: Strip binaries
       run: |
         strip src-tauri/target/release/communitas-node || true
         strip src-tauri/target/release/bootstrap || true
-        strip src-tauri/target/release/communitas-autoupdater || true
 
     - name: Create release archive
       run: |
         cd src-tauri/target/release
         tar -czf communitas-binaries-linux-x86_64.tar.gz \
           communitas-node \
-          bootstrap \
-          communitas-autoupdater
+          bootstrap
 
-    - name: Upload binaries as artifacts
+    - name: Upload Linux binaries
       uses: actions/upload-artifact@v4
       with:
         name: communitas-binaries-linux-x86_64
         path: src-tauri/target/release/communitas-binaries-linux-x86_64.tar.gz
 
-  create-release:
-    name: Create GitHub Release
-    runs-on: ubuntu-latest
-    needs: build-binaries
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-
+  build-macos:
+    name: Build macOS Binaries
+    runs-on: macos-latest
     steps:
     - uses: actions/checkout@v4
 
-    - name: Download binaries artifact
+    - name: Install Rust stable
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+    - name: Build x86_64 binaries
+      run: |
+        cd src-tauri
+        cargo build --release --target x86_64-apple-darwin --bin communitas-node
+        cargo build --release --target x86_64-apple-darwin --bin bootstrap
+
+    - name: Build aarch64 binaries
+      run: |
+        cd src-tauri
+        cargo build --release --target aarch64-apple-darwin --bin communitas-node
+        cargo build --release --target aarch64-apple-darwin --bin bootstrap
+
+    - name: Create universal binaries
+      run: |
+        cd src-tauri/target
+        mkdir -p release/universal-apple-darwin
+        lipo release/x86_64-apple-darwin/release/communitas-node release/aarch64-apple-darwin/release/communitas-node -create -output release/universal-apple-darwin/communitas-node
+        lipo release/x86_64-apple-darwin/release/bootstrap release/aarch64-apple-darwin/release/bootstrap -create -output release/universal-apple-darwin/bootstrap
+
+    - name: Create macOS archive
+      run: |
+        cd src-tauri/target/release/universal-apple-darwin
+        tar -czf communitas-binaries-macos-universal.tar.gz \
+          communitas-node \
+          bootstrap
+
+    - name: Upload macOS binaries
+      uses: actions/upload-artifact@v4
+      with:
+        name: communitas-binaries-macos-universal
+        path: src-tauri/target/release/universal-apple-darwin/communitas-binaries-macos-universal.tar.gz
+
+  build-windows:
+    name: Build Windows Binaries
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Rust stable
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Build binaries
+      run: |
+        cd src-tauri
+        cargo build --release --bin communitas-node
+        cargo build --release --bin bootstrap
+
+    - name: Create Windows archive
+      run: |
+        cd src-tauri/target/release
+        Compress-Archive -Path communitas-node.exe,bootstrap.exe -DestinationPath communitas-binaries-windows-x86_64.zip
+
+    - name: Upload Windows binaries
+      uses: actions/upload-artifact@v4
+      with:
+        name: communitas-binaries-windows-x86_64
+        path: src-tauri/target/release/communitas-binaries-windows-x86_64.zip
+
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [build-linux, build-macos, build-windows]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Download Linux binaries
       uses: actions/download-artifact@v4
       with:
         name: communitas-binaries-linux-x86_64
 
+    - name: Download macOS binaries
+      uses: actions/download-artifact@v4
+      with:
+        name: communitas-binaries-macos-universal
+
+    - name: Download Windows binaries
+      uses: actions/download-artifact@v4
+      with:
+        name: communitas-binaries-windows-x86_64
+
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v1
       with:
-        files: communitas-binaries-linux-x86_64.tar.gz
+        files: |
+          communitas-binaries-linux-x86_64.tar.gz
+          communitas-binaries-macos-universal.tar.gz
+          communitas-binaries-windows-x86_64.zip
         generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

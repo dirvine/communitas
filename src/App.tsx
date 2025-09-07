@@ -19,6 +19,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Lan as LanIcon,
+  Home as HomeIcon,
 } from '@mui/icons-material'
 import { SnackbarProvider } from 'notistack'
 import { NetworkHealth } from './types'

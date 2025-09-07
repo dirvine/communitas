@@ -14,6 +14,7 @@ import { YjsMarkdownEditor } from '../../services/storage/yjsCollaboration'
 import { MarkdownWebPublisher } from '../../services/storage/markdownPublisher'
 import { NetworkIdentity } from '../../types/collaboration'
 import { inputSanitizer } from '../../services/security/inputSanitization'
+import { marked } from 'marked'
 
 interface CollaborationCursor {
   userId: string
@@ -351,10 +352,23 @@ export const CollaborativeMarkdownEditor: React.FC<CollaborativeMarkdownEditorPr
   // Render markdown preview
   useEffect(() => {
     const renderPreview = async () => {
-      if (!publisher || !content) return
+      if (!content) return
 
       try {
-        const html = await publisher.markdownToHtml(content)
+        let html: string
+        if (publisher) {
+          html = await publisher.markdownToHtml(content)
+        } else {
+          // Fallback local rendering when no publisher provided
+          const sanitizationResult = inputSanitizer.sanitizeMarkdown(content)
+          if (!sanitizationResult.isValid) {
+            throw new Error(`Invalid markdown: ${sanitizationResult.errors.join(', ')}`)
+          }
+          const sanitizedMarkdown = sanitizationResult.sanitizedValue
+          marked.setOptions({ gfm: true, breaks: true })
+          const rawHtml = marked.parse(sanitizedMarkdown) as string
+          html = inputSanitizer.sanitizeHTML(rawHtml)
+        }
         setRenderedHtml(html)
       } catch (error) {
         console.error('Failed to render markdown:', error)

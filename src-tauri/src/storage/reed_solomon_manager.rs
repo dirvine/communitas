@@ -443,6 +443,7 @@ impl<D: DhtStorage + saorsa_seal::Dht> EnhancedReedSolomonManager<D> {
 
     // Private helper methods
 
+    #[allow(dead_code)]
     async fn encode_chunk(
         &self,
         chunk: &[u8],
@@ -520,6 +521,7 @@ impl<D: DhtStorage + saorsa_seal::Dht> EnhancedReedSolomonManager<D> {
         Ok(decoded_data)
     }
 
+    #[allow(dead_code)]
     fn pad_data_for_encoding(&self, data: &[u8], config: &ReedSolomonConfig) -> Result<Vec<u8>> {
         let mut padded = data.to_vec();
 

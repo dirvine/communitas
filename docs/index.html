@@ -133,7 +133,7 @@
                             </svg>
                         </div>
                         <h3>Virtual Disks</h3>
-                        <p>Private/public/shared storage per entity with Reed‑Solomon FEC. Each disk can host content and a website, synced across peers with no central servers.</p>
+                        <p>Private/public/shared storage per entity (i.e. group, channel, organisation, project etc.) with Reed‑Solomon FEC. Each disk can host content and a website, synced across peers with no central servers.</p>
                     </div>
 
                     <div class="innovation-item">
@@ -160,53 +160,6 @@
                         </div>
                         <h3>Shared Communications</h3>
                         <p>Channels, threads, calls, screenshare — all peer‑to‑peer. WebRTC‑over‑QUIC with end‑to‑end encryption and no central servers.</p>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <!-- The New Web Interactive Demo -->
-        <section id="new-web" class="new-web-section section-alt">
-            <div class="container">
-                <div class="section-header">
-                    <h2>The New Web</h2>
-                    <p>Experience the mental model in 30 seconds</p>
-                </div>
-                
-                <div class="demo-container">
-                    <div class="demo-panel demo-left">
-                        <h3>Choose an Identity</h3>
-                        <div class="identity-input">
-                            <input type="text" id="demo-identity" value="black tree fish river" readonly>
-                            <button class="btn-small" onclick="randomizeIdentity()">Randomize</button>
-                        </div>
-                        <div class="identity-info">
-                            <p class="mono-text">Public Key: 0x7f3a9b2c...</p>
-                            <p class="mono-text">Website Root: <span id="website-root">none</span></p>
-                        </div>
-                    </div>
-                    
-                    <div class="demo-panel demo-right">
-                        <div class="demo-steps">
-                            <div class="demo-step" id="step1">
-                                <h4>Step 1: Publish Site</h4>
-                                <button class="btn btn-primary" onclick="publishSite()">Publish Website</button>
-                                <div class="step-output" id="step1-output"></div>
-                            </div>
-                            
-                            <div class="demo-step" id="step2" style="display:none;">
-                                <h4>Step 2: Visit via Four Words</h4>
-                                <button class="btn btn-secondary" onclick="visitSite()">Visit Site</button>
-                                <div class="step-output" id="step2-output"></div>
-                            </div>
-                            
-                            <div class="demo-step" id="step3" style="display:none;">
-                                <h4>Step 3: Link to Group Site</h4>
-                                <button class="btn btn-outline" onclick="linkToGroup()">Browse Links</button>
-                                <div class="step-output" id="step3-output"></div>
-                            </div>
-                        </div>
-                        <button class="reset-btn" onclick="resetDemo()">Reset Demo</button>
                     </div>
                 </div>
             </div>
@@ -273,7 +226,6 @@
                 <ul>
                     <li><a href="https://crates.io/crates/saorsa-core">Saorsa Core</a></li>
                     <li><a href="https://github.com/dirvine/communitas/blob/main/docs/AGENTS_API.md">API Documentation</a></li>
-                    <li><a href="#new-web">The New Web Demo</a></li>
                     <li><a href="https://saorsalabs.com">Saorsa Labs</a></li>
                 </ul>
             </div>
@@ -293,6 +245,5 @@
         </div>
     </footer>
 
-    <script src="demo.js"></script>
 </body>
 </html>

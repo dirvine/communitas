@@ -21,6 +21,7 @@ import {
   Lan as LanIcon,
   Home as HomeIcon,
 } from '@mui/icons-material'
+import useMediaQuery from '@mui/material/useMediaQuery'
 import { SnackbarProvider } from 'notistack'
 import { NetworkHealth } from './types'
 
@@ -152,6 +153,11 @@ function App() {
   const { defaultOpen } = useSidebarBehavior()
   const [sidebarOpen, setSidebarOpen] = useState(defaultOpen)
   const handleToggleSidebar = () => setSidebarOpen(o => !o)
+  const isSmall = useMediaQuery('(max-width:900px)')
+
+  useEffect(() => {
+    if (isSmall) setSidebarOpen(false)
+  }, [isSmall])
 
   useEffect(() => {
     // Load or generate identity
@@ -513,43 +519,79 @@ function App() {
           {/* Using experimental UI as default */}
           {/* New WhatsApp-style UI */}
             <Box sx={{ display: 'flex', height: '100vh', position: 'relative' }}>
-              {/* Collapsible left navigation with auto-expand on hover */}
-              <Box
-                sx={{
-                  width: sidebarOpen ? 320 : 0,
-                  transition: 'width 0.2s ease',
-                  borderRight: theme => (sidebarOpen ? `1px solid ${theme.palette.divider}` : 'none'),
-                  overflow: 'hidden',
-                  position: 'relative',
-                  minWidth: 0,
-                }}
-              >
-                <WhatsAppStyleNavigation
-                  organizations={mockOrganizations}
-                  personalGroups={mockPersonalGroups}
-                  personalUsers={mockPersonalUsers}
-                  currentUserId="user_owner_123"
-                  onNavigate={handleWhatsAppNavigate}
-                  onVideoCall={handleVideoCall}
-                  onAudioCall={handleAudioCall}
-                  onScreenShare={handleScreenShare}
-                  onOpenFiles={handleOpenFiles}
-                />
-                {/* Collapse/expand handle */}
-                {sidebarOpen && (
-                  <Box sx={{ position: 'absolute', top: 8, right: 8 }}>
-                    <IconButton size="small" onClick={handleToggleSidebar}>
-                      <ChevronLeft />
-                    </IconButton>
+              {/* Responsive Sidebar */}
+              {isSmall ? (
+                <>
+                  {!sidebarOpen && (
+                    <Box sx={{ position: 'absolute', top: 8, left: 8, zIndex: 2000 }}>
+                      <IconButton size="small" onClick={handleToggleSidebar} aria-label="Open sidebar">
+                        <ChevronRight />
+                      </IconButton>
+                    </Box>
+                  )}
+                  {sidebarOpen && (
+                    <>
+                      <Box onClick={handleToggleSidebar} sx={{ position: 'absolute', inset: 0, bgcolor: 'rgba(0,0,0,0.35)', zIndex: 1199 }} />
+                      <Box sx={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: '85vw', maxWidth: 360, bgcolor: 'background.paper', borderRight: theme => `1px solid ${theme.palette.divider}`, zIndex: 1200, overflow: 'hidden' }}>
+                        <WhatsAppStyleNavigation
+                          organizations={mockOrganizations}
+                          personalGroups={mockPersonalGroups}
+                          personalUsers={mockPersonalUsers}
+                          currentUserId="user_owner_123"
+                          onNavigate={handleWhatsAppNavigate}
+                          onVideoCall={handleVideoCall}
+                          onAudioCall={handleAudioCall}
+                          onScreenShare={handleScreenShare}
+                          onOpenFiles={handleOpenFiles}
+                        />
+                        <Box sx={{ position: 'absolute', top: 8, right: 8 }}>
+                          <IconButton size="small" onClick={handleToggleSidebar}>
+                            <ChevronLeft />
+                          </IconButton>
+                        </Box>
+                      </Box>
+                    </>
+                  )}
+                </>
+              ) : (
+                <>
+                  <Box
+                    sx={{
+                      width: sidebarOpen ? 320 : 0,
+                      transition: 'width 0.2s ease',
+                      borderRight: theme => (sidebarOpen ? `1px solid ${theme.palette.divider}` : 'none'),
+                      overflow: 'hidden',
+                      position: 'relative',
+                      minWidth: 0,
+                    }}
+                  >
+                    <WhatsAppStyleNavigation
+                      organizations={mockOrganizations}
+                      personalGroups={mockPersonalGroups}
+                      personalUsers={mockPersonalUsers}
+                      currentUserId="user_owner_123"
+                      onNavigate={handleWhatsAppNavigate}
+                      onVideoCall={handleVideoCall}
+                      onAudioCall={handleAudioCall}
+                      onScreenShare={handleScreenShare}
+                      onOpenFiles={handleOpenFiles}
+                    />
+                    {sidebarOpen && (
+                      <Box sx={{ position: 'absolute', top: 8, right: 8 }}>
+                        <IconButton size="small" onClick={handleToggleSidebar}>
+                          <ChevronLeft />
+                        </IconButton>
+                      </Box>
+                    )}
                   </Box>
-                )}
-              </Box>
-              {!sidebarOpen && (
-                <Box sx={{ position: 'absolute', top: 8, left: 8, zIndex: 2000 }}>
-                  <IconButton size="small" onClick={handleToggleSidebar} aria-label="Open sidebar">
-                    <ChevronRight />
-                  </IconButton>
-                </Box>
+                  {!sidebarOpen && (
+                    <Box sx={{ position: 'absolute', top: 8, left: 8, zIndex: 2000 }}>
+                      <IconButton size="small" onClick={handleToggleSidebar} aria-label="Open sidebar">
+                        <ChevronRight />
+                      </IconButton>
+                    </Box>
+                  )}
+                </>
               )}
               <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                 <AppBar position="sticky" elevation={1} sx={{ 

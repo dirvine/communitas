@@ -47,26 +47,23 @@ jobs:
     - name: Build binaries
       run: |
         cd src-tauri
-        cargo build --release --bin communitas-node
-        cargo build --release --bin bootstrap
+        cargo build --release --bin communitas-headless
 
     - name: Strip binaries
       run: |
-        strip src-tauri/target/release/communitas-node || true
-        strip src-tauri/target/release/bootstrap || true
+        strip src-tauri/target/release/communitas-headless || true
 
     - name: Create release archive
       run: |
         cd src-tauri/target/release
-        tar -czf communitas-binaries-linux-x86_64.tar.gz \
-          communitas-node \
-          bootstrap
+        tar -czf communitas-headless-linux-x86_64.tar.gz \
+          communitas-headless
 
     - name: Upload Linux binaries
       uses: actions/upload-artifact@v4
       with:
-        name: communitas-binaries-linux-x86_64
-        path: src-tauri/target/release/communitas-binaries-linux-x86_64.tar.gz
+        name: communitas-headless-linux-x86_64
+        path: src-tauri/target/release/communitas-headless-linux-x86_64.tar.gz
 
   build-macos:
     name: Build macOS Binaries
@@ -82,34 +79,30 @@ jobs:
     - name: Build x86_64 binaries
       run: |
         cd src-tauri
-        cargo build --release --target x86_64-apple-darwin --bin communitas-node
-        cargo build --release --target x86_64-apple-darwin --bin bootstrap
+        cargo build --release --target x86_64-apple-darwin --bin communitas-headless
 
     - name: Build aarch64 binaries
       run: |
         cd src-tauri
-        cargo build --release --target aarch64-apple-darwin --bin communitas-node
-        cargo build --release --target aarch64-apple-darwin --bin bootstrap
+        cargo build --release --target aarch64-apple-darwin --bin communitas-headless
 
     - name: Create universal binaries
       run: |
         cd src-tauri/target
         mkdir -p release/universal-apple-darwin
-        lipo release/x86_64-apple-darwin/release/communitas-node release/aarch64-apple-darwin/release/communitas-node -create -output release/universal-apple-darwin/communitas-node
-        lipo release/x86_64-apple-darwin/release/bootstrap release/aarch64-apple-darwin/release/bootstrap -create -output release/universal-apple-darwin/bootstrap
+        lipo release/x86_64-apple-darwin/release/communitas-headless release/aarch64-apple-darwin/release/communitas-headless -create -output release/universal-apple-darwin/communitas-headless
 
     - name: Create macOS archive
       run: |
         cd src-tauri/target/release/universal-apple-darwin
-        tar -czf communitas-binaries-macos-universal.tar.gz \
-          communitas-node \
-          bootstrap
+        tar -czf communitas-headless-macos-universal.tar.gz \
+          communitas-headless
 
     - name: Upload macOS binaries
       uses: actions/upload-artifact@v4
       with:
-        name: communitas-binaries-macos-universal
-        path: src-tauri/target/release/universal-apple-darwin/communitas-binaries-macos-universal.tar.gz
+        name: communitas-headless-macos-universal
+        path: src-tauri/target/release/universal-apple-darwin/communitas-headless-macos-universal.tar.gz
 
   build-windows:
     name: Build Windows Binaries
@@ -123,19 +116,18 @@ jobs:
     - name: Build binaries
       run: |
         cd src-tauri
-        cargo build --release --bin communitas-node
-        cargo build --release --bin bootstrap
+        cargo build --release --bin communitas-headless
 
     - name: Create Windows archive
       run: |
         cd src-tauri/target/release
-        Compress-Archive -Path communitas-node.exe,bootstrap.exe -DestinationPath communitas-binaries-windows-x86_64.zip
+        Compress-Archive -Path communitas-headless.exe -DestinationPath communitas-headless-windows-x86_64.zip
 
     - name: Upload Windows binaries
       uses: actions/upload-artifact@v4
       with:
-        name: communitas-binaries-windows-x86_64
-        path: src-tauri/target/release/communitas-binaries-windows-x86_64.zip
+        name: communitas-headless-windows-x86_64
+        path: src-tauri/target/release/communitas-headless-windows-x86_64.zip
 
   create-release:
     name: Create GitHub Release
@@ -148,25 +140,25 @@ jobs:
     - name: Download Linux binaries
       uses: actions/download-artifact@v4
       with:
-        name: communitas-binaries-linux-x86_64
+        name: communitas-headless-linux-x86_64
 
     - name: Download macOS binaries
       uses: actions/download-artifact@v4
       with:
-        name: communitas-binaries-macos-universal
+        name: communitas-headless-macos-universal
 
     - name: Download Windows binaries
       uses: actions/download-artifact@v4
       with:
-        name: communitas-binaries-windows-x86_64
+        name: communitas-headless-windows-x86_64
 
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v1
       with:
         files: |
-          communitas-binaries-linux-x86_64.tar.gz
-          communitas-binaries-macos-universal.tar.gz
-          communitas-binaries-windows-x86_64.zip
+          communitas-headless-linux-x86_64.tar.gz
+          communitas-headless-macos-universal.tar.gz
+          communitas-headless-windows-x86_64.zip
         generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

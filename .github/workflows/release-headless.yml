@@ -46,8 +46,7 @@ jobs:
               '- **macOS Universal**: communitas-headless-macos-universal.tar.gz\n' +
               '- **Windows x86_64**: communitas-headless-windows-x86_64.zip\n\n' +
               '### Binaries Included\n' +
-              '- communitas-node (headless P2P node with built-in auto-update)\n' +
-              '- bootstrap (network bootstrap node)\n\n' +
+              '- communitas-headless (headless P2P node with built-in auto-update)\n\n' +
               '### Installation\n' +
               'Extract the archive and run the binaries directly. No additional dependencies required.'
 
@@ -91,20 +90,17 @@ jobs:
       - name: Build binaries
         run: |
           cd src-tauri
-          cargo build --release --bin communitas-node
-          cargo build --release --bin bootstrap
+          cargo build --release --bin communitas-headless
 
       - name: Strip binaries
         run: |
-          strip src-tauri/target/release/communitas-node
-          strip src-tauri/target/release/bootstrap
+          strip src-tauri/target/release/communitas-headless
 
       - name: Create archive
         run: |
           cd src-tauri/target/release
           tar -czf communitas-headless-linux-x86_64.tar.gz \
-            communitas-node \
-            bootstrap
+            communitas-headless
 
       - name: Upload to release
         uses: softprops/action-gh-release@v1
@@ -127,28 +123,24 @@ jobs:
       - name: Build x86_64 binaries
         run: |
           cd src-tauri
-          cargo build --release --target x86_64-apple-darwin --bin communitas-node
-          cargo build --release --target x86_64-apple-darwin --bin bootstrap
+          cargo build --release --target x86_64-apple-darwin --bin communitas-headless
 
       - name: Build aarch64 binaries
         run: |
           cd src-tauri
-          cargo build --release --target aarch64-apple-darwin --bin communitas-node
-          cargo build --release --target aarch64-apple-darwin --bin bootstrap
+          cargo build --release --target aarch64-apple-darwin --bin communitas-headless
 
       - name: Create universal binaries
         run: |
           cd src-tauri/target
           mkdir -p release/universal-apple-darwin
-          lipo release/x86_64-apple-darwin/release/communitas-node release/aarch64-apple-darwin/release/communitas-node -create -output release/universal-apple-darwin/communitas-node
-          lipo release/x86_64-apple-darwin/release/bootstrap release/aarch64-apple-darwin/release/bootstrap -create -output release/universal-apple-darwin/bootstrap
+          lipo release/x86_64-apple-darwin/release/communitas-headless release/aarch64-apple-darwin/release/communitas-headless -create -output release/universal-apple-darwin/communitas-headless
 
       - name: Create archive
         run: |
           cd src-tauri/target/release/universal-apple-darwin
           tar -czf communitas-headless-macos-universal.tar.gz \
-            communitas-node \
-            bootstrap
+            communitas-headless
 
       - name: Upload to release
         uses: softprops/action-gh-release@v1
@@ -169,13 +161,12 @@ jobs:
       - name: Build binaries
         run: |
           cd src-tauri
-          cargo build --release --bin communitas-node
-          cargo build --release --bin bootstrap
+          cargo build --release --bin communitas-headless
 
       - name: Create archive
         run: |
           cd src-tauri/target/release
-          Compress-Archive -Path communitas-node.exe,bootstrap.exe -DestinationPath communitas-headless-windows-x86_64.zip
+          Compress-Archive -Path communitas-headless.exe -DestinationPath communitas-headless-windows-x86_64.zip
 
       - name: Upload to release
         uses: softprops/action-gh-release@v1

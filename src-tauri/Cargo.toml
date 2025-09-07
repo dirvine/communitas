@@ -9,25 +9,19 @@ homepage = "https://github.com/dirvine/communitas-foundation"
 documentation = "https://docs.rs/communitas-tauri"
 edition = "2024"
 rust-version = "1.85.0"
-default-run = "communitas-tauri"
+default-run = "communitas"
 
 [lib]
 name = "communitas_tauri"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [[bin]]
-name = "communitas-tauri"
+name = "communitas"
 path = "src/main.rs"
 
 [[bin]]
-name = "communitas-node"
-path = "src/bin/communitas-node.rs"
-
-
-
-[[bin]]
-name = "bootstrap"
-path = "src/bin/bootstrap.rs"
+name = "communitas-headless"
+path = "src/bin/communitas-headless.rs"
 
 
 

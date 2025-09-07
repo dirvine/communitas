@@ -244,12 +244,7 @@ export const LoginDialog: React.FC<LoginDialogProps> = ({
             )}
           </AnimatePresence>
 
-          {/* Auth State Error */}
-          {authState.error && (
-            <Alert severity="error">
-              {authState.error}
-            </Alert>
-          )}
+          {/* Global auth error suppressed in dialog to avoid confusion with local actions */}
 
           <Box component="form" onSubmit={handleSubmit}>
             <Stack spacing={3}>

@@ -358,7 +358,9 @@ function App() {
   const HeaderComponent = ({ onMenuClick, showMenuButton }: { 
     onMenuClick?: () => void; 
     showMenuButton?: boolean;
-  }) => (
+  }) => {
+    const navigate = useNavigate();
+    return (
     <Toolbar sx={{ gap: 1 }}>
       {showMenuButton && (
         <IconButton
@@ -370,6 +372,9 @@ function App() {
           <MenuIcon />
         </IconButton>
       )}
+      <IconButton color="inherit" onClick={() => navigate('/') } sx={{ mr: 1 }} aria-label="Home">
+        <HomeIcon />
+      </IconButton>
       <Typography 
         variant="h6" 
         component="div" 
@@ -430,7 +435,7 @@ function App() {
         <AuthStatus compact={true} showLabel={false} />
       </Box>
     </Toolbar>
-  )
+  )}
 
   // Check if running in Tauri or browser
   // Show full UI in development mode or when in Tauri
@@ -540,7 +545,7 @@ function App() {
                 )}
               </Box>
               {!sidebarOpen && (
-                <Box sx={{ position: 'absolute', top: 8, left: 8, zIndex: 1201 }}>
+                <Box sx={{ position: 'absolute', top: 8, left: 8, zIndex: 2000 }}>
                   <IconButton size="small" onClick={handleToggleSidebar} aria-label="Open sidebar">
                     <ChevronRight />
                   </IconButton>

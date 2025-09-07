@@ -57,6 +57,12 @@ uuid = { version = "1", features = ["v4", "serde"] }
 dirs = "5.0"
 rand = "0.8"
 
+# Headless node dependencies
+self_update = "0.41"
+warp = "0.3"
+toml = "0.8"
+tempfile = "3.8"
+
 # Tauri will be added when we set up the Tauri project
 # tauri = { version = "2.0.0-alpha", features = ["api-all"] }
 
@@ -70,6 +76,10 @@ test-harness = ["proptest"]
 
 [lints]
 workspace = true
+
+[[bin]]
+name = "communitas-headless"
+path = "src-tauri/src/bin/communitas-headless.rs"
 
 [workspace]
 members = ["src-tauri"]

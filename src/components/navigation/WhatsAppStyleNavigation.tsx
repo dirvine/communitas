@@ -250,23 +250,6 @@ export const WhatsAppStyleNavigation: React.FC<WhatsAppStyleNavigationProps> = (
       <Divider />
 
       {/* Personal Groups Section */}
-      {/* Search within organization */}
-      <Box sx={{ p: 2, pb: 0 }}>
-        <TextField
-          fullWidth
-          size="small"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          placeholder={`Search…`}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon fontSize="small" />
-              </InputAdornment>
-            ),
-          }}
-        />
-      </Box>
 
       <Box sx={{ flex: 1, overflow: 'auto' }}>
         <Box sx={{ p: 2, pb: 1 }}>

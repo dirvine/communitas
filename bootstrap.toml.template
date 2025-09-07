@@ -1,0 +1,93 @@
+# Communitas Testnet Bootstrap Configuration Template
+# Copy this file to bootstrap.toml and fill in the actual IP addresses
+
+[network]
+name = "communitas-testnet"
+version = "v0.1.0"
+
+# Bootstrap coordinator node
+[[nodes]]
+name = "bootstrap-coordinator"
+internal_ip = "REPLACE_WITH_ACTUAL_IP"  # Get from: hostname -i in container
+port = 8080
+region = "nyc"
+role = "bootstrap"
+public_key = "REPLACE_WITH_ACTUAL_PUBLIC_KEY"
+
+# Worker nodes
+[[nodes]]
+name = "node-nyc"
+internal_ip = "REPLACE_WITH_ACTUAL_IP"
+port = 8081
+region = "nyc"
+role = "worker"
+public_key = "REPLACE_WITH_ACTUAL_PUBLIC_KEY"
+
+[[nodes]]
+name = "node-sfo"
+internal_ip = "REPLACE_WITH_ACTUAL_IP"
+port = 8082
+region = "sfo"
+role = "worker"
+public_key = "REPLACE_WITH_ACTUAL_PUBLIC_KEY"
+
+[[nodes]]
+name = "node-lon"
+internal_ip = "REPLACE_WITH_ACTUAL_IP"
+port = 8083
+region = "lon"
+role = "worker"
+public_key = "REPLACE_WITH_ACTUAL_PUBLIC_KEY"
+
+[[nodes]]
+name = "node-fra"
+internal_ip = "REPLACE_WITH_ACTUAL_IP"
+port = 8084
+region = "fra"
+role = "worker"
+public_key = "REPLACE_WITH_ACTUAL_PUBLIC_KEY"
+
+[[nodes]]
+name = "node-sgp"
+internal_ip = "REPLACE_WITH_ACTUAL_IP"
+port = 8085
+region = "sgp"
+role = "worker"
+public_key = "REPLACE_WITH_ACTUAL_PUBLIC_KEY"
+
+[[nodes]]
+name = "node-syd"
+internal_ip = "REPLACE_WITH_ACTUAL_IP"
+port = 8086
+region = "syd"
+role = "worker"
+public_key = "REPLACE_WITH_ACTUAL_PUBLIC_KEY"
+
+# Database configuration
+[database]
+host = "testnet-metrics"
+port = 5432
+database = "communitas_metrics"
+username = "REPLACE_WITH_DB_USER"
+password = "REPLACE_WITH_DB_PASSWORD"
+
+# DHT configuration
+[dht]
+bootstrap_nodes = [
+    "bootstrap-coordinator:8080",
+]
+replication_factor = 3
+k = 20
+
+# P2P configuration
+[p2p]
+listen_address = "0.0.0.0"
+external_address = "REPLACE_WITH_EXTERNAL_IP"
+max_connections = 50
+connection_timeout = 30
+
+# Security configuration
+[security]
+enable_pqc = true
+key_rotation_interval = 3600
+encryption_algorithm = "kyber1024"

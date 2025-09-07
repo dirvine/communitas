@@ -1,5 +1,5 @@
 // @ts-ignore - Tauri API import for desktop builds
-import { invoke } from '@tauri-apps/api/tauri'
+import { invoke } from '@tauri-apps/api/core'
 
 // Build canonical message bytes per saorsa-core for identity.website_root update
 // Message: b"saorsa-identity:website_root:v1" || id || pk || CBOR(website_root)

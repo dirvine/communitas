@@ -30,6 +30,8 @@ Communitas is a local-first, PQC-ready collaboration platform that merges WhatsA
 - **Website Publishing**: DNS-free web via identity.website_root binding
 - **Messaging**: End-to-end encrypted group messaging with channel support
 - **Groups**: Threshold-ready group identities with ML-DSA signatures
+- **Network Connection**: Auto-connects on startup with retry logic and graceful fallback to local mode
+- **Offline-First**: All operations work offline via IndexedDB and sync when network returns
 
 ## Development Commands
 
@@ -128,6 +130,52 @@ Per-entity storage with different access policies:
 - **Secure storage**: Platform-specific credential managers
 
 ## Common Development Tasks
+
+### Working with Network Connection
+```typescript
+// Network service is a singleton that auto-connects on startup
+import { networkService } from './services/network/NetworkConnectionService';
+
+// Check network status
+const state = networkService.getState();
+console.log(state.status); // 'connecting' | 'connected' | 'offline' | 'local' | 'error'
+
+// Subscribe to network changes
+const unsubscribe = networkService.subscribe((state) => {
+  console.log('Network changed:', state.status);
+});
+
+// Manual control
+await networkService.connect();    // Try to connect
+await networkService.disconnect(); // Go to local mode
+
+// Testing in console
+window.testNetwork.status();        // Check status
+window.testNetwork.simulateOffline(); // Test offline
+window.testNetwork.testFlow();      // Run complete test
+```
+
+### Offline-First Storage
+```typescript
+import { offlineStorage } from './services/storage/OfflineStorageService';
+
+// Store data (works offline)
+await offlineStorage.store('key', data, {
+  ttl: 3600000,        // 1 hour cache
+  encrypt: true,       // Encrypt sensitive data
+  syncOnline: true     // Sync when network returns
+});
+
+// Retrieve data (from cache first, then network)
+const data = await offlineStorage.get('key');
+
+// Queue operation for sync
+await offlineStorage.queueForSync({
+  type: 'create',
+  entity: 'message',
+  data: messageData
+});
+```
 
 ### Adding New Tauri Commands
 1. Define command in appropriate module (e.g., `core_commands.rs`)
@@ -237,6 +285,10 @@ Bootstrap and seed nodes for network support:
 
 ### Common Issues
 - **P2P Connection Failures**: Check bootstrap node connectivity
+  - App auto-falls back to local mode when network unavailable
+  - Check network status indicator in header (green=connected, yellow=local/connecting, red=error)
+  - Click indicator to manually reconnect
+  - Use `window.testNetwork.status()` in console to debug
 - **Build Failures**: Ensure Rust 1.85+ and Node.js 20+ installed
 - **Test Failures**: Clean `.communitas-data/` directory between test runs
 

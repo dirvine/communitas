@@ -23,7 +23,7 @@ use crate::{
 use anyhow::Result;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use tokio::sync::RwLock;
 
 /// Peer connection information
@@ -68,6 +68,7 @@ pub struct ConnectionStats {
     pub last_health_check: Instant,
 }
 
+#[allow(clippy::missing_fields_in_debug)]
 impl std::fmt::Debug for NetworkIntegration {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("NetworkIntegration")
@@ -153,11 +154,12 @@ impl NetworkIntegration {
         let mut success_count = 0;
         let mut failure_count = 0;
 
-        for member in &group.members {
-            if member != &self.get_identity().await?.four_word_address {
+        for participant in &group.participants {
+            let member_addr = &participant.four_word_address;
+            if member_addr != &self.get_identity().await?.four_word_address {
                 let result = timeout(
                     Duration::from_millis(100), // 100ms timeout for real-time delivery
-                    self.send_message_to_peer(member, message),
+                    self.send_message_to_peer(member_addr, message),
                 )
                 .await;
 
@@ -320,7 +322,7 @@ impl NetworkIntegration {
         let peers = self.peers.read().await;
         let mut healthy_count = 0;
 
-        for peer in peers.values() {
+        for _peer in peers.values() {
             // TODO: Implement actual peer health check
             // For now, simulate random health status
             if rand::random::<bool>() {
@@ -329,6 +331,7 @@ impl NetworkIntegration {
         }
 
         stats.active_connections = healthy_count;
+        stats.failed_connections = peers.len().saturating_sub(healthy_count);
         tracing::info!(
             "Health check completed: {}/{} peers healthy",
             healthy_count,

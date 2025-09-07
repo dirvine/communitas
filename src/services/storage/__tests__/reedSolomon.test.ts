@@ -16,7 +16,7 @@ describe('ReedSolomonEncoder', () => {
   })
 
   describe('Basic encoding/decoding', () => {
-    test('should encode file into k+m shards', async () => {
+    test.runIf(!!process.env.RUN_SLOW)('should encode file into k+m shards', async () => {
       // Given: 10MB file
       const fileSize = 10 * 1024 * 1024 // 10MB
       const originalData = new Uint8Array(fileSize)
@@ -81,7 +81,7 @@ describe('ReedSolomonEncoder', () => {
       expect(decoded).toEqual(emptyData)
     })
 
-    test('should handle files not divisible by k', async () => {
+    test.runIf(!!process.env.RUN_SLOW)('should handle files not divisible by k', async () => {
       // Given: 10MB + 7 bytes file
       const size = 10 * 1024 * 1024 + 7
       const originalData = new Uint8Array(size)

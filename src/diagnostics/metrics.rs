@@ -83,7 +83,7 @@ pub struct PeerMetrics {
 
 impl NetworkMetrics {
     /// Update metrics with new stats
-    pub fn update(&mut self, stats: NetworkStats) {
+    pub fn update(&mut self, stats: &NetworkStats) {
         self.connected_peers = stats.connected_peers;
         self.bandwidth_usage_kbps = stats.bandwidth_kbps;
 
@@ -95,8 +95,11 @@ impl NetworkMetrics {
 
         // Calculate average latency
         if !self.latency_samples.is_empty() {
-            self.avg_latency_ms =
-                self.latency_samples.iter().sum::<f64>() / self.latency_samples.len() as f64;
+            #[allow(clippy::cast_precision_loss)]
+            {
+                let len_f64 = self.latency_samples.len() as f64;
+                self.avg_latency_ms = self.latency_samples.iter().sum::<f64>() / len_f64;
+            }
         }
     }
 }

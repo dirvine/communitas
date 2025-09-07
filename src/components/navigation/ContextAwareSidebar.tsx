@@ -139,28 +139,7 @@ const ContextAwareSidebar: React.FC<ContextAwareSidebarProps> = ({ currentUserId
           }
         }}
       >
-        {/* Personal Space */}
-        <ListItem disablePadding>
-          <ListItemButton
-            selected={state.context === 'personal'}
-            onClick={handlePersonalClick}
-            sx={{
-              bgcolor: state.context === 'personal' ? 'action.selected' : 'transparent'
-            }}
-          >
-            <ListItemIcon>
-              <HomeIcon color={state.context === 'personal' ? 'primary' : 'inherit'} />
-            </ListItemIcon>
-            <ListItemText 
-              primary="Personal Space"
-              secondary="Your contacts & groups"
-            />
-          </ListItemButton>
-        </ListItem>
-
-        <Divider sx={{ my: 1 }} />
-
-        {/* Organizations Section */}
+        {/* Organizations Section - Moved to top */}
         <ListItem>
           <Typography variant="overline" color="text.secondary">
             Organizations ({filteredOrganizations.length})
@@ -332,6 +311,27 @@ const ContextAwareSidebar: React.FC<ContextAwareSidebarProps> = ({ currentUserId
               <AddIcon />
             </ListItemIcon>
             <ListItemText primary="Create Organization" />
+          </ListItemButton>
+        </ListItem>
+
+        <Divider sx={{ my: 1 }} />
+
+        {/* Personal Space - Moved to bottom */}
+        <ListItem disablePadding>
+          <ListItemButton
+            selected={state.context === 'personal'}
+            onClick={handlePersonalClick}
+            sx={{
+              bgcolor: state.context === 'personal' ? 'action.selected' : 'transparent'
+            }}
+          >
+            <ListItemIcon>
+              <HomeIcon color={state.context === 'personal' ? 'primary' : 'inherit'} />
+            </ListItemIcon>
+            <ListItemText 
+              primary="Personal Space"
+              secondary="Your contacts & groups"
+            />
           </ListItemButton>
         </ListItem>
       </List>

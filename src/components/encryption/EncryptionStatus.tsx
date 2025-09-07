@@ -96,7 +96,7 @@ export const EncryptionStatus: React.FC<EncryptionStatusProps> = ({
           sx={{
             color: getStatusColor() === 'success' ? 'success.main' : 
                    getStatusColor() === 'warning' ? 'warning.main' : 
-                   getStatusColor() === 'error' ? 'error.main' : 'text.secondary'
+                   getStatusColor() === 'error' ? 'error.main' : 'text.primary'
           }}
         >
           {getStatusIcon()}

@@ -34,17 +34,19 @@ interface LoginDialogProps {
   open: boolean;
   onClose: () => void;
   onSuccess?: () => void;
+  initialMode?: 'login' | 'create';
 }
 
 export const LoginDialog: React.FC<LoginDialogProps> = ({
   open,
   onClose,
   onSuccess,
+  initialMode = 'login',
 }) => {
   const { login, createIdentity, authState } = useAuth();
   const { isMobile } = useResponsive();
   
-  const [mode, setMode] = useState<'login' | 'create'>('login');
+  const [mode, setMode] = useState<'login' | 'create'>(initialMode);
   const [formData, setFormData] = useState({
     fourWordAddress: '',
     privateKey: '',
@@ -167,7 +169,7 @@ export const LoginDialog: React.FC<LoginDialogProps> = ({
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <SecurityIcon color="primary" />
           <Typography variant="h6" fontWeight={600}>
-            {mode === 'login' ? 'Sign In to Communitas' : 'Create New Identity'}
+            {mode === 'login' ? 'Sign In to Communitas' : 'Sign Up for Communitas'}
           </Typography>
         </Box>
         <IconButton onClick={onClose} size="small">
@@ -184,14 +186,14 @@ export const LoginDialog: React.FC<LoginDialogProps> = ({
               variant={mode === 'login' ? 'filled' : 'outlined'}
               color={mode === 'login' ? 'primary' : 'default'}
               onClick={() => switchMode('login')}
-              sx={{ cursor: 'pointer', minWidth: 80 }}
+              sx={{ cursor: 'pointer', minWidth: 100 }}
             />
             <Chip
-              label="Create Identity"
+              label="Sign Up"
               variant={mode === 'create' ? 'filled' : 'outlined'}
               color={mode === 'create' ? 'primary' : 'default'}
               onClick={() => switchMode('create')}
-              sx={{ cursor: 'pointer', minWidth: 120 }}
+              sx={{ cursor: 'pointer', minWidth: 100 }}
             />
           </Stack>
 
@@ -235,7 +237,7 @@ export const LoginDialog: React.FC<LoginDialogProps> = ({
                     InputProps={{
                       startAdornment: <PersonIcon sx={{ mr: 1, color: 'text.secondary' }} />,
                     }}
-                    helperText="Your unique four-word network address"
+                    helperText="Enter your existing four-word network address"
                     disabled={loading}
                   />
 
@@ -322,8 +324,10 @@ export const LoginDialog: React.FC<LoginDialogProps> = ({
 
                   <Alert severity="info" sx={{ mt: 2 }}>
                     <Typography variant="body2">
-                      Creating a new identity will generate a unique four-word address and 
-                      cryptographic keys for secure communication on the P2P network.
+                      <strong>Sign up will create:</strong><br/>
+                      • A unique four-word address (e.g., ocean-forest-moon-star)<br/>
+                      • Cryptographic keys for secure communication<br/>
+                      • Your identity on the P2P network
                     </Typography>
                   </Alert>
                 </>

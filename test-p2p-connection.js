@@ -21,15 +21,28 @@ async function testP2PConnection() {
     }
   });
   
-  console.log('Navigating to http://localhost:1420...');
-  await page.goto('http://localhost:1420', { waitUntil: 'networkidle2' });
+  console.log('Navigating to http://localhost:1422...');
+  await page.goto('http://localhost:1422', { waitUntil: 'networkidle2' });
   
-  // Wait for the app to load
-  await page.waitForSelector('h6', { timeout: 5000 });
-  
+  // Wait for the app to load - look for any content
+  await page.waitForSelector('body', { timeout: 5000 });
+
   // Get the page title
   const title = await page.title();
   console.log('✓ Page loaded:', title);
+
+  // Check if we're in browser fallback mode
+  const fallbackText = await page.evaluate(() => {
+    const h1 = document.querySelector('h1');
+    return h1 ? h1.textContent : '';
+  });
+
+  if (fallbackText && fallbackText.includes('Communitas Desktop App Required')) {
+    console.log('ℹ️  App is running in browser fallback mode');
+    console.log('💡 To test P2P features, run the Tauri desktop app with: npm run tauri dev');
+    console.log('📱 The desktop app provides full P2P networking capabilities');
+    return;
+  }
   
   // Look for the connect button using different selectors
   try {
@@ -38,27 +51,31 @@ async function testP2PConnection() {
       const buttons = Array.from(document.querySelectorAll('button'));
       return buttons.find(btn => btn.textContent?.includes('Connect to P2P Network'));
     });
-    
+
     if (connectButton && await connectButton.evaluate(el => el !== null)) {
       console.log('✓ Found "Connect to P2P Network" button');
-      
+
       // Click the button
-      await connectButton.click();
+      await page.evaluate(() => {
+        const buttons = Array.from(document.querySelectorAll('button'));
+        const btn = buttons.find(btn => btn.textContent?.includes('Connect to P2P Network'));
+        if (btn) btn.click();
+      });
       console.log('✓ Clicked connect button');
-      
+
       // Wait for connection attempt
       await page.waitForTimeout(5000);
-      
+
       // Check for any alerts or status changes
-      const alerts = await page.$$eval('div[role="alert"]', elements => 
+      const alerts = await page.$$eval('div[role="alert"]', elements =>
         elements.map(el => el.textContent)
       );
-      
+
       if (alerts.length > 0) {
         console.log('\n📡 Connection status:');
         alerts.forEach(alert => console.log('  -', alert));
       }
-      
+
       // Check if peer count changed
       const peerCount = await page.evaluate(() => {
         const h3s = document.querySelectorAll('h3');
@@ -70,17 +87,19 @@ async function testP2PConnection() {
         }
         return 0;
       });
-      
+
       if (peerCount > 0) {
         console.log(`\n✅ Successfully connected! Peer count: ${peerCount}`);
       } else {
         console.log('\n⚠️  Connection attempted but no peers detected yet');
+        console.log('💡 This is expected in a local test environment without other nodes');
       }
     } else {
       console.log('ℹ️  App may already be connected or button not found');
     }
   } catch (e) {
     console.log('Error during connection test:', e.message);
+    console.log('💡 This may be expected if the P2P features require the Tauri backend');
   }
   
   // Take a final screenshot

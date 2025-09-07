@@ -1,0 +1,33 @@
+# Simple testnet Dockerfile for quick builds
+FROM ubuntu:22.04
+
+# Install minimal dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    build-essential \
+    pkg-config \
+    libssl-dev \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Rust (minimal profile for faster builds)
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# Create app directory
+WORKDIR /app
+
+# Copy source code
+COPY src-tauri/ /app/
+
+# Build only the bootstrap binary first (smaller build)
+RUN cd /app && cargo build --release --bin bootstrap
+
+# Copy the binary to root
+RUN cp /app/target/release/bootstrap /bootstrap
+
+# Expose port
+EXPOSE 8080
+
+# Default command
+CMD ["/bootstrap"]

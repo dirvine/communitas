@@ -1,0 +1,102 @@
+name: Release Binaries
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release'
+        required: true
+        default: 'latest'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+
+jobs:
+  build-binaries:
+    name: Build Linux Binaries
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Rust stable
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: x86_64-unknown-linux-gnu
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          curl \
+          wget \
+          libssl-dev \
+          pkg-config
+
+    - name: Cache Cargo registry
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: linux-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Build communitas-node binary
+      run: cargo build --release --bin communitas-node
+      working-directory: src-tauri
+
+    - name: Build bootstrap binary
+      run: cargo build --release --bin bootstrap
+      working-directory: src-tauri
+
+    - name: Build communitas-autoupdater binary
+      run: cargo build --release --bin communitas-autoupdater
+      working-directory: src-tauri
+
+    - name: Strip binaries
+      run: |
+        strip src-tauri/target/release/communitas-node
+        strip src-tauri/target/release/bootstrap
+        strip src-tauri/target/release/communitas-autoupdater
+
+    - name: Create release archive
+      run: |
+        cd src-tauri/target/release
+        tar -czf communitas-binaries-linux-x86_64.tar.gz \
+          communitas-node \
+          bootstrap \
+          communitas-autoupdater
+
+    - name: Upload binaries as artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: communitas-binaries-linux-x86_64
+        path: src-tauri/target/release/communitas-binaries-linux-x86_64.tar.gz
+
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: build-binaries
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Download binaries artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: communitas-binaries-linux-x86_64
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: communitas-binaries-linux-x86_64.tar.gz
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -109,7 +109,7 @@ export const ThemeSwitcher: React.FC<ThemeSwitcherProps> = ({
             onClick={toggleMode}
             size="small"
             sx={{
-              color: muiTheme.palette.text.secondary,
+              color: muiTheme.palette.text.primary,
               '&:hover': {
                 backgroundColor: muiTheme.palette.action.hover,
                 color: muiTheme.palette.primary.main,
@@ -126,7 +126,7 @@ export const ThemeSwitcher: React.FC<ThemeSwitcherProps> = ({
               onClick={handlePresetMenuOpen}
               size="small"
               sx={{
-                color: muiTheme.palette.text.secondary,
+                color: muiTheme.palette.text.primary,
                 '&:hover': {
                   backgroundColor: muiTheme.palette.action.hover,
                   color: muiTheme.palette.primary.main,

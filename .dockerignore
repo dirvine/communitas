@@ -1,0 +1,971 @@
+# Node.js dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build outputs
+dist/
+build/
+src-tauri/target/
+*.tsbuildinfo
+
+# Development files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+
+# Documentation and assets
+docs/
+*.md
+!README.md
+
+# Test files
+**/*.test.*
+**/*.spec.*
+coverage/
+playwright-report/
+test-results/
+
+# Logs
+logs/
+*.log
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+
+# Dependency directories
+jspm_packages/
+
+# Optional npm cache directory
+.npm
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# dotenv environment variables file
+.env
+
+# IDE files
+.vscode/
+.idea/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files
+tmp/
+temp/
+
+# Docker files
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Package manager lock files (keep one)
+package-lock.json
+yarn.lock
+
+# Rust target directory
+target/
+
+# Cargo lock (keep for reproducible builds)
+# Cargo.lock
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Logs
+logs
+*.log
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage
+
+# nyc test coverage
+.nyc_output
+
+# Grunt intermediate storage (http://gruntjs.com/creating-plugins#storing-task-files)
+.grunt
+
+# Bower dependency directory (https://bower.io/)
+bower_components
+
+# node-waf configuration
+.lock-wscript
+
+# Compiled binary addons (https://nodejs.org/api/addons.html)
+build/Release
+
+# Dependency directories
+node_modules/
+jspm_packages/
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Optional npm cache directory
+.npm
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# dotenv environment variables file
+.env
+
+# parcel-bundler cache (https://parceljs.org/)
+.cache
+.parcel-cache
+
+# next.js build output
+.next
+
+# nuxt.js build output
+.nuxt
+
+# vuepress build output
+.vuepress/dist
+
+# Serverless directories
+.serverless
+
+# FuseBox cache
+.fusebox/
+
+# DynamoDB Local files
+.dynamodb/
+
+# TernJS port file
+.tern-port
+
+# Stores VSCode versions used for testing VSCode extensions
+.vscode-test
+
+# Temporary folders
+tmp/
+temp/
+
+# Test coverage
+coverage/
+*.lcov
+
+# Playwright
+playwright-report/
+test-results/
+
+# Tauri
+src-tauri/target/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# PEP 582
+__pypackages__/
+
+# Celery stuff
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# Cython debug symbols
+cython_debug/
+
+# Go
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+# Dependency directories (uncomment the next line if you want to remove dependencies from the Docker build)
+# vendor/
+
+# Go workspace file
+go.work
+
+# Java
+*.class
+
+# Log file
+*.log
+
+# BlueJ files
+*.ctxt
+
+# Mobile Tools for Java (J2ME)
+.mtj.tmp/
+
+# Package Files #
+*.jar
+*.war
+*.nar
+*.ear
+*.zip
+*.tar.gz
+*.rar
+
+# virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
+hs_err_pid*
+
+# C++
+# Prerequisites
+*.d
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Fortran module files
+*.mod
+*.smod
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+# Ruby
+*.gem
+*.rbc
+*.o
+*.log
+
+# Documentation
+doc/
+
+# YARD artifacts
+.yardoc/
+_yardoc/
+doc/
+
+# bundler
+.bundle/
+
+# RubyGems
+gemfiles/
+
+# rbenv
+.rbenv-version
+
+# gemsets
+.gemset
+
+# IRB
+.irb_history
+
+# RVM
+.rvmrc
+.ruby-version
+.ruby-gemset
+
+# C
+*.o
+*.so
+*.dylib
+*.dll
+*.exe
+
+# Haskell
+dist/
+dist-newstyle/
+cabal.project.local
+.ghc.environment.*
+
+# Elm
+elm-stuff/
+*.elmi
+*.elmo
+
+# Elixir
+_build/
+deps/
+*.ez
+erl_crash.dump
+*.log
+
+# Erlang
+.eunit/
+deps/
+*.beam
+*.plt
+erl_crash.dump
+*.log
+
+# Lua
+*.luac
+
+# Nim
+nimcache/
+
+# PHP
+vendor/
+composer.lock
+
+# Laravel
+bootstrap/cache/
+storage/logs/
+storage/framework/cache/
+storage/framework/sessions/
+storage/framework/views/
+
+# Symfony
+var/cache/
+var/logs/
+var/sessions/
+
+# Drupal
+sites/default/files/
+sites/default/settings.local.php
+
+# WordPress
+wp-content/uploads/
+wp-content/cache/
+
+# Magento
+var/
+generated/
+pub/static/_cache/
+
+# CakePHP
+tmp/
+logs/
+cache/
+
+# Yii
+runtime/
+assets/
+
+# Zend
+data/cache/
+data/logs/
+data/sessions/
+
+# CodeIgniter
+application/logs/
+application/cache/
+
+# ExpressionEngine
+system/ee/legacy/libraries/cache/
+system/ee/legacy/libraries/logs/
+
+# Bolt
+app/cache/
+app/logs/
+
+# Craft CMS
+storage/runtime/
+storage/logs/
+
+# October CMS
+storage/temp/
+storage/logs/
+storage/cache/
+
+# Grav
+cache/
+logs/
+images/
+assets/
+
+# Pico
+plugins/
+themes/
+
+# Kirby
+content/
+site/accounts/
+site/cache/
+site/sessions/
+
+# Statamic
+local/
+statamic/
+storage/
+
+# Anchor CMS
+content/
+
+# CouchDB
+*.couch
+
+# Redis
+dump.rdb
+
+# MongoDB
+*.lock
+storage.db
+journal/
+
+# Elasticsearch
+data/
+logs/
+
+# SQLite
+*.db
+*.sqlite
+*.sqlite3
+
+# PostgreSQL
+pgdata/
+
+# MySQL
+mysql/
+mysql-data/
+
+# MariaDB
+mariadb/
+mariadb-data/
+
+# Docker
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# Kubernetes
+*.yaml
+*.yml
+
+# Helm
+chart/
+
+# Terraform
+*.tfstate
+*.tfvars
+.terraform/
+
+# Ansible
+*.retry
+
+# Packer
+*.pkrvars.hcl
+
+# Vagrant
+.vagrant/
+
+# VirtualBox
+*.vdi
+*.vmdk
+*.vhd
+
+# VMware
+*.vmx
+*.vmsd
+*.vmdk
+*.vmxf
+*.vmem
+
+# Hyper-V
+*.vhdx
+*.avhdx
+
+# Parallels
+*.pvm
+
+# QEMU
+*.qcow2
+*.img
+
+# libvirt
+*.xml
+
+# Cloud
+.aws/
+.gcp/
+.azure/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary
+tmp/
+temp/
+*.tmp
+*.temp
+
+# Backup
+*.bak
+*.backup
+*~
+
+# Logs
+logs/
+*.log
+
+# Cache
+.cache/
+.cache
+*.cache
+
+# Config
+config/
+*.config
+*.cfg
+*.ini
+*.conf
+
+# Secrets
+secrets/
+*.key
+*.pem
+*.crt
+*.cer
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.truststore
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+db/
+database/
+
+# Screenshots
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.tiff
+*.svg
+
+# Videos
+*.mp4
+*.avi
+*.mkv
+*.mov
+*.wmv
+*.flv
+*.webm
+
+# Audio
+*.mp3
+*.wav
+*.flac
+*.aac
+*.ogg
+
+# Documents
+*.pdf
+*.doc
+*.docx
+*.xls
+*.xlsx
+*.ppt
+*.pptx
+*.odt
+*.ods
+*.odp
+
+# Archives
+*.zip
+*.tar
+*.gz
+*.bz2
+*.xz
+*.7z
+*.rar
+
+# Installers
+*.dmg
+*.pkg
+*.deb
+*.rpm
+*.exe
+*.msi
+
+# Other
+*.torrent
+*.iso
+*.bin
+*.cue
+*.mdf
+*.mds
+
+# Project specific
+.claude/
+AGENTS.md
+AGENTS_API.md
+ARCHITECTURE.md
+AUTONOMOUS_ORCHESTRATION_COMPLETION_REPORT.md
+BROWSER_DEVELOPMENT.md
+CHANGELOG.md
+CLAUDE.md
+DESIGN.md
+DOCUMENTATION_AUDIT_REPORT.md
+EXPERIMENTAL_MODE_TESTING.md
+FOUR_WORD_IDENTITY_ARCHITECTURE.md
+MCP_SERVERS.md
+NETWORK_TESTING.md
+SECURITY_AUDIT_SAORSA.md
+Sprint-3-Messaging-Architecture.md
+TAURI_MCP_TESTING.md
+TESTNET_DEPLOYMENT_README.md
+communitas-screenshot.png
+deploy-testnet.sh
+deploy.sh
+docker-compose.testnet.yml
+index.html
+local-testnet-config.toml
+monitor-build.sh
+p2p-connection-test.png
+run-frontend.sh
+run-multiple-instances.sh
+tauri-app-test.png
+test-bootstrap-config.sh
+test-bootstrap.sh
+test-collaboration.js
+test-connectivity.sh
+test-frontend.js
+test-local-network.sh
+test-local-setup.sh
+test-p2p-connection.js
+test-tauri-app.js
+test-tauri-identity.js
+tmp
+tsconfig.node.json
+tsconfig.test.json
+vitest.config.ts
+vitest.setup.ts
+vite.config.ts
+playwright.config.ts
+package.json
+package-lock.json
+tsconfig.json
+README.md
+LICENSE-AGPL-3.0
+LICENSE-COMMERCIAL.md
+Cargo.toml.bak2
+check_keyring.rs
+debug_keyring.rs
+test_keyring_api.rs
+test_keyring_detailed.rs
+test_keyring.rs
+test_saorsa_pqc.rs
+test_secure_storage_final.rs
+test_secure_storage_isolated.rs
+test_secure_storage.rs
+TASK_6_MESSAGING_PROGRESS.md
+TASK_7_COMPLETION_SUMMARY.md
+TASK_7_GROUP_CHAT_PROGRESS.md
+src/
+public/
+tests/
+scripts/
+servers/
+finalise/
+mcp-artifacts/
+playwright-report/
+deployment/
+apps/
+docs/
+.github/
+.cargo/
+.cursorrules
+.gitignore
+.sgignore
+AGENTS_API.md
+AGENTS.md
+ARCHITECTURE.md
+AUTONOMOUS_ORCHESTRATION_COMPLETION_REPORT.md
+BROWSER_DEVELOPMENT.md
+CHANGELOG.md
+CLAUDE.md
+communitas-screenshot.png
+deploy-testnet.sh
+deploy.sh
+DESIGN.md
+DOCUMENTATION_AUDIT_REPORT.md
+docker-compose.testnet.yml
+EXPERIMENTAL_MODE_TESTING.md
+FOUR_WORD_IDENTITY_ARCHITECTURE.md
+index.html
+LICENSE-AGPL-3.0
+LICENSE-COMMERCIAL.md
+local-testnet-config.toml
+MCP_SERVERS.md
+monitor-build.sh
+NETWORK_TESTING.md
+p2p-connection-test.png
+run-frontend.sh
+run-multiple-instances.sh
+SECURITY_AUDIT_SAORSA.md
+Sprint-3-Messaging-Architecture.md
+TAURI_MCP_TESTING.md
+tauri-app-test.png
+TAURI_MCP_TESTING.md
+TESTNET_DEPLOYMENT_README.md
+test-bootstrap-config.sh
+test-bootstrap.sh
+test-collaboration.js
+test-connectivity.sh
+test-frontend.js
+test-local-network.sh
+test-local-setup.sh
+test-p2p-connection.js
+test-tauri-app.js
+test-tauri-identity.js
+tmp
+tsconfig.json
+tsconfig.node.json
+tsconfig.test.json
+vite.config.ts
+vitest.config.ts
+vitest.setup.ts
+playwright.config.ts
+package-lock.json
+package.json
+README.md
+LICENSE-AGPL-3.0
+LICENSE-COMMERCIAL.md
+Cargo.toml.bak2
+check_keyring.rs
+debug_keyring.rs
+test_keyring_api.rs
+test_keyring_detailed.rs
+test_keyring.rs
+test_saorsa_pqc.rs
+test_secure_storage_final.rs
+test_secure_storage_isolated.rs
+test_secure_storage.rs
+TASK_6_MESSAGING_PROGRESS.md
+TASK_7_COMPLETION_SUMMARY.md
+TASK_7_GROUP_CHAT_PROGRESS.md
+src/
+public/
+tests/
+scripts/
+servers/
+finalise/
+mcp-artifacts/
+playwright-report/
+deployment/
+apps/
+docs/
+.github/
+.cargo/
+.cursorrules
+.gitignore
+.sgignore
+AGENTS_API.md
+AGENTS.md
+ARCHITECTURE.md
+AUTONOMOUS_ORCHESTRATION_COMPLETION_REPORT.md
+BROWSER_DEVELOPMENT.md
+CHANGELOG.md
+CLAUDE.md
+communitas-screenshot.png
+deploy-testnet.sh
+deploy.sh
+DESIGN.md
+DOCUMENTATION_AUDIT_REPORT.md
+docker-compose.testnet.yml
+EXPERIMENTAL_MODE_TESTING.md
+FOUR_WORD_IDENTITY_ARCHITECTURE.md
+index.html
+LICENSE-AGPL-3.0
+LICENSE-COMMERCIAL.md
+local-testnet-config.toml
+MCP_SERVERS.md
+monitor-build.sh
+NETWORK_TESTING.md
+p2p-connection-test.png
+run-frontend.sh
+run-multiple-instances.sh
+SECURITY_AUDIT_SAORSA.md
+Sprint-3-Messaging-Architecture.md
+TAURI_MCP_TESTING.md
+tauri-app-test.png
+TAURI_MCP_TESTING.md
+TESTNET_DEPLOYMENT_README.md
+test-bootstrap-config.sh
+test-bootstrap.sh
+test-collaboration.js
+test-connectivity.sh
+test-frontend.js
+test-local-network.sh
+test-local-setup.sh
+test-p2p-connection.js
+test-tauri-app.js
+test-tauri-identity.js
+tmp
+tsconfig.json
+tsconfig.node.json
+tsconfig.test.json
+vite.config.ts
+vitest.config.ts
+vitest.setup.ts
+playwright.config.ts
+package-lock.json
+package.json
+README.md
+LICENSE-AGPL-3.0
+LICENSE-COMMERCIAL.md
+Cargo.toml.bak2
+check_keyring.rs
+debug_keyring.rs
+test_keyring_api.rs
+test_keyring_detailed.rs
+test_keyring.rs
+test_saorsa_pqc.rs
+test_secure_storage_final.rs
+test_secure_storage_isolated.rs
+test_secure_storage.rs
+TASK_6_MESSAGING_PROGRESS.md
+TASK_7_COMPLETION_SUMMARY.md
+TASK_7_GROUP_CHAT_PROGRESS.md
+src/
+public/
+tests/
+scripts/
+servers/
+finalise/
+mcp-artifacts/
+playwright-report/
+deployment/
+apps/
+docs/
+.github/
+.cargo/
+.cursorrules
+.gitignore
+.sgignore

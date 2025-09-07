@@ -1,10 +1,5 @@
 use crate::core_context::CoreContext;
-use saorsa_core::DelegatedWriteAuth;
-use saorsa_core::api::{
-    ContainerManifestV1, FecParams, PutPolicy, container_manifest_fetch, container_manifest_put,
-};
-use saorsa_core::chat::{Attachment, Channel, ChannelId, ChannelType, Message, MessageId, Thread};
-use saorsa_core::dht::Key as DhtKey;
+use saorsa_core::chat::{Channel, ChannelId, ChannelType, MessageId, Thread};
 use saorsa_core::identity::FourWordAddress;
 use saorsa_core::identity::enhanced::DeviceType;
 use saorsa_core::messaging::ChannelId as MessagingChannelId;
@@ -160,7 +155,7 @@ pub async fn core_send_message_to_recipients(
     let ctx = guard
         .as_mut()
         .ok_or_else(|| "Core not initialized".to_string())?;
-    let messaging = &mut ctx.messaging;
+    // use ctx.messaging directly below
 
     let mapped: Vec<FourWordAddress> = recipients.into_iter().map(FourWordAddress).collect();
     let channel_uuid = uuid::Uuid::parse_str(&channel_id)
@@ -253,30 +248,25 @@ pub async fn core_subscribe_messages(
     let app_clone = app.clone();
     tokio::spawn(async move {
         let mut rx = rx;
-        loop {
-            match rx.recv().await {
-                Ok(rec) => {
-                    let payload = {
-                        let guard = shared_clone.read().await;
-                        if let Some(ctx) = guard.as_ref() {
-                            match ctx.messaging.decrypt_message(rec.message.clone()).await {
-                                Ok(rich) => serde_json::to_value(&rich).unwrap_or_else(|_| {
-                                    serde_json::json!({
-                                        "error": "serialize_failed"
-                                    })
-                                }),
-                                Err(_) => {
-                                    serde_json::json!({ "encrypted": true, "receivedAt": rec.received_at.to_rfc3339() })
-                                }
-                            }
-                        } else {
-                            serde_json::json!({ "error": "core_not_initialized" })
+        while let Ok(rec) = rx.recv().await {
+            let payload = {
+                let guard = shared_clone.read().await;
+                if let Some(ctx) = guard.as_ref() {
+                    match ctx.messaging.decrypt_message(rec.message.clone()).await {
+                        Ok(rich) => serde_json::to_value(&rich).unwrap_or_else(|_| {
+                            serde_json::json!({
+                                "error": "serialize_failed"
+                            })
+                        }),
+                        Err(_) => {
+                            serde_json::json!({ "encrypted": true, "receivedAt": rec.received_at.to_rfc3339() })
                         }
-                    };
-                    let _ = app_clone.emit("message-received", payload);
+                    }
+                } else {
+                    serde_json::json!({ "error": "core_not_initialized" })
                 }
-                Err(_) => break,
-            }
+            };
+            let _ = app_clone.emit("message-received", payload);
         }
     });
 
@@ -320,4 +310,61 @@ pub async fn core_private_get(
         .get_encrypted::<Vec<u8>>(&key)
         .await
         .map_err(|e| format!("get_encrypted failed: {}", e))
+}
+
+/// Get bootstrap nodes from configuration
+#[tauri::command]
+pub async fn core_get_bootstrap_nodes() -> Result<Vec<String>, String> {
+    // Load bootstrap configuration from file
+    let config_path = std::path::PathBuf::from("bootstrap.toml");
+
+    if !config_path.exists() {
+        // Return default bootstrap nodes if config doesn't exist
+        return Ok(vec![
+            "ocean-forest-moon-star:443".to_string(),
+            "river-mountain-sun-cloud:443".to_string(),
+        ]);
+    }
+
+    // Parse TOML configuration
+    let content = std::fs::read_to_string(&config_path)
+        .map_err(|e| format!("Failed to read bootstrap config: {}", e))?;
+
+    let config: toml::Value =
+        toml::from_str(&content).map_err(|e| format!("Failed to parse bootstrap config: {}", e))?;
+
+    // Extract seeds array
+    let seeds = config
+        .get("seeds")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| "No seeds array found in bootstrap config".to_string())?;
+
+    let mut bootstrap_nodes = Vec::new();
+    for seed in seeds {
+        if let Some(seed_str) = seed.as_str() {
+            bootstrap_nodes.push(seed_str.to_string());
+        }
+    }
+
+    Ok(bootstrap_nodes)
+}
+
+/// Update bootstrap nodes configuration
+#[tauri::command]
+pub async fn core_update_bootstrap_nodes(nodes: Vec<String>) -> Result<bool, String> {
+    use std::collections::BTreeMap;
+
+    let mut config = BTreeMap::new();
+    config.insert(
+        "seeds".to_string(),
+        toml::Value::Array(nodes.into_iter().map(toml::Value::String).collect()),
+    );
+
+    let content =
+        toml::to_string(&config).map_err(|e| format!("Failed to serialize config: {}", e))?;
+
+    std::fs::write("bootstrap.toml", content)
+        .map_err(|e| format!("Failed to write bootstrap config: {}", e))?;
+
+    Ok(true)
 }

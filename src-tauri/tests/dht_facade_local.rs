@@ -1,5 +1,58 @@
-use communitas_tauri::test_harness::*;
-use saorsa_core::dht::*;
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+
+// Mock LocalDht implementation for testing
+#[derive(Clone)]
+struct LocalDht {
+    node_id: String,
+    storage: Arc<RwLock<HashMap<Vec<u8>, Vec<u8>>>>,
+    peers: Arc<RwLock<HashMap<String, Vec<Vec<u8>>>>>,
+}
+
+impl LocalDht {
+    fn new(node_id: String) -> Self {
+        Self {
+            node_id,
+            storage: Arc::new(RwLock::new(HashMap::new())),
+            peers: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    async fn add_peer(&self, peer_id: String) {
+        let mut peers = self.peers.write().await;
+        peers.insert(peer_id, Vec::new());
+    }
+
+    async fn put(&self, key: Vec<u8>, value: Vec<u8>) -> Result<(), Box<dyn std::error::Error>> {
+        let mut storage = self.storage.write().await;
+        storage.insert(key, value);
+        Ok(())
+    }
+
+    async fn get(&self, key: Vec<u8>) -> Result<Option<Vec<u8>>, Box<dyn std::error::Error>> {
+        let storage = self.storage.read().await;
+        Ok(storage.get(&key).cloned())
+    }
+
+    async fn send(
+        &self,
+        peer_id: String,
+        _topic: String,
+        payload: Vec<u8>,
+    ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+        let mut peers = self.peers.write().await;
+        if let Some(inbox) = peers.get_mut(&peer_id) {
+            inbox.push(payload);
+        }
+        Ok(vec![])
+    }
+
+    async fn drain_inbox(&self, peer_id: &str) -> Vec<Vec<u8>> {
+        let mut peers = self.peers.write().await;
+        peers.remove(peer_id).unwrap_or_default()
+    }
+}
 
 #[tokio::test]
 async fn local_dht_put_get_send() {

@@ -20,6 +20,8 @@ import {
   Stack,
   Tooltip,
   alpha,
+  TextField,
+  InputAdornment,
 } from '@mui/material';
 import {
   Business as OrganizationIcon,
@@ -35,8 +37,10 @@ import {
   ExpandMore,
   ExpandLess,
   Add as AddIcon,
+  Search as SearchIcon,
 } from '@mui/icons-material';
 import { Organization, Group, PersonalUser, Channel, Project, OrganizationUser } from '../../types/collaboration';
+import { useNavigation } from '../../contexts/NavigationContext';
 
 interface WhatsAppStyleNavigationProps {
   organizations: Organization[];
@@ -61,8 +65,10 @@ export const WhatsAppStyleNavigation: React.FC<WhatsAppStyleNavigationProps> = (
   onScreenShare,
   onOpenFiles,
 }) => {
+  const nav = useNavigation();
   const [showOrganizations, setShowOrganizations] = useState(false);
   const [selectedOrganization, setSelectedOrganization] = useState<Organization | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
   const [expandedSections, setExpandedSections] = useState({
     channels: true,
     projects: true,
@@ -70,9 +76,12 @@ export const WhatsAppStyleNavigation: React.FC<WhatsAppStyleNavigationProps> = (
     users: true,
   });
 
+  const matchesQuery = (text?: string) => !searchTerm || (text ?? '').toLowerCase().includes(searchTerm.toLowerCase());
+
   const handleOrganizationClick = (org: Organization) => {
     setSelectedOrganization(org);
     setShowOrganizations(false);
+    nav.switchToOrganization(org.id, org.name);
     onNavigate(`/org/${org.id}`, org);
   };
 
@@ -98,7 +107,7 @@ export const WhatsAppStyleNavigation: React.FC<WhatsAppStyleNavigationProps> = (
     entityType: string;
     size?: 'small' | 'medium';
   }) => (
-    <Box sx={{ display: 'flex', gap: 0.5 }}>
+    <Box className="entity-actions" sx={{ display: 'flex', gap: 0.5, opacity: 0, transition: 'opacity 0.2s' }}>
       <Tooltip title="Video Call">
         <IconButton
           size={size}
@@ -165,6 +174,23 @@ export const WhatsAppStyleNavigation: React.FC<WhatsAppStyleNavigationProps> = (
   // Main navigation (Personal Contacts & Groups)
   const MainNavigation = () => (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      {/* Global Search */}
+      <Box sx={{ p: 2, pb: 0 }}>
+        <TextField
+          fullWidth
+          size="small"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          placeholder="Search organizations, groups, contacts…"
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon fontSize="small" />
+              </InputAdornment>
+            ),
+          }}
+        />
+      </Box>
       {/* Organizations Button at Top */}
       <Box sx={{ p: 2 }}>
         <Button
@@ -188,7 +214,7 @@ export const WhatsAppStyleNavigation: React.FC<WhatsAppStyleNavigationProps> = (
         <Collapse in={showOrganizations} timeout="auto" unmountOnExit>
           <Paper elevation={3} sx={{ mt: 1, maxHeight: 300, overflow: 'auto' }}>
             <List dense>
-              {organizations.map(org => (
+              {organizations.filter(org => matchesQuery(org.name) || matchesQuery(org.networkIdentity.fourWords)).map(org => (
                 <ListItemButton
                   key={org.id}
                   onClick={() => handleOrganizationClick(org)}
@@ -224,6 +250,24 @@ export const WhatsAppStyleNavigation: React.FC<WhatsAppStyleNavigationProps> = (
       <Divider />
 
       {/* Personal Groups Section */}
+      {/* Search within organization */}
+      <Box sx={{ p: 2, pb: 0 }}>
+        <TextField
+          fullWidth
+          size="small"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          placeholder={`Search…`}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon fontSize="small" />
+              </InputAdornment>
+            ),
+          }}
+        />
+      </Box>
+
       <Box sx={{ flex: 1, overflow: 'auto' }}>
         <Box sx={{ p: 2, pb: 1 }}>
           <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
@@ -232,17 +276,25 @@ export const WhatsAppStyleNavigation: React.FC<WhatsAppStyleNavigationProps> = (
         </Box>
         
         <List dense>
-          {personalGroups.map(group => (
+          {personalGroups.filter(group => matchesQuery(group.name) || matchesQuery(group.networkIdentity.fourWords)).map(group => (
             <ListItem
               key={group.id}
-              disablePadding
               sx={{
+                position: 'relative',
+                '& .entity-actions': { opacity: 0 },
                 '&:hover': {
                   bgcolor: 'action.hover',
+                  '& .entity-actions': { opacity: 1 },
                 },
               }}
+              secondaryAction={
+                <CollaborationActions 
+                  entityId={group.id} 
+                  entityType="group"
+                />
+              }
             >
-              <ListItemButton onClick={() => onNavigate(`/group/${group.id}`, group)}>
+              <ListItemButton onClick={() => { nav.selectEntity('group', group.id, group.name); onNavigate(`/group/${group.id}`, group); }} sx={{ pr: 16 }}>
                 <ListItemIcon>
                   <Avatar sx={{ width: 40, height: 40 }}>
                     <GroupIcon />
@@ -261,12 +313,6 @@ export const WhatsAppStyleNavigation: React.FC<WhatsAppStyleNavigationProps> = (
                   }
                 />
               </ListItemButton>
-              <ListItemSecondaryAction>
-                <CollaborationActions 
-                  entityId={group.id} 
-                  entityType="group"
-                />
-              </ListItemSecondaryAction>
             </ListItem>
           ))}
         </List>
@@ -281,17 +327,25 @@ export const WhatsAppStyleNavigation: React.FC<WhatsAppStyleNavigationProps> = (
         </Box>
         
         <List dense>
-          {personalUsers.map(user => (
+          {personalUsers.filter(user => matchesQuery(user.name) || matchesQuery(user.networkIdentity.fourWords)).map(user => (
             <ListItem
               key={user.id}
-              disablePadding
               sx={{
+                position: 'relative',
+                '& .entity-actions': { opacity: 0 },
                 '&:hover': {
                   bgcolor: 'action.hover',
+                  '& .entity-actions': { opacity: 1 },
                 },
               }}
+              secondaryAction={
+                <CollaborationActions 
+                  entityId={user.id} 
+                  entityType="user"
+                />
+              }
             >
-              <ListItemButton onClick={() => onNavigate(`/user/${user.id}`, user)}>
+              <ListItemButton onClick={() => { nav.selectEntity('individual', user.id, user.name); onNavigate(`/user/${user.id}`, user); }} sx={{ pr: 16 }}>
                 <ListItemIcon>
                   <Badge
                     variant="dot"
@@ -317,12 +371,6 @@ export const WhatsAppStyleNavigation: React.FC<WhatsAppStyleNavigationProps> = (
                   }
                 />
               </ListItemButton>
-              <ListItemSecondaryAction>
-                <CollaborationActions 
-                  entityId={user.id} 
-                  entityType="user"
-                />
-              </ListItemSecondaryAction>
             </ListItem>
           ))}
         </List>
@@ -378,10 +426,14 @@ export const WhatsAppStyleNavigation: React.FC<WhatsAppStyleNavigationProps> = (
           </ListItemButton>
           
           <Collapse in={expandedSections.channels} timeout="auto" unmountOnExit>
-            {org.channels.map(channel => (
+            {org.channels.filter(channel => matchesQuery(channel.name)).map(channel => (
               <ListItem
                 key={channel.id}
-                sx={{ pl: 3 }}
+                sx={{ 
+                  pl: 3,
+                  '& .entity-actions': { opacity: 0 },
+                  '&:hover .entity-actions': { opacity: 1 },
+                }}
                 secondaryAction={
                   <CollaborationActions 
                     entityId={channel.id} 
@@ -389,7 +441,7 @@ export const WhatsAppStyleNavigation: React.FC<WhatsAppStyleNavigationProps> = (
                   />
                 }
               >
-                <ListItemButton onClick={() => onNavigate(`/org/${org.id}/channel/${channel.id}`, channel)}>
+                <ListItemButton onClick={() => { nav.selectEntity('channel', channel.id, channel.name); onNavigate(`/org/${org.id}/channel/${channel.id}`, channel); }} sx={{ pr: 16 }}>
                   <ListItemIcon>
                     <Typography variant="h6" color="text.secondary">#</Typography>
                   </ListItemIcon>
@@ -425,10 +477,14 @@ export const WhatsAppStyleNavigation: React.FC<WhatsAppStyleNavigationProps> = (
           </ListItemButton>
           
           <Collapse in={expandedSections.projects} timeout="auto" unmountOnExit>
-            {org.projects.map(project => (
+            {org.projects.filter(project => matchesQuery(project.name)).map(project => (
               <ListItem
                 key={project.id}
-                sx={{ pl: 3 }}
+                sx={{ 
+                  pl: 3,
+                  '& .entity-actions': { opacity: 0 },
+                  '&:hover .entity-actions': { opacity: 1 },
+                }}
                 secondaryAction={
                   <CollaborationActions 
                     entityId={project.id} 
@@ -436,7 +492,7 @@ export const WhatsAppStyleNavigation: React.FC<WhatsAppStyleNavigationProps> = (
                   />
                 }
               >
-                <ListItemButton onClick={() => onNavigate(`/org/${org.id}/project/${project.id}`, project)}>
+                <ListItemButton onClick={() => { nav.selectEntity('project', project.id, project.name); onNavigate(`/org/${org.id}/project/${project.id}`, project); }} sx={{ pr: 16 }}>
                   <ListItemIcon>
                     <Avatar sx={{ width: 32, height: 32, bgcolor: 'secondary.main' }}>
                       {project.name[0]}
@@ -485,10 +541,14 @@ export const WhatsAppStyleNavigation: React.FC<WhatsAppStyleNavigationProps> = (
           </ListItemButton>
           
           <Collapse in={expandedSections.groups} timeout="auto" unmountOnExit>
-            {org.groups.map(group => (
+            {org.groups.filter(group => matchesQuery(group.name)).map(group => (
               <ListItem
                 key={group.id}
-                sx={{ pl: 3 }}
+                sx={{ 
+                  pl: 3,
+                  '& .entity-actions': { opacity: 0 },
+                  '&:hover .entity-actions': { opacity: 1 },
+                }}
                 secondaryAction={
                   <CollaborationActions 
                     entityId={group.id} 
@@ -496,7 +556,7 @@ export const WhatsAppStyleNavigation: React.FC<WhatsAppStyleNavigationProps> = (
                   />
                 }
               >
-                <ListItemButton onClick={() => onNavigate(`/org/${org.id}/group/${group.id}`, group)}>
+                <ListItemButton onClick={() => { nav.selectEntity('group', group.id, group.name); onNavigate(`/org/${org.id}/group/${group.id}`, group); }} sx={{ pr: 16 }}>
                   <ListItemIcon>
                     <Avatar sx={{ width: 32, height: 32 }}>
                       <GroupIcon fontSize="small" />

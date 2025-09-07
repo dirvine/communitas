@@ -1,7 +1,6 @@
 use saorsa_core::api::{
-    GroupIdentityPacketV1, MemberRef, group_identity_canonical_sign_bytes, group_identity_create,
-    group_identity_fetch, group_identity_publish, group_identity_update_members_signed,
-    identity_fetch,
+    MemberRef, group_identity_canonical_sign_bytes, group_identity_create, group_identity_fetch,
+    group_identity_publish, group_identity_update_members_signed, identity_fetch,
 };
 use saorsa_core::dht::Key as DhtKey;
 use saorsa_core::fwid::fw_to_key;
@@ -131,7 +130,7 @@ pub async fn core_group_add_member(
         let out = hasher.finalize();
         DhtKey::from(*out.as_bytes())
     };
-    let msg = group_identity_canonical_sign_bytes(&gip.id.clone().into(), &new_root.into());
+    let msg = group_identity_canonical_sign_bytes(&gip.id.clone(), &new_root.into());
 
     let id_hex = hex::encode(gip.id.as_bytes());
     let kp = ctx
@@ -198,7 +197,7 @@ pub async fn core_group_remove_member(
         let out = hasher.finalize();
         DhtKey::from(*out.as_bytes())
     };
-    let msg = group_identity_canonical_sign_bytes(&gip.id.clone().into(), &new_root.into());
+    let msg = group_identity_canonical_sign_bytes(&gip.id.clone(), &new_root.into());
     let id_hex = hex::encode(gip.id.as_bytes());
     let kp = ctx
         .group_keys

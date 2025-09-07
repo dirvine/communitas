@@ -44,6 +44,11 @@ impl std::fmt::Debug for ChatService {
 
 impl ChatService {
     /// Create new chat service
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the local message store cannot be created or opened
+    /// in the platform data directory.
     pub async fn new(network: Arc<NetworkIntegration>) -> Result<Self> {
         let db_path = dirs::data_dir()
             .ok_or_else(|| anyhow::anyhow!("Failed to get data directory"))?
@@ -61,6 +66,10 @@ impl ChatService {
     }
 
     /// Create a new group
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if storing the group in the DHT fails.
     pub async fn create_group(&self, name: &str) -> Result<Group> {
         let group = Group::new(name.to_string());
 
@@ -74,6 +83,11 @@ impl ChatService {
     }
 
     /// Send a message to a group
+    ///
+    /// # Errors
+    ///
+    /// Returns `ChatError::GroupNotFound` if the group is unknown, or any
+    /// network/storage errors encountered while persisting/broadcasting.
     pub async fn send_message(&self, group_id: &str, content: &str) -> Result<MessageId> {
         let groups = self.groups.read().await;
         let group_id_obj = GroupId(group_id.to_string());

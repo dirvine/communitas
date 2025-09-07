@@ -47,7 +47,7 @@ struct UpdateConfig {
     /// Check interval in seconds
     check_interval_secs: u64,
 
-    /// Jitter range in seconds (0-6h default)
+    /// Jitter range in seconds (0 disables jitter, default 0 for saorsa-core 0.3.18+)
     jitter_secs: u64,
 
     /// Signature verification public key
@@ -69,7 +69,7 @@ impl Default for UpdateConfig {
             channel: "stable".to_string(),
             repository: "dirvine/communitas-foundation".to_string(),
             check_interval_secs: 21600, // 6 hours
-            jitter_secs: 21600,         // 0-6h jitter
+            jitter_secs: 0,             // No jitter needed for saorsa-core 0.3.18+
             pub_key: None,
             max_retries: 10,
             backoff_multiplier: 2.0,
@@ -241,6 +241,62 @@ async fn restart_service() -> Result<()> {
     Ok(())
 }
 
+fn detect_platform_tags() -> (Vec<&'static str>, Vec<&'static str>) {
+    // Determine OS/arch tags used in asset filenames
+    // We keep multiple synonyms to match common release naming conventions
+    let os = std::env::consts::OS;
+    let arch = std::env::consts::ARCH;
+
+    let os_tags: Vec<&'static str> = match os {
+        "linux" => vec!["linux", "gnu", "musl"],
+        "macos" => vec!["darwin", "macos", "mac"],
+        "windows" => vec!["windows", "win"],
+        other => vec![other],
+    };
+
+    let arch_tags: Vec<&'static str> = match arch {
+        "x86_64" => vec!["x86_64", "amd64"],
+        "aarch64" => vec!["aarch64", "arm64"],
+        "arm" => vec!["armv7", "arm"],
+        other => vec![other],
+    };
+
+    (os_tags, arch_tags)
+}
+
+fn asset_matches(name: &str, os_tags: &[&str], arch_tags: &[&str]) -> bool {
+    let lower = name.to_lowercase();
+    let os_ok = os_tags.iter().any(|t| lower.contains(t));
+    let arch_ok = arch_tags.iter().any(|t| lower.contains(t));
+    os_ok && arch_ok
+}
+
+fn select_asset<'a>(assets: &'a [ReleaseAsset]) -> Option<&'a ReleaseAsset> {
+    let (os_tags, arch_tags) = detect_platform_tags();
+
+    // Prefer exact OS+ARCH match
+    if let Some(a) = assets
+        .iter()
+        .find(|a| asset_matches(&a.name, &os_tags, &arch_tags))
+    {
+        return Some(a);
+    }
+
+    // Fallback: OS match with universal builds
+    if let Some(a) = assets.iter().find(|a| {
+        let lower = a.name.to_lowercase();
+        os_tags.iter().any(|t| lower.contains(t))
+            && (lower.contains("universal") || lower.contains("all") || lower.contains("any"))
+    }) {
+        return Some(a);
+    }
+
+    // Last resort: single-file binaries without explicit tags
+    assets
+        .iter()
+        .find(|a| a.name.ends_with(".bin") || a.name.contains("communitas-node"))
+}
+
 async fn apply_update(
     release: &ReleaseInfo,
     config: &UpdateConfig,
@@ -249,14 +305,9 @@ async fn apply_update(
 ) -> Result<()> {
     info!("Applying update to version {}", release.tag_name);
 
-    // Find appropriate asset for this platform
-    let asset = release
-        .assets
-        .iter()
-        .find(|a| {
-            a.name.contains("linux") && (a.name.contains("x86_64") || a.name.contains("amd64"))
-        })
-        .context("No suitable binary found for this platform")?;
+    // Find appropriate asset for this platform (OS/ARCH aware)
+    let asset =
+        select_asset(&release.assets).context("No suitable binary found for this platform")?;
 
     if dry_run {
         info!("Dry run: would download {}", asset.name);
@@ -283,9 +334,38 @@ async fn apply_update(
     atomic_replace(&temp_path, &binary_path).await?;
     info!("Binary updated successfully");
 
-    // Restart service
-    restart_service().await?;
-    info!("Service restarted");
+    // Restart service based on platform
+    match std::env::consts::OS {
+        "linux" => {
+            if let Err(e) = restart_service().await {
+                warn!("Service restart failed: {:#}", e);
+            } else {
+                info!("Service restarted");
+            }
+        }
+        "macos" => {
+            // Attempt launchctl if available, else instruct manual restart
+            let _ = tokio::process::Command::new("launchctl")
+                .args(["kickstart", "-k", "system/com.communitas"])
+                .output()
+                .await;
+            info!("macOS update applied; restart performed if launchctl service present");
+        }
+        "windows" => {
+            let _ = tokio::process::Command::new("sc")
+                .args(["stop", "Communitas"])
+                .output()
+                .await;
+            let _ = tokio::process::Command::new("sc")
+                .args(["start", "Communitas"])
+                .output()
+                .await;
+            info!("Windows update applied; attempted service restart");
+        }
+        _ => {
+            info!("Update applied; please restart the service or application manually");
+        }
+    }
 
     Ok(())
 }
@@ -297,8 +377,10 @@ async fn check_and_update(config: &UpdateConfig, bin_dir: &PathBuf, dry_run: boo
     let release = fetch_latest_release(config).await?;
     info!("Latest version: {}", release.tag_name);
 
-    // Simple version comparison (in production, use semver)
-    if release.tag_name.trim_start_matches('v') > current.as_str() {
+    // Simple version comparison (in production, use semver). Normalize both sides.
+    let latest = release.tag_name.trim_start_matches('v');
+    let current_norm = current.trim_start_matches('v');
+    if latest > current_norm {
         info!("Update available: {} -> {}", current, release.tag_name);
 
         // Apply jitter
@@ -405,7 +487,7 @@ mod tests {
         let config = UpdateConfig::default();
         assert_eq!(config.channel, "stable");
         assert_eq!(config.max_retries, 10);
-        assert_eq!(config.jitter_secs, 21600);
+        assert_eq!(config.jitter_secs, 0);
     }
 
     #[tokio::test]

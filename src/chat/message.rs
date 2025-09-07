@@ -75,6 +75,7 @@ pub struct CallInfo {
 
 impl Message {
     /// Create a new message
+    #[must_use]
     pub fn new(sender: Identity, content: MessageContent) -> Self {
         Self {
             id: MessageId(format!("msg-{}", chrono::Utc::now().timestamp())),

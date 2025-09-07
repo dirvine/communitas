@@ -19,7 +19,19 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 name = "communitas-tauri"
 path = "src/main.rs"
 
- 
+[[bin]]
+name = "communitas-node"
+path = "src/bin/communitas-node.rs"
+
+[[bin]]
+name = "communitas-autoupdater"
+path = "src/bin/communitas-autoupdater.rs"
+
+[[bin]]
+name = "bootstrap"
+path = "src/bin/bootstrap.rs"
+
+
 
 [build-dependencies]
 tauri-build = { version = "2.3.0", features = [] }
@@ -33,7 +45,7 @@ tauri = { version = "2.6.1", features = [] }
 tauri-plugin-log = "2"
 
 # Saorsa Labs - Updated to latest version
-saorsa-core = "0.3.17"
+saorsa-core = "0.3.18"
 tokio = { version = "1.39", features = ["full"] }
 anyhow = "1.0"
 thiserror = "1.0"

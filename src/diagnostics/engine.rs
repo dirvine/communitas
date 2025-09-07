@@ -48,6 +48,7 @@ impl std::fmt::Debug for DiagnosticsEngine {
 
 impl DiagnosticsEngine {
     /// Create new diagnostics engine
+    #[must_use]
     pub fn new(network: Arc<NetworkIntegration>) -> Self {
         Self {
             network,
@@ -78,7 +79,7 @@ impl DiagnosticsEngine {
                 // Update metrics
                 if let Ok(stats) = network.get_network_stats().await {
                     let mut metrics = network_metrics.write().await;
-                    metrics.update(stats);
+                    metrics.update(&stats);
                 }
             }
         });

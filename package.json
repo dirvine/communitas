@@ -1,17 +1,44 @@
 {
   "name": "communitas",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A decentralized P2P chat and collaboration platform built on Saorsa Core",
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:browser": "vite --port 1420 --strictPort",
     "build": "vite build",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
     "tauri": "tauri",
     "test": "NODE_OPTIONS=--max-old-space-size=4096 vitest --run --reporter=dot",
+    "test:fast": "NODE_OPTIONS=--max-old-space-size=4096 vitest run --reporter=dot src/services/__tests__/featureFlags.test.ts src/utils/__tests__/identity.test.ts src/services/storage/__tests__/markdownPublisher.test.ts",
     "test:run": "NODE_OPTIONS=--max-old-space-size=4096 vitest run --reporter=dot src/services/__tests__/featureFlags.test.ts src/utils/__tests__/identity.test.ts src/services/storage/__tests__/dhtStorage.test.ts src/services/storage/__tests__/reedSolomon.test.ts src/services/storage/__tests__/markdownPublisher.test.ts",
-    "test:ui": "vitest --ui"
+    "test:ui": "vitest --ui",
+    "test:coverage": "NODE_OPTIONS=--max-old-space-size=4096 vitest run --coverage --reporter=dot",
+    "test:coverage:slow": "RUN_SLOW=1 NODE_OPTIONS=--max-old-space-size=4096 vitest run --coverage --reporter=dot",
+    "mcp:puppeteer": "node servers/mcp-puppeteer/server.js",
+    "mcp:demo": "node servers/mcp-puppeteer/demo-client.js",
+    "mcp:puppeteer:http": "node servers/mcp-puppeteer/server-http.js",
+    "mcp:demo:http": "node servers/mcp-puppeteer/demo-client-http.js",
+    "ports:kill": "bash scripts/kill-ports.sh 1420 8765",
+    "serve+mcp:http": "bash scripts/run-browser-and-mcp-http.sh",
+    "mcp:http:demo": "bash scripts/mcp-http-demo.sh",
+    "mcp:smoke": "bash scripts/smoke-mcp-http.sh",
+    "mcp:full": "node servers/mcp-puppeteer/full-check.js",
+    "mcp:suite": "node servers/mcp-puppeteer/run-suite.js",
+    "serve+mcp:playwright": "bash scripts/run-browser-and-mcp-http.sh",
+    "mcp:identity": "node servers/mcp-puppeteer/run-identity.js",
+    "offline:start": "bash scripts/offline-start.sh",
+    "offline:test": "bash scripts/offline-test.sh",
+    "offline:stop": "bash scripts/offline-stop.sh",
+    "offline:all:once": "bash -lc 'npm run offline:start && npm run offline:test; npm run offline:stop'",
+    "offline:all": "bash -lc 'npm run offline:start && npm run offline:test'",
+    "playwright:install": "npx playwright install --with-deps",
+    "test:playwright": "playwright test",
+    "test:playwright:ui": "playwright test --ui",
+    "test:playwright:chrome": "playwright test --project=chromium --headed --channel=chrome",
+    "test:playwright:ui:chrome": "playwright test --ui --project=chromium --channel=chrome",
+    "playwright:open:chrome": "playwright open http://localhost:1420 --channel=chrome"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
@@ -23,6 +50,7 @@
     "@tauri-apps/plugin-log": "^2.0.0",
     "date-fns": "^4.1.0",
     "dompurify": "^3.0.5",
+    "events": "^3.3.0",
     "framer-motion": "^12.23.12",
     "marked": "^14.1.3",
     "monaco-editor": "^0.50.0",
@@ -35,9 +63,11 @@
     "validator": "^13.12.0",
     "y-indexeddb": "^9.0.12",
     "y-webrtc": "^10.3.0",
-    "yjs": "^13.6.21"
+    "yjs": "^13.6.21",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.17.5",
     "@playwright/test": "^1.55.0",
     "@tauri-apps/cli": "^2.0.0",
     "@testing-library/jest-dom": "^6.4.6",
@@ -52,11 +82,10 @@
     "@vitejs/plugin-react": "^4.2.0",
     "jsdom": "^24.0.0",
     "playwright": "^1.55.0",
+    "puppeteer": "^24.19.0",
     "typescript": "^5.6.3",
     "vite": "^5.0.8",
+    "vite-plugin-node-polyfills": "^0.24.0",
     "vitest": "^1.6.1"
-  },
-  "engines": {
-    "node": ">=20 <21"
   }
 }

@@ -1,0 +1,14 @@
+[Unit]
+Description=Communitas Bootstrap Node
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=communitas
+ExecStart=/opt/communitas/bin/bootstrap
+Restart=always
+RestartSec=5
+LimitNOFILE=1048576
+
+[Install]
+WantedBy=multi-user.target

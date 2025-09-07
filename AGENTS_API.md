@@ -105,8 +105,30 @@ Security helpers (frontend)
 - Subscription helper: `subscribeMessages(onMessage, { channelId? })` see `src/services/messagingSubscription.ts`
 
 Dev panels
-- `/dev/console`: live “Message Console”
-- `/dev/website`: “Website Publishing Utility” (canonical bytes, publish, apply identity update)
+- `/dev/console`: live "Message Console"
+- `/dev/website`: "Website Publishing Utility" (canonical bytes, publish, apply identity update)
+
+Network Connection & Status
+- `NetworkConnectionService` (singleton): Auto-connects on startup, retry logic, fallback to local mode
+  - `connect()`: Manual connection attempt
+  - `disconnect()`: Go to local mode
+  - `getState()`: Current network state (status, peers, bootstrap nodes, errors)
+  - `subscribe(listener)`: Listen to network state changes
+- `NetworkStatusIndicator` component: Visual status in header with click-to-reconnect
+- States: `connecting`, `connected`, `offline`, `local`, `error`
+- Auto-behaviors: Browser online/offline detection, exponential backoff retry (1s, 3s, 10s)
+
+Offline-First Architecture
+- `OfflineStorageService`: IndexedDB + sync queue + file caching
+  - All data operations work offline
+  - Automatic sync when network returns
+  - Multiple storage layers: Memory, IndexedDB, Tauri backend, localStorage
+- Test utilities in console:
+  - `window.testNetwork.status()`: Check network status
+  - `window.testNetwork.connect()`: Manual connect
+  - `window.testNetwork.disconnect()`: Go local
+  - `window.testNetwork.simulateOffline()`: Test offline mode
+  - `window.testNetwork.testFlow()`: Run complete test
 
 ---
 

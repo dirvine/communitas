@@ -60,6 +60,7 @@ impl Default for GroupSettings {
 
 impl Group {
     /// Create a new group
+    #[must_use]
     pub fn new(name: String) -> Self {
         Self {
             id: GroupId(format!("group-{}", chrono::Utc::now().timestamp())),
@@ -71,6 +72,11 @@ impl Group {
     }
 
     /// Add a participant
+    ///
+    /// # Errors
+    ///
+    /// Returns `ChatError::GroupSizeLimitExceeded` if the group has reached
+    /// the configured participant limit.
     pub fn add_participant(&mut self, identity: Identity) -> Result<(), super::ChatError> {
         if self.participants.len() >= self.settings.max_participants {
             return Err(super::ChatError::GroupSizeLimitExceeded);

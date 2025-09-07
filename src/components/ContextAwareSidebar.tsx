@@ -59,11 +59,12 @@ import {
   VpnLock as VpnLockIcon,
 } from '@mui/icons-material';
 import { Organization, Project, Group, Member } from '../types/organization';
+import { Channel } from '../types/collaboration';
 
 interface ContextAwareSidebarProps {
   context: {
-    type: 'personal' | 'organization' | 'project' | 'group';
-    entity?: Organization | Project | Group;
+    type: 'personal' | 'organization' | 'project' | 'group' | 'channel';
+    entity?: Organization | Project | Group | Channel;
   };
   onAction: (action: string, data?: any) => void;
   onMemberSelect: (member: Member) => void;
@@ -607,6 +608,43 @@ export const ContextAwareSidebar: React.FC<ContextAwareSidebarProps> = ({
     );
   };
 
+  const renderChannelContext = () => {
+    const channel = context.entity as Channel;
+    if (!channel) return null;
+
+    const members: any[] = Array.isArray((channel as any).members) ? ((channel as any).members as any[]) : [];
+
+    return (
+      <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+        <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
+          <Stack spacing={1}>
+            <Typography variant="h6">#{channel.name}</Typography>
+            <Chip icon={<GroupIcon />} label={`${members.length} members`} size="small" />
+          </Stack>
+        </Box>
+        <Box sx={{ p: 2, flexGrow: 1, overflow: 'auto' }}>
+          <Typography variant="subtitle2" gutterBottom>
+            Members
+          </Typography>
+          <List dense>
+            {members.length > 0 ? (
+              members.map((m: any) => (
+                <ListItemButton key={m.user_id || m.id} onClick={() => onMemberSelect(m)}>
+                  <ListItemIcon>
+                    <Avatar sx={{ width: 32, height: 32 }}>{(m.display_name || m.name || '?')[0]}</Avatar>
+                  </ListItemIcon>
+                  <ListItemText primary={m.display_name || m.name || 'Member'} secondary={m.role || ''} />
+                </ListItemButton>
+              ))
+            ) : (
+              <Typography variant="caption" color="text.secondary">No member list available.</Typography>
+            )}
+          </List>
+        </Box>
+      </Box>
+    );
+  };
+
   // Render based on context
   const renderContent = () => {
     switch (context.type) {
@@ -618,6 +656,8 @@ export const ContextAwareSidebar: React.FC<ContextAwareSidebarProps> = ({
         return renderProjectContext();
       case 'group':
         return renderGroupContext();
+      case 'channel':
+        return renderChannelContext();
       default:
         return null;
     }

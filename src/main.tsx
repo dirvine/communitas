@@ -1,56 +1,81 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
+import App from './App'
+// import SimpleTestApp from './SimpleTestApp'
 import './index.css'
+import './test-identity' // Load test utilities for console testing
+import './test-offline-capabilities' // Load offline test suite
+import './setup-test-workspace' // Load workspace setup utilities
+import './test-tauri-groups' // Load Tauri group testing utilities
+import './test-network-connection' // Load network connection test utilities
 
-// Very simple test component
-const TestComponent: React.FC = () => {
-  console.log('✅ React component function executed');
-  return React.createElement('div', {
-    style: { padding: '20px', backgroundColor: '#f0f0f0' }
-  }, [
-    React.createElement('h1', { key: 'title' }, '🚀 React is Working!'),
-    React.createElement('p', { key: 'desc' }, 'This confirms that React is loading and rendering correctly.'),
-    React.createElement('button', {
-      key: 'button',
-      onClick: () => alert('Button works!')
-    }, 'Test Button'),
-    React.createElement('p', { key: 'time' }, `Current time: ${new Date().toLocaleTimeString()}`)
-  ]);
-};
+// Error boundary to catch runtime errors
+class ErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; error?: Error }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props)
+    this.state = { hasError: false }
+  }
 
-// Test React mounting with error handling
-console.log('🔍 Starting React mounting test...');
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error }
+  }
 
-const rootElement = document.getElementById('root');
-if (rootElement) {
-  console.log('✅ Root element found');
-  try {
-    const root = ReactDOM.createRoot(rootElement);
-    console.log('✅ ReactDOM.createRoot succeeded');
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('ErrorBoundary caught:', error, errorInfo)
+  }
 
-    root.render(
-      React.createElement(React.StrictMode, null,
-        React.createElement(TestComponent, null)
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: '20px', backgroundColor: '#fee' }}>
+          <h1>Runtime Error</h1>
+          <pre>{this.state.error?.toString()}</pre>
+          <details>
+            <summary>Stack Trace</summary>
+            <pre>{this.state.error?.stack}</pre>
+          </details>
+        </div>
       )
-    );
-    console.log('✅ React component rendered successfully');
+    }
+    return this.props.children
+  }
+}
+
+// Mount the app
+const rootElement = document.getElementById('root')
+console.log('Root element:', rootElement)
+console.log('Environment:', { 
+  isDev: import.meta.env.DEV,
+  mode: import.meta.env.MODE,
+  tauriAvailable: typeof (window as any).__TAURI__ !== 'undefined'
+})
+
+if (rootElement) {
+  const root = ReactDOM.createRoot(rootElement)
+  console.log('Creating React root...')
+  
+  try {
+    root.render(
+      <React.StrictMode>
+        <ErrorBoundary>
+          <App />
+        </ErrorBoundary>
+      </React.StrictMode>
+    )
+    console.log('React app mounted successfully')
   } catch (error) {
-    console.error('❌ React mounting failed:', error);
-    // Fallback: render error message
+    console.error('Failed to render app:', error)
     rootElement.innerHTML = `
-      <div style="padding: 20px; background: #ffebee; border: 1px solid #f44336; border-radius: 4px;">
-        <h2>❌ React Error</h2>
-        <p>React failed to mount. Check console for details.</p>
-        <pre style="background: #f5f5f5; padding: 10px; border-radius: 4px;">${error}</pre>
+      <div style="padding: 20px; background: #fee; color: #c00;">
+        <h1>Failed to render app</h1>
+        <pre>${error}</pre>
       </div>
-    `;
+    `
   }
 } else {
-  console.error('❌ Root element not found!');
-  document.body.innerHTML = `
-    <div style="padding: 20px; background: #ffebee; border: 1px solid #f44336; border-radius: 4px;">
-      <h2>❌ Root Element Missing</h2>
-      <p>The root element (#root) was not found in the DOM.</p>
-    </div>
-  `;
+  console.error('Root element not found!')
+  document.body.innerHTML = '<h1>Root element not found!</h1>'
 }

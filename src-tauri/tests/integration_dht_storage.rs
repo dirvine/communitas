@@ -16,7 +16,7 @@ use anyhow::Result;
 use std::fs;
 
 use communitas_tauri::storage::{
-    StorageAllocation, local_storage::LocalStorageManager, reed_solomon_manager::ReedSolomonConfig,
+    local_storage::LocalStorageManager, reed_solomon_manager::ReedSolomonConfig,
 };
 
 /// Test Reed Solomon configuration for different group sizes

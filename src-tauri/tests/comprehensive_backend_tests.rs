@@ -21,8 +21,11 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use communitas_tauri::{core_commands::*, security::*, storage::*, test_harness::*};
-use saorsa_core::{chat::*, dht::*, identity::*, messaging::*, quantum_crypto::*, storage::*};
+use communitas_tauri::{core_commands::*, security::*, storage::*};
+use saorsa_core::adaptive::NetworkMessage;
+use saorsa_core::network::PeerInfo;
+use saorsa_core::{dht::*, identity::*, messaging::*, quantum_crypto::*, storage::*};
+use saorsa_mls::MessageType;
 
 // Mock network state for testing
 #[derive(Clone)]

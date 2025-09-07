@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useCallback, ReactNode } fr
 
 // Navigation context types
 export type NavigationContextType = 'personal' | 'organization'
-export type EntityType = 'individual' | 'group' | 'project' | 'overview'
+export type EntityType = 'individual' | 'group' | 'project' | 'channel' | 'overview'
 
 export interface Breadcrumb {
   label: string

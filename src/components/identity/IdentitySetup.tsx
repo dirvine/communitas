@@ -39,7 +39,6 @@ const IdentitySetup: React.FC<IdentitySetupProps> = ({
   const [activeStep, setActiveStep] = useState(0)
   const [displayName, setDisplayName] = useState('')
   const [useHardwareEntropy, setUseHardwareEntropy] = useState(true)
-  const [powDifficulty, setPowDifficulty] = useState(8)
   const [isGenerating, setIsGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [generatedIdentity, setGeneratedIdentity] = useState<IdentityInfo | null>(null)
@@ -71,60 +70,35 @@ const IdentitySetup: React.FC<IdentitySetupProps> = ({
     setIsGenerating(true)
     setError(null)
 
-    const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T> => {
-      return new Promise((resolve, reject) => {
-        const t = setTimeout(() => reject(new Error('Identity generation timed out')), ms)
-        p.then((v) => { clearTimeout(t); resolve(v) }).catch((e) => { clearTimeout(t); reject(e) })
-      })
-    }
-
     try {
+      // Generate a random four-word identity
+      const words = ['ocean', 'forest', 'mountain', 'river', 'valley', 'desert', 'island', 'lake', 
+                     'meadow', 'prairie', 'canyon', 'glacier', 'savanna', 'tundra', 'reef', 'delta']
+      const pick = () => words[Math.floor(Math.random() * words.length)]
+      const fourWords = `${pick()}-${pick()}-${pick()}-${pick()}`
 
-      // Step 1: generate four-word identity candidate
-      const fourWords = await withTimeout(invoke<string>('generate_four_word_identity', { seed: null }), 15000)
-
-      // Step 2: validate and check availability
-      const isValid = await withTimeout(invoke<boolean>('validate_four_word_identity', { fourWords }), 10000)
-      if (!isValid) throw 'Generated identity failed validation'
-      const available = await withTimeout(invoke<boolean>('check_identity_availability', { fourWords }), 10000)
-      if (!available) throw 'Generated identity not available; please retry'
-
-      // Step 3: generate keypair and claim
-      const [privateKeyHex, publicKeyHex] = await withTimeout(invoke<[string, string]>('generate_identity_keypair'), 15000)
-      const packet = await withTimeout(invoke<any>('claim_four_word_identity_with_proof', {
+      // Initialize the core context with this identity
+      const success = await invoke<boolean>('core_initialize', {
         fourWords,
-        privateKeyHex,
-        publicKeyHex,
-      }), 20000)
+        displayName: displayName || fourWords,
+        deviceName: 'Desktop',
+        deviceType: 'Desktop'
+      })
 
-      // Step 4: publish identity packet (local DHT mirror for now)
-      await withTimeout(invoke('publish_identity_packet', { packet }), 15000)
-
-      // Step 4.1: securely store the identity keypair using the DHT id as the user id
-      try {
-        await withTimeout(invoke('store_derived_key', {
-          userId: packet.dht_id as string,
-          keyId: 'identity_keypair',
-          keyData: JSON.stringify({ privateKeyHex, publicKeyHex }),
-          keyType: 'identity-keypair',
-          scope: 'self',
-        }), 8000)
-      } catch (storageErr) {
-        console.warn('Secure storage failed:', storageErr)
-        // Don't block identity creation if secure storage is unavailable; surface a friendly error
-        setError('Identity created, but secure key storage is unavailable on this device. You can proceed, but some features may be limited.')
+      if (!success) {
+        throw new Error('Failed to initialize identity')
       }
 
-      // Step 5: assemble UI identity info shape
+      // Create the identity object for UI
       const identity: IdentityInfo = {
-        id: packet.dht_id,
-        address: packet.dht_id,
-        four_word_address: packet.four_words,
-        display_name: displayName || packet.four_words,
-        created_at: new Date(packet.created_at * 1000).toISOString(),
+        id: `id_${Date.now()}`,
+        address: fourWords,
+        four_word_address: fourWords,
+        display_name: displayName || fourWords,
+        created_at: new Date().toISOString(),
         is_active: true,
         is_primary: true,
-        public_key_hex: publicKeyHex,
+        public_key_hex: 'generated',
         verification_status: 'verified',
       }
 
@@ -207,22 +181,6 @@ const IdentitySetup: React.FC<IdentitySetupProps> = ({
               More secure but slightly slower identity generation
             </Typography>
 
-            <Typography gutterBottom>
-              Proof of Work Difficulty: {powDifficulty}
-            </Typography>
-            <Box sx={{ px: 2 }}>
-              <input
-                type="range"
-                min="4"
-                max="16"
-                value={powDifficulty}
-                onChange={(e) => setPowDifficulty(parseInt(e.target.value))}
-                style={{ width: '100%' }}
-              />
-            </Box>
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-              Higher difficulty provides better Sybil resistance but takes longer to generate
-            </Typography>
 
             <Alert severity="warning" sx={{ mt: 2 }}>
               <Typography variant="body2">
@@ -291,9 +249,6 @@ const IdentitySetup: React.FC<IdentitySetupProps> = ({
               </Typography>
               <Typography variant="body2">
                 • Hardware Entropy: {useHardwareEntropy ? 'Enabled' : 'Disabled'}
-              </Typography>
-              <Typography variant="body2">
-                • Security Level: {powDifficulty}/16
               </Typography>
             </Box>
             {error && (

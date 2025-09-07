@@ -11,11 +11,13 @@ import {
   Switch,
   FormControlLabel,
   Chip,
+  Stack,
 } from '@mui/material'
 import {
   Menu as MenuIcon,
   Person,
-  Science as ExperimentalIcon,
+  ChevronLeft,
+  ChevronRight,
 } from '@mui/icons-material'
 import { SnackbarProvider } from 'notistack'
 import { NetworkHealth } from './types'
@@ -23,10 +25,8 @@ import { NetworkHealth } from './types'
 // Feature Flags
 import { featureFlags, useFeatureFlag } from './services/featureFlags'
 
-// Theme System - both old and new
+// Theme System
 import { ThemeProvider, ThemeSwitcher } from './components/theme'
-import { ThemeProvider as UnifiedThemeProvider } from '@mui/material/styles'
-import unifiedTheme from './theme/unified'
 
 // Authentication System
 import { AuthProvider, AuthStatus } from './components/auth'
@@ -34,8 +34,8 @@ import { AuthProvider, AuthStatus } from './components/auth'
 // Encryption System
 import { EncryptionProvider, EncryptionStatus } from './components/encryption'
 
-// Responsive Layout
-import { ResponsiveLayout, useSidebarBehavior } from './components/responsive'
+  // Responsive Layout  
+  import { useSidebarBehavior } from './components/responsive'
 
 // Navigation - both old and new
 import { WhatsAppStyleNavigation } from './components/navigation/WhatsAppStyleNavigation'
@@ -59,21 +59,26 @@ import { ensureIdentity } from './utils/identity'
 // WebRTC Communication
 import { SimpleCommunicationHub } from './components/webrtc'
 
+// Communication
+import { EntitySelector } from './components/communication/EntitySelector'
+
 // Error handling
 import ErrorBoundary from './components/ErrorBoundary'
 
 // Real-time Sync
 import { GlobalSyncBar } from './components/sync/GlobalSyncBar'
 
-// Tab panels
-import OrganizationTab from './components/tabs/OrganizationTab'
-import GroupsAndPeopleTab from './components/tabs/GroupsAndPeopleTab'
+// Network Status
+import { NetworkStatusIndicator } from './components/network/NetworkStatusIndicator'
+import { EndpointStatusDisplay, CompactEndpointStatus } from './components/network/EndpointStatusDisplay'
+import { networkService } from './services/network/NetworkConnectionService'
+
 import OverviewDashboard from './components/OverviewDashboard'
 import IdentityTab from './components/tabs/IdentityTab'
 
 // Unified components
 import { UnifiedDashboard } from './components/unified/UnifiedDashboard'
-import FirstRunWizard from './components/onboarding/FirstRunWizard'
+// import FirstRunWizard from './components/onboarding/FirstRunWizard'
 import QuickActionsBar from './components/QuickActionsBar'
 import StorageWorkspaceDialog from './components/storage/StorageWorkspaceDialog'
 import { CollaborativeEditingTest } from './components/testing/CollaborativeEditingTest'
@@ -98,41 +103,18 @@ const TestButton: React.FC = () => {
   );
 };
 
-interface TabPanelProps {
-  children?: React.ReactNode
-  index: number
-  value: number
-}
-
-function TabPanel(props: TabPanelProps) {
-  const { children, value, index, ...other } = props
-
-  return (
-    <div
-      role="tabpanel"
-      hidden={value !== index}
-      {...other}
-    >
-      {value === index && (
-        <Box 
-          sx={{ 
-            height: { xs: 'calc(100vh - 56px)', sm: 'calc(100vh - 64px)' }, 
-            overflow: 'auto',
-            p: { xs: 0, sm: 1 },
-          }}
-        >
-          {children}
-        </Box>
-      )}
-    </div>
-  )
-}
 
 function App() {
-  // Feature flags for progressive migration
-  const [experimentalMode, setExperimentalMode] = useState(() => {
-    return localStorage.getItem('communitas-experimental-mode') === 'true'
-  })
+  console.log('App component rendering...')
+  
+  // Experimental mode is now the default
+  // Enable all features
+  React.useEffect(() => {
+    featureFlags.enable('unified-design-system')
+    featureFlags.enable('context-aware-navigation')
+    featureFlags.enable('four-word-identity')
+    featureFlags.enable('unified-storage-ui')
+  }, [])
   
   // Check which features are enabled
   const useContextNav = useFeatureFlag('context-aware-navigation', 'user_owner_123')
@@ -150,11 +132,12 @@ function App() {
     fourWords: undefined,
   })
 
-  const [_currentTab, _setCurrentTab] = useState(0)
   const [showOverview, setShowOverview] = useState(false)
   const [showIdentity, setShowIdentity] = useState(false)
   const [_selectedEntity, _setSelectedEntity] = useState<any>(null)
   const [showStorageWorkspace, setShowStorageWorkspace] = useState(false)
+  const [showEntitySelector, setShowEntitySelector] = useState(false)
+  const [pendingAction, setPendingAction] = useState<'call' | 'video' | 'screen' | 'storage' | null>(null)
   const [networkHealth, setNetworkHealth] = useState<NetworkHealth>({
     status: 'Disconnected',
     peer_count: 0,
@@ -166,6 +149,7 @@ function App() {
   // Use responsive sidebar behavior
   const { defaultOpen } = useSidebarBehavior()
   const [sidebarOpen, setSidebarOpen] = useState(defaultOpen)
+  const handleToggleSidebar = () => setSidebarOpen(o => !o)
 
   useEffect(() => {
     // Load or generate identity
@@ -175,14 +159,10 @@ function App() {
       // leave undefined; UI can handle missing identity
     })
 
-    // Initialize feature flags based on experimental mode
-    if (experimentalMode) {
-      featureFlags.enable('unified-design-system')
-      featureFlags.enable('context-aware-navigation')
-      featureFlags.enable('four-word-identity')
-      featureFlags.enable('unified-storage-ui')
-    }
-  }, [experimentalMode])
+    // Initialize network connection service (auto-connects on startup)
+    console.log('🚀 Initializing network connection service...')
+    // Network service will auto-connect in its constructor
+  }, [])
 
   // Listen for global storage workspace open requests (from dashboards, etc.)
   useEffect(() => {
@@ -217,60 +197,134 @@ function App() {
 
 
 
-  const handleToggleSidebar = () => {
-    setSidebarOpen(!sidebarOpen)
-  }
+  // handleToggleSidebar defined above near sidebarOpen declaration
 
+  // Removed unused _setCurrentTab; keep modal toggles where needed
   const _handleTabChange = (_newValue: number) => {
-    // Handle special cases for Overview and Identity modals
     if (_newValue === 2) {
       setShowOverview(true)
     } else if (_newValue === 3) {
       setShowIdentity(true)
-    } else {
-      _setCurrentTab(_newValue)
     }
   }
 
   // Collaboration feature handlers
-  const handleVideoCall = (entityId: string, entityType: string) => {
+  const handleVideoCall = (entityId?: string, entityType?: string) => {
+    if (!entityId || !entityType) {
+      // Show entity selector for video call
+      setPendingAction('video')
+      setShowEntitySelector(true)
+      return
+    }
     console.log('Starting video call for', entityType, entityId)
     // TODO: Integrate with WebRTC implementation
   }
 
-  const handleAudioCall = (entityId: string, entityType: string) => {
+  const handleAudioCall = (entityId?: string, entityType?: string) => {
+    if (!entityId || !entityType) {
+      // Show entity selector for audio call
+      setPendingAction('call')
+      setShowEntitySelector(true)
+      return
+    }
     console.log('Starting audio call for', entityType, entityId)
     // TODO: Integrate with WebRTC implementation
   }
 
-  const handleScreenShare = (entityId: string, entityType: string) => {
+  const handleScreenShare = (entityId?: string, entityType?: string) => {
+    if (!entityId || !entityType) {
+      // Show entity selector for screen share
+      setPendingAction('screen')
+      setShowEntitySelector(true)
+      return
+    }
     console.log('Starting screen share for', entityType, entityId)
     // TODO: Integrate with WebRTC implementation
   }
 
-  const handleOpenFiles = (entityId: string, entityType: string) => {
+  const handleOpenFiles = (entityId?: string, entityType?: string) => {
+    if (!entityId || !entityType) {
+      // Show entity selector for storage
+      setPendingAction('storage')
+      setShowEntitySelector(true)
+      return
+    }
     console.log('Opening files for', entityType, entityId)
     _setSelectedEntity({ id: entityId, type: entityType })
     // Use the unified storage workspace dialog instead of the basic file sharing dialog
     setShowStorageWorkspace(true)
   }
 
+  const handleEntitySelected = (entity: any, type: 'person' | 'group' | 'organization') => {
+    // Execute the pending action with the selected entity
+    const entityId = entity.id
+    const entityType = type
+    
+    switch (pendingAction) {
+      case 'video':
+        handleVideoCall(entityId, entityType)
+        break
+      case 'call':
+        handleAudioCall(entityId, entityType)
+        break
+      case 'screen':
+        handleScreenShare(entityId, entityType)
+        break
+      case 'storage':
+        handleOpenFiles(entityId, entityType)
+        break
+    }
+    
+    setPendingAction(null)
+  }
+
   const handleQuickAction = (action: string) => {
-    const currentType = navigationContext.mode
-    const currentId = navigationContext.organizationId || navigationContext.projectId || 'current-user'
+    // Check if we have a selected entity or context
+    const hasContext = navigationContext.organizationId || navigationContext.projectId || _selectedEntity
+    
     switch (action) {
       case 'start_voice_call':
-        handleAudioCall(currentId, currentType)
+        if (hasContext) {
+          const currentType = navigationContext.mode
+          const currentId = navigationContext.organizationId || navigationContext.projectId || _selectedEntity?.id
+          if (currentId) {
+            handleAudioCall(currentId, currentType)
+          } else {
+            handleAudioCall() // Will show selector
+          }
+        } else {
+          handleAudioCall() // Will show selector
+        }
         break
       case 'start_video_call':
-        handleVideoCall(currentId, currentType)
+        if (hasContext) {
+          const currentType = navigationContext.mode
+          const currentId = navigationContext.organizationId || navigationContext.projectId || _selectedEntity?.id
+          if (currentId) {
+            handleVideoCall(currentId, currentType)
+          } else {
+            handleVideoCall() // Will show selector
+          }
+        } else {
+          handleVideoCall() // Will show selector
+        }
         break
       case 'upload_documents':
       case 'storage_settings':
       case 'upload_files':
       case 'open_chat':
       default:
-        handleOpenFiles(currentId, currentType)
+        if (hasContext) {
+          const currentType = navigationContext.mode
+          const currentId = navigationContext.organizationId || navigationContext.projectId || _selectedEntity?.id
+          if (currentId) {
+            handleOpenFiles(currentId, currentType)
+          } else {
+            handleOpenFiles() // Will show selector
+          }
+        } else {
+          handleOpenFiles() // Will show selector
+        }
         break
     }
   }
@@ -303,13 +357,13 @@ function App() {
     onMenuClick?: () => void; 
     showMenuButton?: boolean;
   }) => (
-    <Toolbar>
+    <Toolbar sx={{ gap: 1 }}>
       {showMenuButton && (
         <IconButton
           color="inherit"
           edge="start"
           onClick={onMenuClick}
-          sx={{ mr: 2 }}
+          sx={{ mr: 2, flexShrink: 0 }}
         >
           <MenuIcon />
         </IconButton>
@@ -324,94 +378,74 @@ function App() {
           WebkitTextFillColor: 'transparent',
           backgroundClip: 'text',
           fontWeight: 600,
-          fontSize: { xs: '1rem', sm: '1.25rem' },
+          fontSize: { xs: '0.9rem', sm: '1.1rem', md: '1.25rem' },
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          minWidth: 0,
         }}
       >
-        Communitas - P2P Collaboration Platform
+        Communitas
       </Typography>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        {navigationContext.fourWords && (
-          <Chip
-            label={navigationContext.fourWords}
-            size="small"
-            sx={{
-              bgcolor: 'rgba(255,255,255,0.1)',
-              color: 'inherit',
-              fontWeight: 500,
-              textTransform: 'none'
-            }}
-          />
-        )}
-        {/* Experimental Mode Toggle */}
-        <Tooltip title="Enable experimental unified UI">
-          <FormControlLabel
-            control={
-              <Switch
-                checked={experimentalMode}
-                onChange={(e) => {
-                  const enabled = e.target.checked
-                  setExperimentalMode(enabled)
-                  localStorage.setItem('communitas-experimental-mode', enabled.toString())
-                  
-                  // Enable/disable Phase 1 features
-                  if (enabled) {
-                    featureFlags.enable('unified-design-system')
-                    featureFlags.enable('context-aware-navigation')
-                    featureFlags.enable('four-word-identity')
-                    featureFlags.enable('unified-storage-ui')
-                  } else {
-                    featureFlags.disable('unified-design-system')
-                    featureFlags.disable('context-aware-navigation')
-                    featureFlags.disable('four-word-identity')
-                    featureFlags.disable('unified-storage-ui')
-                  }
-                  
-                  // Reload to apply changes
-                  window.location.reload()
-                }}
-                icon={<ExperimentalIcon />}
-                checkedIcon={<ExperimentalIcon />}
-                size="small"
-              />
-            }
-            label=""
-            sx={{ m: 0 }}
-          />
-        </Tooltip>
+      <Box sx={{ 
+        display: 'flex', 
+        alignItems: 'center', 
+        gap: { xs: 0.5, sm: 1 },
+        flexShrink: 0,
+        ml: 'auto',
+      }}>
+        {/* Compact Endpoint Status showing four-words or offline */}
+        <CompactEndpointStatus />
         <Button
           variant="outlined"
           size="small"
           startIcon={<Person />}
           onClick={() => setShowIdentity(true)}
           sx={{ 
-            borderColor: 'rgba(255,255,255,0.3)',
-            color: 'inherit',
+            borderColor: (theme) => theme.palette.divider,
+            color: 'primary.main',
+            minWidth: 'auto',
+            px: { xs: 1, sm: 2 },
             '&:hover': {
-              borderColor: 'rgba(255,255,255,0.5)',
-              backgroundColor: 'rgba(255,255,255,0.1)',
-            }
+              borderColor: (theme) => theme.palette.primary.light,
+              backgroundColor: (theme) => theme.palette.action.hover,
+            },
+            '& .MuiButton-startIcon': {
+              mr: { xs: 0.5, sm: 1 },
+            },
           }}
         >
-          Identity
+          <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+            Identity
+          </Box>
         </Button>
-        <EncryptionStatus compact={true} />
-        {!experimentalMode && <ThemeSwitcher compact showPresets />}
+        <Box sx={{ display: { xs: 'none', md: 'flex' }, alignItems: 'center', gap: 1 }}>
+          <EncryptionStatus compact={true} />
+          <ThemeSwitcher compact showPresets />
+        </Box>
         <AuthStatus compact={true} showLabel={false} />
       </Box>
     </Toolbar>
   )
 
   // Check if running in Tauri or browser
-  // Show full UI in development browser mode, otherwise show fallback
-  const showFullUI = isTauriApp()
+  // Show full UI in development mode or when in Tauri
+  // In development, always show full UI to enable testing
+  const isDevelopment = import.meta.env.DEV
+  const showFullUI = isDevelopment || isTauriApp()
+  
+  console.log('App render check:', { isDevelopment, isTauriApp: isTauriApp(), showFullUI })
   
   if (!showFullUI) {
+    console.log('Showing BrowserFallback')
     return (
       <ThemeProvider>
         <BrowserFallback />
       </ThemeProvider>
     );
   }
+  
+  console.log('Showing full UI')
 
   // Handle navigation from unified navigation
   const _handleUnifiedNavigate = (_path: string) => {
@@ -448,22 +482,13 @@ function App() {
 
   // Render theme provider conditionally to keep prop types correct
 
-  // First-run gate stored in localStorage for now
-  const [firstRunOpen, setFirstRunOpen] = useState(() => {
-    return localStorage.getItem('communitas-onboarded') !== 'true'
-  })
-
-  const handleWizardClose = () => {
-    localStorage.setItem('communitas-onboarded', 'true')
-    setFirstRunOpen(false)
-  }
+  // First-run wizard removed in browser mode; use AuthStatus/Login dialog instead
 
   const ThemedApp = (
     <TauriProvider>
       <AuthProvider>
         <EncryptionProvider>
           <NavigationProvider>
-          <FirstRunWizard open={firstRunOpen} onClose={handleWizardClose} />
           <BrowserRouter>
           {/* Global Sync Status Bar */}
           <GlobalSyncBar 
@@ -476,23 +501,44 @@ function App() {
           {/* Conditionally render breadcrumb navigation */}
           {useContextNav && <BreadcrumbNavigation />}
           
-          {/* Conditional UI rendering based on feature flags */}
-          {(experimentalMode || useContextNav) ? (
-            // New WhatsApp-style UI
+          {/* Using experimental UI as default */}
+          {/* New WhatsApp-style UI */}
             <Box sx={{ display: 'flex', height: '100vh' }}>
-              <WhatsAppStyleNavigation
-                organizations={mockOrganizations}
-                personalGroups={mockPersonalGroups}
-                personalUsers={mockPersonalUsers}
-                currentUserId="user_owner_123"
-                onNavigate={handleWhatsAppNavigate}
-                onVideoCall={handleVideoCall}
-                onAudioCall={handleAudioCall}
-                onScreenShare={handleScreenShare}
-                onOpenFiles={handleOpenFiles}
-              />
+              {/* Collapsible left navigation with auto-expand on hover */}
+              <Box
+                sx={{
+                  width: sidebarOpen ? 320 : 56,
+                  transition: 'width 0.2s ease',
+                  borderRight: theme => `1px solid ${theme.palette.divider}`,
+                  overflow: 'hidden',
+                  position: 'relative',
+                  '&:hover': !sidebarOpen ? { width: 320 } : {},
+                }}
+              >
+                <WhatsAppStyleNavigation
+                  organizations={mockOrganizations}
+                  personalGroups={mockPersonalGroups}
+                  personalUsers={mockPersonalUsers}
+                  currentUserId="user_owner_123"
+                  onNavigate={handleWhatsAppNavigate}
+                  onVideoCall={handleVideoCall}
+                  onAudioCall={handleAudioCall}
+                  onScreenShare={handleScreenShare}
+                  onOpenFiles={handleOpenFiles}
+                />
+                {/* Collapse/expand handle */}
+                <Box sx={{ position: 'absolute', top: 8, right: 8 }}>
+                  <IconButton size="small" onClick={handleToggleSidebar}>
+                    {sidebarOpen ? <ChevronLeft /> : <ChevronRight />}
+                  </IconButton>
+                </Box>
+              </Box>
               <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                <AppBar position="sticky" elevation={0}>
+                <AppBar position="sticky" elevation={1} sx={{ 
+                  backgroundColor: theme => theme.palette.background.paper,
+                  color: theme => theme.palette.text.primary,
+                  borderBottom: theme => `1px solid ${theme.palette.divider}`
+                }}>
                   <HeaderComponent 
                     onMenuClick={handleToggleSidebar}
                     showMenuButton={false}
@@ -503,14 +549,23 @@ function App() {
                     <Route path="/" element={
                       <Box sx={{
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        height: '100%', flexDirection: 'column' }}>
+                        height: '100%', flexDirection: 'column', p: 3 }}>
+                        {/* Prominent Endpoint Status Display */}
+                        <Box sx={{ mb: 4, width: '100%', maxWidth: 500 }}>
+                          <EndpointStatusDisplay />
+                        </Box>
+                        
                         <Typography variant="h5" color="text.secondary" gutterBottom>
                           Welcome to Communitas
                         </Typography>
                         <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
                           Select a contact, group, or organization to start collaborating
                         </Typography>
-                        <TestButton />
+                        
+                        <Stack spacing={2} alignItems="center">
+                          <TestButton />
+                          
+                        </Stack>
                       </Box>
                     } />
                     <Route path="/test" element={<SimpleTest />} />
@@ -524,50 +579,18 @@ function App() {
                     <Route path="*" element={<Navigate to="/" replace />} />
                   </Routes>
                 </Box>
-                {/* Floating Quick Actions */}
-                <QuickActionsBar
-                  context={{ type: navigationContext.mode as any, entity: navigationContext }}
-                  onAction={handleQuickAction}
-                  position="bottom-right"
-                  notifications={0}
-                />
               </Box>
               
               {/* WebRTC Communication Hub - Global overlay */}
               <SimpleCommunicationHub />
-            </Box>
-          ) : (
-            // Legacy UI
-            <ResponsiveLayout
-              header={<HeaderComponent />}
-              sidebar={
-                <ContextAwareSidebar
-                  currentUserId="user_owner_123"
-                />
-              }
-              sidebarOpen={sidebarOpen}
-              onSidebarToggle={handleToggleSidebar}
-              maxWidth="xl"
-            >
-              {/* Tab Panels */}
-              <TabPanel value={_currentTab} index={0}>
-                <OrganizationTab />
-              </TabPanel>
-              <TabPanel value={_currentTab} index={1}>
-                <GroupsAndPeopleTab />
-              </TabPanel>
-              
-              {/* WebRTC Communication Hub - Global overlay */}
-              <SimpleCommunicationHub />
-              {/* Quick Actions in legacy UI */}
+              {/* Quick Actions in experimental UI */}
               <QuickActionsBar
                 context={{ type: navigationContext.mode as any, entity: navigationContext }}
                 onAction={handleQuickAction}
                 position="bottom-right"
                 notifications={0}
               />
-            </ResponsiveLayout>
-          )}
+            </Box>
           </BrowserRouter>
   
   {/* Overview Modal */}
@@ -639,6 +662,17 @@ function App() {
       fourWords: navigationContext.fourWords,
     }}
   />
+  
+  {/* Entity Selector Dialog */}
+  <EntitySelector
+    open={showEntitySelector}
+    onClose={() => {
+      setShowEntitySelector(false)
+      setPendingAction(null)
+    }}
+    onSelect={handleEntitySelected}
+    actionType={pendingAction || 'call'}
+  />
           </NavigationProvider>
         </EncryptionProvider>
       </AuthProvider>
@@ -646,28 +680,25 @@ function App() {
   );
 
   return (
-    <ErrorBoundary>
-      <SnackbarProvider maxSnack={3} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
-        <Box
-          component="main"
-          role="main"
-          aria-label="Communitas P2P Collaboration Platform"
-          sx={{
-            // Ensure proper focus management
-            '&:focus-visible': {
-              outline: 'none',
-            },
-          }}
-          tabIndex={-1}
-        >
-          {experimentalMode ? (
-            <UnifiedThemeProvider theme={unifiedTheme.light}>{ThemedApp}</UnifiedThemeProvider>
-          ) : (
-            <ThemeProvider>{ThemedApp}</ThemeProvider>
-          )}
-        </Box>
-      </SnackbarProvider>
-    </ErrorBoundary>
+    <ThemeProvider>
+      <ErrorBoundary>
+        <SnackbarProvider maxSnack={3} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
+          <Box
+            component="main"
+            role="main"
+            aria-label="Communitas P2P Collaboration Platform"
+            sx={{
+              '&:focus-visible': {
+                outline: 'none',
+              },
+            }}
+            tabIndex={-1}
+          >
+            {ThemedApp}
+          </Box>
+        </SnackbarProvider>
+      </ErrorBoundary>
+    </ThemeProvider>
   )
 }
 

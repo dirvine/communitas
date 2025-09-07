@@ -1,95 +1,112 @@
 version: '3.8'
 
 services:
+  # Bootstrap node - first node that others connect to
   bootstrap:
-    build:
-      context: .
-      dockerfile: Dockerfile.bootstrap
+    image: communitas-test:latest
+    container_name: communitas-bootstrap
+    command: ["/app/bootstrap"]
     ports:
-      - "9001:9001"
-      - "9100:9100"
-      - "9110:9110"
-      - "9120:9120"
+      - "8080:8080"  # Bootstrap service port
+      - "8081:8081"  # P2P communication port
     environment:
-      - RUST_LOG=info
+      - RUST_LOG=debug
+      - BOOTSTRAP_PORT=8080
+      - P2P_PORT=8081
+      - NODE_TYPE=bootstrap
+      - DATA_DIR=/app/data/bootstrap
+    volumes:
+      - ./data/bootstrap:/app/data/bootstrap
+    networks:
+      - communitas-net
     healthcheck:
-      test: ["CMD", "nc", "-z", "localhost", "9001"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - communitas-testnet
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
-  # Node 1 - Main testing node
+  # Node 1 - connects to bootstrap
   node1:
-    build: .
+    image: communitas-test:latest
+    container_name: communitas-node1
+    command: ["/app/communitas-node"]
     depends_on:
       bootstrap:
         condition: service_healthy
     ports:
-      - "1420:1420"  # Tauri dev server
+      - "8082:8082"  # Node service port
+      - "8083:8083"  # P2P communication port
     environment:
-      - COMMUNITAS_LOCAL_BOOTSTRAP=bootstrap:9001
-      - COMMUNITAS_P2P_PORT=9002
-      - COMMUNITAS_DATA_DIR=/app/node1-data
-      - RUST_LOG=info,communitas=debug
+      - RUST_LOG=debug
+      - NODE_PORT=8082
+      - P2P_PORT=8083
+      - BOOTSTRAP_ADDR=bootstrap:8080
+      - NODE_TYPE=node
+      - NODE_ID=node1
+      - DATA_DIR=/app/data/node1
     volumes:
-      - ./node1-data:/app/node1-data
-      - /tmp/.X11-unix:/tmp/.X11-unix  # For GUI testing
+      - ./data/node1:/app/data/node1
     networks:
-      - communitas-testnet
-    # Uncomment for GUI testing
-    # environment:
-    #   - DISPLAY=$DISPLAY
+      - communitas-net
 
-  # Node 2 - Secondary testing node
+  # Node 2 - connects to bootstrap
   node2:
-    build: .
+    image: communitas-test:latest
+    container_name: communitas-node2
+    command: ["/app/communitas-node"]
     depends_on:
       bootstrap:
         condition: service_healthy
     ports:
-      - "1421:1420"
+      - "8084:8084"  # Node service port
+      - "8085:8085"  # P2P communication port
     environment:
-      - COMMUNITAS_LOCAL_BOOTSTRAP=bootstrap:9001
-      - COMMUNITAS_P2P_PORT=9003
-      - COMMUNITAS_DATA_DIR=/app/node2-data
-      - RUST_LOG=info,communitas=debug
+      - RUST_LOG=debug
+      - NODE_PORT=8084
+      - P2P_PORT=8085
+      - BOOTSTRAP_ADDR=bootstrap:8080
+      - NODE_TYPE=node
+      - NODE_ID=node2
+      - DATA_DIR=/app/data/node2
     volumes:
-      - ./node2-data:/app/node2-data
+      - ./data/node2:/app/data/node2
     networks:
-      - communitas-testnet
-    profiles:
-      - multi-node
+      - communitas-net
 
-  # Node 3 - Additional testing node
+  # Node 3 - connects to bootstrap
   node3:
-    build: .
+    image: communitas-test:latest
+    container_name: communitas-node3
+    command: ["/app/communitas-node"]
     depends_on:
       bootstrap:
         condition: service_healthy
     ports:
-      - "1422:1420"
+      - "8086:8086"  # Node service port
+      - "8087:8087"  # P2P communication port
     environment:
-      - COMMUNITAS_LOCAL_BOOTSTRAP=bootstrap:9001
-      - COMMUNITAS_P2P_PORT=9004
-      - COMMUNITAS_DATA_DIR=/app/node3-data
-      - RUST_LOG=info,communitas=debug
+      - RUST_LOG=debug
+      - NODE_PORT=8086
+      - P2P_PORT=8087
+      - BOOTSTRAP_ADDR=bootstrap:8080
+      - NODE_TYPE=node
+      - NODE_ID=node3
+      - DATA_DIR=/app/data/node3
     volumes:
-      - ./node3-data:/app/node3-data
+      - ./data/node3:/app/data/node3
     networks:
-      - communitas-testnet
-    profiles:
-      - multi-node
+      - communitas-net
 
 networks:
-  communitas-testnet:
+  communitas-net:
     driver: bridge
     ipam:
       config:
         - subnet: 172.20.0.0/16
 
 volumes:
-  node1-data:
-  node2-data:
-  node3-data:
+  bootstrap_data:
+  node1_data:
+  node2_data:
+  node3_data:

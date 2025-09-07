@@ -34,13 +34,13 @@ pub const MAX_FOUR_WORDS_LENGTH: usize = 100;
 #[derive(Debug, Clone)]
 pub struct InputValidator {
     /// Regex for validating four-word addresses
-    four_words_pattern: Regex,
+    four_words_pattern: Option<Regex>,
     /// Regex for validating usernames
-    username_pattern: Regex,
+    username_pattern: Option<Regex>,
     /// Regex for detecting potential SQL injection
-    sql_injection_pattern: Regex,
+    sql_injection_pattern: Option<Regex>,
     /// Regex for detecting script injection
-    script_injection_pattern: Regex,
+    script_injection_pattern: Option<Regex>,
 }
 
 impl Default for InputValidator {
@@ -53,14 +53,10 @@ impl InputValidator {
     /// Create a new input validator with compiled regex patterns
     pub fn new() -> Self {
         Self {
-            four_words_pattern: Regex::new(r"^[a-z]+-[a-z]+-[a-z]+-[a-z]+$")
-                .expect("Four words pattern should compile"),
-            username_pattern: Regex::new(r"^[a-zA-Z0-9_-]{3,64}$")
-                .expect("Username pattern should compile"),
-            sql_injection_pattern: Regex::new(r"(?i)(select|insert|update|delete|drop|create|alter|exec|union|script|javascript|vbscript)")
-                .expect("SQL injection pattern should compile"),
-            script_injection_pattern: Regex::new(r"(?i)(<script|javascript:|vbscript:|on\w+\s*=)")
-                .expect("Script injection pattern should compile"),
+            four_words_pattern: Regex::new(r"^[a-z]+-[a-z]+-[a-z]+-[a-z]+$").ok(),
+            username_pattern: Regex::new(r"^[a-zA-Z0-9_-]{3,64}$").ok(),
+            sql_injection_pattern: Regex::new(r"(?i)(select|insert|update|delete|drop|create|alter|exec|union|script|javascript|vbscript)").ok(),
+            script_injection_pattern: Regex::new(r"(?i)(<script|javascript:|vbscript:|on\w+\s*=)").ok(),
         }
     }
 
@@ -86,7 +82,11 @@ impl InputValidator {
 
         let sanitized = input.trim().to_lowercase();
 
-        if !self.four_words_pattern.is_match(&sanitized) {
+        if !self
+            .four_words_pattern
+            .as_ref()
+            .is_some_and(|re| re.is_match(&sanitized))
+        {
             return Err(ValidationError::InvalidFormat);
         }
 
@@ -144,7 +144,11 @@ impl InputValidator {
                 max: 10 * 1024 * 1024,
             });
         }
-        if self.script_injection_pattern.is_match(input) {
+        if self
+            .script_injection_pattern
+            .as_ref()
+            .map_or(false, |re| re.is_match(input))
+        {
             return Err(ValidationError::MaliciousContent);
         }
         Ok(input.to_string())
@@ -261,7 +265,11 @@ impl InputValidator {
 
         let sanitized = input.trim();
 
-        if !self.username_pattern.is_match(sanitized) {
+        if !self
+            .username_pattern
+            .as_ref()
+            .is_some_and(|re| re.is_match(sanitized))
+        {
             return Err(anyhow::anyhow!(
                 "Invalid username format. Only alphanumeric characters, hyphens, and underscores allowed"
             ));
@@ -285,7 +293,11 @@ impl InputValidator {
         }
 
         // Check for script injection attempts
-        if self.script_injection_pattern.is_match(input) {
+        if self
+            .script_injection_pattern
+            .as_ref()
+            .is_some_and(|re| re.is_match(input))
+        {
             return Err(anyhow::anyhow!(
                 "Message content contains potentially malicious scripts"
             ));
@@ -359,12 +371,20 @@ impl InputValidator {
     /// Check if input contains potentially malicious content
     fn contains_malicious_content(&self, input: &str) -> bool {
         // Check for SQL injection patterns
-        if self.sql_injection_pattern.is_match(input) {
+        if self
+            .sql_injection_pattern
+            .as_ref()
+            .map_or(false, |re| re.is_match(input))
+        {
             return true;
         }
 
         // Check for script injection patterns
-        if self.script_injection_pattern.is_match(input) {
+        if self
+            .script_injection_pattern
+            .as_ref()
+            .map_or(false, |re| re.is_match(input))
+        {
             return true;
         }
 
@@ -461,8 +481,7 @@ pub struct ValidatedPath {
 
 // Regex constants for validator derive macro
 lazy_static::lazy_static! {
-    static ref USERNAME_REGEX: Regex = Regex::new(r"^[a-zA-Z0-9_-]{3,64}$")
-        .expect("Failed to compile username regex pattern - this is a development error");
+    static ref USERNAME_REGEX: Option<Regex> = Regex::new(r"^[a-zA-Z0-9_-]{3,64}$").ok();
 }
 
 /// Result type for validation operations

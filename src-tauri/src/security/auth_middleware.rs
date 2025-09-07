@@ -6,8 +6,7 @@
 //! - Secure session management
 //! - Protection against unauthorized command execution
 
-use anyhow::{Context, Result};
-use secrecy::{ExposeSecret, Secret};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};

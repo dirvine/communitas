@@ -1,0 +1,112 @@
+{
+  "name": "communitas-testnet",
+  "region": "nyc3",
+  "services": [
+    {
+      "name": "bootstrap-node",
+      "source_dir": "/",
+      "github": {
+        "repo": "david-irvine/communitas",
+        "branch": "main",
+        "deploy_on_push": true
+      },
+      "run_command": "./communitas-node --config /app/config.toml",
+      "environment_slug": "node-js",
+      "instance_count": 1,
+      "instance_size_slug": "basic-xxs",
+      "http_port": 8080,
+      "health_check": {
+        "http_path": "/health"
+      }
+    }
+  ],
+  "workers": [
+    {
+      "name": "node-ams3",
+      "source_dir": "/",
+      "github": {
+        "repo": "david-irvine/communitas",
+        "branch": "main",
+        "deploy_on_push": true
+      },
+      "run_command": "./communitas-node --config /app/config.toml --region ams3",
+      "environment_slug": "node-js",
+      "instance_count": 1,
+      "instance_size_slug": "basic-xxs"
+    },
+    {
+      "name": "node-lon1",
+      "source_dir": "/",
+      "github": {
+        "repo": "david-irvine/communitas",
+        "branch": "main",
+        "deploy_on_push": true
+      },
+      "run_command": "./communitas-node --config /app/config.toml --region lon1",
+      "environment_slug": "node-js",
+      "instance_count": 1,
+      "instance_size_slug": "basic-xxs"
+    },
+    {
+      "name": "node-fra1",
+      "source_dir": "/",
+      "github": {
+        "repo": "david-irvine/communitas",
+        "branch": "main",
+        "deploy_on_push": true
+      },
+      "run_command": "./communitas-node --config /app/config.toml --region fra1",
+      "environment_slug": "node-js",
+      "instance_count": 1,
+      "instance_size_slug": "basic-xxs"
+    },
+    {
+      "name": "node-nyc3",
+      "source_dir": "/",
+      "github": {
+        "repo": "david-irvine/communitas",
+        "branch": "main",
+        "deploy_on_push": true
+      },
+      "run_command": "./communitas-node --config /app/config.toml --region nyc3",
+      "environment_slug": "node-js",
+      "instance_count": 1,
+      "instance_size_slug": "basic-xxs"
+    },
+    {
+      "name": "node-sfo3",
+      "source_dir": "/",
+      "github": {
+        "repo": "david-irvine/communitas",
+        "branch": "main",
+        "deploy_on_push": true
+      },
+      "run_command": "./communitas-node --config /app/config.toml --region sfo3",
+      "environment_slug": "node-js",
+      "instance_count": 1,
+      "instance_size_slug": "basic-xxs"
+    },
+    {
+      "name": "node-sgp1",
+      "source_dir": "/",
+      "github": {
+        "repo": "david-irvine/communitas",
+        "branch": "main",
+        "deploy_on_push": true
+      },
+      "run_command": "./communitas-node --config /app/config.toml --region sgp1",
+      "environment_slug": "node-js",
+      "instance_count": 1,
+      "instance_size_slug": "basic-xxs"
+    }
+  ],
+  "databases": [
+    {
+      "name": "testnet-db",
+      "engine": "PG",
+      "version": "15",
+      "size": "db-s-1vcpu-1gb",
+      "num_nodes": 1
+    }
+  ]
+}

@@ -55,6 +55,7 @@ proptest = { version = "1.4", optional = true }
 # Additional dependencies
 uuid = { version = "1", features = ["v4", "serde"] }
 dirs = "5.0"
+rand = "0.8"
 
 # Tauri will be added when we set up the Tauri project
 # tauri = { version = "2.0.0-alpha", features = ["api-all"] }

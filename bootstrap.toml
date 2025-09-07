@@ -1,0 +1,29 @@
+# Communitas Testnet Bootstrap Configuration
+# This file contains the bootstrap nodes for the testnet
+# Generated automatically by deploy-testnet.sh
+
+# Bootstrap seeds - update these with actual deployed node addresses
+seeds = [
+  "ocean-forest-moon-star:443",
+  "river-mountain-sun-cloud:443",
+  "sparrow-candle-forest-ember:443",
+  "eagle-wind-rain-thunder:443",
+  "wolf-pack-hunt-moon:443",
+  "bear-claw-tree-mountain:443",
+]
+
+# Network configuration
+[network]
+# Default bootstrap timeout in seconds
+bootstrap_timeout_secs = 30
+# Maximum bootstrap connection attempts
+max_bootstrap_attempts = 3
+# Bootstrap node selection strategy (round-robin, random, closest)
+selection_strategy = "round-robin"
+
+# DHT configuration
+[dht]
+# Bootstrap into DHT after connecting to seeds
+enable_dht_bootstrap = true
+# DHT bootstrap timeout
+dht_bootstrap_timeout_secs = 60

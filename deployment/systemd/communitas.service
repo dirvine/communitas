@@ -1,0 +1,14 @@
+[Unit]
+Description=Communitas Node
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=communitas
+ExecStart=/opt/communitas/bin/communitas-node --config /opt/communitas/bootstrap.toml
+Restart=always
+RestartSec=5
+LimitNOFILE=1048576
+
+[Install]
+WantedBy=multi-user.target

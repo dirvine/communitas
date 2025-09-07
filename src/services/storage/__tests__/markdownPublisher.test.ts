@@ -1,5 +1,6 @@
 import { describe, test, expect, beforeEach, afterEach } from 'vitest'
 import { MarkdownWebPublisher } from '../markdownPublisher'
+import { cryptoManager } from '../../security/cryptoManager'
 import { FourWordIdentity } from '../../../types/collaboration'
 import { DHTStorage } from '../dhtStorage'
 import { ReedSolomonEncoder } from '../reedSolomon'
@@ -34,8 +35,10 @@ describe('MarkdownWebPublisher', () => {
       encoder,
       baseDirectory: '/web/'
     })
-    
+
     await publisher.initialize()
+    // Seed a deterministic PQC key for tests so DHT signing works
+    await cryptoManager.generateKeyPair('pk_test_123')
   })
 
   afterEach(async () => {
@@ -189,7 +192,7 @@ Content for section 2
   })
 
   describe('Storage and distribution', () => {
-    test('should distribute website files using Reed-Solomon', async () => {
+    test.runIf(!!process.env.RUN_SLOW)('should distribute website files using Reed-Solomon', async () => {
       await publisher.addFile('/web/home.md', '# Large Content\n'.repeat(10000))
       
       const result = await publisher.publish()

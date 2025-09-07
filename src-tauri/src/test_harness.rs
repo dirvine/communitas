@@ -74,7 +74,7 @@ impl TestHarness {
         let temp_dir = TempDir::new()?;
         let network = Arc::new(RwLock::new(NetworkSimulator::new()));
 
-        let mut harness = TestHarness { network, temp_dir };
+        let harness = TestHarness { network, temp_dir };
 
         // Create and add nodes
         for i in 0..node_count {

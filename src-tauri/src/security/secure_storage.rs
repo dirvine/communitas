@@ -36,15 +36,15 @@ impl SecureStorageManager {
     pub async fn store_derived_key(
         &self,
         key_id: &str,
-        key_data: &str,
-        metadata: &SecureKeyMetadata,
+        _key_data: &str,
+        _metadata: &SecureKeyMetadata,
     ) -> Result<()> {
         // For now, just log - actual keyring implementation would go here
         info!("Would store key {} for user {}", key_id, self.user_id);
         Ok(())
     }
 
-    pub async fn get_derived_key(&self, key_id: &str) -> Result<(String, SecureKeyMetadata)> {
+    pub async fn get_derived_key(&self, _key_id: &str) -> Result<(String, SecureKeyMetadata)> {
         // For now, return a dummy response - actual keyring implementation would go here
         let metadata = SecureKeyMetadata {
             created_at: chrono::Utc::now(),
@@ -54,7 +54,7 @@ impl SecureStorageManager {
         Ok(("dummy_key".to_string(), metadata))
     }
 
-    pub async fn store_encryption_keys(&self, master_key: &str, key_pair: &str) -> Result<()> {
+    pub async fn store_encryption_keys(&self, _master_key: &str, _key_pair: &str) -> Result<()> {
         // For now, just log - actual keyring implementation would go here
         info!("Would store encryption keys for user {}", self.user_id);
         Ok(())

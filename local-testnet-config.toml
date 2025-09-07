@@ -1,0 +1,35 @@
+# Local Communitas Configuration for Testnet
+# This file configures local instances to connect to the remote testnet
+
+[node]
+# Local node configuration
+storage_path = "./local-data"
+listen_quic = ["127.0.0.1:9001"]
+listen_webrtc = ["127.0.0.1:9001"]
+
+[bootstrap]
+# Remote testnet bootstrap nodes
+# Update these with actual four-word addresses from your deployed testnet
+seeds = [
+  "ocean-forest-moon-star:443",
+  "river-mountain-sun-cloud:443",
+  "sparrow-candle-forest-ember:443",
+  "eagle-wind-rain-thunder:443",
+  "wolf-pack-hunt-moon:443",
+  "bear-claw-tree-mountain:443",
+]
+
+[network]
+# Network settings for local testing
+enable_ipv6 = false
+max_peers = 50
+connection_timeout_ms = 10000
+
+[storage]
+# Local storage settings
+cache_size_mb = 512
+enable_compression = true
+
+[logging]
+level = "info"
+file = "./communitas.log"

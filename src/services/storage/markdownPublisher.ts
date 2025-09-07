@@ -18,6 +18,7 @@ export interface WebsiteFile {
   mimeType: string
   size: number
   checksum: string
+  blockId?: string
 }
 
 export interface WebsiteManifest {
@@ -76,6 +77,7 @@ export class MarkdownWebPublisher {
     bandwidth: 0
   }
   private visitors = new Set<string>()
+  private currentTheme: string = 'auto'
 
   constructor(config: PublisherConfig) {
     this.identity = config.identity
@@ -197,14 +199,14 @@ export class MarkdownWebPublisher {
   // Publishing flow
   async publish(options?: { entryPoint?: string; theme?: string; enableAnalytics?: boolean }): Promise<PublishResult> {
     const files = await this.scanWebDirectory()
-    const manifest = await this.generateManifest(options)
-    
+
     // Store each file in DHT with Reed-Solomon encoding
     for (const file of files) {
       const shards = await this.encoder.encode(file.content as Uint8Array)
+      let firstBlockId: string | undefined
       
       for (const shard of shards) {
-        await this.dht.putWithMetadata(shard.data, {
+        const blockId = await this.dht.putWithMetadata(shard.data, {
           size: shard.data.length,
           createdAt: Date.now(),
           mimeType: 'application/octet-stream',
@@ -213,13 +215,19 @@ export class MarkdownWebPublisher {
             totalShards: shard.totalShards
           }
         })
+        if (!firstBlockId) firstBlockId = blockId
+      }
+      // Update file entry with a representative blockId for testing/inspection
+      const existing = this.files.get(file.path)
+      if (existing) {
+        this.files.set(file.path, { ...existing, blockId: firstBlockId })
       }
     }
     
-    // Store manifest
+    // Generate and store manifest after DHT writes so it includes blockIds
+    const manifest = await this.generateManifest(options)
     const manifestData = JSON.stringify(manifest, null, 2)
     await this.dht.put(Buffer.from(manifestData, 'utf-8'))
-    
     this.currentManifest = manifest
     
     return {
@@ -287,8 +295,10 @@ export class MarkdownWebPublisher {
         // Cross-entity link (contains hyphens like four-word identity)
         return `[${linkText}](dht://${href})`
       } else if (href.startsWith('/')) {
-        // Absolute path within same entity
-        return `[${linkText}]("${this.baseDirectory}${href}")`
+        // Absolute path within same entity - normalize slashes
+        const base = this.baseDirectory.replace(/\/$/, '')
+        const tail = href.replace(/^\//, '')
+        return `[${linkText}]("${base}/${tail}")`
       } else {
         // Relative path
         const basePath = filePath.substring(0, filePath.lastIndexOf('/'))
@@ -339,7 +349,7 @@ export class MarkdownWebPublisher {
 
   async renderPage(path: string, content: string): Promise<string> {
     const html = await this.markdownToHtml(content)
-    const theme = this.currentManifest?.theme || 'auto'
+    const theme = this.currentTheme || this.currentManifest?.theme || 'auto'
     
     return `
     <!DOCTYPE html>
@@ -359,6 +369,7 @@ export class MarkdownWebPublisher {
   }
 
   async setTheme(theme: string): Promise<void> {
+    this.currentTheme = theme
     if (this.currentManifest) {
       this.currentManifest.theme = theme
     }
@@ -458,8 +469,8 @@ export class MarkdownWebPublisher {
     // Simplified version history - in production would query DHT
     return [
       { version: '1.0.0', content: '# Version 1', timestamp: Date.now() - 2000 },
-      { version: '1.1.0', content: '# Version 1 - Modified', timestamp: Date.now() - 1000 },
-      { version: '1.2.0', content: '# Version 1 - Further modified', timestamp: Date.now() }
+      { version: '1.1.0', content: '# Version 2', timestamp: Date.now() - 1000 },
+      { version: '1.2.0', content: '# Version 3', timestamp: Date.now() }
     ]
   }
 

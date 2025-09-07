@@ -36,6 +36,12 @@ impl fmt::Debug for TestHarness {
     }
 }
 
+impl Default for TestHarness {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Test node instance
 #[derive(Debug)]
 pub struct TestNode {

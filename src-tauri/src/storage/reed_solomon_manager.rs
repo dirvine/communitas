@@ -19,9 +19,7 @@ use tracing::{debug, error, info, warn};
 use blake3;
 use hex;
 use saorsa_fec::{FecCodec, FecParams};
-use saorsa_seal::{
-    EnvelopeKind, ProvidedShare, Recipient, RecipientId, SealPolicy, open_bytes, seal_bytes,
-};
+use saorsa_seal::{EnvelopeKind, Recipient, RecipientId, SealPolicy, seal_bytes};
 
 // DHT interface for saorsa-seal
 pub trait DhtStorage {

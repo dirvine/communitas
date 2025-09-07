@@ -1,0 +1,9 @@
+[workspace]
+
+[package]
+name = "fwaddr"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+four-word-networking = "2.6"

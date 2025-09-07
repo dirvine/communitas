@@ -1,5 +1,42 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { offlineStorage } from '../services/storage/OfflineStorageService';
+
+// Dynamic import of Tauri API with fallback
+let invoke: any = async (cmd: string, args?: any) => {
+  // Try to get Tauri from window first
+  if (typeof window !== 'undefined' && (window as any).__TAURI__?.core?.invoke) {
+    return (window as any).__TAURI__.core.invoke(cmd, args);
+  }
+  
+  // Try dynamic import
+  try {
+    const { invoke: tauriInvoke } = await import('@tauri-apps/api/core');
+    return tauriInvoke(cmd, args);
+  } catch (error) {
+    console.warn(`Tauri not available, simulating ${cmd}`, args);
+    
+    // Simulate successful responses for development
+    if (cmd === 'core_initialize') {
+      return true;
+    }
+    if (cmd === 'authenticate_user') {
+      return {
+        id: 'mock_id',
+        fourWordAddress: args?.fourWordAddress || 'mock-address',
+        publicKey: 'mock_public_key',
+        privateKey: 'mock_private_key',
+        profile: { name: 'Mock User' },
+        permissions: [],
+        createdAt: new Date(),
+        lastActive: new Date(),
+        isVerified: true,
+        networkStatus: 'connected',
+      };
+    }
+    
+    throw new Error(`Command ${cmd} not available in mock mode`);
+  }
+};
 
 // User identity interface
 export interface UserIdentity {
@@ -92,25 +129,55 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       setAuthState(prev => ({ ...prev, loading: true, error: null }));
       
-      // Check for existing session
-      const existingSession = await invoke<UserIdentity | null>('get_current_identity');
+      // First check offline storage for cached identity
+      const cachedIdentity = await offlineStorage.get<UserIdentity>('current_identity');
       
-      if (existingSession) {
-        // Verify the session is still valid
-        const networkStatus = await getNetworkStatus();
-        
+      if (cachedIdentity) {
+        console.log('📦 Restored identity from offline storage');
         setAuthState({
           isAuthenticated: true,
-          user: existingSession,
+          user: cachedIdentity,
           loading: false,
           error: null,
         });
+      }
+      
+      // Try to get from backend (will update cache if online)
+      try {
+        const existingSession = await (invoke('get_current_identity') as Promise<UserIdentity | null>);
         
-        if (networkStatus.connected) {
-          console.log('✅ Authentication restored, connected to network');
+        if (existingSession) {
+          // Update offline storage
+          await offlineStorage.store('current_identity', existingSession, {
+            encrypt: true,
+            syncOnline: true
+          });
+          
+          // Verify the session is still valid
+          const networkStatus = await getNetworkStatus();
+          
+          setAuthState({
+            isAuthenticated: true,
+            user: existingSession,
+            loading: false,
+            error: null,
+          });
+          
+          if (networkStatus.connected) {
+            console.log('✅ Authentication restored, connected to network');
+          } else {
+            console.log('📵 Authentication restored, working offline');
+          }
+        } else if (!cachedIdentity) {
+          setAuthState(prev => ({ ...prev, loading: false }));
         }
-      } else {
-        setAuthState(prev => ({ ...prev, loading: false }));
+      } catch (backendError) {
+        // Backend not available, but we have cached identity
+        if (cachedIdentity) {
+          console.log('📵 Backend unavailable, using cached identity');
+        } else {
+          setAuthState(prev => ({ ...prev, loading: false }));
+        }
       }
     } catch (error) {
       console.error('Failed to initialize authentication:', error);
@@ -128,10 +195,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setAuthState(prev => ({ ...prev, loading: true, error: null }));
 
       // Attempt to connect with the provided credentials
-      const identity = await invoke<UserIdentity>('authenticate_identity', {
+      const identity = await (invoke('authenticate_identity', {
         fourWordAddress,
         privateKey,
-      });
+      }) as Promise<UserIdentity>);
 
       // Connect to the P2P network
       const connected = await connectToNetwork();
@@ -148,6 +215,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       // Store session for persistence
       await invoke('store_identity_session', { identity });
+      
+      // Also store in offline storage
+      await offlineStorage.store('current_identity', identity, {
+        encrypt: true,
+        syncOnline: true
+      });
       
       console.log('✅ Login successful:', identity.fourWordAddress);
       return connected;
@@ -169,6 +242,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       // Clear stored session
       await invoke('clear_identity_session');
+      
+      // Clear offline storage
+      await offlineStorage.store('current_identity', null);
       
       setAuthState({
         isAuthenticated: false,
@@ -194,13 +270,51 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       setAuthState(prev => ({ ...prev, loading: true, error: null }));
 
-      const newIdentity = await invoke<UserIdentity>('create_new_identity', {
+      // Generate a random four-word identity
+      const words = ['ocean', 'forest', 'mountain', 'river', 'valley', 'desert', 'island', 'lake', 
+                     'meadow', 'prairie', 'canyon', 'glacier', 'savanna', 'tundra', 'reef', 'delta'];
+      const pick = () => words[Math.floor(Math.random() * words.length)];
+      const fourWordAddress = `${pick()}-${pick()}-${pick()}-${pick()}`;
+
+      // Initialize the core context with this identity
+      const success = await (invoke('core_initialize', {
+        fourWords: fourWordAddress,
+        displayName: name,
+        deviceName: 'Desktop',
+        deviceType: 'Desktop'
+      }) as Promise<boolean>);
+
+      if (!success) {
+        throw new Error('Failed to initialize identity');
+      }
+
+      // Create the identity object
+      const newIdentity: UserIdentity = {
+        id: `id_${Date.now()}`,
         name,
         email,
-      });
+        fourWordAddress,
+        publicKey: 'generated',
+        profile: {},
+        permissions: [],
+        createdAt: new Date().toISOString(),
+        lastActive: new Date().toISOString(),
+      };
 
       // Auto-login with the new identity
-      await login(newIdentity.fourWordAddress);
+      setAuthState(prev => ({
+        ...prev,
+        isAuthenticated: true,
+        user: newIdentity,
+        loading: false,
+        error: null,
+      }));
+      
+      // Store in offline storage
+      await offlineStorage.store('current_identity', newIdentity, {
+        encrypt: true,
+        syncOnline: true
+      });
       
       console.log('✅ Identity created:', newIdentity.fourWordAddress);
       return newIdentity;
@@ -219,10 +333,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     if (!authState.user) throw new Error('Not authenticated');
 
     try {
-      const updatedUser = await invoke<UserIdentity>('update_user_profile', {
+      const updatedUser = await (invoke('update_user_profile', {
         userId: authState.user.id,
         updates,
-      });
+      }) as Promise<UserIdentity>);
 
       setAuthState(prev => ({
         ...prev,
@@ -240,10 +354,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     if (!authState.user) throw new Error('Not authenticated');
 
     try {
-      const updatedUser = await invoke<UserIdentity>('update_user_permissions', {
+      const updatedUser = await (invoke('update_user_permissions', {
         userId: authState.user.id,
         permissions,
-      });
+      }) as Promise<UserIdentity>);
 
       setAuthState(prev => ({
         ...prev,
@@ -261,10 +375,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     if (!authState.user) throw new Error('Not authenticated');
 
     try {
-      return await invoke<string>('sign_message', {
+      return await (invoke('sign_message', {
         message,
         userId: authState.user.id,
-      });
+      }) as Promise<string>);
     } catch (error) {
       console.error('Message signing failed:', error);
       throw error;
@@ -277,11 +391,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     publicKey: string
   ): Promise<boolean> => {
     try {
-      return await invoke<boolean>('verify_signature', {
+      return await (invoke('verify_signature', {
         message,
         signature,
         publicKey,
-      });
+      }) as Promise<boolean>);
     } catch (error) {
       console.error('Signature verification failed:', error);
       return false;
@@ -290,7 +404,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const connectToNetwork = async (): Promise<boolean> => {
     try {
-      return await invoke<boolean>('connect_to_network');
+      return await (invoke('connect_to_network') as Promise<boolean>);
     } catch (error) {
       console.error('Network connection failed:', error);
       return false;
@@ -307,7 +421,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const getNetworkStatus = async (): Promise<{ connected: boolean; peers: number }> => {
     try {
-      return await invoke<{ connected: boolean; peers: number }>('get_network_status');
+      return await (invoke('get_network_status') as Promise<{ connected: boolean; peers: number }>);
     } catch (error) {
       console.error('Failed to get network status:', error);
       return { connected: false, peers: 0 };

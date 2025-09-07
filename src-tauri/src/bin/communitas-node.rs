@@ -100,7 +100,7 @@ struct UpdateConfig {
     /// Enable auto-update
     auto_update: bool,
 
-    /// Jitter range in seconds (0-6h)
+    /// Jitter range in seconds (0 disables jitter, default 0 for saorsa-core 0.3.18+)
     jitter_secs: u64,
 }
 
@@ -134,7 +134,7 @@ impl Default for Config {
                 channel: "stable".to_string(),
                 check_interval_secs: 21600, // 6 hours
                 auto_update: true,
-                jitter_secs: 21600, // 0-6h jitter
+                jitter_secs: 0, // No jitter needed for saorsa-core 0.3.18+
             },
         }
     }

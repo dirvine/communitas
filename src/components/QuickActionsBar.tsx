@@ -43,7 +43,11 @@ import {
   QrCode as QrCodeIcon,
   VpnKey as VpnKeyIcon,
   Storage as StorageIcon,
+  Menu as MenuIcon,
+  Brush as BrushIcon,
 } from '@mui/icons-material';
+import { useTheme } from './theme/ThemeProvider'
+import type { ColorPreset } from '../theme'
 
 interface QuickActionsBarProps {
   context: {
@@ -64,6 +68,8 @@ export const QuickActionsBar: React.FC<QuickActionsBarProps> = ({
   const [open, setOpen] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
+  const [settingsAnchor, setSettingsAnchor] = useState<null | HTMLElement>(null);
+  const { mode, toggleMode, setColorPreset } = useTheme();
 
   const handleAction = (action: string, data?: any) => {
     setOpen(false);
@@ -226,7 +232,7 @@ export const QuickActionsBar: React.FC<QuickActionsBarProps> = ({
     action: string;
     color: 'default' | 'primary' | 'secondary' | 'success';
     badge?: number;
-  }>;
+  }>; 
 
   // Position styles
   const getPositionStyles = () => {
@@ -234,17 +240,50 @@ export const QuickActionsBar: React.FC<QuickActionsBarProps> = ({
     
     switch (position) {
       case 'bottom-right':
-        return { ...baseStyles, bottom: 16, right: 16 };
+        return { ...baseStyles, bottom: 24, right: 24 };
       case 'bottom-left':
-        return { ...baseStyles, bottom: 16, left: 16 };
+        return { ...baseStyles, bottom: 24, left: 24 };
       case 'top-right':
-        return { ...baseStyles, top: 80, right: 16 };
+        return { ...baseStyles, top: 80, right: 24 };
       case 'top-left':
-        return { ...baseStyles, top: 80, left: 16 };
+        return { ...baseStyles, top: 80, left: 24 };
       default:
-        return { ...baseStyles, bottom: 16, right: 16 };
+        return { ...baseStyles, bottom: 24, right: 24 };
     }
   };
+
+  // Simple settings menu near the FAB (hamburger)
+  const renderSettings = () => (
+    <>
+      <Tooltip title="Settings & Theme">
+        <Fab
+          size="small"
+          onClick={(e) => setSettingsAnchor(e.currentTarget)}
+          sx={{
+            position: 'fixed',
+            bottom: 96,
+            right: position.includes('right') ? 24 : undefined,
+            left: position.includes('left') ? 24 : undefined,
+            zIndex: 1200,
+            boxShadow: 3,
+          }}
+        >
+          <MenuIcon />
+        </Fab>
+      </Tooltip>
+      <Menu
+        anchorEl={settingsAnchor}
+        open={Boolean(settingsAnchor)}
+        onClose={() => setSettingsAnchor(null)}
+        PaperProps={{ sx: { minWidth: 240 } }}
+      >
+        <MenuItem onClick={() => { onAction('settings'); setSettingsAnchor(null); }}>
+          <ListItemIcon><SettingsIcon /></ListItemIcon>
+          <ListItemText>Open Settings</ListItemText>
+        </MenuItem>
+      </Menu>
+    </>
+  );
 
   // Floating Action Buttons for common actions
   const renderFloatingActions = () => {
@@ -253,18 +292,20 @@ export const QuickActionsBar: React.FC<QuickActionsBarProps> = ({
                            context.type === 'group' ||
                            context.type === 'personal';
 
-    if (!showCallButtons) return null;
+    // Avoid visual overlap with main SpeedDial; hide when SpeedDial is open
+    if (!showCallButtons || open) return null;
 
     return (
       <Stack
         direction="column"
-        spacing={1}
+        spacing={2}
         sx={{
           position: 'fixed',
-          bottom: 100,
-          right: position.includes('right') ? 16 : undefined,
-          left: position.includes('left') ? 16 : undefined,
-          zIndex: 1199,
+          // Keep a generous offset so we don't collide with the main + FAB
+          bottom: 240,
+          right: position.includes('right') ? 24 : undefined,
+          left: position.includes('left') ? 24 : undefined,
+          zIndex: 1200,
         }}
       >
         <Tooltip title="Voice Call" placement={position.includes('right') ? 'left' : 'right'}>
@@ -475,11 +516,8 @@ export const QuickActionsBar: React.FC<QuickActionsBarProps> = ({
         ))}
       </SpeedDial>
 
-      {/* Floating Call Actions */}
-      {renderFloatingActions()}
-
-      {/* Mini Toolbar */}
-      {renderMiniToolbar()}
+      {/* Settings (hamburger) */}
+      {renderSettings()}
 
       {/* Context Menu */}
       {renderContextMenu()}

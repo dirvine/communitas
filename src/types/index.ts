@@ -58,7 +58,6 @@ export interface IdentityGenerationParams {
   display_name?: string
   use_secure_storage: boolean
   use_hardware_entropy?: boolean
-  pow_difficulty?: number
 }
 
 // Organization hierarchy types

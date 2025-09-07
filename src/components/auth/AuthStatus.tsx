@@ -43,6 +43,7 @@ export const AuthStatus: React.FC<AuthStatusProps> = ({
   const { authState, logout, getNetworkStatus } = useAuth();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
+  const [loginInitialMode, setLoginInitialMode] = useState<'login' | 'create'>('login');
   const [profileDialogOpen, setProfileDialogOpen] = useState(false);
   const [networkStatus, setNetworkStatus] = useState<{ connected: boolean; peers: number } | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -55,6 +56,7 @@ export const AuthStatus: React.FC<AuthStatusProps> = ({
       // Update network status when menu opens
       updateNetworkStatus();
     } else {
+      setLoginInitialMode('login');
       setLoginDialogOpen(true);
     }
   };
@@ -105,18 +107,32 @@ export const AuthStatus: React.FC<AuthStatusProps> = ({
   if (!authState.isAuthenticated) {
     return (
       <>
-        <Button
-          variant={compact ? 'text' : 'outlined'}
-          startIcon={<LoginIcon />}
-          onClick={() => setLoginDialogOpen(true)}
-          size={compact ? 'small' : 'medium'}
-        >
-          {compact ? 'Sign In' : 'Sign In to Communitas'}
-        </Button>
+        <Stack direction="row" spacing={1} alignItems="center">
+          <Button
+            variant={compact ? 'text' : 'outlined'}
+            startIcon={<LoginIcon />}
+            onClick={() => { setLoginInitialMode('login'); setLoginDialogOpen(true); }}
+            size={compact ? 'small' : 'medium'}
+          >
+            {compact ? 'Sign In' : 'Sign In'}
+          </Button>
+          {!compact && (
+            <Button
+              variant="contained"
+              startIcon={<SecurityIcon />}
+              onClick={() => { setLoginInitialMode('create'); setLoginDialogOpen(true); }}
+              size="medium"
+              color="primary"
+            >
+              Create Identity
+            </Button>
+          )}
+        </Stack>
 
         <LoginDialog
           open={loginDialogOpen}
           onClose={() => setLoginDialogOpen(false)}
+          initialMode={loginInitialMode}
         />
       </>
     );

@@ -1,0 +1,31 @@
+# Communitas Bootstrap Configuration
+# This file contains the initial peer addresses for the testnet
+# Update the addresses below with the actual four-word addresses of your deployed nodes
+
+[bootstrap]
+# List of bootstrap nodes for initial peer discovery
+# Format: "four-word-address:port"
+seeds = [
+  # AMS3 (Amsterdam) - 104.248.85.72:443
+  "sparrow-candle-forest-ember:443",
+  # LON1 (London) - 138.68.130.66:443
+  "eagle-feather-mountain-peak:443",
+  # FRA1 (Frankfurt) - 159.89.109.179:443
+  "wolf-pack-snow-summit:443",
+  # NYC3 (New York) - 165.22.44.216:443
+  "tiger-stripe-jungle-leaf:443",
+  # SFO3 (San Francisco) - 137.184.123.27:443
+  "bear-claw-rocky-mountain:443",
+  # SGP1 (Singapore) - 128.199.85.70:443
+  "dragon-scale-oriental-garden:443",
+]
+
+[node]
+# Node configuration
+storage_path = "/var/lib/communitas"
+listen_quic = ["0.0.0.0:443"]
+listen_webrtc = ["0.0.0.0:443"]
+
+[update]
+# Auto-update configuration
+channel = "stable"

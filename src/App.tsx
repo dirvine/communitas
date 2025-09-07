@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import {
   AppBar,
@@ -74,19 +74,18 @@ import { EndpointStatusDisplay, CompactEndpointStatus } from './components/netwo
 import { networkService } from './services/network/NetworkConnectionService'
 
 import OverviewDashboard from './components/OverviewDashboard'
-import IdentityTab from './components/tabs/IdentityTab'
-
-// Unified components
-import { UnifiedDashboard } from './components/unified/UnifiedDashboard'
 // import FirstRunWizard from './components/onboarding/FirstRunWizard'
 import QuickActionsBar from './components/QuickActionsBar'
 import StorageWorkspaceDialog from './components/storage/StorageWorkspaceDialog'
-import { CollaborativeEditingTest } from './components/testing/CollaborativeEditingTest'
-import { SimpleCollaborationTest } from './components/testing/SimpleCollaborationTest'
-import { TestPage } from './components/testing/TestPage'
-import { SimpleTest } from './components/testing/SimpleTest'
-import { MessageConsole } from './components/dev/MessageConsole'
-import WebsitePublishPanel from './components/dev/WebsitePublishPanel'
+
+const IdentityTab = React.lazy(() => import('./components/tabs/IdentityTab'))
+const WebsitePublishPanel = React.lazy(() => import('./components/dev/WebsitePublishPanel'))
+const UnifiedDashboard = React.lazy(() => import('./components/unified/UnifiedDashboard').then(m => ({ default: m.UnifiedDashboard })))
+const CollaborativeEditingTest = React.lazy(() => import('./components/testing/CollaborativeEditingTest').then(m => ({ default: m.CollaborativeEditingTest })))
+const SimpleCollaborationTest = React.lazy(() => import('./components/testing/SimpleCollaborationTest').then(m => ({ default: m.SimpleCollaborationTest })))
+const TestPage = React.lazy(() => import('./components/testing/TestPage').then(m => ({ default: m.TestPage })))
+const SimpleTest = React.lazy(() => import('./components/testing/SimpleTest').then(m => ({ default: m.SimpleTest })))
+const MessageConsole = React.lazy(() => import('./components/dev/MessageConsole').then(m => ({ default: m.MessageConsole })))
 
 // Test button component that uses React Router navigation
 const TestButton: React.FC = () => {
@@ -545,6 +544,7 @@ function App() {
                   />
                 </AppBar>
                 <Box sx={{ flex: 1, overflow: 'auto', bgcolor: 'grey.50' }}>
+                  <Suspense fallback={<Box sx={{ p: 3 }}><Typography>Loading…</Typography></Box>}>
                   <Routes>
                     <Route path="/" element={
                       <Box sx={{
@@ -578,6 +578,7 @@ function App() {
                     <Route path="/project/:projectId/*" element={<UnifiedDashboard userId="user_owner_123" userName="Owner" />} />
                     <Route path="*" element={<Navigate to="/" replace />} />
                   </Routes>
+                  </Suspense>
                 </Box>
               </Box>
               
@@ -646,7 +647,9 @@ function App() {
           p: 3,
         }}
       >
-        <IdentityTab onClose={() => setShowIdentity(false)} />
+        <Suspense fallback={<Box sx={{ p: 2 }}><Typography>Loading identity…</Typography></Box>}>
+          <IdentityTab onClose={() => setShowIdentity(false)} />
+        </Suspense>
       </Box>
     </>
   )}

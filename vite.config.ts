@@ -24,6 +24,20 @@ export default defineConfig({
     target: process.env.TAURI_PLATFORM == 'windows' ? 'chrome105' : 'safari13',
     minify: !process.env.TAURI_DEBUG ? 'esbuild' : false,
     sourcemap: !!process.env.TAURI_DEBUG,
+    chunkSizeWarningLimit: 2000,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('monaco-editor')) return 'monaco';
+            if (id.includes('@mui/')) return 'mui';
+            if (id.includes('react') || id.includes('react-dom')) return 'react';
+            if (id.includes('yjs') || id.includes('y-webrtc')) return 'yjs';
+            if (id.includes('@tauri-apps')) return 'tauri';
+          }
+        },
+      },
+    },
   },
   optimizeDeps: {
     esbuildOptions: {

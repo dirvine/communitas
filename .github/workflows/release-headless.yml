@@ -1,4 +1,4 @@
-name: Tauri Release
+name: Release Headless Binaries
 
 on:
   push:
@@ -9,125 +9,62 @@ on:
       version:
         description: 'Version to release'
         required: false
+        default: 'latest'
 
-permissions:
-  contents: write
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
 
 jobs:
   create-release:
     runs-on: ubuntu-latest
     outputs:
       release_id: ${{ steps.create-release.outputs.result }}
+      version: ${{ steps.get-version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          
+
       - name: Get version
-        run: echo "PACKAGE_VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_ENV
-        
+        id: get-version
+        run: |
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/}
+          else
+            VERSION="v$(node -p "require('./package.json').version")"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
       - name: Create release
         id: create-release
         uses: actions/github-script@v7
         with:
           script: |
+            const version = '${{ steps.get-version.outputs.version }}'
             const { data } = await github.rest.repos.createRelease({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              tag_name: `v${process.env.PACKAGE_VERSION}`,
-              name: `Communitas v${process.env.PACKAGE_VERSION}`,
-              body: `## What's Changed
-              
-              ### Features
-              - Updated branding to "Privacy, Security and Freedom (Saorsa)"
-              - Enhanced network connectivity with offline-first capabilities
-              - Improved UI/UX with WhatsApp-style navigation
-              
-              ### Binaries Available
-              - **Desktop Apps**: macOS (DMG), Windows (MSI), Linux (AppImage, DEB)
-              - **Headless Node**: communitas-node for server deployments
-              - **Bootstrap Node**: For network seed nodes
-              - **Auto-updater**: For automatic updates
-              
-              Full changelog: https://github.com/${{ github.repository }}/compare/v0.1.0...v${process.env.PACKAGE_VERSION}`,
+              tag_name: version,
+              name: `Communitas Headless ${version}`,
+              body: `## Headless Binaries Release
+
+### Available Downloads
+- **Linux x86_64**: communitas-headless-linux-x86_64.tar.gz
+- **macOS Universal**: communitas-headless-macos-universal.tar.gz
+- **Windows x86_64**: communitas-headless-windows-x86_64.zip
+
+### Binaries Included
+- communitas-node (headless P2P node)
+- bootstrap (network bootstrap node)
+- communitas-autoupdater (automatic update service)
+
+### Installation
+Extract the archive and run the binaries directly. No additional dependencies required.`,
               draft: true,
               prerelease: false
             })
             return data.id
 
-  build-tauri:
-    needs: create-release
-    permissions:
-      contents: write
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: 'macos-latest'
-            args: '--target universal-apple-darwin'
-          - platform: 'ubuntu-22.04'
-            args: ''
-          - platform: 'windows-latest'
-            args: ''
-
-    runs-on: ${{ matrix.platform }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
-
-      - name: Install dependencies (Ubuntu)
-        if: matrix.platform == 'ubuntu-22.04'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            build-essential \
-            curl \
-            wget \
-            file \
-            libssl-dev \
-            libgtk-3-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            libjavascriptcoregtk-4.1-dev \
-            libsoup-3.0-dev
-
-      - name: Install dependencies (macOS)
-        if: matrix.platform == 'macos-latest'
-        run: |
-          rustup target add aarch64-apple-darwin
-          rustup target add x86_64-apple-darwin
-
-      - name: Install frontend dependencies
-        run: npm install
-
-      - name: Build Tauri App
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        with:
-          releaseId: ${{ needs.create-release.outputs.release_id }}
-          args: ${{ matrix.args }}
-
-  build-headless:
+  build-linux:
     needs: create-release
     runs-on: ubuntu-latest
     steps:
@@ -141,8 +78,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             build-essential \
-            curl \
-            wget \
             libssl-dev \
             pkg-config
 
@@ -153,9 +88,9 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: linux-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Build headless binaries
+      - name: Build binaries
         run: |
           cd src-tauri
           cargo build --release --bin communitas-node
@@ -168,31 +103,22 @@ jobs:
           strip src-tauri/target/release/bootstrap
           strip src-tauri/target/release/communitas-autoupdater
 
-      - name: Create archives
+      - name: Create archive
         run: |
           cd src-tauri/target/release
-          # Linux x86_64
           tar -czf communitas-headless-linux-x86_64.tar.gz \
             communitas-node \
             bootstrap \
             communitas-autoupdater
-          # Create individual archives too
-          tar -czf communitas-node-linux-x86_64.tar.gz communitas-node
-          tar -czf bootstrap-linux-x86_64.tar.gz bootstrap
-          tar -czf communitas-autoupdater-linux-x86_64.tar.gz communitas-autoupdater
 
       - name: Upload to release
         uses: softprops/action-gh-release@v1
         with:
-          files: |
-            src-tauri/target/release/communitas-headless-linux-x86_64.tar.gz
-            src-tauri/target/release/communitas-node-linux-x86_64.tar.gz
-            src-tauri/target/release/bootstrap-linux-x86_64.tar.gz
-            src-tauri/target/release/communitas-autoupdater-linux-x86_64.tar.gz
+          files: src-tauri/target/release/communitas-headless-linux-x86_64.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  build-headless-macos:
+  build-macos:
     needs: create-release
     runs-on: macos-latest
     steps:
@@ -203,14 +129,14 @@ jobs:
         with:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
 
-      - name: Build headless binaries (x86_64)
+      - name: Build x86_64 binaries
         run: |
           cd src-tauri
           cargo build --release --target x86_64-apple-darwin --bin communitas-node
           cargo build --release --target x86_64-apple-darwin --bin bootstrap
           cargo build --release --target x86_64-apple-darwin --bin communitas-autoupdater
 
-      - name: Build headless binaries (aarch64)
+      - name: Build aarch64 binaries
         run: |
           cd src-tauri
           cargo build --release --target aarch64-apple-darwin --bin communitas-node
@@ -220,12 +146,12 @@ jobs:
       - name: Create universal binaries
         run: |
           cd src-tauri/target
-          # Create universal binaries for macOS
+          mkdir -p release/universal-apple-darwin
           lipo release/x86_64-apple-darwin/release/communitas-node release/aarch64-apple-darwin/release/communitas-node -create -output release/universal-apple-darwin/communitas-node
           lipo release/x86_64-apple-darwin/release/bootstrap release/aarch64-apple-darwin/release/bootstrap -create -output release/universal-apple-darwin/bootstrap
           lipo release/x86_64-apple-darwin/release/communitas-autoupdater release/aarch64-apple-darwin/release/communitas-autoupdater -create -output release/universal-apple-darwin/communitas-autoupdater
 
-      - name: Create macOS archive
+      - name: Create archive
         run: |
           cd src-tauri/target/release/universal-apple-darwin
           tar -czf communitas-headless-macos-universal.tar.gz \
@@ -233,14 +159,14 @@ jobs:
             bootstrap \
             communitas-autoupdater
 
-      - name: Upload macOS binaries to release
+      - name: Upload to release
         uses: softprops/action-gh-release@v1
         with:
           files: src-tauri/target/release/universal-apple-darwin/communitas-headless-macos-universal.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  build-headless-windows:
+  build-windows:
     needs: create-release
     runs-on: windows-latest
     steps:
@@ -249,19 +175,19 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Build headless binaries
+      - name: Build binaries
         run: |
           cd src-tauri
           cargo build --release --bin communitas-node
           cargo build --release --bin bootstrap
           cargo build --release --bin communitas-autoupdater
 
-      - name: Create Windows archive
+      - name: Create archive
         run: |
           cd src-tauri/target/release
           Compress-Archive -Path communitas-node.exe,bootstrap.exe,communitas-autoupdater.exe -DestinationPath communitas-headless-windows-x86_64.zip
 
-      - name: Upload Windows binaries to release
+      - name: Upload to release
         uses: softprops/action-gh-release@v1
         with:
           files: src-tauri/target/release/communitas-headless-windows-x86_64.zip
@@ -269,11 +195,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   publish-release:
-    needs: [build-tauri, build-headless, build-headless-macos, build-headless-windows]
+    needs: [create-release, build-linux, build-macos, build-windows]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Publish release
         uses: actions/github-script@v7
         with:

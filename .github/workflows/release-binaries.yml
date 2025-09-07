@@ -25,8 +25,6 @@ jobs:
 
     - name: Install Rust stable
       uses: dtolnay/rust-toolchain@stable
-      with:
-        targets: x86_64-unknown-linux-gnu
 
     - name: Install system dependencies
       run: |
@@ -36,7 +34,11 @@ jobs:
           curl \
           wget \
           libssl-dev \
-          pkg-config
+          pkg-config \
+          libwebkit2gtk-4.1-dev \
+          libgtk-3-dev \
+          libayatana-appindicator3-dev \
+          librsvg2-dev
 
     - name: Cache Cargo registry
       uses: actions/cache@v4
@@ -48,22 +50,25 @@ jobs:
         key: linux-cargo-${{ hashFiles('**/Cargo.lock') }}
 
     - name: Build communitas-node binary
-      run: cargo build --release --bin communitas-node
-      working-directory: src-tauri
+      run: |
+        cd src-tauri
+        cargo build --release --bin communitas-node
 
     - name: Build bootstrap binary
-      run: cargo build --release --bin bootstrap
-      working-directory: src-tauri
+      run: |
+        cd src-tauri
+        cargo build --release --bin bootstrap
 
     - name: Build communitas-autoupdater binary
-      run: cargo build --release --bin communitas-autoupdater
-      working-directory: src-tauri
+      run: |
+        cd src-tauri
+        cargo build --release --bin communitas-autoupdater
 
     - name: Strip binaries
       run: |
-        strip src-tauri/target/release/communitas-node
-        strip src-tauri/target/release/bootstrap
-        strip src-tauri/target/release/communitas-autoupdater
+        strip src-tauri/target/release/communitas-node || true
+        strip src-tauri/target/release/bootstrap || true
+        strip src-tauri/target/release/communitas-autoupdater || true
 
     - name: Create release archive
       run: |

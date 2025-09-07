@@ -1,98 +1,494 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Communitas — Agents API</title>
-    <meta name="description" content="Authoritative Agents API for Communitas + saorsa-core. Canonical signing, automation, and end-to-end flows." />
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agents API - Communitas</title>
+    <meta name="description" content="Comprehensive API documentation for Communitas agents and automation">
     
-    <!-- Inter Font - Same as saorsalabs.com -->
+    <!-- Inter Font -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     
     <link rel="stylesheet" href="styles.css">
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-  </head>
-  <body>
+    <style>
+        .api-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        .api-header {
+            text-align: center;
+            margin-bottom: 4rem;
+            padding-top: 2rem;
+        }
+        
+        .api-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 2rem;
+            margin-bottom: 3rem;
+        }
+        
+        .api-card {
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 1.5rem;
+            transition: all 0.2s ease;
+        }
+        
+        .api-card:hover {
+            border-color: #6366f1;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.1);
+        }
+        
+        .api-card h3 {
+            color: #111827;
+            margin: 0 0 0.5rem 0;
+            font-size: 1.25rem;
+        }
+        
+        .api-card .description {
+            color: #6b7280;
+            margin-bottom: 1rem;
+            line-height: 1.6;
+        }
+        
+        .code-example {
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            padding: 1rem;
+            margin: 1rem 0;
+            overflow-x: auto;
+        }
+        
+        .code-example pre {
+            margin: 0;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 0.875rem;
+            color: #374151;
+        }
+        
+        .api-link {
+            display: inline-flex;
+            align-items: center;
+            color: #6366f1;
+            text-decoration: none;
+            font-weight: 500;
+            margin-top: 1rem;
+        }
+        
+        .api-link:hover {
+            color: #4f46e5;
+        }
+        
+        .api-link svg {
+            margin-left: 0.5rem;
+            transition: transform 0.2s;
+        }
+        
+        .api-link:hover svg {
+            transform: translateX(2px);
+        }
+        
+        .api-section {
+            margin: 4rem 0;
+        }
+        
+        .api-section h2 {
+            color: #111827;
+            font-size: 2rem;
+            margin-bottom: 1rem;
+        }
+        
+        .api-section > p {
+            color: #6b7280;
+            font-size: 1.125rem;
+            margin-bottom: 2rem;
+        }
+        
+        .endpoint-list {
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        
+        .endpoint-item {
+            padding: 1.5rem;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        
+        .endpoint-item:last-child {
+            border-bottom: none;
+        }
+        
+        .endpoint-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .method-badge {
+            background: #10b981;
+            color: white;
+            padding: 0.25rem 0.75rem;
+            border-radius: 4px;
+            font-size: 0.875rem;
+            font-weight: 600;
+        }
+        
+        .method-badge.post {
+            background: #6366f1;
+        }
+        
+        .method-badge.put {
+            background: #f59e0b;
+        }
+        
+        .method-badge.delete {
+            background: #ef4444;
+        }
+        
+        .endpoint-path {
+            font-family: 'Monaco', 'Courier New', monospace;
+            color: #374151;
+            font-weight: 500;
+        }
+        
+        .endpoint-description {
+            color: #6b7280;
+            margin: 0.5rem 0;
+        }
+    </style>
+</head>
+<body>
     <nav class="navbar">
         <div class="nav-container">
             <div class="nav-brand">
-                <a href="index.html" style="text-decoration: none; color: inherit;">
-                    <span class="logo-text">Communitas</span>
-                </a>
+                <span class="logo-text">Communitas</span>
             </div>
             <ul class="nav-menu">
                 <li><a href="index.html">Home</a></li>
-                <li><a href="index.html#features">Features</a></li>
-                <li><a href="agents.html" style="color: var(--text-primary); font-weight: 600;">Agents API</a></li>
-                <li><a href="agents-core.html">Core API</a></li>
+                <li><a href="index.html#new-web">New Web</a></li>
+                <li><a href="index.html#technology">Technology</a></li>
+                <li><a href="agents.html" class="active">Agents</a></li>
                 <li><a href="https://github.com/dirvine/communitas" target="_blank" rel="noopener">GitHub</a></li>
+                <li><a href="https://github.com/dirvine/communitas/releases" class="nav-download">Download</a></li>
             </ul>
         </div>
     </nav>
 
-    <main style="padding-top: 80px;">
-        <section class="hero" style="padding: 4rem 0 3rem;">
-            <div class="hero-container">
-                <h1 style="font-size: 2.5rem;">Agents API</h1>
-                <p class="hero-subtitle">Complete automation and security model for humans and AIs</p>
-                <div class="hero-buttons">
-                    <a href="https://github.com/dirvine/communitas/blob/main/AGENTS_API.md" class="btn btn-primary" target="_blank" rel="noopener">View on GitHub</a>
-                    <a href="agents-core.html" class="btn btn-secondary">Core API</a>
-                </div>
+    <main>
+        <div class="api-container">
+            <div class="api-header">
+                <h1>Agents API</h1>
+                <p>Build powerful automation and integrations with Communitas</p>
             </div>
-        </section>
 
-        <section class="section">
-            <div class="container">
-                <div class="cta-section">
-                    <div id="loading" style="color: var(--text-secondary);">Loading AGENTS_API.md…</div>
-                    <article id="content" style="text-align: left; display: none;"></article>
+            <!-- Core API Surfaces -->
+            <section class="api-section">
+                <h2>Core API Surfaces</h2>
+                <p>Essential building blocks for the New Web</p>
+                
+                <div class="api-grid">
+                    <div class="api-card">
+                        <h3>🆔 Identity Management</h3>
+                        <p class="description">Claim and manage Four-Word identities with ML-DSA signatures</p>
+                        <div class="code-example">
+                            <pre>// Claim a Four-Word identity
+const identity = await agents.identity.claim({
+  fourWords: "ocean-forest-moon-star",
+  displayName: "Alice"
+});</pre>
+                        </div>
+                        <a href="https://github.com/dirvine/communitas/blob/main/docs/AGENTS_API.md#identity-management" class="api-link">
+                            View Documentation
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                <path d="M6 12L10 8L6 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </a>
+                    </div>
+
+                    <div class="api-card">
+                        <h3>🌐 Website Publishing</h3>
+                        <p class="description">Publish DNS-free websites bound to identities with canonical bytes</p>
+                        <div class="code-example">
+                            <pre>// Publish a website
+const receipt = await agents.website.publish({
+  entityHex: identity.id,
+  rootHex: manifestHash,
+  sigHex: signature
+});</pre>
+                        </div>
+                        <a href="https://github.com/dirvine/communitas/blob/main/docs/AGENTS_API.md#website-publishing" class="api-link">
+                            View Documentation
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                <path d="M6 12L10 8L6 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </a>
+                    </div>
+
+                    <div class="api-card">
+                        <h3>💾 Virtual Disks</h3>
+                        <p class="description">Manage per-entity storage with Private, Public, and Shared disks</p>
+                        <div class="code-example">
+                            <pre>// Write to virtual disk
+await agents.disk.write({
+  entityHex: entity.id,
+  diskType: "Private",
+  path: "/docs/readme.md",
+  content: data
+});</pre>
+                        </div>
+                        <a href="https://github.com/dirvine/communitas/blob/main/docs/AGENTS_API.md#virtual-disks" class="api-link">
+                            View Documentation
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                <path d="M6 12L10 8L6 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </a>
+                    </div>
+
+                    <div class="api-card">
+                        <h3>👥 Group Management</h3>
+                        <p class="description">Create and manage threshold-ready groups with shared identities</p>
+                        <div class="code-example">
+                            <pre>// Create a group
+const group = await agents.group.create({
+  name: "Research Team",
+  fourWords: "quantum-labs-collective",
+  members: [alice.id, bob.id]
+});</pre>
+                        </div>
+                        <a href="https://github.com/dirvine/communitas/blob/main/docs/AGENTS_API.md#group-management" class="api-link">
+                            View Documentation
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                <path d="M6 12L10 8L6 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </a>
+                    </div>
+
+                    <div class="api-card">
+                        <h3>💬 Channel Messaging</h3>
+                        <p class="description">End-to-end encrypted messaging with reactions and threads</p>
+                        <div class="code-example">
+                            <pre>// Send a message
+await agents.channel.send({
+  channelId: channel.id,
+  content: "Hello, quantum world!",
+  encrypted: true
+});</pre>
+                        </div>
+                        <a href="https://github.com/dirvine/communitas/blob/main/docs/AGENTS_API.md#messaging" class="api-link">
+                            View Documentation
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                <path d="M6 12L10 8L6 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </a>
+                    </div>
+
+                    <div class="api-card">
+                        <h3>🔐 Quantum Security</h3>
+                        <p class="description">ML-KEM and ML-DSA cryptographic operations</p>
+                        <div class="code-example">
+                            <pre>// Sign with ML-DSA
+const signature = await agents.crypto.sign({
+  data: canonicalBytes,
+  keyPair: identity.keys
+});</pre>
+                        </div>
+                        <a href="https://github.com/dirvine/communitas/blob/main/docs/AGENTS_API.md#cryptography" class="api-link">
+                            View Documentation
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                <path d="M6 12L10 8L6 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </a>
+                    </div>
                 </div>
-            </div>
-        </section>
+            </section>
+
+            <!-- Key Endpoints -->
+            <section class="api-section">
+                <h2>Key Endpoints</h2>
+                <p>Most commonly used API endpoints</p>
+                
+                <div class="endpoint-list">
+                    <div class="endpoint-item">
+                        <div class="endpoint-header">
+                            <span class="method-badge">GET</span>
+                            <span class="endpoint-path">/api/identity/{fourWords}</span>
+                        </div>
+                        <p class="endpoint-description">Resolve a Four-Word identity to its public key and metadata</p>
+                    </div>
+                    
+                    <div class="endpoint-item">
+                        <div class="endpoint-header">
+                            <span class="method-badge post">POST</span>
+                            <span class="endpoint-path">/api/identity/claim</span>
+                        </div>
+                        <p class="endpoint-description">Claim a new Four-Word identity with ML-DSA keypair generation</p>
+                    </div>
+                    
+                    <div class="endpoint-item">
+                        <div class="endpoint-header">
+                            <span class="method-badge post">POST</span>
+                            <span class="endpoint-path">/api/website/publish</span>
+                        </div>
+                        <p class="endpoint-description">Publish or update a website bound to an identity</p>
+                    </div>
+                    
+                    <div class="endpoint-item">
+                        <div class="endpoint-header">
+                            <span class="method-badge">GET</span>
+                            <span class="endpoint-path">/api/website/{identity}</span>
+                        </div>
+                        <p class="endpoint-description">Fetch website content for a given identity</p>
+                    </div>
+                    
+                    <div class="endpoint-item">
+                        <div class="endpoint-header">
+                            <span class="method-badge post">POST</span>
+                            <span class="endpoint-path">/api/disk/{entity}/write</span>
+                        </div>
+                        <p class="endpoint-description">Write data to an entity's virtual disk</p>
+                    </div>
+                    
+                    <div class="endpoint-item">
+                        <div class="endpoint-header">
+                            <span class="method-badge">GET</span>
+                            <span class="endpoint-path">/api/disk/{entity}/read</span>
+                        </div>
+                        <p class="endpoint-description">Read data from an entity's virtual disk</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Integration Examples -->
+            <section class="api-section">
+                <h2>Integration Examples</h2>
+                <p>Real-world patterns for building with Communitas</p>
+                
+                <div class="api-grid">
+                    <div class="api-card">
+                        <h3>Publishing a Blog</h3>
+                        <div class="code-example">
+                            <pre>// 1. Initialize identity
+const id = await agents.identity.init("blog-writer");
+
+// 2. Create content manifest
+const manifest = {
+  posts: blogPosts,
+  style: stylesheet,
+  index: indexHtml
+};
+
+// 3. Publish to network
+const root = await agents.disk.writeManifest(manifest);
+await agents.website.publish(id, root);</pre>
+                        </div>
+                    </div>
+                    
+                    <div class="api-card">
+                        <h3>Group Collaboration</h3>
+                        <div class="code-example">
+                            <pre>// 1. Create group
+const group = await agents.group.create({
+  name: "Project Team",
+  threshold: 2 // 2 of N signatures
+});
+
+// 2. Share documents
+await agents.disk.write({
+  entity: group.id,
+  diskType: "Shared",
+  path: "/docs/spec.md",
+  content: specification
+});</pre>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Resources -->
+            <section class="api-section">
+                <h2>Resources</h2>
+                <div class="api-grid">
+                    <div class="api-card">
+                        <h3>📚 Full Documentation</h3>
+                        <p class="description">Complete API reference with all endpoints and examples</p>
+                        <a href="https://github.com/dirvine/communitas/blob/main/docs/AGENTS_API.md" class="api-link">
+                            View on GitHub
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                <path d="M6 12L10 8L6 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </a>
+                    </div>
+                    
+                    <div class="api-card">
+                        <h3>🔧 Saorsa Core API</h3>
+                        <p class="description">Low-level core library documentation</p>
+                        <a href="agents-core.html" class="api-link">
+                            Explore Core API
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                <path d="M6 12L10 8L6 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </a>
+                    </div>
+                    
+                    <div class="api-card">
+                        <h3>💻 SDKs & Libraries</h3>
+                        <p class="description">Client libraries for popular languages</p>
+                        <a href="https://github.com/dirvine/communitas#sdks" class="api-link">
+                            Browse SDKs
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                <path d="M6 12L10 8L6 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </a>
+                    </div>
+                </div>
+            </section>
+        </div>
     </main>
 
     <footer class="footer">
-        <div class="container">
-            <div class="footer-bottom">
-                <p>&copy; 2024 Saorsa Labs Limited. Dual-licensed under AGPL-3.0 and Commercial terms.</p>
+        <div class="footer-container">
+            <div class="footer-section">
+                <h3>Resources</h3>
+                <ul>
+                    <li><a href="https://github.com/dirvine/communitas">GitHub Repository</a></li>
+                    <li><a href="agents.html">Agents API</a></li>
+                    <li><a href="agents-core.html">Core API</a></li>
+                    <li><a href="https://github.com/dirvine/communitas/releases">Downloads</a></li>
+                </ul>
+            </div>
+            <div class="footer-section">
+                <h3>Technology</h3>
+                <ul>
+                    <li><a href="https://crates.io/crates/saorsa-core">Saorsa Core</a></li>
+                    <li><a href="https://github.com/dirvine/communitas/blob/main/docs/AGENTS_API.md">API Documentation</a></li>
+                    <li><a href="index.html#new-web">The New Web Demo</a></li>
+                    <li><a href="https://saorsalabs.com">Saorsa Labs</a></li>
+                </ul>
+            </div>
+            <div class="footer-section">
+                <h3>Legal</h3>
+                <ul>
+                    <li><a href="https://github.com/dirvine/communitas/blob/main/LICENSE">AGPL License</a></li>
+                    <li><a href="mailto:saorsalabs@gmail.com">Commercial License</a></li>
+                    <li><a href="#privacy">Privacy</a></li>
+                    <li><a href="mailto:saorsalabs@gmail.com">Contact</a></li>
+                </ul>
             </div>
         </div>
+        <div class="footer-bottom">
+            <p>&copy; 2025 Saorsa Labs Ltd. All rights reserved.</p>
+            <p class="footer-tagline">Privacy, Security and Freedom</p>
+        </div>
     </footer>
-
-    <script>
-      (async function() {
-        // Try local file first, fallback to GitHub
-        const LOCAL_URL = 'AGENTS_API.md';
-        const GITHUB_URL = 'https://raw.githubusercontent.com/dirvine/communitas/main/AGENTS_API.md';
-        const loading = document.getElementById('loading');
-        const content = document.getElementById('content');
-        
-        async function loadMarkdown(url) {
-          const res = await fetch(url, { cache: 'no-cache' });
-          if (!res.ok) throw new Error('HTTP ' + res.status);
-          return await res.text();
-        }
-        
-        try {
-          // Try local first
-          let md;
-          try {
-            md = await loadMarkdown(LOCAL_URL);
-          } catch (localError) {
-            // Fallback to GitHub
-            md = await loadMarkdown(GITHUB_URL);
-          }
-          
-          content.innerHTML = marked.parse(md);
-          loading.style.display = 'none';
-          content.style.display = 'block';
-        } catch (e) {
-          loading.textContent = 'Failed to load AGENTS_API.md: ' + (e && e.message ? e.message : e);
-        }
-      })();
-    </script>
-  </body>
-  </html>
+</body>
+</html>

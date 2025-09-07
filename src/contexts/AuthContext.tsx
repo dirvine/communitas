@@ -83,9 +83,11 @@ export interface AuthContextType {
   authState: AuthState;
   
   // Authentication methods
-  login: (fourWordAddress: string, privateKey?: string) => Promise<boolean>;
+  login: (fourWordAddress: string, password?: string) => Promise<boolean>;
   logout: () => Promise<void>;
-  createIdentity: (name: string, email?: string) => Promise<UserIdentity>;
+  createIdentity: (name: string, email?: string, options?: { fourWords?: string; publicKey?: number[]; seedPhrase?: string; dhtPacket?: unknown; password?: string }) => Promise<UserIdentity>;
+  registerPasskey: () => Promise<boolean>;
+  signInWithPasskey: () => Promise<boolean>;
   
   // Identity management
   updateProfile: (updates: Partial<UserIdentity['profile']>) => Promise<void>;
@@ -190,15 +192,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  const login = async (fourWordAddress: string, privateKey?: string): Promise<boolean> => {
+  const login = async (fourWordAddress: string, password?: string): Promise<boolean> => {
     try {
       setAuthState(prev => ({ ...prev, loading: true, error: null }));
 
       // Attempt to connect with the provided credentials
-      const identity = await (invoke('authenticate_identity', {
-        fourWordAddress,
-        privateKey,
-      }) as Promise<UserIdentity>);
+      let identity: UserIdentity | null = null
+      try {
+        identity = await (invoke('authenticate_identity', { fourWordAddress, password }) as Promise<UserIdentity>)
+      } catch {
+        // Fallback in browser/dev when backend not available: use offline storage
+        const cached = await offlineStorage.get<UserIdentity>('current_identity')
+        if (cached && cached.fourWordAddress === fourWordAddress) {
+          identity = cached
+        }
+      }
+      if (!identity) throw new Error('Invalid credentials or offline')
 
       // Connect to the P2P network
       const connected = await connectToNetwork();
@@ -266,15 +275,59 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  const createIdentity = async (name: string, email?: string): Promise<UserIdentity> => {
+  // Passkey registration and sign-in (backend-aware; browser fallback)
+  const registerPasskey = async (): Promise<boolean> => {
+    try {
+      try { return await (invoke('register_passkey') as Promise<boolean>); } catch {}
+      if (typeof window === 'undefined' || !(window as any).PublicKeyCredential) return false;
+      const challenge = Uint8Array.from(crypto.getRandomValues(new Uint8Array(32)));
+      const cred = await (navigator.credentials as any).create({
+        publicKey: {
+          challenge,
+          rp: { name: 'Communitas' },
+          user: { id: Uint8Array.from(crypto.getRandomValues(new Uint8Array(16))), name: 'user', displayName: 'Communitas User' },
+          pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
+          timeout: 60000,
+          authenticatorSelection: { userVerification: 'preferred' },
+        },
+      });
+      await offlineStorage.store('passkey_registered', true);
+      return !!cred;
+    } catch (e) {
+      console.warn('Passkey registration failed', e);
+      return false;
+    }
+  };
+
+  const signInWithPasskey = async (): Promise<boolean> => {
+    try {
+      try { return await (invoke('sign_in_with_passkey') as Promise<boolean>); } catch {}
+      if (typeof window === 'undefined' || !(window as any).PublicKeyCredential) return false;
+      const challenge = Uint8Array.from(crypto.getRandomValues(new Uint8Array(32)));
+      await (navigator.credentials as any).get({ publicKey: { challenge, timeout: 60000, userVerification: 'preferred' } });
+      const cached = await offlineStorage.get<UserIdentity>('current_identity');
+      if (cached) {
+        setAuthState({ isAuthenticated: true, user: cached, loading: false, error: null });
+        return true;
+      }
+      return false;
+    } catch (e) {
+      console.warn('Passkey sign-in failed', e);
+      return false;
+    }
+  };
+
+  const createIdentity = async (name: string, email?: string, options?: { fourWords?: string; publicKey?: number[]; seedPhrase?: string; dhtPacket?: unknown; password?: string }): Promise<UserIdentity> => {
     try {
       setAuthState(prev => ({ ...prev, loading: true, error: null }));
 
-      // Generate a random four-word identity
-      const words = ['ocean', 'forest', 'mountain', 'river', 'valley', 'desert', 'island', 'lake', 
-                     'meadow', 'prairie', 'canyon', 'glacier', 'savanna', 'tundra', 'reef', 'delta'];
-      const pick = () => words[Math.floor(Math.random() * words.length)];
-      const fourWordAddress = `${pick()}-${pick()}-${pick()}-${pick()}`;
+      // Four words from options or fallback generator
+      let fourWordAddress = options?.fourWords || ''
+      if (!fourWordAddress) {
+        const words = ['ocean', 'forest', 'mountain', 'river', 'valley', 'desert', 'island', 'lake', 'meadow', 'prairie', 'canyon', 'glacier', 'savanna', 'tundra', 'reef', 'delta'];
+        const pick = () => words[Math.floor(Math.random() * words.length)];
+        fourWordAddress = `${pick()}-${pick()}-${pick()}-${pick()}`;
+      }
 
       // Initialize the core context with this identity
       const success = await (invoke('core_initialize', {
@@ -315,6 +368,28 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         encrypt: true,
         syncOnline: true
       });
+      // Password-based locator + encrypted profile (browser fallback; backend optional)
+      if (options?.password) {
+        try {
+          const enc = new TextEncoder()
+          const salt = crypto.getRandomValues(new Uint8Array(16))
+          const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(options.password), { name: 'PBKDF2' }, false, ['deriveKey'])
+          const key = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: 100_000, hash: 'SHA-256' }, keyMaterial, { name: 'AES-GCM', length: 256 }, false, ['encrypt'])
+          const iv = crypto.getRandomValues(new Uint8Array(12))
+          const payload = enc.encode(JSON.stringify({ fourWordAddress, name, createdAt: Date.now() }))
+          const ciphertext = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, payload))
+          const locatorBytes = new Uint8Array(await crypto.subtle.digest('SHA-256', enc.encode(options.password)))
+          const locator = Array.from(locatorBytes).map(b => b.toString(16).padStart(2,'0')).join('')
+          const blob = { salt: Array.from(salt), iv: Array.from(iv), ciphertext: Array.from(ciphertext) }
+          try { await invoke('store_encrypted_profile', { locator, blob }); } catch {}
+          await offlineStorage.store('password_locator', { locator, blob })
+        } catch (e) {
+          console.warn('Password-based storage failed:', e)
+        }
+      }
+      if (options?.dhtPacket) {
+        try { await invoke('store_identity_packet', { packet: options.dhtPacket }); } catch {}
+      }
       
       console.log('✅ Identity created:', newIdentity.fourWordAddress);
       return newIdentity;
@@ -451,11 +526,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     );
   };
 
+  // Provide default no-op until functions are defined above (ensure in-scope)
   const contextValue: AuthContextType = {
     authState,
     login,
     logout,
     createIdentity,
+    registerPasskey: registerPasskey || (async () => false),
+    signInWithPasskey: signInWithPasskey || (async () => false),
     updateProfile,
     updatePermissions,
     signMessage,

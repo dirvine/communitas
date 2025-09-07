@@ -25,9 +25,12 @@ import {
   Person as PersonIcon,
   NetworkCheck as NetworkIcon,
   Security as SecurityIcon,
+  Fingerprint as FingerprintIcon,
 } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../../contexts/AuthContext';
+import { generateFourWordIdentity } from '../../utils/identity';
+import validator from 'validator';
 import { useResponsive } from '../responsive';
 
 interface LoginDialogProps {
@@ -43,7 +46,7 @@ export const LoginDialog: React.FC<LoginDialogProps> = ({
   onSuccess,
   initialMode = 'login',
 }) => {
-  const { login, createIdentity, authState } = useAuth();
+  const { login, createIdentity, authState, registerPasskey, signInWithPasskey } = useAuth();
   const { isMobile } = useResponsive();
   
   const [mode, setMode] = useState<'login' | 'create'>(initialMode);
@@ -91,30 +94,57 @@ export const LoginDialog: React.FC<LoginDialogProps> = ({
     }
   };
 
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [passwordStrength, setPasswordStrength] = useState<{ ok: boolean; score: number; feedback: string[] }>({ ok: false, score: 0, feedback: [] })
+
+  const evaluateStrength = (pwd: string) => {
+    const options = { minLength: 12, minLowercase: 1, minUppercase: 1, minNumbers: 1, minSymbols: 1, returnScore: true as any }
+    // validator doesn't return score; we compute a simple heuristic
+    const ok = validator.isStrongPassword(pwd, options as any)
+    let score = 0
+    if (pwd.length >= 12) score += 25
+    if (/[a-z]/.test(pwd)) score += 15
+    if (/[A-Z]/.test(pwd)) score += 15
+    if (/[0-9]/.test(pwd)) score += 15
+    if (/[^A-Za-z0-9]/.test(pwd)) score += 15
+    if (pwd.length >= 16) score += 15
+    const feedback: string[] = []
+    if (pwd.length < 12) feedback.push('Use at least 12 characters')
+    if (!/[a-z]/.test(pwd)) feedback.push('Add lowercase letters')
+    if (!/[A-Z]/.test(pwd)) feedback.push('Add uppercase letters')
+    if (!/[0-9]/.test(pwd)) feedback.push('Add numbers')
+    if (!/[^A-Za-z0-9]/.test(pwd)) feedback.push('Add symbols')
+    setPasswordStrength({ ok, score, feedback })
+  }
+
   const handleCreateIdentity = async () => {
     if (!formData.name.trim()) {
       setError('Name is required');
       return;
+    }
+    if (!passwordStrength.ok || password !== confirmPassword) {
+      setError(password !== confirmPassword ? 'Passwords do not match' : 'Please choose a stronger password')
+      return
     }
 
     setLoading(true);
     setError(null);
 
     try {
-      await createIdentity(formData.name.trim(), formData.email.trim() || undefined);
+      // Generate four-words
+      const fourWords = await generateFourWordIdentity()
+      // Create identity with password (AuthContext will store encrypted info and DHT locator)
+      await createIdentity(formData.name.trim(), formData.email.trim() || undefined, { fourWords, password } as any)
       onSuccess?.();
       onClose();
-      // Reset form
-      setFormData({
-        fourWordAddress: '',
-        privateKey: '',
-        name: '',
-        email: '',
-      });
+      setFormData({ fourWordAddress: '', privateKey: '', name: '', email: '' })
+      setPassword(''); setConfirmPassword('')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Identity creation failed');
+      console.error(err)
+      setError(err instanceof Error ? err.message : 'Identity creation failed')
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
   };
 
@@ -287,6 +317,17 @@ export const LoginDialog: React.FC<LoginDialogProps> = ({
                       </motion.div>
                     )}
                   </AnimatePresence>
+
+                  {('PublicKeyCredential' in window) && (
+                    <Button
+                      variant="outlined"
+                      startIcon={<FingerprintIcon />}
+                      onClick={async () => { setLoading(true); const ok = await signInWithPasskey(); setLoading(false); if (ok) { onSuccess?.(); onClose(); } else { setError('Passkey sign-in failed'); } }}
+                      disabled={loading}
+                    >
+                      Sign in with Passkey
+                    </Button>
+                  )}
                 </>
               )}
 
@@ -321,15 +362,53 @@ export const LoginDialog: React.FC<LoginDialogProps> = ({
                     helperText="Used for notifications and recovery"
                     disabled={loading}
                   />
+                  <TextField
+                    fullWidth
+                    label="Password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => { setPassword(e.target.value); evaluateStrength(e.target.value) }}
+                    helperText="Use at least 12 chars with upper, lower, number, symbol"
+                    disabled={loading}
+                    required
+                  />
+                  <Box sx={{ px: 0.5 }}>
+                    <Box sx={{ height: 8, bgcolor: 'action.hover', borderRadius: 4, overflow: 'hidden' }}>
+                      <Box sx={{ width: `${Math.min(passwordStrength.score, 100)}%`, height: '100%', bgcolor: passwordStrength.ok ? 'success.main' : 'warning.main', transition: 'width 150ms ease' }} />
+                    </Box>
+                    {!passwordStrength.ok && password.length > 0 && (
+                      <Typography variant="caption" color="text.secondary">
+                        {passwordStrength.feedback.join(' • ')}
+                      </Typography>
+                    )}
+                  </Box>
+                  <TextField
+                    fullWidth
+                    label="Confirm Password"
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    error={confirmPassword.length > 0 && confirmPassword !== password}
+                    helperText={confirmPassword.length > 0 && confirmPassword !== password ? 'Passwords do not match' : ' '}
+                    disabled={loading}
+                    required
+                  />
 
-                  <Alert severity="info" sx={{ mt: 2 }}>
+                  <Alert severity="info" sx={{ mt: 1 }}>
                     <Typography variant="body2">
-                      <strong>Sign up will create:</strong><br/>
-                      • A unique four-word address (e.g., ocean-forest-moon-star)<br/>
-                      • Cryptographic keys for secure communication<br/>
-                      • Your identity on the P2P network
+                      Your four words will be generated automatically. Your password is used to encrypt your local info and to locate your encrypted backup on the network. You can add passkey later for easy sign-in.
                     </Typography>
                   </Alert>
+                  {('PublicKeyCredential' in window) && (
+                    <Button
+                      variant="outlined"
+                      startIcon={<FingerprintIcon />}
+                      onClick={async () => { setLoading(true); const ok = await registerPasskey(); setLoading(false); if (!ok) setError('Passkey registration failed'); }}
+                      disabled={loading}
+                    >
+                      Register Passkey on this device
+                    </Button>
+                  )}
                 </>
               )}
             </Stack>
@@ -360,9 +439,9 @@ export const LoginDialog: React.FC<LoginDialogProps> = ({
           Cancel
         </Button>
         <Button
-          variant="contained"
-          onClick={handleSubmit}
-          disabled={loading || !formData.fourWordAddress.trim() && mode === 'login' || !formData.name.trim() && mode === 'create'}
+            variant="contained"
+            onClick={handleSubmit}
+            disabled={loading || (!formData.fourWordAddress.trim() && mode === 'login') || (!formData.name.trim() && mode === 'create')}
           startIcon={
             loading ? (
               <CircularProgress size={20} />
@@ -380,7 +459,7 @@ export const LoginDialog: React.FC<LoginDialogProps> = ({
             ? 'Sign In'
             : 'Create Identity'
           }
-        </Button>
+          </Button>
       </DialogActions>
     </Dialog>
   );

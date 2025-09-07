@@ -1,0 +1,81 @@
+{
+  "identities": {
+    "black-tree-fish-river": {
+      "publicKey": "0x7f3a9b2c8e4d1a5f9b6c2d8e4f1a7b3c",
+      "displayName": "Demo User",
+      "websiteRoot": null,
+      "type": "individual"
+    },
+    "quantum-labs-research-collective": {
+      "publicKey": "0xa1b2c3d4e5f6789012345678901234567890abcd",
+      "displayName": "Quantum Labs",
+      "websiteRoot": "3f4a5b6c7d8e9f0a1b2c3d4e5f6789012345678901234567890abcdef123456",
+      "type": "organization",
+      "website": {
+        "title": "Quantum Labs Research Collective",
+        "description": "Advancing post-quantum cryptography and distributed systems",
+        "sections": [
+          {
+            "type": "hero",
+            "content": "Building the quantum-resistant future"
+          },
+          {
+            "type": "projects",
+            "items": ["ML-KEM Implementation", "Lattice-based signatures", "FEC optimization"]
+          }
+        ]
+      }
+    },
+    "secure-mesh-network-alliance": {
+      "publicKey": "0xb2c3d4e5f678901234567890abcdef1234567890",
+      "displayName": "Secure Mesh Alliance",
+      "websiteRoot": "4e5f6789012345678901234567890abcdef1234567890abcdef123456789012",
+      "type": "group",
+      "website": {
+        "title": "Secure Mesh Network Alliance",
+        "description": "Connecting communities with resilient, private networks",
+        "sections": [
+          {
+            "type": "hero",
+            "content": "Mesh networking for everyone"
+          },
+          {
+            "type": "features",
+            "items": ["End-to-end encryption", "Peer discovery", "Offline-first"]
+          }
+        ]
+      }
+    },
+    "privacy-first-developers-guild": {
+      "publicKey": "0xc3d4e5f6789012345678901234567890abcdef12",
+      "displayName": "Privacy First Devs",
+      "websiteRoot": "567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef123",
+      "type": "community",
+      "website": {
+        "title": "Privacy First Developers Guild",
+        "description": "Building tools that respect user sovereignty",
+        "sections": [
+          {
+            "type": "hero",
+            "content": "Code for freedom"
+          },
+          {
+            "type": "values",
+            "items": ["No tracking", "Local-first", "User-owned data"]
+          }
+        ]
+      }
+    }
+  },
+  "canonicalPaths": {
+    "websiteRoot": "saorsa-identity:website_root:v1",
+    "groupMembership": "saorsa-group:membership:v1",
+    "diskManifest": "saorsa-disk:manifest:v1"
+  },
+  "networkStats": {
+    "peers": 1247,
+    "shards": 98653,
+    "identities": 5832,
+    "websites": 2341
+  }
+}

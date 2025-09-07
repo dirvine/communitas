@@ -18,6 +18,7 @@ import {
   Person,
   ChevronLeft,
   ChevronRight,
+  Lan as LanIcon,
 } from '@mui/icons-material'
 import { SnackbarProvider } from 'notistack'
 import { NetworkHealth } from './types'
@@ -58,6 +59,7 @@ import { ensureIdentity } from './utils/identity'
 
 // WebRTC Communication
 import { SimpleCommunicationHub } from './components/webrtc'
+import { LoginDialog } from './components/auth/LoginDialog'
 
 // Communication
 import { EntitySelector } from './components/communication/EntitySelector'
@@ -132,7 +134,7 @@ function App() {
   })
 
   const [showOverview, setShowOverview] = useState(false)
-  const [showIdentity, setShowIdentity] = useState(false)
+  const [authDialogOpen, setAuthDialogOpen] = useState(false)
   const [_selectedEntity, _setSelectedEntity] = useState<any>(null)
   const [showStorageWorkspace, setShowStorageWorkspace] = useState(false)
   const [showEntitySelector, setShowEntitySelector] = useState(false)
@@ -203,7 +205,7 @@ function App() {
     if (_newValue === 2) {
       setShowOverview(true)
     } else if (_newValue === 3) {
-      setShowIdentity(true)
+      setAuthDialogOpen(true)
     }
   }
 
@@ -398,8 +400,11 @@ function App() {
         <Button
           variant="outlined"
           size="small"
-          startIcon={<Person />}
-          onClick={() => setShowIdentity(true)}
+          startIcon={<LanIcon />}
+          onClick={async () => {
+            const text = navigationContext.fourWords || 'local'
+            try { await navigator.clipboard.writeText(text) } catch {}
+          }}
           sx={{ 
             borderColor: (theme) => theme.palette.divider,
             color: 'primary.main',
@@ -409,13 +414,12 @@ function App() {
               borderColor: (theme) => theme.palette.primary.light,
               backgroundColor: (theme) => theme.palette.action.hover,
             },
-            '& .MuiButton-startIcon': {
-              mr: { xs: 0.5, sm: 1 },
-            },
+            '& .MuiButton-startIcon': { mr: { xs: 0.5, sm: 1 } },
           }}
+          title="Click to copy your local four-word address"
         >
           <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
-            Identity
+            {navigationContext.fourWords || 'local'}
           </Box>
         </Button>
         <Box sx={{ display: { xs: 'none', md: 'flex' }, alignItems: 'center', gap: 1 }}>
@@ -502,16 +506,16 @@ function App() {
           
           {/* Using experimental UI as default */}
           {/* New WhatsApp-style UI */}
-            <Box sx={{ display: 'flex', height: '100vh' }}>
+            <Box sx={{ display: 'flex', height: '100vh', position: 'relative' }}>
               {/* Collapsible left navigation with auto-expand on hover */}
               <Box
                 sx={{
-                  width: sidebarOpen ? 320 : 56,
+                  width: sidebarOpen ? 320 : 0,
                   transition: 'width 0.2s ease',
-                  borderRight: theme => `1px solid ${theme.palette.divider}`,
+                  borderRight: theme => (sidebarOpen ? `1px solid ${theme.palette.divider}` : 'none'),
                   overflow: 'hidden',
                   position: 'relative',
-                  '&:hover': !sidebarOpen ? { width: 320 } : {},
+                  minWidth: 0,
                 }}
               >
                 <WhatsAppStyleNavigation
@@ -526,12 +530,21 @@ function App() {
                   onOpenFiles={handleOpenFiles}
                 />
                 {/* Collapse/expand handle */}
-                <Box sx={{ position: 'absolute', top: 8, right: 8 }}>
-                  <IconButton size="small" onClick={handleToggleSidebar}>
-                    {sidebarOpen ? <ChevronLeft /> : <ChevronRight />}
+                {sidebarOpen && (
+                  <Box sx={{ position: 'absolute', top: 8, right: 8 }}>
+                    <IconButton size="small" onClick={handleToggleSidebar}>
+                      <ChevronLeft />
+                    </IconButton>
+                  </Box>
+                )}
+              </Box>
+              {!sidebarOpen && (
+                <Box sx={{ position: 'absolute', top: 8, left: 8, zIndex: 1201 }}>
+                  <IconButton size="small" onClick={handleToggleSidebar} aria-label="Open sidebar">
+                    <ChevronRight />
                   </IconButton>
                 </Box>
-              </Box>
+              )}
               <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                 <AppBar position="sticky" elevation={1} sx={{ 
                   backgroundColor: theme => theme.palette.background.paper,
@@ -582,8 +595,7 @@ function App() {
                 </Box>
               </Box>
               
-              {/* WebRTC Communication Hub - Global overlay */}
-              <SimpleCommunicationHub />
+              {/* WebRTC Communication Hub removed to avoid duplicate FABs */}
               {/* Quick Actions in experimental UI */}
               <QuickActionsBar
                 context={{ type: navigationContext.mode as any, entity: navigationContext }}
@@ -616,43 +628,7 @@ function App() {
     </>
   )}
   
-  {/* Identity Modal */}
-  {showIdentity && (
-    <>
-      <Box
-        sx={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.5)',
-          zIndex: 1299,
-        }}
-        onClick={() => setShowIdentity(false)}
-      />
-      <Box
-        sx={{
-          position: 'fixed',
-          top: '50%',
-          left: '50%',
-          transform: 'translate(-50%, -50%)',
-          width: '90%',
-          maxWidth: 1200,
-          height: '80vh',
-          backgroundColor: 'background.paper',
-          borderRadius: 2,
-          overflow: 'auto',
-          zIndex: 1300,
-          p: 3,
-        }}
-      >
-        <Suspense fallback={<Box sx={{ p: 2 }}><Typography>Loading identity…</Typography></Box>}>
-          <IdentityTab onClose={() => setShowIdentity(false)} />
-        </Suspense>
-      </Box>
-    </>
-  )}
+  <LoginDialog open={authDialogOpen} onClose={() => setAuthDialogOpen(false)} />
   
   {/* Unified Storage Workspace Dialog */}
   <StorageWorkspaceDialog

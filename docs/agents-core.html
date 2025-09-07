@@ -1,134 +1,521 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Saorsa Core — Agents API</title>
-    <meta name="description" content="Saorsa-core Agents API: identities, groups, messaging, virtual disk, transport, and canonical signing." />
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Saorsa Core API - Communitas</title>
+    <meta name="description" content="Low-level core library documentation for identity, website roots, and canonical bytes">
     
-    <!-- Inter Font - Same as saorsalabs.com -->
+    <!-- Inter Font -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     
     <link rel="stylesheet" href="styles.css">
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-  </head>
-  <body>
+    <style>
+        .core-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        .core-header {
+            text-align: center;
+            margin-bottom: 4rem;
+            padding-top: 2rem;
+        }
+        
+        .code-block {
+            background: #1e293b;
+            color: #e2e8f0;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin: 1rem 0;
+            overflow-x: auto;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 0.875rem;
+            line-height: 1.6;
+        }
+        
+        .code-block .comment {
+            color: #94a3b8;
+        }
+        
+        .code-block .keyword {
+            color: #f472b6;
+        }
+        
+        .code-block .function {
+            color: #60a5fa;
+        }
+        
+        .code-block .string {
+            color: #86efac;
+        }
+        
+        .core-section {
+            margin: 4rem 0;
+        }
+        
+        .core-section h2 {
+            color: #111827;
+            font-size: 2rem;
+            margin-bottom: 1rem;
+        }
+        
+        .core-section h3 {
+            color: #374151;
+            font-size: 1.5rem;
+            margin: 2rem 0 1rem 0;
+        }
+        
+        .core-section p {
+            color: #6b7280;
+            line-height: 1.8;
+            margin-bottom: 1rem;
+        }
+        
+        .api-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1.5rem 0;
+        }
+        
+        .api-table th {
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            padding: 1rem;
+            text-align: left;
+            font-weight: 600;
+            color: #111827;
+        }
+        
+        .api-table td {
+            border: 1px solid #e5e7eb;
+            padding: 1rem;
+            vertical-align: top;
+        }
+        
+        .api-table .method-name {
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-weight: 500;
+            color: #374151;
+        }
+        
+        .api-table .param-type {
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 0.875rem;
+            color: #6366f1;
+        }
+        
+        .canonical-example {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.05), rgba(16, 185, 129, 0.05));
+            border: 1px solid rgba(99, 102, 241, 0.2);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin: 2rem 0;
+        }
+        
+        .canonical-example h4 {
+            color: #111827;
+            margin: 0 0 1rem 0;
+        }
+        
+        .resource-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin: 2rem 0;
+        }
+        
+        .resource-card {
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 1.5rem;
+            text-align: center;
+            transition: all 0.2s ease;
+        }
+        
+        .resource-card:hover {
+            border-color: #6366f1;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.1);
+        }
+        
+        .resource-card a {
+            color: #111827;
+            text-decoration: none;
+            display: block;
+        }
+        
+        .resource-card .icon {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .resource-card h4 {
+            margin: 0.5rem 0;
+            color: #111827;
+        }
+        
+        .resource-card p {
+            font-size: 0.875rem;
+            color: #6b7280;
+            margin: 0;
+        }
+    </style>
+</head>
+<body>
     <nav class="navbar">
         <div class="nav-container">
             <div class="nav-brand">
-                <a href="index.html" style="text-decoration: none; color: inherit;">
-                    <span class="logo-text">Communitas</span>
-                </a>
+                <span class="logo-text">Communitas</span>
             </div>
             <ul class="nav-menu">
                 <li><a href="index.html">Home</a></li>
-                <li><a href="index.html#features">Features</a></li>
-                <li><a href="agents.html">Agents API</a></li>
-                <li><a href="agents-core.html" style="color: var(--text-primary); font-weight: 600;">Core API</a></li>
+                <li><a href="index.html#new-web">New Web</a></li>
+                <li><a href="index.html#technology">Technology</a></li>
+                <li><a href="agents.html">Agents</a></li>
                 <li><a href="https://github.com/dirvine/communitas" target="_blank" rel="noopener">GitHub</a></li>
+                <li><a href="https://github.com/dirvine/communitas/releases" class="nav-download">Download</a></li>
             </ul>
         </div>
     </nav>
 
-    <main style="padding-top: 80px;">
-        <section class="hero" style="padding: 4rem 0 3rem;">
-            <div class="hero-container">
-                <h1 style="font-size: 2.5rem;">Saorsa Core API</h1>
-                <p class="hero-subtitle">Core primitives for Communitas: DHT, QUIC, identities, groups, messaging, and virtual disks</p>
-                <div class="hero-buttons">
-                    <a href="https://github.com/dirvine/saorsa-core" class="btn btn-primary" target="_blank" rel="noopener">View on GitHub</a>
-                    <a href="https://docs.rs/saorsa-core" class="btn btn-secondary" target="_blank" rel="noopener">Rust Docs</a>
-                    <a href="agents.html" class="btn btn-secondary">Communitas API</a>
-                </div>
+    <main>
+        <div class="core-container">
+            <div class="core-header">
+                <h1>Saorsa Core API</h1>
+                <p>Low-level primitives for the New Web</p>
             </div>
-        </section>
 
-        <section class="section">
-            <div class="container">
-                <div class="cta-section">
-                    <div id="loading" style="color: var(--text-secondary);">Loading saorsa-core/AGENTS_API.md…</div>
-                    <article id="content" style="text-align: left; display: none;"></article>
+            <!-- Overview -->
+            <section class="core-section">
+                <h2>Overview</h2>
+                <p>Saorsa Core is the foundational library powering Communitas. It provides the core primitives for identity management, DNS-free website publishing, virtual disks, and quantum-resistant cryptography.</p>
+                
+                <div class="resource-grid">
+                    <div class="resource-card">
+                        <a href="https://docs.rs/saorsa-core" target="_blank" rel="noopener">
+                            <div class="icon">📚</div>
+                            <h4>API Docs</h4>
+                            <p>Complete Rust documentation</p>
+                        </a>
+                    </div>
+                    <div class="resource-card">
+                        <a href="https://crates.io/crates/saorsa-core" target="_blank" rel="noopener">
+                            <div class="icon">📦</div>
+                            <h4>Crates.io</h4>
+                            <p>Version 0.3.18</p>
+                        </a>
+                    </div>
+                    <div class="resource-card">
+                        <a href="https://github.com/dirvine/saorsa-core" target="_blank" rel="noopener">
+                            <div class="icon">💻</div>
+                            <h4>Source Code</h4>
+                            <p>GitHub repository</p>
+                        </a>
+                    </div>
                 </div>
-            </div>
-        </section>
+            </section>
+
+            <!-- Canonical Bytes -->
+            <section class="core-section">
+                <h2>Canonical Bytes & Website Roots</h2>
+                <p>The foundation of DNS-free websites: cryptographically binding content to identities.</p>
+                
+                <div class="canonical-example">
+                    <h4>Website Root Canonical Bytes</h4>
+                    <div class="code-block">
+<span class="comment">// Domain Separation Tag (DST) for website roots</span>
+<span class="keyword">const</span> <span class="function">DST</span>: &<span class="keyword">str</span> = <span class="string">"saorsa-identity:website_root:v1"</span>;
+
+<span class="comment">// Canonical bytes construction</span>
+<span class="keyword">let</span> canonical_bytes = format!(
+    <span class="string">"{}|{}|{}"</span>,
+    DST,                <span class="comment">// Domain separation</span>
+    identity_public_key, <span class="comment">// ML-DSA public key</span>
+    website_root_hex    <span class="comment">// BLAKE3 hash of manifest</span>
+);
+
+<span class="comment">// Sign with ML-DSA</span>
+<span class="keyword">let</span> signature = ml_dsa_sign(&canonical_bytes, &identity_private_key);
+
+<span class="comment">// Update identity with website root</span>
+identity_set_website_root(
+    identity_id,
+    website_root_hex,
+    signature
+)?;</div>
+                </div>
+                
+                <p>This cryptographic binding ensures:</p>
+                <ul>
+                    <li>✓ No DNS registration or renewal needed</li>
+                    <li>✓ Websites are cryptographically owned by identities</li>
+                    <li>✓ Content integrity via BLAKE3 hashing</li>
+                    <li>✓ Quantum-resistant signatures with ML-DSA</li>
+                </ul>
+            </section>
+
+            <!-- Core APIs -->
+            <section class="core-section">
+                <h2>Core API Methods</h2>
+                
+                <h3>Identity Operations</h3>
+                <table class="api-table">
+                    <thead>
+                        <tr>
+                            <th>Method</th>
+                            <th>Description</th>
+                            <th>Parameters</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="method-name">identity_claim</td>
+                            <td>Claim a Four-Word identity</td>
+                            <td><span class="param-type">words: [String; 4]</span>, <span class="param-type">pubkey: PublicKey</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">identity_fetch</td>
+                            <td>Retrieve identity by ID</td>
+                            <td><span class="param-type">id: Key</span></td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">identity_set_website_root</td>
+                            <td>Bind website to identity</td>
+                            <td><span class="param-type">id: Key</span>, <span class="param-type">root: Hash</span>, <span class="param-type">sig: Signature</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Virtual Disk Operations</h3>
+                <table class="api-table">
+                    <thead>
+                        <tr>
+                            <th>Method</th>
+                            <th>Description</th>
+                            <th>Disk Types</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="method-name">disk_create</td>
+                            <td>Create entity virtual disk</td>
+                            <td>Private | Public | Shared</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">disk_write</td>
+                            <td>Write to virtual disk</td>
+                            <td>FEC sharding, optional encryption</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">disk_read</td>
+                            <td>Read from virtual disk</td>
+                            <td>Automatic FEC recovery</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>Group Management</h3>
+                <table class="api-table">
+                    <thead>
+                        <tr>
+                            <th>Method</th>
+                            <th>Description</th>
+                            <th>Features</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="method-name">group_identity_create</td>
+                            <td>Create group identity</td>
+                            <td>Threshold signatures ready</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">group_member_add</td>
+                            <td>Add member to group</td>
+                            <td>Requires group signature</td>
+                        </tr>
+                        <tr>
+                            <td class="method-name">group_identity_update</td>
+                            <td>Update group members</td>
+                            <td>Threshold consensus</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <!-- Code Examples -->
+            <section class="core-section">
+                <h2>Implementation Examples</h2>
+                
+                <h3>Publishing a DNS-free Website</h3>
+                <div class="code-block">
+<span class="keyword">use</span> saorsa_core::{identity, website, disk};
+
+<span class="comment">// 1. Create website content</span>
+<span class="keyword">let</span> content = WebsiteManifest {
+    index: <span class="string">"index.html"</span>,
+    pages: vec![<span class="string">"about.html"</span>, <span class="string">"blog.html"</span>],
+    assets: vec![<span class="string">"style.css"</span>, <span class="string">"logo.png"</span>],
+};
+
+<span class="comment">// 2. Write to Public disk</span>
+<span class="keyword">let</span> disk_handle = disk::create(entity_id, DiskType::Public)?;
+<span class="keyword">let</span> manifest_hash = disk::write_manifest(&disk_handle, &content)?;
+
+<span class="comment">// 3. Create canonical bytes</span>
+<span class="keyword">let</span> canonical = format!(
+    <span class="string">"saorsa-identity:website_root:v1|{}|{}"</span>,
+    identity.public_key,
+    manifest_hash
+);
+
+<span class="comment">// 4. Sign and publish</span>
+<span class="keyword">let</span> signature = identity.sign(&canonical)?;
+website::publish(entity_id, manifest_hash, signature)?;</div>
+
+                <h3>Creating a Group with Shared Storage</h3>
+                <div class="code-block">
+<span class="keyword">use</span> saorsa_core::{group, disk};
+
+<span class="comment">// 1. Create group identity</span>
+<span class="keyword">let</span> (group_id, group_keys) = group::create(
+    <span class="string">"quantum-labs-research-collective"</span>,
+    vec![alice_id, bob_id, carol_id]
+)?;
+
+<span class="comment">// 2. Create shared disk for collaboration</span>
+<span class="keyword">let</span> shared_disk = disk::create(
+    group_id,
+    DiskType::Shared,
+    DiskConfig {
+        encryption: EncryptionPolicy::GroupShared,
+        fec_params: FecParams::default(),
+    }
+)?;
+
+<span class="comment">// 3. Write shared documents</span>
+disk::write(
+    &shared_disk,
+    <span class="string">"/docs/research.md"</span>,
+    research_content,
+    FileMetadata::new()
+)?;</div>
+            </section>
+
+            <!-- Installation -->
+            <section class="core-section">
+                <h2>Installation</h2>
+                
+                <h3>Add to Cargo.toml</h3>
+                <div class="code-block">
+[dependencies]
+saorsa-core = <span class="string">"0.3.18"</span>
+
+<span class="comment"># Optional features</span>
+[features]
+default = [<span class="string">"full"</span>]
+full = [<span class="string">"identity"</span>, <span class="string">"groups"</span>, <span class="string">"messaging"</span>, <span class="string">"disk"</span>, <span class="string">"website"</span>]</div>
+
+                <h3>Quick Start</h3>
+                <div class="code-block">
+<span class="keyword">use</span> saorsa_core::prelude::*;
+
+<span class="keyword">#[tokio::main]</span>
+<span class="keyword">async fn</span> <span class="function">main</span>() -> Result&lt;()&gt; {
+    <span class="comment">// Initialize DHT client</span>
+    <span class="keyword">let</span> dht = DhtClient::new(Config::default()).await?;
+    
+    <span class="comment">// Claim identity</span>
+    <span class="keyword">let</span> identity = Identity::claim(
+        [<span class="string">"ocean"</span>, <span class="string">"forest"</span>, <span class="string">"moon"</span>, <span class="string">"star"</span>],
+        &dht
+    ).await?;
+    
+    <span class="comment">// Ready to publish!</span>
+    Ok(())
+}</div>
+            </section>
+
+            <!-- Resources -->
+            <section class="core-section">
+                <h2>Additional Resources</h2>
+                
+                <div class="api-grid">
+                    <div class="api-card">
+                        <h3>📖 Architecture Guide</h3>
+                        <p class="description">Deep dive into system design and patterns</p>
+                        <a href="https://github.com/dirvine/saorsa-core/blob/main/ARCHITECTURE.md" class="api-link">
+                            Read Guide
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                <path d="M6 12L10 8L6 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </a>
+                    </div>
+                    
+                    <div class="api-card">
+                        <h3>🔒 Security Model</h3>
+                        <p class="description">Post-quantum cryptography and threat model</p>
+                        <a href="https://github.com/dirvine/saorsa-core/blob/main/SECURITY.md" class="api-link">
+                            View Security
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                <path d="M6 12L10 8L6 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </a>
+                    </div>
+                    
+                    <div class="api-card">
+                        <h3>🚀 Examples</h3>
+                        <p class="description">Working code samples and patterns</p>
+                        <a href="https://github.com/dirvine/saorsa-core/tree/main/examples" class="api-link">
+                            Browse Examples
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                <path d="M6 12L10 8L6 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </a>
+                    </div>
+                </div>
+            </section>
+        </div>
     </main>
 
     <footer class="footer">
-        <div class="container">
-            <div class="footer-bottom">
-                <p>&copy; 2024 Saorsa Labs Limited. Dual-licensed under AGPL-3.0 and Commercial terms.</p>
+        <div class="footer-container">
+            <div class="footer-section">
+                <h3>Resources</h3>
+                <ul>
+                    <li><a href="https://github.com/dirvine/communitas">GitHub Repository</a></li>
+                    <li><a href="agents.html">Agents API</a></li>
+                    <li><a href="agents-core.html">Core API</a></li>
+                    <li><a href="https://github.com/dirvine/communitas/releases">Downloads</a></li>
+                </ul>
+            </div>
+            <div class="footer-section">
+                <h3>Technology</h3>
+                <ul>
+                    <li><a href="https://crates.io/crates/saorsa-core">Saorsa Core</a></li>
+                    <li><a href="https://github.com/dirvine/communitas/blob/main/docs/AGENTS_API.md">API Documentation</a></li>
+                    <li><a href="index.html#new-web">The New Web Demo</a></li>
+                    <li><a href="https://saorsalabs.com">Saorsa Labs</a></li>
+                </ul>
+            </div>
+            <div class="footer-section">
+                <h3>Legal</h3>
+                <ul>
+                    <li><a href="https://github.com/dirvine/communitas/blob/main/LICENSE">AGPL License</a></li>
+                    <li><a href="mailto:saorsalabs@gmail.com">Commercial License</a></li>
+                    <li><a href="#privacy">Privacy</a></li>
+                    <li><a href="mailto:saorsalabs@gmail.com">Contact</a></li>
+                </ul>
             </div>
         </div>
+        <div class="footer-bottom">
+            <p>&copy; 2025 Saorsa Labs Ltd. All rights reserved.</p>
+            <p class="footer-tagline">Privacy, Security and Freedom</p>
+        </div>
     </footer>
-
-    <script>
-      (async function() {
-        const loading = document.getElementById('loading');
-        const content = document.getElementById('content');
-        
-        // Since saorsa-core is a separate repository, we'll show a helpful message with links
-        const coreContent = `
-          <h2>Saorsa Core API Documentation</h2>
-          <p>Saorsa Core is the foundational library that powers Communitas, providing:</p>
-          
-          <h3>Core Components</h3>
-          <ul>
-            <li><strong>Identity System</strong> - Four-Word addresses with ML-DSA signatures</li>
-            <li><strong>Groups</strong> - Threshold-ready group identities with membership management</li>
-            <li><strong>Messaging</strong> - End-to-end encrypted messaging with channel support</li>
-            <li><strong>Virtual Disks</strong> - Per-entity storage with Private/Public/Shared policies</li>
-            <li><strong>DHT</strong> - Trust-weighted Kademlia with quorum and telemetry</li>
-            <li><strong>Transport</strong> - QUIC via ant-quic, WebRTC DataChannel bridge</li>
-            <li><strong>Cryptography</strong> - Post-quantum (ML-DSA/ML-KEM) with ChaCha20-Poly1305</li>
-          </ul>
-          
-          <h3>Key APIs</h3>
-          <h4>Identity Operations</h4>
-          <pre><code>identity_claim(words, pubkey, sig) -> Result<()>
-identity_fetch(id: Key) -> IdentityPacketV1
-identity_set_website_root(id, website_root, sig) -> Result<()></code></pre>
-          
-          <h4>Group Management</h4>
-          <pre><code>group_identity_create(words, members) -> (GroupIdentityPacketV1, GroupKeyPair)
-group_identity_update_members_signed(id, new_members, group_pk, group_sig) -> Result<()>
-group_member_add(id, member, group_pk, group_sig) -> Result<()></code></pre>
-          
-          <h4>Messaging Service</h4>
-          <pre><code>MessagingService::new(four_word_addr, DhtClient) -> Self
-send_message_to_channel(channel_id, content, options) -> (MessageId, DeliveryReceipt)
-subscribe_messages(channel_filter) -> broadcast::Receiver<ReceivedMessage></code></pre>
-          
-          <h4>Virtual Disk & Website</h4>
-          <pre><code>disk_create(entity_id, DiskType, DiskConfig) -> DiskHandle
-disk_write(&handle, path, content, FileMetadata) -> WriteReceipt
-website_publish(entity_id, website_root) -> PublishReceipt</code></pre>
-          
-          <h3>Resources</h3>
-          <ul>
-            <li><a href="https://docs.rs/saorsa-core" target="_blank" rel="noopener">📚 Full API Documentation on docs.rs</a></li>
-            <li><a href="https://crates.io/crates/saorsa-core" target="_blank" rel="noopener">📦 Package on crates.io</a></li>
-            <li><a href="https://github.com/dirvine/saorsa-core" target="_blank" rel="noopener">💻 Source Code on GitHub</a></li>
-          </ul>
-          
-          <h3>Version</h3>
-          <p>Current version: <strong>0.3.17</strong></p>
-          
-          <h3>Installation</h3>
-          <pre><code># Add to Cargo.toml
-[dependencies]
-saorsa-core = "0.3.17"</code></pre>
-        `;
-        
-        try {
-          content.innerHTML = marked.parse(coreContent);
-          loading.style.display = 'none';
-          content.style.display = 'block';
-        } catch (e) {
-          loading.textContent = 'Failed to render content: ' + (e && e.message ? e.message : e);
-        }
-      })();
-    </script>
-  </body>
-  </html>
+</body>
+</html>

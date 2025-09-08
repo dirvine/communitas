@@ -1,5 +1,5 @@
 import React, { useState, useEffect, Suspense } from 'react'
-import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import {
   AppBar,
   Toolbar,
@@ -90,6 +90,8 @@ const SimpleCollaborationTest = React.lazy(() => import('./components/testing/Si
 const TestPage = React.lazy(() => import('./components/testing/TestPage').then(m => ({ default: m.TestPage })))
 const SimpleTest = React.lazy(() => import('./components/testing/SimpleTest').then(m => ({ default: m.SimpleTest })))
 const MessageConsole = React.lazy(() => import('./components/dev/MessageConsole').then(m => ({ default: m.MessageConsole })))
+const GroupPage = React.lazy(() => import('./components/pages/GroupPage').then(m => ({ default: m.GroupPage })))
+const UserPage = React.lazy(() => import('./components/pages/UserPage').then(m => ({ default: m.UserPage })))
 
 // Test button component that uses React Router navigation
 const TestButton: React.FC = () => {
@@ -476,6 +478,7 @@ function App() {
         organizationName: 'Acme Corp', // TODO: Fetch from store
         fourWords: 'acme-global-secure-network',
       })
+      window.dispatchEvent(new CustomEvent('app:navigate', { detail: _path }))
     } else if (_path.startsWith('/project/')) {
       const parts = _path.split('/')
       const projectId = parts[2]
@@ -485,11 +488,23 @@ function App() {
         projectName: 'Project Alpha', // TODO: Fetch from store
         fourWords: 'alpha-mission-space-explore',
       })
+      window.dispatchEvent(new CustomEvent('app:navigate', { detail: _path }))
+    } else if (_path.startsWith('/group/')) {
+      const parts = _path.split('/')
+      const groupId = parts[2]
+      setNavigationContext(prev => ({ ...prev, mode: 'personal' }))
+      window.dispatchEvent(new CustomEvent('app:navigate', { detail: _path }))
+    } else if (_path.startsWith('/user/')) {
+      const parts = _path.split('/')
+      const userId = parts[2]
+      setNavigationContext(prev => ({ ...prev, mode: 'personal' }))
+      window.dispatchEvent(new CustomEvent('app:navigate', { detail: _path }))
     } else {
       setNavigationContext({
         mode: 'personal',
         fourWords: 'ocean-forest-moon-star',
       })
+      window.dispatchEvent(new CustomEvent('app:navigate', { detail: '/' }))
     }
 
     // TODO: Implement actual routing
@@ -505,6 +520,60 @@ function App() {
         <EncryptionProvider>
           <NavigationProvider>
           <BrowserRouter>
+          {/** Bridge navigation events to React Router */}
+          {(() => {
+            const NavBridge: React.FC = () => {
+              const nav = useNavigate();
+              const location = useLocation();
+              // bridge custom events -> router navigate
+              useEffect(() => {
+                const handler = (e: any) => { if (e?.detail) nav(e.detail) }
+                window.addEventListener('app:navigate', handler)
+                return () => window.removeEventListener('app:navigate', handler)
+              }, [nav])
+              // route-level navigation context
+              useEffect(() => {
+                const path = location.pathname
+                if (path.startsWith('/org/')) {
+                  const parts = path.split('/');
+                  const orgId = parts[2]
+                  setNavigationContext(prev => ({ ...prev, mode: 'organization', organizationId: orgId }))
+                } else if (path.startsWith('/project/')) {
+                  const parts = path.split('/');
+                  const projectId = parts[2]
+                  setNavigationContext(prev => ({ ...prev, mode: 'project', projectId }))
+                } else if (path.startsWith('/group/')) {
+                  const parts = path.split('/');
+                  const groupId = parts[2]
+                  setNavigationContext(prev => ({ ...prev, mode: 'personal', projectId: undefined, organizationId: undefined }))
+                  // could attach group selection state if needed
+                } else if (path.startsWith('/user/')) {
+                  const parts = path.split('/');
+                  const userId = parts[2]
+                  setNavigationContext(prev => ({ ...prev, mode: 'personal', projectId: undefined, organizationId: undefined }))
+                } else {
+                  setNavigationContext(prev => ({ ...prev, mode: 'personal', projectId: undefined, organizationId: undefined }))
+                }
+              }, [location.pathname])
+              
+              // bridge action events -> handlers
+              useEffect(() => {
+                const handler = (e: any) => {
+                  const d = e?.detail; if (!d) return;
+                  switch (d.action) {
+                    case 'video': handleVideoCall(d.entityId, d.entityType); break;
+                    case 'call': handleAudioCall(d.entityId, d.entityType); break;
+                    case 'screen': handleScreenShare(d.entityId, d.entityType); break;
+                    case 'storage': handleOpenFiles(d.entityId, d.entityType); break;
+                  }
+                }
+                window.addEventListener('app:action', handler)
+                return () => window.removeEventListener('app:action', handler)
+              }, [])
+              return null
+            }
+            return <NavBridge />
+          })()}
           {/* Global Sync Status Bar */}
           <GlobalSyncBar 
             userId="user_owner_123" // TODO: Use actual authenticated user ID
@@ -629,6 +698,8 @@ function App() {
                         </Stack>
                       </Box>
                     } />
+                    <Route path="/group/:groupId" element={<GroupPage />} />
+                    <Route path="/user/:userId" element={<UserPage />} />
                     <Route path="/test" element={<SimpleTest />} />
                     <Route path="/test/page" element={<TestPage />} />
                     <Route path="/test/collaboration" element={<CollaborativeEditingTest />} />

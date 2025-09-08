@@ -9,8 +9,10 @@ users:
       - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQD0H91SZIFP6rBe3+996fuIeC9e7GYrb885f2xZQkH+8rgG5Zmq+HqIpQ7XgvAGBePjtdKsg58eQktA7vE8UMbCHMVofnCe8mLf3WiaoajMJr+FrSnlau0RkMHIJcdgFDtJcFr5wottqMXsEThUtNBC98eMu8rE1uW8cl7ZLH6H9z2y51uAW04OA0KGHCgSQqOb+pCvFQkdm9hNFVar+/4sPGW6fA6ZWlc1n/cvn3pcCSMJIVpx45TRBa43YktUsMUm3fWrPk4ZWPbjMdUNndDjrAPoCG4nySB9ZE3Z++AEYXkwzvMkhNRc1MykVcyvg3sre/RP/iXwSF6gNsKVe9cioyikv6E4GjooOTCi+OL33ou4hhLvh7GVVhuAy6tDHgkuuubLtatZSuglVIpGmai2+0W39qA6zlgnvgvwYd55baQ01UjbTlacDFEXcjXTBETzpHlXqKwyiuzcs7NFPrurIH7j55VDhmInCVHbb8wXg/5J6dAM+U614HMHgyqu12c=
 runcmd:
   - sysctl -w net.core.rmem_max=2500000
-  - ufw allow 443/udp
-  - ufw allow 443/tcp
+  - PORT=$(shuf -i 20000-60999 -n 1)
+  - echo "COMMUNITAS_QUIC_PORT=$PORT" | tee /etc/communitas-port.env
+  - ufw allow "$PORT"/udp
+  - ufw allow "$PORT"/tcp
   - ufw allow 22/tcp
   - ufw --force enable
   - mkdir -p /opt/communitas/bin /var/lib/communitas

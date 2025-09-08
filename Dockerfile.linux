@@ -14,11 +14,8 @@ WORKDIR /app
 # Copy source
 COPY . ./
 
-# Build the binaries
-RUN cargo build --release --bins
+RUN cargo build --release -p communitas-tauri --bin communitas-headless
 
 # Extract binaries
 FROM scratch AS binaries
-COPY --from=builder /app/target/release/communitas-node /
-COPY --from=builder /app/target/release/communitas-autoupdater /
-COPY --from=builder /app/target/release/bootstrap /
+COPY --from=builder /app/target/release/communitas-headless /

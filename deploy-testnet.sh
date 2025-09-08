@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Communitas Testnet Deployment Script
-# Deploys 6 headless nodes across DigitalOcean regions
+# Communitas Testnet Deployment Script (headless only)
+# Deploys 6 headless nodes across DigitalOcean regions using communitas-headless
 
 set -e
 
@@ -51,49 +51,8 @@ for i in "${!REGIONS[@]}"; do
 
     echo -e "${GREEN}🌊 Creating droplet in $REGION...${NC}"
 
-# Cloud-init user-data
-USER_DATA=$(cat <<EOF
-#cloud-config
-package_update: true
-package_upgrade: true
-packages:
-  - curl
-  - build-essential
-  - pkg-config
-  - libssl-dev
-users:
-  - name: communitas
-    sudo: ALL=(ALL) NOPASSWD:ALL
-    shell: /bin/bash
-    ssh_authorized_keys:
-      - $(cat ~/.ssh/id_rsa.pub 2>/dev/null || echo "")
-runcmd:
-  - sysctl -w net.core.rmem_max=2500000
-  - ufw allow 443/udp
-  - ufw allow 443/tcp
-  - ufw allow 22/tcp
-  - ufw --force enable
-  - mkdir -p /opt/communitas/bin /var/lib/communitas
-  - chown communitas:communitas /opt/communitas /var/lib/communitas
-  - printf '%s\n' "[update]\nchannel=stable\n" > /etc/communitas/update.toml
-  # Install Rust
-  - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-  - source ~/.cargo/env
-  - export PATH="\$HOME/.cargo/bin:\$PATH"
-  # Clone and build communitas
-  - cd /tmp
-  - git clone https://github.com/dirvine/communitas-foundation.git communitas
-  - cd communitas
-  - cargo build --release --bin communitas-node
-  - cargo build --release --bin communitas-autoupdater
-  - cargo build --release --bin bootstrap
-  - cp target/release/communitas-node /opt/communitas/bin/
-  - cp target/release/communitas-autoupdater /opt/communitas/bin/
-  - cp target/release/bootstrap /opt/communitas/bin/
-  - chown communitas:communitas /opt/communitas/bin/*
-  - chmod +x /opt/communitas/bin/*
-EOF
-)
+# Cloud-init user-data (reads from repo file)
+USER_DATA=$(cat cloud-init.yml)
 
     # Create droplet
     DROPLET_ID=$(doctl compute droplet create "$NAME" \
@@ -123,45 +82,25 @@ for i in "${!DROPLET_IDS[@]}"; do
     IP=$(doctl compute droplet get "$DROPLET_ID" --format PublicIPv4 --no-header)
     echo -e "${YELLOW}Deploying to $NAME ($IP)...${NC}"
 
-    # Copy systemd services
+    # Copy systemd service (headless)
     doctl compute scp deployment/systemd/communitas.service "$DROPLET_ID":/etc/systemd/system/
-    doctl compute scp deployment/systemd/communitas-updater.service "$DROPLET_ID":/etc/systemd/system/
 
     echo -e "${GREEN}✅ Services deployed to $NAME${NC}"
 done
 
-# Get IPs and generate four-word addresses
-echo -e "${GREEN}📝 Generating four-word addresses...${NC}"
+echo -e "${GREEN}📝 Collecting node endpoints (random ports)...${NC}"
+BOOTSTRAP_FILE="bootstrap.toml"
+echo "# Generated: $(date)" > "$BOOTSTRAP_FILE"
+echo "seeds = [" >> "$BOOTSTRAP_FILE"
 for i in "${!DROPLET_IDS[@]}"; do
     DROPLET_ID=${DROPLET_IDS[$i]}
     REGION=${REGIONS[$i]}
-
     IP=$(doctl compute droplet get "$DROPLET_ID" --format PublicIPv4 --no-header)
-
-    # Generate four-word address
-    WORDS=$(./tools/fwaddr/target/release/fwaddr "$IP" 443)
-    FOUR_WORD_ADDRS+=("$WORDS")
-
-    echo "Node $((i+1)) ($REGION): $IP -> $WORDS"
+    PORT=$(doctl compute ssh "$DROPLET_ID" --ssh-command "grep -oE '[0-9]+' /etc/communitas-port.env | head -n1" 2>/dev/null)
+    echo "Node $((i+1)) ($REGION): $IP:$PORT"
+    echo "  \"$IP:$PORT\"," >> "$BOOTSTRAP_FILE"
 done
-
-# Create bootstrap.toml
-echo -e "${GREEN}📄 Creating bootstrap.toml...${NC}"
-BOOTSTRAP_FILE="bootstrap.toml"
-cat > "$BOOTSTRAP_FILE" << EOF
-# Communitas Testnet Bootstrap Configuration
-# Generated: $(date)
-
-seeds = [
-EOF
-
-for addr in "${FOUR_WORD_ADDRS[@]}"; do
-    echo "  \"$addr:443\"," >> "$BOOTSTRAP_FILE"
-done
-
-cat >> "$BOOTSTRAP_FILE" << EOF
-]
-EOF
+echo "]" >> "$BOOTSTRAP_FILE"
 
 # Deploy bootstrap config and start services
 echo -e "${GREEN}🚀 Starting services on droplets...${NC}"
@@ -169,15 +108,10 @@ for i in "${!DROPLET_IDS[@]}"; do
     DROPLET_ID=${DROPLET_IDS[$i]}
     NAME="communitas-node-$((i+1))"
 
-    # Upload bootstrap config
-    doctl compute scp "$BOOTSTRAP_FILE" "$DROPLET_ID":/opt/communitas/bootstrap.toml
-
     # Start services
     doctl compute ssh "$DROPLET_ID" --ssh-command "sudo systemctl daemon-reload"
     doctl compute ssh "$DROPLET_ID" --ssh-command "sudo systemctl enable communitas"
     doctl compute ssh "$DROPLET_ID" --ssh-command "sudo systemctl start communitas"
-    doctl compute ssh "$DROPLET_ID" --ssh-command "sudo systemctl enable communitas-updater"
-    doctl compute ssh "$DROPLET_ID" --ssh-command "sudo systemctl start communitas-updater"
 
     echo -e "${GREEN}✅ Services started on $NAME${NC}"
 done
@@ -185,17 +119,12 @@ done
 echo ""
 echo -e "${GREEN}🎉 Testnet deployment complete!${NC}"
 echo ""
-echo -e "${BLUE}📋 Bootstrap addresses:${NC}"
-for i in "${!FOUR_WORD_ADDRS[@]}"; do
-    REGION=${REGIONS[$i]}
-    WORDS=${FOUR_WORD_ADDRS[$i]}
-    echo "  $REGION: $WORDS:443"
-done
+echo -e "${BLUE}📋 Bootstrap seeds (ip:port):${NC}"
+cat "$BOOTSTRAP_FILE"
 
 echo ""
 echo -e "${YELLOW}💡 Next steps:${NC}"
 echo "1. ✅ Testnet deployed and running"
 echo "2. Monitor logs: doctl compute ssh <droplet-id> --ssh-command 'journalctl -u communitas -f'"
-echo "3. Test connectivity between nodes"
-echo "4. Update local bootstrap.toml with these addresses"
-echo "5. Run local communitas instances for testing"
+echo "3. Update local bootstrap.toml with these addresses"
+echo "4. Run local Communitas (GUI) and pin raw SPKI keys"

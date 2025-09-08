@@ -56,17 +56,17 @@ jobs:
       run: |
         strip src-tauri/target/release/communitas-headless || true
 
-    - name: Create release archive
+    - name: Create release archive (Linux target triple)
       run: |
         cd src-tauri/target/release
-        tar -czf communitas-headless-linux-x86_64.tar.gz \
+        tar -czf communitas-headless-x86_64-unknown-linux-gnu.tar.gz \
           communitas-headless
 
     - name: Upload Linux binaries
       uses: actions/upload-artifact@v4
       with:
-        name: communitas-headless-linux-x86_64
-        path: src-tauri/target/release/communitas-headless-linux-x86_64.tar.gz
+        name: communitas-headless-x86_64-unknown-linux-gnu
+        path: src-tauri/target/release/communitas-headless-x86_64-unknown-linux-gnu.tar.gz
 
   build-macos:
     name: Build macOS Binaries
@@ -143,7 +143,7 @@ jobs:
     - name: Download Linux binaries
       uses: actions/download-artifact@v4
       with:
-        name: communitas-headless-linux-x86_64
+        name: communitas-headless-x86_64-unknown-linux-gnu
 
     - name: Download macOS binaries
       uses: actions/download-artifact@v4
@@ -159,7 +159,7 @@ jobs:
       uses: softprops/action-gh-release@v1
       with:
         files: |
-          communitas-headless-linux-x86_64.tar.gz
+          communitas-headless-x86_64-unknown-linux-gnu.tar.gz
           communitas-headless-macos-universal.tar.gz
           communitas-headless-windows-x86_64.zip
         generate_release_notes: true

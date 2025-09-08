@@ -19,26 +19,21 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 # Create app directory
 WORKDIR /app
 
-# Copy source code - build directly from src-tauri
-COPY src-tauri/ /app/
+COPY . /src
 
-# Build the binaries from src-tauri directory
-RUN cd /app && cargo build --release --bins
-
-# Copy binaries to root for easier access
-RUN cp /app/src-tauri/target/release/communitas-node /app/ && \
-    cp /app/src-tauri/target/release/bootstrap /app/ && \
-    cp /app/src-tauri/target/release/communitas-autoupdater /app/
+# Build only the headless binary
+RUN cd /src/src-tauri && cargo build --release -p communitas-tauri --bin communitas-headless && \
+    cp target/release/communitas-headless /app/communitas-headless
 
 # Create data directory
 RUN mkdir -p /app/data
 
 # Expose ports (will be overridden in docker-compose or DO app spec)
-EXPOSE 8080-8086
+EXPOSE 20000-60999/udp
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:${PORT:-8080}/health || exit 1
+# Optional: no HTTP health; headless exposes metrics only if run with --metrics
+HEALTHCHECK NONE
 
 # Default command (will be overridden in DO app spec)
-CMD ["sleep", "infinity"]
+CMD ["/app/communitas-headless", "--listen", "0.0.0.0:0"]

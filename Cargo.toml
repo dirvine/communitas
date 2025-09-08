@@ -23,8 +23,8 @@ include = [
 identifier = "com.p2pfoundation.communitas"
 
 [dependencies]
-# P2P Foundation - Updated to latest version
-saorsa-core = "0.3.17"
+# P2P Foundation - use published saorsa-core
+saorsa-core = "0.3.19"
 
 # Async runtime
 tokio = { version = "1.39", features = ["full"] }
@@ -56,6 +56,10 @@ proptest = { version = "1.4", optional = true }
 uuid = { version = "1", features = ["v4", "serde"] }
 dirs = "5.0"
 rand = "0.8"
+hex = "0.4"
+communitas-container = { path = "crates/communitas-container" }
+ant-quic = "0.8"
+ed25519-dalek = "2"
 
 # Headless node dependencies
 self_update = "0.41"
@@ -82,7 +86,7 @@ name = "communitas-headless"
 path = "src-tauri/src/bin/communitas-headless.rs"
 
 [workspace]
-members = ["src-tauri"]
+members = ["src-tauri", "crates/communitas-dht", "crates/communitas-container"]
 
 [workspace.lints]
 

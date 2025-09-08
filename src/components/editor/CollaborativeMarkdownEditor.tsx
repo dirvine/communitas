@@ -182,6 +182,20 @@ export const CollaborativeMarkdownEditor: React.FC<CollaborativeMarkdownEditorPr
     }
   }, [])
 
+  // Responsive handling: collapse split mode on narrow widths
+  useEffect(() => {
+    const el = editorContainerRef.current?.parentElement // the flex container
+    if (!el) return
+    const ro = new ResizeObserver(entries => {
+      const w = entries[0].contentRect.width
+      if (w < 720 && viewMode === 'split') {
+        setViewMode('editor')
+      }
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [viewMode])
+
   // Initialize Yjs collaboration
   useEffect(() => {
     const initCollaboration = async () => {

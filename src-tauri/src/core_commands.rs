@@ -1,5 +1,5 @@
 use crate::core_context::CoreContext;
-use saorsa_core::chat::{Channel, ChannelId, ChannelType, MessageId, Thread};
+use saorsa_core::chat::{Channel, ChannelId, ChannelType, ChannelRole, MessageId, Thread};
 use saorsa_core::identity::FourWordAddress;
 use saorsa_core::identity::enhanced::DeviceType;
 use saorsa_core::messaging::ChannelId as MessagingChannelId;
@@ -201,27 +201,165 @@ pub async fn core_send_message_to_channel(
     let ctx = guard
         .as_mut()
         .ok_or_else(|| "Core not initialized".to_string())?;
+
+    // Resolve recipients from channel membership using four-word formatted user_ids when available
+    let ch = ctx
+        .chat
+        .get_channel(&ChannelId(channel_id.clone()))
+        .await
+        .map_err(|e| format!("get_channel failed: {}", e))?;
+
+    let mut recipients: Vec<saorsa_core::identity::FourWordAddress> = Vec::new();
+    for m in ch.members {
+        // Heuristic: treat user_id as four-word address if it contains 4 hyphen-separated words
+        if m.user_id.split('-').count() == 4 {
+            recipients.push(saorsa_core::identity::FourWordAddress(m.user_id.to_lowercase()));
+        }
+    }
+
+    if recipients.is_empty() {
+        // Fallback to self so user sees message locally if channel member IDs are not four-words yet
+        recipients.push(saorsa_core::identity::FourWordAddress(
+            ctx.four_words.clone(),
+        ));
+    }
+
     let (msg_id, _receipt) = ctx
         .messaging
-        .send_message_to_channel(
-            MessagingChannelId(uuid::Uuid::parse_str(&channel_id).unwrap_or_default()),
+        .send_message(
+            recipients,
             saorsa_core::messaging::MessageContent::Text(text),
+            MessagingChannelId(uuid::Uuid::parse_str(&channel_id).unwrap_or_default()),
             Default::default(),
         )
         .await
-        .map_err(|e| format!("send_message_to_channel failed: {}", e))?;
+        .map_err(|e| format!("send_message failed: {}", e))?;
     Ok(msg_id.to_string())
+}
+
+/// Invite a member to a channel by four-word address; registers mapping and adds to channel
+#[tauri::command]
+pub async fn core_channel_invite_by_words(
+    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+    channel_id: String,
+    invitee_words: [String; 4],
+    role: Option<String>,
+) -> Result<bool, String> {
+    // Validate words
+    if !saorsa_core::fwid::fw_check(invitee_words.clone()) {
+        return Err("Invalid four-word address format".to_string());
+    }
+
+    let invitee_key = saorsa_core::fwid::fw_to_key(invitee_words.clone())
+        .map_err(|e| format!("fw_to_key failed: {}", e))?;
+
+    let words_joined = invitee_words.join("-");
+    let user_id = saorsa_core::get_user_by_four_words(&words_joined)
+        .await
+        .map_err(|e| format!("address book lookup failed: {}", e))?
+        .ok_or_else(|| "unknown user (address not found)".to_string())?;
+
+    // Add to channel using ChatManager
+    let mut guard = shared.write().await;
+    let ctx = guard
+        .as_mut()
+        .ok_or_else(|| "Core not initialized".to_string())?;
+    let member_role = match role.as_deref() {
+        Some("Owner") => ChannelRole::Owner,
+        Some("Admin") => ChannelRole::Admin,
+        Some("Moderator") => ChannelRole::Moderator,
+        Some("Guest") => ChannelRole::Guest,
+        _ => ChannelRole::Member,
+    };
+    ctx.chat
+        .add_member(&ChannelId(channel_id), user_id, member_role)
+        .await
+        .map_err(|e| format!("add_member failed: {}", e))?;
+    Ok(true)
 }
 
 /// Get channel recipients
 #[tauri::command]
 pub async fn core_channel_recipients(channel_id: String) -> Result<Vec<String>, String> {
-    let recips = saorsa_core::messaging::service::channel_recipients(&MessagingChannelId(
-        uuid::Uuid::parse_str(&channel_id).unwrap_or_default(),
-    ))
-    .await
-    .map_err(|e| format!("channel_recipients failed: {}", e))?;
-    Ok(recips.into_iter().map(|fw| fw.0).collect())
+    // When running inside Communitas, channel membership is managed by ChatManager in state,
+    // so this Tauri command should be called via core_send_message_to_channel instead.
+    // Keep a minimal implementation that returns an empty list to signal the UI to compute or skip.
+    Ok(Vec::new())
+}
+
+#[derive(serde::Serialize)]
+pub struct ChannelMemberEntry {
+    pub user_id: String,
+    pub role: String,
+    pub four_words: Option<String>,
+}
+
+/// List channel members with resolved four-word addresses when available
+#[tauri::command]
+pub async fn core_channel_list_members(
+    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+    channel_id: String,
+) -> Result<Vec<ChannelMemberEntry>, String> {
+    let guard = shared.read().await;
+    let ctx = guard
+        .as_ref()
+        .ok_or_else(|| "Core not initialized".to_string())?;
+    let ch = ctx
+        .chat
+        .get_channel(&ChannelId(channel_id))
+        .await
+        .map_err(|e| format!("get_channel failed: {}", e))?;
+    let mut out = Vec::with_capacity(ch.members.len());
+    for m in ch.members {
+        let words_opt = saorsa_core::get_user_four_words(&m.user_id)
+            .await
+            .ok()
+            .and_then(|o| o.map(|fw| fw.0));
+        out.push(ChannelMemberEntry {
+            user_id: m.user_id,
+            role: format!("{:?}", m.role),
+            four_words: words_opt,
+        });
+    }
+    Ok(out)
+}
+
+/// Resolve member addresses for a channel in the background and emit per-member events.
+/// Emits `channel-member-resolved` with payload `{ user_id, role, four_words }` as each resolves.
+#[tauri::command]
+pub async fn core_resolve_channel_members(
+    app: AppHandle,
+    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+    channel_id: String,
+) -> Result<bool, String> {
+    let guard = shared.read().await;
+    let ctx = guard
+        .as_ref()
+        .ok_or_else(|| "Core not initialized".to_string())?;
+
+    let ch = ctx
+        .chat
+        .get_channel(&ChannelId(channel_id))
+        .await
+        .map_err(|e| format!("get_channel failed: {}", e))?;
+
+    let app_clone = app.clone();
+    tokio::spawn(async move {
+        for m in ch.members {
+            let words_opt = match saorsa_core::get_user_four_words(&m.user_id).await {
+                Ok(Some(addr)) => Some(addr.0),
+                _ => None,
+            };
+            let payload = serde_json::json!({
+                "user_id": m.user_id,
+                "role": format!("{:?}", m.role),
+                "four_words": words_opt,
+            });
+            let _ = app_clone.emit("channel-member-resolved", payload);
+        }
+    });
+
+    Ok(true)
 }
 
 /// Subscribe to messages

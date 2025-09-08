@@ -5,7 +5,9 @@ Wants=network-online.target
 
 [Service]
 User=communitas
-ExecStart=/opt/communitas/bin/communitas-node --config /opt/communitas/bootstrap.toml
+EnvironmentFile=-/etc/communitas-port.env
+Environment=RUST_LOG=info,communitas=debug,saorsa_core=info
+ExecStart=/opt/communitas/bin/communitas-headless --listen 0.0.0.0:${COMMUNITAS_QUIC_PORT} --metrics --metrics-addr 0.0.0.0:9600
 Restart=always
 RestartSec=5
 LimitNOFILE=1048576

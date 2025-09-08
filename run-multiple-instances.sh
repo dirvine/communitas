@@ -33,9 +33,10 @@ run_instance() {
     local instance_num=$1
     local port_offset=$((instance_num - 1))
     local dev_port=$((1420 + port_offset))
-    local p2p_port=$((9000 + port_offset))
+    # Pick a random high port per instance (20000-60999)
+    local p2p_port=$(shuf -i 20000-60999 -n 1)
 
-    echo -e "${BLUE}📱 Starting Instance $instance_num (Port: $dev_port, P2P: $p2p_port)${NC}"
+    echo -e "${BLUE}📱 Starting Instance $instance_num (UI: $dev_port, P2P: $p2p_port)${NC}"
 
     # Create instance-specific data directory
     mkdir -p "instance-$instance_num-data"
@@ -45,6 +46,7 @@ run_instance() {
     export COMMUNITAS_P2P_PORT="$p2p_port"
     export COMMUNITAS_DATA_DIR="$(pwd)/instance-$instance_num-data"
     export RUST_LOG="info,communitas=debug,saorsa_core=info"
+    echo -n "$p2p_port" > "instance-$instance_num-data/.p2p_port"
 
     # Run in background
     npm run tauri dev -- --port "$dev_port" &
@@ -62,7 +64,13 @@ echo ""
 echo "Instance URLs:"
 for i in $(seq 1 "$INSTANCES"); do
     port=$((1420 + i - 1))
-    echo "  Instance $i: http://localhost:$port"
+    echo -n "  Instance $i: http://localhost:$port"
+    # attempt to read chosen P2P port from env file written during launch (best-effort)
+    if [ -f "instance-$i-data/.p2p_port" ]; then
+      echo "  (P2P: $(cat instance-$i-data/.p2p_port))"
+    else
+      echo ""
+    fi
 done
 
 echo ""

@@ -22,7 +22,6 @@ pub struct CoreContext {
     pub storage: StorageManager,
     pub chat: ChatManager,
     pub messaging: MessagingService,
-    pub dht_client: DhtClient,
     pub group_keys: HashMap<String, GroupKeyPair>,
 }
 
@@ -94,7 +93,6 @@ impl CoreContext {
             storage,
             chat,
             messaging,
-            dht_client,
             group_keys: HashMap::new(),
         })
     }

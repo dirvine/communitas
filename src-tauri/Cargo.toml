@@ -32,13 +32,14 @@ tauri-build = { version = "2.3.0", features = [] }
 # Tauri
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
+serde_cbor = "0.11"
 log = "0.4"
 tauri = { version = "2.6.1", features = [] }
 tauri-plugin-log = "2"
 tauri-plugin-updater = "2"
 
-# Saorsa Labs - Updated to latest version
-saorsa-core = "0.3.18"
+# Saorsa Labs - use published crate
+saorsa-core = "0.3.19"
 tokio = { version = "1.39", features = ["full"] }
 anyhow = "1.0"
 thiserror = "1.0"
@@ -65,6 +66,11 @@ four-word-networking = "2.3"
 saorsa-pqc = "0.3.12"
 saorsa-seal = "0.1.2"
 rand = "0.8"
+communitas-container = { path = "../crates/communitas-container" }
+
+# QUIC transport (central part, no feature gate)
+ant-quic = "0.8"
+ed25519-dalek = "2"
 
 # Database and storage
 # Using rusqlite to match saorsa-core 0.3.16 dependencies

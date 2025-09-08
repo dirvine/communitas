@@ -16,10 +16,12 @@
 //! Communitas - minimal Tauri library crate for backend.
 //! Intentional minimal surface; the Tauri binary exports commands.
 
+pub mod core_cmds;
 pub mod core_commands;
 pub mod core_context;
 pub mod core_groups;
 pub mod error;
+pub mod keystore;
 pub mod security;
 pub mod storage;
 pub mod test_harness;

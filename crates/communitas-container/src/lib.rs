@@ -12,7 +12,6 @@ use saorsa_fec::{fec, fec::FecParams};
 use saorsa_seal::aead::{compute_cek_commitment, ContentEncryptor};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::sync::Arc;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -113,7 +112,7 @@ pub struct ContainerEngine {
     crdt: RwLock<CrdtState>,
     index: RwLock<Indexer>,
     // signing key for tips
-    pk: MlDsaPublicKey,
+    _pk: MlDsaPublicKey,
     sk: MlDsaSecretKey,
     aead: AeadConfig,
     fec: FecConfig,
@@ -121,7 +120,7 @@ pub struct ContainerEngine {
 
 impl ContainerEngine {
     pub fn new(pk: MlDsaPublicKey, sk: MlDsaSecretKey, aead: AeadConfig, fec: FecConfig) -> Self {
-        Self { objects: RwLock::default(), crdt: RwLock::default(), index: RwLock::default(), pk, sk, aead, fec }
+        Self { objects: RwLock::default(), crdt: RwLock::default(), index: RwLock::default(), _pk: pk, sk, aead, fec }
     }
 
     pub fn put_object(&self, bytes: &[u8]) -> Result<Oid> {

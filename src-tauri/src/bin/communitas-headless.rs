@@ -461,24 +461,7 @@ async fn start_quic_delta_server(listen: std::net::SocketAddr, base_dir: std::pa
     // Bind endpoint
     let endpoint = QuicEndpoint::server(server_cfg, listen)
         .map_err(|e| anyhow::anyhow!("endpoint server bind: {e}"))?;
-    // Try to log the actual bound address if available (port 0 case)
-    #[allow(unused_mut)]
-    let mut bound = None;
-    #[allow(unused_assignments)]
-    {
-        // Some implementations expose local_addr(); ignore if not available
-        #[allow(dead_code)]
-        fn _try_local_addr(ep: &QuicEndpoint) -> Option<std::net::SocketAddr> {
-            #[allow(unused_variables)]
-            {
-                // If ant_quic exposes local_addr(), use it via UFCS; else None
-            }
-            None
-        }
-        bound = _try_local_addr(&endpoint);
-    }
-    let display_addr = bound.unwrap_or(listen);
-    info!("QUIC delta server listening on {}", display_addr);
+    info!("QUIC delta server listening on {}", listen);
 
     loop {
         match endpoint.accept().await {

@@ -94,18 +94,18 @@ jobs:
 
       - name: Strip binaries
         run: |
-          strip src-tauri/target/release/communitas-headless
+          strip target/release/communitas-headless || true
 
       - name: Create archive (Linux target triple)
         run: |
-          cd src-tauri/target/release
+          cd target/release
           tar -czf communitas-headless-x86_64-unknown-linux-gnu.tar.gz \
             communitas-headless
 
       - name: Upload to release (Linux)
         uses: softprops/action-gh-release@v1
         with:
-          files: src-tauri/target/release/communitas-headless-x86_64-unknown-linux-gnu.tar.gz
+          files: target/release/communitas-headless-x86_64-unknown-linux-gnu.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

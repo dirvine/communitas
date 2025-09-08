@@ -262,12 +262,11 @@ async fn fetch_deltas_over_ant_quic(
                     send.finish().map_err(|e| format!("finish stream: {e}"))?;
 
                     // Read full response (single line JSON)
-                    let mut buf = Vec::new();
-                    match recv.read_to_end(1024 * 1024).await {
-                        Ok(bytes) => buf = bytes,
+                    let bytes = match recv.read_to_end(1024 * 1024).await {
+                        Ok(v) => v,
                         Err(e) => return Err(format!("read deltas: {e}")),
-                    }
-                    let text = String::from_utf8(buf).map_err(|e| format!("utf8: {e}"))?;
+                    };
+                    let text = String::from_utf8(bytes).map_err(|e| format!("utf8: {e}"))?;
                     let resp: DeltaResponse = serde_json::from_str(text.trim_end())
                         .map_err(|e| format!("decode deltas: {e}"))?;
                     return Ok(resp.ops);

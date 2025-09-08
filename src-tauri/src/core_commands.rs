@@ -250,7 +250,7 @@ pub async fn core_channel_invite_by_words(
         return Err("Invalid four-word address format".to_string());
     }
 
-    let invitee_key = saorsa_core::fwid::fw_to_key(invitee_words.clone())
+    let _invitee_key = saorsa_core::fwid::fw_to_key(invitee_words.clone())
         .map_err(|e| format!("fw_to_key failed: {}", e))?;
 
     let words_joined = invitee_words.join("-");
@@ -280,7 +280,7 @@ pub async fn core_channel_invite_by_words(
 
 /// Get channel recipients
 #[tauri::command]
-pub async fn core_channel_recipients(channel_id: String) -> Result<Vec<String>, String> {
+pub async fn core_channel_recipients(_channel_id: String) -> Result<Vec<String>, String> {
     // When running inside Communitas, channel membership is managed by ChatManager in state,
     // so this Tauri command should be called via core_send_message_to_channel instead.
     // Keep a minimal implementation that returns an empty list to signal the UI to compute or skip.

@@ -11,12 +11,17 @@ on:
         required: false
         default: 'latest'
 
+permissions:
+  contents: write
+
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-D warnings"
 
 jobs:
   create-release:
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     outputs:
       release_id: ${{ steps.create-release.outputs.result }}
@@ -38,6 +43,7 @@ jobs:
         id: create-release
         uses: actions/github-script@v7
         with:
+          github-token: ${{ secrets.GH_RELEASE_TOKEN }}
           script: |
             const version = '${{ steps.get-version.outputs.version }}'
             const releaseBody = '## Headless Binaries Release\n\n' +
@@ -62,6 +68,8 @@ jobs:
             return data.id
 
   build-linux:
+    permissions:
+      contents: write
     needs: create-release
     runs-on: ubuntu-latest
     steps:
@@ -107,9 +115,11 @@ jobs:
         with:
           files: target/release/communitas-headless-x86_64-unknown-linux-gnu.tar.gz
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
 
   build-macos:
+    permissions:
+      contents: write
     needs: create-release
     runs-on: macos-latest
     steps:
@@ -147,9 +157,11 @@ jobs:
         with:
           files: src-tauri/target/release/universal-apple-darwin/communitas-headless-macos-universal.tar.gz
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
 
   build-windows:
+    permissions:
+      contents: write
     needs: create-release
     runs-on: windows-latest
     steps:
@@ -173,9 +185,11 @@ jobs:
         with:
           files: src-tauri/target/release/communitas-headless-windows-x86_64.zip
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
 
   publish-release:
+    permissions:
+      contents: write
     needs: [create-release, build-linux, build-macos, build-windows]
     runs-on: ubuntu-latest
     steps:
@@ -183,6 +197,8 @@ jobs:
 
       - name: Publish release
         uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GH_RELEASE_TOKEN }}
         with:
           script: |
             github.rest.repos.updateRelease({

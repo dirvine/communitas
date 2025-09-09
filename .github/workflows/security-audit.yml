@@ -39,12 +39,12 @@ jobs:
       run: cargo install cargo-deny
       
     - name: Run cargo audit (security vulnerabilities)
-      run: cargo audit --db ./advisory-db --deny warnings
-      working-directory: src-tauri
+      run: cargo audit --deny warnings
+      working-directory: .
       
     - name: Run cargo deny (license and dependency checks)
       run: cargo deny check
-      working-directory: src-tauri
+      working-directory: .
       
     - name: Check for unwrap/expect in production code
       run: |

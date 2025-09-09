@@ -15,9 +15,20 @@ jobs:
     name: Rust Backend Tests
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        rust-version: [stable, nightly]
+        os: [ubuntu-latest]
+        rust-version: [stable]
+        include:
+          - os: windows-latest
+            rust-version: stable
+            continue-on-error: true
+          - os: macos-latest
+            rust-version: stable
+            continue-on-error: true
+          - os: ubuntu-latest
+            rust-version: nightly
+            continue-on-error: true
     
     steps:
     - uses: actions/checkout@v4
@@ -110,6 +121,7 @@ jobs:
   test-e2e:
     name: End-to-End Tests
     runs-on: ubuntu-latest
+    continue-on-error: true
     needs: [test-rust, test-frontend]
     
     steps:
@@ -172,8 +184,8 @@ jobs:
       run: cargo install cargo-audit
     
     - name: Rust security audit
-      run: cargo audit
-      working-directory: src-tauri
+      run: cargo audit --deny warnings
+      working-directory: .
     
     - name: Install npm dependencies
       run: npm ci

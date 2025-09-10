@@ -1,6 +1,6 @@
 [package]
 name = "communitas-tauri"
-version = "0.1.10"
+version = "0.1.12"
 description = "Communitas desktop app backend (Tauri) — local-first PQC collaboration with per-entity virtual disks and DNS-free websites"
 authors = ["Saorsa Labs Limited <saorsalabs@gmail.com>"]
 license = "AGPL-3.0-or-later"

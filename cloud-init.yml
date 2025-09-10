@@ -53,10 +53,10 @@ runcmd:
       curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
       export PATH="$HOME/.cargo/bin:$PATH"
       git clone https://github.com/${OWNER}/${NAME}.git /tmp/communitas-src
-      cd /tmp/communitas-src/src-tauri
+      cd /tmp/communitas-src
       if [ "$TAG" != "latest" ]; then git fetch --tags && git checkout "$TAG" || true; fi
-      COMMUNITAS_SKIP_TAURI_BUILD=1 cargo build --release -p communitas-tauri --bin communitas-headless
-      install -m 0755 /tmp/communitas-src/target/release/communitas-headless /opt/communitas/bin/communitas-headless
+      COMMUNITAS_SKIP_TAURI_BUILD=1 cargo build --release --no-default-features --bin communitas-headless
+      install -m 0755 target/release/communitas-headless /opt/communitas/bin/communitas-headless
       chown communitas:communitas /opt/communitas/bin/communitas-headless
     fi
   - |

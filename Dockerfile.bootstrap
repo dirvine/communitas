@@ -7,15 +7,14 @@ RUN apt-get update --allow-releaseinfo-change && apt-get install -y \
     libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy only the src-tauri directory
-COPY src-tauri/ /app/
+# Copy full repository (root build of headless binary)
+COPY . /app/
 
-# Set working directory to the copied src-tauri directory
 WORKDIR /app
 
 # Build the headless node
 ENV COMMUNITAS_SKIP_TAURI_BUILD=1
-RUN cargo build --release --bin communitas-headless
+RUN cargo build --release --no-default-features --bin communitas-headless
 
 # Production runtime image
 FROM debian:bookworm-slim

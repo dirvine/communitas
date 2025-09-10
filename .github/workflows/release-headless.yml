@@ -97,8 +97,7 @@ jobs:
 
       - name: Build binaries (headless only)
         run: |
-          cd src-tauri
-          COMMUNITAS_SKIP_TAURI_BUILD=1 cargo build --release --bin communitas-headless
+          COMMUNITAS_SKIP_TAURI_BUILD=1 cargo build --release --no-default-features --bin communitas-headless
 
       - name: Strip binaries
         run: |
@@ -134,13 +133,11 @@ jobs:
 
       - name: Build x86_64 binaries (headless only)
         run: |
-          cd src-tauri
-          COMMUNITAS_SKIP_TAURI_BUILD=1 cargo build --release --target x86_64-apple-darwin --bin communitas-headless
+          COMMUNITAS_SKIP_TAURI_BUILD=1 cargo build --release --no-default-features --target x86_64-apple-darwin --bin communitas-headless
 
       - name: Build aarch64 binaries (headless only)
         run: |
-          cd src-tauri
-          COMMUNITAS_SKIP_TAURI_BUILD=1 cargo build --release --target aarch64-apple-darwin --bin communitas-headless
+          COMMUNITAS_SKIP_TAURI_BUILD=1 cargo build --release --no-default-features --target aarch64-apple-darwin --bin communitas-headless
 
       - name: Create universal binaries
         run: |
@@ -175,10 +172,10 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Build binaries (headless only)
+        shell: pwsh
         run: |
-          cd src-tauri
-          setx COMMUNITAS_SKIP_TAURI_BUILD 1
-          cargo build --release --bin communitas-headless
+          $env:COMMUNITAS_SKIP_TAURI_BUILD = '1'
+          cargo build --release --no-default-features --bin communitas-headless
 
       - name: Create archive
         run: |

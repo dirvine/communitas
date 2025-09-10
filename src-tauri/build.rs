@@ -14,5 +14,10 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 fn main() {
+    // Skip Tauri build when producing the headless binary to avoid GUI deps.
+    // Controlled via env var set in CI and container builds.
+    if std::env::var("COMMUNITAS_SKIP_TAURI_BUILD").is_ok() {
+        return;
+    }
     tauri_build::build();
 }

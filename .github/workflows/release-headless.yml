@@ -95,10 +95,10 @@ jobs:
             target
           key: linux-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Build binaries
+      - name: Build binaries (headless only)
         run: |
           cd src-tauri
-          cargo build --release --bin communitas-headless
+          COMMUNITAS_SKIP_TAURI_BUILD=1 cargo build --release --bin communitas-headless
 
       - name: Strip binaries
         run: |
@@ -132,15 +132,15 @@ jobs:
         with:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
 
-      - name: Build x86_64 binaries
+      - name: Build x86_64 binaries (headless only)
         run: |
           cd src-tauri
-          cargo build --release --target x86_64-apple-darwin --bin communitas-headless
+          COMMUNITAS_SKIP_TAURI_BUILD=1 cargo build --release --target x86_64-apple-darwin --bin communitas-headless
 
-      - name: Build aarch64 binaries
+      - name: Build aarch64 binaries (headless only)
         run: |
           cd src-tauri
-          cargo build --release --target aarch64-apple-darwin --bin communitas-headless
+          COMMUNITAS_SKIP_TAURI_BUILD=1 cargo build --release --target aarch64-apple-darwin --bin communitas-headless
 
       - name: Create universal binaries
         run: |
@@ -174,9 +174,10 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Build binaries
+      - name: Build binaries (headless only)
         run: |
           cd src-tauri
+          setx COMMUNITAS_SKIP_TAURI_BUILD 1
           cargo build --release --bin communitas-headless
 
       - name: Create archive

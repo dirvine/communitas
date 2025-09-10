@@ -33,15 +33,32 @@ runcmd:
       REL_JSON=$(curl -sSL "${API_URL}/tags/${TAG}")
     fi
     ASSET_URL=$(echo "$REL_JSON" | jq -r '.assets[] | select(.name | test("communitas-headless-x86_64-unknown-linux-gnu\\.tar\\.gz$")) | .browser_download_url' | head -n1)
-    if [ -z "$ASSET_URL" ] || [ "$ASSET_URL" = "null" ]; then
-      echo "No matching Linux asset found in release ${TAG}" >&2; exit 1;
-    fi
-    echo "Downloading: $ASSET_URL"
     cd /tmp
-    curl -fL "$ASSET_URL" -o communitas-headless-x86_64-unknown-linux-gnu.tar.gz
-    tar -xzf communitas-headless-x86_64-unknown-linux-gnu.tar.gz
-    install -m 0755 communitas-headless /opt/communitas/bin/communitas-headless
-    chown communitas:communitas /opt/communitas/bin/communitas-headless
+    if [ -n "$ASSET_URL" ] && [ "$ASSET_URL" != "null" ]; then
+      echo "Downloading: $ASSET_URL"
+      if curl -fL "$ASSET_URL" -o communitas-headless-x86_64-unknown-linux-gnu.tar.gz; then
+        tar -xzf communitas-headless-x86_64-unknown-linux-gnu.tar.gz
+        install -m 0755 communitas-headless /opt/communitas/bin/communitas-headless
+        chown communitas:communitas /opt/communitas/bin/communitas-headless
+      else
+        echo "Download failed; will build from source" >&2
+      fi
+    else
+      echo "No release asset found for ${TAG}; will build from source" >&2
+    fi
+    if [ ! -x /opt/communitas/bin/communitas-headless ]; then
+      # Fallback: build from source
+      echo "Building headless from source fallback"
+      apt-get update && apt-get install -y build-essential pkg-config libssl-dev curl git
+      curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+      export PATH="$HOME/.cargo/bin:$PATH"
+      git clone https://github.com/${OWNER}/${NAME}.git /tmp/communitas-src
+      cd /tmp/communitas-src/src-tauri
+      if [ "$TAG" != "latest" ]; then git fetch --tags && git checkout "$TAG" || true; fi
+      COMMUNITAS_SKIP_TAURI_BUILD=1 cargo build --release -p communitas-tauri --bin communitas-headless
+      install -m 0755 /tmp/communitas-src/target/release/communitas-headless /opt/communitas/bin/communitas-headless
+      chown communitas:communitas /opt/communitas/bin/communitas-headless
+    fi
   - |
     cat >/etc/systemd/system/communitas.service <<EOF
     [Unit]

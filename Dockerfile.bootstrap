@@ -13,8 +13,8 @@ COPY src-tauri/ /app/
 # Set working directory to the copied src-tauri directory
 WORKDIR /app
 
-# Build the bootstrap node
-RUN cargo build --release --bin bootstrap
+# Build the headless node
+RUN cargo build --release --bin communitas-headless
 
 # Production runtime image
 FROM debian:bookworm-slim
@@ -30,8 +30,8 @@ RUN groupadd -r communitas && useradd -r -g communitas communitas
 # Set working directory
 WORKDIR /app
 
-# Copy the built bootstrap node
-COPY --from=builder /app/target/release/bootstrap /app/bootstrap
+# Copy the built headless node
+COPY --from=builder /app/target/release/communitas-headless /app/communitas-headless
 
 # Switch to non-root user
 USER communitas
@@ -39,12 +39,12 @@ USER communitas
 # Set environment variables
 ENV RUST_LOG=info
 
-# Expose ports
-EXPOSE 9001 9100 9110 9120
+# Expose ports (primary QUIC port chosen at runtime via env)
+EXPOSE 9001 9600
 
-# Health check
+# Health check (metrics endpoint)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD nc -z localhost 9001 || exit 1
+    CMD nc -z localhost 9600 || exit 1
 
-# Run the bootstrap node
-CMD ["./bootstrap"]
+# Run the headless node (QUIC + metrics)
+CMD ["./communitas-headless", "--listen", "0.0.0.0:9001", "--metrics", "--metrics-addr", "0.0.0.0:9600"]

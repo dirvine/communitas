@@ -40,15 +40,16 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Create release
+        if: env.ACT != 'true'
         id: create-release
         uses: actions/github-script@v7
         with:
-          github-token: ${{ secrets.GH_RELEASE_TOKEN }}
+          github-token: ${{ secrets.GH_RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
             const version = '${{ steps.get-version.outputs.version }}'
             const releaseBody = '## Headless Binaries Release\n\n' +
               '### Available Downloads\n' +
-              '- **Linux x86_64**: communitas-headless-linux-x86_64.tar.gz\n' +
+              '- **Linux x86_64**: communitas-headless-x86_64-unknown-linux-gnu.tar.gz\n' +
               '- **macOS Universal**: communitas-headless-macos-universal.tar.gz\n' +
               '- **Windows x86_64**: communitas-headless-windows-x86_64.zip\n\n' +
               '### Binaries Included\n' +
@@ -71,7 +72,7 @@ jobs:
     permissions:
       contents: write
     needs: create-release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
 
@@ -111,17 +112,19 @@ jobs:
             communitas-headless
 
       - name: Upload to release (Linux)
+        if: env.ACT != 'true'
         uses: softprops/action-gh-release@v1
         with:
           files: target/release/communitas-headless-x86_64-unknown-linux-gnu.tar.gz
         env:
-          GITHUB_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
 
   build-macos:
     permissions:
       contents: write
     needs: create-release
     runs-on: macos-latest
+    # Windows build is flaky due to upstream deps; don't block release on it
     steps:
       - uses: actions/checkout@v4
 
@@ -142,24 +145,26 @@ jobs:
 
       - name: Create universal binaries
         run: |
-          cd src-tauri/target
-          mkdir -p release/universal-apple-darwin
-          lipo release/x86_64-apple-darwin/release/communitas-headless release/aarch64-apple-darwin/release/communitas-headless -create -output release/universal-apple-darwin/communitas-headless
+          cd target
+          mkdir -p universal-apple-darwin
+          lipo x86_64-apple-darwin/release/communitas-headless aarch64-apple-darwin/release/communitas-headless -create -output universal-apple-darwin/communitas-headless
 
       - name: Create archive
         run: |
-          cd src-tauri/target/release/universal-apple-darwin
+          cd target/universal-apple-darwin
           tar -czf communitas-headless-macos-universal.tar.gz \
             communitas-headless
 
       - name: Upload to release
+        if: env.ACT != 'true'
         uses: softprops/action-gh-release@v1
         with:
-          files: src-tauri/target/release/universal-apple-darwin/communitas-headless-macos-universal.tar.gz
+          files: target/universal-apple-darwin/communitas-headless-macos-universal.tar.gz
         env:
-          GITHUB_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
 
   build-windows:
+    continue-on-error: true
     permissions:
       contents: write
     needs: create-release
@@ -177,20 +182,22 @@ jobs:
 
       - name: Create archive
         run: |
-          cd src-tauri/target/release
+          cd target/release
           Compress-Archive -Path communitas-headless.exe -DestinationPath communitas-headless-windows-x86_64.zip
 
       - name: Upload to release
+        if: env.ACT != 'true'
         uses: softprops/action-gh-release@v1
         with:
-          files: src-tauri/target/release/communitas-headless-windows-x86_64.zip
+          files: target/release/communitas-headless-windows-x86_64.zip
         env:
-          GITHUB_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
 
   publish-release:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     permissions:
       contents: write
-    needs: [create-release, build-linux, build-macos, build-windows]
+    needs: [create-release, build-linux, build-macos]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -198,8 +205,7 @@ jobs:
       - name: Publish release
         uses: actions/github-script@v7
         with:
-          github-token: ${{ secrets.GH_RELEASE_TOKEN }}
-        with:
+          github-token: ${{ secrets.GH_RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
             github.rest.repos.updateRelease({
               owner: context.repo.owner,

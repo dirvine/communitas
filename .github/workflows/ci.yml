@@ -6,9 +6,18 @@ on:
   pull_request:
     branches: [ main ]
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  build-test:
+  test-fast:
+    name: JS Fast Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PUPPETEER_SKIP_DOWNLOAD: '1'
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
     steps:
       - uses: actions/checkout@v4
 
@@ -24,15 +33,56 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Run unit tests (act)
+        if: env.ACT == 'true'
+        run: npm run test:run
+
+      - name: Run unit tests (full)
+        if: env.ACT != 'true'
+        run: npm run test:run
+
+  coverage:
+    name: JS Coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: test-fast
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Node deps
+        run: npm ci
+
       - name: Run unit tests with coverage
         run: npm run test:coverage
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
-        if: always()
         with:
           name: coverage-html
           path: coverage
+
+  rust-checks:
+    name: Rust Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: linux-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
@@ -43,3 +93,6 @@ jobs:
       - name: Rust clippy policy
         run: cargo clippy --workspace --all-features -- -D clippy::panic -D clippy::unwrap_used -D clippy::expect_used
 
+      - name: Build communitas-headless (smoke)
+        run: |
+          cargo build --release -p communitas-tauri --bin communitas-headless

@@ -43,7 +43,7 @@ fi
 echo -e "${GREEN}✅ Found release information${NC}"
 
 # Extract download URLs for different platforms
-LINUX_URL=$(echo "$RELEASE_INFO" | grep -o 'https://github.com/[^"]*linux-x86_64.tar.gz' | head -1)
+LINUX_URL=$(echo "$RELEASE_INFO" | grep -o 'https://github.com/[^"]*x86_64-unknown-linux-gnu.tar.gz' | head -1)
 MACOS_URL=$(echo "$RELEASE_INFO" | grep -o 'https://github.com/[^"]*macos-universal.tar.gz' | head -1)
 WINDOWS_URL=$(echo "$RELEASE_INFO" | grep -o 'https://github.com/[^"]*windows-x86_64.zip' | head -1)
 
@@ -65,17 +65,16 @@ deploy_to_droplet() {
         set -e
         echo "Downloading Linux binaries..."
         cd /tmp
-        curl -L "$LINUX_URL" -o communitas-headless-linux-x86_64.tar.gz
+        curl -L "$LINUX_URL" -o communitas-headless-x86_64-unknown-linux-gnu.tar.gz
         echo "Extracting binaries..."
-        tar -xzf communitas-headless-linux-x86_64.tar.gz
-        echo "Installing binaries..."
-        sudo cp communitas-node /opt/communitas/bin/
-        sudo cp bootstrap /opt/communitas/bin/
-        sudo cp communitas-autoupdater /opt/communitas/bin/
-        sudo chown communitas:communitas /opt/communitas/bin/*
-        sudo chmod +x /opt/communitas/bin/*
+        tar -xzf communitas-headless-x86_64-unknown-linux-gnu.tar.gz
+        echo "Installing binary..."
+        sudo mkdir -p /opt/communitas/bin
+        sudo cp communitas-headless /opt/communitas/bin/
+        sudo chown communitas:communitas /opt/communitas/bin/communitas-headless
+        sudo chmod +x /opt/communitas/bin/communitas-headless
         echo "Cleaning up..."
-        rm -f communitas-headless-linux-x86_64.tar.gz communitas-node bootstrap communitas-autoupdater
+        rm -f communitas-headless-x86_64-unknown-linux-gnu.tar.gz communitas-headless
         echo "✅ Deployment to $region complete"
 EOF
 

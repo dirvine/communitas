@@ -1,6 +1,6 @@
 {
   "name": "communitas",
-  "version": "0.1.2",
+  "version": "0.1.10",
   "description": "A decentralized P2P chat and collaboration platform built on Saorsa Core",
   "type": "module",
   "scripts": {

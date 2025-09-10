@@ -92,7 +92,7 @@ members = ["src-tauri", "crates/communitas-dht", "crates/communitas-container"]
 
 [workspace.package]
 edition = "2024"
-version = "0.1.12"
+version = "0.1.14"
 authors = ["Saorsa Labs Limited <saorsalabs@gmail.com>"]
 license = "AGPL-3.0-or-later"
 homepage = "https://github.com/dirvine/communitas-foundation"

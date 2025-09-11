@@ -1,7 +1,9 @@
 //! Communitas DHT record schemas (pointers-only).
 //! Canonical CBOR, ML-DSA signatures, strict size limits and TTLs.
 
-use saorsa_core::quantum_crypto::{MlDsa65, MlDsaOperations, MlDsaPublicKey, MlDsaSecretKey, MlDsaSignature};
+use saorsa_core::quantum_crypto::{
+    MlDsa65, MlDsaOperations, MlDsaPublicKey, MlDsaSecretKey, MlDsaSignature,
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, thiserror::Error)]
@@ -101,7 +103,11 @@ impl IdentityRecordV1 {
         let ok = ml
             .verify(pk, &msg, &MlDsaSignature(Box::new(arr)))
             .map_err(|e| DhtSchemaError::Crypto(format!("mldsa verify: {:?}", e)))?;
-        if ok { Ok(()) } else { Err(DhtSchemaError::InvalidSig) }
+        if ok {
+            Ok(())
+        } else {
+            Err(DhtSchemaError::InvalidSig)
+        }
     }
 
     fn enforce_size(&self) -> Result<(), DhtSchemaError> {
@@ -170,7 +176,11 @@ impl PresenceRecordV1 {
         let ok = ml
             .verify(pk, &msg, &MlDsaSignature(Box::new(arr)))
             .map_err(|e| DhtSchemaError::Crypto(format!("mldsa verify: {:?}", e)))?;
-        if ok { Ok(()) } else { Err(DhtSchemaError::InvalidSig) }
+        if ok {
+            Ok(())
+        } else {
+            Err(DhtSchemaError::InvalidSig)
+        }
     }
 
     fn enforce_size(&self) -> Result<(), DhtSchemaError> {
@@ -232,7 +242,11 @@ impl GroupRecordV1 {
         let ok = ml
             .verify(pk, &msg, &MlDsaSignature(Box::new(arr)))
             .map_err(|e| DhtSchemaError::Crypto(format!("mldsa verify: {:?}", e)))?;
-        if ok { Ok(()) } else { Err(DhtSchemaError::InvalidSig) }
+        if ok {
+            Ok(())
+        } else {
+            Err(DhtSchemaError::InvalidSig)
+        }
     }
 
     fn enforce_size(&self) -> Result<(), DhtSchemaError> {
@@ -288,7 +302,11 @@ impl ChannelRecordV1 {
         let ok = ml
             .verify(pk, &msg, &MlDsaSignature(Box::new(arr)))
             .map_err(|e| DhtSchemaError::Crypto(format!("mldsa verify: {:?}", e)))?;
-        if ok { Ok(()) } else { Err(DhtSchemaError::InvalidSig) }
+        if ok {
+            Ok(())
+        } else {
+            Err(DhtSchemaError::InvalidSig)
+        }
     }
     fn enforce_size(&self) -> Result<(), DhtSchemaError> {
         let bytes = canonical_cbor(self)?;
@@ -351,7 +369,11 @@ impl ContainerTipRecordV1 {
         let ok = ml
             .verify(pk, &msg, &MlDsaSignature(Box::new(arr)))
             .map_err(|e| DhtSchemaError::Crypto(format!("mldsa verify: {:?}", e)))?;
-        if ok { Ok(()) } else { Err(DhtSchemaError::InvalidSig) }
+        if ok {
+            Ok(())
+        } else {
+            Err(DhtSchemaError::InvalidSig)
+        }
     }
     fn enforce_size(&self) -> Result<(), DhtSchemaError> {
         let bytes = canonical_cbor(self)?;
@@ -383,7 +405,10 @@ mod tests {
             devices: vec![IdentityDevice {
                 id: "dev-1".into(),
                 device_type: "Active".into(),
-                endpoint: Endpoint { protocol: "quic".into(), addr: "1.2.3.4:443".into() },
+                endpoint: Endpoint {
+                    protocol: "quic".into(),
+                    addr: "1.2.3.4:443".into(),
+                },
                 caps: DeviceCaps { storage_gb: 100 },
             }],
             sig: vec![],
@@ -402,8 +427,15 @@ mod tests {
             ver: 1,
             ts: 1,
             active_device: "dev-1".into(),
-            endpoint_hint: Endpoint { protocol: "quic".into(), addr: "1.2.3.4:443".into() },
-            media: PresenceMediaCaps { audio: true, video: true, screen: true },
+            endpoint_hint: Endpoint {
+                protocol: "quic".into(),
+                addr: "1.2.3.4:443".into(),
+            },
+            media: PresenceMediaCaps {
+                audio: true,
+                video: true,
+                screen: true,
+            },
             ttl: 120,
             sig: vec![],
         };
@@ -428,7 +460,13 @@ mod tests {
         g.sign(&sk).unwrap();
         assert!(g.verify(&pk, 100).is_ok());
 
-        let mut c = ChannelRecordV1 { ver: 1, ts: 1, epoch: 42, container_tip: [1u8;32], sig: vec![] };
+        let mut c = ChannelRecordV1 {
+            ver: 1,
+            ts: 1,
+            epoch: 42,
+            container_tip: [1u8; 32],
+            sig: vec![],
+        };
         c.sign(&sk).unwrap();
         assert!(c.verify(&pk, 100).is_ok());
     }

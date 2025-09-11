@@ -9,7 +9,7 @@ use blake3::Hasher;
 use parking_lot::RwLock;
 use saorsa_core::quantum_crypto::{MlDsa65, MlDsaOperations, MlDsaPublicKey, MlDsaSecretKey};
 use saorsa_fec::{fec, fec::FecParams};
-use saorsa_seal::aead::{compute_cek_commitment, ContentEncryptor};
+use saorsa_seal::aead::{ContentEncryptor, compute_cek_commitment};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use thiserror::Error;
@@ -78,7 +78,11 @@ struct ObjectStore {
 }
 
 impl Default for ObjectStore {
-    fn default() -> Self { Self { data: HashMap::new() } }
+    fn default() -> Self {
+        Self {
+            data: HashMap::new(),
+        }
+    }
 }
 
 struct CrdtState {
@@ -89,7 +93,12 @@ struct CrdtState {
 }
 
 impl Default for CrdtState {
-    fn default() -> Self { Self { posts: BTreeMap::new(), seen_ops: BTreeSet::new() } }
+    fn default() -> Self {
+        Self {
+            posts: BTreeMap::new(),
+            seen_ops: BTreeSet::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -97,7 +106,11 @@ pub struct AeadConfig {
     pub use_aead: bool,
 }
 
-impl Default for AeadConfig { fn default() -> Self { Self { use_aead: true } } }
+impl Default for AeadConfig {
+    fn default() -> Self {
+        Self { use_aead: true }
+    }
+}
 
 #[derive(Debug, Clone, Copy)]
 pub struct FecConfig {
@@ -105,7 +118,11 @@ pub struct FecConfig {
     pub m: u16,
 }
 
-impl Default for FecConfig { fn default() -> Self { Self { k: 4, m: 2 } } }
+impl Default for FecConfig {
+    fn default() -> Self {
+        Self { k: 4, m: 2 }
+    }
+}
 
 pub struct ContainerEngine {
     objects: RwLock<ObjectStore>,
@@ -120,27 +137,45 @@ pub struct ContainerEngine {
 
 impl ContainerEngine {
     pub fn new(pk: MlDsaPublicKey, sk: MlDsaSecretKey, aead: AeadConfig, fec: FecConfig) -> Self {
-        Self { objects: RwLock::default(), crdt: RwLock::default(), index: RwLock::default(), _pk: pk, sk, aead, fec }
+        Self {
+            objects: RwLock::default(),
+            crdt: RwLock::default(),
+            index: RwLock::default(),
+            _pk: pk,
+            sk,
+            aead,
+            fec,
+        }
     }
 
     pub fn put_object(&self, bytes: &[u8]) -> Result<Oid> {
         let cek = saorsa_seal::types::CEK::generate();
         let mut enc = ContentEncryptor::new(cek.clone(), [0u8; 32])
             .map_err(|e| ContainerError::Crypto(format!("seal init: {e:?}")))?;
-        let ciphertext = if self.aead.use_aead { enc.encrypt(bytes).map_err(|e| ContainerError::Crypto(format!("encrypt: {e:?}")))? } else { bytes.to_vec() };
+        let ciphertext = if self.aead.use_aead {
+            enc.encrypt(bytes)
+                .map_err(|e| ContainerError::Crypto(format!("encrypt: {e:?}")))?
+        } else {
+            bytes.to_vec()
+        };
 
         // Compute oid on plaintext for logical identity
         let oid = *blake3::hash(bytes).as_bytes();
 
         // Produce shard set (metadata) using FEC to satisfy spec; we keep data in-memory
-        let k = self.fec.k; let m = self.fec.m;
+        let k = self.fec.k;
+        let m = self.fec.m;
         let shard_size = std::cmp::max(1, (ciphertext.len() + k as usize - 1) / k as usize);
-        let params = FecParams::new(k, m, shard_size).map_err(|e| ContainerError::Fec(e.to_string()))?;
+        let params =
+            FecParams::new(k, m, shard_size).map_err(|e| ContainerError::Fec(e.to_string()))?;
         // Clamp data not to exceed k*shard_size, pad if needed
         let mut padded = ciphertext.clone();
         let total = shard_size * k as usize;
-        if padded.len() < total { padded.resize(total, 0); }
-        let _shards = fec::encode(&padded, params).map_err(|e| ContainerError::Fec(e.to_string()))?;
+        if padded.len() < total {
+            padded.resize(total, 0);
+        }
+        let _shards =
+            fec::encode(&padded, params).map_err(|e| ContainerError::Fec(e.to_string()))?;
         // We don't persist shards here; storage policies do that in higher layers.
         let _commitment = compute_cek_commitment(&cek);
 
@@ -167,7 +202,9 @@ impl ContainerEngine {
             for op in ops {
                 match op {
                     Op::Append { post } => {
-                        if !crdt.seen_ops.insert(post.id) { continue; }
+                        if !crdt.seen_ops.insert(post.id) {
+                            continue;
+                        }
                         crdt.posts.insert(post.id, post.clone());
                         index.add(post);
                     }
@@ -194,7 +231,11 @@ impl ContainerEngine {
         let sig = ml
             .sign(&self.sk, &root)
             .map_err(|e| ContainerError::Crypto(format!("sign tip: {e:?}")))?;
-        Ok(Tip { root, count, sig: sig.0.to_vec() })
+        Ok(Tip {
+            root,
+            count,
+            sig: sig.0.to_vec(),
+        })
     }
 }
 
@@ -236,7 +277,11 @@ mod tests {
         let mut all_ops: Vec<Vec<Op>> = Vec::new();
         for e in &engines {
             let pk = e.pk.as_bytes().to_vec();
-            let ops: Vec<Op> = (0..200).map(|i| Op::Append { post: make_post(&pk, i) }).collect();
+            let ops: Vec<Op> = (0..200)
+                .map(|i| Op::Append {
+                    post: make_post(&pk, i),
+                })
+                .collect();
             let _ = e.apply_ops(&ops).unwrap();
             all_ops.push(ops);
         }
@@ -246,8 +291,12 @@ mod tests {
         for _round in 0..10 {
             for src in 0..engines.len() {
                 for dst in 0..engines.len() {
-                    if src == dst { continue; }
-                    if rng.gen_bool(0.15) { continue; } // drop
+                    if src == dst {
+                        continue;
+                    }
+                    if rng.gen_bool(0.15) {
+                        continue;
+                    } // drop
                     let ops = &all_ops[src];
                     let _ = engines[dst].apply_ops(ops);
                 }
@@ -255,7 +304,12 @@ mod tests {
         }
 
         // Check convergence to single root
-        let roots: Vec<_> = engines.iter().map(|e| e.current_tip().unwrap().root).collect();
-        for r in &roots[1..] { assert_eq!(r, &roots[0]); }
+        let roots: Vec<_> = engines
+            .iter()
+            .map(|e| e.current_tip().unwrap().root)
+            .collect();
+        for r in &roots[1..] {
+            assert_eq!(r, &roots[0]);
+        }
     }
 }

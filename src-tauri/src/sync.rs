@@ -1,12 +1,12 @@
 use crate::container::EngineState;
-use communitas_container::{Tip, Op};
-use tokio::net::lookup_host;
 use ant_quic::crypto::raw_public_keys::RawPublicKeyConfigBuilder;
+use communitas_container::{Op, Tip};
 use saorsa_fec::{FecCodec, FecParams};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
-use tokio::sync::{oneshot, RwLock};
-use tokio::time::{sleep, Duration};
+use tokio::net::lookup_host;
+use tokio::sync::{RwLock, oneshot};
+use tokio::time::{Duration, sleep};
 
 #[derive(Default)]
 pub struct TipWatcherState {
@@ -80,9 +80,13 @@ pub async fn sync_start_tip_watcher(
 }
 
 #[tauri::command]
-pub async fn sync_stop_tip_watcher(watcher: State<'_, Arc<RwLock<TipWatcherState>>>) -> Result<bool, String> {
+pub async fn sync_stop_tip_watcher(
+    watcher: State<'_, Arc<RwLock<TipWatcherState>>>,
+) -> Result<bool, String> {
     let mut w = watcher.write().await;
-    if let Some(tx) = w.cancel_tx.take() { let _ = tx.send(()); }
+    if let Some(tx) = w.cancel_tx.take() {
+        let _ = tx.send(());
+    }
     w.handle.take();
     w.last_tip = None;
     Ok(true)
@@ -100,10 +104,12 @@ pub async fn sync_repair_fec(
         return Err("data_shards must be > 0".into());
     }
     // Create codec and attempt decode
-    let params = FecParams::new(data_shards, parity_shards)
-        .map_err(|e| format!("fec params: {e:?}"))?;
+    let params =
+        FecParams::new(data_shards, parity_shards).map_err(|e| format!("fec params: {e:?}"))?;
     let codec = FecCodec::new(params).map_err(|e| format!("fec codec: {e:?}"))?;
-    codec.decode(&shares).map_err(|e| format!("fec decode: {e:?}"))
+    codec
+        .decode(&shares)
+        .map_err(|e| format!("fec decode: {e:?}"))
 }
 
 /// Delta fetcher over QUIC (IPv4-first). Returns number of ops fetched.
@@ -133,29 +139,41 @@ pub async fn sync_fetch_deltas(
         }
     };
 
-    let _ = app.emit("sync-progress", serde_json::json!({
-        "phase": "request",
-        "peer": peer_addr,
-        "since": since_count,
-    }));
+    let _ = app.emit(
+        "sync-progress",
+        serde_json::json!({
+            "phase": "request",
+            "peer": peer_addr,
+            "since": since_count,
+        }),
+    );
 
-    let ops = fetch_deltas_over_ant_quic(&peer_addr, from_root_hex, since_count, pinned_key).await?;
+    let ops =
+        fetch_deltas_over_ant_quic(&peer_addr, from_root_hex, since_count, pinned_key).await?;
     let received = ops.len() as u64;
-    let _ = app.emit("sync-progress", serde_json::json!({
-        "phase": "received",
-        "peer": peer_addr,
-        "ops": received,
-    }));
+    let _ = app.emit(
+        "sync-progress",
+        serde_json::json!({
+            "phase": "received",
+            "peer": peer_addr,
+            "ops": received,
+        }),
+    );
     let count = ops.len() as u64;
-    if count == 0 { return Ok(0); }
+    if count == 0 {
+        return Ok(0);
+    }
     if let Some(state) = container.read().await.as_ref() {
         let tip = state.apply_ops(&ops)?;
-        let _ = app.emit("sync-progress", serde_json::json!({
-            "phase": "applied",
-            "peer": peer_addr,
-            "new_count": tip.count,
-            "root": hex::encode(tip.root),
-        }));
+        let _ = app.emit(
+            "sync-progress",
+            serde_json::json!({
+                "phase": "applied",
+                "peer": peer_addr,
+                "new_count": tip.count,
+                "root": hex::encode(tip.root),
+            }),
+        );
     }
     Ok(count)
 }
@@ -192,7 +210,9 @@ struct DeltaRequest<'a> {
 }
 
 #[derive(serde::Deserialize)]
-struct DeltaResponse { ops: Vec<Op> }
+struct DeltaResponse {
+    ops: Vec<Op>,
+}
 
 // ---------------- ant-quic client (QUIC, IPv4-first) -----------------
 async fn fetch_deltas_over_ant_quic(
@@ -201,8 +221,8 @@ async fn fetch_deltas_over_ant_quic(
     want_since_count: Option<u64>,
     pinned_key: Option<[u8; 32]>,
 ) -> Result<Vec<Op>, String> {
-    use ant_quic::high_level::Endpoint as QuicEndpoint;
     use ant_quic::config::ClientConfig as QuicClientConfig;
+    use ant_quic::high_level::Endpoint as QuicEndpoint;
     use std::sync::Arc as StdArc;
     // write_all is available on send stream without extra trait import
 
@@ -245,10 +265,8 @@ async fn fetch_deltas_over_ant_quic(
             Ok(connecting) => match connecting.await {
                 Ok(conn) => {
                     // Open bi-directional stream
-                    let (mut send, mut recv) = conn
-                        .open_bi()
-                        .await
-                        .map_err(|e| format!("open_bi: {e}"))?;
+                    let (mut send, mut recv) =
+                        conn.open_bi().await.map_err(|e| format!("open_bi: {e}"))?;
                     // Send JSON line
                     let req = serde_json::to_string(&DeltaRequest {
                         from_root_hex: from_root_hex.as_deref(),
@@ -279,12 +297,17 @@ async fn fetch_deltas_over_ant_quic(
     Err(last_err.unwrap_or_else(|| "no QUIC addresses reachable".into()))
 }
 
-async fn resolve_host_ipv4_first(peer_addr: &str) -> Result<(Option<String>, Vec<std::net::SocketAddr>), String> {
+async fn resolve_host_ipv4_first(
+    peer_addr: &str,
+) -> Result<(Option<String>, Vec<std::net::SocketAddr>), String> {
     // Extract host for SNI if present
-    let sni = peer_addr
-        .rsplit_once(':')
-        .map(|(h, _)| h)
-        .and_then(|h| if h.parse::<std::net::IpAddr>().is_ok() { None } else { Some(h.to_string()) });
+    let sni = peer_addr.rsplit_once(':').map(|(h, _)| h).and_then(|h| {
+        if h.parse::<std::net::IpAddr>().is_ok() {
+            None
+        } else {
+            Some(h.to_string())
+        }
+    });
     let mut v4 = Vec::new();
     let mut v6 = Vec::new();
     let it = lookup_host(peer_addr)

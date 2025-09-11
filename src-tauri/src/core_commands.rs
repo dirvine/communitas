@@ -1,5 +1,5 @@
 use crate::core_context::CoreContext;
-use saorsa_core::chat::{Channel, ChannelId, ChannelType, ChannelRole, MessageId, Thread};
+use saorsa_core::chat::{Channel, ChannelId, ChannelRole, ChannelType, MessageId, Thread};
 use saorsa_core::identity::FourWordAddress;
 use saorsa_core::identity::enhanced::DeviceType;
 use saorsa_core::messaging::ChannelId as MessagingChannelId;
@@ -213,7 +213,9 @@ pub async fn core_send_message_to_channel(
     for m in ch.members {
         // Heuristic: treat user_id as four-word address if it contains 4 hyphen-separated words
         if m.user_id.split('-').count() == 4 {
-            recipients.push(saorsa_core::identity::FourWordAddress(m.user_id.to_lowercase()));
+            recipients.push(saorsa_core::identity::FourWordAddress(
+                m.user_id.to_lowercase(),
+            ));
         }
     }
 

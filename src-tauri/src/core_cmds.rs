@@ -8,7 +8,11 @@ use saorsa_core::quantum_crypto::{MlDsa65, MlDsaOperations, MlDsaSecretKey};
 
 // Container storage: local, content-addressed, no DHT blobs (pointers-only policy).
 fn data_root() -> PathBuf {
-    if let Ok(p) = std::env::var("COMMUNITAS_DATA_DIR") { PathBuf::from(p) } else { PathBuf::from("src-tauri/.communitas-data") }
+    if let Ok(p) = std::env::var("COMMUNITAS_DATA_DIR") {
+        PathBuf::from(p)
+    } else {
+        PathBuf::from("src-tauri/.communitas-data")
+    }
 }
 
 #[tauri::command]
@@ -47,7 +51,10 @@ pub async fn core_claim(words: [String; 4]) -> Result<String, String> {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AdvertiseResult { pub id_hex: String, pub endpoint_fw4: Option<String> }
+pub struct AdvertiseResult {
+    pub id_hex: String,
+    pub endpoint_fw4: Option<String>,
+}
 
 #[tauri::command]
 pub async fn core_advertise(addr: String, _storage_gb: u32) -> Result<AdvertiseResult, String> {
@@ -86,25 +93,44 @@ pub async fn core_advertise(addr: String, _storage_gb: u32) -> Result<AdvertiseR
             endpoint_fw4 = Some(enc.to_string().replace(' ', "-"));
         }
     }
-    Ok(AdvertiseResult { id_hex, endpoint_fw4 })
+    Ok(AdvertiseResult {
+        id_hex,
+        endpoint_fw4,
+    })
 }
 
 #[tauri::command]
 pub async fn container_put(bytes: Vec<u8>, _group_size: usize) -> Result<String, String> {
     // Store locally (pointers-only)
     let handle = hex::encode(blake3::hash(&bytes).as_bytes());
-    let ks = Keystore::new(); let id_hex = ks.load_current_identity()?;
-    let root = data_root(); let dir = root.join("personal").join(&id_hex);
+    let ks = Keystore::new();
+    let id_hex = ks.load_current_identity()?;
+    let root = data_root();
+    let dir = root.join("personal").join(&id_hex);
     let path = dir.join(format!("{}.data", handle));
-    if let Some(parent) = path.parent() { tokio::fs::create_dir_all(parent).await.map_err(|e| format!("mkdirs failed: {}", e))?; }
-    tokio::fs::write(&path, &bytes).await.map_err(|e| format!("write object failed: {}", e))?;
+    if let Some(parent) = path.parent() {
+        tokio::fs::create_dir_all(parent)
+            .await
+            .map_err(|e| format!("mkdirs failed: {}", e))?;
+    }
+    tokio::fs::write(&path, &bytes)
+        .await
+        .map_err(|e| format!("write object failed: {}", e))?;
     Ok(handle)
 }
 
 #[tauri::command]
 pub async fn container_get(handle: String) -> Result<Vec<u8>, String> {
-    if handle.len() != 64 { return Err("invalid handle format (expect hex blake3)".into()); }
-    let ks = Keystore::new(); let id_hex = ks.load_current_identity()?;
-    let path = data_root().join("personal").join(&id_hex).join(format!("{}.data", handle));
-    tokio::fs::read(&path).await.map_err(|e| format!("object not found/read failed: {}", e))
+    if handle.len() != 64 {
+        return Err("invalid handle format (expect hex blake3)".into());
+    }
+    let ks = Keystore::new();
+    let id_hex = ks.load_current_identity()?;
+    let path = data_root()
+        .join("personal")
+        .join(&id_hex)
+        .join(format!("{}.data", handle));
+    tokio::fs::read(&path)
+        .await
+        .map_err(|e| format!("object not found/read failed: {}", e))
 }

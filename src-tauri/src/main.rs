@@ -8,12 +8,12 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod container;
 mod core_cmds;
 mod core_commands;
 mod core_context;
 mod core_groups;
 mod error;
-mod container;
 mod keystore;
 mod sync;
 mod security {
@@ -57,11 +57,15 @@ async fn main() -> anyhow::Result<()> {
             Option::<core_context::CoreContext>::None,
         )))
         // Container engine state
-        .manage(Arc::new(RwLock::new(Option::<container::EngineState>::None)))
+        .manage(Arc::new(RwLock::new(
+            Option::<container::EngineState>::None,
+        )))
         // Sync watcher state
         .manage(Arc::new(RwLock::new(sync::TipWatcherState::default())))
         // Raw SPKI pinning state
-        .manage(Arc::new(RwLock::new(security::raw_spki::RawSpkiState::default())))
+        .manage(Arc::new(RwLock::new(
+            security::raw_spki::RawSpkiState::default(),
+        )))
         .invoke_handler(tauri::generate_handler![
             // Core bindings (pointers-only DHT surface)
             core_cmds::core_claim,

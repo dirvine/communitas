@@ -101,7 +101,7 @@ saorsa-mls = "0.1.5"
 saorsa-rsps = "0.2.0"
 
 # Security and validation dependencies
-validator = { version = "0.18", features = ["derive"] }
+validator = { version = "0.20", features = ["derive"] }
 secrecy = "0.8"
 argon2 = "0.5"
 zeroize = "1.7"

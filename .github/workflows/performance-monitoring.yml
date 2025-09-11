@@ -38,8 +38,12 @@ jobs:
       - name: Build optimized release
         run: cargo build --release
         working-directory: src-tauri
+        env:
+          COMMUNITAS_SKIP_TAURI_BUILD: "1"
 
       - name: Run encryption performance tests
+        env:
+          COMMUNITAS_SKIP_TAURI_BUILD: "1"
         run: |
           echo "Running encryption performance benchmarks..."
 
@@ -89,6 +93,8 @@ jobs:
         working-directory: src-tauri
 
       - name: Memory usage analysis
+        env:
+          COMMUNITAS_SKIP_TAURI_BUILD: "1"
         run: |
           echo "Analyzing memory usage patterns..."
 
@@ -129,8 +135,12 @@ jobs:
       - name: Build optimized release
         run: cargo build --release
         working-directory: src-tauri
+        env:
+          COMMUNITAS_SKIP_TAURI_BUILD: "1"
 
       - name: P2P connection performance test
+        env:
+          COMMUNITAS_SKIP_TAURI_BUILD: "1"
         run: |
           echo "Testing P2P connection performance..."
 
@@ -220,7 +230,7 @@ jobs:
           # Measure Rust build time (debug)
           echo "Building Rust backend (debug)..."
           start_time=$(date +%s)
-          cargo build
+          cd src-tauri && cargo build
           end_time=$(date +%s)
           debug_build_time=$((end_time - start_time))
           echo "Debug build time: ${debug_build_time}s"
@@ -228,7 +238,7 @@ jobs:
           # Measure Rust build time (release)
           echo "Building Rust backend (release)..."
           start_time=$(date +%s)
-          cargo build --release
+          cd src-tauri && cargo build --release
           end_time=$(date +%s)
           release_build_time=$((end_time - start_time))
           echo "Release build time: ${release_build_time}s"

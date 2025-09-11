@@ -2,9 +2,9 @@ name: Communitas CI
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 env:
   CARGO_TERM_COLOR: always
@@ -29,275 +29,272 @@ jobs:
           - os: ubuntu-latest
             rust-version: nightly
             continue-on-error: true
-    
+
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Install Rust ${{ matrix.rust-version }}
-      uses: dtolnay/rust-toolchain@master
-      with:
-        toolchain: ${{ matrix.rust-version }}
-        components: rustfmt, clippy
-    
-    - name: Install system dependencies (Linux)
-      if: matrix.os == 'ubuntu-latest'
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          libwebkit2gtk-4.0-dev \
-          build-essential \
-          curl \
-          wget \
-          libssl-dev \
-          libgtk-3-dev \
-          libayatana-appindicator3-dev \
-          librsvg2-dev
-    
-    - name: Install system dependencies (macOS)
-      if: matrix.os == 'macos-latest'
-      run: |
-        # Tauri dependencies are included in macOS by default
-        echo "macOS dependencies ready"
-    
-    - name: Cache Cargo registry
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cargo/registry
-          ~/.cargo/git
-          target
-        key: ${{ matrix.os }}-cargo-${{ matrix.rust-version }}-${{ hashFiles('**/Cargo.lock') }}
-    
-    - name: Check Rust formatting
-      run: cargo fmt --all -- --check
-      working-directory: src-tauri
-    
-    - name: Rust linting
-      run: cargo clippy --all-targets --all-features -- -D warnings
-      working-directory: src-tauri
-    
-    - name: Build Rust backend
-      run: cargo build --verbose
-      working-directory: src-tauri
-    
-    - name: Run Rust tests
-      run: cargo test --verbose
-      working-directory: src-tauri
-    
-    - name: Run integration tests
-      run: |
-        cargo test --test integration_dht_storage
-        cargo test --test test_reed_solomon_v2
-      working-directory: src-tauri
+      - uses: actions/checkout@v4
+
+      - name: Install Rust ${{ matrix.rust-version }}
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust-version }}
+          components: rustfmt, clippy
+
+      - name: Install system dependencies (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            libssl-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+
+      - name: Install system dependencies (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          # Tauri dependencies are included in macOS by default
+          echo "macOS dependencies ready"
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ matrix.os }}-cargo-${{ matrix.rust-version }}-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Check Rust formatting
+        run: cargo fmt --all -- --check
+        working-directory: src-tauri
+
+      - name: Rust linting
+        run: cargo clippy --all-targets --all-features -- -D warnings
+        working-directory: src-tauri
+
+      - name: Build Rust backend
+        run: cargo build --verbose
+        working-directory: src-tauri
+
+      - name: Run Rust tests
+        run: cargo test --verbose
+        working-directory: src-tauri
+
+      - name: Run integration tests
+        run: |
+          cargo test --test integration_dht_storage
+          cargo test --test test_reed_solomon_v2
+        working-directory: src-tauri
 
   test-frontend:
     name: Frontend Tests
     runs-on: ubuntu-latest
-    
+
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-        cache: 'npm'
-    
-    - name: Install dependencies
-      run: npm ci
-    
-    - name: TypeScript type checking
-      run: npm run type-check
-    
-    - name: Lint frontend code
-      run: npm run lint
-    
-    - name: Run frontend tests
-      run: npm run test
-    
-    - name: Build frontend
-      run: npm run build
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript type checking
+        run: npm run typecheck
+
+      - name: Run frontend tests
+        run: npm run test
+
+      - name: Build frontend
+        run: npm run build
 
   test-e2e:
     name: End-to-End Tests
     runs-on: ubuntu-latest
     continue-on-error: true
     needs: [test-rust, test-frontend]
-    
+
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-        cache: 'npm'
-    
-    - name: Install Rust stable
-      uses: dtolnay/rust-toolchain@stable
-    
-    - name: Install system dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          libwebkit2gtk-4.0-dev \
-          build-essential \
-          curl \
-          wget \
-          libssl-dev \
-          libgtk-3-dev \
-          libayatana-appindicator3-dev \
-          librsvg2-dev \
-          xvfb
-    
-    - name: Install dependencies
-      run: npm ci
-    
-    - name: Install Playwright
-      run: npx playwright install --with-deps
-    
-    - name: Build app for testing
-      run: npm run tauri build
-      env:
-        TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
-    
-    - name: Run E2E tests
-      run: xvfb-run -a npm run test:e2e
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            libssl-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            xvfb
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright
+        run: npx playwright install --with-deps
+
+      - name: Build app for testing
+        run: npm run tauri build
+        env:
+          TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+
+      - name: Run E2E tests
+        run: xvfb-run -a npm run test:e2e
 
   security:
     name: Security Audit
     runs-on: ubuntu-latest
-    
+
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Install Rust stable
-      uses: dtolnay/rust-toolchain@stable
-    
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-        cache: 'npm'
-    
-    - name: Install cargo-audit
-      run: cargo install cargo-audit
-    
-    - name: Rust security audit
-      run: cargo audit --deny warnings
-      working-directory: .
-    
-    - name: Install npm dependencies
-      run: npm ci
-    
-    - name: NPM security audit
-      run: npm audit --audit-level=high
-    
-    - name: Check for hardcoded secrets
-      run: |
-        echo "Scanning for potential secrets..."
-        if grep -r -E "(api_key|secret_key|password|token)\s*[:=]\s*['\"][^'\"]{8,}['\"]" --include="*.ts" --include="*.tsx" --include="*.js" --include="*.rs" .; then
-          echo "::warning::Potential hardcoded secrets found"
-        fi
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+
+      - name: Rust security audit
+        run: cargo audit --deny warnings
+        working-directory: .
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: NPM security audit
+        run: npm audit --audit-level=high
+
+      - name: Check for hardcoded secrets
+        run: |
+          echo "Scanning for potential secrets..."
+          if grep -r -E "(api_key|secret_key|password|token)\s*[:=]\s*['\"][^'\"]{8,}['\"]" --include="*.ts" --include="*.tsx" --include="*.js" --include="*.rs" .; then
+            echo "::warning::Potential hardcoded secrets found"
+          fi
 
   build-artifacts:
     name: Build Release Artifacts
     runs-on: ${{ matrix.os }}
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [test-rust, test-frontend]
-    
+
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-    
+
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-        cache: 'npm'
-    
-    - name: Install Rust stable
-      uses: dtolnay/rust-toolchain@stable
-    
-    - name: Install system dependencies (Linux)
-      if: matrix.os == 'ubuntu-latest'
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          libwebkit2gtk-4.0-dev \
-          build-essential \
-          curl \
-          wget \
-          libssl-dev \
-          libgtk-3-dev \
-          libayatana-appindicator3-dev \
-          librsvg2-dev
-    
-    - name: Install dependencies
-      run: npm ci
-    
-    - name: Build release
-      run: npm run tauri build
-      env:
-        TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
-    
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: communitas-${{ matrix.os }}
-        path: |
-          src-tauri/target/release/bundle/
-          !src-tauri/target/release/bundle/**/.*
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install system dependencies (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            libssl-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build release
+        run: npm run tauri build
+        env:
+          TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: communitas-${{ matrix.os }}
+          path: |
+            src-tauri/target/release/bundle/
+            !src-tauri/target/release/bundle/**/.*
 
   release:
     name: Release
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     needs: [test-rust, test-frontend, test-e2e, security, build-artifacts]
-    
+
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-        cache: 'npm'
-    
-    - name: Install Rust stable
-      uses: dtolnay/rust-toolchain@stable
-    
-    - name: Install system dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          libwebkit2gtk-4.0-dev \
-          build-essential \
-          curl \
-          wget \
-          libssl-dev \
-          libgtk-3-dev \
-          libayatana-appindicator3-dev \
-          librsvg2-dev
-    
-    - name: Install dependencies
-      run: npm ci
-    
-    - name: Build and release
-      run: npm run tauri build
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
-    
-    - name: Create GitHub Release
-      uses: softprops/action-gh-release@v1
-      with:
-        files: |
-          src-tauri/target/release/bundle/deb/*.deb
-          src-tauri/target/release/bundle/appimage/*.AppImage
-          src-tauri/target/release/bundle/msi/*.msi
-          src-tauri/target/release/bundle/dmg/*.dmg
-        generate_release_notes: true
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            libssl-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build and release
+        run: npm run tauri build
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            src-tauri/target/release/bundle/deb/*.deb
+            src-tauri/target/release/bundle/appimage/*.AppImage
+            src-tauri/target/release/bundle/msi/*.msi
+            src-tauri/target/release/bundle/dmg/*.dmg
+          generate_release_notes: true

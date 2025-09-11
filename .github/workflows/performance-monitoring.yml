@@ -2,12 +2,12 @@ name: Performance Monitoring
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
   schedule:
     # Run performance monitoring weekly on Saturdays at 6 AM UTC
-    - cron: '0 6 * * 6'
+    - cron: "0 6 * * 6"
 
 env:
   CARGO_TERM_COLOR: always
@@ -17,307 +17,307 @@ jobs:
   encryption-performance:
     name: Encryption Performance Benchmarks
     runs-on: ubuntu-latest
-    
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Install Rust toolchain
-      uses: dtolnay/rust-toolchain@stable
-      
-    - name: Cache Rust dependencies
-      uses: Swatinem/rust-cache@v2
-      with:
-        workspaces: src-tauri -> target
-        
-    - name: Install system dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y libwebkit2gtk-4.0-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
-        
-    - name: Build optimized release
-      run: cargo build --release
-      working-directory: src-tauri
-      
-    - name: Run encryption performance tests
-      run: |
-        echo "Running encryption performance benchmarks..."
-        
-        # Create a simple performance test for encryption
-        cat > src-tauri/src/bin/encryption_benchmark.rs << 'EOF'
-        use std::time::Instant;
-        use communitas::secure_fec::{SecureFecManager, FecConfig};
-        
-        #[tokio::main]
-        async fn main() -> Result<(), Box<dyn std::error::Error>> {
-            let config = FecConfig::default();
-            let manager = SecureFecManager::new(config)?;
-            
-            // Test data sizes
-            let test_sizes = vec![1024, 10_240, 102_400, 1_048_576]; // 1KB to 1MB
-            
-            for size in test_sizes {
-                let test_data = vec![0u8; size];
-                
-                // Measure encryption time
-                let start = Instant::now();
-                let encrypted = manager.encrypt_data(&test_data, None).await?;
-                let encryption_time = start.elapsed();
-                
-                // Measure decryption time (need to get key_id)
-                // This is a simplified benchmark - real benchmarks would be more sophisticated
-                println!("Size: {}KB, Encryption: {:?}", size / 1024, encryption_time);
-                
-                // Performance assertions
-                if size <= 10_240 && encryption_time.as_millis() > 100 {
-                    eprintln!("❌ Encryption too slow for {}KB: {:?}", size / 1024, encryption_time);
-                    std::process::exit(1);
-                }
-            }
-            
-            println!("✅ Encryption performance benchmarks passed");
-            Ok(())
-        }
-        EOF
-        
-        # Build and run the benchmark
-        cargo build --release --bin encryption_benchmark
-        timeout 30s cargo run --release --bin encryption_benchmark || echo "Benchmark completed or timed out"
-        
-        # Clean up
-        rm -f src-tauri/src/bin/encryption_benchmark.rs
-      working-directory: src-tauri
-      
-    - name: Memory usage analysis
-      run: |
-        echo "Analyzing memory usage patterns..."
-        
-        # Run memory-intensive operations and measure usage
-        if command -v valgrind >/dev/null 2>&1; then
-          echo "Running memory analysis with valgrind..."
-          # Note: This would need a proper test harness
-          echo "Valgrind analysis would run here in a full implementation"
-        else
-          echo "Valgrind not available, skipping detailed memory analysis"
-        fi
-        
-        # Basic memory test using Rust's built-in tools
-        RUSTFLAGS="-C debug-assertions=off" cargo test --release test_encryption_decryption_roundtrip
-      working-directory: src-tauri
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+
+      - name: Build optimized release
+        run: cargo build --release
+        working-directory: src-tauri
+
+      - name: Run encryption performance tests
+        run: |
+          echo "Running encryption performance benchmarks..."
+
+          # Create a simple performance test for encryption
+          cat > src-tauri/src/bin/encryption_benchmark.rs << 'EOF'
+          use std::time::Instant;
+          use communitas::secure_fec::{SecureFecManager, FecConfig};
+
+          #[tokio::main]
+          async fn main() -> Result<(), Box<dyn std::error::Error>> {
+              let config = FecConfig::default();
+              let manager = SecureFecManager::new(config)?;
+
+              // Test data sizes
+              let test_sizes = vec![1024, 10_240, 102_400, 1_048_576]; // 1KB to 1MB
+
+              for size in test_sizes {
+                  let test_data = vec![0u8; size];
+
+                  // Measure encryption time
+                  let start = Instant::now();
+                  let encrypted = manager.encrypt_data(&test_data, None).await?;
+                  let encryption_time = start.elapsed();
+
+                  // Measure decryption time (need to get key_id)
+                  // This is a simplified benchmark - real benchmarks would be more sophisticated
+                  println!("Size: {}KB, Encryption: {:?}", size / 1024, encryption_time);
+
+                  // Performance assertions
+                  if size <= 10_240 && encryption_time.as_millis() > 100 {
+                      eprintln!("❌ Encryption too slow for {}KB: {:?}", size / 1024, encryption_time);
+                      std::process::exit(1);
+                  }
+              }
+
+              println!("✅ Encryption performance benchmarks passed");
+              Ok(())
+          }
+          EOF
+
+          # Build and run the benchmark
+          cargo build --release --bin encryption_benchmark
+          timeout 30s cargo run --release --bin encryption_benchmark || echo "Benchmark completed or timed out"
+
+          # Clean up
+          rm -f src-tauri/src/bin/encryption_benchmark.rs
+        working-directory: src-tauri
+
+      - name: Memory usage analysis
+        run: |
+          echo "Analyzing memory usage patterns..."
+
+          # Run memory-intensive operations and measure usage
+          if command -v valgrind >/dev/null 2>&1; then
+            echo "Running memory analysis with valgrind..."
+            # Note: This would need a proper test harness
+            echo "Valgrind analysis would run here in a full implementation"
+          else
+            echo "Valgrind not available, skipping detailed memory analysis"
+          fi
+
+          # Basic memory test using Rust's built-in tools
+          RUSTFLAGS="-C debug-assertions=off" cargo test --release test_encryption_decryption_roundtrip
+        working-directory: src-tauri
 
   p2p-performance:
     name: P2P Network Performance
     runs-on: ubuntu-latest
-    
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Install Rust toolchain
-      uses: dtolnay/rust-toolchain@stable
-      
-    - name: Cache Rust dependencies
-      uses: Swatinem/rust-cache@v2
-      with:
-        workspaces: src-tauri -> target
-        
-    - name: Install system dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y libwebkit2gtk-4.0-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
-        
-    - name: Build optimized release
-      run: cargo build --release
-      working-directory: src-tauri
-      
-    - name: P2P connection performance test
-      run: |
-        echo "Testing P2P connection performance..."
-        
-        # Run specific P2P performance tests
-        cargo test --release integration_dht_storage --no-capture | tee p2p_test_output.log
-        
-        # Analyze test output for performance metrics
-        if grep -q "test result: ok" p2p_test_output.log; then
-          echo "✅ P2P integration tests passed"
-        else
-          echo "❌ P2P integration tests failed"
-          cat p2p_test_output.log
-          exit 1
-        fi
-        
-        # Check for performance warnings in logs
-        if grep -i "slow\|timeout\|failed" p2p_test_output.log; then
-          echo "⚠️ Performance warnings detected in P2P tests"
-        fi
-        
-        rm -f p2p_test_output.log
-      working-directory: src-tauri
-      
-    - name: DHT performance validation
-      run: |
-        echo "Validating DHT performance characteristics..."
-        
-        # Test DHT operations performance
-        cargo test --release test_dht --no-capture | tee dht_test_output.log || true
-        
-        # WebRTC-over-QUIC performance validation
-        echo "Testing WebRTC-over-QUIC performance..."
-        cargo test --release webrtc --no-capture | tee webrtc_test_output.log || true
-        
-        echo "✅ DHT performance validation completed"
-        
-        # Clean up
-        rm -f dht_test_output.log webrtc_test_output.log
-      working-directory: src-tauri
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+
+      - name: Build optimized release
+        run: cargo build --release
+        working-directory: src-tauri
+
+      - name: P2P connection performance test
+        run: |
+          echo "Testing P2P connection performance..."
+
+          # Run specific P2P performance tests
+          cargo test --release integration_dht_storage --no-capture | tee p2p_test_output.log
+
+          # Analyze test output for performance metrics
+          if grep -q "test result: ok" p2p_test_output.log; then
+            echo "✅ P2P integration tests passed"
+          else
+            echo "❌ P2P integration tests failed"
+            cat p2p_test_output.log
+            exit 1
+          fi
+
+          # Check for performance warnings in logs
+          if grep -i "slow\|timeout\|failed" p2p_test_output.log; then
+            echo "⚠️ Performance warnings detected in P2P tests"
+          fi
+
+          rm -f p2p_test_output.log
+        working-directory: src-tauri
+
+      - name: DHT performance validation
+        run: |
+          echo "Validating DHT performance characteristics..."
+
+          # Test DHT operations performance
+          cargo test --release test_dht --no-capture | tee dht_test_output.log || true
+
+          # WebRTC-over-QUIC performance validation
+          echo "Testing WebRTC-over-QUIC performance..."
+          cargo test --release webrtc --no-capture | tee webrtc_test_output.log || true
+
+          echo "✅ DHT performance validation completed"
+
+          # Clean up
+          rm -f dht_test_output.log webrtc_test_output.log
+        working-directory: src-tauri
 
   build-performance:
     name: Build Performance & Binary Size
     runs-on: ubuntu-latest
-    
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Install Rust toolchain
-      uses: dtolnay/rust-toolchain@stable
-      
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-        cache: 'npm'
-        
-    - name: Cache Rust dependencies
-      uses: Swatinem/rust-cache@v2
-      with:
-        workspaces: src-tauri -> target
-        
-    - name: Install system dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y libwebkit2gtk-4.0-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
-        
-    - name: Install frontend dependencies
-      run: npm ci
-      
-    - name: Measure build performance
-      run: |
-        echo "Measuring build performance..."
-        
-        # Clean previous builds
-        cargo clean
-        rm -rf dist/
-        
-        # Measure frontend build time
-        echo "Building frontend..."
-        start_time=$(date +%s)
-        npm run build
-        end_time=$(date +%s)
-        frontend_build_time=$((end_time - start_time))
-        echo "Frontend build time: ${frontend_build_time}s"
-        
-        # Measure Rust build time (debug)
-        echo "Building Rust backend (debug)..."
-        start_time=$(date +%s)
-        cargo build
-        end_time=$(date +%s)
-        debug_build_time=$((end_time - start_time))
-        echo "Debug build time: ${debug_build_time}s"
-        
-        # Measure Rust build time (release)
-        echo "Building Rust backend (release)..."
-        start_time=$(date +%s)
-        cargo build --release
-        end_time=$(date +%s)
-        release_build_time=$((end_time - start_time))
-        echo "Release build time: ${release_build_time}s"
-        
-        # Performance thresholds (adjust as needed)
-        if [ $frontend_build_time -gt 300 ]; then  # 5 minutes
-          echo "⚠️ Frontend build time ($frontend_build_time s) exceeds threshold"
-        fi
-        
-        if [ $release_build_time -gt 1800 ]; then  # 30 minutes
-          echo "⚠️ Release build time ($release_build_time s) exceeds threshold"
-        fi
-        
-        echo "✅ Build performance analysis completed"
-      working-directory: src-tauri
-      
-    - name: Analyze binary size
-      run: |
-        echo "Analyzing binary size..."
-        
-        # Get binary size
-        BINARY_PATH="target/release/communitas"
-        if [ -f "$BINARY_PATH" ]; then
-          BINARY_SIZE=$(stat -c%s "$BINARY_PATH")
-          BINARY_SIZE_MB=$((BINARY_SIZE / 1024 / 1024))
-          echo "Release binary size: ${BINARY_SIZE_MB}MB (${BINARY_SIZE} bytes)"
-          
-          # Binary size threshold (adjust as needed)
-          if [ $BINARY_SIZE_MB -gt 100 ]; then  # 100MB
-            echo "⚠️ Binary size (${BINARY_SIZE_MB}MB) is quite large"
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Measure build performance
+        run: |
+          echo "Measuring build performance..."
+
+          # Clean previous builds
+          cargo clean
+          rm -rf dist/
+
+          # Measure frontend build time
+          echo "Building frontend..."
+          start_time=$(date +%s)
+          npm run build
+          end_time=$(date +%s)
+          frontend_build_time=$((end_time - start_time))
+          echo "Frontend build time: ${frontend_build_time}s"
+
+          # Measure Rust build time (debug)
+          echo "Building Rust backend (debug)..."
+          start_time=$(date +%s)
+          cargo build
+          end_time=$(date +%s)
+          debug_build_time=$((end_time - start_time))
+          echo "Debug build time: ${debug_build_time}s"
+
+          # Measure Rust build time (release)
+          echo "Building Rust backend (release)..."
+          start_time=$(date +%s)
+          cargo build --release
+          end_time=$(date +%s)
+          release_build_time=$((end_time - start_time))
+          echo "Release build time: ${release_build_time}s"
+
+          # Performance thresholds (adjust as needed)
+          if [ $frontend_build_time -gt 300 ]; then  # 5 minutes
+            echo "⚠️ Frontend build time ($frontend_build_time s) exceeds threshold"
           fi
-        else
-          echo "❌ Release binary not found"
-          exit 1
-        fi
-        
-        # Analyze frontend bundle size
-        if [ -d "../dist" ]; then
-          BUNDLE_SIZE=$(du -sh ../dist | cut -f1)
-          echo "Frontend bundle size: $BUNDLE_SIZE"
-        fi
-        
-        # Dependency analysis
-        echo "Analyzing dependencies contributing to binary size..."
-        cargo tree --depth 1 | head -20
-        
-        echo "✅ Binary size analysis completed"
-      working-directory: src-tauri
-      
-    - name: Store performance metrics
-      run: |
-        echo "Storing performance metrics for trend analysis..."
-        
-        # Create performance report
-        cat > performance_report.md << EOF
-        # Performance Report - $(date)
-        
-        ## Build Performance
-        - Frontend build time: ${frontend_build_time:-unknown}s
-        - Debug build time: ${debug_build_time:-unknown}s  
-        - Release build time: ${release_build_time:-unknown}s
-        
-        ## Binary Sizes
-        - Release binary: ${BINARY_SIZE_MB:-unknown}MB
-        - Frontend bundle: ${BUNDLE_SIZE:-unknown}
-        
-        ## Git Commit
-        - SHA: $GITHUB_SHA
-        - Branch: $GITHUB_REF_NAME
-        
-        Generated by GitHub Actions performance monitoring
-        EOF
-        
-        # In a real implementation, this could be uploaded to a performance tracking service
-        cat performance_report.md
-        
-    - name: Performance regression detection
-      run: |
-        echo "Checking for performance regressions..."
-        
-        # In a full implementation, this would compare against baseline metrics
-        # For now, we'll just ensure basic performance criteria are met
-        
-        echo "Performance criteria validation:"
-        echo "✅ Build completed successfully"
-        echo "✅ Binary size within acceptable range"
-        echo "✅ No critical performance issues detected"
-        
-        # This could be enhanced to:
-        # - Compare against historical performance data
-        # - Set up alerts for significant regressions
-        # - Generate performance trend reports
+
+          if [ $release_build_time -gt 1800 ]; then  # 30 minutes
+            echo "⚠️ Release build time ($release_build_time s) exceeds threshold"
+          fi
+
+          echo "✅ Build performance analysis completed"
+        working-directory: src-tauri
+
+      - name: Analyze binary size
+        run: |
+          echo "Analyzing binary size..."
+
+          # Get binary size
+          BINARY_PATH="target/release/communitas"
+          if [ -f "$BINARY_PATH" ]; then
+            BINARY_SIZE=$(stat -c%s "$BINARY_PATH")
+            BINARY_SIZE_MB=$((BINARY_SIZE / 1024 / 1024))
+            echo "Release binary size: ${BINARY_SIZE_MB}MB (${BINARY_SIZE} bytes)"
+
+            # Binary size threshold (adjust as needed)
+            if [ $BINARY_SIZE_MB -gt 100 ]; then  # 100MB
+              echo "⚠️ Binary size (${BINARY_SIZE_MB}MB) is quite large"
+            fi
+          else
+            echo "❌ Release binary not found"
+            exit 1
+          fi
+
+          # Analyze frontend bundle size
+          if [ -d "../dist" ]; then
+            BUNDLE_SIZE=$(du -sh ../dist | cut -f1)
+            echo "Frontend bundle size: $BUNDLE_SIZE"
+          fi
+
+          # Dependency analysis
+          echo "Analyzing dependencies contributing to binary size..."
+          cargo tree --depth 1 | head -20
+
+          echo "✅ Binary size analysis completed"
+        working-directory: src-tauri
+
+      - name: Store performance metrics
+        run: |
+          echo "Storing performance metrics for trend analysis..."
+
+          # Create performance report
+          cat > performance_report.md << EOF
+          # Performance Report - $(date)
+
+          ## Build Performance
+          - Frontend build time: ${frontend_build_time:-unknown}s
+          - Debug build time: ${debug_build_time:-unknown}s
+          - Release build time: ${release_build_time:-unknown}s
+
+          ## Binary Sizes
+          - Release binary: ${BINARY_SIZE_MB:-unknown}MB
+          - Frontend bundle: ${BUNDLE_SIZE:-unknown}
+
+          ## Git Commit
+          - SHA: $GITHUB_SHA
+          - Branch: $GITHUB_REF_NAME
+
+          Generated by GitHub Actions performance monitoring
+          EOF
+
+          # In a real implementation, this could be uploaded to a performance tracking service
+          cat performance_report.md
+
+      - name: Performance regression detection
+        run: |
+          echo "Checking for performance regressions..."
+
+          # In a full implementation, this would compare against baseline metrics
+          # For now, we'll just ensure basic performance criteria are met
+
+          echo "Performance criteria validation:"
+          echo "✅ Build completed successfully"
+          echo "✅ Binary size within acceptable range"
+          echo "✅ No critical performance issues detected"
+
+          # This could be enhanced to:
+          # - Compare against historical performance data
+          # - Set up alerts for significant regressions
+          # - Generate performance trend reports

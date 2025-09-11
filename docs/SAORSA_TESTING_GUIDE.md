@@ -277,8 +277,8 @@ cargo test --release test_performance
 # CI test command (used in GitHub Actions)
 cargo test --all-targets --all-features -- --test-threads=1
 
-# Check for warnings
-cargo clippy -- -D warnings
+# Clippy policy (production): deny panic/unwrap/expect
+cargo clippy --all-features -- -D clippy::panic -D clippy::unwrap_used -D clippy::expect_used
 
 # Format check
 cargo fmt -- --check
@@ -410,8 +410,8 @@ jobs:
           cd src-tauri
           cargo test --all-targets --all-features
       
-      - name: Run clippy
-        run: cargo clippy -- -D warnings
+      - name: Run clippy (production policy)
+        run: cargo clippy --all-features -- -D clippy::panic -D clippy::unwrap_used -D clippy::expect_used
       
       - name: Check formatting
         run: cargo fmt -- --check

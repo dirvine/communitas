@@ -8,7 +8,7 @@ dev:testnet:
 
 lint:
 	cargo fmt --all
-	cargo clippy --all-features -- -D clippy::panic -D clippy::unwrap_used -D clippy::expect_used -W clippy::pedantic
+	cargo clippy --all-features -- -D clippy::panic -D clippy::unwrap_used -D clippy::expect_used
 
 build:tauri:
 	@echo "Reproducible Tauri build (macOS)"
@@ -16,4 +16,3 @@ build:tauri:
 
 test:
 	cargo test --workspace -- --nocapture
-

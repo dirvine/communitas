@@ -11,12 +11,12 @@
 - Typecheck: `npm run typecheck`.
 - JS unit tests: `npm test` (Vitest). Fast subset: `npm run test:run`.
 - Rust checks: `cargo check`; tests: `cargo test -p communitas-tauri`.
-- Rust lint policy: `cargo clippy --all-features -- -D clippy::panic -D clippy::unwrap_used -D clippy::expect_used` (add `-W clippy::pedantic` optionally).
+- Rust lint policy: `cargo clippy --all-features -- -D clippy::panic -D clippy::unwrap_used -D clippy::expect_used`.
 - Formatting: `cargo fmt --all` before commits/CI.
 
 ## Coding Style & Naming
 - TypeScript: 2-space indent, camelCase for vars/functions, PascalCase for components/types. Tests in `__tests__` with `*.test.ts[x]`.
-- Rust: snake_case for functions/modules, CamelCase for types. Non-test code must not use `unwrap/expect/panic!`; prefer `thiserror` for errors and `tracing` for logs.
+- Rust: snake_case for functions/modules, CamelCase for types. Non-test code must not use `unwrap/expect/panic!`; prefer `thiserror` for errors and `tracing` for logs. In tests, `unwrap/expect/panic!` are permitted for clarity and speed.
 - File naming: kebab-case for files in UI; module-focused `mod.rs`/`lib.rs` in Rust where applicable.
 
 ## Testing Guidelines
@@ -41,4 +41,3 @@
 - Do not commit secrets. Use platform keyring (Rust uses `keyring`) and environment configs.
 - Optional: run dependency checks if installed (e.g., `cargo deny check` using `src-tauri/deny.toml`).
 - See `ARCHITECTURE.md` and `DESIGN.md` for deeper system context.
-

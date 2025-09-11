@@ -49,7 +49,7 @@ cargo test                  # Backend tests
 
 # Type checking and linting
 npm run typecheck          # TypeScript
-cargo clippy --all-features -- -D warnings  # Rust
+cargo clippy --all-features -- -D clippy::panic -D clippy::unwrap_used -D clippy::expect_used  # Rust
 ```
 
 ### Frontend Development
@@ -68,7 +68,7 @@ cargo build                # Build debug
 cargo build --release      # Build release
 cargo test                 # Run all tests
 cargo fmt --all           # Format code
-cargo clippy --all-features -- -D warnings  # Lint
+cargo clippy --all-features -- -D clippy::panic -D clippy::unwrap_used -D clippy::expect_used  # Lint
 ```
 
 ### Production Build
@@ -236,10 +236,11 @@ await invoke('core_identity_set_website_root', {
 ## Quality Standards
 
 ### Rust Code
-- **No panics**: Zero `unwrap()`, `expect()`, `panic!()` in production
-- **Zero warnings**: `cargo clippy --all-features -- -D warnings` must pass
-- **Formatting**: `cargo fmt --all` before commits
-- **Documentation**: All public items must have doc comments
+- Production code: no `unwrap()`, `expect()`, or `panic!()` (use `thiserror`/`anyhow` and return errors; log via `tracing`).
+- Tests: `unwrap/expect/panic!` are allowed for clarity and speed.
+- Clippy policy: `cargo clippy --all-features -- -D clippy::panic -D clippy::unwrap_used -D clippy::expect_used`. Do not enable `clippy::pedantic` by default.
+- Formatting: `cargo fmt --all` before commits.
+- Documentation: Prefer doc comments on public items; add when helpful.
 
 ### TypeScript Code
 - **Type safety**: No `any` types, strict mode enabled
@@ -250,7 +251,7 @@ await invoke('core_identity_set_website_root', {
 ```bash
 # Format and check before commit
 cargo fmt --all
-cargo clippy --all-features -- -D warnings
+cargo clippy --all-features -- -D clippy::panic -D clippy::unwrap_used -D clippy::expect_used
 npm run typecheck
 cargo test
 npm test

@@ -93,6 +93,117 @@ jobs:
       - name: Rust clippy policy
         run: cargo clippy --workspace --all-features -- -D clippy::panic -D clippy::unwrap_used -D clippy::expect_used
 
-      - name: Build communitas-headless (smoke)
+  headless-build:
+    name: Headless Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: rust-checks
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: headless-${{ matrix.os }}-${{ hashFiles('**/Cargo.lock') }}
+      - name: Build headless (Unix)
+        if: runner.os != 'Windows'
         run: |
-          cargo build --release -p communitas-tauri --bin communitas-headless
+          COMMUNITAS_SKIP_TAURI_BUILD=1 cargo build --release --no-default-features --bin communitas-headless
+      - name: Build headless (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:COMMUNITAS_SKIP_TAURI_BUILD = '1'
+          cargo build --release --no-default-features --bin communitas-headless
+      - name: Smoke (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          ./target/release/communitas-headless --help >/dev/null
+          ./target/release/communitas-headless --version || true
+      - name: Smoke (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./target/release/communitas-headless.exe --help | Out-Null
+          ./target/release/communitas-headless.exe --version
+      - name: Show binary info (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          file target/release/communitas-headless || true
+      - name: Show binary info (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Get-Item target/release/communitas-headless.exe | Format-List Length,LastWriteTime
+
+  desktop-build:
+    name: Desktop Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: rust-checks
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies (GTK/WebKit) [Linux]
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libssl-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libjavascriptcoregtk-4.1-dev \
+            libsoup-3.0-dev
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: desktop-${{ matrix.os }}-${{ hashFiles('**/Cargo.lock') }}
+      - name: Build desktop (Unix)
+        if: runner.os != 'Windows'
+        env:
+          COMMUNITAS_SKIP_TAURI_BUILD: '1'
+        run: |
+          cargo build --release -p communitas-tauri --no-default-features --features desktop
+      - name: Build desktop (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:COMMUNITAS_SKIP_TAURI_BUILD = '1'
+          cargo build --release -p communitas-tauri --no-default-features --features desktop
+      - name: Inspect desktop (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          file target/release/communitas || true
+          ldd target/release/communitas | grep 'not found' && { echo 'Missing runtime deps'; exit 1; } || true
+      - name: Inspect desktop (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          file target/release/communitas || true
+          otool -L target/release/communitas || true
+      - name: Inspect desktop (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Get-Item target/release/communitas.exe | Format-List Length,LastWriteTime

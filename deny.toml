@@ -53,12 +53,6 @@ allow = []
 db-path = "~/.cargo/advisory-db"
 # The url(s) of the advisory databases to use
 db-urls = ["https://github.com/rustsec/advisory-db"]
-# The lint level for security vulnerabilities
-vulnerability = "deny"
-# The lint level for unmaintained crates - use "none" to ignore
-unmaintained = "none"
-# The lint level for crates with security notices
-notice = "warn"
 # A list of advisory IDs to ignore
 ignore = []
 

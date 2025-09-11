@@ -36,6 +36,7 @@ impl Keystore {
             .map_err(|e| e.to_string())
     }
 
+    #[allow(dead_code)]
     pub fn load_words(&self, id_hex: &str) -> Result<[String; 4], String> {
         let joined = entry(&format!("words:{}", id_hex))?
             .get_password()

@@ -2,8 +2,10 @@
 
 use thiserror::Error;
 
+#[allow(dead_code)]
 pub type AppResult<T> = Result<T, AppError>;
 
+#[allow(dead_code)]
 #[derive(Debug, Error)]
 pub enum AppError {
     #[error("I/O error: {0}")]

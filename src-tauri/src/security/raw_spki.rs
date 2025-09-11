@@ -47,7 +47,10 @@ fn parse_spki_or_key_bytes(input: &str) -> Result<[u8; 32], String> {
             out.copy_from_slice(&bytes);
             Ok(out)
         }
-        _ => Err(format!("unexpected byte length {} (want 32 key or 44 SPKI)", bytes.len())),
+        _ => Err(format!(
+            "unexpected byte length {} (want 32 key or 44 SPKI)",
+            bytes.len()
+        )),
     }
 }
 
@@ -83,5 +86,7 @@ pub fn parse_env_pinned_spki() -> Option<[u8; 32]> {
 }
 
 impl RawSpkiState {
-    pub fn get(&self) -> Option<[u8; 32]> { self.pinned_key }
+    pub fn get(&self) -> Option<[u8; 32]> {
+        self.pinned_key
+    }
 }

@@ -3,20 +3,22 @@
 
 use anyhow::{Context, Result};
 use clap::Parser;
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use tokio::signal;
+use tokio::sync::RwLock as AsyncRwLock;
 use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
-use once_cell::sync::Lazy;
-use tokio::sync::RwLock as AsyncRwLock;
 
 /// Try to self-update the binary using GitHub releases
 pub fn try_self_update() -> Result<Option<String>> {
     use self_update::cargo_crate_version;
-    let owner = std::env::var("COMMUNITAS_UPDATE_REPO_OWNER").unwrap_or_else(|_| "dirvine".to_string());
-    let name = std::env::var("COMMUNITAS_UPDATE_REPO_NAME").unwrap_or_else(|_| "communitas".to_string());
+    let owner =
+        std::env::var("COMMUNITAS_UPDATE_REPO_OWNER").unwrap_or_else(|_| "dirvine".to_string());
+    let name =
+        std::env::var("COMMUNITAS_UPDATE_REPO_NAME").unwrap_or_else(|_| "communitas".to_string());
 
     // Primary attempt
     let mut cfg = self_update::backends::github::Update::configure();
@@ -29,7 +31,11 @@ pub fn try_self_update() -> Result<Option<String>> {
         Ok(status) => Ok(Some(status.version().to_string())),
         Err(e1) => {
             // Optional fallback repo (if the project lives under a different owner)
-            let fallback_owner = if owner == "dirvine" { "david-irvine" } else { "dirvine" };
+            let fallback_owner = if owner == "dirvine" {
+                "david-irvine"
+            } else {
+                "dirvine"
+            };
             let mut cfg2 = self_update::backends::github::Update::configure();
             let b2 = cfg2
                 .repo_owner(fallback_owner)
@@ -341,7 +347,9 @@ async fn run_node(args: Args) -> Result<()> {
     // Resolve listen address from args or env overrides
     let mut listen_addr = args.listen;
     if let Ok(s) = std::env::var("COMMUNITAS_QUIC_LISTEN") {
-        if let Ok(sa) = s.parse::<SocketAddr>() { listen_addr = sa; }
+        if let Ok(sa) = s.parse::<SocketAddr>() {
+            listen_addr = sa;
+        }
     } else if let Ok(v) = std::env::var("COMMUNITAS_QUIC_PORT") {
         if let Ok(p) = v.parse::<u16>() {
             listen_addr.set_port(p);
@@ -393,16 +401,16 @@ async fn main() -> Result<()> {
 
 // ---------------- QUIC Delta Server (raw SPKI) -----------------
 
-use ant_quic::high_level::Endpoint as QuicEndpoint;
 use ant_quic::config::ServerConfig as QuicServerConfig;
+use ant_quic::crypto::pqc::rustls_provider::with_pqc_support_server;
 use ant_quic::crypto::raw_public_keys::RawPublicKeyConfigBuilder;
 use ant_quic::crypto::raw_public_keys::key_utils::public_key_to_bytes;
-use ant_quic::crypto::pqc::rustls_provider::with_pqc_support_server;
+use ant_quic::high_level::Endpoint as QuicEndpoint;
 use ed25519_dalek::SigningKey as Ed25519SecretKey;
 use std::sync::Arc as StdArc;
 // ant-quic send streams provide write_all via their API; no extra trait import needed
-use std::os::unix::fs::PermissionsExt;
 use communitas_container as cc;
+use std::os::unix::fs::PermissionsExt;
 
 #[derive(Serialize, Deserialize)]
 struct DeltaRequest<'a> {
@@ -411,22 +419,31 @@ struct DeltaRequest<'a> {
 }
 
 #[derive(Serialize, Deserialize)]
-struct DeltaResponse { ops: Vec<cc::Op> }
+struct DeltaResponse {
+    ops: Vec<cc::Op>,
+}
 
 // Very small in-memory op log for demo/testing. Not persisted.
 static OP_LOG: Lazy<AsyncRwLock<Vec<cc::Op>>> = Lazy::new(|| AsyncRwLock::new(Vec::new()));
 
 async fn ops_since(count: u64) -> Vec<cc::Op> {
     let r = OP_LOG.read().await;
-    if (count as usize) >= r.len() { return Vec::new(); }
+    if (count as usize) >= r.len() {
+        return Vec::new();
+    }
     r[count as usize..].to_vec()
 }
 
-async fn start_quic_delta_server(listen: std::net::SocketAddr, base_dir: std::path::PathBuf) -> Result<()> {
+async fn start_quic_delta_server(
+    listen: std::net::SocketAddr,
+    base_dir: std::path::PathBuf,
+) -> Result<()> {
     // Persist or generate transport key (ed25519 seed, 32 bytes)
     let key_path = base_dir.join("transport_ed25519.key");
     let sk: Ed25519SecretKey = if key_path.exists() {
-        let bytes = tokio::fs::read(&key_path).await.context("read transport key")?;
+        let bytes = tokio::fs::read(&key_path)
+            .await
+            .context("read transport key")?;
         anyhow::ensure!(bytes.len() == 32, "transport key must be 32 bytes (seed)");
         let seed: [u8; 32] = bytes
             .as_slice()
@@ -436,7 +453,9 @@ async fn start_quic_delta_server(listen: std::net::SocketAddr, base_dir: std::pa
     } else {
         use rand::rngs::OsRng;
         let sk = Ed25519SecretKey::generate(&mut OsRng);
-        if let Some(parent) = key_path.parent() { tokio::fs::create_dir_all(parent).await.ok(); }
+        if let Some(parent) = key_path.parent() {
+            tokio::fs::create_dir_all(parent).await.ok();
+        }
         let _ = tokio::fs::write(&key_path, sk.to_bytes()).await;
         let _ = std::fs::set_permissions(&key_path, std::fs::Permissions::from_mode(0o600));
         sk
@@ -452,9 +471,10 @@ async fn start_quic_delta_server(listen: std::net::SocketAddr, base_dir: std::pa
         .map_err(|e| anyhow::anyhow!("raw pk server config: {e}"))?;
 
     // Convert to ant-quic server crypto config
-    let quic_tls: ant_quic::crypto::rustls::QuicServerConfig = StdArc::new(rustls_srv)
-        .try_into()
-        .map_err(|e| anyhow::anyhow!("convert tls server cfg: {e}"))?;
+    let quic_tls: ant_quic::crypto::rustls::QuicServerConfig =
+        StdArc::new(rustls_srv)
+            .try_into()
+            .map_err(|e| anyhow::anyhow!("convert tls server cfg: {e}"))?;
     let server_cfg = with_pqc_support_server(QuicServerConfig::with_crypto(StdArc::new(quic_tls)))
         .map_err(|e| anyhow::anyhow!("enable PQC on server: {e:?}"))?;
 
@@ -478,11 +498,10 @@ async fn start_quic_delta_server(listen: std::net::SocketAddr, base_dir: std::pa
                                         buf = bytes;
                                     }
                                     let text = String::from_utf8_lossy(&buf);
-                                    let req: Result<DeltaRequest, _> = serde_json::from_str(text.trim_end());
-                                    let since = req
-                                        .ok()
-                                        .and_then(|r| r.want_since_count)
-                                        .unwrap_or(0);
+                                    let req: Result<DeltaRequest, _> =
+                                        serde_json::from_str(text.trim_end());
+                                    let since =
+                                        req.ok().and_then(|r| r.want_since_count).unwrap_or(0);
                                     let ops = ops_since(since).await;
                                     let resp = DeltaResponse { ops };
                                     match serde_json::to_string(&resp) {

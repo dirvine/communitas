@@ -219,20 +219,23 @@ jobs:
 
           # Clean previous builds
           cargo clean
-          rm -rf dist/
+          rm -rf ../dist/
 
           # Measure frontend build time
           echo "Building frontend..."
           start_time=$(date +%s)
-          npm run build
+          cd .. && npm run build
           end_time=$(date +%s)
           frontend_build_time=$((end_time - start_time))
           echo "Frontend build time: ${frontend_build_time}s"
 
+          # Back to src-tauri directory
+          cd src-tauri
+
           # Measure Rust build time (debug)
           echo "Building Rust backend (debug)..."
           start_time=$(date +%s)
-          cd src-tauri && cargo build --no-default-features
+          cargo build --no-default-features
           end_time=$(date +%s)
           debug_build_time=$((end_time - start_time))
           echo "Debug build time: ${debug_build_time}s"
@@ -240,7 +243,7 @@ jobs:
           # Measure Rust build time (release)
           echo "Building Rust backend (release)..."
           start_time=$(date +%s)
-          cd src-tauri && cargo build --release --no-default-features
+          cargo build --release --no-default-features
           end_time=$(date +%s)
           release_build_time=$((end_time - start_time))
           echo "Release build time: ${release_build_time}s"

@@ -49,9 +49,7 @@ async fn main() -> anyhow::Result<()> {
 
     let _ = tauri::Builder::default()
         // Shared saorsa-core context (initialized via core_initialize)
-        .manage(Arc::new(RwLock::new(
-            Option::<CoreContext>::None,
-        )))
+        .manage(Arc::new(RwLock::new(Option::<CoreContext>::None)))
         // Container engine state
         .manage(Arc::new(RwLock::new(
             Option::<container::EngineState>::None,

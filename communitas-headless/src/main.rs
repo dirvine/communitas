@@ -351,10 +351,11 @@ async fn run_node(args: Args) -> Result<()> {
             listen_addr = sa;
         }
     } else if let Ok(v) = std::env::var("COMMUNITAS_QUIC_PORT")
-        && let Ok(p) = v.parse::<u16>() {
-            listen_addr.set_port(p);
-            listen_addr.set_ip(std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED));
-        }
+        && let Ok(p) = v.parse::<u16>()
+    {
+        listen_addr.set_port(p);
+        listen_addr.set_ip(std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED));
+    }
 
     // Start QUIC delta server (raw public key, RFC 7250 style)
     let storage_dir = config.storage.base_dir.clone();

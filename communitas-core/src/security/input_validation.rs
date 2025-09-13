@@ -55,8 +55,12 @@ impl InputValidator {
         Self {
             four_words_pattern: Regex::new(r"^[a-z]+-[a-z]+-[a-z]+-[a-z]+$").ok(),
             username_pattern: Regex::new(r"^[a-zA-Z0-9_-]{3,64}$").ok(),
-            sql_injection_pattern: Regex::new(r"(?i)\b(select|insert|update|delete|drop|create|alter|exec|union)\b").ok(),
-            script_injection_pattern: Regex::new(r"(?i)(<script|javascript:|vbscript:|on\w+\s*=)").ok(),
+            sql_injection_pattern: Regex::new(
+                r"(?i)\b(select|insert|update|delete|drop|create|alter|exec|union)\b",
+            )
+            .ok(),
+            script_injection_pattern: Regex::new(r"(?i)(<script|javascript:|vbscript:|on\w+\s*=)")
+                .ok(),
         }
     }
 

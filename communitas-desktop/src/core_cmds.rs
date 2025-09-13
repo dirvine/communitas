@@ -65,9 +65,10 @@ pub async fn core_advertise(addr: String, _storage_gb: u32) -> Result<AdvertiseR
     // IPv4-first: parse host:port; compute optional fw4 string for UI
     let mut ipv4: Option<(String, u16)> = None;
     if let Some((host, port_str)) = addr.split_once(':')
-        && let Ok(port) = port_str.parse::<u16>() {
-            ipv4 = Some((host.to_string(), port));
-        }
+        && let Ok(port) = port_str.parse::<u16>()
+    {
+        ipv4 = Some((host.to_string(), port));
+    }
 
     // Sign a presence heartbeat locally (no blob publish here; pointers-only)
     let mut _presence_sig: Option<Vec<u8>> = None;
@@ -85,12 +86,13 @@ pub async fn core_advertise(addr: String, _storage_gb: u32) -> Result<AdvertiseR
     // Optional fw4 encoding for IPv4
     let mut endpoint_fw4: Option<String> = None;
     if let Some((ref ip, port)) = ipv4
-        && let Ok(v4) = ip.parse::<std::net::Ipv4Addr>() {
-            let enc = four_word_networking::FourWordEncoder::new()
-                .encode_ipv4(v4, port)
-                .map_err(|e| format!("fw4 encode failed: {}", e))?;
-            endpoint_fw4 = Some(enc.to_string().replace(' ', "-"));
-        }
+        && let Ok(v4) = ip.parse::<std::net::Ipv4Addr>()
+    {
+        let enc = four_word_networking::FourWordEncoder::new()
+            .encode_ipv4(v4, port)
+            .map_err(|e| format!("fw4 encode failed: {}", e))?;
+        endpoint_fw4 = Some(enc.to_string().replace(' ', "-"));
+    }
     Ok(AdvertiseResult {
         id_hex,
         endpoint_fw4,

@@ -15,11 +15,11 @@ fn parse_pem_to_root_store(pem: &str) -> Result<Arc<RootStore>, String> {
     let certs = rustls_pemfile::certs(&mut reader)
         .collect::<Result<Vec<CertificateDer<'_>>, _>>()
         .map_err(|e| format!("parse pem: {e}"))?;
-    if certs.is_empty() { return Err("no certificates found in PEM".into()); }
+    if certs.is_empty() {
+        return Err("no certificates found in PEM".into());
+    }
     for cert in certs {
-        store
-            .add(cert)
-            .map_err(|e| format!("add root cert: {e}"))?;
+        store.add(cert).map_err(|e| format!("add root cert: {e}"))?;
     }
     Ok(Arc::new(store))
 }

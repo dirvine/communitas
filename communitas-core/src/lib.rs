@@ -14,7 +14,7 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 //! Communitas Core - Business logic for the Communitas P2P collaboration platform
-//! 
+//!
 //! This crate contains all the core functionality shared between the desktop app
 //! and the headless node/CLI, without any UI dependencies.
 

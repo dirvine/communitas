@@ -78,7 +78,6 @@ struct ObjectStore {
     data: HashMap<Oid, Vec<u8>>,
 }
 
-
 #[derive(Default)]
 struct CrdtState {
     // post id -> Post
@@ -86,7 +85,6 @@ struct CrdtState {
     // op ids applied (dedupe)
     seen_ops: BTreeSet<Uuid>,
 }
-
 
 #[derive(Debug, Clone, Copy)]
 pub struct AeadConfig {

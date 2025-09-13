@@ -60,8 +60,8 @@ db-urls = ["https://github.com/rustsec/advisory-db"]
 # A list of advisory IDs to ignore
 ignore = [
     # These are unmaintained but still widely used and have no good alternatives
-    "RUSTSEC-2025-0198", # fxhash is unmaintained
-    "RUSTSEC-2025-0246", # instant is unmaintained
+    "RUSTSEC-2025-0057", # fxhash is unmaintained
+    "RUSTSEC-2024-0384", # instant is unmaintained
     "RUSTSEC-2021-0127", # serde_cbor is unmaintained
 ]
 

@@ -38,8 +38,12 @@ jobs:
       - name: Build optimized release
         run: cargo build --release --no-default-features
         working-directory: src-tauri
+        env:
+          COMMUNITAS_SKIP_TAURI_BUILD: "1"
 
       - name: Run encryption performance tests
+        env:
+          COMMUNITAS_SKIP_TAURI_BUILD: "1"
         run: |
           echo "Running encryption performance benchmarks..."
 
@@ -89,6 +93,8 @@ jobs:
         working-directory: src-tauri
 
       - name: Memory usage analysis
+        env:
+          COMMUNITAS_SKIP_TAURI_BUILD: "1"
         run: |
           echo "Analyzing memory usage patterns..."
 
@@ -129,8 +135,12 @@ jobs:
       - name: Build optimized release
         run: cargo build --release --no-default-features
         working-directory: src-tauri
+        env:
+          COMMUNITAS_SKIP_TAURI_BUILD: "1"
 
       - name: P2P connection performance test
+        env:
+          COMMUNITAS_SKIP_TAURI_BUILD: "1"
         run: |
           echo "Testing P2P connection performance..."
 
@@ -202,6 +212,8 @@ jobs:
         run: npm ci
 
       - name: Measure build performance
+        env:
+          COMMUNITAS_SKIP_TAURI_BUILD: "1"
         run: |
           echo "Measuring build performance..."
 

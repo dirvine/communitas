@@ -255,7 +255,7 @@ jobs:
         echo "Testing updated dependencies..."
         
         # Quick smoke test to ensure everything still works
-        cd src-tauri && cargo check
+        cargo check --workspace
         npm run typecheck
         
     - name: Create pull request for updates
@@ -276,7 +276,7 @@ jobs:
         git checkout -b "$BRANCH_NAME"
         
         # Commit changes
-        git add src-tauri/Cargo.lock package-lock.json
+        git add Cargo.lock package-lock.json
         git commit -m "chore: automated dependency updates
 
         - Updated Rust dependencies to latest compatible versions

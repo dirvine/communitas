@@ -44,7 +44,8 @@ jobs:
           echo "Running encryption performance benchmarks..."
 
           # Create a simple performance test for encryption
-          cat > src-tauri/src/bin/encryption_benchmark.rs << 'EOF'
+          mkdir -p communitas-core/src/bin
+          cat > communitas-core/src/bin/encryption_benchmark.rs << 'EOF'
           use std::time::Instant;
           use communitas::secure_fec::{SecureFecManager, FecConfig};
 
@@ -85,8 +86,8 @@ jobs:
           timeout 30s cargo run --release --no-default-features --bin encryption_benchmark || echo "Benchmark completed or timed out"
 
           # Clean up
-          rm -f src-tauri/src/bin/encryption_benchmark.rs
-        working-directory: communitas-headless
+          rm -f communitas-core/src/bin/encryption_benchmark.rs
+        working-directory: .
 
       - name: Memory usage analysis
         run: |

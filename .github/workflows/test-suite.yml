@@ -260,7 +260,13 @@ jobs:
         fi
         
         # Check for proper error handling patterns
-        UNWRAP_COUNT=$(find src-tauri/src -name "*.rs" -not -path "*/tests/*" -not -name "*test*.rs" | xargs grep "\.unwrap()" | wc -l || echo 0)
+        UNWRAP_COUNT=0
+        for crate_dir in communitas-core/src communitas-desktop/src communitas-headless/src crates/communitas-container/src crates/communitas-dht/src; do
+          if [ -d "$crate_dir" ]; then
+            COUNT=$(find "$crate_dir" -name "*.rs" -not -path "*/tests/*" -not -name "*test*.rs" | xargs grep "\.unwrap()" | wc -l || echo 0)
+            UNWRAP_COUNT=$((UNWRAP_COUNT + COUNT))
+          fi
+        done
         if [ $UNWRAP_COUNT -gt 0 ]; then
           echo "❌ Found $UNWRAP_COUNT unwrap() calls in production code"
           exit 1

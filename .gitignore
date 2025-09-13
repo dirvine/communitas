@@ -105,3 +105,4 @@ src-tauri/target/release/bundle/
 
 # Test artifacts
 test-results/
+src-tauri.old/

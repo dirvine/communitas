@@ -91,6 +91,9 @@ members = [
     "crates/communitas-dht",
     "crates/communitas-container"
 ]
+exclude = [
+    "src-tauri"
+]
 
 [workspace.lints]
 

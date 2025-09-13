@@ -70,25 +70,25 @@ jobs:
 
       - name: Check Rust formatting
         run: cargo fmt --all -- --check
-        working-directory: src-tauri
+        
 
       - name: Rust linting
         run: cargo clippy --all-targets --all-features -- -D warnings
-        working-directory: src-tauri
+        
 
       - name: Build Rust backend
         run: cargo build --verbose
-        working-directory: src-tauri
+        
 
       - name: Run Rust tests
         run: cargo test --verbose
-        working-directory: src-tauri
+        
 
       - name: Run integration tests
         run: |
           cargo test --test integration_dht_storage
           cargo test --test test_reed_solomon_v2
-        working-directory: src-tauri
+        
 
   test-frontend:
     name: Frontend Tests
@@ -246,8 +246,8 @@ jobs:
         with:
           name: communitas-${{ matrix.os }}
           path: |
-            src-tauri/target/release/bundle/
-            !src-tauri/target/release/bundle/**/.*
+            target/release/bundle/
+            !target/release/bundle/**/.*
 
   release:
     name: Release
@@ -293,8 +293,8 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            src-tauri/target/release/bundle/deb/*.deb
-            src-tauri/target/release/bundle/appimage/*.AppImage
-            src-tauri/target/release/bundle/msi/*.msi
-            src-tauri/target/release/bundle/dmg/*.dmg
+            target/release/bundle/deb/*.deb
+            target/release/bundle/appimage/*.AppImage
+            target/release/bundle/msi/*.msi
+            target/release/bundle/dmg/*.dmg
           generate_release_notes: true

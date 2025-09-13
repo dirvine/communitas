@@ -7,8 +7,8 @@ on:
   workflow_dispatch:  # Allow manual trigger
   push:
     paths:
-      - 'src-tauri/Cargo.toml'
-      - 'src-tauri/Cargo.lock'
+      - '**/Cargo.toml'
+      - 'Cargo.lock'
       - 'package.json'
       - 'package-lock.json'
 
@@ -36,7 +36,7 @@ jobs:
     - name: Cache Rust dependencies
       uses: Swatinem/rust-cache@v2
       with:
-        workspaces: src-tauri -> target
+        workspaces: . -> target
         
     - name: Install cargo tools
       run: |
@@ -46,7 +46,7 @@ jobs:
         
     - name: Audit Rust dependencies for vulnerabilities
       run: cargo audit
-      working-directory: src-tauri
+      
       
     - name: Check for outdated Rust dependencies
       run: |
@@ -63,7 +63,7 @@ jobs:
         else
           echo "✅ Saorsa crates are up to date"
         fi
-      working-directory: src-tauri
+      
       
     - name: Check dependency tree for duplicates
       run: |
@@ -76,7 +76,7 @@ jobs:
           echo "⚠️ High number of duplicate dependencies detected: $DUPLICATE_COUNT"
           echo "Consider consolidating dependency versions"
         fi
-      working-directory: src-tauri
+      
       
     - name: Audit Node.js dependencies
       run: |
@@ -125,7 +125,7 @@ jobs:
           BUNDLE_SIZE=$(du -sh dist | cut -f1)
           echo "Frontend bundle size: $BUNDLE_SIZE"
         fi
-      working-directory: src-tauri
+      
 
   saorsa-compatibility:
     name: Saorsa Crate Compatibility
@@ -141,27 +141,27 @@ jobs:
     - name: Cache Rust dependencies
       uses: Swatinem/rust-cache@v2
       with:
-        workspaces: src-tauri -> target
+        workspaces: . -> target
         
     - name: Verify saorsa-fec integration
       run: |
         echo "Verifying saorsa-fec crate integration..."
         
         # Check that saorsa-fec is in Cargo.toml
-        if ! grep -q "saorsa-fec" src-tauri/Cargo.toml; then
+        if ! grep -q "saorsa-fec" Cargo.toml && ! grep -q "saorsa-fec" communitas-core/Cargo.toml; then
           echo "❌ saorsa-fec dependency missing from Cargo.toml"
           exit 1
         fi
         
         # Verify correct version usage
-        SAORSA_FEC_VERSION=$(grep "saorsa-fec" src-tauri/Cargo.toml | grep -o '"[0-9]\+\.[0-9]\+\.[0-9]\+"' | tr -d '"')
+        SAORSA_FEC_VERSION=$(grep "saorsa-fec" communitas-core/Cargo.toml 2>/dev/null | grep -o '"[0-9]\+\.[0-9]\+\.[0-9]\+"' | tr -d '"' | head -1)
         echo "Using saorsa-fec version: $SAORSA_FEC_VERSION"
         
         # Test compilation with saorsa-fec
         cargo check --features default
         
         echo "✅ saorsa-fec integration verified"
-      working-directory: src-tauri
+      
       
     - name: Test encryption functionality
       run: |
@@ -176,7 +176,7 @@ jobs:
         cargo test test_authentication_failure
         
         echo "✅ Encryption functionality tests passed"
-      working-directory: src-tauri
+      
       
     - name: Performance regression testing
       run: |
@@ -196,7 +196,7 @@ jobs:
         cargo test --release test_encryption_decryption_roundtrip
         
         echo "✅ Performance regression testing completed"
-      working-directory: src-tauri
+      
 
   dependency-updates:
     name: Automated Dependency Updates
@@ -229,12 +229,12 @@ jobs:
         cargo update
         
         # Check if updates were applied
-        if git diff --quiet src-tauri/Cargo.lock; then
+        if git diff --quiet Cargo.lock; then
           echo "No Rust dependency updates available"
         else
           echo "Rust dependencies updated"
         fi
-      working-directory: src-tauri
+      
       
     - name: Update Node.js dependencies
       run: |

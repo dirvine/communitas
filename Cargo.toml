@@ -82,12 +82,15 @@ test-harness = ["proptest"]
 [lints]
 workspace = true
 
-[[bin]]
-name = "communitas-headless"
-path = "src-tauri/src/bin/communitas-headless.rs"
 
 [workspace]
-members = ["src-tauri", "crates/communitas-dht", "crates/communitas-container"]
+members = [
+    "communitas-core",
+    "communitas-desktop", 
+    "communitas-headless",
+    "crates/communitas-dht",
+    "crates/communitas-container"
+]
 
 [workspace.lints]
 

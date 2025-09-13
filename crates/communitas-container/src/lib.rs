@@ -72,19 +72,14 @@ fn tokenize(s: &str) -> Vec<String> {
         .collect()
 }
 
+#[derive(Default)]
 struct ObjectStore {
     // Oid -> encrypted bytes
     data: HashMap<Oid, Vec<u8>>,
 }
 
-impl Default for ObjectStore {
-    fn default() -> Self {
-        Self {
-            data: HashMap::new(),
-        }
-    }
-}
 
+#[derive(Default)]
 struct CrdtState {
     // post id -> Post
     posts: BTreeMap<Uuid, Post>,
@@ -92,14 +87,6 @@ struct CrdtState {
     seen_ops: BTreeSet<Uuid>,
 }
 
-impl Default for CrdtState {
-    fn default() -> Self {
-        Self {
-            posts: BTreeMap::new(),
-            seen_ops: BTreeSet::new(),
-        }
-    }
-}
 
 #[derive(Debug, Clone, Copy)]
 pub struct AeadConfig {
@@ -165,7 +152,7 @@ impl ContainerEngine {
         // Produce shard set (metadata) using FEC to satisfy spec; we keep data in-memory
         let k = self.fec.k;
         let m = self.fec.m;
-        let shard_size = std::cmp::max(1, (ciphertext.len() + k as usize - 1) / k as usize);
+        let shard_size = std::cmp::max(1, ciphertext.len().div_ceil(k as usize));
         let params =
             FecParams::new(k, m, shard_size).map_err(|e| ContainerError::Fec(e.to_string()))?;
         // Clamp data not to exceed k*shard_size, pad if needed
@@ -276,7 +263,7 @@ mod tests {
         // seed: each engine creates 200 posts (total ~1k)
         let mut all_ops: Vec<Vec<Op>> = Vec::new();
         for e in &engines {
-            let pk = e.pk.as_bytes().to_vec();
+            let pk = e._pk.as_bytes().to_vec();
             let ops: Vec<Op> = (0..200)
                 .map(|i| Op::Append {
                     post: make_post(&pk, i),

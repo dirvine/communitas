@@ -31,7 +31,7 @@ jobs:
     - name: Cache Rust dependencies
       uses: Swatinem/rust-cache@v2
       with:
-        workspaces: src-tauri -> target
+        workspaces: . -> target
         
     - name: Install system dependencies (Ubuntu)
       if: matrix.os == 'ubuntu-latest'
@@ -51,27 +51,27 @@ jobs:
       
     - name: Run unit tests
       run: cargo test --lib --bins
-      working-directory: src-tauri
+      
       
     - name: Run integration tests
       run: cargo test --test '*'
-      working-directory: src-tauri
+      
       
     - name: Run doctests
       run: cargo test --doc
-      working-directory: src-tauri
+      
       
     - name: Generate code coverage (Ubuntu only)
       if: matrix.os == 'ubuntu-latest'
       run: |
         cargo tarpaulin --verbose --all-features --workspace --timeout 120 --out xml --output-dir ./coverage/
-      working-directory: src-tauri
+      
       
     - name: Upload coverage to Codecov (Ubuntu only)
       if: matrix.os == 'ubuntu-latest'
       uses: codecov/codecov-action@v3
       with:
-        file: ./src-tauri/coverage/cobertura.xml
+        file: ./coverage/cobertura.xml
         flags: rust-tests
         name: rust-coverage
         
@@ -91,7 +91,7 @@ jobs:
         else
           echo "✅ Code coverage requirement met"
         fi
-      working-directory: src-tauri
+      
 
   tauri-commands-tests:
     name: Tauri Commands Testing
@@ -107,7 +107,7 @@ jobs:
     - name: Cache Rust dependencies
       uses: Swatinem/rust-cache@v2
       with:
-        workspaces: src-tauri -> target
+        workspaces: . -> target
         
     - name: Install system dependencies
       run: |
@@ -119,7 +119,7 @@ jobs:
         echo "Scanning for Tauri command functions..."
         
         # Extract all #[tauri::command] functions
-        COMMAND_FUNCTIONS=$(find src-tauri/src -name "*.rs" | xargs grep -A 1 "#\[tauri::command\]" | grep "pub async fn\|pub fn" | sed 's/.*fn \([^(]*\).*/\1/' | sort -u)
+        COMMAND_FUNCTIONS=$(find communitas-desktop/src -name "*.rs" | xargs grep -A 1 "#\[tauri::command\]" | grep "pub async fn\|pub fn" | sed 's/.*fn \([^(]*\).*/\1/' | sort -u)
         
         echo "Found Tauri commands:"
         echo "$COMMAND_FUNCTIONS"
@@ -128,7 +128,7 @@ jobs:
         MISSING_TESTS=""
         while IFS= read -r command; do
           if [ -n "$command" ]; then
-            TEST_COUNT=$(find src-tauri/src -name "*.rs" -path "*/tests/*" -o -name "*test*.rs" | xargs grep -l "$command" | wc -l || echo 0)
+            TEST_COUNT=$(find . -name "*.rs" -path "*/tests/*" -o -name "*test*.rs" | xargs grep -l "$command" | wc -l || echo 0)
             if [ $TEST_COUNT -eq 0 ]; then
               echo "❌ Missing tests for command: $command"
               MISSING_TESTS="$MISSING_TESTS\n$command"
@@ -200,7 +200,7 @@ jobs:
     - name: Cache Rust dependencies
       uses: Swatinem/rust-cache@v2
       with:
-        workspaces: src-tauri -> target
+        workspaces: . -> target
         
     - name: Install system dependencies
       run: |
@@ -215,15 +215,15 @@ jobs:
       
     - name: Run P2P integration tests
       run: cargo test integration_ --release
-      working-directory: src-tauri
+      
       
     - name: Run DHT storage integration tests
       run: cargo test --test integration_dht_storage --release
-      working-directory: src-tauri
+      
       
     - name: Run Reed-Solomon integration tests
       run: cargo test --test reed_solomon_encode_decode --release
-      working-directory: src-tauri
+      
 
   security-validation:
     name: Security Validation
@@ -239,20 +239,20 @@ jobs:
     - name: Cache Rust dependencies
       uses: Swatinem/rust-cache@v2
       with:
-        workspaces: src-tauri -> target
+        workspaces: . -> target
         
     - name: Validate saorsa-fec encryption compliance
       run: |
         echo "Validating encryption compliance..."
         
         # Check that secure_fec.rs exists and contains required functionality
-        if [ ! -f "src-tauri/src/secure_fec.rs" ]; then
-          echo "❌ secure_fec.rs module missing"
+        if [ ! -f "communitas-core/src/secure_fec.rs" ] && [ ! -f "communitas-desktop/src/secure_fec.rs" ] && [ ! -f "communitas-headless/src/secure_fec.rs" ]; then
+          echo "❌ secure_fec.rs module missing from all crates"
           exit 1
         fi
         
         # Verify SecureFecManager is being used for encryption
-        FEC_USAGE=$(find src-tauri/src -name "*.rs" | xargs grep "SecureFecManager" | wc -l)
+        FEC_USAGE=$(find communitas-core/src communitas-desktop/src communitas-headless/src -name "*.rs" 2>/dev/null | xargs grep "SecureFecManager" | wc -l)
         if [ $FEC_USAGE -lt 5 ]; then
           echo "❌ Insufficient usage of SecureFecManager (found $FEC_USAGE references)"
           echo "All encryption operations must use saorsa-fec via SecureFecManager"
@@ -270,13 +270,13 @@ jobs:
         
     - name: Build in release mode (security optimizations)
       run: cargo build --release
-      working-directory: src-tauri
+      
       
     - name: Verify binary has security features
       run: |
         # Check for stack protection and other security features
         if command -v checksec >/dev/null 2>&1; then
-          checksec --file=src-tauri/target/release/communitas
+          checksec --file=target/release/communitas-desktop
         else
           echo "checksec not available, skipping binary security analysis"
         fi

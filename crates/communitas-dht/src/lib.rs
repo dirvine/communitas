@@ -162,7 +162,7 @@ impl PresenceRecordV1 {
 
     pub fn verify(&self, pk: &MlDsaPublicKey, now_ts: i64) -> Result<(), DhtSchemaError> {
         self.enforce_size()?;
-        if now_ts - self.ts > Self::TTL_SECS.into() {
+        if now_ts - self.ts > Self::TTL_SECS {
             return Err(DhtSchemaError::Expired);
         }
         let msg = self.sign_bytes()?;

@@ -30,7 +30,7 @@ jobs:
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri -> target
+          workspaces: . -> target
 
       - name: Install system dependencies
         run: |
@@ -129,15 +129,17 @@ jobs:
           
           # Check all Rust files
           total_violations = []
-          for root, dirs, files in os.walk('src-tauri/src'):
-              # Skip test directories
-              dirs[:] = [d for d in dirs if d != 'tests' and d != '__tests__']
-              
-              for file in files:
-                  if file.endswith('.rs') and 'test' not in file:
-                      filepath = os.path.join(root, file)
-                      violations = check_file(filepath)
-                      total_violations.extend(violations)
+          for crate_dir in ['communitas-core/src', 'communitas-desktop/src', 'communitas-headless/src', 'crates/communitas-container/src']:
+              if os.path.exists(crate_dir):
+                  for root, dirs, files in os.walk(crate_dir):
+                      # Skip test directories
+                      dirs[:] = [d for d in dirs if d != 'tests' and d != '__tests__']
+                      
+                      for file in files:
+                          if file.endswith('.rs') and 'test' not in file:
+                              filepath = os.path.join(root, file)
+                              violations = check_file(filepath)
+                              total_violations.extend(violations)
           
           # Report results
           if total_violations:
@@ -169,7 +171,7 @@ jobs:
 
           VIOLATIONS_FOUND=0
           for pattern in "${SECRET_PATTERNS[@]}"; do
-            MATCHES=$(find src-tauri/src -name "*.rs" | xargs grep -i "$pattern" | grep -v "test" | grep -v "example" | wc -l || echo 0)
+            MATCHES=$(find communitas-core/src communitas-desktop/src communitas-headless/src crates/*/src -name "*.rs" 2>/dev/null | xargs grep -i "$pattern" | grep -v "test" | grep -v "example" | wc -l || echo 0)
             if [ $MATCHES -gt 0 ]; then
               echo "❌ Found $MATCHES potential hardcoded secrets matching pattern: $pattern"
               VIOLATIONS_FOUND=$((VIOLATIONS_FOUND + MATCHES))
@@ -189,11 +191,11 @@ jobs:
           echo "Verifying all encryption operations use saorsa-fec crate..."
 
           # Check that we're using SecureFecManager for encryption
-          FEC_USAGE=$(find src-tauri/src -name "*.rs" | xargs grep -l "SecureFecManager" | wc -l)
+          FEC_USAGE=$(find communitas-core/src communitas-desktop/src communitas-headless/src crates/*/src -name "*.rs" 2>/dev/null | xargs grep -l "SecureFecManager" | wc -l)
           echo "Found $FEC_USAGE files using SecureFecManager"
 
           # Check for any ChaCha20Poly1305 usage outside of secure_fec.rs
-          DIRECT_CRYPTO=$(find src-tauri/src -name "*.rs" -not -name "secure_fec.rs" | xargs grep -l "ChaCha20Poly1305" | wc -l || echo 0)
+          DIRECT_CRYPTO=$(find communitas-core/src communitas-desktop/src communitas-headless/src crates/*/src -name "*.rs" 2>/dev/null -not -name "secure_fec.rs" | xargs grep -l "ChaCha20Poly1305" | wc -l || echo 0)
           if [ $DIRECT_CRYPTO -gt 0 ]; then
             echo "❌ Found direct ChaCha20Poly1305 usage outside secure_fec.rs"
             echo "All encryption must go through saorsa-fec crate via SecureFecManager"
@@ -203,9 +205,7 @@ jobs:
           echo "✅ Encryption operations properly use saorsa-fec crate"
 
       - name: Check Rust code formatting
-        run: cargo fmt --check
-        working-directory: src-tauri
+        run: cargo fmt --check --all
 
       - name: Run Clippy (security lints)
-        run: cargo clippy --all-targets --all-features -- -D warnings -D clippy::unwrap_used -D clippy::expect_used -D clippy::panic
-        working-directory: src-tauri
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings -D clippy::unwrap_used -D clippy::expect_used -D clippy::panic

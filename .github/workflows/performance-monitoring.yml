@@ -136,7 +136,7 @@ jobs:
           echo "Testing P2P connection performance..."
 
           # Run specific P2P performance tests
-          cargo test --release --no-default-features integration_dht_storage --no-capture | tee p2p_test_output.log
+          cargo test --release --no-default-features integration_dht_storage -- --nocapture | tee p2p_test_output.log
 
           # Analyze test output for performance metrics
           if grep -q "test result: ok" p2p_test_output.log; then
@@ -160,11 +160,11 @@ jobs:
           echo "Validating DHT performance characteristics..."
 
           # Test DHT operations performance
-          cargo test --release --no-default-features test_dht --no-capture | tee dht_test_output.log || true
+          cargo test --release --no-default-features test_dht -- --nocapture | tee dht_test_output.log || true
 
           # WebRTC-over-QUIC performance validation
           echo "Testing WebRTC-over-QUIC performance..."
-          cargo test --release --no-default-features webrtc --no-capture | tee webrtc_test_output.log || true
+          cargo test --release --no-default-features webrtc -- --nocapture | tee webrtc_test_output.log || true
 
           echo "✅ DHT performance validation completed"
 

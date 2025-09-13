@@ -14,6 +14,7 @@ jobs:
   test-rust:
     name: Rust Backend Tests
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -93,6 +94,7 @@ jobs:
   test-frontend:
     name: Frontend Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@v4
@@ -164,6 +166,7 @@ jobs:
   security:
     name: Security Audit
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
@@ -200,6 +203,7 @@ jobs:
   build-artifacts:
     name: Build Release Artifacts
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [test-rust, test-frontend]
 
@@ -252,8 +256,9 @@ jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    needs: [test-rust, test-frontend, test-e2e, security, build-artifacts]
+    needs: [test-rust, test-frontend, security, build-artifacts]
 
     steps:
       - uses: actions/checkout@v4

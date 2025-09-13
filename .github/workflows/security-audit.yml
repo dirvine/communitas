@@ -70,28 +70,90 @@ jobs:
 
       - name: Check for unwrap/expect in production code
         run: |
-          echo "Scanning for unwrap() calls in production code..."
-          UNWRAP_COUNT=$(find src-tauri/src -name "*.rs" -not -path "*/tests/*" -not -path "*/__tests__/*" -not -name "*test*.rs" | xargs grep -n "\.unwrap()" | wc -l || echo 0)
-          echo "Found $UNWRAP_COUNT unwrap() calls in production code"
-
-          echo "Scanning for expect() calls in production code..."
-          EXPECT_COUNT=$(find src-tauri/src -name "*.rs" -not -path "*/tests/*" -not -path "*/__tests__/*" -not -name "*test*.rs" | xargs grep -n "\.expect(" | wc -l || echo 0)
-          echo "Found $EXPECT_COUNT expect() calls in production code"
-
-          echo "Scanning for panic!() calls in production code..."
-          PANIC_COUNT=$(find src-tauri/src -name "*.rs" -not -path "*/tests/*" -not -path "*/__tests__/*" -not -name "*test*.rs" | xargs grep -n "panic!(" | wc -l || echo 0)
-          echo "Found $PANIC_COUNT panic!() calls in production code"
-
-          TOTAL_VIOLATIONS=$((UNWRAP_COUNT + EXPECT_COUNT + PANIC_COUNT))
-
-          if [ $TOTAL_VIOLATIONS -gt 0 ]; then
-            echo "❌ SECURITY VIOLATION: Found $TOTAL_VIOLATIONS panic-inducing calls in production code"
-            echo "Production code must not contain unwrap(), expect(), or panic!() calls"
-            echo "Use proper error handling with Result types and the ? operator instead"
-            exit 1
-          else
-            echo "✅ No panic-inducing calls found in production code"
-          fi
+          echo "Scanning for unwrap()/expect()/panic!() in production code..."
+          
+          # Create a script to check for violations outside of test modules
+          cat > check_violations.py << 'EOF'
+          import sys
+          import re
+          import os
+          
+          def check_file(filepath):
+              with open(filepath, 'r') as f:
+                  content = f.read()
+              
+              # Find all #[cfg(test)] module positions
+              test_module_pattern = r'#\[cfg\(test\)\]'
+              test_positions = []
+              for match in re.finditer(test_module_pattern, content):
+                  test_positions.append(match.start())
+              
+              # Find line starts for mapping
+              line_starts = [0]
+              for i, char in enumerate(content):
+                  if char == '\n':
+                      line_starts.append(i + 1)
+              
+              # Function to get line number from position
+              def get_line_num(pos):
+                  for i, start in enumerate(line_starts):
+                      if pos < start:
+                          return i
+                  return len(line_starts)
+              
+              # Find violations
+              violations = []
+              patterns = [
+                  (r'\.unwrap\(\)', 'unwrap()'),
+                  (r'\.expect\(', 'expect()'),
+                  (r'panic!\(', 'panic!()')
+              ]
+              
+              for pattern, name in patterns:
+                  for match in re.finditer(pattern, content):
+                      pos = match.start()
+                      line_num = get_line_num(pos)
+                      
+                      # Check if this is after a #[cfg(test)] marker
+                      in_test = False
+                      for test_pos in test_positions:
+                          test_line = get_line_num(test_pos)
+                          if line_num > test_line:
+                              in_test = True
+                              break
+                      
+                      if not in_test:
+                          violations.append((line_num, name, filepath))
+              
+              return violations
+          
+          # Check all Rust files
+          total_violations = []
+          for root, dirs, files in os.walk('src-tauri/src'):
+              # Skip test directories
+              dirs[:] = [d for d in dirs if d != 'tests' and d != '__tests__']
+              
+              for file in files:
+                  if file.endswith('.rs') and 'test' not in file:
+                      filepath = os.path.join(root, file)
+                      violations = check_file(filepath)
+                      total_violations.extend(violations)
+          
+          # Report results
+          if total_violations:
+              print(f"❌ SECURITY VIOLATION: Found {len(total_violations)} panic-inducing calls in production code:")
+              for line_num, violation_type, filepath in total_violations[:10]:  # Show first 10
+                  print(f"  {filepath}:{line_num} - {violation_type}")
+              if len(total_violations) > 10:
+                  print(f"  ... and {len(total_violations) - 10} more")
+              print("\nProduction code must not contain unwrap(), expect(), or panic!() calls")
+              print("Use proper error handling with Result types and the ? operator instead")
+              sys.exit(1)
+          else:
+              print("✅ No panic-inducing calls found in production code")
+          EOF
+          
+          python3 check_violations.py
 
       - name: Scan for hardcoded secrets
         run: |

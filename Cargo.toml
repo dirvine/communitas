@@ -88,7 +88,6 @@ members = [
     "communitas-core",
     "communitas-desktop", 
     "communitas-headless",
-    "crates/communitas-dht",
     "crates/communitas-container"
 ]
 exclude = [

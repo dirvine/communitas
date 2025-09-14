@@ -19,6 +19,7 @@
 //! and the headless node/CLI, without any UI dependencies.
 
 pub mod core_context;
+pub mod dht_schemas;
 pub mod error;
 pub mod keystore;
 pub mod security;

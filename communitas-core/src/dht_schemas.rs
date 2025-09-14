@@ -1,5 +1,7 @@
-//! Communitas DHT record schemas (pointers-only).
+//! DHT record schemas for Communitas network
 //! Canonical CBOR, ML-DSA signatures, strict size limits and TTLs.
+//!
+//! These schemas define the structure of records stored in the saorsa-core DHT.
 
 use saorsa_core::quantum_crypto::{
     MlDsa65, MlDsaOperations, MlDsaPublicKey, MlDsaSecretKey, MlDsaSignature,
@@ -271,11 +273,13 @@ pub struct ChannelRecordV1 {
 impl ChannelRecordV1 {
     pub const MAX_SIZE: usize = 8 * 1024;
     pub const TTL_SECS: i64 = 7 * 24 * 60 * 60;
+
     fn sign_bytes(&self) -> Result<Vec<u8>, DhtSchemaError> {
         let mut tmp = self.clone();
         tmp.sig.clear();
         canonical_cbor(&tmp)
     }
+
     pub fn sign(&mut self, sk: &MlDsaSecretKey) -> Result<(), DhtSchemaError> {
         let ml = MlDsa65::new();
         let msg = self.sign_bytes()?;
@@ -286,6 +290,7 @@ impl ChannelRecordV1 {
         self.enforce_size()?;
         Ok(())
     }
+
     pub fn verify(&self, pk: &MlDsaPublicKey, now_ts: i64) -> Result<(), DhtSchemaError> {
         self.enforce_size()?;
         if now_ts - self.ts > Self::TTL_SECS {
@@ -308,6 +313,7 @@ impl ChannelRecordV1 {
             Err(DhtSchemaError::InvalidSig)
         }
     }
+
     fn enforce_size(&self) -> Result<(), DhtSchemaError> {
         let bytes = canonical_cbor(self)?;
         if bytes.len() > Self::MAX_SIZE {
@@ -338,11 +344,13 @@ pub struct ContainerTipRecordV1 {
 impl ContainerTipRecordV1 {
     pub const MAX_SIZE: usize = 8 * 1024;
     pub const TTL_SECS: i64 = 90 * 24 * 60 * 60;
+
     fn sign_bytes(&self) -> Result<Vec<u8>, DhtSchemaError> {
         let mut tmp = self.clone();
         tmp.sig.clear();
         canonical_cbor(&tmp)
     }
+
     pub fn sign(&mut self, sk: &MlDsaSecretKey) -> Result<(), DhtSchemaError> {
         let ml = MlDsa65::new();
         let msg = self.sign_bytes()?;
@@ -353,6 +361,7 @@ impl ContainerTipRecordV1 {
         self.enforce_size()?;
         Ok(())
     }
+
     pub fn verify(&self, pk: &MlDsaPublicKey, now_ts: i64) -> Result<(), DhtSchemaError> {
         self.enforce_size()?;
         if now_ts - self.ts > Self::TTL_SECS {
@@ -375,6 +384,7 @@ impl ContainerTipRecordV1 {
             Err(DhtSchemaError::InvalidSig)
         }
     }
+
     fn enforce_size(&self) -> Result<(), DhtSchemaError> {
         let bytes = canonical_cbor(self)?;
         if bytes.len() > Self::MAX_SIZE {

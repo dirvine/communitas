@@ -125,13 +125,12 @@ jobs:
       - name: Build headless (Unix)
         if: runner.os != 'Windows'
         run: |
-          COMMUNITAS_SKIP_TAURI_BUILD=1 cargo build --release --no-default-features --bin communitas-headless
+          cargo build --release -p communitas-headless
       - name: Build headless (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $env:COMMUNITAS_SKIP_TAURI_BUILD = '1'
-          cargo build --release --no-default-features --bin communitas-headless
+          cargo build --release -p communitas-headless
       - name: Smoke (Unix)
         if: runner.os != 'Windows'
         run: |
@@ -191,28 +190,25 @@ jobs:
           key: desktop-${{ matrix.os }}-${{ hashFiles('**/Cargo.lock') }}
       - name: Build desktop (Unix)
         if: runner.os != 'Windows'
-        env:
-          COMMUNITAS_SKIP_TAURI_BUILD: "1"
         run: |
-          cargo build --release -p communitas-tauri --no-default-features --features desktop
+          cargo build --release -p communitas-desktop
       - name: Build desktop (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $env:COMMUNITAS_SKIP_TAURI_BUILD = '1'
-          cargo build --release -p communitas-tauri --no-default-features --features desktop
+          cargo build --release -p communitas-desktop
       - name: Inspect desktop (Linux)
         if: runner.os == 'Linux'
         run: |
-          file target/release/communitas || true
-          ldd target/release/communitas | grep 'not found' && { echo 'Missing runtime deps'; exit 1; } || true
+          file target/release/communitas-desktop || true
+          ldd target/release/communitas-desktop | grep 'not found' && { echo 'Missing runtime deps'; exit 1; } || true
       - name: Inspect desktop (macOS)
         if: runner.os == 'macOS'
         run: |
-          file target/release/communitas || true
-          otool -L target/release/communitas || true
+          file target/release/communitas-desktop || true
+          otool -L target/release/communitas-desktop || true
       - name: Inspect desktop (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          Get-Item target/release/communitas.exe | Format-List Length,LastWriteTime
+          Get-Item target/release/communitas-desktop.exe | Format-List Length,LastWriteTime

@@ -257,7 +257,7 @@ mod tests {
 
     #[tokio::test]
     async fn crdt_converges_with_packet_loss() {
-        let engines: Vec<_> = (0..5).map(|_| new_engine()).collect();
+        let mut engines: Vec<_> = (0..5).map(|_| new_engine()).collect();
         // seed: each engine creates 200 posts (total ~1k)
         let mut all_ops: Vec<Vec<Op>> = Vec::new();
         for e in &engines {
@@ -274,16 +274,15 @@ mod tests {
         // Gossip with 15% packet loss over 10 rounds
         let mut rng = rand::thread_rng();
         for _round in 0..10 {
-            for src in 0..engines.len() {
-                for dst in 0..engines.len() {
+            for (src, ops) in all_ops.iter().enumerate() {
+                for (dst, engine) in engines.iter_mut().enumerate() {
                     if src == dst {
                         continue;
                     }
                     if rng.gen_bool(0.15) {
                         continue;
                     } // drop
-                    let ops = &all_ops[src];
-                    let _ = engines[dst].apply_ops(ops);
+                    let _ = engine.apply_ops(ops);
                 }
             }
         }

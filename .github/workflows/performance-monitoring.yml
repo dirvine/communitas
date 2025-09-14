@@ -62,7 +62,7 @@ jobs:
       - name: Build communitas-headless
         run: |
           # Build from the workspace root so binary ends up in ./target/release/
-          cargo build --release --bin communitas-headless
+          cargo build --release -p communitas-headless --bin communitas-headless
           ls -la target/release/communitas-headless
           echo "Binary size: $(du -h target/release/communitas-headless | cut -f1)"
           echo "Binary built at workspace root target/release/"
@@ -147,7 +147,7 @@ jobs:
 
       - name: Build communitas-headless
         run: |
-          cargo build --release --bin communitas-headless
+          cargo build --release -p communitas-headless --bin communitas-headless
 
       - name: Simulate Network Conditions
         run: |

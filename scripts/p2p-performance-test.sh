@@ -216,8 +216,11 @@ collect_metrics() {
     local metrics=$(curl -s "http://127.0.0.1:$metrics_port/metrics" 2>/dev/null || echo "")
     
     # Parse peer count from metrics
-    local peer_count=$(echo "$metrics" | grep "communitas_peers_connected" | awk '{print $2}' | head -1)
-    peer_count=${peer_count:-0}
+    local peer_count=$(echo "$metrics" | grep "^communitas_peers_connected" | awk '{print $2}' | grep -E '^[0-9]+$' | head -1 || true)
+    # Make absolutely sure peer_count is numeric
+    if [[ ! "$peer_count" =~ ^[0-9]+$ ]]; then
+        peer_count=0
+    fi
     
     echo "{\"node\": $node_id, \"timestamp\": $timestamp, \"peers\": $peer_count, \"health\": $health}"
 }
@@ -238,8 +241,12 @@ while [ $(($(date +%s) - START_TIME)) -lt $MAX_FORMATION_TIME ]; do
     for i in $(seq 0 $((NUM_NODES - 1))); do
         METRICS_PORT=${NODE_METRICS_PORTS[$i]}
         # Use || true to avoid pipefail issues when grep finds nothing
-        PEER_COUNT=$(curl -s "http://127.0.0.1:$METRICS_PORT/metrics" 2>/dev/null | grep "communitas_peers_connected" | awk '{print $2}' | head -1 || true)
-        PEER_COUNT=${PEER_COUNT:-0}
+        # Also ensure we only get numeric values
+        PEER_COUNT=$(curl -s "http://127.0.0.1:$METRICS_PORT/metrics" 2>/dev/null | grep "^communitas_peers_connected" | awk '{print $2}' | grep -E '^[0-9]+$' | head -1 || true)
+        # Make absolutely sure PEER_COUNT is numeric
+        if [[ ! "$PEER_COUNT" =~ ^[0-9]+$ ]]; then
+            PEER_COUNT=0
+        fi
         TOTAL_CONNECTIONS=$((TOTAL_CONNECTIONS + PEER_COUNT))
     done
     
@@ -283,8 +290,11 @@ for t in $(seq 0 5 $TEST_DURATION); do
     TOTAL_PEERS=0
     for i in $(seq 0 $((NUM_NODES - 1))); do
         METRICS_PORT=${NODE_METRICS_PORTS[$i]}
-        PEER_COUNT=$(curl -s "http://127.0.0.1:$METRICS_PORT/metrics" 2>/dev/null | grep "communitas_peers_connected" | awk '{print $2}' | head -1 || true)
-        PEER_COUNT=${PEER_COUNT:-0}
+        PEER_COUNT=$(curl -s "http://127.0.0.1:$METRICS_PORT/metrics" 2>/dev/null | grep "^communitas_peers_connected" | awk '{print $2}' | grep -E '^[0-9]+$' | head -1 || true)
+        # Make absolutely sure PEER_COUNT is numeric
+        if [[ ! "$PEER_COUNT" =~ ^[0-9]+$ ]]; then
+            PEER_COUNT=0
+        fi
         TOTAL_PEERS=$((TOTAL_PEERS + PEER_COUNT))
     done
     AVG_PEERS=$((TOTAL_PEERS / NUM_NODES))

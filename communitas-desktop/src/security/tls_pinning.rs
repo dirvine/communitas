@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+#[allow(dead_code)]
 pub type RootStore = rustls::RootCertStore;
 
 #[derive(Default)]
@@ -8,6 +9,7 @@ pub struct TlsPinningState {
     pub roots: Option<Arc<RootStore>>, // pinned root store; if None, use platform verifier
 }
 
+#[allow(dead_code)]
 fn parse_pem_to_root_store(pem: &str) -> Result<Arc<RootStore>, String> {
     use rustls::pki_types::CertificateDer;
     let mut reader = pem.as_bytes();
@@ -24,6 +26,7 @@ fn parse_pem_to_root_store(pem: &str) -> Result<Arc<RootStore>, String> {
     Ok(Arc::new(store))
 }
 
+#[allow(dead_code)]
 #[tauri::command]
 pub async fn sync_set_quic_root_cert_pem(
     state: tauri::State<'_, Arc<RwLock<TlsPinningState>>>,
@@ -35,6 +38,7 @@ pub async fn sync_set_quic_root_cert_pem(
     Ok(true)
 }
 
+#[allow(dead_code)]
 #[tauri::command]
 pub async fn sync_clear_quic_root_cert(
     state: tauri::State<'_, Arc<RwLock<TlsPinningState>>>,
@@ -45,6 +49,7 @@ pub async fn sync_clear_quic_root_cert(
 }
 
 // Helper used by non-tauri contexts (e.g., env var path in headless)
+#[allow(dead_code)]
 pub fn sync_set_quic_root_cert_pem_parse_only(pem: &str) -> Result<Arc<RootStore>, String> {
     parse_pem_to_root_store(pem)
 }

@@ -30,7 +30,7 @@ pub async fn sync_start_tip_watcher(
         }
         if let Some(h) = w.handle.take() {
             // Detach; task will observe cancel via channel
-            let _ = h;
+            drop(h);
         }
         w.last_tip = None;
     }

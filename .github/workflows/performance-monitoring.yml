@@ -148,7 +148,8 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y iperf3 tc
+          # tc is part of iproute2 package
+          sudo apt-get install -y iperf3 iproute2 stress-ng
 
       - name: Build communitas-headless
         run: |

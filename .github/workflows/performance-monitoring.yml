@@ -61,14 +61,11 @@ jobs:
 
       - name: Build communitas-headless
         run: |
-          cd communitas-headless
+          # Build from the workspace root so binary ends up in ./target/release/
           cargo build --release --bin communitas-headless
-          ls -la target/release/
+          ls -la target/release/communitas-headless
           echo "Binary size: $(du -h target/release/communitas-headless | cut -f1)"
-          # Copy the binary to the expected location for the script
-          mkdir -p ../target/release/
-          cp target/release/communitas-headless ../target/release/communitas-headless
-          echo "Binary copied to root target/release/"
+          echo "Binary built at workspace root target/release/"
 
       - name: Make test script executable
         run: chmod +x scripts/p2p-performance-test.sh
@@ -78,7 +75,7 @@ jobs:
           NUM_NODES: ${{ matrix.scenario.nodes }}
           TEST_DURATION: ${{ matrix.scenario.duration }}
           LOG_DIR: /tmp/communitas-perf-${{ matrix.scenario.name }}
-          BINARY_PATH: communitas-headless/target/release/communitas-headless
+          BINARY_PATH: target/release/communitas-headless
         run: |
           echo "Running ${{ matrix.scenario.name }} scenario with ${{ matrix.scenario.nodes }} nodes"
           ./scripts/p2p-performance-test.sh
@@ -150,7 +147,6 @@ jobs:
 
       - name: Build communitas-headless
         run: |
-          cd communitas-headless
           cargo build --release --bin communitas-headless
 
       - name: Simulate Network Conditions
@@ -211,8 +207,7 @@ jobs:
           # Install stress-ng if available
           sudo apt-get install -y stress-ng || echo "stress-ng not available"
           
-          cd communitas-headless
-          BINARY_PATH="./target/release/communitas-headless" /tmp/network-sim.sh || true
+          BINARY_PATH="target/release/communitas-headless" /tmp/network-sim.sh || true
 
       - name: Collect System Metrics
         run: |

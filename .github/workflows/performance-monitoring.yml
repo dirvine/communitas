@@ -73,6 +73,7 @@ jobs:
           NUM_NODES: ${{ matrix.scenario.nodes }}
           TEST_DURATION: ${{ matrix.scenario.duration }}
           LOG_DIR: /tmp/communitas-perf-${{ matrix.scenario.name }}
+          BINARY_PATH: communitas-headless/target/release/communitas-headless
         run: |
           echo "Running ${{ matrix.scenario.name }} scenario with ${{ matrix.scenario.nodes }} nodes"
           ./scripts/p2p-performance-test.sh
@@ -206,7 +207,7 @@ jobs:
           sudo apt-get install -y stress-ng || echo "stress-ng not available"
           
           cd communitas-headless
-          /tmp/network-sim.sh || true
+          BINARY_PATH="./target/release/communitas-headless" /tmp/network-sim.sh || true
 
       - name: Collect System Metrics
         run: |

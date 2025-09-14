@@ -44,18 +44,43 @@ echo ""
 
 # Check if binary exists
 if [ ! -f "$BINARY_PATH" ]; then
-    echo -e "${RED}Binary not found at $BINARY_PATH${NC}"
-    echo "Building communitas-headless..."
-    cd communitas-headless && cargo build --release --bin communitas-headless && cd ..
+    echo -e "${YELLOW}Binary not found at $BINARY_PATH${NC}"
     
-    # Verify build succeeded - the binary should now be at communitas-headless/target/release/communitas-headless
-    if [ ! -f "communitas-headless/target/release/communitas-headless" ]; then
-        echo -e "${RED}Build failed - binary still not found${NC}"
-        exit 1
+    # Check alternative paths
+    if [ -f "communitas-headless/target/release/communitas-headless" ]; then
+        echo "Found binary at communitas-headless/target/release/communitas-headless"
+        BINARY_PATH="communitas-headless/target/release/communitas-headless"
+    elif [ -f "target/release/communitas-headless" ]; then
+        echo "Found binary at target/release/communitas-headless"
+        BINARY_PATH="target/release/communitas-headless"
+    else
+        echo -e "${RED}Binary not found in any expected location${NC}"
+        echo "Attempting to build communitas-headless..."
+        
+        # Try to build without changing directory
+        if cargo build --release --bin communitas-headless --manifest-path communitas-headless/Cargo.toml; then
+            # Check if build succeeded
+            if [ -f "communitas-headless/target/release/communitas-headless" ]; then
+                BINARY_PATH="communitas-headless/target/release/communitas-headless"
+                echo -e "${GREEN}Build successful, binary at $BINARY_PATH${NC}"
+            else
+                echo -e "${RED}Build appeared to succeed but binary not found${NC}"
+                exit 1
+            fi
+        else
+            echo -e "${RED}Build failed${NC}"
+            exit 1
+        fi
     fi
-    # Update the binary path after successful build
-    BINARY_PATH="communitas-headless/target/release/communitas-headless"
 fi
+
+# Verify the binary is executable
+if [ ! -x "$BINARY_PATH" ]; then
+    echo -e "${RED}Binary at $BINARY_PATH is not executable${NC}"
+    exit 1
+fi
+
+echo "Using binary: $BINARY_PATH"
 
 # Function to wait for node to be ready
 wait_for_node() {

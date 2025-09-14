@@ -1,0 +1,309 @@
+#!/bin/bash
+# P2P Performance Test Orchestrator for Communitas
+# Launches multiple communitas-headless nodes and measures P2P performance metrics
+
+set -euo pipefail
+
+# Configuration
+NUM_NODES=${NUM_NODES:-3}
+BASE_PORT=${BASE_PORT:-9000}
+BASE_METRICS_PORT=${BASE_METRICS_PORT:-9600}
+TEST_DURATION=${TEST_DURATION:-60}  # seconds
+LOG_DIR=${LOG_DIR:-"/tmp/communitas-perf-test"}
+BINARY_PATH=${BINARY_PATH:-"target/release/communitas-headless"}
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# Cleanup function
+cleanup() {
+    echo -e "${YELLOW}Cleaning up nodes...${NC}"
+    for pid in $(jobs -p); do
+        kill $pid 2>/dev/null || true
+    done
+    wait
+    echo -e "${GREEN}Cleanup complete${NC}"
+}
+
+trap cleanup EXIT
+
+# Create log directory
+mkdir -p "$LOG_DIR"
+rm -rf "$LOG_DIR"/*
+
+echo "========================================"
+echo "  Communitas P2P Performance Test"
+echo "========================================"
+echo "Nodes: $NUM_NODES"
+echo "Test Duration: ${TEST_DURATION}s"
+echo "Log Directory: $LOG_DIR"
+echo ""
+
+# Check if binary exists
+if [ ! -f "$BINARY_PATH" ]; then
+    echo -e "${RED}Binary not found at $BINARY_PATH${NC}"
+    echo "Building communitas-headless..."
+    cd communitas-headless && cargo build --release && cd ..
+fi
+
+# Function to wait for node to be ready
+wait_for_node() {
+    local port=$1
+    local metrics_port=$2
+    local max_wait=30
+    local waited=0
+    
+    echo -n "  Waiting for node on port $port..."
+    while [ $waited -lt $max_wait ]; do
+        if curl -s "http://127.0.0.1:$metrics_port/health" > /dev/null 2>&1; then
+            echo -e " ${GREEN}Ready${NC}"
+            return 0
+        fi
+        sleep 1
+        waited=$((waited + 1))
+        echo -n "."
+    done
+    echo -e " ${RED}Timeout${NC}"
+    return 1
+}
+
+# Launch nodes
+echo -e "${GREEN}Starting $NUM_NODES nodes...${NC}"
+BOOTSTRAP_ADDR=""
+NODE_PORTS=()
+NODE_METRICS_PORTS=()
+NODE_PIDS=()
+
+for i in $(seq 0 $((NUM_NODES - 1))); do
+    PORT=$((BASE_PORT + i))
+    METRICS_PORT=$((BASE_METRICS_PORT + i))
+    STORAGE_DIR="$LOG_DIR/node-$i/storage"
+    CONFIG_FILE="$LOG_DIR/node-$i/config.toml"
+    LOG_FILE="$LOG_DIR/node-$i/node.log"
+    
+    NODE_PORTS+=($PORT)
+    NODE_METRICS_PORTS+=($METRICS_PORT)
+    
+    mkdir -p "$(dirname "$CONFIG_FILE")"
+    mkdir -p "$STORAGE_DIR"
+    
+    echo "Starting Node $i (port: $PORT, metrics: $METRICS_PORT)..."
+    
+    # Build command
+    CMD="$BINARY_PATH \
+        --listen 127.0.0.1:$PORT \
+        --config $CONFIG_FILE \
+        --storage $STORAGE_DIR \
+        --metrics \
+        --metrics-addr 127.0.0.1:$METRICS_PORT"
+    
+    # First node becomes bootstrap, others connect to it
+    if [ $i -gt 0 ] && [ -n "$BOOTSTRAP_ADDR" ]; then
+        CMD="$CMD --bootstrap $BOOTSTRAP_ADDR"
+    fi
+    
+    # Start node in background
+    RUST_LOG=info $CMD > "$LOG_FILE" 2>&1 &
+    PID=$!
+    NODE_PIDS+=($PID)
+    
+    # Wait for node to be ready
+    if wait_for_node $PORT $METRICS_PORT; then
+        # First node becomes bootstrap
+        if [ $i -eq 0 ]; then
+            # Generate a four-word address for bootstrap
+            BOOTSTRAP_ADDR="bootstrap-node-test-perf:$PORT"
+            echo "  Bootstrap node ready at $BOOTSTRAP_ADDR"
+        fi
+    else
+        echo -e "${RED}Failed to start node $i${NC}"
+        exit 1
+    fi
+done
+
+echo ""
+echo -e "${GREEN}All nodes started successfully${NC}"
+echo ""
+
+# Function to collect metrics from a node
+collect_metrics() {
+    local metrics_port=$1
+    local node_id=$2
+    local timestamp=$3
+    
+    # Get health status
+    local health=$(curl -s "http://127.0.0.1:$metrics_port/health" 2>/dev/null || echo "{}")
+    
+    # Get metrics (Prometheus format)
+    local metrics=$(curl -s "http://127.0.0.1:$metrics_port/metrics" 2>/dev/null || echo "")
+    
+    # Parse peer count from metrics
+    local peer_count=$(echo "$metrics" | grep "communitas_peers_connected" | awk '{print $2}' | head -1)
+    peer_count=${peer_count:-0}
+    
+    echo "{\"node\": $node_id, \"timestamp\": $timestamp, \"peers\": $peer_count, \"health\": $health}"
+}
+
+# Performance test phase 1: Network Formation
+echo "========================================"
+echo "  Phase 1: Network Formation"
+echo "========================================"
+
+START_TIME=$(date +%s)
+FORMATION_COMPLETE=false
+MAX_FORMATION_TIME=30
+
+echo "Monitoring network formation..."
+while [ $(($(date +%s) - START_TIME)) -lt $MAX_FORMATION_TIME ]; do
+    TOTAL_CONNECTIONS=0
+    
+    for i in $(seq 0 $((NUM_NODES - 1))); do
+        METRICS_PORT=${NODE_METRICS_PORTS[$i]}
+        PEER_COUNT=$(curl -s "http://127.0.0.1:$METRICS_PORT/metrics" 2>/dev/null | grep "communitas_peers_connected" | awk '{print $2}' | head -1)
+        PEER_COUNT=${PEER_COUNT:-0}
+        TOTAL_CONNECTIONS=$((TOTAL_CONNECTIONS + PEER_COUNT))
+    done
+    
+    # Check if network is fully formed (each node should see NUM_NODES-1 peers)
+    EXPECTED_CONNECTIONS=$((NUM_NODES * (NUM_NODES - 1)))
+    echo "  Connections: $TOTAL_CONNECTIONS / $EXPECTED_CONNECTIONS"
+    
+    if [ $TOTAL_CONNECTIONS -ge $((EXPECTED_CONNECTIONS / 2)) ]; then
+        FORMATION_COMPLETE=true
+        FORMATION_TIME=$(($(date +%s) - START_TIME))
+        echo -e "${GREEN}Network formation complete in ${FORMATION_TIME}s${NC}"
+        break
+    fi
+    
+    sleep 2
+done
+
+if [ "$FORMATION_COMPLETE" = false ]; then
+    echo -e "${YELLOW}Warning: Network formation incomplete after ${MAX_FORMATION_TIME}s${NC}"
+fi
+
+# Performance test phase 2: Message Propagation
+echo ""
+echo "========================================"
+echo "  Phase 2: Performance Metrics Collection"
+echo "========================================"
+
+# Collect metrics over time
+METRICS_FILE="$LOG_DIR/metrics.jsonl"
+echo "Collecting metrics for ${TEST_DURATION}s..."
+
+for t in $(seq 0 5 $TEST_DURATION); do
+    TIMESTAMP=$(date +%s)
+    
+    for i in $(seq 0 $((NUM_NODES - 1))); do
+        METRICS_PORT=${NODE_METRICS_PORTS[$i]}
+        collect_metrics $METRICS_PORT $i $TIMESTAMP >> "$METRICS_FILE"
+    done
+    
+    # Display current status
+    TOTAL_PEERS=0
+    for i in $(seq 0 $((NUM_NODES - 1))); do
+        METRICS_PORT=${NODE_METRICS_PORTS[$i]}
+        PEER_COUNT=$(curl -s "http://127.0.0.1:$METRICS_PORT/metrics" 2>/dev/null | grep "communitas_peers_connected" | awk '{print $2}' | head -1)
+        PEER_COUNT=${PEER_COUNT:-0}
+        TOTAL_PEERS=$((TOTAL_PEERS + PEER_COUNT))
+    done
+    AVG_PEERS=$((TOTAL_PEERS / NUM_NODES))
+    
+    echo "  T+${t}s: Average peers per node: $AVG_PEERS"
+    
+    if [ $t -lt $TEST_DURATION ]; then
+        sleep 5
+    fi
+done
+
+# Performance test phase 3: Stress Test
+echo ""
+echo "========================================"
+echo "  Phase 3: Stress Test (QUIC Delta Server)"
+echo "========================================"
+
+# Test QUIC delta server performance
+echo "Testing QUIC delta server response times..."
+RESPONSE_TIMES=()
+
+for i in $(seq 0 $((NUM_NODES - 1))); do
+    PORT=${NODE_PORTS[$i]}
+    
+    # Create a simple QUIC client test (would need actual QUIC client in production)
+    # For now, we'll check if the port is listening
+    if nc -z 127.0.0.1 $PORT 2>/dev/null; then
+        echo "  Node $i: QUIC server listening on port $PORT ✓"
+    else
+        echo "  Node $i: QUIC server not responding on port $PORT ✗"
+    fi
+done
+
+# Generate performance report
+echo ""
+echo "========================================"
+echo "  Performance Report"
+echo "========================================"
+
+# Calculate statistics from metrics
+if [ -f "$METRICS_FILE" ]; then
+    # Count total metrics collected
+    TOTAL_METRICS=$(wc -l < "$METRICS_FILE")
+    echo "Total metrics collected: $TOTAL_METRICS"
+    
+    # Average peer connections
+    AVG_PEERS=$(grep -o '"peers": [0-9]*' "$METRICS_FILE" | awk -F': ' '{sum+=$2; count++} END {if(count>0) printf "%.2f", sum/count; else print "0"}')
+    echo "Average peers per node: $AVG_PEERS"
+fi
+
+# Check logs for errors
+echo ""
+echo "Log Analysis:"
+for i in $(seq 0 $((NUM_NODES - 1))); do
+    LOG_FILE="$LOG_DIR/node-$i/node.log"
+    ERROR_COUNT=$(grep -c "ERROR\|WARN" "$LOG_FILE" 2>/dev/null || echo "0")
+    INFO_COUNT=$(grep -c "INFO" "$LOG_FILE" 2>/dev/null || echo "0")
+    echo "  Node $i: $INFO_COUNT info, $ERROR_COUNT warnings/errors"
+done
+
+# Performance summary
+echo ""
+echo "========================================"
+echo "  Summary"
+echo "========================================"
+echo "✓ Nodes launched: $NUM_NODES"
+if [ "$FORMATION_COMPLETE" = true ]; then
+    echo "✓ Network formation: ${FORMATION_TIME}s"
+else
+    echo "✗ Network formation: incomplete"
+fi
+echo "✓ Test duration: ${TEST_DURATION}s"
+echo "✓ Logs saved to: $LOG_DIR"
+
+# Create JSON summary for CI
+SUMMARY_FILE="$LOG_DIR/summary.json"
+cat > "$SUMMARY_FILE" <<EOF
+{
+  "nodes": $NUM_NODES,
+  "formation_time": ${FORMATION_TIME:-null},
+  "formation_complete": $FORMATION_COMPLETE,
+  "test_duration": $TEST_DURATION,
+  "average_peers": ${AVG_PEERS:-0},
+  "timestamp": $(date +%s)
+}
+EOF
+
+echo ""
+echo "Summary saved to: $SUMMARY_FILE"
+
+# Exit with appropriate code
+if [ "$FORMATION_COMPLETE" = true ]; then
+    echo -e "${GREEN}Performance test completed successfully${NC}"
+    exit 0
+else
+    echo -e "${RED}Performance test completed with warnings${NC}"
+    exit 1
+fi

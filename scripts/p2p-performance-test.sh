@@ -173,8 +173,7 @@ EOF
     fi
     
     # Start node in background
-    # Set COMMUNITAS_SIMULATE_PEERS to simulate peer connections for testing
-    RUST_LOG=info COMMUNITAS_SIMULATE_PEERS=1 $CMD > "$LOG_FILE" 2>&1 &
+    RUST_LOG=info $CMD > "$LOG_FILE" 2>&1 &
     PID=$!
     NODE_PIDS+=($PID)
     
@@ -182,9 +181,12 @@ EOF
     if wait_for_node $PORT $METRICS_PORT; then
         # First node becomes bootstrap
         if [ $i -eq 0 ]; then
-            # Generate a four-word address for bootstrap
-            BOOTSTRAP_ADDR="bootstrap-node-test-perf:$PORT"
+            # Use actual IP:port for bootstrap address
+            BOOTSTRAP_ADDR="127.0.0.1:$PORT"
             echo "  Bootstrap node ready at $BOOTSTRAP_ADDR"
+            # Also store the node's identity for reference
+            BOOTSTRAP_IDENTITY="node-0-test-perf"
+            echo "  Bootstrap identity: $BOOTSTRAP_IDENTITY"
         fi
     else
         echo -e "${RED}Failed to start node $i${NC}"

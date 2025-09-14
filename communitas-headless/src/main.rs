@@ -1,17 +1,23 @@
 // Communitas Headless Node
 // This binary runs a headless Communitas node using saorsa-core APIs
 
+mod peer_cache;
+
 use anyhow::{Context, Result};
 use clap::Parser;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use tokio::signal;
 use tokio::sync::RwLock as AsyncRwLock;
 use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
+
+// Import peer cache types
+use crate::peer_cache::{PeerCache, PeerInfo};
 
 /// Try to self-update the binary using GitHub releases
 pub fn try_self_update() -> Result<Option<String>> {
@@ -246,13 +252,10 @@ async fn start_health_endpoint(addr: SocketAddr, _dht_client: Arc<saorsa_core::m
     });
 
     let metrics = warp::path("metrics").map(move || {
-        // TODO: Get actual peer count from DHT client
-        // For now, simulate some connections for testing
-        let peer_count = if std::env::var("COMMUNITAS_SIMULATE_PEERS").is_ok() {
-            1  // Simulate 1 peer connection for testing
-        } else {
-            0  // Default to 0
-        };
+        // Get actual peer count from active connections
+        let peer_count = ACTIVE_CONNECTIONS.try_read()
+            .map(|conns| conns.len())
+            .unwrap_or(0);
         
         format!(
             "# HELP communitas_peers_connected Number of connected peers\n\
@@ -269,6 +272,99 @@ async fn start_health_endpoint(addr: SocketAddr, _dht_client: Arc<saorsa_core::m
     });
 
     Ok(())
+}
+
+/// Connect to a peer using QUIC
+async fn connect_to_peer(addr_str: String) -> Result<()> {
+    use std::net::ToSocketAddrs;
+    
+    // Parse the address (format: "host:port" or "four-words:port")
+    let socket_addr = addr_str
+        .to_socket_addrs()
+        .map_err(|e| anyhow::anyhow!("Failed to resolve {}: {}", addr_str, e))?
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("No addresses resolved for {}", addr_str))?;
+    
+    info!("Connecting to peer at {}", socket_addr);
+    
+    // Create QUIC client endpoint
+    let bind_addr: std::net::SocketAddr = if socket_addr.is_ipv4() {
+        "0.0.0.0:0".parse()?
+    } else {
+        "[::]:0".parse()?
+    };
+    
+    let endpoint = QuicEndpoint::client(bind_addr)
+        .map_err(|e| anyhow::anyhow!("Failed to create QUIC client: {}", e))?;
+    
+    // Build client config with raw public keys
+    let client_cfg = {
+        let builder = RawPublicKeyConfigBuilder::new()
+            .enable_certificate_type_extensions()
+            // For testing: trust any public key (trust-on-first-use)
+            .allow_any_key();
+        
+        let rustls_cfg = builder
+            .build_client_config()
+            .map_err(|e| anyhow::anyhow!("Failed to build client config: {}", e))?;
+        
+        let quic_tls: ant_quic::crypto::rustls::QuicClientConfig = StdArc::new(rustls_cfg)
+            .try_into()
+            .map_err(|e| anyhow::anyhow!("Failed to convert to QUIC TLS config: {}", e))?;
+        
+        let client = QuicClientConfig::new(StdArc::new(quic_tls));
+        with_pqc_support(client)
+            .map_err(|e| anyhow::anyhow!("Failed to enable PQC support: {:?}", e))?
+    };
+    
+    // Set client config and connect
+    let mut ep = endpoint.clone();
+    ep.set_default_client_config(client_cfg);
+    
+    // Connect with SNI (use "peer" as default)
+    match ep.connect(socket_addr, "peer") {
+        Ok(connecting) => {
+            match connecting.await {
+                Ok(conn) => {
+                    info!("Successfully connected to {}", socket_addr);
+                    
+                    // Store the connection in active connections
+                    let conn_id = format!("{}_{}", socket_addr, chrono::Utc::now().timestamp());
+                    if let Ok(mut conns) = ACTIVE_CONNECTIONS.try_write() {
+                        conns.insert(conn_id.clone(), conn);
+                        info!("Stored connection {} (total: {})", conn_id, conns.len());
+                    }
+                    
+                    // Update peer cache with successful connection
+                    {
+                        let cache_guard = PEER_CACHE.read().await;
+                        if let Some(cache) = cache_guard.as_ref() {
+                            let peer_id = socket_addr.to_string();
+                            let peer_info = PeerInfo {
+                                identity: None,  // Will be updated when we exchange identities
+                                address: socket_addr,
+                                public_key: None,  // Will be updated from handshake
+                                last_connected: chrono::Utc::now().timestamp(),
+                                connection_count: 1,
+                                quality_score: 80,  // Start with good score
+                            };
+                            
+                            let cache_clone = cache.clone();
+                            tokio::spawn(async move {
+                                if let Err(e) = cache_clone.add_peer(peer_id, peer_info).await {
+                                    warn!("Failed to update peer cache: {}", e);
+                                }
+                            });
+                        }
+                    }
+                    
+                    Ok(())
+                }
+                Err(e) => Err(anyhow::anyhow!("Connection failed: {}", e))
+            }
+        }
+        Err(e) => Err(anyhow::anyhow!("Failed to initiate connection: {}", e))
+    }
 }
 
 async fn run_node(args: Args) -> Result<()> {
@@ -323,6 +419,14 @@ async fn run_node(args: Args) -> Result<()> {
         .await
         .context("Failed to create storage directory")?;
 
+    // Initialize peer cache
+    let peer_cache = PeerCache::new(config.storage.base_dir.clone(), 100)?;
+    {
+        let mut cache_guard = PEER_CACHE.write().await;
+        *cache_guard = Some(Arc::new(peer_cache));
+    }
+    info!("Initialized peer cache");
+
     // Setup identity
     let (identity, _pubkey, _privkey) = setup_identity(&config).await?;
     info!("Node identity: {}", identity);
@@ -338,9 +442,34 @@ async fn run_node(args: Args) -> Result<()> {
     let dht_client = Arc::new(DhtClient::new().map_err(|e| anyhow::anyhow!("DHT init failed: {}", e))?);
     info!("DHT client initialized");
     
-    // TODO: Connect to bootstrap nodes
-    // This would require parsing the bootstrap addresses and connecting via QUIC
-    // For now, the nodes can discover each other via the QUIC server
+    // Load cached peers and connect to them first
+    let mut all_bootstrap_nodes = config.bootstrap_nodes.clone();
+    
+    {
+        let cache_guard = PEER_CACHE.read().await;
+        if let Some(cache) = cache_guard.as_ref() {
+            let cached_peers = cache.get_bootstrap_candidates(5).await;
+            info!("Found {} cached peers to try", cached_peers.len());
+            
+            for peer_info in cached_peers {
+                let addr_str = peer_info.address.to_string();
+                if !all_bootstrap_nodes.contains(&addr_str) {
+                    all_bootstrap_nodes.push(addr_str);
+                }
+            }
+        }
+    }
+    
+    // Connect to bootstrap nodes (including cached peers)
+    if !all_bootstrap_nodes.is_empty() {
+        info!("Connecting to {} bootstrap/cached nodes...", all_bootstrap_nodes.len());
+        for bootstrap_addr in &all_bootstrap_nodes {
+            match connect_to_peer(bootstrap_addr.clone()).await {
+                Ok(_) => info!("Connected to node: {}", bootstrap_addr),
+                Err(e) => warn!("Failed to connect to {}: {}", bootstrap_addr, e),
+            }
+        }
+    }
 
     // Start health/metrics endpoint if enabled
     if args.metrics {
@@ -403,7 +532,24 @@ async fn run_node(args: Args) -> Result<()> {
 
     // Graceful shutdown
     info!("Performing graceful shutdown...");
-    // In production, properly close connections and save state
+    
+    // Save peer cache before shutdown
+    {
+        let cache_guard = PEER_CACHE.read().await;
+        if let Some(cache) = cache_guard.as_ref() {
+            if let Err(e) = cache.save().await {
+                warn!("Failed to save peer cache: {}", e);
+            } else {
+                info!("Peer cache saved successfully");
+            }
+        }
+    }
+    
+    // Close all active connections
+    if let Ok(mut conns) = ACTIVE_CONNECTIONS.try_write() {
+        info!("Closing {} active connections", conns.len());
+        conns.clear();
+    }
 
     Ok(())
 }
@@ -429,8 +575,8 @@ async fn main() -> Result<()> {
 
 // ---------------- QUIC Delta Server (raw SPKI) -----------------
 
-use ant_quic::config::ServerConfig as QuicServerConfig;
-use ant_quic::crypto::pqc::rustls_provider::with_pqc_support_server;
+use ant_quic::config::{ClientConfig as QuicClientConfig, ServerConfig as QuicServerConfig};
+use ant_quic::crypto::pqc::rustls_provider::{with_pqc_support, with_pqc_support_server};
 use ant_quic::crypto::raw_public_keys::RawPublicKeyConfigBuilder;
 use ant_quic::crypto::raw_public_keys::key_utils::public_key_to_bytes;
 use ant_quic::high_level::Endpoint as QuicEndpoint;
@@ -453,6 +599,13 @@ struct DeltaResponse {
 
 // Very small in-memory op log for demo/testing. Not persisted.
 static OP_LOG: Lazy<AsyncRwLock<Vec<cc::Op>>> = Lazy::new(|| AsyncRwLock::new(Vec::new()));
+
+// Global connection tracking
+use ant_quic::HighLevelConnection;
+static ACTIVE_CONNECTIONS: Lazy<Arc<RwLock<HashMap<String, HighLevelConnection>>>> = 
+    Lazy::new(|| Arc::new(RwLock::new(HashMap::new())));
+static PEER_CACHE: Lazy<Arc<AsyncRwLock<Option<Arc<PeerCache>>>>> = 
+    Lazy::new(|| Arc::new(AsyncRwLock::new(None)));
 
 async fn ops_since(count: u64) -> Vec<cc::Op> {
     let r = OP_LOG.read().await;

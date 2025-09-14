@@ -47,25 +47,28 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: . -> target
+          cache-on-failure: true
+          key: headless-${{ matrix.scenario.name }}
 
-      - name: Install system dependencies
+      - name: Install minimal system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libgtk-3-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            netcat-openbsd \
-            jq
+          sudo apt-get install -y netcat-openbsd jq
 
-      - name: Build communitas-headless
+      - name: Build communitas-headless (no GTK deps needed)
         run: |
-          # Build from the workspace root so binary ends up in ./target/release/
-          cargo build --release -p communitas-headless --bin communitas-headless
+          # Build only the headless binary without GUI dependencies
+          # This should be much faster since headless doesn't depend on webkit/GTK
+          cargo build --release -p communitas-headless --bin communitas-headless --no-default-features
+          
+          # Verify binary was built
+          if [ ! -f target/release/communitas-headless ]; then
+            echo "Binary not found, trying with default features"
+            cargo build --release -p communitas-headless --bin communitas-headless
+          fi
+          
           ls -la target/release/communitas-headless
           echo "Binary size: $(du -h target/release/communitas-headless | cut -f1)"
-          echo "Binary built at workspace root target/release/"
           
           # Test if binary can run --help
           echo "Testing binary with --help flag:"
@@ -73,7 +76,7 @@ jobs:
           
           # Check binary dependencies
           echo "Checking binary dependencies:"
-          ldd ./target/release/communitas-headless || echo "ldd not available"
+          ldd ./target/release/communitas-headless 2>/dev/null | head -20 || echo "ldd output truncated/unavailable"
 
       - name: Make test script executable
         run: chmod +x scripts/p2p-performance-test.sh
@@ -145,13 +148,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libgtk-3-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            iperf3 \
-            tc
+          sudo apt-get install -y iperf3 tc
 
       - name: Build communitas-headless
         run: |
@@ -241,14 +238,7 @@ jobs:
         with:
           workspaces: . -> target
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libgtk-3-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev
+      # No system dependencies needed for benchmarks
 
       - name: Run Benchmarks
         run: |

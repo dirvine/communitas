@@ -95,13 +95,13 @@ impl Permission {
         let action_match = self.action == "*" || self.action == required.action;
 
         // Scope must be sufficient
-        let scope_match = match (&self.scope, &required.scope) {
-            (PermissionScope::All, _) => true,
-            (PermissionScope::Shared, PermissionScope::Own) => true,
-            (PermissionScope::Shared, PermissionScope::Shared) => true,
-            (PermissionScope::Own, PermissionScope::Own) => true,
-            _ => false,
-        };
+        let scope_match = matches!(
+            (&self.scope, &required.scope),
+            (PermissionScope::All, _)
+                | (PermissionScope::Shared, PermissionScope::Own)
+                | (PermissionScope::Shared, PermissionScope::Shared)
+                | (PermissionScope::Own, PermissionScope::Own)
+        );
 
         resource_match && action_match && scope_match
     }

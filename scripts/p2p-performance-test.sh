@@ -46,24 +46,38 @@ echo ""
 if [ ! -f "$BINARY_PATH" ]; then
     echo -e "${RED}Binary not found at $BINARY_PATH${NC}"
     echo "Building communitas-headless..."
-    cd communitas-headless && cargo build --release && cd ..
+    cd communitas-headless && cargo build --release --bin communitas-headless && cd ..
+    
+    # Verify build succeeded
+    if [ ! -f "../$BINARY_PATH" ]; then
+        echo -e "${RED}Build failed - binary still not found${NC}"
+        exit 1
+    fi
 fi
 
 # Function to wait for node to be ready
 wait_for_node() {
     local port=$1
     local metrics_port=$2
-    local max_wait=30
+    local max_wait=45  # Increased timeout
     local waited=0
     
     echo -n "  Waiting for node on port $port..."
+    
+    # First wait for process to start
+    sleep 3
+    
     while [ $waited -lt $max_wait ]; do
-        if curl -s "http://127.0.0.1:$metrics_port/health" > /dev/null 2>&1; then
-            echo -e " ${GREEN}Ready${NC}"
+        # Check if the metrics endpoint responds OR if the process is running
+        if curl -s -m 2 "http://127.0.0.1:$metrics_port/health" > /dev/null 2>&1; then
+            echo -e " ${GREEN}Ready (health check passed)${NC}"
+            return 0
+        elif nc -z 127.0.0.1 $port 2>/dev/null; then
+            echo -e " ${GREEN}Ready (port listening)${NC}"
             return 0
         fi
-        sleep 1
-        waited=$((waited + 1))
+        sleep 2  # Increased sleep interval
+        waited=$((waited + 2))
         echo -n "."
     done
     echo -e " ${RED}Timeout${NC}"

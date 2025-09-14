@@ -133,6 +133,32 @@ for i in $(seq 0 $((NUM_NODES - 1))); do
     
     echo "Starting Node $i (port: $PORT, metrics: $METRICS_PORT)..."
     
+    # Create a basic config file to avoid default paths
+    cat > "$CONFIG_FILE" <<EOF
+identity = "node-$i-test-perf"
+bootstrap_nodes = []
+
+[storage]
+base_dir = "$STORAGE_DIR"
+cache_size_mb = 100
+enable_fec = false
+fec_k = 4
+fec_m = 2
+
+[network]
+listen_addrs = ["127.0.0.1:$PORT"]
+enable_ipv6 = false
+enable_webrtc = false
+quic_idle_timeout_ms = 30000
+quic_max_streams = 100
+
+[update]
+channel = "stable"
+check_interval_secs = 86400
+auto_update = false
+jitter_secs = 0
+EOF
+    
     # Build command
     CMD="$BINARY_PATH \
         --listen 127.0.0.1:$PORT \
@@ -161,6 +187,14 @@ for i in $(seq 0 $((NUM_NODES - 1))); do
         fi
     else
         echo -e "${RED}Failed to start node $i${NC}"
+        echo "  Checking if process is still running..."
+        if ! kill -0 $PID 2>/dev/null; then
+            echo "  Process died. Last 50 lines of log:"
+            tail -50 "$LOG_FILE"
+        else
+            echo "  Process is running but not responding. Last 50 lines of log:"
+            tail -50 "$LOG_FILE"
+        fi
         exit 1
     fi
 done

@@ -66,6 +66,14 @@ jobs:
           ls -la target/release/communitas-headless
           echo "Binary size: $(du -h target/release/communitas-headless | cut -f1)"
           echo "Binary built at workspace root target/release/"
+          
+          # Test if binary can run --help
+          echo "Testing binary with --help flag:"
+          ./target/release/communitas-headless --help || echo "Failed to run --help"
+          
+          # Check binary dependencies
+          echo "Checking binary dependencies:"
+          ldd ./target/release/communitas-headless || echo "ldd not available"
 
       - name: Make test script executable
         run: chmod +x scripts/p2p-performance-test.sh

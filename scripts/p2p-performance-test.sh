@@ -48,11 +48,13 @@ if [ ! -f "$BINARY_PATH" ]; then
     echo "Building communitas-headless..."
     cd communitas-headless && cargo build --release --bin communitas-headless && cd ..
     
-    # Verify build succeeded
-    if [ ! -f "../$BINARY_PATH" ]; then
+    # Verify build succeeded - the binary should now be at communitas-headless/target/release/communitas-headless
+    if [ ! -f "communitas-headless/target/release/communitas-headless" ]; then
         echo -e "${RED}Build failed - binary still not found${NC}"
         exit 1
     fi
+    # Update the binary path after successful build
+    BINARY_PATH="communitas-headless/target/release/communitas-headless"
 fi
 
 # Function to wait for node to be ready

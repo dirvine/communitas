@@ -99,15 +99,15 @@ impl PeerCache {
         let mut peers = self.peers.write().await;
 
         // If cache is full, remove the oldest peer
-        if peers.len() >= self.max_peers && !peers.contains_key(&peer_id) {
-            if let Some(oldest_key) = peers
+        if peers.len() >= self.max_peers
+            && !peers.contains_key(&peer_id)
+            && let Some(oldest_key) = peers
                 .iter()
                 .min_by_key(|(_, info)| info.last_connected)
                 .map(|(k, _)| k.clone())
-            {
-                peers.remove(&oldest_key);
-                debug!("Evicted oldest peer {} from cache", oldest_key);
-            }
+        {
+            peers.remove(&oldest_key);
+            debug!("Evicted oldest peer {} from cache", oldest_key);
         }
 
         peers.insert(peer_id.clone(), info);
@@ -125,12 +125,14 @@ impl PeerCache {
     }
 
     /// Get a peer from the cache
+    #[allow(dead_code)]
     pub async fn get_peer(&self, peer_id: &str) -> Option<PeerInfo> {
         let peers = self.peers.read().await;
         peers.get(peer_id).cloned()
     }
 
     /// Get all cached peers
+    #[allow(dead_code)]
     pub async fn get_all_peers(&self) -> Vec<PeerInfo> {
         let peers = self.peers.read().await;
         peers.values().cloned().collect()
@@ -153,6 +155,7 @@ impl PeerCache {
     }
 
     /// Update connection statistics for a peer
+    #[allow(dead_code)]
     pub async fn update_peer_stats(
         &self,
         peer_id: &str,
@@ -161,15 +164,15 @@ impl PeerCache {
     ) -> Result<()> {
         let mut peers = self.peers.write().await;
 
-        if let Some(peer) = peers.get_mut(peer_id) {
-            if connected {
-                peer.last_connected = chrono::Utc::now().timestamp();
-                peer.connection_count += 1;
+        if let Some(peer) = peers.get_mut(peer_id)
+            && connected
+        {
+            peer.last_connected = chrono::Utc::now().timestamp();
+            peer.connection_count += 1;
 
-                // Update quality score with moving average
-                if let Some(q) = quality {
-                    peer.quality_score = ((peer.quality_score as u32 + q as u32) / 2) as u8;
-                }
+            // Update quality score with moving average
+            if let Some(q) = quality {
+                peer.quality_score = ((peer.quality_score as u32 + q as u32) / 2) as u8;
             }
         }
 
@@ -177,6 +180,7 @@ impl PeerCache {
     }
 
     /// Get the number of cached peers
+    #[allow(dead_code)]
     pub async fn peer_count(&self) -> usize {
         let peers = self.peers.read().await;
         peers.len()

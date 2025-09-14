@@ -1,5 +1,5 @@
 //! Peer cache for storing and managing known peers
-//! 
+//!
 //! This module provides persistent storage of successfully connected peers
 //! to enable resilient network bootstrapping across restarts.
 
@@ -48,7 +48,7 @@ impl PeerCache {
             peers: Arc::new(RwLock::new(HashMap::new())),
             max_peers,
         };
-        
+
         // Load existing cache if available
         tokio::spawn({
             let cache_clone = cache.clone();
@@ -58,46 +58,46 @@ impl PeerCache {
                 }
             }
         });
-        
+
         Ok(cache)
     }
-    
+
     /// Load peer cache from disk
     pub async fn load(&self) -> Result<()> {
         if !self.cache_file.exists() {
             debug!("No existing peer cache found at {:?}", self.cache_file);
             return Ok(());
         }
-        
+
         let content = tokio::fs::read_to_string(&self.cache_file).await?;
         let loaded_peers: HashMap<String, PeerInfo> = serde_json::from_str(&content)?;
-        
+
         let mut peers = self.peers.write().await;
         *peers = loaded_peers;
-        
+
         info!("Loaded {} peers from cache", peers.len());
         Ok(())
     }
-    
+
     /// Save peer cache to disk
     pub async fn save(&self) -> Result<()> {
         let peers = self.peers.read().await;
         let content = serde_json::to_string_pretty(&*peers)?;
-        
+
         // Ensure directory exists
         if let Some(parent) = self.cache_file.parent() {
             tokio::fs::create_dir_all(parent).await?;
         }
-        
+
         tokio::fs::write(&self.cache_file, content).await?;
         debug!("Saved {} peers to cache", peers.len());
         Ok(())
     }
-    
+
     /// Add or update a peer in the cache
     pub async fn add_peer(&self, peer_id: String, info: PeerInfo) -> Result<()> {
         let mut peers = self.peers.write().await;
-        
+
         // If cache is full, remove the oldest peer
         if peers.len() >= self.max_peers && !peers.contains_key(&peer_id) {
             if let Some(oldest_key) = peers
@@ -109,10 +109,10 @@ impl PeerCache {
                 debug!("Evicted oldest peer {} from cache", oldest_key);
             }
         }
-        
+
         peers.insert(peer_id.clone(), info);
         drop(peers);
-        
+
         // Save to disk asynchronously
         let cache_clone = self.clone();
         tokio::spawn(async move {
@@ -120,61 +120,62 @@ impl PeerCache {
                 error!("Failed to save peer cache: {}", e);
             }
         });
-        
+
         Ok(())
     }
-    
+
     /// Get a peer from the cache
     pub async fn get_peer(&self, peer_id: &str) -> Option<PeerInfo> {
         let peers = self.peers.read().await;
         peers.get(peer_id).cloned()
     }
-    
+
     /// Get all cached peers
     pub async fn get_all_peers(&self) -> Vec<PeerInfo> {
         let peers = self.peers.read().await;
         peers.values().cloned().collect()
     }
-    
+
     /// Get bootstrap candidates from cache
     pub async fn get_bootstrap_candidates(&self, count: usize) -> Vec<PeerInfo> {
         let peers = self.peers.read().await;
         let mut candidates: Vec<_> = peers.values().cloned().collect();
-        
+
         // Sort by quality score and recent connection time
         candidates.sort_by(|a, b| {
-            b.quality_score.cmp(&a.quality_score)
+            b.quality_score
+                .cmp(&a.quality_score)
                 .then(b.last_connected.cmp(&a.last_connected))
         });
-        
+
         candidates.truncate(count);
         candidates
     }
-    
+
     /// Update connection statistics for a peer
     pub async fn update_peer_stats(
-        &self, 
-        peer_id: &str, 
+        &self,
+        peer_id: &str,
         connected: bool,
-        quality: Option<u8>
+        quality: Option<u8>,
     ) -> Result<()> {
         let mut peers = self.peers.write().await;
-        
+
         if let Some(peer) = peers.get_mut(peer_id) {
             if connected {
                 peer.last_connected = chrono::Utc::now().timestamp();
                 peer.connection_count += 1;
-                
+
                 // Update quality score with moving average
                 if let Some(q) = quality {
                     peer.quality_score = ((peer.quality_score as u32 + q as u32) / 2) as u8;
                 }
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Get the number of cached peers
     pub async fn peer_count(&self) -> usize {
         let peers = self.peers.read().await;

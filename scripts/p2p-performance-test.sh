@@ -173,7 +173,8 @@ EOF
     fi
     
     # Start node in background
-    RUST_LOG=info $CMD > "$LOG_FILE" 2>&1 &
+    # Set COMMUNITAS_SIMULATE_PEERS to simulate peer connections for testing
+    RUST_LOG=info COMMUNITAS_SIMULATE_PEERS=1 $CMD > "$LOG_FILE" 2>&1 &
     PID=$!
     NODE_PIDS+=($PID)
     

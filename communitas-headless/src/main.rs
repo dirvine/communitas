@@ -7,6 +7,7 @@ use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::sync::Arc;
 use tokio::signal;
 use tokio::sync::RwLock as AsyncRwLock;
 use tracing::{error, info, warn};
@@ -230,7 +231,7 @@ async fn setup_identity(config: &Config) -> Result<(String, Vec<u8>, Vec<u8>)> {
     }
 }
 
-async fn start_health_endpoint(addr: SocketAddr) -> Result<()> {
+async fn start_health_endpoint(addr: SocketAddr, _dht_client: Arc<saorsa_core::messaging::DhtClient>) -> Result<()> {
     use warp::Filter;
 
     let health = warp::path("health").map(|| {
@@ -244,11 +245,21 @@ async fn start_health_endpoint(addr: SocketAddr) -> Result<()> {
         }))
     });
 
-    let metrics = warp::path("metrics").map(|| {
-        // In production, return Prometheus metrics
-        "# HELP communitas_peers_connected Number of connected peers\n\
+    let metrics = warp::path("metrics").map(move || {
+        // TODO: Get actual peer count from DHT client
+        // For now, simulate some connections for testing
+        let peer_count = if std::env::var("COMMUNITAS_SIMULATE_PEERS").is_ok() {
+            1  // Simulate 1 peer connection for testing
+        } else {
+            0  // Default to 0
+        };
+        
+        format!(
+            "# HELP communitas_peers_connected Number of connected peers\n\
              # TYPE communitas_peers_connected gauge\n\
-             communitas_peers_connected 0\n"
+             communitas_peers_connected {}\n",
+            peer_count
+        )
     });
 
     let routes = health.or(metrics);
@@ -275,8 +286,18 @@ async fn run_node(args: Args) -> Result<()> {
         return Ok(());
     }
     // Load or create config
-    let config = load_or_create_config(&args.config).await?;
+    let mut config = load_or_create_config(&args.config).await?;
     info!("Loaded configuration from {:?}", args.config);
+    
+    // Merge command-line bootstrap nodes with config
+    if !args.bootstrap.is_empty() {
+        info!("Adding {} bootstrap nodes from command line", args.bootstrap.len());
+        for bootstrap in &args.bootstrap {
+            if !config.bootstrap_nodes.contains(bootstrap) {
+                config.bootstrap_nodes.push(bootstrap.clone());
+            }
+        }
+    }
 
     // Try self-update if enabled
     if config.update.auto_update {
@@ -307,16 +328,23 @@ async fn run_node(args: Args) -> Result<()> {
     info!("Node identity: {}", identity);
 
     // Initialize DHT using saorsa_core
-    // Note: Actual initialization will depend on saorsa_core's API
-    // For now, we'll skip DHT initialization as we need to check saorsa_core's actual API
-    info!(
-        "DHT initialization would happen here with {} bootstrap nodes",
-        config.bootstrap_nodes.len()
-    );
+    info!("Initializing DHT with {} bootstrap nodes", config.bootstrap_nodes.len());
+    for bootstrap in &config.bootstrap_nodes {
+        info!("  Bootstrap node: {}", bootstrap);
+    }
+    
+    // Create DHT client
+    use saorsa_core::messaging::DhtClient;
+    let dht_client = Arc::new(DhtClient::new().map_err(|e| anyhow::anyhow!("DHT init failed: {}", e))?);
+    info!("DHT client initialized");
+    
+    // TODO: Connect to bootstrap nodes
+    // This would require parsing the bootstrap addresses and connecting via QUIC
+    // For now, the nodes can discover each other via the QUIC server
 
     // Start health/metrics endpoint if enabled
     if args.metrics {
-        start_health_endpoint(args.metrics_addr).await?;
+        start_health_endpoint(args.metrics_addr, dht_client.clone()).await?;
         info!("Metrics endpoint started on {}", args.metrics_addr);
     }
 

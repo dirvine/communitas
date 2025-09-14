@@ -1,0 +1,22 @@
+identity = "node-0-test-perf"
+bootstrap_nodes = []
+
+[storage]
+base_dir = "/tmp/communitas-perf-minimal/node-0/storage"
+cache_size_mb = 100
+enable_fec = false
+fec_k = 4
+fec_m = 2
+
+[network]
+listen_addrs = ["127.0.0.1:9000"]
+enable_ipv6 = false
+enable_webrtc = false
+quic_idle_timeout_ms = 30000
+quic_max_streams = 100
+
+[update]
+channel = "stable"
+check_interval_secs = 86400
+auto_update = false
+jitter_secs = 0

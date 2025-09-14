@@ -237,7 +237,8 @@ while [ $(($(date +%s) - START_TIME)) -lt $MAX_FORMATION_TIME ]; do
     
     for i in $(seq 0 $((NUM_NODES - 1))); do
         METRICS_PORT=${NODE_METRICS_PORTS[$i]}
-        PEER_COUNT=$(curl -s "http://127.0.0.1:$METRICS_PORT/metrics" 2>/dev/null | grep "communitas_peers_connected" | awk '{print $2}' | head -1)
+        # Use || true to avoid pipefail issues when grep finds nothing
+        PEER_COUNT=$(curl -s "http://127.0.0.1:$METRICS_PORT/metrics" 2>/dev/null | grep "communitas_peers_connected" | awk '{print $2}' | head -1 || true)
         PEER_COUNT=${PEER_COUNT:-0}
         TOTAL_CONNECTIONS=$((TOTAL_CONNECTIONS + PEER_COUNT))
     done
@@ -282,7 +283,7 @@ for t in $(seq 0 5 $TEST_DURATION); do
     TOTAL_PEERS=0
     for i in $(seq 0 $((NUM_NODES - 1))); do
         METRICS_PORT=${NODE_METRICS_PORTS[$i]}
-        PEER_COUNT=$(curl -s "http://127.0.0.1:$METRICS_PORT/metrics" 2>/dev/null | grep "communitas_peers_connected" | awk '{print $2}' | head -1)
+        PEER_COUNT=$(curl -s "http://127.0.0.1:$METRICS_PORT/metrics" 2>/dev/null | grep "communitas_peers_connected" | awk '{print $2}' | head -1 || true)
         PEER_COUNT=${PEER_COUNT:-0}
         TOTAL_PEERS=$((TOTAL_PEERS + PEER_COUNT))
     done
@@ -329,8 +330,8 @@ if [ -f "$METRICS_FILE" ]; then
     TOTAL_METRICS=$(wc -l < "$METRICS_FILE")
     echo "Total metrics collected: $TOTAL_METRICS"
     
-    # Average peer connections
-    AVG_PEERS=$(grep -o '"peers": [0-9]*' "$METRICS_FILE" | awk -F': ' '{sum+=$2; count++} END {if(count>0) printf "%.2f", sum/count; else print "0"}')
+    # Average peer connections (use || true to avoid pipefail issues)
+    AVG_PEERS=$(grep -o '"peers": [0-9]*' "$METRICS_FILE" 2>/dev/null | awk -F': ' '{sum+=$2; count++} END {if(count>0) printf "%.2f", sum/count; else print "0"}' || echo "0")
     echo "Average peers per node: $AVG_PEERS"
 fi
 

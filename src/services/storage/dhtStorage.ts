@@ -77,6 +77,23 @@ export class DHTStorage {
     console.log(`DHT initialized with key ID: ${this.keyId}`)
   }
 
+  /**
+   * Helper function to convert various data types to ArrayBuffer for crypto.subtle.digest
+   */
+  private toArrayBuffer(data: Uint8Array | ArrayBuffer | string): ArrayBuffer {
+    if (typeof data === 'string') {
+      // Convert string to ArrayBuffer via TextEncoder
+      return new TextEncoder().encode(data).buffer
+    } else if (data instanceof ArrayBuffer) {
+      return data
+    } else if (data instanceof Uint8Array || ArrayBuffer.isView(data)) {
+      // Properly slice the underlying buffer to get the correct ArrayBuffer
+      return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength)
+    } else {
+      throw new TypeError('Data must be Uint8Array, ArrayBuffer, or string')
+    }
+  }
+
   private async ensureReady(): Promise<void> {
     return this.cryptoReady
   }
@@ -87,7 +104,7 @@ export class DHTStorage {
     crypto.getRandomValues(this.encryptionKey)
 
     // SECURITY: Generate key ID using Web Crypto API
-    const hashBuffer = await crypto.subtle.digest('SHA-256', new Uint8Array(this.encryptionKey))
+    const hashBuffer = await crypto.subtle.digest('SHA-256', this.toArrayBuffer(this.encryptionKey))
     const hashArray = new Uint8Array(hashBuffer)
     this.keyId = Array.from(hashArray.slice(0, 16))
       .map(b => b.toString(16).padStart(2, '0'))
@@ -330,7 +347,7 @@ export class DHTStorage {
   // Utility methods
 
   async computeHash(data: Uint8Array): Promise<string> {
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer)
+    const hashBuffer = await crypto.subtle.digest('SHA-256', this.toArrayBuffer(data))
     const hashArray = new Uint8Array(hashBuffer)
     return Array.from(hashArray, byte => byte.toString(16).padStart(2, '0')).join('')
   }
@@ -456,7 +473,7 @@ export class DHTStorage {
   }
 
   private async generateNodeId(address: string): Promise<string> {
-    const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(address))
+    const hashBuffer = await crypto.subtle.digest('SHA-256', this.toArrayBuffer(address))
     const hashArray = new Uint8Array(hashBuffer)
     return Array.from(hashArray, byte => byte.toString(16).padStart(2, '0')).join('')
   }

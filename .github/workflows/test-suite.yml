@@ -171,10 +171,10 @@ jobs:
       run: npm run typecheck
       
     - name: Run frontend tests
-      run: npm run test:run
+      run: NODE_OPTIONS="--max-old-space-size=8192" npm run test:run
       
     - name: Generate test coverage
-      run: npm run test:coverage
+      run: NODE_OPTIONS="--max-old-space-size=8192" npm run test:coverage
       
     - name: Upload frontend coverage
       uses: codecov/codecov-action@v3

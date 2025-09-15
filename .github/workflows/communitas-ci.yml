@@ -116,7 +116,7 @@ jobs:
         timeout-minutes: 3
 
       - name: Run frontend tests
-        run: npm run test
+        run: NODE_OPTIONS="--max-old-space-size=8192" npm run test
         timeout-minutes: 5
 
       - name: Build frontend

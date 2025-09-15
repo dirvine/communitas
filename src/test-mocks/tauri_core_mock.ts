@@ -9,18 +9,25 @@ export async function invoke(command: string, args?: any): Promise<any> {
       }
     case 'ml_dsa_sign': {
       const context = args && args.context ? args.context : 'default'
+      const data: number[] = (args && args.data) || []
+      const checksum = data.reduce((a: number, b: number) => (a + b) % 256, 0)
       return {
-        signature: Array(64).fill(7),
+        signature: Array(64).fill(checksum),
         algorithm: 'ML-DSA-65',
         context,
       }
     }
-    case 'ml_dsa_verify':
+    case 'ml_dsa_verify': {
+      const data: number[] = (args && args.data) || []
+      const signature: number[] = (args && args.signatureBytes) || []
+      const checksum = data.reduce((a: number, b: number) => (a + b) % 256, 0)
+      const is_valid = signature.length > 0 && signature[0] === checksum
       return {
-        is_valid: true,
+        is_valid,
         algorithm: 'ML-DSA-65',
         details: {},
       }
+    }
     case 'get_pqc_info':
       return {
         ml_kem_768_public_key_size: '1184',

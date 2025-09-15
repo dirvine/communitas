@@ -10,7 +10,7 @@ description = "Core business logic for Communitas - PQC collaboration with virtu
 
 [dependencies]
 # Saorsa Labs - use published crate
-saorsa-core = "0.3.17"
+saorsa-core = "=0.3.16"
 saorsa-fec = "0.4.11"
 saorsa-mls = "0.1.5"
 saorsa-rsps = "0.2.0"

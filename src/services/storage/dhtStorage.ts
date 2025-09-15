@@ -348,9 +348,17 @@ export class DHTStorage {
   // Utility methods
 
   async computeHash(data: Uint8Array): Promise<string> {
-    const hashBuffer = await crypto.subtle.digest('SHA-256', this.toArrayBuffer(data))
-    const hashArray = new Uint8Array(hashBuffer)
-    return Array.from(hashArray, byte => byte.toString(16).padStart(2, '0')).join('')
+    try {
+      const hashBuffer = await crypto.subtle.digest('SHA-256', this.toArrayBuffer(data))
+      const hashArray = new Uint8Array(hashBuffer)
+      return Array.from(hashArray, byte => byte.toString(16).padStart(2, '0')).join('')
+    } catch {
+      // Node fallback for test environment
+      // @ts-ignore
+      const nodeCrypto = await import('crypto')
+      const hex = nodeCrypto.createHash('sha256').update(Buffer.from(data)).digest('hex')
+      return hex
+    }
   }
 
   private computeDistance(hash1: string, hash2: string): number {
@@ -474,9 +482,17 @@ export class DHTStorage {
   }
 
   private async generateNodeId(address: string): Promise<string> {
-    const hashBuffer = await crypto.subtle.digest('SHA-256', this.toArrayBuffer(address))
-    const hashArray = new Uint8Array(hashBuffer)
-    return Array.from(hashArray, byte => byte.toString(16).padStart(2, '0')).join('')
+    try {
+      const hashBuffer = await crypto.subtle.digest('SHA-256', this.toArrayBuffer(address))
+      const hashArray = new Uint8Array(hashBuffer)
+      return Array.from(hashArray, byte => byte.toString(16).padStart(2, '0')).join('')
+    } catch {
+      // Node fallback
+      // @ts-ignore
+      const nodeCrypto = await import('crypto')
+      const hex = nodeCrypto.createHash('sha256').update(Buffer.from(address, 'utf-8')).digest('hex')
+      return hex
+    }
   }
 
   private generatePublicKey(): string {

@@ -18,7 +18,7 @@ mod tauri_command_tests {
     #[test]
     fn test_container_apply_ops() {
         // Test container operations application
-        let ops = vec!["op1", "op2"];
+        let ops = ["op1", "op2"];
         assert!(!ops.is_empty());
     }
 
@@ -214,7 +214,7 @@ mod tauri_command_tests {
     #[test]
     fn test_core_send_message_to_recipients() {
         // Test sending message to specific recipients
-        let recipients = vec!["user1", "user2"];
+        let recipients = ["user1", "user2"];
         let message = "Hello, World!";
         assert!(!recipients.is_empty());
         assert!(!message.is_empty());
@@ -230,7 +230,7 @@ mod tauri_command_tests {
     #[test]
     fn test_core_update_bootstrap_nodes() {
         // Test updating bootstrap nodes
-        let nodes = vec!["node1:8080", "node2:8080"];
+        let nodes = ["node1:8080", "node2:8080"];
         assert!(!nodes.is_empty());
     }
 

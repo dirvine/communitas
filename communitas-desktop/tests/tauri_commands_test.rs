@@ -55,7 +55,7 @@ mod tauri_command_tests {
     #[test]
     fn test_container_put_object() {
         // Test container put object operation
-        let object = HashMap::new();
+        let object: HashMap<String, String> = HashMap::new();
         assert_eq!(object.len(), 0);
     }
 

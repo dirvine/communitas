@@ -14,7 +14,7 @@
     "test:components": "NODE_OPTIONS=--max-old-space-size=10240 CI=true vitest run --reporter=dot",
     "test:services": "NODE_OPTIONS=--max-old-space-size=10240 CI=true vitest run --reporter=dot",
     "test:utils": "NODE_OPTIONS=--max-old-space-size=10240 CI=true vitest run --reporter=dot",
-    "test:ci": "NODE_OPTIONS=--max-old-space-size=10240 CI=true vitest run --reporter=dot",
+    "test:ci": "NODE_OPTIONS=--max-old-space-size=10240 CI=true vitest run --reporter=dot --pool=forks --poolOptions.forks.singleFork=true",
     "test:fast": "NODE_OPTIONS=--max-old-space-size=8192 vitest run --reporter=dot src/services/__tests__/featureFlags.test.ts src/utils/__tests__/identity.test.ts src/services/storage/__tests__/markdownPublisher.test.ts",
     "test:run": "NODE_OPTIONS=--max-old-space-size=8192 vitest run --reporter=dot src/services/__tests__/featureFlags.test.ts src/utils/__tests__/identity.test.ts src/services/storage/__tests__/dhtStorage.test.ts src/services/storage/__tests__/reedSolomon.test.ts src/services/storage/__tests__/markdownPublisher.test.ts",
     "test:ui": "vitest --ui",

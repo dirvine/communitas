@@ -24,9 +24,9 @@ export default defineConfig({
     },
     maxWorkers: process.env.CI ? 1 : undefined,
     minWorkers: 1,
-    testTimeout: 30000,
-    hookTimeout: 30000,
-    teardownTimeout: 10000,
+    testTimeout: 10000, // 10 seconds to prevent hanging
+    hookTimeout: 5000,  // 5 seconds for hooks
+    teardownTimeout: 5000, // 5 seconds for cleanup
     coverage: {
       reporter: ['text', 'lcov', 'html'],
       reportsDirectory: './coverage',

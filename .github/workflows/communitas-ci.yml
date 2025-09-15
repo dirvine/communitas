@@ -117,7 +117,7 @@ jobs:
 
       - name: Run frontend tests
         run: npm run test:ci
-        timeout-minutes: 8
+        timeout-minutes: 5
 
       - name: Build frontend
         run: npm run build

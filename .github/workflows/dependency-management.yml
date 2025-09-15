@@ -146,6 +146,20 @@ jobs:
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@stable
       
+    - name: Install system dependencies (Linux)
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          libwebkit2gtk-4.1-dev \
+          build-essential \
+          curl \
+          wget \
+          libssl-dev \
+          libgtk-3-dev \
+          libayatana-appindicator3-dev \
+          librsvg2-dev
+      timeout-minutes: 3
+      
     - name: Cache Rust dependencies
       uses: Swatinem/rust-cache@v2
       with:
@@ -155,14 +169,14 @@ jobs:
       run: |
         echo "Verifying saorsa-fec crate integration..."
         
-        # Check that saorsa-fec is in Cargo.toml
-        if ! grep -q "saorsa-fec" Cargo.toml && ! grep -q "saorsa-fec" communitas-core/Cargo.toml; then
-          echo "❌ saorsa-fec dependency missing from Cargo.toml"
+        # Check that saorsa-fec is in container Cargo.toml
+        if ! grep -q "saorsa-fec" crates/communitas-container/Cargo.toml; then
+          echo "❌ saorsa-fec dependency missing from container Cargo.toml"
           exit 1
         fi
         
         # Verify correct version usage
-        SAORSA_FEC_VERSION=$(grep "saorsa-fec" communitas-core/Cargo.toml 2>/dev/null | grep -o '"[0-9]\+\.[0-9]\+\.[0-9]\+"' | tr -d '"' | head -1)
+        SAORSA_FEC_VERSION=$(grep "saorsa-fec" crates/communitas-container/Cargo.toml 2>/dev/null | grep -o '"[0-9]\+\.[0-9]\+\.[0-9]\+"' | tr -d '"' | head -1)
         echo "Using saorsa-fec version: $SAORSA_FEC_VERSION"
         
         # Test compilation with saorsa-fec
@@ -175,13 +189,8 @@ jobs:
       run: |
         echo "Testing encryption functionality..."
         
-        # Run specific tests for secure_fec module
-        cargo test secure_fec --lib
-        
-        # Verify SecureFecManager functionality  
-        cargo test test_secure_fec_manager_creation
-        cargo test test_encryption_decryption_roundtrip
-        cargo test test_authentication_failure
+        # Run container tests which include FEC and encryption
+        cargo test --package communitas-container --lib
         
         echo "✅ Encryption functionality tests passed"
       
@@ -200,8 +209,8 @@ jobs:
           echo "ℹ️ No benchmark tests found"
         fi
         
-        # Basic performance validation
-        cargo test --release test_encryption_decryption_roundtrip
+        # Basic performance validation - run container tests in release mode
+        cargo test --release --package communitas-container --lib
         
         echo "✅ Performance regression testing completed"
       

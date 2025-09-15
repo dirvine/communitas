@@ -13,6 +13,19 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/setupTests.ts', './vitest.setup.ts'],
     include: ['src/**/*.test.{ts,tsx}', 'src/**/__tests__/**/*.{ts,tsx}'],
+    // Memory management for CI
+    pool: 'forks',
+    poolOptions: {
+      forks: {
+        singleFork: true,
+        isolate: true,
+      }
+    },
+    maxWorkers: process.env.CI ? 1 : undefined,
+    minWorkers: 1,
+    testTimeout: 30000,
+    hookTimeout: 30000,
+    teardownTimeout: 10000,
     coverage: {
       reporter: ['text', 'lcov', 'html'],
       reportsDirectory: './coverage',

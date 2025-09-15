@@ -1,5 +1,5 @@
 use communitas_core::CoreContext;
-use saorsa_core::chat::{Channel, ChannelId, ChannelRole, ChannelType, MessageId, Thread};
+use saorsa_core::chat::{Channel, ChannelId, ChannelType, MessageId, Thread};
 use saorsa_core::identity::FourWordAddress;
 use saorsa_core::identity::enhanced::DeviceType;
 use saorsa_core::messaging::ChannelId as MessagingChannelId;
@@ -242,10 +242,10 @@ pub async fn core_send_message_to_channel(
 /// Invite a member to a channel by four-word address; registers mapping and adds to channel
 #[tauri::command]
 pub async fn core_channel_invite_by_words(
-    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
-    channel_id: String,
+    _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+    _channel_id: String,
     invitee_words: [String; 4],
-    role: Option<String>,
+    _role: Option<String>,
 ) -> Result<bool, String> {
     // Validate words
     if !saorsa_core::fwid::fw_check(invitee_words.clone()) {
@@ -255,29 +255,10 @@ pub async fn core_channel_invite_by_words(
     let _invitee_key = saorsa_core::fwid::fw_to_key(invitee_words.clone())
         .map_err(|e| format!("fw_to_key failed: {}", e))?;
 
-    let words_joined = invitee_words.join("-");
-    let user_id = saorsa_core::get_user_by_four_words(&words_joined)
-        .await
-        .map_err(|e| format!("address book lookup failed: {}", e))?
-        .ok_or_else(|| "unknown user (address not found)".to_string())?;
-
-    // Add to channel using ChatManager
-    let mut guard = shared.write().await;
-    let ctx = guard
-        .as_mut()
-        .ok_or_else(|| "Core not initialized".to_string())?;
-    let member_role = match role.as_deref() {
-        Some("Owner") => ChannelRole::Owner,
-        Some("Admin") => ChannelRole::Admin,
-        Some("Moderator") => ChannelRole::Moderator,
-        Some("Guest") => ChannelRole::Guest,
-        _ => ChannelRole::Member,
-    };
-    ctx.chat
-        .add_member(&ChannelId(channel_id), user_id, member_role)
-        .await
-        .map_err(|e| format!("add_member failed: {}", e))?;
-    Ok(true)
+    // TODO: The saorsa_core v0.3.17 doesn't have get_user_by_four_words function
+    // and ChatManager doesn't have add_member method
+    // This functionality needs to be implemented when the API is available
+    Err("Channel member addition not yet implemented in current saorsa_core version".to_string())
 }
 
 /// Get channel recipients
@@ -313,10 +294,8 @@ pub async fn core_channel_list_members(
         .map_err(|e| format!("get_channel failed: {}", e))?;
     let mut out = Vec::with_capacity(ch.members.len());
     for m in ch.members {
-        let words_opt = saorsa_core::get_user_four_words(&m.user_id)
-            .await
-            .ok()
-            .and_then(|o| o.map(|fw| fw.0));
+        // TODO: saorsa_core v0.3.17 doesn't have get_user_four_words function
+        let words_opt: Option<String> = None;
         out.push(ChannelMemberEntry {
             user_id: m.user_id,
             role: format!("{:?}", m.role),
@@ -348,10 +327,8 @@ pub async fn core_resolve_channel_members(
     let app_clone = app.clone();
     tokio::spawn(async move {
         for m in ch.members {
-            let words_opt = match saorsa_core::get_user_four_words(&m.user_id).await {
-                Ok(Some(addr)) => Some(addr.0),
-                _ => None,
-            };
+            // TODO: saorsa_core v0.3.17 doesn't have get_user_four_words function
+            let words_opt: Option<Vec<String>> = None;
             let payload = serde_json::json!({
                 "user_id": m.user_id,
                 "role": format!("{:?}", m.role),

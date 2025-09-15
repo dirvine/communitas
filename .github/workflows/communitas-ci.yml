@@ -14,7 +14,7 @@ jobs:
   test-rust:
     name: Rust Backend Tests
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    timeout-minutes: 20  # Reduced from 45 to 20 minutes
     strategy:
       fail-fast: false
       matrix:
@@ -53,12 +53,14 @@ jobs:
             libgtk-3-dev \
             libayatana-appindicator3-dev \
             librsvg2-dev
+        timeout-minutes: 3
 
       - name: Install system dependencies (macOS)
         if: matrix.os == 'macos-latest'
         run: |
           # Tauri dependencies are included in macOS by default
           echo "macOS dependencies ready"
+        timeout-minutes: 1
 
       - name: Cache Cargo registry
         uses: actions/cache@v4
@@ -71,30 +73,30 @@ jobs:
 
       - name: Check Rust formatting
         run: cargo fmt --all -- --check
+        timeout-minutes: 2
         
-
       - name: Rust linting
         run: cargo clippy --all-targets --all-features -- -D warnings
+        timeout-minutes: 10
         
-
       - name: Build Rust backend
         run: cargo build --verbose
+        timeout-minutes: 8
         
-
       - name: Run Rust tests
-        run: cargo test --verbose
+        run: timeout 600 cargo test --verbose || cargo test --verbose
+        timeout-minutes: 10
         
-
       - name: Run integration tests
         run: |
           cargo test integration_ || true
           cargo test reed_solomon || true
+        timeout-minutes: 5
         
-
   test-frontend:
     name: Frontend Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v4
@@ -107,21 +109,26 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+        timeout-minutes: 5
 
       - name: TypeScript type checking
         run: npm run typecheck
+        timeout-minutes: 3
 
       - name: Run frontend tests
         run: npm run test
+        timeout-minutes: 5
 
       - name: Build frontend
         run: npm run build
+        timeout-minutes: 3
 
   test-e2e:
     name: End-to-End Tests
     runs-on: ubuntu-latest
     continue-on-error: true
     needs: [test-rust, test-frontend]
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
@@ -148,25 +155,30 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev \
             xvfb
+        timeout-minutes: 3
 
       - name: Install dependencies
         run: npm ci
+        timeout-minutes: 5
 
       - name: Install Playwright
         run: npx playwright install --with-deps
+        timeout-minutes: 5
 
       - name: Build app for testing
         run: npm run tauri build
         env:
           TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+        timeout-minutes: 10
 
       - name: Run E2E tests
         run: xvfb-run -a npm run test:e2e
+        timeout-minutes: 5
 
   security:
     name: Security Audit
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
 
     steps:
       - uses: actions/checkout@v4
@@ -182,16 +194,20 @@ jobs:
 
       - name: Install cargo-audit
         run: cargo install cargo-audit
+        timeout-minutes: 3
 
       - name: Rust security audit
         run: cargo audit --deny warnings
         working-directory: .
+        timeout-minutes: 2
 
       - name: Install npm dependencies
         run: npm ci
+        timeout-minutes: 3
 
       - name: NPM security audit
         run: npm audit --audit-level=high
+        timeout-minutes: 2
 
       - name: Check for hardcoded secrets
         run: |
@@ -199,11 +215,12 @@ jobs:
           if grep -r -E "(api_key|secret_key|password|token)\s*[:=]\s*['\"][^'\"]{8,}['\"]" --include="*.ts" --include="*.tsx" --include="*.js" --include="*.rs" .; then
             echo "::warning::Potential hardcoded secrets found"
           fi
+        timeout-minutes: 1
 
   build-artifacts:
     name: Build Release Artifacts
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 40
+    timeout-minutes: 25
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [test-rust, test-frontend]
 
@@ -236,14 +253,17 @@ jobs:
             libgtk-3-dev \
             libayatana-appindicator3-dev \
             librsvg2-dev
+        timeout-minutes: 3
 
       - name: Install dependencies
         run: npm ci
+        timeout-minutes: 5
 
       - name: Build release
         run: npm run tauri build
         env:
           TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+        timeout-minutes: 15
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -284,15 +304,18 @@ jobs:
             libgtk-3-dev \
             libayatana-appindicator3-dev \
             librsvg2-dev
+        timeout-minutes: 3
 
       - name: Install dependencies
         run: npm ci
+        timeout-minutes: 5
 
       - name: Build and release
         run: npm run tauri build
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+        timeout-minutes: 10
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1

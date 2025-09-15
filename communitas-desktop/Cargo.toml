@@ -22,7 +22,7 @@ communitas-core = { path = "../communitas-core" }
 communitas-container = { path = "../crates/communitas-container" }
 
 # Saorsa Core - needed for direct use
-saorsa-core = "0.3.19"
+saorsa-core = "0.3.17"
 saorsa-fec = "0.4.11"
 
 # Networking

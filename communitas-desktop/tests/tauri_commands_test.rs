@@ -4,9 +4,9 @@
 #[cfg(test)]
 mod tauri_command_tests {
     use std::collections::HashMap;
-    
+
     // Container commands tests
-    
+
     #[test]
     fn test_container_init() {
         // Test container initialization command
@@ -60,14 +60,14 @@ mod tauri_command_tests {
     }
 
     // Core commands tests
-    
+
     #[test]
     fn test_core_initialize() {
         // Test core initialization
         let four_words = "ocean-forest-moon-star";
         let display_name = "Test User";
         let device_name = "Test Device";
-        
+
         assert!(four_words.split('-').count() == 4);
         assert!(!display_name.is_empty());
         assert!(!device_name.is_empty());
@@ -235,7 +235,7 @@ mod tauri_command_tests {
     }
 
     // Sync commands tests
-    
+
     #[test]
     fn test_sync_clear_quic_pinned_spki() {
         // Test clearing QUIC pinned SPKI
@@ -292,7 +292,7 @@ mod integration_tests {
         let group_name = "Integration Test Group";
         let channel_name = "Integration Test Channel";
         let message = "Integration test message";
-        
+
         assert!(four_words.split('-').count() == 4);
         assert!(!group_name.is_empty());
         assert!(!channel_name.is_empty());
@@ -305,7 +305,7 @@ mod integration_tests {
         let private_key = "test-private-key";
         let private_value = "test-private-value";
         let container_id = "test-container";
-        
+
         assert!(!private_key.is_empty());
         assert!(!private_value.is_empty());
         assert!(!container_id.is_empty());
@@ -317,7 +317,7 @@ mod integration_tests {
         let peer_id = "peer-123";
         let spki = "test-spki";
         let watcher_id = "watcher-123";
-        
+
         assert!(!peer_id.is_empty());
         assert!(!spki.is_empty());
         assert!(!watcher_id.is_empty());

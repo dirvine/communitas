@@ -83,12 +83,13 @@ export class DHTStorage {
   private toArrayBuffer(data: Uint8Array | ArrayBuffer | string): ArrayBuffer {
     if (typeof data === 'string') {
       // Convert string to ArrayBuffer via TextEncoder
-      return new TextEncoder().encode(data).buffer
+      const encoded = new TextEncoder().encode(data)
+      return encoded.buffer.slice(encoded.byteOffset, encoded.byteOffset + encoded.byteLength)
     } else if (data instanceof ArrayBuffer) {
       return data
     } else if (data instanceof Uint8Array || ArrayBuffer.isView(data)) {
       // Properly slice the underlying buffer to get the correct ArrayBuffer
-      return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength)
+      return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer
     } else {
       throw new TypeError('Data must be Uint8Array, ArrayBuffer, or string')
     }

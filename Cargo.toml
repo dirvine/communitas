@@ -24,7 +24,7 @@ identifier = "com.p2pfoundation.communitas"
 
 [dependencies]
 # P2P Foundation - use published saorsa-core
-saorsa-core = "=0.3.16"  # Pinned to v0.3.16 - v0.3.17+ has Windows compilation bug in bootstrap/merge.rs:468
+saorsa-core = "=0.3.20"  # v0.3.20 fixes Windows compilation bug
 
 # Async runtime
 tokio = { version = "1.39", features = ["full"] }

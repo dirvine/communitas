@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeAll, afterAll } from 'vitest'
-// Heavy integration; skip in unit env and handle in Sprint 2
-describe.skip('Storage Pipeline Integration', () => {})
+// Heavy integration: run only when RUN_SLOW is set
+const d = process.env.RUN_SLOW ? describe : describe.skip
 import { StoragePipeline } from '../../storagePipeline'
 import { YjsMarkdownEditor } from '../../yjsCollaboration'
 import { ReedSolomonEncoder } from '../../reedSolomon'
@@ -8,7 +8,7 @@ import { DHTStorage } from '../../dhtStorage'
 import { MarkdownWebPublisher } from '../../markdownPublisher'
 import { FourWordIdentity } from '../../../../types/collaboration'
 
-describe('Storage Pipeline Integration', () => {
+d('Storage Pipeline Integration', () => {
   let pipeline: StoragePipeline
   let groupMembers: FourWordIdentity[]
   

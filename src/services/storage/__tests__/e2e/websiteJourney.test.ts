@@ -1,10 +1,11 @@
 import { describe, test, expect, beforeAll, afterAll } from 'vitest'
+const d = process.env.RUN_SLOW ? describe : describe.skip
 // Full E2E flow; skip for Sprint 1 unit runs, migrate to Playwright in Sprint 3
 describe.skip('E2E: Create and Publish Website', () => {})
 import { CompleteStorageSystem } from '../../CompleteStorageSystem'
 import { Organization, Group, PersonalUser } from '../../../../types/collaboration'
 
-describe('E2E: Create and Publish Website', () => {
+d('E2E: Create and Publish Website', () => {
   let system: CompleteStorageSystem
   let organization: Organization
   let orgMembers: PersonalUser[]

@@ -251,6 +251,16 @@ export class DHTStorage {
       ...encryptionResult.authTag
     ])
     
+    // Ensure a key pair exists for the current keyId (useful in tests with synthetic IDs)
+    let kp = cryptoManager.getKeyPair(this.keyId)
+    if (!kp) {
+      try {
+        await cryptoManager.generateKeyPair(this.keyId)
+      } catch (_) {
+        // ignore, signData will throw if generation fails
+      }
+    }
+    
     const signature = await cryptoManager.signData(dataToSign, this.keyId)
     const keyPair = cryptoManager.getKeyPair(this.keyId)
     
@@ -327,7 +337,15 @@ export class DHTStorage {
         ...block.authTag
       ])
       
-      const keyPair = cryptoManager.getKeyPair(block.keyId)
+      let keyPair = cryptoManager.getKeyPair(block.keyId)
+      if (!keyPair) {
+        try {
+          await cryptoManager.generateKeyPair(block.keyId)
+          keyPair = cryptoManager.getKeyPair(block.keyId)
+        } catch (_) {
+          // leave as undefined
+        }
+      }
       if (!keyPair) {
         console.warn(`Key pair not found for verification: ${block.keyId}`)
         return false

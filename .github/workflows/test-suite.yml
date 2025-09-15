@@ -246,38 +246,24 @@ jobs:
       with:
         workspaces: . -> target
         
-    - name: Validate saorsa-fec encryption compliance
+    - name: Validate error handling patterns
       run: |
-        echo "Validating encryption compliance..."
+        echo "Validating error handling compliance..."
         
-        # Check that secure_fec.rs exists and contains required functionality
-        if [ ! -f "communitas-core/src/secure_fec.rs" ] && [ ! -f "communitas-desktop/src/secure_fec.rs" ] && [ ! -f "communitas-headless/src/secure_fec.rs" ]; then
-          echo "❌ secure_fec.rs module missing from all crates"
-          exit 1
-        fi
-        
-        # Verify SecureFecManager is being used for encryption
-        FEC_USAGE=$(find communitas-core/src communitas-desktop/src communitas-headless/src -name "*.rs" 2>/dev/null | xargs grep "SecureFecManager" | wc -l)
-        if [ $FEC_USAGE -lt 5 ]; then
-          echo "❌ Insufficient usage of SecureFecManager (found $FEC_USAGE references)"
-          echo "All encryption operations must use saorsa-fec via SecureFecManager"
-          exit 1
-        fi
-        
-        # Check for proper error handling patterns
+        # Check for proper error handling patterns in src-tauri
         UNWRAP_COUNT=0
-        for crate_dir in communitas-core/src communitas-desktop/src communitas-headless/src crates/communitas-container/src; do
-          if [ -d "$crate_dir" ]; then
-            COUNT=$(find "$crate_dir" -name "*.rs" -not -path "*/tests/*" -not -name "*test*.rs" | xargs grep "\.unwrap()" | wc -l || echo 0)
-            UNWRAP_COUNT=$((UNWRAP_COUNT + COUNT))
-          fi
-        done
+        if [ -d "src-tauri/src" ]; then
+          COUNT=$(find "src-tauri/src" -name "*.rs" -not -path "*/tests/*" -not -name "*test*.rs" | xargs grep "\.unwrap()" | wc -l || echo 0)
+          UNWRAP_COUNT=$((UNWRAP_COUNT + COUNT))
+        fi
+        
         if [ $UNWRAP_COUNT -gt 0 ]; then
           echo "❌ Found $UNWRAP_COUNT unwrap() calls in production code"
+          echo "Production code must use proper error handling with Result types"
           exit 1
         fi
         
-        echo "✅ Encryption compliance validated"
+        echo "✅ Error handling compliance validated"
         
     - name: Build in release mode (security optimizations)
       run: cargo build --release

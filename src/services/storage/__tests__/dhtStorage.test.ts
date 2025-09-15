@@ -3,7 +3,10 @@ import { DHTStorage, EncryptedBlock, BlockMetadata } from '../dhtStorage'
 import { NetworkIdentity } from '../../../types/collaboration'
 import { cryptoManager } from '../../security/cryptoManager'
 
-describe('DHTStorage', () => {
+// Skip DHT tests in CI as they require real network connections
+const skipInCI = process.env.CI === 'true' ? describe.skip : describe
+
+skipInCI('DHTStorage', () => {
   let dht: DHTStorage
   let testIdentity: NetworkIdentity
   

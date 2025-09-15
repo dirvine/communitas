@@ -32,6 +32,13 @@ vi.mock('@tauri-apps/api', () => ({
   },
 }))
 
+// Mock monaco-editor which is not resolvable in test env
+vi.mock('monaco-editor', () => ({
+  editor: {
+    create: vi.fn(() => ({ dispose: vi.fn() })),
+  },
+}))
+
 // Mock framer-motion
 vi.mock('framer-motion', () => ({
   motion: {

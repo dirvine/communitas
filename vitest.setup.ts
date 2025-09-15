@@ -51,3 +51,18 @@ globalThis.crypto.subtle.digest = async function(algorithm: AlgorithmIdentifier,
   
   return originalDigest.call(this, algorithm, buffer)
 }
+
+// Polyfill window.matchMedia for jsdom
+if (typeof window !== 'undefined' && !window.matchMedia) {
+  // @ts-ignore
+  window.matchMedia = (query: string) => ({
+    matches: false,
+    media: query,
+    addEventListener: () => void 0,
+    removeEventListener: () => void 0,
+    addListener: () => void 0,
+    removeListener: () => void 0,
+    onchange: null,
+    dispatchEvent: () => false,
+  }) as any
+}

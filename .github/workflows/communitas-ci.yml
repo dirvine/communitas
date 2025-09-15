@@ -116,8 +116,8 @@ jobs:
         timeout-minutes: 3
 
       - name: Run frontend tests
-        run: npm run test:ci
-        timeout-minutes: 5
+        run: npm run test:ci -- --reporter=verbose
+        timeout-minutes: 3
 
       - name: Build frontend
         run: npm run build

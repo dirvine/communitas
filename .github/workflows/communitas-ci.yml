@@ -283,12 +283,14 @@ jobs:
         timeout-minutes: 5
 
       - name: Build release
+        if: ${{ secrets.TAURI_PRIVATE_KEY != '' }}
         run: npm run tauri build
         env:
           TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
         timeout-minutes: 15
 
       - name: Upload artifacts
+        if: ${{ secrets.TAURI_PRIVATE_KEY != '' }}
         uses: actions/upload-artifact@v4
         with:
           name: communitas-${{ matrix.os }}
@@ -337,6 +339,7 @@ jobs:
         timeout-minutes: 5
 
       - name: Build and release
+        if: ${{ secrets.TAURI_PRIVATE_KEY != '' }}
         run: npm run tauri build
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -344,6 +347,7 @@ jobs:
         timeout-minutes: 10
 
       - name: Create GitHub Release
+        if: ${{ secrets.TAURI_PRIVATE_KEY != '' }}
         uses: softprops/action-gh-release@v1
         with:
           files: |

@@ -241,7 +241,7 @@ jobs:
     name: Build Release Artifacts
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && secrets.TAURI_PRIVATE_KEY != '' }}
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [test-rust, test-frontend]
 
     strategy:

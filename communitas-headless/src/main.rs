@@ -603,6 +603,7 @@ use ed25519_dalek::SigningKey as Ed25519SecretKey;
 use std::sync::Arc as StdArc;
 // ant-quic send streams provide write_all via their API; no extra trait import needed
 use communitas_container as cc;
+#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
 #[derive(Serialize, Deserialize)]
@@ -657,7 +658,10 @@ async fn start_quic_delta_server(
             tokio::fs::create_dir_all(parent).await.ok();
         }
         let _ = tokio::fs::write(&key_path, sk.to_bytes()).await;
-        let _ = std::fs::set_permissions(&key_path, std::fs::Permissions::from_mode(0o600));
+        #[cfg(unix)]
+        {
+            let _ = std::fs::set_permissions(&key_path, std::fs::Permissions::from_mode(0o600));
+        }
         sk
     };
     let pk_bytes = public_key_to_bytes(&sk.verifying_key());

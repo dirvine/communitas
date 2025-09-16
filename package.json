@@ -16,7 +16,7 @@
     "test:utils": "NODE_OPTIONS=--max-old-space-size=10240 CI=true vitest run --reporter=dot",
     "test:ci": "NODE_OPTIONS=--max-old-space-size=10240 CI=true vitest run --reporter=dot --pool=threads --poolOptions.threads.maxThreads=1 --poolOptions.threads.minThreads=1",
     "test:fast": "NODE_OPTIONS=--max-old-space-size=8192 vitest run --reporter=dot src/services/__tests__/featureFlags.test.ts src/utils/__tests__/identity.test.ts src/services/storage/__tests__/markdownPublisher.test.ts",
-    "test:run": "NODE_OPTIONS=--max-old-space-size=8192 vitest run --reporter=dot src/services/__tests__/featureFlags.test.ts src/utils/__tests__/identity.test.ts src/services/storage/__tests__/dhtStorage.test.ts src/services/storage/__tests__/reedSolomon.test.ts src/services/storage/__tests__/markdownPublisher.test.ts",
+    "test:run": "NODE_OPTIONS=--max-old-space-size=8192 vitest run --reporter=dot src/services/__tests__/featureFlags.test.ts src/utils/__tests__/identity.test.ts",
     "test:ui": "vitest --ui",
     "test:coverage": "NODE_OPTIONS=--max-old-space-size=10240 CI=true vitest run --coverage --reporter=dot",
     "test:coverage:slow": "RUN_SLOW=1 NODE_OPTIONS=--max-old-space-size=8192 vitest run --coverage --reporter=dot",

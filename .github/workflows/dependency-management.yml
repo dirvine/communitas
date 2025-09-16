@@ -44,7 +44,7 @@ jobs:
         cargo install cargo-audit
         cargo install cargo-outdated
         cargo install cargo-tree
-      timeout-minutes: 5
+      timeout-minutes: 10
         
     - name: Audit Rust dependencies for vulnerabilities
       run: cargo audit
@@ -161,7 +161,7 @@ jobs:
           pkg-config
         sudo apt-get install -y libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev \
           || sudo apt-get install -y libwebkit2gtk-4.0-dev libjavascriptcoregtk-4.0-dev
-      timeout-minutes: 3
+      timeout-minutes: 6
       
     - name: Cache Rust dependencies
       uses: Swatinem/rust-cache@v2

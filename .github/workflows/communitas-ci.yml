@@ -118,8 +118,8 @@ jobs:
         run: npm run typecheck
         timeout-minutes: 3
 
-      - name: Run frontend tests
-        run: npm run test:ci
+      - name: Run frontend smoke tests
+        run: npm run test:run
         timeout-minutes: 20
 
       - name: Build frontend

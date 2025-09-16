@@ -185,8 +185,8 @@ jobs:
     - name: Run TypeScript type checking
       run: npm run typecheck
       
-    - name: Run frontend tests
-      run: npm run test:ci
+    - name: Run frontend smoke tests
+      run: npm run test:run
       
     - name: Generate test coverage
       run: NODE_OPTIONS="--max-old-space-size=10240" npm run test:coverage

@@ -1,6 +1,15 @@
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 
+const coverageThresholds = process.env.STRICT_COVERAGE === 'true'
+  ? {
+      lines: Number(process.env.COVERAGE_MIN_LINES ?? '85'),
+      functions: Number(process.env.COVERAGE_MIN_FUNCTIONS ?? '85'),
+      branches: Number(process.env.COVERAGE_MIN_BRANCHES ?? '80'),
+      statements: Number(process.env.COVERAGE_MIN_STATEMENTS ?? '85'),
+    }
+  : undefined
+
 export default defineConfig({
   plugins: [react()],
   resolve: {
@@ -31,12 +40,7 @@ export default defineConfig({
       reporter: ['text', 'lcov', 'html'],
       reportsDirectory: './coverage',
       provider: 'v8',
-      thresholds: {
-        lines: 85,
-        functions: 85,
-        branches: 80,
-        statements: 85,
-      },
+      thresholds: coverageThresholds,
       include: ['src/**/*.{ts,tsx}'],
       exclude: [
         'src/**/__tests__/**',

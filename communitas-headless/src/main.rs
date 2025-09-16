@@ -58,8 +58,13 @@ pub fn try_self_update() -> Result<Option<String>> {
 }
 
 #[derive(Parser, Debug)]
-#[command(name = "communitas-node")]
-#[command(about = "Headless Communitas P2P node", long_about = None)]
+#[command(
+    name = "communitas-headless",
+    author,
+    version,
+    about = "Headless Communitas P2P node",
+    long_about = None
+)]
 struct Args {
     /// Configuration file path
     #[arg(short, long, default_value = "/etc/communitas/config.toml")]

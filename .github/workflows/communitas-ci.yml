@@ -274,7 +274,7 @@ jobs:
             pkg-config
           sudo apt-get install -y libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev \
             || sudo apt-get install -y libwebkit2gtk-4.0-dev libjavascriptcoregtk-4.0-dev
-        timeout-minutes: 3
+        timeout-minutes: 6
 
       - name: Install dependencies
         run: npm ci
@@ -328,7 +328,7 @@ jobs:
             pkg-config
           sudo apt-get install -y libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev \
             || sudo apt-get install -y libwebkit2gtk-4.0-dev libjavascriptcoregtk-4.0-dev
-        timeout-minutes: 3
+        timeout-minutes: 6
 
       - name: Install dependencies
         run: npm ci

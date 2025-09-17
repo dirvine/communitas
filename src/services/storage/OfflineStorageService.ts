@@ -196,8 +196,15 @@ export class OfflineStorageService {
       try {
         const encrypted = await invoke<number[]>('core_private_get', { key });
         const decoded = new TextDecoder().decode(new Uint8Array(encrypted));
+
+        // Check if decoded string is valid before parsing
+        if (!decoded || decoded.trim() === '') {
+          console.debug('Empty response from network storage');
+          return undefined;
+        }
+
         const data = JSON.parse(decoded);
-        
+
         // Update cache
         await this.store(key, data);
         return data as T;

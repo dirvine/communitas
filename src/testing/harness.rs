@@ -85,7 +85,7 @@ impl TestHarness {
         let mut results = Vec::new();
 
         for scenario in &mut self.scenarios {
-            println!("Running scenario: {}", scenario.name());
+            tracing::info!("Running scenario: {}", scenario.name());
 
             // Setup
             scenario.setup()?;

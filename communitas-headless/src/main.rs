@@ -748,13 +748,17 @@ async fn connect_to_peer(addr_str: String) -> Result<()> {
 async fn run_node(args: Args) -> Result<()> {
     // Self-update mode: do not start services
     if args.self_update {
-        match try_self_update() {
-            Ok(Some(ver)) => {
+        // Run the blocking self-update in a spawn_blocking task
+        match tokio::task::spawn_blocking(try_self_update).await {
+            Ok(Ok(Some(ver))) => {
                 println!("updated-to={}", ver);
             }
-            Ok(None) => println!("no-update"),
-            Err(e) => {
+            Ok(Ok(None)) => println!("no-update"),
+            Ok(Err(e)) => {
                 eprintln!("self-update error: {:#}", e);
+            }
+            Err(e) => {
+                eprintln!("spawn error: {:#}", e);
             }
         }
         return Ok(());
@@ -826,18 +830,22 @@ async fn run_node(args: Args) -> Result<()> {
     // Try self-update if enabled
     if config.update.auto_update {
         info!("Checking for updates...");
-        match try_self_update() {
-            Ok(Some(new_version)) => {
+        // Run the blocking self-update in a spawn_blocking task
+        match tokio::task::spawn_blocking(try_self_update).await {
+            Ok(Ok(Some(new_version))) => {
                 info!("Successfully updated to version {}", new_version);
                 info!("Please restart the application to use the new version");
                 // In production, you might want to restart automatically
                 // or notify the user through other means
             }
-            Ok(None) => {
+            Ok(Ok(None)) => {
                 info!("No updates available");
             }
-            Err(e) => {
+            Ok(Err(e)) => {
                 warn!("Failed to check for updates: {:#}", e);
+            }
+            Err(e) => {
+                warn!("Failed to spawn update task: {:#}", e);
             }
         }
     }

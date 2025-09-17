@@ -24,7 +24,7 @@ identifier = "com.p2pfoundation.communitas"
 
 [dependencies]
 # P2P Foundation - use published saorsa-core
-saorsa-core = "=0.3.21"  # v0.3.21 exports get_user_four_words for channel tooling
+saorsa-core = "=0.3.22"  # v0.3.22 has improved four-word identity generation
 
 # Async runtime
 tokio = { version = "1.39", features = ["full"] }

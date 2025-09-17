@@ -19,7 +19,7 @@ communitas-container = { path = "../crates/communitas-container" }
 
 # Networking
 ant-quic = "0.8"
-saorsa-core = "=0.3.21"
+saorsa-core = "=0.3.22"
 four-word-networking = "2.6"
 
 # CLI

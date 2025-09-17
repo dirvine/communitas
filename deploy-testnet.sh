@@ -44,6 +44,7 @@ echo -e "${GREEN}📦 Binaries will be built on droplets via cloud-init${NC}"
 # Create droplets
 DROPLET_IDS=()
 FOUR_WORD_ADDRS=()
+SEED_ADDRESSES=()
 
 for i in "${!REGIONS[@]}"; do
     REGION=${REGIONS[$i]}
@@ -97,23 +98,77 @@ for i in "${!DROPLET_IDS[@]}"; do
     REGION=${REGIONS[$i]}
     IP=$(doctl compute droplet get "$DROPLET_ID" --format PublicIPv4 --no-header)
     PORT=$(doctl compute ssh "$DROPLET_ID" --ssh-command "grep -oE '[0-9]+' /etc/communitas-port.env | head -n1" 2>/dev/null)
-    echo "Node $((i+1)) ($REGION): $IP:$PORT"
-    echo "  \"$IP:$PORT\"," >> "$BOOTSTRAP_FILE"
+    if [[ -z "$PORT" ]]; then
+        echo -e "${RED}⚠️  Unable to determine port for node $((i+1)) ($REGION)${NC}"
+        continue
+    fi
+
+    SEED_ADDRESS="$IP:$PORT"
+    SEED_ADDRESSES+=("$SEED_ADDRESS")
+
+    echo "Node $((i+1)) ($REGION): $SEED_ADDRESS"
+    echo "  \"$SEED_ADDRESS\"," >> "$BOOTSTRAP_FILE"
 done
 echo "]" >> "$BOOTSTRAP_FILE"
 
+# Build Communitas config with collected bootstrap nodes
+CONFIG_FILE="communitas-config.toml"
+{
+    echo "# Generated: $(date)"
+    echo "identity = null"
+    echo "bootstrap_nodes = ["
+    if [[ ${#SEED_ADDRESSES[@]} -gt 0 ]]; then
+        for idx in "${!SEED_ADDRESSES[@]}"; do
+            SEED=${SEED_ADDRESSES[$idx]}
+            if [[ $idx -eq $((${#SEED_ADDRESSES[@]} - 1)) ]]; then
+                echo "  \"$SEED\""
+            else
+                echo "  \"$SEED\"," 
+            fi
+        done
+    fi
+    echo "]"
+    echo ""
+    echo "[storage]"
+    echo "base_dir = \"/var/lib/communitas\""
+    echo "cache_size_mb = 1024"
+    echo "enable_fec = true"
+    echo "fec_k = 8"
+    echo "fec_m = 4"
+    echo ""
+    echo "[network]"
+    echo "listen_addrs = [\"0.0.0.0:0\"]"
+    echo "enable_ipv6 = true"
+    echo "enable_webrtc = false"
+    echo "quic_idle_timeout_ms = 30000"
+    echo "quic_max_streams = 100"
+    echo ""
+    echo "[update]"
+    echo "channel = \"stable\""
+    echo "check_interval_secs = 21600"
+    echo "auto_update = true"
+    echo "jitter_secs = 0"
+} > "$CONFIG_FILE"
+
+echo -e "${GREEN}🧩 Generated Communitas config with ${#SEED_ADDRESSES[@]} bootstrap nodes${NC}"
+
 # Deploy bootstrap config and start services
-echo -e "${GREEN}🚀 Starting services on droplets...${NC}"
+echo -e "${GREEN}🚀 Updating services on droplets with new bootstrap list...${NC}"
 for i in "${!DROPLET_IDS[@]}"; do
     DROPLET_ID=${DROPLET_IDS[$i]}
     NAME="communitas-node-$((i+1))"
 
-    # Start services
+    # Push config and restart services
+    doctl compute scp "$CONFIG_FILE" "$DROPLET_ID":/tmp/communitas-config.toml
+    doctl compute ssh "$DROPLET_ID" --ssh-command "sudo mkdir -p /etc/communitas"
+    doctl compute ssh "$DROPLET_ID" --ssh-command "sudo mv /tmp/communitas-config.toml /etc/communitas/config.toml"
+    doctl compute ssh "$DROPLET_ID" --ssh-command "sudo chown communitas:communitas /etc/communitas/config.toml"
+    doctl compute ssh "$DROPLET_ID" --ssh-command "sudo chmod 0644 /etc/communitas/config.toml"
     doctl compute ssh "$DROPLET_ID" --ssh-command "sudo systemctl daemon-reload"
     doctl compute ssh "$DROPLET_ID" --ssh-command "sudo systemctl enable communitas"
-    doctl compute ssh "$DROPLET_ID" --ssh-command "sudo systemctl start communitas"
+    doctl compute ssh "$DROPLET_ID" --ssh-command "sudo systemctl restart communitas"
 
-    echo -e "${GREEN}✅ Services started on $NAME${NC}"
+    echo -e "${GREEN}✅ Services restarted on $NAME${NC}"
 done
 
 echo ""

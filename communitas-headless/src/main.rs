@@ -5,9 +5,10 @@ mod peer_cache;
 
 use anyhow::{Context, Result};
 use clap::Parser;
+use four_word_networking::FourWordAdaptiveEncoder;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
@@ -283,16 +284,131 @@ async fn start_health_endpoint(
     Ok(())
 }
 
+static FOUR_WORD_ENCODER: Lazy<Result<FourWordAdaptiveEncoder>> =
+    Lazy::new(|| Ok(FourWordAdaptiveEncoder::new()?));
+
+fn four_word_encoder() -> Result<&'static FourWordAdaptiveEncoder> {
+    FOUR_WORD_ENCODER
+        .as_ref()
+        .map_err(|e| anyhow::anyhow!("Failed to initialise four-word networking decoder: {}", e))
+}
+
+fn looks_like_four_word_identity(value: &str) -> bool {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+
+    let mut count = 0;
+    for part in trimmed.split('-') {
+        if part.is_empty() || !part.chars().all(|c| c.is_ascii_alphabetic()) {
+            return false;
+        }
+        count += 1;
+    }
+
+    count == 4
+}
+
+fn decode_four_word_seed(seed: &str) -> Result<Option<SocketAddr>> {
+    let trimmed = seed.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+
+    let mut candidate = trimmed;
+    let mut explicit_port: Option<u16> = None;
+
+    if let Some((words, port_part)) = trimmed.rsplit_once(':')
+        && looks_like_four_word_identity(words)
+    {
+        let port = port_part.parse::<u16>().map_err(|e| {
+            anyhow::anyhow!(
+                "Invalid port override '{}' for four-word identity '{}': {}",
+                port_part,
+                seed,
+                e
+            )
+        })?;
+        candidate = words;
+        explicit_port = Some(port);
+    }
+
+    if !looks_like_four_word_identity(candidate) {
+        return Ok(None);
+    }
+
+    let encoder = four_word_encoder()?;
+    let decoded = encoder.decode(&candidate.replace('-', " ")).map_err(|e| {
+        anyhow::anyhow!("Failed to decode four-word identity '{}': {}", candidate, e)
+    })?;
+
+    let mut socket_addr = match decoded.parse::<SocketAddr>() {
+        Ok(addr) => addr,
+        Err(_) => {
+            let ip = decoded.parse::<std::net::IpAddr>().map_err(|e| {
+                anyhow::anyhow!(
+                    "Four-word identity '{}' decoded to '{}' which is not a valid socket address: {}",
+                    candidate,
+                    decoded,
+                    e
+                )
+            })?;
+
+            let port = explicit_port.ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Four-word identity '{}' decoded to '{}' without a port; specify an explicit port like '{}:PORT'.",
+                    candidate,
+                    decoded,
+                    seed
+                )
+            })?;
+
+            SocketAddr::new(ip, port)
+        }
+    };
+
+    if let Some(port) = explicit_port {
+        socket_addr = SocketAddr::new(socket_addr.ip(), port);
+    }
+
+    Ok(Some(socket_addr))
+}
+
+fn canonical_seed_addr(seed: &str) -> Result<Option<SocketAddr>> {
+    let trimmed = seed.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+
+    if let Some(addr) = decode_four_word_seed(trimmed)? {
+        return Ok(Some(addr));
+    }
+
+    if let Ok(addr) = trimmed.parse::<SocketAddr>() {
+        return Ok(Some(addr));
+    }
+
+    Ok(None)
+}
+
 /// Connect to a peer using QUIC
 async fn connect_to_peer(addr_str: String) -> Result<()> {
     use std::net::ToSocketAddrs;
 
-    // Parse the address (format: "host:port" or "four-words:port")
-    let socket_addr = addr_str
-        .to_socket_addrs()
-        .map_err(|e| anyhow::anyhow!("Failed to resolve {}: {}", addr_str, e))?
-        .next()
-        .ok_or_else(|| anyhow::anyhow!("No addresses resolved for {}", addr_str))?;
+    let trimmed = addr_str.trim();
+
+    // Parse the address (format: "host:port" or "four words")
+    let socket_addr = if let Some(addr) = decode_four_word_seed(trimmed)? {
+        info!("Decoded four-word identity '{}' to {}", trimmed, addr);
+        addr
+    } else {
+        trimmed
+            .to_socket_addrs()
+            .map_err(|e| anyhow::anyhow!("Failed to resolve {}: {}", trimmed, e))?
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("No addresses resolved for {}", trimmed))?
+    };
 
     info!("Connecting to peer at {}", socket_addr);
 
@@ -394,6 +510,13 @@ async fn run_node(args: Args) -> Result<()> {
     let mut config = load_or_create_config(&args.config).await?;
     info!("Loaded configuration from {:?}", args.config);
 
+    let mut canonical_bootstrap_addrs: HashSet<SocketAddr> = HashSet::new();
+    for existing in &config.bootstrap_nodes {
+        if let Ok(Some(addr)) = canonical_seed_addr(existing) {
+            canonical_bootstrap_addrs.insert(addr);
+        }
+    }
+
     // Merge command-line bootstrap nodes with config
     if !args.bootstrap.is_empty() {
         info!(
@@ -401,8 +524,44 @@ async fn run_node(args: Args) -> Result<()> {
             args.bootstrap.len()
         );
         for bootstrap in &args.bootstrap {
-            if !config.bootstrap_nodes.contains(bootstrap) {
-                config.bootstrap_nodes.push(bootstrap.clone());
+            let trimmed = bootstrap.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+
+            match canonical_seed_addr(trimmed) {
+                Ok(Some(addr)) => {
+                    if canonical_bootstrap_addrs.insert(addr) {
+                        config.bootstrap_nodes.push(trimmed.to_string());
+                    } else {
+                        info!(
+                            "Bootstrap {} resolves to {} which is already configured; skipping duplicate",
+                            trimmed, addr
+                        );
+                    }
+                }
+                Ok(None) => {
+                    if !config
+                        .bootstrap_nodes
+                        .iter()
+                        .any(|existing| existing.trim() == trimmed)
+                    {
+                        config.bootstrap_nodes.push(trimmed.to_string());
+                    }
+                }
+                Err(e) => {
+                    warn!(
+                        "Bootstrap {} looks like a four-word identity but could not be decoded: {}",
+                        trimmed, e
+                    );
+                    if !config
+                        .bootstrap_nodes
+                        .iter()
+                        .any(|existing| existing.trim() == trimmed)
+                    {
+                        config.bootstrap_nodes.push(trimmed.to_string());
+                    }
+                }
             }
         }
     }
@@ -449,7 +608,15 @@ async fn run_node(args: Args) -> Result<()> {
         config.bootstrap_nodes.len()
     );
     for bootstrap in &config.bootstrap_nodes {
-        info!("  Bootstrap node: {}", bootstrap);
+        let trimmed = bootstrap.trim();
+        match decode_four_word_seed(trimmed) {
+            Ok(Some(addr)) => info!("  Bootstrap node: {} -> {}", trimmed, addr),
+            Ok(None) => info!("  Bootstrap node: {}", trimmed),
+            Err(e) => warn!(
+                "  Bootstrap node {} looks like a four-word identity but could not be decoded: {}",
+                trimmed, e
+            ),
+        }
     }
 
     // Create DHT client
@@ -459,7 +626,35 @@ async fn run_node(args: Args) -> Result<()> {
     info!("DHT client initialized");
 
     // Load cached peers and connect to them first
-    let mut all_bootstrap_nodes = config.bootstrap_nodes.clone();
+    let mut seen_resolved_addrs: HashSet<SocketAddr> = HashSet::new();
+    let mut seen_unresolved: HashSet<String> = HashSet::new();
+    let mut all_bootstrap_nodes: Vec<String> = Vec::new();
+
+    for bootstrap in &config.bootstrap_nodes {
+        let trimmed = bootstrap.trim();
+        let trimmed_owned = trimmed.to_string();
+        match canonical_seed_addr(&trimmed_owned) {
+            Ok(Some(addr)) => {
+                if seen_resolved_addrs.insert(addr) {
+                    all_bootstrap_nodes.push(trimmed_owned);
+                }
+            }
+            Ok(None) => {
+                if seen_unresolved.insert(trimmed_owned.clone()) {
+                    all_bootstrap_nodes.push(trimmed_owned);
+                }
+            }
+            Err(e) => {
+                warn!(
+                    "Bootstrap entry {} looks like a four-word identity but failed to decode: {}",
+                    trimmed, e
+                );
+                if seen_unresolved.insert(trimmed_owned.clone()) {
+                    all_bootstrap_nodes.push(trimmed_owned);
+                }
+            }
+        }
+    }
 
     {
         let cache_guard = PEER_CACHE.read().await;
@@ -468,9 +663,8 @@ async fn run_node(args: Args) -> Result<()> {
             info!("Found {} cached peers to try", cached_peers.len());
 
             for peer_info in cached_peers {
-                let addr_str = peer_info.address.to_string();
-                if !all_bootstrap_nodes.contains(&addr_str) {
-                    all_bootstrap_nodes.push(addr_str);
+                if seen_resolved_addrs.insert(peer_info.address) {
+                    all_bootstrap_nodes.push(peer_info.address.to_string());
                 }
             }
         }

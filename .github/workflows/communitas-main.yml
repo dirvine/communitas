@@ -1,4 +1,4 @@
-name: Communitas CI
+name: Communitas Main CI
 
 on:
   push:

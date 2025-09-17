@@ -244,16 +244,21 @@ impl LocalStorageManager {
         };
 
         // Update index
-        {
+        let previous_metadata = {
             let mut index = self.metadata_index.write().await;
-            index.insert(item_id, metadata.clone());
-        }
+            index.insert(item_id, metadata.clone())
+        };
 
         // Update stats
         {
             let mut stats = self.usage_stats.write().await;
-            stats.personal_data_size += data.len();
-            stats.total_files += 1;
+            if let Some(previous) = previous_metadata {
+                stats.personal_data_size =
+                    stats.personal_data_size.saturating_sub(previous.size) + data.len();
+            } else {
+                stats.personal_data_size += data.len();
+                stats.total_files += 1;
+            }
         }
 
         // Persist metadata
@@ -349,16 +354,23 @@ impl LocalStorageManager {
         };
 
         // Update index
-        {
+        let previous_metadata = {
             let mut index = self.metadata_index.write().await;
-            index.insert(item_id, metadata.clone());
-        }
+            index.insert(item_id, metadata.clone())
+        };
 
         // Update stats
         {
             let mut stats = self.usage_stats.write().await;
-            stats.group_shards_size += shard_data.len();
-            stats.total_files += 1;
+            if let Some(previous) = previous_metadata {
+                stats.group_shards_size = stats
+                    .group_shards_size
+                    .saturating_sub(previous.size)
+                    + shard_data.len();
+            } else {
+                stats.group_shards_size += shard_data.len();
+                stats.total_files += 1;
+            }
         }
 
         self.save_metadata_index().await?;
@@ -458,16 +470,23 @@ impl LocalStorageManager {
         };
 
         // Update index
-        {
+        let previous_metadata = {
             let mut index = self.metadata_index.write().await;
-            index.insert(item_id, metadata.clone());
-        }
+            index.insert(item_id, metadata.clone())
+        };
 
         // Update stats
         {
             let mut stats = self.usage_stats.write().await;
-            stats.dht_cache_size += data.len();
-            stats.total_files += 1;
+            if let Some(previous) = previous_metadata {
+                stats.dht_cache_size = stats
+                    .dht_cache_size
+                    .saturating_sub(previous.size)
+                    + data.len();
+            } else {
+                stats.dht_cache_size += data.len();
+                stats.total_files += 1;
+            }
         }
 
         self.save_metadata_index().await?;

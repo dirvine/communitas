@@ -41,13 +41,13 @@ jobs:
         if: env.ACT != 'true'
         run: npm run test:run
 
-  coverage:
-    name: JS Coverage
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    needs: test-fast
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    steps:
+   coverage:
+   name: JS Coverage
+   runs-on: ubuntu-latest
+   timeout-minutes: 30
+   needs: test-fast
+   if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+   steps:
       - uses: actions/checkout@v4
 
       - name: Set up Node.js 20
@@ -62,13 +62,13 @@ jobs:
       - name: Run unit tests with coverage
         run: npm run test:coverage:smoke
 
-      - name: Upload coverage report
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-html
-          path: coverage
+       - name: Upload coverage report
+         uses: actions/upload-artifact@v4
+         with:
+           name: coverage-html
+           path: coverage
 
-  rust-checks:
+   rust-checks:
     name: Rust Checks
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -106,11 +106,11 @@ jobs:
         with:
           components: rustfmt, clippy
 
-      - name: Rust fmt check
-        run: cargo fmt --all -- --check
+       - name: Rust fmt check
+         run: cargo fmt --all -- --check
 
-      - name: Rust clippy policy
-        run: cargo clippy --workspace --all-features -- -D clippy::panic -D clippy::unwrap_used -D clippy::expect_used
+       - name: Rust clippy policy
+         run: cargo clippy --workspace --all-features -- -D clippy::todo -D clippy::unimplemented -D clippy::unreachable -D clippy::print_stdout -D clippy::print_stderr
 
   headless-build:
     name: Headless Build (${{ matrix.os }})

@@ -172,14 +172,14 @@ jobs:
         timeout-minutes: 5
 
       - name: Build app for testing
-        if: ${{ secrets.TAURI_PRIVATE_KEY != '' }}
+        if: secrets.TAURI_PRIVATE_KEY != ''
         run: npm run tauri build
         env:
           TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
         timeout-minutes: 10
 
       - name: Run E2E tests
-        if: ${{ secrets.TAURI_PRIVATE_KEY != '' }}
+        if: secrets.TAURI_PRIVATE_KEY != ''
         run: xvfb-run -a npm run test:e2e
         timeout-minutes: 5
 

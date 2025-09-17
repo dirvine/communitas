@@ -1,10 +1,19 @@
 # Communitas — The Local‑First Collaboration App (saorsa-core)
 
-Communitas is a local‑first, PQC‑ready collaboration app that merges the best of WhatsApp, Dropbox, Zoom, and Slack into one experience — without centralized servers or DNS. Identities are human‑verifiable four words, storage is per‑entity virtual disks (org, group, channel, project, individual), and websites are published without DNS via identity‑bound website roots.
+Communitas is a local‑first, PQC‑ready collaboration platform that unifies messaging, file sharing, voice/video calling, and web publishing into a single decentralized experience. Built without centralized servers or DNS, it features human‑verifiable Four-Word identities, per‑entity virtual disks for secure storage, real‑time collaboration tools, and DNS‑free website publishing. Organizations, groups, channels, projects, and individuals each get dedicated virtual storage with end‑to‑end encryption, voice/video capabilities, screen sharing, and collaborative document editing.
 
 Two apps, one core:
 - Desktop app (Tauri v2): rich UI with Tauri commands for automation
 - Headless node: bootstrap/seeding and personal nodes (future rewards)
+
+## Key Capabilities
+
+- **Messaging**: Text, voice messages, threads, reactions, and @mentions
+- **Voice/Video**: HD calls, screen sharing, and multi-participant conferencing
+- **Storage**: Per-entity virtual disks with collaborative editing and FEC protection
+- **Web Publishing**: DNS-free websites using Four-Word addresses
+- **Security**: Post-quantum cryptography with end-to-end encryption
+- **Collaboration**: Real-time document editing, file sharing, and team coordination
 
 Backed by Saorsa Core (crates.io `saorsa-core`, v0.3.17): DHT, QUIC, identities, groups, messaging, virtual disks, and security.
 
@@ -66,6 +75,104 @@ npm run tauri dev
 - Core: saorsa-core (DHT, QUIC, identities, groups, messaging, virtual disks)
 - Crypto: PQC (ML‑DSA/ML‑KEM); XChaCha20‑Poly1305 for sealing
 - Storage: content addressed, FEC‑sealed objects, per‑entity virtual disks
+
+## Entities & Modules
+
+Communitas organizes collaboration around five core entities, each with dedicated capabilities and virtual storage:
+
+### 🏢 Organizations
+**Purpose**: Large-scale collaboration hubs for companies, communities, or projects
+**Capabilities**:
+- Multi-channel communication with threads and reactions
+- Hierarchical group structure with admin controls
+- Shared virtual disk with collaborative document editing
+- Voice/video conferencing for up to 100 participants
+- Screen sharing and real-time collaboration tools
+- Web disk publishing for public documentation
+- Advanced member management with roles and permissions
+
+### 👥 Groups
+**Purpose**: Medium-sized teams working on specific initiatives
+**Capabilities**:
+- Real-time messaging with @mentions and emoji reactions
+- Shared virtual disk for project assets and documents
+- Voice calls and video conferencing
+- Screen sharing for presentations and demos
+- Threaded conversations for focused discussions
+- File sharing with automatic encryption
+- Member invitation via Four-Word addresses
+
+### 📢 Channels
+**Purpose**: Topic-focused communication streams within organizations/groups
+**Capabilities**:
+- Public and private channel types
+- Text messaging with rich formatting (Markdown)
+- Voice messages and audio clips
+- File attachments and media sharing
+- Thread creation for detailed discussions
+- Channel-specific virtual storage
+- Integration with external tools and services
+
+### 📁 Projects
+**Purpose**: Structured workspaces for development and creative work
+**Capabilities**:
+- Collaborative document editing (CRDT-based)
+- Version-controlled file storage
+- Real-time presence indicators
+- Integrated task management
+- Code sharing and review tools
+- Project-specific virtual disks
+- Automated backup and synchronization
+
+### 👤 Individuals
+**Purpose**: Personal identity and private communication
+**Capabilities**:
+- Direct messaging with end-to-end encryption
+- Personal virtual disk for private files
+- Identity verification via Four-Word addresses
+- Cross-device synchronization
+- Private key management and backup
+- Personal website publishing (DNS-free)
+- Secure contact management
+
+## Module Capabilities
+
+### 💬 Messaging & Communication
+- **Text Messaging**: Real-time chat with Markdown support, threads, and reactions
+- **Voice Messages**: Record and send audio clips directly in conversations
+- **Direct Messages**: Private one-on-one and group conversations
+- **Channel Broadcasting**: Public announcements and topic-based discussions
+- **File Attachments**: Drag-and-drop file sharing with automatic encryption
+
+### 🎥 Voice & Video
+- **Voice Calls**: High-quality audio communication with noise cancellation
+- **Video Conferencing**: HD video calls with screen sharing capabilities
+- **Group Calls**: Multi-participant audio/video sessions
+- **Screen Sharing**: Share entire screen or specific application windows
+- **Recording**: Optional call recording for meetings and presentations
+
+### 💾 Storage & Virtual Disks
+- **Virtual Disks**: Per-entity encrypted storage containers
+- **Collaborative Editing**: Real-time document collaboration with conflict resolution
+- **File Versioning**: Automatic version history and rollback capabilities
+- **FEC Protection**: Forward Error Correction for data resilience
+- **Content Addressing**: Secure file storage with cryptographic integrity
+- **Cross-Device Sync**: Automatic synchronization across all user devices
+
+### 🌐 Web Disk & Publishing
+- **DNS-Free Websites**: Publish websites using Four-Word addresses
+- **Static Site Hosting**: Host documentation, portfolios, and project sites
+- **Collaborative Web Editing**: Team-based website development
+- **Custom Domains**: Optional integration with traditional DNS
+- **CDN Integration**: Global content distribution for high-traffic sites
+
+### 🔐 Security & Privacy
+- **Post-Quantum Cryptography**: ML-DSA signatures and ML-KEM key exchange
+- **End-to-End Encryption**: All communications encrypted end-to-end
+- **Forward Secrecy**: Perfect forward secrecy for all sessions
+- **Key Management**: Secure key storage in OS keyring
+- **Identity Verification**: Human-verifiable Four-Word addresses
+- **Anti-Phishing**: Built-in protection against identity spoofing
 
 ## Docs & Automation
 
@@ -245,24 +352,31 @@ Monitor these key metrics:
 - ✅ React frontend with TypeScript
 - ✅ Rust backend integration
 - ✅ Development environment setup
-- 🚧 Core UI component library
-- 📅 User authentication system
-- 📅 Real-time messaging
-- 📅 File sharing capabilities
+- ✅ Core messaging system (text, voice, files)
+- ✅ Virtual disk storage per entity
+- ✅ Voice/video calling infrastructure
+- ✅ Screen sharing capabilities
+- ✅ Web disk publishing (DNS-free)
+- ✅ Four-Word identity system
+- ✅ Post-quantum cryptography
+- 🚧 Advanced UI component library
+- 🚧 Mobile application development
 
-### Upcoming Features
-- **Real-time Collaboration**: Yjs CRDTs for collaborative editing
-- **Voice/Video Calling**: WebRTC integration with PQC
-- **Local AI Integration**: On-device language model for assistance
-- **Mobile Applications**: Native iOS/Android clients
-- **Storage Market**: Paid storage for large public datasets
-- **Federated Search**: Search across four-word identities
+### Active Development
+- **Real-time Collaboration**: Yjs CRDTs for collaborative document editing
+- **Enhanced Voice/Video**: WebRTC integration with PQC encryption
+- **Advanced Storage**: Improved FEC and cross-device synchronization
+- **Mobile Clients**: Native iOS/Android applications
+- **Plugin Architecture**: Extensible third-party integration system
 
-### Long-term Vision
-- **Plugin System**: Extensible architecture for third-party integrations
-- **Advanced Collaboration**: Real-time collaborative document editing
-- **Cross-platform Sync**: Seamless experience across all devices
+### Future Roadmap
+- **Local AI Integration**: On-device language models for assistance
+- **Storage Market**: Decentralized storage marketplace
+- **Federated Search**: Cross-network content discovery
+- **Advanced Collaboration**: Real-time whiteboarding and design tools
+- **Cross-platform Sync**: Seamless multi-device experience
 - **Decentralized Governance**: Community-driven feature development
+- **API Marketplace**: Third-party service integrations
 
 ## 🎯 Next Steps
 

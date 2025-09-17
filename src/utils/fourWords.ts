@@ -18,6 +18,19 @@ function blake3Hash(input: string): string {
 }
 
 /**
+ * Generate a random four-word address
+ */
+export function generateFourWords(): string {
+  const words = [
+    ['ocean', 'forest', 'mountain', 'desert', 'river', 'valley', 'island', 'prairie'],
+    ['blue', 'green', 'golden', 'silver', 'crystal', 'shadow', 'bright', 'misty'],
+    ['eagle', 'wolf', 'bear', 'fox', 'owl', 'hawk', 'lion', 'tiger'],
+    ['star', 'moon', 'sun', 'cloud', 'storm', 'wind', 'fire', 'ice']
+  ];
+  return words.map(group => group[Math.floor(Math.random() * group.length)]).join('-');
+}
+
+/**
  * Generate a consistent gradient from a four-word address
  * Uses BLAKE3 hash to ensure deterministic colors
  */
@@ -50,6 +63,7 @@ export function generateFourWordColors(fourWords: string) {
     }
   }
 
+  // Hash the four words to get consistent colors
   const hashHex = blake3Hash(fourWords)
 
   return {
@@ -57,63 +71,4 @@ export function generateFourWordColors(fourWords: string) {
     secondary: '#' + hashHex.substring(6, 12),
     accent: '#' + hashHex.substring(12, 18),
   }
-}
-
-/**
- * Validate four-word address format
- */
-export function isValidFourWords(fourWords: string): boolean {
-  if (!fourWords) return false
-  
-  const words = fourWords.split('-')
-  if (words.length !== 4) return false
-  
-  // Each word should be non-empty and contain only letters
-  return words.every(word => /^[a-z]+$/.test(word))
-}
-
-/**
- * Generate initials from four-word address
- */
-export function getFourWordInitials(fourWords: string): string {
-  if (!fourWords) return '?'
-  
-  const words = fourWords.split('-').filter(Boolean)
-  if (words.length === 0) return '?'
-  
-  return words.map(w => w[0]?.toUpperCase() || '').join('')
-}
-
-/**
- * Format four-word address for display
- */
-export function formatFourWords(fourWords: string): string {
-  if (!fourWords) return ''
-  
-  // Ensure proper formatting with hyphens
-  return fourWords.toLowerCase().replace(/[^a-z-]/g, '')
-}
-
-/**
- * Generate a visual pattern from four-word address
- */
-export function generateFourWordPattern(fourWords: string): string {
-  if (!fourWords) return 'none'
-  
-  const hashHex = blake3Hash(fourWords)
-  
-  // Generate a unique pattern based on hash
-  const angle = parseInt(hashHex.substring(0, 2), 16) % 360
-  const size = (parseInt(hashHex.substring(2, 4), 16) % 20) + 10
-  
-  const color1 = '#' + hashHex.substring(4, 10) + '33'
-  const color2 = '#' + hashHex.substring(10, 16) + '33'
-  
-  return `repeating-linear-gradient(
-    ${angle}deg,
-    ${color1},
-    ${color1} ${size}px,
-    ${color2} ${size}px,
-    ${color2} ${size * 2}px
-  )`
 }

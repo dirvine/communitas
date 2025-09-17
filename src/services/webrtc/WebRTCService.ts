@@ -13,7 +13,7 @@ export interface CallParticipant {
   isAudioEnabled: boolean;
   isVideoEnabled: boolean;
   isScreenSharing: boolean;
-  connectionQuality: 'excellent' | 'good' | 'fair' | 'poor';
+  connectionQuality: 'excellent' | 'good' | 'fair' | 'poor' | 'connecting';
 }
 
 export interface CallState {
@@ -24,6 +24,11 @@ export interface CallState {
   duration: number;
   type: 'audio' | 'video' | 'screen-share';
   isGroupCall: boolean;
+  elementId?: string; // Link to Element system
+  elementType?: string;
+  maxParticipants?: number;
+  hostId?: string;
+  isRecording?: boolean;
 }
 
 export interface MediaDevices {
@@ -250,7 +255,7 @@ export class WebRTCService {
       this.emit('error', new Error('File size exceeds 100MB limit'));
       return;
     }
-    
+
     const attachment: FileAttachment = {
       id: 'file_' + Date.now().toString(),
       name: file.name,
@@ -259,7 +264,7 @@ export class WebRTCService {
       url: URL.createObjectURL(file),
       progress: 0
     };
-    
+
     const message: ChatMessage = {
       id: 'msg_' + Date.now().toString(),
       senderId: 'local',
@@ -269,9 +274,397 @@ export class WebRTCService {
       type: 'file',
       attachments: [attachment]
     };
-    
+
     this.chatHistory.push(message);
     this.emit('messageAdded', message);
+  }
+
+  // Group call methods
+  async initiateGroupCall(participants: string[], type: 'audio' | 'video', elementId?: string, elementType?: string): Promise<void> {
+    try {
+      if (participants.length === 0) {
+        throw new Error('Group call must have at least one participant');
+      }
+
+      if (participants.length > 10) {
+        throw new Error('Group calls are limited to 10 participants');
+      }
+
+      const stream = await this.getUserMedia(type === 'video');
+      this.localStream = stream;
+
+      const callId = 'group_call_' + Date.now().toString();
+
+      // Create peer connections for all participants
+      const participantConnections = await Promise.all(
+        participants.map(async (participantId) => {
+          const peerConnection = this.createPeerConnection(participantId);
+          stream.getTracks().forEach(track => {
+            peerConnection.addTrack(track, stream);
+          });
+          return { participantId, peerConnection };
+        })
+      );
+
+      // Set up call state
+      this.currentCall = {
+        id: callId,
+        participants: [
+          {
+            id: 'local',
+            fourWordAddress: 'self',
+            displayName: 'You',
+            isAudioEnabled: true,
+            isVideoEnabled: type === 'video',
+            isScreenSharing: false,
+            connectionQuality: 'excellent'
+          },
+          ...participants.map(id => ({
+            id,
+            fourWordAddress: id,
+            displayName: id,
+            isAudioEnabled: true,
+            isVideoEnabled: type === 'video',
+            isScreenSharing: false,
+            connectionQuality: 'connecting' as const
+          }))
+        ],
+        isActive: true,
+        startTime: new Date(),
+        duration: 0,
+        type,
+        isGroupCall: true,
+        elementId,
+        elementType,
+        maxParticipants: 10,
+        hostId: 'local'
+      };
+
+      // Initiate offers to all participants
+      await Promise.all(
+        participantConnections.map(async ({ participantId, peerConnection }) => {
+          const offer = await peerConnection.createOffer({
+            offerToReceiveAudio: true,
+            offerToReceiveVideo: type === 'video'
+          });
+
+          await peerConnection.setLocalDescription(offer);
+
+          await this.sendSignalingMessage(participantId, {
+            type: 'group-offer',
+            sdp: offer,
+            callId,
+            callType: type,
+            participants: participants,
+            elementId,
+            elementType
+          });
+        })
+      );
+
+      this.emit('groupCallInitiated', this.currentCall);
+    } catch (error) {
+      console.error('Failed to initiate group call:', error);
+      this.emit('error', error);
+    }
+  }
+
+  async joinGroupCall(callId: string, hostId: string, participants: string[]): Promise<void> {
+    try {
+      if (this.currentCall) {
+        throw new Error('Already in a call');
+      }
+
+      // Get user media
+      const stream = await this.getUserMedia(true); // Assume video for group calls
+      this.localStream = stream;
+
+      // Create peer connections for all participants including host
+      const allParticipants = [hostId, ...participants.filter(p => p !== 'local')];
+      const participantConnections = await Promise.all(
+        allParticipants.map(async (participantId) => {
+          const peerConnection = this.createPeerConnection(participantId);
+          stream.getTracks().forEach(track => {
+            peerConnection.addTrack(track, stream);
+          });
+          return { participantId, peerConnection };
+        })
+      );
+
+      // Set up call state
+      this.currentCall = {
+        id: callId,
+        participants: [
+          {
+            id: 'local',
+            fourWordAddress: 'self',
+            displayName: 'You',
+            isAudioEnabled: true,
+            isVideoEnabled: true,
+            isScreenSharing: false,
+            connectionQuality: 'excellent'
+          },
+          ...allParticipants.map(id => ({
+            id,
+            fourWordAddress: id,
+            displayName: id,
+            isAudioEnabled: true,
+            isVideoEnabled: true,
+            isScreenSharing: false,
+            connectionQuality: 'connecting' as const
+          }))
+        ],
+        isActive: true,
+        startTime: new Date(),
+        duration: 0,
+        type: 'video',
+        isGroupCall: true,
+        maxParticipants: 10,
+        hostId
+      };
+
+      // Send join message to host
+      await this.sendSignalingMessage(hostId, {
+        type: 'join-group-call',
+        callId,
+        participants: allParticipants
+      });
+
+      this.emit('groupCallJoined', this.currentCall);
+    } catch (error) {
+      console.error('Failed to join group call:', error);
+      this.emit('error', error);
+    }
+  }
+
+  async addParticipantToGroupCall(participantId: string): Promise<void> {
+    if (!this.currentCall || !this.currentCall.isGroupCall) {
+      throw new Error('Not in a group call');
+    }
+
+    if (this.currentCall.participants.length >= (this.currentCall.maxParticipants || 10)) {
+      throw new Error('Group call is full');
+    }
+
+    try {
+      // Create new peer connection for the participant
+      const stream = this.localStream || await this.getUserMedia(true);
+      const peerConnection = this.createPeerConnection(participantId);
+      stream.getTracks().forEach(track => {
+        peerConnection.addTrack(track, stream);
+      });
+
+      // Add to call state
+      this.currentCall.participants.push({
+        id: participantId,
+        fourWordAddress: participantId,
+        displayName: participantId,
+        isAudioEnabled: true,
+        isVideoEnabled: true,
+        isScreenSharing: false,
+        connectionQuality: 'connecting'
+      });
+
+      // Send offer to new participant
+      const offer = await peerConnection.createOffer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: true
+      });
+
+      await peerConnection.setLocalDescription(offer);
+
+      await this.sendSignalingMessage(participantId, {
+        type: 'group-offer',
+        sdp: offer,
+        callId: this.currentCall.id,
+        callType: this.currentCall.type,
+        participants: this.currentCall.participants.map(p => p.id).filter(id => id !== 'local'),
+        elementId: this.currentCall.elementId,
+        elementType: this.currentCall.elementType
+      });
+
+      this.emit('participantAdded', { callId: this.currentCall.id, participantId });
+      this.emit('callUpdated', this.currentCall);
+    } catch (error) {
+      console.error('Failed to add participant to group call:', error);
+      this.emit('error', error);
+    }
+  }
+
+  async removeParticipantFromGroupCall(participantId: string): Promise<void> {
+    if (!this.currentCall || !this.currentCall.isGroupCall) {
+      return;
+    }
+
+    try {
+      // Close peer connection
+      const peerConnection = this.peerConnections.get(participantId);
+      if (peerConnection) {
+        peerConnection.close();
+        this.peerConnections.delete(participantId);
+      }
+
+      // Remove from call state
+      this.currentCall.participants = this.currentCall.participants.filter(p => p.id !== participantId);
+
+      // Notify other participants
+      await this.sendSignalingMessage(participantId, {
+        type: 'participant-removed',
+        callId: this.currentCall.id,
+        participantId
+      });
+
+      this.emit('participantRemoved', { callId: this.currentCall.id, participantId });
+      this.emit('callUpdated', this.currentCall);
+    } catch (error) {
+      console.error('Failed to remove participant from group call:', error);
+      this.emit('error', error);
+    }
+  }
+
+  // Screen sharing methods
+  async startScreenShare(options: ScreenShareOptions = {
+    includeAudio: false,
+    cursor: 'always',
+    displaySurface: 'monitor'
+  }): Promise<void> {
+    try {
+      if (this.screenStream) {
+        throw new Error('Screen sharing is already active');
+      }
+
+      const displayMediaOptions: any = {
+        video: {
+          displaySurface: options.displaySurface || 'monitor',
+          cursor: options.cursor || 'always'
+        },
+        audio: options.includeAudio
+      };
+
+      const screenStream = await navigator.mediaDevices.getDisplayMedia(displayMediaOptions);
+      this.screenStream = screenStream;
+
+      // Add screen track to all existing peer connections
+      for (const [participantId, peerConnection] of this.peerConnections) {
+        screenStream.getTracks().forEach(track => {
+          peerConnection.addTrack(track, screenStream);
+        });
+
+        // Renegotiate
+        const offer = await peerConnection.createOffer();
+        await peerConnection.setLocalDescription(offer);
+
+        await this.sendSignalingMessage(participantId, {
+          type: 'screen-share-started',
+          sdp: offer,
+          callId: this.currentCall?.id,
+          options
+        });
+      }
+
+      // Update local participant state
+      if (this.currentCall) {
+        const localParticipant = this.currentCall.participants.find(p => p.id === 'local');
+        if (localParticipant) {
+          localParticipant.isScreenSharing = true;
+          this.emit('callUpdated', this.currentCall);
+        }
+      }
+
+      // Handle screen share end
+      screenStream.getVideoTracks()[0].addEventListener('ended', () => {
+        this.stopScreenShare();
+      });
+
+      this.emit('screenShareStarted', { stream: screenStream, options });
+    } catch (error) {
+      console.error('Failed to start screen sharing:', error);
+      this.emit('error', error);
+    }
+  }
+
+  async stopScreenShare(): Promise<void> {
+    if (!this.screenStream) return;
+
+    try {
+      this.screenStream.getTracks().forEach(track => track.stop());
+      this.screenStream = null;
+
+      // Remove screen tracks from all peer connections and renegotiate
+      for (const [participantId, peerConnection] of this.peerConnections) {
+        // Get current senders
+        const senders = peerConnection.getSenders();
+
+        // Remove screen video sender
+        const screenSender = senders.find(sender =>
+          sender.track && this.screenStream?.getTracks().includes(sender.track)
+        );
+
+        if (screenSender) {
+          peerConnection.removeTrack(screenSender);
+        }
+
+        // Renegotiate
+        const offer = await peerConnection.createOffer();
+        await peerConnection.setLocalDescription(offer);
+
+        await this.sendSignalingMessage(participantId, {
+          type: 'screen-share-stopped',
+          sdp: offer,
+          callId: this.currentCall?.id
+        });
+      }
+
+      // Update local participant state
+      if (this.currentCall) {
+        const localParticipant = this.currentCall.participants.find(p => p.id === 'local');
+        if (localParticipant) {
+          localParticipant.isScreenSharing = false;
+          this.emit('callUpdated', this.currentCall);
+        }
+      }
+
+      this.emit('screenShareStopped');
+    } catch (error) {
+      console.error('Failed to stop screen sharing:', error);
+      this.emit('error', error);
+    }
+  }
+
+  // Element integration methods
+  async initiateElementCall(elementId: string, elementType: string, participants: string[], type: 'audio' | 'video'): Promise<void> {
+    if (participants.length === 1) {
+      // Single participant - use regular call
+      await this.initiateCall(participants[0], type);
+      if (this.currentCall) {
+        this.currentCall.elementId = elementId;
+        this.currentCall.elementType = elementType;
+      }
+    } else {
+      // Multiple participants - use group call
+      await this.initiateGroupCall(participants, type, elementId, elementType);
+    }
+  }
+
+  // Recording methods (placeholder for future implementation)
+  async startRecording(): Promise<void> {
+    if (!this.currentCall) {
+      throw new Error('Not in a call');
+    }
+
+    // This would integrate with MediaRecorder API
+    // For now, just update state
+    this.currentCall.isRecording = true;
+    this.emit('recordingStarted', { callId: this.currentCall.id });
+    this.emit('callUpdated', this.currentCall);
+  }
+
+  async stopRecording(): Promise<void> {
+    if (!this.currentCall) return;
+
+    this.currentCall.isRecording = false;
+    this.emit('recordingStopped', { callId: this.currentCall.id });
+    this.emit('callUpdated', this.currentCall);
   }
 
   // Event emitter methods

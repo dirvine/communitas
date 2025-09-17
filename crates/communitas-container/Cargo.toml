@@ -14,7 +14,7 @@ uuid = { version = "1", features = ["v4", "serde"] }
 thiserror = "1.0"
 saorsa-fec = "0.4.11"
 saorsa-seal = "0.1.2"
-saorsa-core = "=0.3.20"
+saorsa-core = "=0.3.21"
 parking_lot = "0.12"
 rayon = "1.10"
 hex = "0.4"

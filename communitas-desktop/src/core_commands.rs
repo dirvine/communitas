@@ -8,6 +8,18 @@ use tauri::AppHandle;
 use tauri::Emitter;
 use tauri::State;
 use tokio::sync::RwLock;
+use tracing::warn;
+
+async fn resolve_four_words(user_id: &str) -> Option<String> {
+    match saorsa_core::get_user_four_words(user_id).await {
+        Ok(Some(addr)) => Some(addr.0),
+        Ok(None) => None,
+        Err(err) => {
+            warn!("get_user_four_words failed for {}: {}", user_id, err);
+            None
+        }
+    }
+}
 
 /// Initialize saorsa-core wiring and cache it in state
 #[tauri::command]
@@ -211,7 +223,12 @@ pub async fn core_send_message_to_channel(
 
     let mut recipients: Vec<saorsa_core::identity::FourWordAddress> = Vec::new();
     for m in ch.members {
-        // Heuristic: treat user_id as four-word address if it contains 4 hyphen-separated words
+        if let Some(words) = resolve_four_words(&m.user_id).await {
+            recipients.push(saorsa_core::identity::FourWordAddress(words));
+            continue;
+        }
+
+        // Fallback: treat user_id as four-word address if it already looks like one
         if m.user_id.split('-').count() == 4 {
             recipients.push(saorsa_core::identity::FourWordAddress(
                 m.user_id.to_lowercase(),
@@ -255,9 +272,8 @@ pub async fn core_channel_invite_by_words(
     let _invitee_key = saorsa_core::fwid::fw_to_key(invitee_words.clone())
         .map_err(|e| format!("fw_to_key failed: {}", e))?;
 
-    // TODO: The saorsa_core v0.3.17 doesn't have get_user_by_four_words function
-    // and ChatManager doesn't have add_member method
-    // This functionality needs to be implemented when the API is available
+    // TODO: saorsa_core still lacks a ChatManager add_member API, so this flow
+    // cannot update membership yet even though get_user_by_four_words exists.
     Err("Channel member addition not yet implemented in current saorsa_core version".to_string())
 }
 
@@ -294,12 +310,11 @@ pub async fn core_channel_list_members(
         .map_err(|e| format!("get_channel failed: {}", e))?;
     let mut out = Vec::with_capacity(ch.members.len());
     for m in ch.members {
-        // TODO: saorsa_core v0.3.17 doesn't have get_user_four_words function
-        let words_opt: Option<String> = None;
+        let four_words = resolve_four_words(&m.user_id).await;
         out.push(ChannelMemberEntry {
             user_id: m.user_id,
             role: format!("{:?}", m.role),
-            four_words: words_opt,
+            four_words,
         });
     }
     Ok(out)
@@ -327,12 +342,18 @@ pub async fn core_resolve_channel_members(
     let app_clone = app.clone();
     tokio::spawn(async move {
         for m in ch.members {
-            // TODO: saorsa_core v0.3.17 doesn't have get_user_four_words function
-            let words_opt: Option<Vec<String>> = None;
+            let four_words_text = resolve_four_words(&m.user_id).await;
+            let four_words_array = four_words_text.as_ref().map(|words| {
+                words
+                    .split('-')
+                    .map(|w| w.to_string())
+                    .collect::<Vec<String>>()
+            });
             let payload = serde_json::json!({
                 "user_id": m.user_id,
                 "role": format!("{:?}", m.role),
-                "four_words": words_opt,
+                "four_words": four_words_array,
+                "four_words_text": four_words_text,
             });
             let _ = app_clone.emit("channel-member-resolved", payload);
         }

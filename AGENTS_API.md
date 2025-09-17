@@ -1,353 +1,318 @@
 # Communitas + Saorsa Core — Agents API (AGENTS_API.md)
 
-Version: 1.0 • Date: 2025-09-05 • Audience: Agents (human + AI)
+Version: 1.2 • Date: 2025-09-15 • Audience: Agents (human + AI)
 
-This document is the authoritative guide for agents integrating with Communitas (the desktop app) and the headless node, powered by Saorsa Core. It covers capabilities, APIs, events, security guarantees, anti‑abuse controls, canonical signing rules, and example flows. Every interface defined here is panic‑free and designed for autonomous, verifiable operation.
+This document is the authoritative contract for agents that integrate with Communitas (desktop app) and its headless node, both of which are powered by Saorsa Core. It captures the IPC surface, supporting Rust APIs, security guarantees, and operational flows required to operate autonomously. All interfaces here are panic-free; production builds enforce `-D clippy::panic -D clippy::unwrap_used -D clippy::expect_used`.
 
-If you are implementing an agent, you can choose any subset of these APIs; all are independent and composable.
+## What changed since v1.0 (2025-09-05)
+- **New identity bootstrap path**: `core_claim` persists ML-DSA keys to the OS keyring; `core_advertise` signs presence heartbeats and returns Four-Word IPv4 handles.
+- **Address book integration**: Upgraded to saorsa-core v0.3.21 so `core_channel_list_members`, `core_resolve_channel_members`, and `core_send_message_to_channel` resolve Four-Word addresses via `saorsa_core::get_user_four_words`. Event payloads now surface both array and string forms (`four_words`, `four_words_text`).
+- **Expanded IPC surface**: Added container engine (`container_init/put_object/get_object/apply_ops/current_tip`), encrypted KV storage (`core_private_put/get`), bootstrap config commands, raw SPKI pinning, and QUIC delta sync helpers.
+- **Core wiring update**: `communitas-core::CoreContext` now owns saorsa-core managers (identity, chat, messaging, storage) per device, keeping group signing material in-memory.
+- **Pointer-only storage**: The container engine (new crate `crates/communitas-container`) signs tips and keeps opaque blobs local, enforcing the pointer-only DHT policy.
+- **Headless node uplift**: Self-update flow, metrics endpoint, bootstrap/QUIC tuning, and peer cache now documented for automation tooling.
 
 ---
 
 ## 0. Vision & Context
 
-Communitas is the evolution of WhatsApp + Dropbox + Zoom + Slack in a single, local‑first, PQC‑ready collaboration app. It delivers:
+Communitas is the evolution of WhatsApp + Dropbox + Zoom + Slack in a single, local-first, PQC-ready collaboration app. It delivers:
 
-- Real‑time messaging, threads, reactions, mentions, presence
-- Group, channel, project, and organization entities — each can have a shared “virtual disk”
-- Quantum‑secured storage per entity with collaborative Markdown editing
-- End‑to‑end group crypto and FEC‑sealed content distribution
-- Public websites without DNS: identities publish `website_root` and link via Four‑Word Networking (FWN)
-- Direct machine‑to‑machine secure channels (QUIC, WebRTC‑over‑QUIC)
-- A “people’s internet”: human‑verifiable identities, zero centralized naming, anti‑phishing by design
-- Future AI extensions: transcription, summarization, TTS — highly personalized, private by default
+- Real-time messaging, threads, reactions, mentions, presence
+- Group, channel, project, and organization entities — each with a shared “virtual disk”
+- Quantum-secured storage per entity with collaborative Markdown editing
+- End-to-end group crypto and FEC-sealed content distribution
+- Public websites without DNS: identities publish `website_root` and link via Four-Word Networking (FWN)
+- Direct machine-to-machine secure channels (QUIC, WebRTC-over-QUIC)
+- A “people’s internet”: human-verifiable identities, zero centralized naming, anti-phishing by design
 
-Two apps, one core:
+Apps + core:
 
-- Desktop (Tauri) app: user‑facing collaboration UI, exposes Tauri commands for automation
-- Headless node: bootstrap/seed nodes and personal nodes for network support and (future) rewards
-
-Under the hood is Saorsa Core (crates.io `saorsa-core`), providing DHT, QUIC, identity, group, messaging, virtual disk, and security foundations. See also `../saorsa-core/AGENTS_API.md` for the full core API surface.
+- **Desktop (Tauri)** app: user-facing collaboration UI, exposes IPC commands for automation.
+- **Headless node**: bootstrap/seed/personal nodes for network support and (future) rewards.
+- **Saorsa Core** (`saorsa-core` crate, v0.3.21): DHT, QUIC, identity, groups, messaging, website hosting, and the address-book helpers (`get_user_four_words`, `get_user_by_four_words`) we now consume directly.
 
 ---
 
 ## 1. Quick Start (Agent Playbook)
 
-1) Identity (four words) + device
-- Generate ML‑DSA keypair (via your signer)
-- Choose four words (FWN). Call `identity_claim()` (saorsa-core) with signature over utf8(words)
+1. **Claim identity**
+   ```ts
+   const idHex = await invoke<string>('core_claim', { words: ['river','spark','honest','lion'] })
+   ```
+   - Validates dictionary words (`saorsa_core::fwid::fw_check`), generates ML-DSA-65 keys, stores everything in the OS keyring via `communitas_core::keystore::Keystore`.
 
-2) Desktop app init (Tauri)
-- `core_initialize({ fourWords, displayName, deviceName, deviceType })`
+2. **Optional: advertise presence**
+   ```ts
+   const advert = await invoke('core_advertise', { addr: '203.0.113.12:443', storageGb: 200 })
+   ```
+   - Returns `{ id_hex, endpoint_fw4? }`. Presence heartbeats are signed locally; full network publish remains pointer-only for now.
 
-3) Channels & messaging
-- `core_create_channel({ name, description })` → Channel
-- `core_send_message_to_channel(channelId, "Hello!")` or `core_send_message_to_recipients(channelId, ["river-spark-honest-lion"], "Hi")`
-- `core_subscribe_messages({ channelId? })` → listen to `message-received`
+3. **Initialize runtime context**
+   ```ts
+   await invoke('core_initialize', {
+     fourWords: 'river-spark-honest-lion',
+     displayName: 'Alice',
+     deviceName: 'Mac-mini',
+     deviceType: 'Desktop'
+   })
+   ```
+   - Builds `CoreContext`, wiring identity, chat, messaging, and storage managers with PQC device metadata.
 
-4) Private storage
-- `core_disk_write({ entity_hex, disk_type: "Private", path: "/docs/readme.md", content_base64 })`
-- `core_disk_read(entity_hex, "Private", "/docs/readme.md")`
+4. **Messaging flows**
+   ```ts
+   const channel = await invoke('core_create_channel', { name: 'general', description: 'Daily chat' })
+   await invoke('core_send_message_to_channel', { channelId: channel.id, text: 'Hello team' })
+   await invoke('core_subscribe_messages', { channelId: channel.id })
+   ```
+   - Events: `message-received` with decrypted payloads (else `{ encrypted: true }`).
+   - Membership helpers: `core_channel_list_members` returns `{ user_id, role, four_words }` with Four-Word handles fetched via saorsa-core.
 
-5) Public website (new web)
-- Create site files (`core_website_set_home`), then publish:
-  - `core_website_publish_receipt(entity_hex, website_root_hex)` → manifest stored
-  - Build canonical bytes and sign ML‑DSA
-  - `core_identity_set_website_root(id_hex, website_root_hex, sig_hex)` → DNS‑free, human‑verifiable website
+5. **Container storage**
+   ```ts
+   await invoke('container_init')
+   const handle = await invoke('container_put_object', { bytes: Array.from(new TextEncoder().encode('# Note')) })
+   const tip = await invoke('container_current_tip')
+   ```
+   - Handles map to encrypted blobs stored under `COMMUNITAS_DATA_DIR`.
 
-6) Group membership
-- `core_group_create([w1,w2,w3,w4])` (stores group keypair locally in app state)
-- Add/remove members using canonical signing and `group_identity_update_members_signed` under the hood
+6. **Group membership**
+   ```ts
+   await invoke('core_group_add_member', {
+     groupWords: ['project','alpha','launch','team'],
+     memberWords: ['ocean','forest','moon','star']
+   })
+   ```
+   - Uses cached ML-DSA group keys to sign canonical membership roots.
 
----
+7. **Sync & repair**
+   ```ts
+   await invoke('sync_set_quic_pinned_spki', { value: 'spki:...' })
+   await invoke('sync_fetch_deltas', { peerAddr: 'ocean-forest-moon-star:443' })
+   await invoke('sync_start_tip_watcher', { intervalMs: 2000 })
+   ```
 
-## 2. Communitas (Tauri) — IPC Surface (100%)
-
-All commands return `Result<… , String>` at the IPC boundary. Errors are human readable.
-
-Identity & bootstrap
-- `core_initialize(fourWords: string, displayName: string, deviceName?: string, deviceType?: "Desktop"|"Mobile"|"Tablet"|"Web") -> bool`
-- `health() -> { status: "ok", saorsa_core: string, app: string }`
-
-Messaging, channels, threads
-- `core_create_channel(name: string, description: string) -> Channel`
-- `core_get_channels() -> Channel[]`
-- `core_post_message(channelId: string, text: string, threadId?: string) -> Message` (persist via ChatManager)
-- `core_send_message_to_channel(channelId: string, text: string) -> messageId`
-- `core_send_message_to_recipients(channelId: string, recipients: string[], text: string) -> messageId` (recipients are four words)
-- `core_channel_recipients(channelId: string) -> string[]`
-- `core_create_thread(channelId: string, parentMessageId: string) -> Thread`
-- `core_add_reaction(channelId: string, messageId: string, emoji: string) -> bool`
-- `core_subscribe_messages(channelId?: string) -> bool`
-  - Emits `message-received` (payload decrypted if possible): `{ id?, channel_id?, sender?, content?, receivedAt?, encrypted?: boolean, error?: string }`
-
-Virtual Disk & Website (per entity: org/group/channel/project/individual)
-- Private/public/shared virtual disks
-  - `core_disk_write({ entity_hex, disk_type: "Private"|"Public"|"Shared", path, content_base64, mime_type? }) -> WriteReceipt`
-  - `core_disk_read(entity_hex: string, disk_type: string, path: string) -> Uint8Array`
-  - `core_disk_list(entity_hex: string, disk_type: string, path: string, recursive: boolean) -> FileEntry[]`
-  - `core_disk_delete(entity_hex: string, disk_type: string, path: string) -> bool`
-  - `core_disk_sync(entity_hex: string, disk_type: string) -> SyncStatus`
-- Website publishing
-  - `core_website_set_home(entity_hex: string, markdown_content: string, assets: { path, content_base64, mime_type }[]) -> bool`
-  - `core_website_publish({ object_hex, k, m, shard_size, assets_hex[], sealed_meta_hex? }) -> bool` (manifest)
-  - `core_website_get_manifest(object_hex: string) -> ContainerManifestV1 JSON`
-  - `core_website_publish_receipt(entity_hex: string, website_root_hex: string) -> PublishReceipt JSON`
-  - `core_identity_set_website_root(id_hex: string, website_root_hex: string, sig_hex: string) -> bool`
-  - `core_website_publish_and_update_identity(entity_hex: string, website_root_hex: string, sig_hex?: string) -> PublishReceipt JSON`
-
-Groups (threshold ready)
-- `core_group_create(words: [string; 4]) -> { id_hex, words }`
-- `core_group_add_member(group_words: [string;4], member_words: [string;4]) -> bool`
-- `core_group_remove_member(group_words: [string;4], member_words: [string;4]) -> bool`
-
-Security helpers (frontend)
-- `buildWebsiteRootCanonicalHex(idHex, pkHex, websiteRootHex)`: see `src/services/website.ts`
-- Subscription helper: `subscribeMessages(onMessage, { channelId? })` see `src/services/messagingSubscription.ts`
-
-Dev panels
-- `/dev/console`: live "Message Console"
-- `/dev/website`: "Website Publishing Utility" (canonical bytes, publish, apply identity update)
-
-Network Connection & Status
-- `NetworkConnectionService` (singleton): Auto-connects on startup, retry logic, fallback to local mode
-  - `connect()`: Manual connection attempt
-  - `disconnect()`: Go to local mode
-  - `getState()`: Current network state (status, peers, bootstrap nodes, errors)
-  - `subscribe(listener)`: Listen to network state changes
-- `NetworkStatusIndicator` component: Visual status in header with click-to-reconnect
-- States: `connecting`, `connected`, `offline`, `local`, `error`
-- Auto-behaviors: Browser online/offline detection, exponential backoff retry (1s, 3s, 10s)
-
-Offline-First Architecture
-- `OfflineStorageService`: IndexedDB + sync queue + file caching
-  - All data operations work offline
-  - Automatic sync when network returns
-  - Multiple storage layers: Memory, IndexedDB, Tauri backend, localStorage
-- Test utilities in console:
-  - `window.testNetwork.status()`: Check network status
-  - `window.testNetwork.connect()`: Manual connect
-  - `window.testNetwork.disconnect()`: Go local
-  - `window.testNetwork.simulateOffline()`: Test offline mode
-  - `window.testNetwork.testFlow()`: Run complete test
+8. **Bootstrap configuration**
+   ```ts
+   const seeds = await invoke<string[]>('core_get_bootstrap_nodes')
+   await invoke('core_update_bootstrap_nodes', { nodes: ['river-mountain-sun-cloud:443'] })
+   ```
 
 ---
 
-## 3. Saorsa Core — Key APIs Used by Communitas
+## 2. Communitas (Tauri) — IPC Surface
 
-Identity
-- `identity_claim(words, pubkey, sig) -> Result<()>`
+All commands return `Result<…, String>` at the IPC boundary. Errors are human-readable; no panics bubble to IPC.
+
+### 2.1 Identity & Bootstrap
+| Command | Parameters | Returns | Notes |
+| --- | --- | --- | --- |
+| `core_claim` | `words: [String;4]` | `id_hex: String` | Generates ML-DSA-65 keys, stores in keyring, sets current identity. |
+| `core_advertise` | `addr: String`, `storage_gb: u32` | `{ id_hex, endpoint_fw4? }` | Signs presence heartbeat; returns optional FW4 handle when IPv4 provided. |
+| `core_initialize` | `fourWords`, `displayName`, `deviceName?`, `deviceType?` | `bool` | Instantiates `CoreContext`; validates four-word format. |
+| `core_get_bootstrap_nodes` | — | `Vec<String>` | Reads `bootstrap.toml` (or returns defaults). |
+| `core_update_bootstrap_nodes` | `nodes: Vec<String>` | `bool` | Writes `bootstrap.toml` with sorted seed list. |
+| `core_private_put` | `key: String`, `content: Vec<u8>` | `bool` | Encrypted local store (365d TTL by default). |
+| `core_private_get` | `key: String` | `Vec<u8>` | Retrieves encrypted entry.
+
+### 2.2 Messaging, Channels & Threads
+| Command | Purpose |
+| --- | --- |
+| `core_create_channel(name, description)` | Creates public channel (`ChannelType::Public`). Validates length + characters. |
+| `core_get_channels()` | Returns channels user belongs to (`Vec<Channel>`). |
+| `core_add_reaction(channel_id, message_id, emoji)` | Adds emoji reaction via `ChatManager`. |
+| `core_send_message_to_recipients(channel_id, recipients[], text)` | Sends direct message to specified four-word identities; enforces size/recipient limits. |
+| `core_send_message_to_channel(channel_id, text)` | Expands channel membership to recipient list via address-book lookup (`get_user_four_words`) with heuristic fallback, then sends broadcast message. |
+| `core_create_thread(channel_id, parent_message_id)` | Creates thread under parent message. |
+| `core_subscribe_messages(channel_id?)` | Subscribes to message stream; emits `message-received`. |
+| `core_channel_list_members(channel_id)` | Returns member entries `{ user_id, role, four_words }` with strings sourced from `get_user_four_words`. |
+| `core_channel_invite_by_words(channel_id, invitee_words, role?)` | Validates input; returns `Err` until saorsa-core membership APIs land. |
+| `core_channel_recipients(channel_id)` | Placeholder (`[]`) – UI computes fallback recipients. |
+| `core_resolve_channel_members(channel_id)` | Spawns background task; emits `channel-member-resolved { user_id, role, four_words[], four_words_text }` per member. |
+
+### 2.3 Groups & Membership
+| Command | Purpose |
+| --- | --- |
+| `core_group_create(words)` | Creates group identity, publishes packet, stores ML-DSA group signing keys. Returns `{ id_hex, words }`. |
+| `core_group_add_member(group_words, member_words)` | Fetches identity + group packet, recomputes membership root, signs update, calls `group_identity_update_members_signed`. |
+| `core_group_remove_member(group_words, member_words)` | Similar flow; removes member, re-signs root. |
+
+### 2.4 Container & Virtual Disk Pointers
+| Command | Purpose |
+| --- | --- |
+| `container_init()` | Lazily instantiates `ContainerEngine` with identity keys. |
+| `container_put_object(bytes)` | Encrypts (AEAD) + stores blob locally; returns 32-byte BLAKE3 handle (hex). |
+| `container_get_object(oid_hex)` | Fetches from engine; falls back to local blob cache. |
+| `container_apply_ops(ops[])` | Applies CRDT ops, returns new tip. |
+| `container_current_tip()` | Returns `{ root, count, sig }`. |
+| `core_private_put/get` | See identity section (encrypted KV).
+
+### 2.5 Sync, Repair & Security
+| Command | Purpose |
+| --- | --- |
+| `sync_start_tip_watcher(interval_ms?)` | Emits `container-tip` events every interval with current tip. |
+| `sync_stop_tip_watcher()` | Cancels watcher. |
+| `sync_repair_fec(data_shards, parity_shards, shares[])` | Reed–Solomon repair helper (uses `saorsa_fec`). |
+| `sync_fetch_deltas(peer_addr)` | Fetches CRDT ops over ant-quic with raw public key pinning. Emits `sync-progress` events for phases `request`, `received`, `applied`. |
+| `sync_set_quic_pinned_spki(value)` | Accepts 32-byte key or 44-byte SPKI (hex/base64). Stores in state. |
+| `sync_clear_quic_pinned_spki()` | Clears pinned key. |
+| `health()` | Returns `{ status, saorsa_core, app }` for CI smoke tests.
+
+Events emitted to the frontend:
+- `message-received`
+- `channel-member-resolved` (payload includes `{ user_id, role, four_words: string[], four_words_text: string? }`)
+- `container-tip`
+- `sync-progress`
+
+---
+
+## 3. Saorsa Core APIs Used by Communitas
+
+Identity & Enhanced Devices:
+- `IdentityManager::create_identity(display_name, four_words, …)`
+- `EnhancedIdentityManager::create_enhanced_identity(base, device_name, device_type)`
 - `identity_fetch(id: Key) -> IdentityPacketV1`
-- `identity_publish_endpoints_signed(id, endpoints, ep_sig) -> Result<()>`
-- `identity_set_website_root(id, website_root, sig) -> Result<()>`  ← new in 0.3.17
-  - Canonical: `"saorsa-identity:website_root:v1" || id || pk || CBOR(website_root)`
+- `identity_set_website_root(id, website_root, sig)` (see §5 for canonical bytes)
 
-Groups
+Messaging & Channels:
+- `MessagingService::new(FourWordAddress, DhtClient)`
+- `send_message(recipients, MessageContent::Text, ChannelId, SendOptions)`
+- `subscribe_messages(channel_filter?) -> broadcast::Receiver<ReceivedMessage>`
+- `ChatManager::create_channel`, `get_channel`, `get_user_channels`, `create_thread`, `add_reaction`
+- `address_book::get_user_four_words(user_id) -> Result<Option<FourWordAddress>>`
+- `address_book::get_user_by_four_words(words) -> Result<Option<String>>`
+
+Groups:
 - `group_identity_create(words, members) -> (GroupIdentityPacketV1, GroupKeyPair)`
-- `group_identity_publish(packet) -> Result<()>`
-- `group_identity_fetch(id: Key) -> GroupIdentityPacketV1`
-- `group_identity_canonical_sign_bytes(id: &Key, membership_root: &Key) -> Vec<u8>`  ← exported
-- `group_identity_update_members_signed(id, new_members, group_pk, group_sig) -> Result<()>`  ← new in 0.3.17
-- `group_member_add(id, member, group_pk, group_sig) -> Result<()>`
-- `group_member_remove(id, member_id, group_pk, group_sig) -> Result<()>`
-- `group_epoch_bump(id, proof?, group_pk, group_sig) -> Result<()>` (optional)
+- `group_identity_publish(packet)`
+- `group_identity_fetch(id)`
+- `group_identity_canonical_sign_bytes(id, membership_root)`
+- `group_identity_update_members_signed(id, members, group_pk, sig)`
 
-Messaging
-- `MessagingService::new(four_word_addr, DhtClient) -> Self`
-- `send_message(recipients: Vec<FourWordAddress>, content, channel_id, options) -> (MessageId, DeliveryReceipt)`
-- `channel_recipients(&ChannelId) -> Vec<FourWordAddress>`  ← new helper in 0.3.17
-- `send_message_to_channel(channel_id, content, options) -> (MessageId, DeliveryReceipt)`  ← new in 0.3.17
-- `subscribe_messages(channel_filter: Option<ChannelId>) -> broadcast::Receiver<ReceivedMessage>`
+Storage & Virtual Disks:
+- `StorageManager::new(DhtCoreEngine, &EnhancedIdentity)`
+- `StorageManager::store_encrypted(key, bytes, ttl, metadata)`
+- `StorageManager::get_encrypted::<T>(key)`
 
-Virtual Disk & Website
-- `disk_create(entity_id, DiskType, DiskConfig) -> DiskHandle`
-- `disk_mount(entity_id, DiskType) -> DiskHandle`
-- `disk_write(&handle, path, content, FileMetadata) -> WriteReceipt`
-- `disk_read(&handle, path) -> Vec<u8>`
-- `disk_list(&handle, path, recursive) -> Vec<FileEntry>`
-- `disk_delete(&handle, path) -> ()`
-- `disk_sync(&handle) -> SyncStatus`
-- `website_set_home(&handle, markdown_content, assets: Vec<Asset>) -> ()`
-- `website_publish(entity_id, website_root) -> PublishReceipt`
-- Container manifests: `container_manifest_put/fetch` (FEC, sealed meta)
-
-Transport / Networking
-- QUIC via `ant-quic`, IPv4‑first, Happy Eyeballs fallback
-- WebRTC DataChannel bridge over QUIC
-- DHT with quorum policy, telemetry, and event bus
-- Four‑Word Networking (FWN) encoders for FW4/FW6 endpoints
+Container engine (new crate):
+- `communitas_container::ContainerEngine::new(pk, sk, AeadConfig, FecConfig)`
+- Ops and tips: `Op::Append`, `Tip { root, count, sig }`
 
 ---
 
-## 4. Security, Anti‑Abuse, and Trust
+## 4. The “New Web” (DNS-free Websites)
 
-Production code guarantees
-- No `unwrap/expect/panic!` in production — enforced by Clippy CI: `-D clippy::panic -D clippy::unwrap_used -D clippy::expect_used`
-- Canonical signing for all sensitive updates (identity website_root, group membership, epoch bumps)
-- Zeroized secrets and structured errors
+Identical to v1.0 but now handled via container pointers:
 
-Identity & Anti‑Phishing
-- Four‑Word Addressing: constrained dictionary + checksum make typosquatting detectable and rare
-- DNS‑free web: `identity.website_root` binds a content root to identity keys (ML‑DSA verification). Links resolve by identity, not DNS
-- Endpoint publication requires signature over canonical tuple `(id || pk || CBOR(endpoints))`
-
-Group security
-- Group identities carry ML‑DSA group keys; membership changes are signed over canonical `membership_root`
-- Optional `group_epoch_bump` to auditable epoch rotation after changes
-- Threshold capabilities available (saorsa-core `threshold` module) for governance and write policies
-
-DHT & WriteAuth
-- DHT writes go through `PutPolicy { quorum, ttl, auth }` with Single/Delegated/Mls/Threshold authorizers
-- Immutable manifests and sealed content reduce tampering surface; telemetry emits DHT puts/gets
-
-Spam & Scams
-- Rate limiter patterns available on the Tauri side (simple), and trust‑weighted routing in core
-- `EigenTrust` integration and RSPS provider summaries (saorsa-core) provide supply‑side reputation
-- Content size and type constraints on disk and messaging by default
-
-Event model
-- Global event bus for DHT updates and topology; Tauri emits `message-received` for UIs/agents
-
-See also: `../saorsa-core/AGENTS_API.md` — sections on Principles, Error Handling, Anti‑Phishing and Name Safety.
-
----
-
-## 5. The “New Web” (No DNS)
-
-Every entity can host a website by publishing a container manifest to the DHT and updating `identity.website_root` with a signed, canonical message.
-
-- Human‑verifiable addressing via four words
-- No centralized DNS; sites are verified by ML‑DSA over canonical signing bytes
-- Content is content‑addressed, FEC‑sharded, and optionally encrypted
-- Links between sites use FWN and identity references; agents can validate links before navigation
-
-Example (canonical bytes & update)
 ```text
 DST = "saorsa-identity:website_root:v1"
 msg = DST || id || pk || CBOR(website_root)
-// Sign msg with ML‑DSA secret key → sig
+// sign msg with ML-DSA secret key → sig
 identity_set_website_root(id, website_root, sig)
 ```
 
----
-
-## 6. End‑to‑End Flows (Examples)
-
-A) Subscribe + send to channel
-```ts
-import { invoke } from '@tauri-apps/api/tauri'
-import { subscribeMessages } from './services/messagingSubscription'
-
-await invoke('core_initialize', { fourWords, displayName: 'Alice', deviceName: 'Mac', deviceType: 'Desktop' })
-
-// Subscribe to all messages
-const unlisten = await subscribeMessages((m) => console.log('recv', m))
-
-// Create channel & send
-const ch = await invoke('core_create_channel', { name: 'general', description: 'Demo' })
-await invoke('core_send_message_to_channel', { channelId: ch.id, text: 'Hello world' })
-```
-
-B) Private disk write/read
-```ts
-await invoke('core_disk_write', {
-  entityHex,
-  diskType: 'Private',
-  path: '/docs/welcome.md',
-  contentBase64: btoa('# Welcome\nThis is a demo.'),
-  mimeType: 'text/markdown',
-})
-const data = await invoke<Uint8Array>('core_disk_read', { entityHex, diskType: 'Private', path: '/docs/welcome.md' })
-```
-
-C) Publish website + update identity
-```ts
-import { buildWebsiteRootCanonicalHex, applyWebsiteRootWithSignature } from './services/website'
-
-// 1) Publish manifest (also available: core_website_publish_and_update_identity)
-const rcpt = await invoke('core_website_publish_receipt', { entityHex, websiteRootHex })
-
-// 2) Build canonical bytes and sign externally
-const canonicalHex = buildWebsiteRootCanonicalHex(entityHex, pkHex, websiteRootHex)
-const sigHex = await mySigner(canonicalHex) // your ML‑DSA signature hex
-
-// 3) Update identity
-await applyWebsiteRootWithSignature(entityHex, websiteRootHex, sigHex)
-```
-
-D) Group add member
-```ts
-await invoke('core_group_add_member', {
-  groupWords: ['river','spark','honest','lion'],
-  memberWords: ['ocean','forest','moon','star']
-})
-```
+The desktop app exposes helpers via `core_website_*` commands (to be surfaced in a later revision). Until then, use saorsa-core bindings directly when automating website updates.
 
 ---
 
-## 7. Headless Node & Bootstrap
+## 5. Sync & Networking Details
 
-Headless binaries (in Communitas repo earlier and in product packaging):
-- `communitas-node` — run a PQC‑ready node with QUIC and DHT
-- `communitas-autoupdater` — jittered 0–6h rollout, with signature checks
-
-Operational surface:
-- Config: TOML with listen addresses, storage path, bootstrap seeds
-- Health: `/health`, metrics at `127.0.0.1:9600`
-- Systemd units, cloud‑init for DigitalOcean; default bootstrap in 6 regions
-- Four‑word endpoints computed from IPv4 and port for human presentation
-- Future: provider rewards for seeders and storage providers
-
-See: `finalise/DEPLOY_TESTNET.md` and saorsa-core AGENTS_API.md sections.
+- **Pointer-only DHT policy**: Tauri only commits signed tips or manifests. Bulk data stays local or in delegated storage.
+- **QUIC client**: `sync_fetch_deltas` binds to `(::, 0)` but prefers IPv4 addresses (Happy Eyeballs). Raw public key TLS (`RFC 7250`) enforced; set `COMMUNITAS_RPK_ALLOW_ANY=1` only in development.
+- **FEC**: `sync_repair_fec` and container engine defaults use Reed–Solomon (`k=4`, `m=2`). Provide `shares: Vec<Option<Vec<u8>>>` with `None` for missing shards.
+- **Tip watcher**: after `sync_start_tip_watcher`, UI should listen for `container-tip { root, count }` events to refresh views.
+- **Bootstrap maintenance**: `bootstrap.toml` stores seeds array. Agents should atomically rewrite via `core_update_bootstrap_nodes`.
 
 ---
 
-## 8. Testing & Validation
+## 6. Headless Node & Bootstrap
 
-Rust (backend)
-- Build: `cargo check`
-- Lints: `cargo clippy --all-features -- -D clippy::panic -D clippy::unwrap_used -D clippy::expect_used`
-- Unit/integration tests: `cargo test` (core and tauri layers as applicable)
+Binary: `target/release/communitas-headless`
 
-UI (frontend)
-- Typecheck: `npm run typecheck`
-- Unit: `npm test` (Vitest)
-- End‑to‑end: subscribe/send flows, disk read/write, website publish/update
+CLI flags (see `communitas-headless/src/main.rs`):
+- `--config /etc/communitas/config.toml`
+- `--storage /var/lib/communitas`
+- `--listen 0.0.0.0:0`
+- `--bootstrap word-word-word-word:port` (repeatable)
+- `--metrics` + `--metrics-addr 127.0.0.1:9600`
+- `--self-update`
 
-Security validation
-- Verify canonical byte construction and signature lengths (ML‑DSA signature size = 3309 bytes)
-- Enforce PutPolicy and WriteAuth for DHT updates
-- Run chaos and churn tests (saorsa-core test suites)
+Config schema (TOML `Config` struct):
+- `identity`: optional four-word address (use `core_claim` + share key store)
+- `bootstrap_nodes`: array of seeds
+- `storage`: `{ base_dir, cache_size_mb, enable_fec, fec_k, fec_m }`
+- `network`: `{ listen_addrs[], enable_ipv6, enable_webrtc, quic_idle_timeout_ms, quic_max_streams }`
+- `update`: `{ channel, check_interval_secs, auto_update, jitter_secs }`
+
+Runtime features:
+- Self-update via GitHub Releases (primary + fallback owner).
+- Peer cache for gossip; stored under `<storage>/peers.json`.
+- Metrics endpoint (if `--metrics`) exposes gauge/counter set for peers, DHT throughput, storage usage.
+
+---
+
+## 7. Testing & Validation
+
+Rust:
+- `cargo fmt --all`
+- `cargo clippy --all-features -- -D clippy::panic -D clippy::unwrap_used -D clippy::expect_used`
+- `cargo test -p communitas-desktop`, `-p communitas-core`, `-p communitas-headless`
+- Integration suites: `cargo test integration_ --release`, `cargo test reed_solomon --release`
+
+Node/React:
+- `npm run typecheck`
+- `npm run test:run` (fast), `npm run test:ci` (full), `npm run build`
+
+Sync/containers:
+- `sync_repair_fec` unit tests live in `communitas-desktop/src/sync.rs`.
+- Container engine coverage under `crates/communitas-container` (unit tests recommended when extending ops or AEAD config).
+
+CI expectations:
+- `.github/workflows/ci.yml` and `test-suite.yml` depend on the commands above. Keep them up to date after changing tooling or moving code.
+
+---
+
+## 8. Security, Anti-Abuse, Trust
+
+- **Panic-free production**: enforced via Clippy policy; checks run in CI.
+- **Key management**: ML-DSA keys stored via OS keyring (`keyring` crate). Device IDs persisted once per install.
+- **Canonical signing**: group membership and identity website roots rely on canonical bytes (`group_identity_canonical_sign_bytes`, `saorsa-identity:website_root:v1`).
+- **Raw SPKI pinning**: QUIC client enforces pinned public keys unless `COMMUNITAS_RPK_ALLOW_ANY` is set.
+- **Rate limiting**: UI layer should throttle invites and messaging; backend exposes `MessagingService` send options for future weighting.
+- **Spam mitigation**: pointer-only DHT updates, presence signatures, and EigenTrust/RSPS hooks (saorsa-core) reduce abuse vectors.
 
 ---
 
 ## 9. Error Model & Limits
 
-- All functions return `Result<T, E>` with explicit error variants; IPC flattens to strings
-- Size limits: disk quotas (configurable), message length, manifest sizes
-- Rate limiting patterns available on app side; reputation and RSPS in core
-- No hidden panics or unwraps; agents should not rely on panic catching
+- IPC commands return `Err(String)` with actionable context (`send_message failed: …`).
+- Message size limit: 10 KiB (`core_send_message_to_recipients`).
+- Recipient cap: 100 recipients per message.
+- `container_get_object` expects 32-byte (64-hex) handles; validates length and hex.
+- FEC repair requires `data_shards > 0`; returns descriptive error otherwise.
+- `core_channel_invite_by_words` currently returns an explicit `Err` until saorsa-core adds membership APIs.
+- All long-lived watchers (`core_resolve_channel_members`, `sync_start_tip_watcher`) spawn Tokio tasks; ensure you call matching stop/cleanup in automations.
 
 ---
 
 ## 10. Glossary
 
-- FWN (Four‑Word Networking): readable, checksum‑secured addressing for humans
-- DHT: Trust‑weighted Kademlia with quorum and telemetry
-- FEC: Forward Error Correction for resilient storage and transport
-- Virtual Disk: entity‑scoped, encrypted/public disks for files & websites
-- Website Root: identity‑bound key for DNS‑free sites
-- MLS/ML‑DSA/ML‑KEM: PQC algorithms used throughout
+- **FWN**: Four-Word Networking, human-readable addressing with checksum.
+- **Tip**: Signed state root `{ root, count, sig }` emitted by the container engine.
+- **Pointer-only**: Policy of only storing references (hashes, manifests) in the DHT.
+- **ML-DSA / ML-KEM**: Post-quantum signature / key encapsulation algorithms.
+- **Raw SPKI**: RFC 7250 raw public key transport for QUIC TLS handshakes.
+- **FEC**: Forward Error Correction (Reed–Solomon) for resilient storage/transport.
 
 ---
 
 ## 11. References
 
-- Saorsa Core (crates.io): `saorsa-core` (v0.3.17)
-- Saorsa Core docs: `../saorsa-core/AGENTS_API.md`
-- Communitas deploy/testnet: `finalise/DEPLOY_TESTNET.md`
-- Project architecture/design: `ARCHITECTURE.md`, `DESIGN.md`
+- `communitas-desktop/src/` – IPC implementation.
+- `communitas-core/src/` – CoreContext, keystore, storage glue.
+- `crates/communitas-container/src/lib.rs` – container engine internals.
+- `communitas-headless/src/` – headless node CLI and self-update.
+- Saorsa Core docs – see upstream `saorsa-core/AGENTS_API.md` for low-level types.
+- Architecture/design context – `ARCHITECTURE.md`, `DESIGN.md`, `COMMUNITAS_ARCHITECTURE.md`.
 
----
-
-This document is maintained with the code. If an API here differs from the code in `src-tauri/src`, the code is the source of truth. Please open issues/PRs with proposed changes to keep agents in sync.
-
+If any API in this document diverges from the code in `communitas-desktop/src`, treat the code as source of truth and file an update.

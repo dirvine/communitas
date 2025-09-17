@@ -12,7 +12,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, waitFor } from '@testing-library/react'
 import '@testing-library/jest-dom'
-import { BrowserRouter } from 'react-router-dom'
 import { ThemeProvider } from '@mui/material/styles'
 import { SnackbarProvider } from 'notistack'
 
@@ -49,22 +48,21 @@ vi.mock('framer-motion', () => ({
 }))
 
 // Test wrapper component
+// Note: App component already includes BrowserRouter, so we don't wrap it here
 const TestWrapper = ({ children }: { children: React.ReactNode }) => (
-  <BrowserRouter>
-    <ThemeProvider theme={createCustomTheme('light')}>
-      <SnackbarProvider>
-        <TauriProvider>
-          <AuthProvider>
-            <NavigationProvider>
-              <PqcEncryptionProvider>
-                {children}
-              </PqcEncryptionProvider>
-            </NavigationProvider>
-          </AuthProvider>
-        </TauriProvider>
-      </SnackbarProvider>
-    </ThemeProvider>
-  </BrowserRouter>
+  <ThemeProvider theme={createCustomTheme('light')}>
+    <SnackbarProvider>
+      <TauriProvider>
+        <AuthProvider>
+          <NavigationProvider>
+            <PqcEncryptionProvider>
+              {children}
+            </PqcEncryptionProvider>
+          </NavigationProvider>
+        </AuthProvider>
+      </TauriProvider>
+    </SnackbarProvider>
+  </ThemeProvider>
 )
 
 describe('App Component', () => {

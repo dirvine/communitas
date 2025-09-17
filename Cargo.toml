@@ -24,7 +24,7 @@ identifier = "com.p2pfoundation.communitas"
 
 [dependencies]
 # P2P Foundation - use published saorsa-core
-saorsa-core = "=0.3.20"  # v0.3.20 fixes Windows compilation bug
+saorsa-core = "=0.3.21"  # v0.3.21 exports get_user_four_words for channel tooling
 
 # Async runtime
 tokio = { version = "1.39", features = ["full"] }

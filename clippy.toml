@@ -1,0 +1,18 @@
+# Clippy configuration for Communitas
+# Configuration fields for clippy behavior
+
+# Complexity threshold
+cognitive-complexity-threshold = 15
+too-many-arguments-threshold = 7
+
+# Allow panic/unwrap/expect in tests
+allow-panic-in-tests = true
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+
+# Allow print/dbg in tests
+allow-print-in-tests = true
+allow-dbg-in-tests = true
+
+# Module size thresholds
+too-many-lines-threshold = 500

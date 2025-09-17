@@ -751,14 +751,14 @@ async fn run_node(args: Args) -> Result<()> {
         // Run the blocking self-update in a spawn_blocking task
         match tokio::task::spawn_blocking(try_self_update).await {
             Ok(Ok(Some(ver))) => {
-                println!("updated-to={}", ver);
+                tracing::info!("updated-to={}", ver);
             }
-            Ok(Ok(None)) => println!("no-update"),
+            Ok(Ok(None)) => tracing::info!("no-update"),
             Ok(Err(e)) => {
-                eprintln!("self-update error: {:#}", e);
+                tracing::error!("self-update error: {:#}", e);
             }
             Err(e) => {
-                eprintln!("spawn error: {:#}", e);
+                tracing::error!("spawn error: {:#}", e);
             }
         }
         return Ok(());

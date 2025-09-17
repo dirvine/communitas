@@ -368,10 +368,10 @@ fn generate_random_four_words() -> Result<String> {
         let ipv4 = Ipv4Addr::from(rng.next_u32());
         let port = (rng.next_u32() % PORT_SPAN) as u16 + MIN_PORT;
         let candidate = NetworkAddress::from_ipv4(ipv4, port);
-        if let Some(words) = candidate.four_words() {
-            if let Ok(canonical) = canonicalize_four_words(words) {
-                return Ok(canonical);
-            }
+        if let Some(words) = candidate.four_words()
+            && let Ok(canonical) = canonicalize_four_words(words)
+        {
+            return Ok(canonical);
         }
     }
     Err(anyhow!(

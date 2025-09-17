@@ -3,19 +3,35 @@
 
 mod peer_cache;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow};
+use base64::Engine as _;
+use base64::engine::general_purpose::STANDARD as BASE64;
 use clap::Parser;
+use ed25519_dalek::SigningKey as Ed25519SecretKey;
 use four_word_networking::FourWordAdaptiveEncoder;
 use once_cell::sync::Lazy;
+use rand::RngCore;
+use rand::rngs::OsRng;
+use saorsa_core::address::NetworkAddress;
+use saorsa_core::identity::FourWordAddress;
+use saorsa_core::quantum_crypto::{
+    MlDsaPublicKey, MlDsaSecretKey, MlKemPublicKey, MlKemSecretKey, generate_ml_dsa_keypair,
+    generate_ml_kem_keypair,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use std::net::SocketAddr;
-use std::path::PathBuf;
+use std::convert::TryInto;
+use std::io::ErrorKind;
+use std::net::{Ipv4Addr, SocketAddr};
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use tokio::signal;
 use tokio::sync::RwLock as AsyncRwLock;
 use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
+
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 
 // Import peer cache types
 use crate::peer_cache::{PeerCache, PeerInfo};
@@ -221,25 +237,262 @@ async fn load_or_create_config(path: &PathBuf) -> Result<Config> {
     }
 }
 
-async fn setup_identity(config: &Config) -> Result<(String, Vec<u8>, Vec<u8>)> {
-    // If identity is configured, use it
-    if let Some(identity) = &config.identity {
-        info!("Using configured identity: {}", identity);
-        // In production, load keys from secure storage
-        // For now, generate new keys (should be persisted)
-        // Note: saorsa-pqc may have different module structure, using placeholder
-        let pk = vec![0u8; 32];
-        let sk = vec![0u8; 64];
-        Ok((identity.clone(), pk, sk))
-    } else {
-        // Generate new identity
-        warn!("No identity configured, generating new one");
-        // In production, this should generate a proper four-word address
-        // and persist the keys securely
-        let words = ["communitas", "node", "test", "instance"];
-        let pk = vec![0u8; 32];
-        let sk = vec![0u8; 64];
-        Ok((words.join("-"), pk, sk))
+async fn save_config(path: &PathBuf, config: &Config) -> Result<()> {
+    let content = toml::to_string_pretty(config).context("Failed to serialize config")?;
+    tokio::fs::write(path, content)
+        .await
+        .with_context(|| format!("Failed to write config file {}", path.display()))?;
+    Ok(())
+}
+
+const IDENTITY_DIR_NAME: &str = "identity";
+const IDENTITY_FILE_NAME: &str = "identity.json";
+const IDENTITY_GENERATION_ATTEMPTS: usize = 1024;
+
+#[derive(Debug)]
+struct IdentityMaterial {
+    four_words: String,
+    ml_dsa_public: Vec<u8>,
+    ml_dsa_secret: Vec<u8>,
+    ml_kem_public: Vec<u8>,
+    ml_kem_secret: Vec<u8>,
+    ed25519_public: Vec<u8>,
+    ed25519_secret: Vec<u8>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct StoredIdentity {
+    four_words: String,
+    ml_dsa_public: String,
+    ml_dsa_secret: String,
+    ml_kem_public: String,
+    ml_kem_secret: String,
+    ed25519_public: String,
+    ed25519_secret: String,
+}
+
+impl StoredIdentity {
+    fn into_material(self) -> Result<IdentityMaterial> {
+        let StoredIdentity {
+            four_words,
+            ml_dsa_public,
+            ml_dsa_secret,
+            ml_kem_public,
+            ml_kem_secret,
+            ed25519_public,
+            ed25519_secret,
+        } = self;
+
+        let canonical = canonicalize_four_words(&four_words)?;
+
+        let ml_dsa_public = BASE64
+            .decode(ml_dsa_public)
+            .context("Failed to decode stored ML-DSA public key")?;
+        let ml_dsa_secret = BASE64
+            .decode(ml_dsa_secret)
+            .context("Failed to decode stored ML-DSA secret key")?;
+        let ml_kem_public = BASE64
+            .decode(ml_kem_public)
+            .context("Failed to decode stored ML-KEM public key")?;
+        let ml_kem_secret = BASE64
+            .decode(ml_kem_secret)
+            .context("Failed to decode stored ML-KEM secret key")?;
+        let ed25519_public = BASE64
+            .decode(ed25519_public)
+            .context("Failed to decode stored Ed25519 public key")?;
+        let ed25519_secret = BASE64
+            .decode(ed25519_secret)
+            .context("Failed to decode stored Ed25519 secret key")?;
+
+        MlDsaPublicKey::from_bytes(&ml_dsa_public)
+            .map_err(|e| anyhow!("Invalid ML-DSA public key in identity store: {}", e))?;
+        MlDsaSecretKey::from_bytes(&ml_dsa_secret)
+            .map_err(|e| anyhow!("Invalid ML-DSA secret key in identity store: {}", e))?;
+        MlKemPublicKey::from_bytes(&ml_kem_public)
+            .map_err(|e| anyhow!("Invalid ML-KEM public key in identity store: {}", e))?;
+        MlKemSecretKey::from_bytes(&ml_kem_secret)
+            .map_err(|e| anyhow!("Invalid ML-KEM secret key in identity store: {}", e))?;
+
+        if ed25519_public.len() != 32 {
+            return Err(anyhow!("Stored Ed25519 public key must be 32 bytes"));
+        }
+        if ed25519_secret.len() != 32 {
+            return Err(anyhow!("Stored Ed25519 secret key must be 32 bytes"));
+        }
+        let secret_seed: [u8; 32] = ed25519_secret
+            .as_slice()
+            .try_into()
+            .map_err(|_| anyhow!("Stored Ed25519 secret key must be 32 bytes"))?;
+        let signing = Ed25519SecretKey::from_bytes(&secret_seed);
+        if signing.verifying_key().to_bytes().as_slice() != ed25519_public.as_slice() {
+            return Err(anyhow!(
+                "Stored Ed25519 public key does not match secret key"
+            ));
+        }
+
+        Ok(IdentityMaterial {
+            four_words: canonical,
+            ml_dsa_public,
+            ml_dsa_secret,
+            ml_kem_public,
+            ml_kem_secret,
+            ed25519_public,
+            ed25519_secret,
+        })
+    }
+}
+
+fn canonicalize_four_words(input: &str) -> Result<String> {
+    let parsed = FourWordAddress::parse_str(input)
+        .map_err(|e| anyhow!("Invalid four-word identity: {}", e))?;
+    let words_vec = parsed.words();
+    let words: [String; 4] = words_vec.try_into().map_err(|v: Vec<String>| {
+        anyhow!(
+            "Four-word identity must contain exactly 4 words, found {}",
+            v.len()
+        )
+    })?;
+    if !saorsa_core::fwid::fw_check(words.clone()) {
+        return Err(anyhow!(
+            "Four-word identity contains words outside the allowed dictionary"
+        ));
+    }
+    Ok(parsed.as_str().to_string())
+}
+
+fn generate_random_four_words() -> Result<String> {
+    let mut rng = OsRng;
+    const MIN_PORT: u16 = 1024;
+    const PORT_SPAN: u32 = u16::MAX as u32 - MIN_PORT as u32 + 1;
+    for _ in 0..IDENTITY_GENERATION_ATTEMPTS {
+        let ipv4 = Ipv4Addr::from(rng.next_u32());
+        let port = (rng.next_u32() % PORT_SPAN) as u16 + MIN_PORT;
+        let candidate = NetworkAddress::from_ipv4(ipv4, port);
+        if let Some(words) = candidate.four_words() {
+            if let Ok(canonical) = canonicalize_four_words(words) {
+                return Ok(canonical);
+            }
+        }
+    }
+    Err(anyhow!(
+        "Failed to generate a valid four-word identity after {} attempts",
+        IDENTITY_GENERATION_ATTEMPTS
+    ))
+}
+
+async fn persist_identity_to_disk(path: &Path, material: &IdentityMaterial) -> Result<()> {
+    let stored = StoredIdentity {
+        four_words: material.four_words.clone(),
+        ml_dsa_public: BASE64.encode(&material.ml_dsa_public),
+        ml_dsa_secret: BASE64.encode(&material.ml_dsa_secret),
+        ml_kem_public: BASE64.encode(&material.ml_kem_public),
+        ml_kem_secret: BASE64.encode(&material.ml_kem_secret),
+        ed25519_public: BASE64.encode(&material.ed25519_public),
+        ed25519_secret: BASE64.encode(&material.ed25519_secret),
+    };
+    let serialized = serde_json::to_vec_pretty(&stored)
+        .context("Failed to serialize identity for persistence")?;
+    tokio::fs::write(path, serialized)
+        .await
+        .with_context(|| format!("Failed to write identity file {}", path.display()))?;
+    #[cfg(unix)]
+    {
+        let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
+    }
+    Ok(())
+}
+
+async fn setup_identity(config: &Config) -> Result<IdentityMaterial> {
+    let identity_dir = config.storage.base_dir.join(IDENTITY_DIR_NAME);
+    tokio::fs::create_dir_all(&identity_dir)
+        .await
+        .with_context(|| {
+            format!(
+                "Failed to create identity directory {}",
+                identity_dir.display()
+            )
+        })?;
+
+    let identity_path = identity_dir.join(IDENTITY_FILE_NAME);
+
+    match tokio::fs::read(&identity_path).await {
+        Ok(bytes) => {
+            let stored: StoredIdentity = serde_json::from_slice(&bytes)
+                .context("Failed to parse persisted identity JSON")?;
+            let material = stored.into_material()?;
+
+            if let Some(config_identity) = &config.identity {
+                match canonicalize_four_words(config_identity) {
+                    Ok(canonical) if canonical != material.four_words => {
+                        warn!(
+                            "Configured four-word identity {} does not match persisted identity {}; using persisted identity",
+                            config_identity, material.four_words
+                        );
+                    }
+                    Err(err) => {
+                        warn!(
+                            "Configured four-word identity {} is invalid: {}; using persisted identity",
+                            config_identity, err
+                        );
+                    }
+                    _ => {}
+                }
+            }
+
+            info!(
+                "Loaded existing node identity {} from {}",
+                material.four_words,
+                identity_path.display()
+            );
+            Ok(material)
+        }
+        Err(err) if err.kind() == ErrorKind::NotFound => {
+            let four_words = if let Some(config_identity) = &config.identity {
+                let canonical = canonicalize_four_words(config_identity)?;
+                info!(
+                    "Initializing identity from configured four-word address: {}",
+                    canonical
+                );
+                canonical
+            } else {
+                let generated = generate_random_four_words()?;
+                info!("Generated new four-word identity: {}", generated);
+                generated
+            };
+
+            let (ml_dsa_public, ml_dsa_secret) = generate_ml_dsa_keypair()
+                .map_err(|e| anyhow!("Failed to generate ML-DSA keypair: {}", e))?;
+            let (ml_kem_public, ml_kem_secret) = generate_ml_kem_keypair()
+                .map_err(|e| anyhow!("Failed to generate ML-KEM keypair: {}", e))?;
+
+            let mut rng = OsRng;
+            let ed25519_secret = Ed25519SecretKey::generate(&mut rng);
+            let ed25519_public = ed25519_secret.verifying_key();
+
+            let material = IdentityMaterial {
+                four_words,
+                ml_dsa_public: ml_dsa_public.as_bytes().to_vec(),
+                ml_dsa_secret: ml_dsa_secret.as_bytes().to_vec(),
+                ml_kem_public: ml_kem_public.as_bytes().to_vec(),
+                ml_kem_secret: ml_kem_secret.as_bytes().to_vec(),
+                ed25519_public: ed25519_public.to_bytes().to_vec(),
+                ed25519_secret: ed25519_secret.to_bytes().to_vec(),
+            };
+
+            persist_identity_to_disk(&identity_path, &material).await?;
+            info!(
+                "Persisted node identity {} to {}",
+                material.four_words,
+                identity_path.display()
+            );
+
+            Ok(material)
+        }
+        Err(err) => Err(anyhow!(
+            "Failed to read identity file {}: {}",
+            identity_path.display(),
+            err
+        )),
     }
 }
 
@@ -508,6 +761,7 @@ async fn run_node(args: Args) -> Result<()> {
     }
     // Load or create config
     let mut config = load_or_create_config(&args.config).await?;
+    let mut config_dirty = false;
     info!("Loaded configuration from {:?}", args.config);
 
     let mut canonical_bootstrap_addrs: HashSet<SocketAddr> = HashSet::new();
@@ -533,6 +787,7 @@ async fn run_node(args: Args) -> Result<()> {
                 Ok(Some(addr)) => {
                     if canonical_bootstrap_addrs.insert(addr) {
                         config.bootstrap_nodes.push(trimmed.to_string());
+                        config_dirty = true;
                     } else {
                         info!(
                             "Bootstrap {} resolves to {} which is already configured; skipping duplicate",
@@ -547,6 +802,7 @@ async fn run_node(args: Args) -> Result<()> {
                         .any(|existing| existing.trim() == trimmed)
                     {
                         config.bootstrap_nodes.push(trimmed.to_string());
+                        config_dirty = true;
                     }
                 }
                 Err(e) => {
@@ -560,6 +816,7 @@ async fn run_node(args: Args) -> Result<()> {
                         .any(|existing| existing.trim() == trimmed)
                     {
                         config.bootstrap_nodes.push(trimmed.to_string());
+                        config_dirty = true;
                     }
                 }
             }
@@ -599,7 +856,15 @@ async fn run_node(args: Args) -> Result<()> {
     info!("Initialized peer cache");
 
     // Setup identity
-    let (identity, _pubkey, _privkey) = setup_identity(&config).await?;
+    let identity_material = setup_identity(&config).await?;
+    let identity = identity_material.four_words.clone();
+    if config.identity.as_deref() != Some(identity.as_str()) {
+        config.identity = Some(identity.clone());
+        config_dirty = true;
+    }
+    if config_dirty {
+        save_config(&args.config, &config).await?;
+    }
     info!("Node identity: {}", identity);
 
     // Initialize DHT using saorsa_core
@@ -793,12 +1058,9 @@ use ant_quic::crypto::pqc::rustls_provider::{with_pqc_support, with_pqc_support_
 use ant_quic::crypto::raw_public_keys::RawPublicKeyConfigBuilder;
 use ant_quic::crypto::raw_public_keys::key_utils::public_key_to_bytes;
 use ant_quic::high_level::Endpoint as QuicEndpoint;
-use ed25519_dalek::SigningKey as Ed25519SecretKey;
 use std::sync::Arc as StdArc;
 // ant-quic send streams provide write_all via their API; no extra trait import needed
 use communitas_container as cc;
-#[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
 
 #[derive(Serialize, Deserialize)]
 struct DeltaRequest<'a> {
@@ -846,8 +1108,8 @@ async fn start_quic_delta_server(
             .map_err(|_| anyhow::anyhow!("transport key file must be exactly 32 bytes"))?;
         Ed25519SecretKey::from_bytes(&seed)
     } else {
-        use rand::rngs::OsRng;
-        let sk = Ed25519SecretKey::generate(&mut OsRng);
+        let mut rng = OsRng;
+        let sk = Ed25519SecretKey::generate(&mut rng);
         if let Some(parent) = key_path.parent() {
             tokio::fs::create_dir_all(parent).await.ok();
         }

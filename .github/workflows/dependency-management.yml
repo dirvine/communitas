@@ -115,7 +115,7 @@ jobs:
           snyk test --severity-threshold=medium
         else
           echo "Snyk not available, using npm audit instead"
-  npm audit --audit-level=high
+          npm audit --audit-level=high
         fi
         
     - name: Dependency size analysis

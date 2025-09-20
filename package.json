@@ -22,6 +22,8 @@
     "test:coverage": "NODE_OPTIONS=--max-old-space-size=10240 CI=true vitest run --coverage --reporter=dot",
     "test:coverage:slow": "RUN_SLOW=1 NODE_OPTIONS=--max-old-space-size=8192 vitest run --coverage --reporter=dot",
     "mcp:puppeteer": "node servers/mcp-puppeteer/server.js",
+    "mcp:puppeteer:visible": "MCP_BROWSER_HEADLESS=0 node servers/mcp-puppeteer/server.js",
+    "mcp:puppeteer:headless": "MCP_BROWSER_HEADLESS=1 node servers/mcp-puppeteer/server.js",
     "mcp:demo": "node servers/mcp-puppeteer/demo-client.js",
     "mcp:puppeteer:http": "node servers/mcp-puppeteer/server-http.js",
     "mcp:demo:http": "node servers/mcp-puppeteer/demo-client-http.js",

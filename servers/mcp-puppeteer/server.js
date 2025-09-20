@@ -8,7 +8,8 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 
 const DEFAULT_URL = process.env.MCP_BROWSER_URL || 'http://localhost:1420';
-const HEADLESS = process.env.MCP_BROWSER_HEADLESS === '1';
+const HEADLESS = process.env.MCP_BROWSER_HEADLESS !== '0'; // Default to visible browser
+const DEBUG_PORT = process.env.MCP_CHROME_DEBUG_PORT || 9222;
 
 let browser = null;
 let page = null;
@@ -19,10 +20,14 @@ async function ensureBrowser() {
     const launchOpts = {
       headless: HEADLESS,
       defaultViewport: { width: 1400, height: 900 },
-      args: ['--no-sandbox', '--disable-dev-shm-usage'],
+      args: ['--no-sandbox', '--disable-dev-shm-usage', `--remote-debugging-port=${DEBUG_PORT}`],
       executablePath,
     };
-    console.log('[mcp-stdio] Launching Puppeteer', { headless: HEADLESS, executablePath: executablePath ? 'custom' : 'default' });
+    console.log('[mcp-stdio] Launching Puppeteer', {
+      headless: HEADLESS,
+      executablePath: executablePath ? 'custom' : 'default',
+      debugPort: DEBUG_PORT
+    });
     browser = await puppeteer.launch(launchOpts);
   }
   if (!page) {
@@ -39,7 +44,99 @@ async function ensureBrowser() {
   return { browser, page };
 }
 
+async function connectToActiveChrome(targetUrl = null, debugPort = DEBUG_PORT) {
+  try {
+    console.log('[mcp-stdio] Attempting to connect to existing Chrome instance', { debugPort, targetUrl });
+
+    // Try to connect to existing Chrome instance
+    const browserWSEndpoint = `http://localhost:${debugPort}/json/version`;
+    const https = await import('https');
+    const response = await new Promise((resolve, reject) => {
+      https.get(browserWSEndpoint, (res) => {
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => resolve({ ok: res.statusCode === 200, json: () => JSON.parse(data) }));
+      }).on('error', reject);
+    });
+
+    if (!response.ok) {
+      throw new Error(`Chrome debugging not available on port ${debugPort}`);
+    }
+
+    const data = await response.json();
+    const browserURL = data.webSocketDebuggerUrl;
+
+    browser = await puppeteer.connect({
+      browserWSEndpoint: browserURL,
+      defaultViewport: { width: 1400, height: 900 }
+    });
+
+    const pages = await browser.pages();
+
+    // Find the target page or use the first non-extension page
+    if (targetUrl) {
+      page = pages.find(p => p.url().includes(targetUrl)) || pages.find(p => !p.url().startsWith('chrome-extension://'));
+    } else {
+      page = pages.find(p => !p.url().startsWith('chrome-extension://')) || pages[0];
+    }
+
+    if (!page) {
+      page = await browser.newPage();
+    }
+
+    page.on('console', msg => {
+      const type = msg.type();
+      if (type === 'error') {
+        console.error('[browser:error]', msg.text());
+      } else {
+        console.log(`[browser:${type}]`, msg.text());
+      }
+    });
+
+    console.log('[mcp-stdio] Successfully connected to existing Chrome instance');
+    return { browser, page };
+  } catch (error) {
+    console.error('[mcp-stdio] Failed to connect to existing Chrome:', error.message);
+    throw error;
+  }
+}
+
 const server = new McpServer({ name: 'communitas-mcp-puppeteer', version: '0.1.0' });
+
+// browser_connect_active_chrome
+server.registerTool(
+  'browser_connect_active_chrome',
+  {
+    title: 'Connect to Active Chrome',
+    description: 'Connect to an existing Chrome browser instance with remote debugging enabled',
+    inputSchema: {
+      targetUrl: z.string().url().optional().describe('Specific URL to connect to (optional)'),
+      debugPort: z.number().int().positive().optional().describe('Chrome debugging port (default: 9222)'),
+    },
+  },
+  async ({ targetUrl, debugPort }) => {
+    try {
+      const { browser: connectedBrowser, page: connectedPage } = await connectToActiveChrome(targetUrl, debugPort || DEBUG_PORT);
+      browser = connectedBrowser;
+      page = connectedPage;
+      const currentUrl = page.url();
+      const title = page.title();
+      return {
+        content: [{
+          type: 'text',
+          text: `Connected to Chrome instance\nURL: ${currentUrl}\nTitle: ${title}\nDebug Port: ${debugPort || DEBUG_PORT}`
+        }]
+      };
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: `Failed to connect to Chrome: ${error.message}\n\nMake sure Chrome is running with remote debugging enabled:\nWindows: chrome.exe --remote-debugging-port=9222\nmacOS: /Applications/Google\\ Chrome.app/Contents/MacOS/Google\\ Chrome --remote-debugging-port=9222\nLinux: google-chrome --remote-debugging-port=9222`
+        }]
+      };
+    }
+  }
+);
 
 // browser_navigate
 server.registerTool(
@@ -326,7 +423,7 @@ const appTools = [
       const setup = await ws.setup();
       const test = await ot.test();
       const list = await ws.list();
-      return { setup, test, listed: true };
+      return { setup, test, list, success: true };
     }
   },
 ];

@@ -1,13 +1,16 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import App from './App'
+// import App from './App'
+// import SimpleApp from './SimpleApp'
+import AppClean from './AppClean'
 // import SimpleTestApp from './SimpleTestApp'
 import './index.css'
-import './test-identity' // Load test utilities for console testing
-import './test-offline-capabilities' // Load offline test suite
-import './setup-test-workspace' // Load workspace setup utilities
-import './test-tauri-groups' // Load Tauri group testing utilities
-import './test-network-connection' // Load network connection test utilities
+// Test utilities - load after main app initialization
+// import './test-identity' // Load test utilities for console testing
+// import './test-offline-capabilities' // Load offline test suite
+// import './setup-test-workspace' // Load workspace setup utilities
+// import './test-tauri-groups' // Load Tauri group testing utilities
+// import './test-network-connection' // Load network connection test utilities
 
 // Error boundary to catch runtime errors
 class ErrorBoundary extends React.Component<
@@ -61,7 +64,7 @@ if (rootElement) {
     root.render(
       <React.StrictMode>
         <ErrorBoundary>
-          <App />
+          <AppClean />
         </ErrorBoundary>
       </React.StrictMode>
     )

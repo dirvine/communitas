@@ -7,7 +7,7 @@ This playbook is for anyone (human or AI) automating Communitas. It captures the
 ## 1. Workspace at a Glance
 - `apps/communitas/` – React/Material UI console that now fronts the identity and storage surfaces. Uses the Tauri bindings defined in `communitas-desktop`.
 - `communitas-desktop/` – Tauri v2 desktop crate. The only place we expose IPC commands (see `src/core_commands.rs`, `core_groups.rs`, `core_cmds.rs`, `container.rs`, `sync.rs`, `security/raw_spki.rs`).
-- `communitas-core/` – Shared Rust library. `CoreContext` wires saorsa-core (v0.3.21) managers together (including the exported `get_user_four_words` helpers), persists PQC identities to the platform keyring, and caches group signing keys.
+ - `communitas-core/` – Shared Rust library. `CoreContext` wires saorsa-core (v0.3.23) managers together (including the exported `get_user_four_words` helpers), persists PQC identities to the platform keyring, and caches group signing keys.
 - `communitas-headless/` – Headless QUIC node with self-update, bootstrap, and metrics support. Ideal for CI smoke checks and autonomous seeders.
 - `crates/communitas-container/` – Pointer-only container/CRDT engine that produces signed tips and optional FEC metadata. Desktop and headless both depend on it.
 - `src/` – Legacy React SPA still compiled for regression coverage. Tests under `src/**/__tests__` remain part of CI; do not delete until the migration completes.
@@ -16,7 +16,7 @@ This playbook is for anyone (human or AI) automating Communitas. It captures the
 1. **Claim identity** – Call `core_claim(words: [String; 4])`. Keys are persisted in the keyring (`communitas-core::keystore`).
 2. **Advertise presence** – `core_advertise(addr, storage_gb)` signs a presence heartbeat and returns optional Four-Word IPv4 endpoints for UI display.
 3. **Initialize runtime** – `core_initialize` instantiates `CoreContext`, creating enhanced identities, chat/messaging services, and per-device storage handles.
-4. **Messaging & channels** – Use `core_create_channel`, `core_send_message_to_channel`, `core_send_message_to_recipients`, `core_subscribe_messages`, and UI receives `message-received` events with decrypted payloads when possible. New in saorsa-core v0.3.21: `core_channel_list_members` and `core_resolve_channel_members` hydrate Four-Word handles directly from the address book so automations can map user IDs without guessing.
+4. **Messaging & channels** – Use `core_create_channel`, `core_send_message_to_channel`, `core_send_message_to_recipients`, `core_subscribe_messages`, and UI receives `message-received` events with decrypted payloads when possible. New in saorsa-core v0.3.23: `core_channel_list_members` and `core_resolve_channel_members` hydrate Four-Word handles directly from the address book so automations can map user IDs without guessing.
 5. **Groups** – `core_group_create`, `core_group_add_member`, `core_group_remove_member` manage ML-DSA signed membership packets. Group signing keys are cached in-memory on the Tauri side.
 6. **Container & virtual disk pointers** – `container_init`, `container_put_object`, `container_get_object`, `container_apply_ops`, and `container_current_tip` provide pointer-only storage. Use `core_private_put/get` for encrypted KV storage in the local store.
 7. **Sync & repair** – `sync_start_tip_watcher` emits `container-tip` events; `sync_fetch_deltas` pulls CRDT ops over raw-key-pinned QUIC; `sync_repair_fec` exposes Reed–Solomon recovery helpers. Pin raw SPKI values via `sync_set_quic_pinned_spki`.

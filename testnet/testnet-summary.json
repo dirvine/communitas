@@ -1,0 +1,68 @@
+{
+  "testnet": {
+    "name": "Communitas Testnet",
+    "version": "1.0",
+    "generated": "2025-09-18T16:25:58Z",
+    "saorsa_core_version": "0.3.22"
+  },
+  "nodes": [
+    {
+      "id": 1,
+      "four_word_address": "philosophy-truth-prevent-wound",
+      "region": "AMS3",
+      "ip": "104.248.85.72",
+      "port": 443,
+      "config_file": "node1/config.toml"
+    },
+    {
+      "id": 2,
+      "four_word_address": "donna-jewish-scorpion-socrates",
+      "region": "LON1",
+      "ip": "138.68.130.66",
+      "port": 443,
+      "config_file": "node2/config.toml"
+    },
+    {
+      "id": 3,
+      "four_word_address": "bike-in-porto-napkin",
+      "region": "FRA1",
+      "ip": "159.89.109.179",
+      "port": 443,
+      "config_file": "node3/config.toml"
+    },
+    {
+      "id": 4,
+      "four_word_address": "congratulate-twice-tonga-hurt",
+      "region": "NYC3",
+      "ip": "165.22.44.216",
+      "port": 443,
+      "config_file": "node4/config.toml"
+    },
+    {
+      "id": 5,
+      "four_word_address": "sponsor-biker-simon-leipzig",
+      "region": "SFO3",
+      "ip": "137.184.123.27",
+      "port": 443,
+      "config_file": "node5/config.toml"
+    },
+    {
+      "id": 6,
+      "four_word_address": "event-ascent-net-remote",
+      "region": "SGP1",
+      "ip": "128.199.85.70",
+      "port": 443,
+      "config_file": "node6/config.toml"
+    }
+  ],
+  "bootstrap": {
+    "seeds": [
+      "philosophy-truth-prevent-wound:443",
+      "donna-jewish-scorpion-socrates:443",
+      "bike-in-porto-napkin:443",
+      "congratulate-twice-tonga-hurt:443",
+      "sponsor-biker-simon-leipzig:443",
+      "event-ascent-net-remote:443"
+    ]
+  }
+}

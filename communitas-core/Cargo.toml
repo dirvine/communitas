@@ -10,7 +10,7 @@ description = "Core business logic for Communitas - PQC collaboration with virtu
 
 [dependencies]
 # Saorsa Labs - use published crate
-saorsa-core = "=0.3.22"
+saorsa-core = { git = "https://github.com/dirvine/saorsa-core-foundation.git", branch = "main" }
 saorsa-fec = "0.4.11"
 saorsa-mls = "0.1.5"
 saorsa-rsps = "0.2.0"
@@ -47,7 +47,7 @@ zeroize = "1.7"
 secrecy = "0.8"
 
 # QUIC transport
-ant-quic = "0.8"
+ant-quic = "^0.8.17"
 
 # Database and storage
 rusqlite = { version = "0.37", features = ["chrono", "serde_json", "uuid", "bundled"] }

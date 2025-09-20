@@ -196,22 +196,77 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       setAuthState(prev => ({ ...prev, loading: true, error: null }));
 
-      // Attempt to connect with the provided credentials
-      let identity: UserIdentity | null = null
-      try {
-        identity = await (invoke('authenticate_identity', { fourWordAddress, password }) as Promise<UserIdentity>)
-      } catch {
-        // Fallback in browser/dev when backend not available: use offline storage
-        const cached = await offlineStorage.get<UserIdentity>('current_identity')
-        if (cached && cached.fourWordAddress === fourWordAddress) {
-          identity = cached
+      // Validate four-word address format
+      if (!fourWordAddress || !fourWordAddress.includes('-')) {
+        throw new Error('Invalid four-word address format');
+      }
+
+      // Try to validate identity with testnet nodes
+      let identity: UserIdentity | null = null;
+      const testnetNodes = [
+        'http://localhost:9002',
+        'http://localhost:9003',
+        'http://localhost:9004',
+        'http://localhost:9005',
+        'http://localhost:9006'
+      ];
+
+      for (const nodeUrl of testnetNodes) {
+        try {
+          console.log(`🔍 Checking identity with node: ${nodeUrl}`);
+          const response = await fetch(`${nodeUrl}/authenticate`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              fourWordAddress,
+              password,
+              action: 'validate'
+            })
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            if (data.success) {
+              // Create identity from validation response
+              identity = {
+                id: `user_${Date.now()}`,
+                name: data.name || fourWordAddress,
+                fourWordAddress,
+                publicKey: data.publicKey || 'validated',
+                profile: data.profile || {},
+                permissions: data.permissions || [],
+                createdAt: data.createdAt || new Date().toISOString(),
+                lastActive: new Date().toISOString(),
+                email: data.email
+              };
+              console.log(`✅ Identity validated by node: ${nodeUrl}`);
+              break;
+            }
+          }
+        } catch (error) {
+          console.log(`Node ${nodeUrl} validation failed:`, error);
         }
       }
-      if (!identity) throw new Error('Invalid credentials or offline')
+
+      // Fallback: check offline storage if no testnet validation succeeded
+      if (!identity) {
+        console.log('📦 Falling back to offline storage validation');
+        const cached = await offlineStorage.get<UserIdentity>('current_identity');
+        if (cached && cached.fourWordAddress === fourWordAddress) {
+          identity = cached;
+          console.log('✅ Found cached identity');
+        }
+      }
+
+      if (!identity) {
+        throw new Error('Identity not found on testnet or invalid credentials');
+      }
 
       // Connect to the P2P network
       const connected = await connectToNetwork();
-      
+
       setAuthState({
         isAuthenticated: true,
         user: {
@@ -222,15 +277,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         error: null,
       });
 
-      // Store session for persistence
-      await invoke('store_identity_session', { identity });
-      
-      // Also store in offline storage
+      // Store in offline storage for persistence
       await offlineStorage.store('current_identity', identity, {
         encrypt: true,
         syncOnline: true
       });
-      
+
       console.log('✅ Login successful:', identity.fourWordAddress);
       return connected;
     } catch (error) {
@@ -329,16 +381,48 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         fourWordAddress = `${pick()}-${pick()}-${pick()}-${pick()}`;
       }
 
-      // Initialize the core context with this identity
-      const success = await (invoke('core_initialize', {
-        fourWords: fourWordAddress,
-        displayName: name,
-        deviceName: 'Desktop',
-        deviceType: 'Desktop'
-      }) as Promise<boolean>);
+      // Try to register with testnet nodes (optional - continue even if registration fails)
+      let registered = false;
+      const testnetNodes = [
+        'http://localhost:9002',
+        'http://localhost:9003',
+        'http://localhost:9004',
+        'http://localhost:9005',
+        'http://localhost:9006'
+      ];
 
-      if (!success) {
-        throw new Error('Failed to initialize identity');
+      for (const nodeUrl of testnetNodes) {
+        try {
+          console.log(`📝 Registering identity with node: ${nodeUrl}`);
+          const response = await fetch(`${nodeUrl}/authenticate`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              action: 'register',
+              name,
+              email,
+              fourWordAddress,
+              password: options?.password
+            })
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            if (data.success) {
+              registered = true;
+              console.log(`✅ Identity registered with node: ${nodeUrl}`);
+              break;
+            }
+          }
+        } catch (error) {
+          console.log(`Node ${nodeUrl} registration failed:`, error);
+        }
+      }
+
+      if (!registered) {
+        console.warn('⚠️ Could not register with testnet nodes, proceeding with local storage only');
       }
 
       // Create the identity object
@@ -479,7 +563,39 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const connectToNetwork = async (): Promise<boolean> => {
     try {
-      return await (invoke('connect_to_network') as Promise<boolean>);
+      // Try to connect to testnet nodes
+      const testnetNodes = [
+        'http://localhost:9002',
+        'http://localhost:9003',
+        'http://localhost:9004',
+        'http://localhost:9005',
+        'http://localhost:9006'
+      ];
+
+      let connected = false;
+      for (const nodeUrl of testnetNodes) {
+        try {
+          const response = await fetch(`${nodeUrl}/health`);
+          if (response.ok) {
+            const data = await response.json();
+            if (data.status === 'healthy') {
+              connected = true;
+              console.log(`✅ Connected to testnet node: ${nodeUrl}`);
+              break;
+            }
+          }
+        } catch (error) {
+          console.log(`Node ${nodeUrl} not available:`, error);
+        }
+      }
+
+      if (connected) {
+        console.log('✅ Successfully connected to testnet');
+        return true;
+      } else {
+        console.error('❌ Failed to connect to any testnet node');
+        return false;
+      }
     } catch (error) {
       console.error('Network connection failed:', error);
       return false;
@@ -488,7 +604,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const disconnectFromNetwork = async (): Promise<void> => {
     try {
-      await invoke('disconnect_from_network');
+      // For browser-based disconnection, we don't need to do anything specific
+      // The connection is maintained through HTTP requests
+      console.log('📵 Disconnected from network');
     } catch (error) {
       console.error('Network disconnection failed:', error);
     }
@@ -496,7 +614,43 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const getNetworkStatus = async (): Promise<{ connected: boolean; peers: number }> => {
     try {
-      return await (invoke('get_network_status') as Promise<{ connected: boolean; peers: number }>);
+      // Check testnet node status
+      const testnetNodes = [
+        'http://localhost:9002',
+        'http://localhost:9003',
+        'http://localhost:9004',
+        'http://localhost:9005',
+        'http://localhost:9006'
+      ];
+
+      let connected = false;
+      let totalPeers = 0;
+
+      for (const nodeUrl of testnetNodes) {
+        try {
+          const response = await fetch(`${nodeUrl}/health`);
+          if (response.ok) {
+            connected = true;
+            // Try to get peer count from metrics endpoint
+            try {
+              const metricsResponse = await fetch(`${nodeUrl}/metrics`);
+              if (metricsResponse.ok) {
+                const metricsText = await metricsResponse.text();
+                const peerMatch = metricsText.match(/communitas_peers_connected (\d+)/);
+                if (peerMatch) {
+                  totalPeers = Math.max(totalPeers, parseInt(peerMatch[1]));
+                }
+              }
+            } catch (metricsError) {
+              console.log(`Could not get metrics from ${nodeUrl}:`, metricsError);
+            }
+          }
+        } catch (error) {
+          console.log(`Node ${nodeUrl} not available:`, error);
+        }
+      }
+
+      return { connected, peers: totalPeers };
     } catch (error) {
       console.error('Failed to get network status:', error);
       return { connected: false, peers: 0 };

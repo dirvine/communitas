@@ -1,5 +1,5 @@
-import React, { useState } from 'react'
-import { 
+import React, { useState, useEffect } from 'react'
+import {
   Box,
   Typography,
   Card,
@@ -8,19 +8,44 @@ import {
   TextField,
   Button,
   Stack,
+  Chip,
+  Grid,
+  LinearProgress,
 } from '@mui/material'
+import {
+  NetworkCheck as NetworkIcon,
+  Security as SecurityIcon,
+  Storage as StorageIcon,
+  People as PeopleIcon,
+} from '@mui/icons-material'
 import IdentityManager from '../identity/IdentityManager'
 import { invoke } from '@tauri-apps/api/core'
+import { useAuth } from '../../contexts/AuthContext'
 
 const IdentityTab: React.FC = () => {
+  const { authState, getNetworkStatus } = useAuth()
   const [verifyInput, setVerifyInput] = useState('')
   const [verifyLoading, setVerifyLoading] = useState(false)
+  const [networkStatus, setNetworkStatus] = useState<{ connected: boolean; peers: number } | null>(null)
   const [verifyResult, setVerifyResult] = useState<{
     status: 'idle' | 'verified' | 'not_found' | 'error'
     message?: string
     packet?: any
     dhtId?: string
   }>({ status: 'idle' })
+
+  // Load network status on component mount
+  useEffect(() => {
+    const loadNetworkStatus = async () => {
+      try {
+        const status = await getNetworkStatus()
+        setNetworkStatus(status)
+      } catch (error) {
+        console.error('Failed to get network status:', error)
+      }
+    }
+    loadNetworkStatus()
+  }, [getNetworkStatus])
 
   const handleVerifyFetch = async () => {
     if (!verifyInput.trim()) return
@@ -72,6 +97,108 @@ const IdentityTab: React.FC = () => {
           <IdentityManager />
         </CardContent>
       </Card>
+
+      {/* Network Status */}
+      <Card sx={{ mt: 3 }}>
+        <CardContent>
+          <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <NetworkIcon />
+            Testnet Status
+          </Typography>
+
+          {networkStatus ? (
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <NetworkIcon color={networkStatus.connected ? 'success' : 'error'} />
+                  <Box>
+                    <Typography variant="body2" fontWeight={500}>
+                      Connection Status
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {networkStatus.connected ? 'Connected' : 'Disconnected'}
+                    </Typography>
+                  </Box>
+                </Box>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <PeopleIcon color="primary" />
+                  <Box>
+                    <Typography variant="body2" fontWeight={500}>
+                      Active Peers
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {networkStatus.peers} connected
+                    </Typography>
+                  </Box>
+                </Box>
+              </Grid>
+              <Grid item xs={12}>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                  Testnet nodes: localhost:9002-9006
+                </Typography>
+              </Grid>
+            </Grid>
+          ) : (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <LinearProgress sx={{ flex: 1 }} />
+              <Typography variant="body2" color="text.secondary">
+                Checking network status...
+              </Typography>
+            </Box>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Current User Status */}
+      {authState.isAuthenticated && authState.user && (
+        <Card sx={{ mt: 3 }}>
+          <CardContent>
+            <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <SecurityIcon />
+              Current Identity
+            </Typography>
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6}>
+                <Typography variant="body2" fontWeight={500}>
+                  Name
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {authState.user.name}
+                </Typography>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <Typography variant="body2" fontWeight={500}>
+                  Four-Word Address
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
+                  {authState.user.fourWordAddress}
+                </Typography>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <Typography variant="body2" fontWeight={500}>
+                  Status
+                </Typography>
+                <Chip
+                  size="small"
+                  label="Active"
+                  color="success"
+                  variant="outlined"
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <Typography variant="body2" fontWeight={500}>
+                  Created
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {new Date(authState.user.createdAt).toLocaleDateString()}
+                </Typography>
+              </Grid>
+            </Grid>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Verify & Fetch Identity */}
       <Card sx={{ mt: 3 }}>

@@ -1,0 +1,12 @@
+[package]
+name = "gen_fwid"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+
+[dependencies]
+saorsa-core = { git = "https://github.com/dirvine/saorsa-core-foundation.git", branch = "main" }
+anyhow = "1.0"
+rand = "0.8"
+tokio = { version = "1.39", features = ["full"] }

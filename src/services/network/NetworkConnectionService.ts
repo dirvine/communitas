@@ -65,12 +65,15 @@ export class NetworkConnectionService {
   private async initialize() {
     // Get invoke function
     await this.setupInvoke();
-    
+
     // Setup browser online/offline listeners
     this.setupNetworkListeners();
-    
+
     // Try to connect to network automatically
-    await this.attemptNetworkConnection();
+    // TEMPORARILY DISABLED FOR TESTING
+    console.log('📵 Network auto-connection disabled for testing');
+    this.updateState({ status: 'local' });
+    // await this.attemptNetworkConnection();
   }
 
   private async setupInvoke() {

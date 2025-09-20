@@ -501,6 +501,7 @@ async fn start_health_endpoint(
     _dht_client: Arc<saorsa_core::messaging::DhtClient>,
 ) -> Result<()> {
     use warp::Filter;
+    use warp::cors;
 
     let health = warp::path("health").map(|| {
         warp::reply::json(&serde_json::json!({
@@ -528,10 +529,46 @@ async fn start_health_endpoint(
         )
     });
 
-    let routes = health.or(metrics);
+    // Add authentication endpoints
+    let authenticate = warp::path("authenticate")
+        .and(warp::post())
+        .and(warp::body::json())
+        .map(|body: serde_json::Value| {
+            // Simple authentication endpoint for demo
+            // In production, this would validate against the actual identity system
+            warp::reply::json(&serde_json::json!({
+                "success": true,
+                "message": "Authentication endpoint ready",
+                "received": body
+            }))
+        });
+
+    let get_identity = warp::path("identity")
+        .and(warp::get())
+        .map(|| {
+            // Return current node identity info
+            warp::reply::json(&serde_json::json!({
+                "node_type": "communitas-headless",
+                "version": env!("CARGO_PKG_VERSION"),
+                "status": "active"
+            }))
+        });
+
+    let routes = health
+        .or(metrics)
+        .or(authenticate)
+        .or(get_identity);
+
+    // Add CORS support
+    let cors = cors()
+        .allow_any_origin()
+        .allow_headers(vec!["content-type", "authorization"])
+        .allow_methods(vec!["GET", "POST", "PUT", "DELETE", "OPTIONS"]);
+
+    let routes_with_cors = routes.with(cors);
 
     tokio::spawn(async move {
-        warp::serve(routes).run(addr).await;
+        warp::serve(routes_with_cors).run(addr).await;
     });
 
     Ok(())

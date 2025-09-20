@@ -1,0 +1,29 @@
+# Communitas Headless Node Configuration
+# Node 4: congratulate-twice-tonga-hurt (NYC3)
+
+# Identity configuration
+[identity]
+four_words = "congratulate-twice-tonga-hurt"
+display_name = "TestNode4"
+
+# Network configuration
+[network]
+listen_address = "0.0.0.0:9003"
+bootstrap_nodes = [
+    "philosophy-truth-prevent-wound:443", "donna-jewish-scorpion-socrates:443", "bike-in-porto-napkin:443", "congratulate-twice-tonga-hurt:443", "sponsor-biker-simon-leipzig:443", "event-ascent-net-remote:443"
+]
+
+# Storage configuration
+[storage]
+path = "./data"
+max_size_gb = 10
+
+# Logging configuration
+[logging]
+level = "info"
+file = "./logs/node4.log"
+
+# API configuration
+[api]
+enabled = true
+address = "0.0.0.0:9005"

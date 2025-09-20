@@ -22,11 +22,11 @@ communitas-core = { path = "../communitas-core" }
 communitas-container = { path = "../crates/communitas-container" }
 
 # Saorsa Core - needed for direct use
-saorsa-core = "=0.3.22"
+saorsa-core = { git = "https://github.com/dirvine/saorsa-core-foundation.git", branch = "main" }
 saorsa-fec = "0.4.11"
 
 # Networking
-ant-quic = "0.8"
+ant-quic = "^0.8.17"
 
 # Utils
 uuid = { version = "1", features = ["v4", "serde"] }

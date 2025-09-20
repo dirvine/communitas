@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Test Page</title>
+  <style>
+    body { 
+      margin: 0; 
+      padding: 20px; 
+      font-family: system-ui; 
+      background: white;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    .status { 
+      background: #e8f5e9; 
+      padding: 15px; 
+      border-radius: 8px;
+      margin: 20px 0;
+    }
+    iframe {
+      width: 100%;
+      height: 600px;
+      border: 2px solid #333;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Communitas App Debug View</h1>
+    <div class="status">
+      <h2>✅ This page confirms your browser is working!</h2>
+      <p>If you can see this, the issue is with the React app at localhost:1422</p>
+    </div>
+    
+    <h3>App Preview (iframe):</h3>
+    <iframe src="http://localhost:1422" id="appFrame"></iframe>
+    
+    <div style="margin-top: 20px">
+      <button onclick="checkApp()">Check App in iFrame</button>
+      <button onclick="window.open('http://localhost:1422', '_blank')">Open App in New Tab</button>
+      <button onclick="location.reload(true)">Hard Refresh</button>
+    </div>
+    
+    <div id="results"></div>
+  </div>
+  
+  <script>
+    function checkApp() {
+      const iframe = document.getElementById('appFrame');
+      const results = document.getElementById('results');
+      
+      try {
+        const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+        const root = iframeDoc.getElementById('root');
+        
+        if (root && root.children.length > 0) {
+          results.innerHTML = '<h3 style="color: green">✅ App is rendering in iframe!</h3>';
+        } else {
+          results.innerHTML = '<h3 style="color: red">❌ App not rendering in iframe</h3>';
+        }
+      } catch(e) {
+        results.innerHTML = '<h3 style="color: orange">⚠️ Cannot access iframe (CORS)</h3>';
+      }
+    }
+    
+    // Auto-check after load
+    setTimeout(checkApp, 2000);
+  </script>
+</body>
+</html>

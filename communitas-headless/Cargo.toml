@@ -18,8 +18,8 @@ communitas-core = { path = "../communitas-core" }
 communitas-container = { path = "../crates/communitas-container" }
 
 # Networking
-ant-quic = "0.8"
-saorsa-core = "=0.3.22"
+ant-quic = "^0.8.17"
+saorsa-core = { git = "https://github.com/dirvine/saorsa-core-foundation.git", branch = "main" }
 four-word-networking = "2.6"
 
 # CLI

@@ -6,7 +6,7 @@ This document is the authoritative contract for agents that integrate with Commu
 
 ## What changed since v1.0 (2025-09-05)
 - **New identity bootstrap path**: `core_claim` persists ML-DSA keys to the OS keyring; `core_advertise` signs presence heartbeats and returns Four-Word IPv4 handles.
-- **Address book integration**: Upgraded to saorsa-core v0.3.21 so `core_channel_list_members`, `core_resolve_channel_members`, and `core_send_message_to_channel` resolve Four-Word addresses via `saorsa_core::get_user_four_words`. Event payloads now surface both array and string forms (`four_words`, `four_words_text`).
+- **Address book integration**: Upgraded to saorsa-core v0.3.23 so `core_channel_list_members`, `core_resolve_channel_members`, and `core_send_message_to_channel` resolve Four-Word addresses via `saorsa_core::get_user_four_words`. Event payloads now surface both array and string forms (`four_words`, `four_words_text`).
 - **Expanded IPC surface**: Added container engine (`container_init/put_object/get_object/apply_ops/current_tip`), encrypted KV storage (`core_private_put/get`), bootstrap config commands, raw SPKI pinning, and QUIC delta sync helpers.
 - **Core wiring update**: `communitas-core::CoreContext` now owns saorsa-core managers (identity, chat, messaging, storage) per device, keeping group signing material in-memory.
 - **Pointer-only storage**: The container engine (new crate `crates/communitas-container`) signs tips and keeps opaque blobs local, enforcing the pointer-only DHT policy.
@@ -30,7 +30,7 @@ Apps + core:
 
 - **Desktop (Tauri)** app: user-facing collaboration UI, exposes IPC commands for automation.
 - **Headless node**: bootstrap/seed/personal nodes for network support and (future) rewards.
-- **Saorsa Core** (`saorsa-core` crate, v0.3.21): DHT, QUIC, identity, groups, messaging, website hosting, and the address-book helpers (`get_user_four_words`, `get_user_by_four_words`) we now consume directly.
+- **Saorsa Core** (`saorsa-core` crate, v0.3.23): DHT, QUIC, identity, groups, messaging, website hosting, and the address-book helpers (`get_user_four_words`, `get_user_by_four_words`) we now consume directly.
 
 ---
 

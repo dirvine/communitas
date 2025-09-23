@@ -1,0 +1,31 @@
+[node]
+identity = "glad-proud-work-prague"
+
+bootstrap_nodes = [
+    "correct-bump-punch-purity:443",
+    "sebastian-but-awake-group:443",
+    "smart-awoken-aristotle-jeffrey:443",
+    "alice-grumpy-versus-various:443",
+    "low-urgent-vote-animal:443",
+    "tide-careful-alliance-jennifer:443",
+]
+
+[storage]
+base_dir = "./local-data"
+cache_size_mb = 512
+enable_fec = true
+fec_k = 4
+fec_m = 2
+
+[network]
+listen_addrs = ["127.0.0.1:14001"]
+enable_ipv6 = false
+enable_webrtc = true
+quic_idle_timeout_ms = 30000
+quic_max_streams = 100
+
+[update]
+channel = "stable"
+check_interval_secs = 86400
+auto_update = false
+jitter_secs = 3600

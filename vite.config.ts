@@ -7,17 +7,22 @@ export default defineConfig({
     react(),
     // Add polyfills for Node.js modules
     nodePolyfills({
-      include: ['events', 'crypto', 'stream', 'buffer'],
+      include: ['events', 'crypto', 'stream', 'buffer', 'util', 'string_decoder'],
       globals: {
         Buffer: true,
         global: true,
         process: true,
       },
+      protocolImports: true,
     }),
   ],
   server: {
     port: 1422,
     strictPort: false,
+    cors: true,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+    },
   },
   envPrefix: ['VITE_', 'TAURI_'],
   build: {
@@ -25,19 +30,6 @@ export default defineConfig({
     minify: !process.env.TAURI_DEBUG ? 'esbuild' : false,
     sourcemap: !!process.env.TAURI_DEBUG,
     chunkSizeWarningLimit: 2000,
-    rollupOptions: {
-      output: {
-        manualChunks(id) {
-          if (id.includes('node_modules')) {
-            if (id.includes('monaco-editor')) return 'monaco';
-            if (id.includes('@mui/')) return 'mui';
-            if (id.includes('react') || id.includes('react-dom')) return 'react';
-            if (id.includes('yjs') || id.includes('y-webrtc')) return 'yjs';
-            if (id.includes('@tauri-apps')) return 'tauri';
-          }
-        },
-      },
-    },
   },
   optimizeDeps: {
     esbuildOptions: {

@@ -1,4 +1,3 @@
-import { invoke } from '@tauri-apps/api/core'
 import React, { useState } from 'react'
 import {
   Dialog,
@@ -23,7 +22,10 @@ import {
   // Security as SecurityIcon,
   Check as CheckIcon,
 } from '@mui/icons-material'
-import { IdentityInfo, IdentityGenerationParams } from '../../types'
+import { IdentityInfo } from '../../types'
+import { safeInvoke } from '../../utils/tauri'
+import { generateFourWordIdentity } from '../../utils/identity'
+import { offlineStorage } from '../../services/storage/OfflineStorageService'
 
 interface IdentitySetupProps {
   open: boolean
@@ -71,42 +73,53 @@ const IdentitySetup: React.FC<IdentitySetupProps> = ({
     setError(null)
 
     try {
-      // Generate a random four-word identity
-      const words = ['ocean', 'forest', 'mountain', 'river', 'valley', 'desert', 'island', 'lake', 
-                     'meadow', 'prairie', 'canyon', 'glacier', 'savanna', 'tundra', 'reef', 'delta']
-      const pick = () => words[Math.floor(Math.random() * words.length)]
-      const fourWords = `${pick()}-${pick()}-${pick()}-${pick()}`
+      const fourWords = await generateFourWordIdentity()
+      const normalizedWords = fourWords
+        .split('-')
+        .map((word) => word.trim().toLowerCase())
 
-      // Initialize the core context with this identity
-      const success = await invoke<boolean>('core_initialize', {
+      if (normalizedWords.length !== 4) {
+        throw new Error('Generated identity is invalid')
+      }
+
+      const wordsTuple = normalizedWords as [string, string, string, string]
+
+      await safeInvoke<string>('core_claim', {
+        words: wordsTuple,
+      })
+
+      const initialized = await safeInvoke<boolean>('core_initialize', {
         fourWords,
         displayName: displayName || fourWords,
         deviceName: 'Desktop',
-        deviceType: 'Desktop'
+        deviceType: 'Desktop',
       })
 
-      if (!success) {
-        throw new Error('Failed to initialize identity')
-      }
-
-      // Create the identity object for UI
       const identity: IdentityInfo = {
-        id: `id_${Date.now()}`,
-        address: fourWords,
+        id: initialized ? `id_${Date.now()}` : `local_${Date.now()}`,
+        address: initialized ? fourWords : `dht://${fourWords}`,
         four_word_address: fourWords,
         display_name: displayName || fourWords,
         created_at: new Date().toISOString(),
         is_active: true,
         is_primary: true,
-        public_key_hex: 'generated',
-        verification_status: 'verified',
+        public_key_hex: initialized ? 'generated' : 'local-dev-key',
+        verification_status: initialized ? 'verified' : 'unverified',
       }
+
+      await offlineStorage.store('primary_identity', identity)
+      await offlineStorage.store('current_identity', identity)
 
       setGeneratedIdentity(identity)
       handleNext()
     } catch (err) {
       const message = err instanceof Error ? err.message : (err as string)
       setError(message)
+      const fallback = generateFallbackIdentity()
+      await offlineStorage.store('primary_identity', fallback)
+      await offlineStorage.store('current_identity', fallback)
+      setGeneratedIdentity(fallback)
+      handleNext()
     } finally {
       setIsGenerating(false)
     }

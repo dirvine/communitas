@@ -29,7 +29,7 @@ import {
 } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTheme } from './ThemeProvider';
-import { ColorPreset } from '../../theme';
+import type { ColorPreset } from '../../theme';
 
 // Color preset configurations
 const COLOR_PRESETS: { [key in ColorPreset]: { 

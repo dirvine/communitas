@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Test Imports</title>
+</head>
+<body>
+  <h1>Testing Imports</h1>
+  <div id="results"></div>
+
+  <script type="module">
+    const results = document.getElementById('results');
+
+    function log(msg) {
+      const p = document.createElement('p');
+      p.textContent = msg;
+      results.appendChild(p);
+      console.log(msg);
+    }
+
+    log(`TextDecoder available: ${typeof TextDecoder !== 'undefined'}`);
+    log(`TextEncoder available: ${typeof TextEncoder !== 'undefined'}`);
+
+    try {
+      // Test if TextDecoder works
+      const decoder = new TextDecoder();
+      log('✅ TextDecoder constructor works');
+    } catch (e) {
+      log(`❌ TextDecoder error: ${e.message}`);
+    }
+
+    // Try importing @tauri-apps/api/core
+    log('Attempting to import @tauri-apps/api/core...');
+    try {
+      const mod = await import('@tauri-apps/api/core');
+      log('✅ @tauri-apps/api/core imported successfully');
+    } catch (e) {
+      log(`❌ @tauri-apps/api/core error: ${e.message}`);
+    }
+  </script>
+</body>
+</html>

@@ -118,6 +118,26 @@ export const useOrientation = () => {
   };
 };
 
+// Touch-friendly sizing defaults to WCAG-compliant minimum sizes for interactive controls
+export const useTouchFriendlySizing = () => {
+  const { isMobile, isTablet, isDesktop } = useResponsive();
+  const isTouch = useTouchDevice();
+
+  const minTouchTarget = (() => {
+    if (isTouch && (isMobile || isTablet)) return 56; // generous padding for mobile/tablet
+    if (isTouch || isMobile) return 52;
+    if (isTablet) return 48;
+    return 44; // desktop fallback still above WCAG minimum (44px)
+  })();
+
+  return {
+    minTouchTarget,
+    paddingScale: isTouch ? 1.5 : 1,
+    iconSize: isTouch ? 28 : 24,
+    typographyScale: isTouch ? 1.05 : isDesktop ? 1 : 0.95,
+  };
+};
+
 // Hook for responsive spacing based on screen size
 export const useResponsiveSpacing = () => {
   const { isMobile, isTablet, isDesktop } = useResponsive();

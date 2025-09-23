@@ -1,5 +1,23 @@
 import crypto from 'crypto'
-import { encode as rsEncode, reconstruct as rsReconstruct } from 'wasm-reed-solomon-erasure'
+
+// Lazy load the WASM module to avoid TextDecoder issues during initialization
+let rsEncode: any = null;
+let rsReconstruct: any = null;
+let wasmLoaded = false;
+
+async function loadWasmModule() {
+  if (!wasmLoaded) {
+    try {
+      const wasm = await import('wasm-reed-solomon-erasure');
+      rsEncode = wasm.encode;
+      rsReconstruct = wasm.reconstruct;
+      wasmLoaded = true;
+    } catch (error) {
+      console.error('[ReedSolomon] Failed to load WASM module:', error);
+      throw new Error('Reed-Solomon WASM module failed to load');
+    }
+  }
+}
 
 export interface ReedSolomonConfig {
   dataShards: number
@@ -40,6 +58,7 @@ export class ReedSolomonEncoder {
   }
 
   async encode(data: Uint8Array): Promise<EncodedShard[]> {
+    await loadWasmModule();
     if (this.mode === 'two-person') {
       return this.encodeTwoPerson(data)
     }
@@ -55,6 +74,7 @@ export class ReedSolomonEncoder {
   }
 
   async decode(shards: EncodedShard[]): Promise<Uint8Array> {
+    await loadWasmModule();
     if (this.mode === 'two-person') {
       return this.decodeTwoPerson(shards)
     }

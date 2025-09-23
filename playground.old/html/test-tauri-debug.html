@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tauri Detection Debug</title>
+</head>
+<body>
+    <h1>Tauri Detection Debug</h1>
+    <div id="debug-info"></div>
+
+    <script>
+        const debugInfo = {
+            hostname: window.location.hostname,
+            port: window.location.port,
+            protocol: window.location.protocol,
+            hasTauriRuntime: typeof window.__TAURI__ !== 'undefined',
+            tauriObject: typeof window.__TAURI__,
+            userAgent: navigator.userAgent,
+            isDevelopment: import.meta?.env?.DEV,
+            url: window.location.href
+        };
+
+        document.getElementById('debug-info').innerHTML = `
+            <h2>Debug Information:</h2>
+            <pre>${JSON.stringify(debugInfo, null, 2)}</pre>
+        `;
+
+        console.log('Tauri Debug Info:', debugInfo);
+    </script>
+</body>
+</html>

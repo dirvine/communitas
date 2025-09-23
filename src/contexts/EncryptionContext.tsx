@@ -8,7 +8,22 @@ import {
   encryptUserData,
   decryptUserData 
 } from '../utils/crypto';
-import { invoke } from '@tauri-apps/api/core';
+// Dynamic import of Tauri API with fallback
+let invoke: any = async (cmd: string, args?: any) => {
+  // Try to get Tauri from window first
+  if (typeof window !== 'undefined' && (window as any).__TAURI__?.core?.invoke) {
+    return (window as any).__TAURI__.core.invoke(cmd, args);
+  }
+
+  // Try dynamic import
+  try {
+    const { invoke: tauriInvoke } = await import('@tauri-apps/api/core');
+    return tauriInvoke(cmd, args);
+  } catch (error) {
+    console.warn(`[Encryption] Tauri not available for ${cmd}`, args);
+    return null;
+  }
+};
 
 // Encryption state types
 export interface EncryptionKey {

@@ -12,6 +12,9 @@ import {
   Menu,
   MenuItem,
   Chip,
+  TextField,
+  CircularProgress,
+  Alert,
 } from '@mui/material'
 import {
   Menu as MenuIcon,
@@ -33,6 +36,7 @@ import { NavigationProvider } from './contexts/NavigationContext'
 // Authentication
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import LoginDialog from './components/auth/LoginDialog'
+import IdentitySetup from './components/identity/IdentitySetup'
 
 // Tauri integration
 import { TauriProvider } from './contexts/TauriContext'
@@ -58,12 +62,42 @@ const LoadingSpinner = () => (
   </Box>
 )
 
-// Main App Component
 const AppContent: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [currentView, setCurrentView] = useState('dashboard')
   const [loginDialogOpen, setLoginDialogOpen] = useState(false)
   const [userMenuAnchor, setUserMenuAnchor] = useState<null | HTMLElement>(null)
+  const [showIdentitySetup, setShowIdentitySetup] = useState(false)
+  const [showSignup, setShowSignup] = useState(true)
+  const [displayName, setDisplayName] = useState('')
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [userIdentity, setUserIdentity] = useState<any>(null)
+
+  const handleIdentityCreated = (identity: any) => {
+    setShowIdentitySetup(false)
+    setShowSignup(false)
+    setUserIdentity(identity)
+    console.log('Local identity created:', identity)
+  }
+
+  const handleSignup = async () => {
+    setIsGenerating(true)
+    try {
+      // Mock identity generation for now
+      const mockIdentity = {
+        display_name: displayName || 'Anonymous User',
+        four_word_address: 'hello-world-test-user'
+      }
+      setUserIdentity(mockIdentity)
+      setTimeout(() => {
+        setShowSignup(false)
+        setIsGenerating(false)
+      }, 1500)
+    } catch (error) {
+      console.error('Failed to generate identity:', error)
+      setIsGenerating(false)
+    }
+  }
 
   // Authentication
   const { authState, logout } = useAuth()
@@ -109,6 +143,52 @@ const AppContent: React.FC = () => {
     await logout()
     setUserMenuAnchor(null)
     setCurrentView('dashboard')
+  }
+
+  // Render the appropriate view based on state
+  if (showSignup) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', p: 2 }}>
+        <Box sx={{ maxWidth: 400, width: '100%', bgcolor: 'background.paper', p: 3, borderRadius: 2, boxShadow: 3 }}>
+          <Typography variant="h4" gutterBottom align="center">
+            Welcome to Communitas
+          </Typography>
+          <Typography variant="body1" gutterBottom align="center" color="text.secondary">
+            Create your local identity to get started.
+          </Typography>
+          <TextField
+            fullWidth
+            label="Display Name"
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            placeholder="Your name"
+            sx={{ mb: 2 }}
+          />
+          <Button
+            fullWidth
+            variant="contained"
+            onClick={handleSignup}
+            disabled={isGenerating}
+            startIcon={isGenerating ? <CircularProgress size={20} /> : null}
+          >
+            {isGenerating ? 'Generating...' : 'Sign Up Locally'}
+          </Button>
+          {userIdentity && (
+            <Alert severity="success" sx={{ mt: 2 }}>
+              <Typography variant="h6">
+                Signed up as {userIdentity.display_name}
+              </Typography>
+              <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+                Address: {userIdentity.four_word_address}
+              </Typography>
+              <Button onClick={() => setShowSignup(false)} variant="outlined" fullWidth sx={{ mt: 1 }}>
+                Continue to App
+              </Button>
+            </Alert>
+          )}
+        </Box>
+      </Box>
+    )
   }
 
   return (
@@ -274,6 +354,15 @@ const AppContent: React.FC = () => {
           onClose={() => setLoginDialogOpen(false)}
           onSuccess={handleLoginSuccess}
         />
+
+        {/* Identity Setup Dialog */}
+        {showIdentitySetup && (
+          <IdentitySetup
+            open={true}
+            onClose={() => setShowIdentitySetup(false)}
+            onIdentityCreated={handleIdentityCreated}
+          />
+        )}
       </Box>
     </NavigationProvider>
   )

@@ -1,4 +1,3 @@
-import { invoke } from '@tauri-apps/api/core'
 import React, { useState, useEffect } from 'react'
 import {
   Box,
@@ -21,6 +20,8 @@ import {
 import { IdentityInfo, StorageBackendInfo } from '../../types'
 import IdentityCard from './IdentityCard'
 import IdentitySetup from './IdentitySetup'
+import { safeInvoke } from '../../utils/tauri'
+import { offlineStorage } from '../../services/storage/OfflineStorageService'
 
 const IdentityManager: React.FC = () => {
   const [currentIdentity, setCurrentIdentity] = useState<IdentityInfo | null>(null)
@@ -42,16 +43,41 @@ const IdentityManager: React.FC = () => {
 
     try {
       // Load current identity
-      const current = await invoke<IdentityInfo>('get_identity')
-      setCurrentIdentity(current)
+      const current = await safeInvoke<IdentityInfo>('get_identity')
+      let fallbackIdentity: IdentityInfo | null = null
+
+      if (!current) {
+        fallbackIdentity =
+          (await offlineStorage.get<IdentityInfo>('primary_identity')) ||
+          (await offlineStorage.get<IdentityInfo>('current_identity')) ||
+          null
+      }
+
+      setCurrentIdentity(current ?? fallbackIdentity)
 
       // Load all identities
-      const allIdentities = await invoke<IdentityInfo[]>('list_identities')
-      setIdentities(allIdentities)
+      const allIdentities = await safeInvoke<IdentityInfo[]>('list_identities')
+      if (allIdentities && allIdentities.length > 0) {
+        setIdentities(allIdentities)
+      } else if (current ?? fallbackIdentity) {
+        setIdentities([current ?? fallbackIdentity])
+      } else {
+        setIdentities([])
+      }
 
       // Load storage info
-      const storage = await invoke<StorageBackendInfo>('get_storage_info')
-      setStorageInfo(storage)
+      const storage = await safeInvoke<StorageBackendInfo>('get_storage_info')
+      if (storage) {
+        setStorageInfo(storage)
+      } else {
+        const stats = await offlineStorage.getStats()
+        setStorageInfo({
+          backend_type: 'Offline Cache',
+          description: 'IndexedDB offline cache (fallback)',
+          is_available: true,
+          key_count: stats.contentCount + stats.cacheSize,
+        })
+      }
 
     } catch (err) {
       setError(`Failed to load identity data: ${err}`)

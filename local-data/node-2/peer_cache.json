@@ -1,0 +1,18 @@
+{
+  "127.0.0.1:14001": {
+    "identity": null,
+    "address": "127.0.0.1:14001",
+    "public_key": null,
+    "last_connected": 1758528065,
+    "connection_count": 1,
+    "quality_score": 80
+  },
+  "127.0.0.1:14000": {
+    "identity": null,
+    "address": "127.0.0.1:14000",
+    "public_key": null,
+    "last_connected": 1758528065,
+    "connection_count": 1,
+    "quality_score": 80
+  }
+}

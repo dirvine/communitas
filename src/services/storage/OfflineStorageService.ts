@@ -8,7 +8,23 @@
  * - Automatic fallback to cached data
  */
 
-import { invoke } from '@tauri-apps/api/core';
+// Dynamic import of Tauri API with fallback
+let invoke: any = async (cmd: string, args?: any) => {
+  // Try to get Tauri from window first
+  if (typeof window !== 'undefined' && (window as any).__TAURI__?.core?.invoke) {
+    return (window as any).__TAURI__.core.invoke(cmd, args);
+  }
+
+  // Try dynamic import
+  try {
+    const { invoke: tauriInvoke } = await import('@tauri-apps/api/core');
+    return tauriInvoke(cmd, args);
+  } catch (error) {
+    console.warn(`[OfflineStorage] Tauri not available for ${cmd}`, args);
+    // Return mock response for testing
+    return null;
+  }
+};
 
 interface CacheEntry {
   key: string;
@@ -500,5 +516,26 @@ export class OfflineStorageService {
   }
 }
 
-// Export singleton instance
-export const offlineStorage = OfflineStorageService.getInstance();
+// Export singleton instance lazily
+let _instance: OfflineStorageService | null = null;
+export const offlineStorage = {
+  get instance() {
+    if (!_instance) {
+      _instance = OfflineStorageService.getInstance();
+    }
+    return _instance;
+  },
+  // Proxy methods to avoid immediate instantiation
+  store: (...args: any[]) => offlineStorage.instance.store(...args),
+  get: (...args: any[]) => offlineStorage.instance.get(...args),
+  remove: (...args: any[]) => offlineStorage.instance.remove(...args),
+  clear: (...args: any[]) => offlineStorage.instance.clear(...args),
+  queueForSync: (...args: any[]) => offlineStorage.instance.queueForSync(...args),
+  processSyncQueue: (...args: any[]) => offlineStorage.instance.processSyncQueue(...args),
+  saveUserContent: (...args: any[]) => offlineStorage.instance.saveUserContent(...args),
+  getUserContent: (...args: any[]) => offlineStorage.instance.getUserContent(...args),
+  saveFile: (...args: any[]) => offlineStorage.instance.saveFile(...args),
+  getFile: (...args: any[]) => offlineStorage.instance.getFile(...args),
+  getCacheStats: (...args: any[]) => offlineStorage.instance.getCacheStats(...args),
+  clearExpiredCache: (...args: any[]) => offlineStorage.instance.clearExpiredCache(...args),
+};

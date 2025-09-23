@@ -1,84 +1,83 @@
+import './polyfills'  // Import polyfills first
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-// import App from './App'
-// import SimpleApp from './SimpleApp'
-import AppClean from './AppClean'
-// import SimpleTestApp from './SimpleTestApp'
+import App from './App'
+// import AppSimple from './AppSimple'  // Use simple app for testing
+// import AppMinimal from './AppMinimal'  // Use minimal app for testing
+import ErrorBoundary from './components/ErrorBoundary'
 import './index.css'
-// Test utilities - load after main app initialization
-// import './test-identity' // Load test utilities for console testing
-// import './test-offline-capabilities' // Load offline test suite
-// import './setup-test-workspace' // Load workspace setup utilities
-// import './test-tauri-groups' // Load Tauri group testing utilities
-// import './test-network-connection' // Load network connection test utilities
 
-// Error boundary to catch runtime errors
-class ErrorBoundary extends React.Component<
-  { children: React.ReactNode },
-  { hasError: boolean; error?: Error }
-> {
-  constructor(props: { children: React.ReactNode }) {
-    super(props)
-    this.state = { hasError: false }
+// Test harnesses disabled for production stability
+// async function loadHarnesses() {
+//   if (!import.meta.env.DEV) {
+//     return
+//   }
+//
+//   const harnesses: Array<() => Promise<unknown>> = [
+//     () => import('./test-identity'),
+//     () => import('./test-offline-capabilities'),
+//     () => import('./setup-test-workspace'),
+//     () => import('./test-tauri-groups'),
+//     () => import('./test-network-connection'),
+//   ]
+//
+//   await Promise.all(
+//     harnesses.map(async (load) => {
+//       try {
+//         await load()
+//       } catch (error) {
+//         console.warn('[Communitas] Failed to load dev harness module:', error)
+//       }
+//     }),
+//   )
+// }
+
+async function bootstrap() {
+  console.info('[Communitas] Bootstrap starting...')
+  const rootElement = document.getElementById('root')
+  if (!rootElement) {
+    throw new Error('Root element not found')
   }
 
-  static getDerivedStateFromError(error: Error) {
-    return { hasError: true, error }
-  }
+  console.info('[Communitas] Bootstrapping app', {
+    mode: import.meta.env.MODE,
+    dev: import.meta.env.DEV,
+    tauri: typeof window !== 'undefined' && !!(window as any).__TAURI__,
+    hasTextDecoder: typeof TextDecoder !== 'undefined',
+  })
 
-  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error('ErrorBoundary caught:', error, errorInfo)
-  }
+  // Test harnesses disabled for production stability
+  // await loadHarnesses()
 
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div style={{ padding: '20px', backgroundColor: '#fee' }}>
-          <h1>Runtime Error</h1>
-          <pre>{this.state.error?.toString()}</pre>
-          <details>
-            <summary>Stack Trace</summary>
-            <pre>{this.state.error?.stack}</pre>
-          </details>
-        </div>
-      )
-    }
-    return this.props.children
-  }
-}
-
-// Mount the app
-const rootElement = document.getElementById('root')
-console.log('Root element:', rootElement)
-console.log('Environment:', { 
-  isDev: import.meta.env.DEV,
-  mode: import.meta.env.MODE,
-  tauriAvailable: typeof (window as any).__TAURI__ !== 'undefined'
-})
-
-if (rootElement) {
+  console.info('[Communitas] Creating root...')
   const root = ReactDOM.createRoot(rootElement)
-  console.log('Creating React root...')
-  
+
+  console.info('[Communitas] Rendering app...')
   try {
     root.render(
       <React.StrictMode>
         <ErrorBoundary>
-          <AppClean />
+          <App />
         </ErrorBoundary>
-      </React.StrictMode>
+      </React.StrictMode>,
     )
-    console.log('React app mounted successfully')
+    console.info('[Communitas] App rendered successfully')
   } catch (error) {
-    console.error('Failed to render app:', error)
+    console.error('[Communitas] Failed to render app:', error)
+    throw error
+  }
+}
+
+bootstrap().catch((error) => {
+  console.error('[Communitas] Failed to bootstrap', error)
+  const rootElement = document.getElementById('root')
+  if (rootElement) {
     rootElement.innerHTML = `
-      <div style="padding: 20px; background: #fee; color: #c00;">
-        <h1>Failed to render app</h1>
-        <pre>${error}</pre>
+      <div style="padding: 24px; font-family: system-ui, sans-serif; color: #c00;">
+        <h1 style="margin-bottom: 12px;">Something went wrong</h1>
+        <p style="margin: 0 0 16px 0;">${(error as Error).message}</p>
+        <p style="margin: 0; font-size: 0.9rem; color: #555;">Check the developer console for details.</p>
       </div>
     `
   }
-} else {
-  console.error('Root element not found!')
-  document.body.innerHTML = '<h1>Root element not found!</h1>'
-}
+})

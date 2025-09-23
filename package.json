@@ -67,6 +67,8 @@
     "react-markdown": "^9.0.1",
     "react-router-dom": "^6.26.2",
     "react-syntax-highlighter": "^15.6.6",
+    "tauri-plugin-mcp": "file:./tauri-plugin-mcp",
+    "text-encoding-polyfill": "^0.6.7",
     "validator": "^13.12.0",
     "wasm-reed-solomon-erasure": "^0.2.2",
     "y-indexeddb": "^9.0.12",

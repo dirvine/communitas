@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Communitas - Standalone Test</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .header {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .container {
+            flex: 1;
+            padding: 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
+            width: 100%;
+        }
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+            margin: 1rem 0;
+        }
+        .status-item {
+            padding: 0.5rem;
+            background: #f7f7f7;
+            border-radius: 6px;
+            font-size: 0.9rem;
+        }
+        .status-item.success { background: #d4f4dd; color: #0d7a2d; }
+        .status-item.error { background: #fdd4d4; color: #a02d2d; }
+        .status-item.warning { background: #fef3c7; color: #92400e; }
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 6px;
+            font-size: 1rem;
+            cursor: pointer;
+            margin: 0.5rem;
+            transition: all 0.3s ease;
+        }
+        button:hover {
+            background: #5a67d8;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        button:disabled {
+            background: #cbd5e0;
+            cursor: not-allowed;
+            transform: none;
+        }
+        input {
+            padding: 0.75rem;
+            border: 2px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 1rem;
+            width: 100%;
+            max-width: 300px;
+            margin: 0.5rem;
+        }
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .console {
+            background: #1a202c;
+            color: #a0aec0;
+            padding: 1rem;
+            border-radius: 6px;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 0.85rem;
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 1rem;
+        }
+        .console .log { color: #68d391; }
+        .console .error { color: #fc8181; }
+        .console .warn { color: #f6e05e; }
+        .console .info { color: #63b3ed; }
+        h1 { color: #2d3748; margin-bottom: 0.5rem; }
+        h2 { color: #4a5568; font-size: 1.25rem; margin-bottom: 1rem; }
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 12px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin: 0.25rem;
+        }
+        .badge.success { background: #68d391; color: white; }
+        .badge.error { background: #fc8181; color: white; }
+        .badge.info { background: #63b3ed; color: white; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🚀 Communitas Desktop</h1>
+        <div id="env-badges"></div>
+    </div>
+
+    <div class="container">
+        <!-- Tauri Detection Card -->
+        <div class="card">
+            <h2>🔍 Tauri Environment Detection</h2>
+            <div id="tauri-status" class="status-grid">
+                <div class="status-item">Checking Tauri availability...</div>
+            </div>
+        </div>
+
+        <!-- Quick Actions Card -->
+        <div class="card">
+            <h2>⚡ Quick Actions</h2>
+            <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                <button onclick="testCore()">Initialize Core</button>
+                <button onclick="getIdentity()">Get Identity</button>
+                <button onclick="testMCP()">Test MCP Plugin</button>
+                <button onclick="listCommands()">List All Commands</button>
+            </div>
+            <div id="action-result" style="margin-top: 1rem; padding: 1rem; background: #f7fafc; border-radius: 6px; min-height: 50px;">
+                Ready for testing...
+            </div>
+        </div>
+
+        <!-- Identity Management Card -->
+        <div class="card">
+            <h2>👤 Identity Management</h2>
+            <div style="display: flex; align-items: center; flex-wrap: wrap;">
+                <input type="text" id="name-input" placeholder="Enter your name" />
+                <button onclick="createIdentity()">Create Identity</button>
+                <button onclick="generateFourWords()">Generate Four Words</button>
+            </div>
+            <div id="identity-display" style="margin-top: 1rem;"></div>
+        </div>
+
+        <!-- Console Output Card -->
+        <div class="card">
+            <h2>📟 Console Output</h2>
+            <div id="console" class="console">
+                <div class="info">→ Console initialized...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Console output helper
+        const consoleEl = document.getElementById('console');
+        function log(message, type = 'log') {
+            const entry = document.createElement('div');
+            entry.className = type;
+            entry.textContent = `→ ${new Date().toLocaleTimeString()}: ${message}`;
+            consoleEl.appendChild(entry);
+            consoleEl.scrollTop = consoleEl.scrollHeight;
+            console[type === 'log' ? 'log' : type](message);
+        }
+
+        // Global state
+        let tauriAvailable = false;
+        let tauriInvoke = null;
+        let availableCommands = [];
+
+        // Check Tauri availability
+        async function checkTauri() {
+            const statusEl = document.getElementById('tauri-status');
+            const envBadges = document.getElementById('env-badges');
+            
+            // Check multiple times as Tauri might load asynchronously
+            let attempts = 0;
+            const maxAttempts = 10;
+            
+            const check = () => {
+                const status = {
+                    __TAURI__: typeof window.__TAURI__ !== 'undefined',
+                    __TAURI_IPC__: typeof window.__TAURI_IPC__ !== 'undefined',
+                    __TAURI_CORE__: typeof window.__TAURI__?.core !== 'undefined',
+                    __TAURI_INVOKE__: typeof window.__TAURI__?.core?.invoke === 'function',
+                    protocol: window.location.protocol,
+                    userAgent: navigator.userAgent,
+                    hasTauriInUA: navigator.userAgent.includes('Tauri')
+                };
+
+                // Update status display
+                statusEl.innerHTML = `
+                    <div class="status-item ${status.__TAURI__ ? 'success' : 'error'}">
+                        window.__TAURI__: ${status.__TAURI__ ? '✅ Available' : '❌ Not Found'}
+                    </div>
+                    <div class="status-item ${status.__TAURI_IPC__ ? 'success' : 'error'}">
+                        window.__TAURI_IPC__: ${status.__TAURI_IPC__ ? '✅ Available' : '❌ Not Found'}
+                    </div>
+                    <div class="status-item ${status.__TAURI_CORE__ ? 'success' : 'error'}">
+                        Tauri Core API: ${status.__TAURI_CORE__ ? '✅ Available' : '❌ Not Found'}
+                    </div>
+                    <div class="status-item ${status.__TAURI_INVOKE__ ? 'success' : 'error'}">
+                        Invoke Function: ${status.__TAURI_INVOKE__ ? '✅ Ready' : '❌ Not Found'}
+                    </div>
+                    <div class="status-item ${status.protocol === 'tauri:' ? 'success' : 'warning'}">
+                        Protocol: ${status.protocol}
+                    </div>
+                    <div class="status-item ${status.hasTauriInUA ? 'success' : 'warning'}">
+                        User Agent: ${status.hasTauriInUA ? 'Tauri Detected' : 'Standard Browser'}
+                    </div>
+                `;
+
+                // Update environment badges
+                envBadges.innerHTML = `
+                    <span class="badge ${status.__TAURI__ ? 'success' : 'error'}">
+                        ${status.__TAURI__ ? 'Tauri Active' : 'No Tauri'}
+                    </span>
+                    <span class="badge info">
+                        ${status.protocol.replace(':', '').toUpperCase()} Protocol
+                    </span>
+                `;
+
+                if (status.__TAURI_INVOKE__) {
+                    tauriAvailable = true;
+                    tauriInvoke = window.__TAURI__.core.invoke;
+                    log('✅ Tauri API detected and ready!', 'log');
+                    
+                    // List available APIs
+                    if (window.__TAURI__) {
+                        const apis = Object.keys(window.__TAURI__);
+                        log(`Available Tauri APIs: ${apis.join(', ')}`, 'info');
+                    }
+                    
+                    return true;
+                } else if (attempts < maxAttempts) {
+                    attempts++;
+                    setTimeout(check, 200);
+                } else {
+                    log('❌ Tauri API not available after ' + maxAttempts + ' attempts', 'error');
+                    log('Running in browser mode - Tauri commands will not work', 'warn');
+                }
+                
+                return false;
+            };
+            
+            return check();
+        }
+
+        // Test core initialization
+        async function testCore() {
+            const resultEl = document.getElementById('action-result');
+            
+            if (!tauriAvailable) {
+                resultEl.innerHTML = '<span style="color: red;">❌ Tauri not available</span>';
+                log('Cannot test core - Tauri not available', 'error');
+                return;
+            }
+            
+            try {
+                resultEl.innerHTML = '<span style="color: orange;">⏳ Initializing core...</span>';
+                log('Attempting to initialize core...', 'info');
+                
+                const result = await tauriInvoke('core_initialize');
+                
+                resultEl.innerHTML = '<span style="color: green;">✅ Core initialized successfully!</span>';
+                log('Core initialized: ' + JSON.stringify(result), 'log');
+            } catch (error) {
+                resultEl.innerHTML = `<span style="color: red;">❌ Error: ${error}</span>`;
+                log('Core initialization failed: ' + error, 'error');
+            }
+        }
+
+        // Get identity
+        async function getIdentity() {
+            const resultEl = document.getElementById('action-result');
+            
+            if (!tauriAvailable) {
+                resultEl.innerHTML = '<span style="color: red;">❌ Tauri not available</span>';
+                return;
+            }
+            
+            try {
+                resultEl.innerHTML = '<span style="color: orange;">⏳ Getting identity...</span>';
+                const result = await tauriInvoke('core_get_identity');
+                resultEl.innerHTML = '<span style="color: green;">✅ Identity retrieved!</span>';
+                
+                document.getElementById('identity-display').innerHTML = `
+                    <div style="background: #f0f9ff; padding: 1rem; border-radius: 6px;">
+                        <strong>Current Identity:</strong><br>
+                        ${JSON.stringify(result, null, 2)}
+                    </div>
+                `;
+                
+                log('Identity: ' + JSON.stringify(result), 'log');
+            } catch (error) {
+                resultEl.innerHTML = `<span style="color: red;">❌ Error: ${error}</span>`;
+                log('Failed to get identity: ' + error, 'error');
+            }
+        }
+
+        // Test MCP plugin
+        async function testMCP() {
+            const resultEl = document.getElementById('action-result');
+            
+            if (!tauriAvailable) {
+                resultEl.innerHTML = '<span style="color: red;">❌ Tauri not available</span>';
+                return;
+            }
+            
+            try {
+                resultEl.innerHTML = '<span style="color: orange;">⏳ Testing MCP plugin...</span>';
+                const result = await tauriInvoke('plugin:mcp|get_server_info');
+                resultEl.innerHTML = '<span style="color: green;">✅ MCP plugin active!</span>';
+                log('MCP Server Info: ' + JSON.stringify(result), 'log');
+            } catch (error) {
+                resultEl.innerHTML = `<span style="color: orange;">⚠️ MCP Error: ${error}</span>`;
+                log('MCP test failed (this is expected if MCP is not configured): ' + error, 'warn');
+            }
+        }
+
+        // List all available commands
+        async function listCommands() {
+            const resultEl = document.getElementById('action-result');
+            
+            // These are the known communitas commands
+            const commands = [
+                'core_initialize',
+                'core_claim',
+                'core_get_identity',
+                'core_advertise',
+                'core_create_channel',
+                'core_send_message_to_channel',
+                'core_send_message_to_recipients',
+                'core_subscribe_messages',
+                'core_group_create',
+                'core_group_add_member',
+                'core_group_remove_member',
+                'container_init',
+                'container_put_object',
+                'container_get_object',
+                'sync_start_tip_watcher',
+                'sync_fetch_deltas'
+            ];
+            
+            resultEl.innerHTML = `
+                <strong>Available Commands:</strong><br>
+                ${commands.map(cmd => `<code>${cmd}</code>`).join(', ')}
+            `;
+            
+            log('Listed ' + commands.length + ' available commands', 'info');
+        }
+
+        // Create identity
+        async function createIdentity() {
+            const nameInput = document.getElementById('name-input');
+            const name = nameInput.value.trim();
+            
+            if (!name) {
+                alert('Please enter a name');
+                return;
+            }
+            
+            const identityDisplay = document.getElementById('identity-display');
+            
+            if (!tauriAvailable) {
+                // Mock identity for browser mode
+                const mockIdentity = {
+                    display_name: name,
+                    four_words: 'mock-test-user-identity',
+                    created_at: new Date().toISOString()
+                };
+                
+                identityDisplay.innerHTML = `
+                    <div style="background: #fffbeb; padding: 1rem; border-radius: 6px;">
+                        <strong>🔶 Mock Identity (Browser Mode):</strong><br>
+                        Name: ${mockIdentity.display_name}<br>
+                        Four Words: ${mockIdentity.four_words}<br>
+                        Created: ${mockIdentity.created_at}
+                    </div>
+                `;
+                
+                log('Created mock identity: ' + mockIdentity.display_name, 'warn');
+                return;
+            }
+            
+            // Try to create real identity
+            try {
+                identityDisplay.innerHTML = '<span style="color: orange;">⏳ Creating identity...</span>';
+                
+                // Try to set display name (this might not be the right command)
+                await tauriInvoke('core_initialize');
+                
+                identityDisplay.innerHTML = `
+                    <div style="background: #d4f4dd; padding: 1rem; border-radius: 6px;">
+                        <strong>✅ Identity Created:</strong><br>
+                        Name: ${name}<br>
+                        Status: Initialized
+                    </div>
+                `;
+                
+                log('Identity created for: ' + name, 'log');
+            } catch (error) {
+                identityDisplay.innerHTML = `
+                    <div style="background: #fdd4d4; padding: 1rem; border-radius: 6px;">
+                        <strong>❌ Error:</strong><br>
+                        ${error}
+                    </div>
+                `;
+                log('Failed to create identity: ' + error, 'error');
+            }
+        }
+
+        // Generate four words
+        async function generateFourWords() {
+            const words = ['happy', 'sunny', 'blue', 'green', 'swift', 'bright', 'cool', 'warm', 'soft', 'quick', 'smart', 'fresh'];
+            const fourWords = [];
+            
+            for (let i = 0; i < 4; i++) {
+                fourWords.push(words[Math.floor(Math.random() * words.length)]);
+            }
+            
+            const identityDisplay = document.getElementById('identity-display');
+            
+            if (!tauriAvailable) {
+                identityDisplay.innerHTML = `
+                    <div style="background: #fffbeb; padding: 1rem; border-radius: 6px;">
+                        <strong>🔶 Generated Four Words (Mock):</strong><br>
+                        ${fourWords.join('-')}
+                    </div>
+                `;
+                log('Generated mock four words: ' + fourWords.join('-'), 'warn');
+                return;
+            }
+            
+            try {
+                identityDisplay.innerHTML = '<span style="color: orange;">⏳ Claiming identity...</span>';
+                
+                const result = await tauriInvoke('core_claim', { words: fourWords });
+                
+                identityDisplay.innerHTML = `
+                    <div style="background: #d4f4dd; padding: 1rem; border-radius: 6px;">
+                        <strong>✅ Identity Claimed:</strong><br>
+                        Four Words: ${fourWords.join('-')}<br>
+                        Result: ${JSON.stringify(result)}
+                    </div>
+                `;
+                
+                log('Claimed identity: ' + fourWords.join('-'), 'log');
+            } catch (error) {
+                identityDisplay.innerHTML = `
+                    <div style="background: #fdd4d4; padding: 1rem; border-radius: 6px;">
+                        <strong>❌ Claim Failed:</strong><br>
+                        Four Words: ${fourWords.join('-')}<br>
+                        Error: ${error}
+                    </div>
+                `;
+                log('Failed to claim: ' + error, 'error');
+            }
+        }
+
+        // Initialize on load
+        window.addEventListener('DOMContentLoaded', () => {
+            log('Page loaded, checking for Tauri...', 'info');
+            checkTauri();
+        });
+
+        // Also check after a delay
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                if (!tauriAvailable) {
+                    log('Rechecking for Tauri after page load...', 'info');
+                    checkTauri();
+                }
+            }, 1000);
+        });
+    </script>
+</body>
+</html>

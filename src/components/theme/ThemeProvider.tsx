@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { ThemeProvider as MuiThemeProvider, CssBaseline, GlobalStyles } from '@mui/material';
-import { createCustomTheme, ThemeMode, ColorPreset } from '../../theme';
+import { createTheme } from '@mui/material/styles';
+import type { ThemeMode, ColorPreset } from '../../theme';
 
 // Theme context interface
 interface ThemeContextType {
@@ -172,7 +173,8 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
   });
 
   // Create theme based on current mode and preset with performance optimization
-  const theme = React.useMemo(() => createCustomTheme(mode, colorPreset), [mode, colorPreset]);
+  const paletteMode: 'light' | 'dark' = mode === 'dark' ? 'dark' : 'light';
+  const theme = React.useMemo(() => createTheme({ palette: { mode: paletteMode } }), [paletteMode]);
 
   // Toggle between light and dark modes
   const toggleMode = () => {

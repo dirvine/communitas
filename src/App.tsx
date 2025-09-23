@@ -85,10 +85,11 @@ import StorageWorkspaceDialog from './components/storage/StorageWorkspaceDialog'
 const IdentityTab = React.lazy(() => import('./components/tabs/IdentityTab'))
 const WebsitePublishPanel = React.lazy(() => import('./components/dev/WebsitePublishPanel'))
 const UnifiedDashboard = React.lazy(() => import('./components/unified/UnifiedDashboard').then(m => ({ default: m.UnifiedDashboard })))
-const CollaborativeEditingTest = React.lazy(() => import('./components/testing/CollaborativeEditingTest').then(m => ({ default: m.CollaborativeEditingTest })))
-const SimpleCollaborationTest = React.lazy(() => import('./components/testing/SimpleCollaborationTest').then(m => ({ default: m.SimpleCollaborationTest })))
-const TestPage = React.lazy(() => import('./components/testing/TestPage').then(m => ({ default: m.TestPage })))
-const SimpleTest = React.lazy(() => import('./components/testing/SimpleTest').then(m => ({ default: m.SimpleTest })))
+// Commented out - missing test components
+// const CollaborativeEditingTest = React.lazy(() => import('./components/testing/CollaborativeEditingTest').then(m => ({ default: m.CollaborativeEditingTest })))
+// const SimpleCollaborationTest = React.lazy(() => import('./components/testing/SimpleCollaborationTest').then(m => ({ default: m.SimpleCollaborationTest })))
+// const TestPage = React.lazy(() => import('./components/testing/TestPage').then(m => ({ default: m.TestPage })))
+// const SimpleTest = React.lazy(() => import('./components/testing/SimpleTest').then(m => ({ default: m.SimpleTest })))
 const MessageConsole = React.lazy(() => import('./components/dev/MessageConsole').then(m => ({ default: m.MessageConsole })))
 const GroupPage = React.lazy(() => import('./components/pages/GroupPage').then(m => ({ default: m.GroupPage })))
 const UserPage = React.lazy(() => import('./components/pages/UserPage').then(m => ({ default: m.UserPage })))
@@ -700,10 +701,11 @@ function App() {
                     } />
                     <Route path="/group/:groupId" element={<GroupPage />} />
                     <Route path="/user/:userId" element={<UserPage />} />
+                    {/* Commented out - missing test components
                     <Route path="/test" element={<SimpleTest />} />
                     <Route path="/test/page" element={<TestPage />} />
                     <Route path="/test/collaboration" element={<CollaborativeEditingTest />} />
-                    <Route path="/test/simple" element={<SimpleCollaborationTest />} />
+                    <Route path="/test/simple" element={<SimpleCollaborationTest />} /> */}
                     <Route path="/dev/console" element={<MessageConsole />} />
                     <Route path="/dev/website" element={<WebsitePublishPanel />} />
                     <Route path="/org/:orgId/*" element={<UnifiedDashboard userId="user_owner_123" userName="Owner" />} />

@@ -106,3 +106,25 @@ src-tauri/target/release/bundle/
 # Test artifacts
 test-results/
 src-tauri.old/
+*.png
+*.jpg
+test_*.py
+test_auth_flow_results.json
+test_*.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv
+
+# Selenium/ChromeDriver
+chromedriver
+geckodriver
+
+# Debug files
+debug_app.html

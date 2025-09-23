@@ -26,7 +26,6 @@ import {
   NetworkCheck as NetworkIcon,
   AccountCircle as AccountCircleIcon,
 } from '@mui/icons-material';
-import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../../contexts/AuthContext';
 import { LoginDialog } from './LoginDialog';
 import { ProfileManager } from './ProfileManager';
@@ -114,7 +113,7 @@ export const AuthStatus: React.FC<AuthStatusProps> = ({
             onClick={() => { setLoginInitialMode('login'); setLoginDialogOpen(true); }}
             size={compact ? 'small' : 'medium'}
           >
-            {compact ? 'Sign In' : 'Sign In'}
+            Sign In
           </Button>
           {!compact && (
             <Button
@@ -142,34 +141,27 @@ export const AuthStatus: React.FC<AuthStatusProps> = ({
 
   return (
     <>
-      <motion.div
-        initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.2 }}
-      >
+      <Stack direction="row" spacing={1} alignItems="center">
         <Tooltip
           title={`Signed in as ${user.name} (${user.fourWordAddress})`}
           arrow
           placement="bottom"
         >
-          <Box
+          <IconButton
+            onClick={handleClick}
+            size={compact ? 'small' : 'medium'}
             sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 1,
-              cursor: 'pointer',
-              p: compact ? 0.5 : 1,
-              borderRadius: 1,
+              border: '1px solid',
+              borderColor: 'divider',
               '&:hover': {
                 backgroundColor: 'action.hover',
               },
             }}
-            onClick={handleClick}
           >
             <Avatar
               sx={{
-                width: compact ? 32 : 40,
-                height: compact ? 32 : 40,
+                width: compact ? 28 : 36,
+                height: compact ? 28 : 36,
                 bgcolor: 'primary.main',
                 fontSize: compact ? '0.875rem' : '1rem',
                 fontWeight: 600,
@@ -177,39 +169,49 @@ export const AuthStatus: React.FC<AuthStatusProps> = ({
             >
               {user.name.charAt(0).toUpperCase()}
             </Avatar>
-
-            {showLabel && !compact && (
-              <Box sx={{ minWidth: 0 }}>
-                <Typography
-                  variant="body2"
-                  fontWeight={600}
-                  sx={{
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    maxWidth: 120,
-                  }}
-                >
-                  {user.name}
-                </Typography>
-                <Typography
-                  variant="caption"
-                  color="text.secondary"
-                  sx={{
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    maxWidth: 120,
-                    display: 'block',
-                  }}
-                >
-                  {user.fourWordAddress}
-                </Typography>
-              </Box>
-            )}
-          </Box>
+          </IconButton>
         </Tooltip>
-      </motion.div>
+
+        {showLabel && !compact && (
+          <Box sx={{ minWidth: 0 }}>
+            <Typography
+              variant="body2"
+              fontWeight={600}
+              sx={{
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                maxWidth: 120,
+              }}
+            >
+              {user.name}
+            </Typography>
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                maxWidth: 120,
+                display: 'block',
+              }}
+            >
+              {user.fourWordAddress}
+            </Typography>
+          </Box>
+        )}
+
+        <Button
+          variant="text"
+          size="small"
+          onClick={handleLogout}
+          startIcon={<LogoutIcon />}
+          disabled={loggingOut}
+        >
+          {loggingOut ? 'Signing out...' : 'Sign Out'}
+        </Button>
+      </Stack>
 
       {/* User Menu */}
       <Menu

@@ -4,12 +4,13 @@
   "version": "0.1.1",
   "identifier": "com.p2pfoundation.communitas",
   "build": {
-    "frontendDist": "../dist",
-    "devUrl": "http://localhost:1422",
     "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build"
+    "devUrl": "http://localhost:1422/",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
   },
   "app": {
+    "withGlobalTauri": true,
     "windows": [
       {
         "title": "Communitas - Privacy, Security and Freedom (Saorsa)",
@@ -24,14 +25,7 @@
       }
     ],
     "security": {
-      "csp": {
-        "default-src": "'self' http://localhost:*",
-        "script-src": "'self' 'unsafe-inline' 'unsafe-eval' http://localhost:*",
-        "style-src": "'self' 'unsafe-inline' http://localhost:*",
-        "img-src": "'self' data: https: http://localhost:*",
-        "connect-src": "'self' ws: wss: http://localhost:* ws://localhost:*",
-        "font-src": "'self' data: http://localhost:*"
-      }
+      "csp": null
     }
   },
   "bundle": {

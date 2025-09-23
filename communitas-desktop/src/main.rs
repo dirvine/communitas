@@ -47,7 +47,7 @@ async fn main() -> anyhow::Result<()> {
 
     info!("Starting Communitas (saorsa-core integrated)");
 
-    let _ = tauri::Builder::default()
+    let mut builder = tauri::Builder::default()
         // Shared saorsa-core context (initialized via core_initialize)
         .manage(Arc::new(RwLock::new(Option::<CoreContext>::None)))
         // Container engine state
@@ -59,8 +59,36 @@ async fn main() -> anyhow::Result<()> {
         // Raw SPKI pinning state
         .manage(Arc::new(RwLock::new(
             security::raw_spki::RawSpkiState::default(),
-        )))
-        .invoke_handler(tauri::generate_handler![
+        )));
+    
+    // Only include the MCP plugin in development builds
+    #[cfg(debug_assertions)]
+    {
+        if std::env::var("TAURI_MCP_DISABLED").is_ok() {
+            info!("MCP plugin disabled by TAURI_MCP_DISABLED environment variable");
+        } else {
+            info!("Development build detected, enabling MCP plugin");
+            
+            // Use a unique socket path to avoid conflicts
+            let socket_path = if let Ok(path) = std::env::var("TAURI_MCP_SOCKET_PATH") {
+                std::path::PathBuf::from(path)
+            } else {
+                // Generate a unique socket path using process ID
+                let pid = std::process::id();
+                std::path::PathBuf::from(format!("/tmp/tauri-mcp-communitas-{}.sock", pid))
+            };
+            
+            info!("Using MCP socket path: {:?}", socket_path);
+            
+            builder = builder.plugin(tauri_plugin_mcp::init_with_config(
+                tauri_plugin_mcp::PluginConfig::new("Communitas".to_string())
+                    .start_socket_server(true)
+                    .socket_path(socket_path)
+            ));
+        }
+    }
+    
+    builder = builder.invoke_handler(tauri::generate_handler![
             // Core bindings (pointers-only DHT surface)
             core_cmds::core_claim,
             core_cmds::core_advertise,
@@ -99,9 +127,12 @@ async fn main() -> anyhow::Result<()> {
             security::raw_spki::sync_set_quic_pinned_spki,
             security::raw_spki::sync_clear_quic_pinned_spki,
             health,
-        ])
+        ]);
+    
+    builder
         .setup(|_app| Ok(()))
-        .run(tauri::generate_context!());
+        .run(tauri::generate_context!())
+        .map_err(|e| anyhow::anyhow!("Failed to run Tauri app: {}", e))?;
 
     Ok(())
 }

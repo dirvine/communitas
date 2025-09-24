@@ -5,6 +5,7 @@ import App from './App'
 // import AppSimple from './AppSimple'  // Use simple app for testing
 // import AppMinimal from './AppMinimal'  // Use minimal app for testing
 import ErrorBoundary from './components/ErrorBoundary'
+import { LocalStorageProvider } from './contexts/LocalStorageProvider'
 import './index.css'
 
 // Test harnesses disabled for production stability
@@ -46,6 +47,18 @@ async function bootstrap() {
     hasTextDecoder: typeof TextDecoder !== 'undefined',
   })
 
+  if (typeof window !== 'undefined' && (window as any).__TAURI__) {
+    try {
+      const { setupPluginListeners } = await import('tauri-plugin-mcp')
+      if (typeof setupPluginListeners === 'function') {
+        await setupPluginListeners()
+        console.info('[Communitas] MCP plugin listeners initialised')
+      }
+    } catch (error) {
+      console.warn('[Communitas] Failed to setup MCP plugin listeners', error)
+    }
+  }
+
   // Test harnesses disabled for production stability
   // await loadHarnesses()
 
@@ -57,7 +70,9 @@ async function bootstrap() {
     root.render(
       <React.StrictMode>
         <ErrorBoundary>
-          <App />
+          <LocalStorageProvider>
+            <App />
+          </LocalStorageProvider>
         </ErrorBoundary>
       </React.StrictMode>,
     )

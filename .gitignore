@@ -112,6 +112,31 @@ test_*.py
 test_auth_flow_results.json
 test_*.json
 
+# Temporary test files (root directory)
+test-*.js
+test-*.mjs
+test-*.cjs
+test_*.js
+test_*.mjs
+chrome-test-*.js
+human-interaction-*.js
+puppeteer*.mjs
+*-debug.js
+*-diagnose.mjs
+verify_*.mjs
+check_*.mjs
+check-*.cjs
+mcp_*.js
+mcp-*.mjs
+clear-and-*.js
+
+# Temporary documentation
+*_CRASH_FIX.md
+*_TEST_REPORT.md
+*_TESTING.md
+Sprint-*.md
+TASK_*.md
+
 # Python
 __pycache__/
 *.py[cod]

@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { offlineStorage } from '../services/storage/OfflineStorageService';
+import { vaultManager } from '../services/vault/UserVault';
+import { localVault } from '../services/vault/LocalVaultService';
 
 // Dynamic import of Tauri API with fallback
 let invoke: any = async (cmd: string, args?: any) => {
@@ -118,7 +120,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [authState, setAuthState] = useState<AuthState>({
     isAuthenticated: false,
     user: null,
-    loading: true,
+    loading: false, // Start with loading false for browser testing
     error: null,
   });
 
@@ -129,57 +131,36 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const initializeAuth = async () => {
     try {
-      setAuthState(prev => ({ ...prev, loading: true, error: null }));
-      
-      // First check offline storage for cached identity
-      const cachedIdentity = await offlineStorage.get<UserIdentity>('current_identity');
-      
-      if (cachedIdentity) {
-        console.log('📦 Restored identity from offline storage');
+      // Simple check for localStorage identity - don't use offlineStorage here to avoid loops
+      const storedFourWords = localStorage.getItem('communitas-four-words');
+      const storedName = localStorage.getItem('communitas-user-name');
+
+      if (storedFourWords && storedName) {
+        // Create a basic identity from localStorage
+        const basicIdentity: UserIdentity = {
+          id: `user_${storedFourWords}`,
+          name: storedName,
+          fourWordAddress: storedFourWords,
+          publicKey: 'stored',
+          profile: {},
+          permissions: [],
+          createdAt: new Date().toISOString(),
+          lastActive: new Date().toISOString(),
+        };
+
         setAuthState({
           isAuthenticated: true,
-          user: cachedIdentity,
+          user: basicIdentity,
           loading: false,
           error: null,
         });
-      }
-      
-      // Try to get from backend (will update cache if online)
-      try {
-        const existingSession = await (invoke('get_current_identity') as Promise<UserIdentity | null>);
-        
-        if (existingSession) {
-          // Update offline storage
-          await offlineStorage.store('current_identity', existingSession, {
-            encrypt: true,
-            syncOnline: true
-          });
-          
-          // Verify the session is still valid
-          const networkStatus = await getNetworkStatus();
-          
-          setAuthState({
-            isAuthenticated: true,
-            user: existingSession,
-            loading: false,
-            error: null,
-          });
-          
-          if (networkStatus.connected) {
-            console.log('✅ Authentication restored, connected to network');
-          } else {
-            console.log('📵 Authentication restored, working offline');
-          }
-        } else if (!cachedIdentity) {
-          setAuthState(prev => ({ ...prev, loading: false }));
-        }
-      } catch (backendError) {
-        // Backend not available, but we have cached identity
-        if (cachedIdentity) {
-          console.log('📵 Backend unavailable, using cached identity');
-        } else {
-          setAuthState(prev => ({ ...prev, loading: false }));
-        }
+      } else {
+        setAuthState({
+          isAuthenticated: false,
+          user: null,
+          loading: false,
+          error: null,
+        });
       }
     } catch (error) {
       console.error('Failed to initialize authentication:', error);
@@ -277,11 +258,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         error: null,
       });
 
-      // Store in offline storage for persistence
-      await offlineStorage.store('current_identity', identity, {
-        encrypt: true,
-        syncOnline: true
-      });
+      // Store complete identity in encrypted vault (local-first approach)
+      try {
+        // Use provided password or fourWordAddress as password
+        const vault = await vaultManager.openVault(identity.fourWordAddress, password || fourWordAddress);
+        await vault.updateIdentity(identity);
+
+        // Also store minimal data in localStorage for quick checks
+        localStorage.setItem('communitas-four-words', identity.fourWordAddress);
+        localStorage.setItem('communitas-user-name', identity.name);
+        localStorage.setItem('communitas-has-vault', 'true');
+      } catch (vaultError) {
+        console.warn('Could not save to vault, using localStorage only:', vaultError);
+        // Fall back to localStorage only
+        localStorage.setItem('communitas-four-words', identity.fourWordAddress);
+        localStorage.setItem('communitas-user-name', identity.name);
+        localStorage.setItem('communitas-identity', JSON.stringify(identity));
+      }
 
       console.log('✅ Login successful:', identity.fourWordAddress);
       return connected;
@@ -298,22 +291,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const logout = async (): Promise<void> => {
     try {
-      // Disconnect from network
-      await disconnectFromNetwork();
-      
-      // Clear stored session
-      await invoke('clear_identity_session');
-      
-      // Clear offline storage
-      await offlineStorage.store('current_identity', null);
-      
+      // Close vault
+      vaultManager.closeAllVaults();
+
+      // Clear localStorage
+      localStorage.removeItem('communitas-four-words');
+      localStorage.removeItem('communitas-user-name');
+      localStorage.removeItem('communitas-has-vault');
+      localStorage.removeItem('communitas-identity');
+
       setAuthState({
         isAuthenticated: false,
         user: null,
         loading: false,
         error: null,
       });
-      
+
       console.log('✅ Logout successful');
     } catch (error) {
       console.error('Logout failed:', error);

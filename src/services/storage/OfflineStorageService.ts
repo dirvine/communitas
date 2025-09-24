@@ -210,7 +210,10 @@ export class OfflineStorageService {
     // Try to get from encrypted storage if online
     if (this.isOnline) {
       try {
-        const encrypted = await invoke<number[]>('core_private_get', { key });
+        const encrypted = await invoke('core_private_get', { key }) as number[] | null;
+        if (!encrypted) {
+          return null;
+        }
         const decoded = new TextDecoder().decode(new Uint8Array(encrypted));
 
         // Check if decoded string is valid before parsing
@@ -525,17 +528,39 @@ export const offlineStorage = {
     }
     return _instance;
   },
-  // Proxy methods to avoid immediate instantiation
-  store: (...args: any[]) => offlineStorage.instance.store(...args),
-  get: (...args: any[]) => offlineStorage.instance.get(...args),
-  remove: (...args: any[]) => offlineStorage.instance.remove(...args),
-  clear: (...args: any[]) => offlineStorage.instance.clear(...args),
-  queueForSync: (...args: any[]) => offlineStorage.instance.queueForSync(...args),
-  processSyncQueue: (...args: any[]) => offlineStorage.instance.processSyncQueue(...args),
-  saveUserContent: (...args: any[]) => offlineStorage.instance.saveUserContent(...args),
-  getUserContent: (...args: any[]) => offlineStorage.instance.getUserContent(...args),
-  saveFile: (...args: any[]) => offlineStorage.instance.saveFile(...args),
-  getFile: (...args: any[]) => offlineStorage.instance.getFile(...args),
-  getCacheStats: (...args: any[]) => offlineStorage.instance.getCacheStats(...args),
-  clearExpiredCache: (...args: any[]) => offlineStorage.instance.clearExpiredCache(...args),
+  async store(key: string, data: any, options?: {
+    ttl?: number;
+    encrypt?: boolean;
+    syncOnline?: boolean;
+  }): Promise<void> {
+    return offlineStorage.instance.store(key, data, options);
+  },
+  async get<T = any>(key: string): Promise<T | null> {
+    return offlineStorage.instance.get<T>(key);
+  },
+  async storeContent(type: string, content: any): Promise<string> {
+    return offlineStorage.instance.storeContent(type, content);
+  },
+  async getContentByType<T = any>(type: string): Promise<T[]> {
+    return offlineStorage.instance.getContentByType(type) as Promise<T[]>;
+  },
+  async storeFile(path: string, content: ArrayBuffer, metadata?: any): Promise<void> {
+    return offlineStorage.instance.storeFile(path, content, metadata);
+  },
+  async getStats(): Promise<{
+    cacheSize: number;
+    contentCount: number;
+    syncQueueLength: number;
+    online: boolean;
+    fileCount: number;
+  }> {
+    const stats = await offlineStorage.instance.getStats();
+    return {
+      cacheSize: stats.cacheSize,
+      contentCount: stats.contentCount,
+      syncQueueLength: stats.syncQueueLength,
+      online: stats.isOnline,
+      fileCount: stats.fileCount,
+    };
+  }
 };

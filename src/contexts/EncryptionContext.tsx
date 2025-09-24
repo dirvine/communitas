@@ -181,10 +181,10 @@ export const EncryptionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       let userKeyPair: KeyPair | null = null;
       
       try {
-        const storedKeys = await invoke<{
+        const storedKeys = (await invoke('get_encryption_keys', { userId: user.id })) as {
           masterKey?: string;
           keyPair?: string;
-        }>('get_encryption_keys', { userId: user.id });
+        } | null;
         
         if (storedKeys.masterKey) {
           const masterKeyData = JSON.parse(storedKeys.masterKey);

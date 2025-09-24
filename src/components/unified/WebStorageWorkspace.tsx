@@ -97,9 +97,10 @@ export const WebStorageWorkspace: React.FC<WebStorageWorkspaceProps> = ({
       
       // Shared storage - require entity-specific permissions only
       if (currentEntity.type === 'organization' || currentEntity.type === 'project') {
-        // Only allow users with explicit permissions for this specific entity
+        // Only allow users with explicit permissions for this specific entity (namespaced)
+        const resourceKey = `${currentEntity.type}:${currentEntity.id}`
         return authState.user.permissions.some(p => 
-          p.resource === currentEntity.id && p.actions.includes('write')
+          p.resource === resourceKey && p.actions.includes('write')
         )
       }
     }
@@ -119,9 +120,10 @@ export const WebStorageWorkspace: React.FC<WebStorageWorkspaceProps> = ({
       
       // Shared storage - require entity-specific collaboration permissions
       if (currentEntity.type === 'organization' || currentEntity.type === 'project') {
-        // Only allow users with explicit permissions for this specific entity
+        // Only allow users with explicit permissions for this specific entity (namespaced)
+        const resourceKey = `${currentEntity.type}:${currentEntity.id}`
         return authState.user.permissions.some(p => 
-          p.resource === currentEntity.id && 
+          p.resource === resourceKey && 
           (p.actions.includes('collaborate') || p.actions.includes('write'))
         )
       }

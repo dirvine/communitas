@@ -41,7 +41,7 @@ import { MarkdownBrowser } from '../browser/MarkdownBrowser'
 import { CompleteStorageSystem } from '../../services/storage/CompleteStorageSystem'
 import { DHTWebRouter } from '../../services/dht/DHTWebRouter'
 import { NetworkIdentity, PersonalUser, Organization, Project } from '../../types/collaboration'
-import { AuthGuard, useAuth, usePermissions } from '../security/AuthGuard'
+import { useAuth } from '../../contexts/AuthContext'
 
 interface TabPanelProps {
   children?: React.ReactNode
@@ -82,8 +82,16 @@ export const WebStorageWorkspace: React.FC<WebStorageWorkspaceProps> = ({
   onEntityChange,
   className
 }) => {
-  const { isAuthenticated } = useAuth()
-  const { canWrite, canCollaborate } = usePermissions()
+  const { authState, hasPermission } = useAuth()
+  
+  // Simple permission helpers
+  const canWrite = (resource: string, context?: any) => {
+    return authState.isAuthenticated && hasPermission(resource, 'write')
+  }
+  
+  const canCollaborate = (resource: string, context?: any) => {
+    return authState.isAuthenticated && hasPermission(resource, 'collaborate')
+  }
   const [activeTab, setActiveTab] = useState(0)
   const [currentEntity, setCurrentEntity] = useState(initialEntity)
   const [currentFile, setCurrentFile] = useState(initialFile)
@@ -298,11 +306,15 @@ Happy collaborating! 🚀
     return `${currentEntity.name} (${currentEntity.networkIdentity.fourWords})`
   }, [currentEntity])
 
+  if (!authState.isAuthenticated) {
+    return (
+      <Paper className={className} sx={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Typography variant="body1">Please log in to access storage</Typography>
+      </Paper>
+    );
+  }
+
   return (
-    <AuthGuard 
-      requireAuth={true}
-      requiredPermission={{ action: 'read', resource: 'documents' }}
-    >
       <Paper className={className} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* Header */}
       <Box sx={{ borderBottom: 1, borderColor: 'divider', px: 2, py: 1 }}>
@@ -562,6 +574,5 @@ Happy collaborating! 🚀
         </Alert>
       </Snackbar>
     </Paper>
-    </AuthGuard>
   )
 }

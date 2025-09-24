@@ -84,13 +84,50 @@ export const WebStorageWorkspace: React.FC<WebStorageWorkspaceProps> = ({
 }) => {
   const { authState, hasPermission } = useAuth()
   
-  // Simple permission helpers
+  // Secure permission helpers with proper authorization checks
   const canWrite = (resource: string, context?: any) => {
-    return authState.isAuthenticated && hasPermission(resource, 'write')
+    if (!authState.isAuthenticated || !authState.user) return false
+    
+    // For entity storage, check proper permissions
+    if (currentEntity) {
+      // Personal storage - only the owner can write
+      if (currentEntity.type === 'personal_user') {
+        return authState.user.id === currentEntity.userId || authState.user.id === currentEntity.id
+      }
+      
+      // Shared storage - require entity-specific permissions only
+      if (currentEntity.type === 'organization' || currentEntity.type === 'project') {
+        // Only allow users with explicit permissions for this specific entity
+        return authState.user.permissions.some(p => 
+          p.resource === currentEntity.id && p.actions.includes('write')
+        )
+      }
+    }
+    
+    return hasPermission(resource, 'write')
   }
   
   const canCollaborate = (resource: string, context?: any) => {
-    return authState.isAuthenticated && hasPermission(resource, 'collaborate')
+    if (!authState.isAuthenticated || !authState.user) return false
+    
+    // For entity storage, check collaboration permissions
+    if (currentEntity) {
+      // Personal storage - owner can collaborate
+      if (currentEntity.type === 'personal_user') {
+        return authState.user.id === currentEntity.userId || authState.user.id === currentEntity.id
+      }
+      
+      // Shared storage - require entity-specific collaboration permissions
+      if (currentEntity.type === 'organization' || currentEntity.type === 'project') {
+        // Only allow users with explicit permissions for this specific entity
+        return authState.user.permissions.some(p => 
+          p.resource === currentEntity.id && 
+          (p.actions.includes('collaborate') || p.actions.includes('write'))
+        )
+      }
+    }
+    
+    return hasPermission(resource, 'collaborate')
   }
   const [activeTab, setActiveTab] = useState(0)
   const [currentEntity, setCurrentEntity] = useState(initialEntity)
@@ -274,11 +311,11 @@ Happy collaborating! 🚀
     setIsDirty(true)
   }, [])
 
-  // Tab labels and icons
+  // Tab labels and icons with clear storage vs website distinction
   const tabs = useMemo(() => [
-    { label: 'Editor', icon: <Edit fontSize="small" /> },
+    { label: 'Storage Editor', icon: <Edit fontSize="small" /> },
     { label: 'Preview', icon: <Preview fontSize="small" /> },
-    { label: 'Browser', icon: <Language fontSize="small" /> }
+    { label: 'Website Browser', icon: <Language fontSize="small" /> }
   ], [])
 
   // Load initial file
@@ -322,6 +359,14 @@ Happy collaborating! 🚀
           <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <Storage color="primary" />
             {entityDisplayName}
+            {currentEntity && (
+              <Chip 
+                label={`${currentEntity.type === 'personal_user' ? 'Personal' : 'Shared'} Storage`} 
+                size="small" 
+                color={currentEntity.type === 'personal_user' ? 'default' : 'primary'} 
+                variant="outlined"
+              />
+            )}
             {isDirty && <Chip label="Unsaved" size="small" color="warning" />}
             {lastSaved && (
               <Chip 

@@ -27,13 +27,13 @@ export const StorageWorkspaceDialog: React.FC<StorageWorkspaceDialogProps> = ({ 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Create or memoize a pseudo-identity when not provided
+  // Create proper entity identity with correct context
   const entityIdentity: NetworkIdentity | null = useMemo(() => {
     if (!entity) return null
     const four = entity.fourWords || `${entity.entityType}-${entity.entityId}`
     return {
       fourWords: four,
-      publicKey: `pk_${four}`,
+      publicKey: `pk_${entity.entityType}_${entity.entityId}`,
       dhtAddress: `dht://${four}`,
     }
   }, [entity])
@@ -102,7 +102,7 @@ export const StorageWorkspaceDialog: React.FC<StorageWorkspaceDialogProps> = ({ 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth PaperProps={{ sx: { height: '90vh' } }}>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        {entity?.entityName || entityIdentity?.fourWords || 'Storage Workspace'}
+        {entity ? `${entity.entityName || entity.entityId} - ${entity.entityType.charAt(0).toUpperCase() + entity.entityType.slice(1)} Storage` : 'Storage Workspace'}
         <IconButton onClick={onClose} size="small">
           <CloseIcon />
         </IconButton>

@@ -55,6 +55,20 @@ This playbook is for anyone (human or AI) automating Communitas. It captures the
 ### MCP Server Overview
 When running `npm run tauri dev`, a Unix socket server starts at `/tmp/tauri-mcp-communitas-<pid>.sock` enabling programmatic UI control.
 
+### Chrome DevTools MCP Browser Automation
+- **Why**: Provides a standards-based MCP surface on top of headless Chrome so agents can exercise the browser build (`npm run dev:browser`) without relying on the Tauri webview bridge.
+- **Server launch**: `npx chrome-devtools-mcp --headless --isolated` (the CLI spawns its own Chrome profile and speaks JSON-RPC 2.0). Pass `--browserUrl http://127.0.0.1:1420` to attach to an existing Vite session instead of launching a fresh browser.
+- **Handshake**: Send an `initialize` request with `protocolVersion: "0.1.0"` and `clientInfo` populated. A healthy server replies with `protocolVersion: "2025-06-18"`, advertises 26 tools (navigation, DOM snapshots, console/network inspectors), and remains ready for `tools/call` RPCs.
+- **Signin/logout recipe**:
+  1. Ensure Communitas browser mode is running (`npm run dev:browser`).
+  2. Launch the MCP server and record its stdio stream (or wire it into your MCP client).
+  3. `tools/call` → `navigate_page` with `{"url": "http://localhost:1420"}` to load the app shell.
+  4. `tools/call` → `take_snapshot` to capture UIDs, then `fill` / `fill_form` against the signin form fields, followed by `click` on the submit UID.
+  5. Verify success via `evaluate_script` (e.g., `() => !!window.__COMMUNITAS_USER__`).
+  6. Call `evaluate_script` again with `() => window.__TAURI__?.invoke?.('core_logout')` or drive the UI logout button via another `click`.
+  7. Capture a post-logout snapshot and console logs (`list_console_messages`) to confirm state reset.
+- **Teardown**: The server lacks a `shutdown` RPC; terminate the process (`Ctrl+C` or PID kill) once snapshots and logs are saved.
+
 ### Automated Testing with MCP
 
 #### User Registration Flow

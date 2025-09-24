@@ -33,6 +33,41 @@ Communitas is a local-first, PQC-ready collaboration platform that merges WhatsA
 - **Network Connection**: Auto-connects on startup with retry logic and graceful fallback to local mode
 - **Offline-First**: All operations work offline via IndexedDB and sync when network returns
 
+## Chrome DevTools MCP Integration
+
+### Overview
+The project includes Chrome DevTools MCP integration for advanced browser debugging and testing capabilities. This provides AI-assisted analysis of performance, UI issues, network requests, and React-specific debugging.
+
+### Configuration
+Chrome DevTools MCP can be configured in `mcp-config.json`:
+```json
+{
+  "mcpServers": {
+    "chrome-devtools": {
+      "command": "npx",
+      "args": ["chrome-devtools-mcp@latest"]
+    }
+  }
+}
+```
+
+### Testing Capabilities
+- **Performance Metrics**: LCP, FCP, CLS, loading sequences
+- **Error Detection**: Console errors, network failures, runtime issues
+- **Network Analysis**: Request monitoring, WebSocket connections, bundle sizes
+- **UI Validation**: DOM structure, CSS issues, component rendering
+- **React Debugging**: Re-render issues, Context usage, memory leaks
+
+### Usage
+Run the test guide: `node test-chrome-devtools-mcp.js`
+
+Key test areas for Communitas:
+- Authentication flow (avatar display, login/logout)
+- Theme switching (light/dark mode transitions)
+- Network connectivity (P2P connections, offline mode)
+- Tauri IPC communication
+- IndexedDB offline storage
+
 ## Development Commands
 
 ### Quick Start

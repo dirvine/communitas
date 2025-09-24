@@ -22,7 +22,10 @@ import {
   Security as SecurityIcon,
   Check as CheckIcon,
 } from '@mui/icons-material'
-import { IdentityInfo, IdentityGenerationParams } from '../../types'
+import { IdentityInfo } from '../../types'
+import { generateFourWordIdentity, normalizeFourWords, validateFourWords } from '../../utils/identity'
+import { persistIdentity } from '../../utils/identityStorage'
+import { safeInvoke } from '../../utils/tauri'
 
 interface IdentitySetupProps {
   open: boolean
@@ -71,21 +74,41 @@ const IdentitySetup: React.FC<IdentitySetupProps> = ({
     setError(null)
 
     try {
-      const params: IdentityGenerationParams = {
-        display_name: displayName.trim() || undefined,
-        use_hardware_entropy: useHardwareEntropy,
-        pow_difficulty: powDifficulty,
+      const fourWordsRaw = await generateFourWordIdentity()
+
+      if (!await validateFourWords(fourWordsRaw)) {
+        throw new Error('Generated identity failed validation')
       }
 
-      // Call the Tauri command
-      const identity = await window.__TAURI_INVOKE__('generate_new_identity', {
-        displayName: params.display_name,
+      const wordsTuple = normalizeFourWords(fourWordsRaw)
+
+      const claimResult = await safeInvoke<string>('core_claim', { words: wordsTuple })
+      if (!claimResult) {
+        throw new Error('Unable to claim identity via core_claim')
+      }
+
+      const initialized = await safeInvoke<boolean>('core_initialize', {
+        fourWords: fourWordsRaw,
+        displayName: displayName.trim() || fourWordsRaw,
+        deviceName: 'Desktop',
+        deviceType: 'Desktop',
       })
 
+      const identity: IdentityInfo = {
+        four_word_address: fourWordsRaw,
+        display_name: displayName.trim() || fourWordsRaw,
+        created_at: new Date().toISOString(),
+        is_primary: true,
+        verification_status: initialized ? 'verified' : 'pending',
+        public_key_hex: claimResult,
+      }
+
+      persistIdentity(identity)
       setGeneratedIdentity(identity)
       handleNext()
     } catch (err) {
-      setError(err as string)
+      const message = err instanceof Error ? err.message : String(err)
+      setError(message)
     } finally {
       setIsGenerating(false)
     }
@@ -93,6 +116,7 @@ const IdentitySetup: React.FC<IdentitySetupProps> = ({
 
   const handleComplete = () => {
     if (generatedIdentity) {
+      persistIdentity(generatedIdentity)
       onIdentityCreated(generatedIdentity)
     }
     onClose()

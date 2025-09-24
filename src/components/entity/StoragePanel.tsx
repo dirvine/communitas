@@ -1,0 +1,935 @@
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import {
+  Box,
+  Paper,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
+  ListItemSecondaryAction,
+  IconButton,
+  Typography,
+  Breadcrumbs,
+  Link,
+  Button,
+  Stack,
+  Chip,
+  CircularProgress,
+  LinearProgress,
+  Alert,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  Menu,
+  MenuItem,
+  Divider,
+  Tooltip,
+  Grid,
+  Card,
+  CardContent,
+  CardActions,
+  Select,
+  FormControl,
+  InputLabel,
+  Fab,
+} from '@mui/material';
+import {
+  Folder as FolderIcon,
+  InsertDriveFile as FileIcon,
+  CloudUpload as UploadIcon,
+  CloudDownload as DownloadIcon,
+  CreateNewFolder as NewFolderIcon,
+  Delete as DeleteIcon,
+  Edit as EditIcon,
+  Share as ShareIcon,
+  MoreVert as MoreIcon,
+  Lock as LockIcon,
+  LockOpen as UnlockIcon,
+  Security as SecurityIcon,
+  Warning as WarningIcon,
+  CheckCircle as HealthyIcon,
+  Error as CriticalIcon,
+  Home as HomeIcon,
+  NavigateNext as NavigateNextIcon,
+  ViewList as ListViewIcon,
+  ViewModule as GridViewIcon,
+  Search as SearchIcon,
+  FilterList as FilterIcon,
+  Sort as SortIcon,
+  Refresh as RefreshIcon,
+  Add as AddIcon,
+  Code as CodeIcon,
+  Image as ImageIcon,
+  VideoFile as VideoIcon,
+  AudioFile as AudioIcon,
+  PictureAsPdf as PdfIcon,
+  Description as DocumentIcon,
+  Archive as ArchiveIcon,
+  CloudOff as OfflineIcon,
+} from '@mui/icons-material';
+import { invoke } from '@tauri-apps/api/core';
+import { format } from 'date-fns';
+import { useLocalStorage } from '../../contexts/LocalStorageProvider';
+import { networkService } from '../../services/network/NetworkConnectionService';
+import { offlineStorage } from '../../services/storage/OfflineStorageService';
+
+interface StorageItem {
+  name: string;
+  path: string;
+  type: 'file' | 'folder';
+  size?: number;
+  modified?: string;
+  encrypted: boolean;
+  shared: boolean;
+  permissions: string[];
+  mime_type?: string;
+  shard_status?: {
+    available: number;
+    total: number;
+    health: 'healthy' | 'degraded' | 'critical';
+  };
+}
+
+interface StorageStats {
+  total_size: number;
+  used_size: number;
+  file_count: number;
+  folder_count: number;
+  encrypted_count: number;
+  shared_count: number;
+}
+
+interface EncryptionStatus {
+  enabled: boolean;
+  threshold: { k: number; m: number };
+  available_shards: number;
+  health_status: 'healthy' | 'degraded' | 'critical';
+}
+
+interface StoragePanelProps {
+  entityType: 'individual' | 'group' | 'channel' | 'project';
+  entityId: string;
+  entityName: string;
+  fourWords: string;
+  permissions: string[];
+  encryptionStatus: EncryptionStatus | null;
+}
+
+const StoragePanel: React.FC<StoragePanelProps> = ({
+  entityType,
+  entityId,
+  entityName,
+  fourWords,
+  permissions,
+  encryptionStatus,
+}) => {
+  // Try to use LocalStorage context, fall back to direct service if not available
+  let localStorage: any = null;
+  try {
+    localStorage = useLocalStorage();
+  } catch (error) {
+    console.warn('[StoragePanel] LocalStorageProvider not available, using fallback');
+    // Provide fallback implementation using offlineStorage directly
+    localStorage = {
+      list: async (entityId: string, path: string) => {
+        const cached = await offlineStorage.get(`storage:${entityId}:${path}`) || [];
+        return cached;
+      },
+      read: async (entityId: string, path: string) => {
+        return await offlineStorage.get(`file:${entityId}:${path}`);
+      },
+      write: async (entityId: string, path: string, content: any) => {
+        await offlineStorage.store(`file:${entityId}:${path}`, content, {
+          encrypt: true,
+          syncOnline: true
+        });
+      },
+      delete: async (entityId: string, path: string) => {
+        await offlineStorage.remove(`file:${entityId}:${path}`);
+      },
+      mkdir: async (entityId: string, path: string) => {
+        // Store folder metadata
+        await offlineStorage.store(`folder:${entityId}:${path}`, {
+          created: new Date().toISOString()
+        });
+      },
+      isOnline: false,
+      syncInProgress: false,
+      lastSyncError: null,
+      getSyncQueue: () => [],
+      forceSyncNow: async () => {},
+      clearSyncQueue: () => {}
+    };
+  }
+
+  const [items, setItems] = useState<StorageItem[]>([]);
+  const [currentPath, setCurrentPath] = useState('/');
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  const [sortBy, setSortBy] = useState<'name' | 'size' | 'modified'>('name');
+  const [filterType, setFilterType] = useState<'all' | 'files' | 'folders'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [stats, setStats] = useState<StorageStats | null>(null);
+  const [isOffline, setIsOffline] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; item: StorageItem } | null>(null);
+  const [renameDialog, setRenameDialog] = useState<{ open: boolean; item: StorageItem | null }>({ open: false, item: null });
+  const [newFolderDialog, setNewFolderDialog] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
+  const [newItemName, setNewItemName] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const canWrite = permissions.includes('write') || permissions.includes('admin');
+  const canDelete = permissions.includes('admin');
+  const canShare = permissions.includes('share') || permissions.includes('admin');
+
+  // Monitor network status
+  useEffect(() => {
+    const unsubscribe = networkService.subscribe((state) => {
+      setIsOffline(state.status !== 'connected');
+    });
+
+    // Get initial state
+    const currentState = networkService.getState();
+    setIsOffline(currentState.status !== 'connected');
+
+    return unsubscribe;
+  }, []);
+
+  // Load storage items - local-first approach
+  const loadItems = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Use local-first storage
+      const files = await localStorage.list(entityId, currentPath);
+
+      // Convert to StorageItem format
+      const storageItems: StorageItem[] = files.map(file => ({
+        name: file.name,
+        path: file.path,
+        type: file.isDirectory ? 'folder' : 'file',
+        size: file.size,
+        modified: file.modifiedAt,
+        mime_type: file.contentType,
+        encrypted: encryptionStatus?.enabled || false,
+        shared: false, // Will be updated when we get sharing info from network
+        permissions: permissions,
+      }));
+
+      setItems(storageItems);
+
+      // Try to load stats if online (non-blocking)
+      if (localStorage.isOnline) {
+        try {
+          const storageStats = await invoke('core_storage_stats', {
+            entityId,
+          });
+          setStats(storageStats as StorageStats);
+        } catch (err) {
+          // Stats are optional, don't fail the whole operation
+          console.warn('Could not load storage stats:', err);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load storage items:', err);
+      setError('Failed to load storage items. Working in offline mode.');
+      // Still show empty list rather than crashing
+      setItems([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [entityId, currentPath, localStorage, encryptionStatus, permissions]);
+
+  // Upload file with threshold encryption
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0 || !canWrite) return;
+
+    setUploading(true);
+    try {
+      for (const file of files) {
+        const arrayBuffer = await file.arrayBuffer();
+        const content = new Uint8Array(arrayBuffer);
+
+        // Get recipients for encryption (entity members)
+        const recipients = await invoke('core_entity_get_members', {
+          entityId,
+        }) as string[];
+
+        // Upload with threshold encryption
+        await invoke('core_entity_write_file_sealed', {
+          entityId,
+          entityType,
+          path: `${currentPath}/${file.name}`,
+          content: Array.from(content),
+          recipients,
+        });
+      }
+
+      await loadItems();
+    } catch (err) {
+      console.error('Failed to upload files:', err);
+      setError('Failed to upload files');
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  // Download file with threshold decryption
+  const handleDownload = async (item: StorageItem) => {
+    try {
+      const content = await invoke('core_entity_read_file_sealed', {
+        entityId,
+        path: item.path,
+      }) as number[];
+
+      // Convert to blob and download
+      const blob = new Blob([new Uint8Array(content)], { type: item.mime_type || 'application/octet-stream' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = item.name;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Failed to download file:', err);
+      setError('Failed to download file');
+    }
+  };
+
+  // Create new folder
+  const handleCreateFolder = async () => {
+    if (!newFolderName.trim() || !canWrite) return;
+
+    try {
+      await invoke('core_storage_create_folder', {
+        entityId,
+        path: `${currentPath}/${newFolderName.trim()}`,
+      });
+
+      setNewFolderDialog(false);
+      setNewFolderName('');
+      await loadItems();
+    } catch (err) {
+      console.error('Failed to create folder:', err);
+      setError('Failed to create folder');
+    }
+  };
+
+  // Delete items
+  const handleDelete = async (itemsToDelete: StorageItem[]) => {
+    if (!canDelete) return;
+
+    try {
+      for (const item of itemsToDelete) {
+        await invoke('core_storage_delete', {
+          entityId,
+          path: item.path,
+        });
+      }
+
+      setSelectedItems(new Set());
+      await loadItems();
+    } catch (err) {
+      console.error('Failed to delete items:', err);
+      setError('Failed to delete items');
+    }
+  };
+
+  // Rename item
+  const handleRename = async () => {
+    if (!renameDialog.item || !newItemName.trim() || !canWrite) return;
+
+    try {
+      const newPath = currentPath + '/' + newItemName.trim();
+      await invoke('core_storage_rename', {
+        entityId,
+        oldPath: renameDialog.item.path,
+        newPath,
+      });
+
+      setRenameDialog({ open: false, item: null });
+      setNewItemName('');
+      await loadItems();
+    } catch (err) {
+      console.error('Failed to rename item:', err);
+      setError('Failed to rename item');
+    }
+  };
+
+  // Navigate to folder
+  const navigateToFolder = (path: string) => {
+    setCurrentPath(path);
+    setSelectedItems(new Set());
+  };
+
+  // Get file icon
+  const getFileIcon = (item: StorageItem) => {
+    if (item.type === 'folder') return <FolderIcon />;
+
+    const ext = item.name.split('.').pop()?.toLowerCase();
+    switch (ext) {
+      case 'jpg':
+      case 'jpeg':
+      case 'png':
+      case 'gif':
+      case 'svg':
+        return <ImageIcon />;
+      case 'mp4':
+      case 'avi':
+      case 'mov':
+      case 'webm':
+        return <VideoIcon />;
+      case 'mp3':
+      case 'wav':
+      case 'ogg':
+      case 'flac':
+        return <AudioIcon />;
+      case 'pdf':
+        return <PdfIcon />;
+      case 'doc':
+      case 'docx':
+      case 'txt':
+      case 'md':
+        return <DocumentIcon />;
+      case 'zip':
+      case 'tar':
+      case 'gz':
+      case '7z':
+        return <ArchiveIcon />;
+      case 'js':
+      case 'ts':
+      case 'jsx':
+      case 'tsx':
+      case 'py':
+      case 'rs':
+      case 'go':
+        return <CodeIcon />;
+      default:
+        return <FileIcon />;
+    }
+  };
+
+  // Format file size
+  const formatFileSize = (bytes?: number) => {
+    if (!bytes) return '-';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let size = bytes;
+    let unitIndex = 0;
+
+    while (size >= 1024 && unitIndex < units.length - 1) {
+      size /= 1024;
+      unitIndex++;
+    }
+
+    return `${size.toFixed(1)} ${units[unitIndex]}`;
+  };
+
+  // Get health color
+  const getHealthColor = (health?: string) => {
+    switch (health) {
+      case 'healthy': return 'success';
+      case 'degraded': return 'warning';
+      case 'critical': return 'error';
+      default: return 'default';
+    }
+  };
+
+  // Filter and sort items
+  const processedItems = items
+    .filter(item => {
+      if (filterType === 'files' && item.type !== 'file') return false;
+      if (filterType === 'folders' && item.type !== 'folder') return false;
+      if (searchQuery && !item.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      switch (sortBy) {
+        case 'size':
+          return (b.size || 0) - (a.size || 0);
+        case 'modified':
+          return new Date(b.modified || 0).getTime() - new Date(a.modified || 0).getTime();
+        default:
+          return a.name.localeCompare(b.name);
+      }
+    });
+
+  useEffect(() => {
+    loadItems();
+  }, [loadItems]);
+
+  // Refresh on entity:refresh event
+  useEffect(() => {
+    const handleRefresh = (event: CustomEvent) => {
+      if (event.detail.entityId === entityId) {
+        loadItems();
+      }
+    };
+    window.addEventListener('entity:refresh', handleRefresh as EventListener);
+    return () => {
+      window.removeEventListener('entity:refresh', handleRefresh as EventListener);
+    };
+  }, [entityId, loadItems]);
+
+  if (loading && items.length === 0) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  return (
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      {/* Storage Header */}
+      <Paper elevation={0} sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
+        {/* Encryption Status */}
+        {encryptionStatus && (
+          <Alert
+            severity={getHealthColor(encryptionStatus.health_status) as any}
+            icon={
+              encryptionStatus.health_status === 'healthy' ? <HealthyIcon /> :
+              encryptionStatus.health_status === 'degraded' ? <WarningIcon /> :
+              <CriticalIcon />
+            }
+            sx={{ mb: 2 }}
+          >
+            <Stack direction="row" alignItems="center" spacing={2}>
+              <Typography variant="body2">
+                Threshold Encryption: {encryptionStatus.threshold.k}-of-{encryptionStatus.threshold.k + encryptionStatus.threshold.m}
+              </Typography>
+              <Chip
+                label={`${encryptionStatus.available_shards} shards available`}
+                size="small"
+                color={getHealthColor(encryptionStatus.health_status) as any}
+              />
+            </Stack>
+          </Alert>
+        )}
+
+        {/* Breadcrumbs */}
+        <Breadcrumbs separator={<NavigateNextIcon fontSize="small" />} sx={{ mb: 2 }}>
+          <Link
+            component="button"
+            variant="body1"
+            onClick={() => navigateToFolder('/')}
+            underline="hover"
+            color="inherit"
+          >
+            <HomeIcon sx={{ mr: 0.5, verticalAlign: 'bottom' }} fontSize="small" />
+            {entityName}
+          </Link>
+          {currentPath !== '/' && currentPath.split('/').filter(Boolean).map((folder, index, arr) => (
+            <Link
+              key={index}
+              component="button"
+              variant="body1"
+              onClick={() => navigateToFolder('/' + arr.slice(0, index + 1).join('/'))}
+              underline="hover"
+              color={index === arr.length - 1 ? 'text.primary' : 'inherit'}
+            >
+              {folder}
+            </Link>
+          ))}
+        </Breadcrumbs>
+
+        {/* Toolbar */}
+        <Stack direction="row" alignItems="center" justifyContent="space-between">
+          <Stack direction="row" spacing={1}>
+            {canWrite && (
+              <>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  hidden
+                  onChange={handleFileUpload}
+                />
+                <Button
+                  variant="contained"
+                  startIcon={uploading ? <CircularProgress size={16} /> : <UploadIcon />}
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                >
+                  Upload
+                </Button>
+                <Button
+                  variant="outlined"
+                  startIcon={<NewFolderIcon />}
+                  onClick={() => setNewFolderDialog(true)}
+                >
+                  New Folder
+                </Button>
+              </>
+            )}
+
+            {selectedItems.size > 0 && (
+              <>
+                <Button
+                  startIcon={<DownloadIcon />}
+                  onClick={() => {
+                    processedItems
+                      .filter(item => selectedItems.has(item.path))
+                      .forEach(item => handleDownload(item));
+                  }}
+                >
+                  Download ({selectedItems.size})
+                </Button>
+
+                {canDelete && (
+                  <Button
+                    color="error"
+                    startIcon={<DeleteIcon />}
+                    onClick={() => {
+                      const itemsToDelete = processedItems.filter(item => selectedItems.has(item.path));
+                      handleDelete(itemsToDelete);
+                    }}
+                  >
+                    Delete ({selectedItems.size})
+                  </Button>
+                )}
+              </>
+            )}
+          </Stack>
+
+          <Stack direction="row" spacing={1} alignItems="center">
+            {/* Search */}
+            <TextField
+              size="small"
+              placeholder="Search..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              InputProps={{
+                startAdornment: <SearchIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />,
+              }}
+            />
+
+            {/* Filter */}
+            <FormControl size="small" sx={{ minWidth: 100 }}>
+              <Select
+                value={filterType}
+                onChange={(e) => setFilterType(e.target.value as any)}
+                displayEmpty
+              >
+                <MenuItem value="all">All</MenuItem>
+                <MenuItem value="files">Files</MenuItem>
+                <MenuItem value="folders">Folders</MenuItem>
+              </Select>
+            </FormControl>
+
+            {/* Sort */}
+            <FormControl size="small" sx={{ minWidth: 100 }}>
+              <Select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as any)}
+                displayEmpty
+              >
+                <MenuItem value="name">Name</MenuItem>
+                <MenuItem value="size">Size</MenuItem>
+                <MenuItem value="modified">Modified</MenuItem>
+              </Select>
+            </FormControl>
+
+            {/* View Mode */}
+            <IconButton onClick={() => setViewMode(viewMode === 'list' ? 'grid' : 'list')}>
+              {viewMode === 'list' ? <GridViewIcon /> : <ListViewIcon />}
+            </IconButton>
+
+            {/* Refresh */}
+            <IconButton onClick={loadItems}>
+              <RefreshIcon />
+            </IconButton>
+          </Stack>
+        </Stack>
+
+        {/* Storage Stats */}
+        {stats && (
+          <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
+            <Chip label={`${stats.file_count} files`} size="small" />
+            <Chip label={`${stats.folder_count} folders`} size="small" />
+            <Chip label={formatFileSize(stats.used_size)} size="small" />
+            {stats.encrypted_count > 0 && (
+              <Chip
+                icon={<LockIcon />}
+                label={`${stats.encrypted_count} encrypted`}
+                size="small"
+                color="primary"
+              />
+            )}
+            {stats.shared_count > 0 && (
+              <Chip
+                icon={<ShareIcon />}
+                label={`${stats.shared_count} shared`}
+                size="small"
+                color="secondary"
+              />
+            )}
+          </Stack>
+        )}
+      </Paper>
+
+      {/* Storage Content */}
+      <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
+        {error && (
+          <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 2 }}>
+            {error}
+          </Alert>
+        )}
+
+        {uploading && (
+          <LinearProgress sx={{ mb: 2 }} />
+        )}
+
+        {viewMode === 'list' ? (
+          <List>
+            {processedItems.map(item => (
+              <ListItem
+                key={item.path}
+                button
+                selected={selectedItems.has(item.path)}
+                onClick={() => {
+                  if (item.type === 'folder') {
+                    navigateToFolder(item.path);
+                  } else {
+                    const newSelected = new Set(selectedItems);
+                    if (newSelected.has(item.path)) {
+                      newSelected.delete(item.path);
+                    } else {
+                      newSelected.add(item.path);
+                    }
+                    setSelectedItems(newSelected);
+                  }
+                }}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setContextMenu({ x: e.clientX, y: e.clientY, item });
+                }}
+              >
+                <ListItemIcon>
+                  {getFileIcon(item)}
+                </ListItemIcon>
+
+                <ListItemText
+                  primary={
+                    <Stack direction="row" alignItems="center" spacing={1}>
+                      <Typography variant="body2">{item.name}</Typography>
+                      {item.encrypted && (
+                        <Tooltip title="Encrypted">
+                          <LockIcon fontSize="small" color="action" />
+                        </Tooltip>
+                      )}
+                      {item.shared && (
+                        <Tooltip title="Shared">
+                          <ShareIcon fontSize="small" color="action" />
+                        </Tooltip>
+                      )}
+                      {item.shard_status && (
+                        <Chip
+                          label={`${item.shard_status.available}/${item.shard_status.total}`}
+                          size="small"
+                          color={getHealthColor(item.shard_status.health) as any}
+                          sx={{ height: 20 }}
+                        />
+                      )}
+                    </Stack>
+                  }
+                  secondary={
+                    <Stack direction="row" spacing={2}>
+                      {item.size !== undefined && (
+                        <Typography variant="caption" color="text.secondary">
+                          {formatFileSize(item.size)}
+                        </Typography>
+                      )}
+                      {item.modified && (
+                        <Typography variant="caption" color="text.secondary">
+                          {format(new Date(item.modified), 'dd/MM/yyyy HH:mm')}
+                        </Typography>
+                      )}
+                    </Stack>
+                  }
+                />
+
+                <ListItemSecondaryAction>
+                  <IconButton
+                    edge="end"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setContextMenu({ x: e.currentTarget.getBoundingClientRect().left, y: e.currentTarget.getBoundingClientRect().bottom, item });
+                    }}
+                  >
+                    <MoreIcon />
+                  </IconButton>
+                </ListItemSecondaryAction>
+              </ListItem>
+            ))}
+          </List>
+        ) : (
+          <Grid container spacing={2}>
+            {processedItems.map(item => (
+              <Grid item xs={12} sm={6} md={4} lg={3} key={item.path}>
+                <Card
+                  sx={{
+                    cursor: 'pointer',
+                    border: selectedItems.has(item.path) ? 2 : 0,
+                    borderColor: 'primary.main',
+                  }}
+                  onClick={() => {
+                    if (item.type === 'folder') {
+                      navigateToFolder(item.path);
+                    } else {
+                      const newSelected = new Set(selectedItems);
+                      if (newSelected.has(item.path)) {
+                        newSelected.delete(item.path);
+                      } else {
+                        newSelected.add(item.path);
+                      }
+                      setSelectedItems(newSelected);
+                    }
+                  }}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setContextMenu({ x: e.clientX, y: e.clientY, item });
+                  }}
+                >
+                  <CardContent>
+                    <Stack alignItems="center" spacing={2}>
+                      <Box sx={{ fontSize: 48 }}>
+                        {getFileIcon(item)}
+                      </Box>
+                      <Typography variant="body2" noWrap sx={{ width: '100%', textAlign: 'center' }}>
+                        {item.name}
+                      </Typography>
+                      <Stack direction="row" spacing={1}>
+                        {item.encrypted && <LockIcon fontSize="small" color="action" />}
+                        {item.shared && <ShareIcon fontSize="small" color="action" />}
+                      </Stack>
+                      {item.size !== undefined && (
+                        <Typography variant="caption" color="text.secondary">
+                          {formatFileSize(item.size)}
+                        </Typography>
+                      )}
+                    </Stack>
+                  </CardContent>
+                </Card>
+              </Grid>
+            ))}
+          </Grid>
+        )}
+      </Box>
+
+      {/* Context Menu */}
+      <Menu
+        open={contextMenu !== null}
+        onClose={() => setContextMenu(null)}
+        anchorReference="anchorPosition"
+        anchorPosition={
+          contextMenu !== null
+            ? { top: contextMenu.y, left: contextMenu.x }
+            : undefined
+        }
+      >
+        {contextMenu?.item.type === 'file' && (
+          <MenuItem onClick={() => { handleDownload(contextMenu.item); setContextMenu(null); }}>
+            <ListItemIcon><DownloadIcon fontSize="small" /></ListItemIcon>
+            <ListItemText>Download</ListItemText>
+          </MenuItem>
+        )}
+
+        {canShare && (
+          <MenuItem onClick={() => setContextMenu(null)}>
+            <ListItemIcon><ShareIcon fontSize="small" /></ListItemIcon>
+            <ListItemText>Share</ListItemText>
+          </MenuItem>
+        )}
+
+        {canWrite && (
+          <MenuItem onClick={() => {
+            if (contextMenu) {
+              setRenameDialog({ open: true, item: contextMenu.item });
+              setNewItemName(contextMenu.item.name);
+            }
+            setContextMenu(null);
+          }}>
+            <ListItemIcon><EditIcon fontSize="small" /></ListItemIcon>
+            <ListItemText>Rename</ListItemText>
+          </MenuItem>
+        )}
+
+        <Divider />
+
+        {canDelete && (
+          <MenuItem onClick={() => {
+            if (contextMenu) {
+              handleDelete([contextMenu.item]);
+            }
+            setContextMenu(null);
+          }}>
+            <ListItemIcon><DeleteIcon fontSize="small" color="error" /></ListItemIcon>
+            <ListItemText>Delete</ListItemText>
+          </MenuItem>
+        )}
+      </Menu>
+
+      {/* New Folder Dialog */}
+      <Dialog open={newFolderDialog} onClose={() => setNewFolderDialog(false)}>
+        <DialogTitle>Create New Folder</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            margin="dense"
+            label="Folder Name"
+            fullWidth
+            variant="outlined"
+            value={newFolderName}
+            onChange={(e) => setNewFolderName(e.target.value)}
+            onKeyPress={(e) => {
+              if (e.key === 'Enter') {
+                handleCreateFolder();
+              }
+            }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setNewFolderDialog(false)}>Cancel</Button>
+          <Button onClick={handleCreateFolder} variant="contained">Create</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Rename Dialog */}
+      <Dialog open={renameDialog.open} onClose={() => setRenameDialog({ open: false, item: null })}>
+        <DialogTitle>Rename {renameDialog.item?.type === 'folder' ? 'Folder' : 'File'}</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            margin="dense"
+            label="New Name"
+            fullWidth
+            variant="outlined"
+            value={newItemName}
+            onChange={(e) => setNewItemName(e.target.value)}
+            onKeyPress={(e) => {
+              if (e.key === 'Enter') {
+                handleRename();
+              }
+            }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRenameDialog({ open: false, item: null })}>Cancel</Button>
+          <Button onClick={handleRename} variant="contained">Rename</Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  );
+};
+
+export default StoragePanel;

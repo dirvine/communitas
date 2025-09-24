@@ -20,6 +20,8 @@ import {
 import { IdentityInfo, StorageBackendInfo } from '../../types'
 import IdentityCard from './IdentityCard'
 import IdentitySetup from './IdentitySetup'
+import { loadStoredIdentities, persistIdentity, storeIdentities } from '../../utils/identityStorage'
+import { safeInvoke } from '../../utils/tauri'
 
 const IdentityManager: React.FC = () => {
   const [currentIdentity, setCurrentIdentity] = useState<IdentityInfo | null>(null)
@@ -40,17 +42,29 @@ const IdentityManager: React.FC = () => {
     setError(null)
 
     try {
-      // Load current identity
-      const current = await window.__TAURI_INVOKE__('get_identity')
-      setCurrentIdentity(current)
+      const current = await safeInvoke<IdentityInfo>('get_identity')
+      const stored = current ? persistIdentity(current) : loadStoredIdentities()
 
-      // Load all identities
-      const allIdentities = await window.__TAURI_INVOKE__('list_identities')
-      setIdentities(allIdentities)
+      setCurrentIdentity(current ?? stored[0] ?? null)
 
-      // Load storage info
-      const storage = await window.__TAURI_INVOKE__('get_storage_info')
-      setStorageInfo(storage)
+      const allIdentities = await safeInvoke<IdentityInfo[]>('list_identities')
+      if (allIdentities && allIdentities.length > 0) {
+        setIdentities(allIdentities)
+        storeIdentities(allIdentities)
+      } else {
+        setIdentities(stored)
+      }
+
+      const storage = await safeInvoke<StorageBackendInfo>('get_storage_info')
+      if (storage) {
+        setStorageInfo(storage)
+      } else {
+        setStorageInfo({
+          backend_type: 'Offline Cache',
+          key_count: stored.length,
+          is_available: true,
+        })
+      }
 
     } catch (err) {
       setError(`Failed to load identity data: ${err}`)
@@ -65,13 +79,14 @@ const IdentityManager: React.FC = () => {
 
   const handleIdentityCreated = (identity: IdentityInfo) => {
     setCurrentIdentity(identity)
-    setIdentities([identity, ...identities])
-    setSnackbarMessage('Identity created successfully\!')
+    const updated = persistIdentity(identity)
+    setIdentities(updated)
+    setSnackbarMessage('Identity created successfully!')
     setShowSetup(false)
   }
 
   const handleCopyAddress = () => {
-    setSnackbarMessage('Address copied to clipboard\!')
+    setSnackbarMessage('Address copied to clipboard!')
   }
 
   const handleRefresh = () => {

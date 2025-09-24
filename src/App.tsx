@@ -32,7 +32,7 @@ import { featureFlags, useFeatureFlag } from './services/featureFlags'
 import { ThemeProvider, ThemeSwitcher } from './components/theme'
 
 // Authentication System
-import { AuthProvider, AuthStatus } from './components/auth'
+import { AuthProvider, AuthStatus, useAuth } from './components/auth'
 
 // Encryption System
 import { EncryptionProvider, EncryptionStatus } from './components/encryption'
@@ -79,7 +79,7 @@ import { networkService } from './services/network/NetworkConnectionService'
 
 import OverviewDashboard from './components/OverviewDashboard'
 // import FirstRunWizard from './components/onboarding/FirstRunWizard'
-import QuickActionsBar from './components/QuickActionsBar'
+import QuickActionsBar, { SettingsButton } from './components/QuickActionsBar'
 import StorageWorkspaceDialog from './components/storage/StorageWorkspaceDialog'
 
 const IdentityTab = React.lazy(() => import('./components/tabs/IdentityTab'))
@@ -111,7 +111,7 @@ const TestButton: React.FC = () => {
 
 
 function App() {
-  console.log('App component rendering...')
+  // console.log('App component rendering...')
   
   // Experimental mode is now the default
   // Enable all features
@@ -163,12 +163,13 @@ function App() {
   }, [isSmall])
 
   useEffect(() => {
-    // Load or generate identity
-    ensureIdentity().then(four => {
-      setNavigationContext(prev => ({ ...prev, fourWords: four }))
-    }).catch(() => {
-      // leave undefined; UI can handle missing identity
-    })
+    // Check if user already has an identity stored (don't auto-generate)
+    const storedFourWords = localStorage.getItem('communitas-four-words')
+    if (storedFourWords) {
+      // User has previously logged in, set their four-words
+      setNavigationContext(prev => ({ ...prev, fourWords: storedFourWords }))
+    }
+    // Don't auto-generate identity - wait for user to sign in
 
     // Initialize network connection service (auto-connects on startup)
     console.log('🚀 Initializing network connection service...')
@@ -410,38 +411,14 @@ function App() {
         flexShrink: 0,
         ml: 'auto',
       }}>
-        {/* Compact Endpoint Status showing four-words or offline */}
+        {/* Compact Endpoint Status showing connection state */}
         <CompactEndpointStatus />
-        <Button
-          variant="outlined"
-          size="small"
-          startIcon={<LanIcon />}
-          onClick={async () => {
-            const text = navigationContext.fourWords || 'local'
-            try { await navigator.clipboard.writeText(text) } catch {}
-          }}
-          sx={{ 
-            borderColor: (theme) => theme.palette.divider,
-            color: 'primary.main',
-            minWidth: 'auto',
-            px: { xs: 1, sm: 2 },
-            '&:hover': {
-              borderColor: (theme) => theme.palette.primary.light,
-              backgroundColor: (theme) => theme.palette.action.hover,
-            },
-            '& .MuiButton-startIcon': { mr: { xs: 0.5, sm: 1 } },
-          }}
-          title="Click to copy your local four-word address"
-        >
-          <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
-            {navigationContext.fourWords || 'local'}
-          </Box>
-        </Button>
         <Box sx={{ display: { xs: 'none', md: 'flex' }, alignItems: 'center', gap: 1 }}>
           <EncryptionStatus compact={true} />
           <ThemeSwitcher compact showPresets />
         </Box>
         <AuthStatus compact={true} showLabel={false} />
+        <SettingsButton onAction={handleQuickAction} />
       </Box>
     </Toolbar>
   )}
@@ -452,7 +429,7 @@ function App() {
   const isDevelopment = import.meta.env.DEV
   const showFullUI = isDevelopment || isTauriApp()
   
-  console.log('App render check:', { isDevelopment, isTauriApp: isTauriApp(), showFullUI })
+  // console.log('App render check:', { isDevelopment, isTauriApp: isTauriApp(), showFullUI })
   
   if (!showFullUI) {
     console.log('Showing BrowserFallback')
@@ -462,8 +439,6 @@ function App() {
       </ThemeProvider>
     );
   }
-  
-  console.log('Showing full UI')
 
   // Handle navigation from unified navigation
   const _handleUnifiedNavigate = (_path: string) => {
@@ -522,59 +497,11 @@ function App() {
           <NavigationProvider>
           <BrowserRouter>
           {/** Bridge navigation events to React Router */}
+          {/* NavBridge temporarily disabled - causing infinite render loop
           {(() => {
-            const NavBridge: React.FC = () => {
-              const nav = useNavigate();
-              const location = useLocation();
-              // bridge custom events -> router navigate
-              useEffect(() => {
-                const handler = (e: any) => { if (e?.detail) nav(e.detail) }
-                window.addEventListener('app:navigate', handler)
-                return () => window.removeEventListener('app:navigate', handler)
-              }, [nav])
-              // route-level navigation context
-              useEffect(() => {
-                const path = location.pathname
-                if (path.startsWith('/org/')) {
-                  const parts = path.split('/');
-                  const orgId = parts[2]
-                  setNavigationContext(prev => ({ ...prev, mode: 'organization', organizationId: orgId }))
-                } else if (path.startsWith('/project/')) {
-                  const parts = path.split('/');
-                  const projectId = parts[2]
-                  setNavigationContext(prev => ({ ...prev, mode: 'project', projectId }))
-                } else if (path.startsWith('/group/')) {
-                  const parts = path.split('/');
-                  const groupId = parts[2]
-                  setNavigationContext(prev => ({ ...prev, mode: 'personal', projectId: undefined, organizationId: undefined }))
-                  // could attach group selection state if needed
-                } else if (path.startsWith('/user/')) {
-                  const parts = path.split('/');
-                  const userId = parts[2]
-                  setNavigationContext(prev => ({ ...prev, mode: 'personal', projectId: undefined, organizationId: undefined }))
-                } else {
-                  setNavigationContext(prev => ({ ...prev, mode: 'personal', projectId: undefined, organizationId: undefined }))
-                }
-              }, [location.pathname])
-              
-              // bridge action events -> handlers
-              useEffect(() => {
-                const handler = (e: any) => {
-                  const d = e?.detail; if (!d) return;
-                  switch (d.action) {
-                    case 'video': handleVideoCall(d.entityId, d.entityType); break;
-                    case 'call': handleAudioCall(d.entityId, d.entityType); break;
-                    case 'screen': handleScreenShare(d.entityId, d.entityType); break;
-                    case 'storage': handleOpenFiles(d.entityId, d.entityType); break;
-                  }
-                }
-                window.addEventListener('app:action', handler)
-                return () => window.removeEventListener('app:action', handler)
-              }, [])
-              return null
-            }
+            // NavBridge component moved outside to prevent re-creation
             return <NavBridge />
-          })()}
+          })()} */}
           {/* Global Sync Status Bar */}
           <GlobalSyncBar 
             userId="user_owner_123" // TODO: Use actual authenticated user ID

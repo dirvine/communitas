@@ -252,30 +252,28 @@ export const QuickActionsBar: React.FC<QuickActionsBarProps> = ({
     }
   };
 
-  // Simple settings menu near the FAB (hamburger)
+  // Simple settings menu (now rendered inline, not as a FAB)
   const renderSettings = () => (
     <>
-      <Tooltip title="Settings & Theme">
-        <Fab
-          size="small"
-          onClick={(e) => setSettingsAnchor(e.currentTarget)}
-          sx={{
-            position: 'fixed',
-            bottom: 96,
-            right: position.includes('right') ? 24 : undefined,
-            left: position.includes('left') ? 24 : undefined,
-            zIndex: 1200,
-            boxShadow: 3,
-          }}
-        >
-          <MenuIcon />
-        </Fab>
-      </Tooltip>
       <Menu
         anchorEl={settingsAnchor}
         open={Boolean(settingsAnchor)}
         onClose={() => setSettingsAnchor(null)}
-        PaperProps={{ sx: { minWidth: 240 } }}
+        anchorOrigin={{
+          vertical: position.includes('bottom') ? 'top' : 'bottom',
+          horizontal: position.includes('right') ? 'left' : 'right',
+        }}
+        transformOrigin={{
+          vertical: position.includes('bottom') ? 'bottom' : 'top',
+          horizontal: position.includes('right') ? 'right' : 'left',
+        }}
+        PaperProps={{
+          sx: {
+            minWidth: 240,
+            mt: position.includes('bottom') ? -2 : 2,
+            ml: position.includes('right') ? -2 : 2,
+          }
+        }}
       >
         <MenuItem onClick={() => { onAction('settings'); setSettingsAnchor(null); }}>
           <ListItemIcon><SettingsIcon /></ListItemIcon>
@@ -516,11 +514,94 @@ export const QuickActionsBar: React.FC<QuickActionsBarProps> = ({
         ))}
       </SpeedDial>
 
-      {/* Settings (hamburger) */}
-      {renderSettings()}
-
       {/* Context Menu */}
       {renderContextMenu()}
+    </>
+  );
+};
+
+// Settings button component to be placed in the header
+export const SettingsButton: React.FC<{ onAction: (action: string) => void }> = ({ onAction }) => {
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+
+  const handleClick = (event: React.MouseEvent<HTMLElement>) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleClose = () => {
+    setAnchorEl(null);
+  };
+
+  const handleSettingsClick = () => {
+    onAction('settings');
+    handleClose();
+  };
+
+  const handleThemeToggle = () => {
+    onAction('toggle_theme');
+    handleClose();
+  };
+
+  return (
+    <>
+      <Tooltip title="Settings & Options">
+        <IconButton
+          onClick={handleClick}
+          size="medium"
+          sx={{
+            ml: 1,
+            border: '1px solid',
+            borderColor: 'divider',
+            '&:hover': {
+              backgroundColor: 'action.hover',
+            }
+          }}
+        >
+          <MenuIcon />
+        </IconButton>
+      </Tooltip>
+
+      <Menu
+        anchorEl={anchorEl}
+        open={Boolean(anchorEl)}
+        onClose={handleClose}
+        anchorOrigin={{
+          vertical: 'bottom',
+          horizontal: 'right',
+        }}
+        transformOrigin={{
+          vertical: 'top',
+          horizontal: 'right',
+        }}
+        PaperProps={{
+          sx: {
+            minWidth: 200,
+            mt: 1,
+          }
+        }}
+      >
+        <MenuItem onClick={handleSettingsClick}>
+          <ListItemIcon><SettingsIcon /></ListItemIcon>
+          <ListItemText>Settings</ListItemText>
+        </MenuItem>
+
+        <MenuItem onClick={handleThemeToggle}>
+          <ListItemIcon><BrushIcon /></ListItemIcon>
+          <ListItemText>Toggle Theme</ListItemText>
+        </MenuItem>
+
+        <Divider />
+
+        <MenuItem onClick={() => { onAction('storage_settings'); handleClose(); }}>
+          <ListItemIcon><StorageIcon /></ListItemIcon>
+          <ListItemText>Storage</ListItemText>
+        </MenuItem>
+
+        <MenuItem onClick={() => { onAction('manage_permissions'); handleClose(); }}>
+          <ListItemIcon><VpnKeyIcon /></ListItemIcon>
+          <ListItemText>Permissions</ListItemText>
+        </MenuItem>
+      </Menu>
     </>
   );
 };

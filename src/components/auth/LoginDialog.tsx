@@ -46,6 +46,8 @@ export const LoginDialog: React.FC<LoginDialogProps> = ({
   onSuccess,
   initialMode = 'login',
 }) => {
+  console.log('🟢 LoginDialog render - open:', open);
+
   const { login, createIdentity, authState, registerPasskey, signInWithPasskey } = useAuth();
   const { isMobile } = useResponsive();
   

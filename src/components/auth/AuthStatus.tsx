@@ -47,6 +47,9 @@ export const AuthStatus: React.FC<AuthStatusProps> = ({
   const [networkStatus, setNetworkStatus] = useState<{ connected: boolean; peers: number } | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
 
+  console.log('🟡 AuthStatus render - loginDialogOpen:', loginDialogOpen);
+
+
   const open = Boolean(anchorEl);
 
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
@@ -110,7 +113,12 @@ export const AuthStatus: React.FC<AuthStatusProps> = ({
           <Button
             variant={compact ? 'text' : 'outlined'}
             startIcon={<LoginIcon />}
-            onClick={() => { setLoginInitialMode('login'); setLoginDialogOpen(true); }}
+            onClick={() => {
+              console.log('🔴 Sign In button clicked!');
+              setLoginInitialMode('login');
+              setLoginDialogOpen(true);
+              console.log('🔴 LoginDialog should open, state set to true');
+            }}
             size={compact ? 'small' : 'medium'}
           >
             Sign In
@@ -201,16 +209,6 @@ export const AuthStatus: React.FC<AuthStatusProps> = ({
             </Typography>
           </Box>
         )}
-
-        <Button
-          variant="text"
-          size="small"
-          onClick={handleLogout}
-          startIcon={<LogoutIcon />}
-          disabled={loggingOut}
-        >
-          {loggingOut ? 'Signing out...' : 'Sign Out'}
-        </Button>
       </Stack>
 
       {/* User Menu */}

@@ -31,7 +31,12 @@ export const generateFourWordIdentity = async (seed?: string): Promise<string> =
 export const validateFourWordIdentity = async (four_words: string): Promise<boolean> => {
   const ok = await safeInvoke<boolean>('validate_four_word_identity', { four_words })
   if (ok != null) return !!ok
-  return /^[a-z]+ [a-z]+ [a-z]+ [a-z]+$/.test(four_words)
+  
+  // Normalize input: trim, lowercase, handle both spaces and dashes
+  const normalized = four_words.trim().toLowerCase()
+  
+  // Accept both space-separated and dash-separated formats
+  return /^[a-z]+[\s-][a-z]+[\s-][a-z]+[\s-][a-z]+$/.test(normalized)
 }
 
 export const claimFourWordIdentity = async (four_words: string): Promise<boolean> => {

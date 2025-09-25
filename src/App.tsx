@@ -164,14 +164,20 @@ function App() {
     avg_latency_ms: 0,
   })
   
-  // Use responsive sidebar behavior
+  // Use responsive sidebar behavior - but start open by default
   const { defaultOpen } = useSidebarBehavior()
-  const [sidebarOpen, setSidebarOpen] = useState(defaultOpen)
+  const [sidebarOpen, setSidebarOpen] = useState(true) // Start open by default
   const handleToggleSidebar = () => setSidebarOpen(o => !o)
-  const isSmall = useMediaQuery('(max-width:900px)')
+  const isSmall = useMediaQuery('(max-width:600px)') // More reasonable mobile breakpoint
 
   useEffect(() => {
-    if (isSmall) setSidebarOpen(false)
+    // Only auto-close on very small mobile screens
+    if (isSmall) {
+      setSidebarOpen(false)
+    } else {
+      // Keep sidebar open by default on larger screens
+      setSidebarOpen(true)
+    }
   }, [isSmall])
 
   useEffect(() => {
@@ -757,16 +763,26 @@ function App() {
               {/* Responsive Sidebar */}
               {isSmall ? (
                 <>
+                  {/* Mobile: Hamburger menu always visible when closed */}
                   {!sidebarOpen && (
-                    <Box sx={{ position: 'absolute', top: 8, left: 8, zIndex: 2000 }}>
-                      <IconButton size="small" onClick={handleToggleSidebar} aria-label="Open sidebar">
-                        <ChevronRight />
+                    <Box sx={{ position: 'absolute', top: 16, left: 16, zIndex: 2000 }}>
+                      <IconButton 
+                        size="medium" 
+                        onClick={handleToggleSidebar} 
+                        aria-label="Open sidebar"
+                        sx={{ 
+                          bgcolor: 'background.paper', 
+                          boxShadow: 2,
+                          '&:hover': { bgcolor: 'grey.100' }
+                        }}
+                      >
+                        <MenuIcon />
                       </IconButton>
                     </Box>
                   )}
                   {sidebarOpen && (
                     <>
-                      <Box onClick={handleToggleSidebar} sx={{ position: 'absolute', inset: 0, bgcolor: 'rgba(0,0,0,0.35)', zIndex: 1199 }} />
+                      <Box onClick={handleToggleSidebar} sx={{ position: 'absolute', inset: 0, bgcolor: 'rgba(0,0,0,0.5)', zIndex: 1199 }} />
                       <Box sx={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: '85vw', maxWidth: 360, bgcolor: 'background.paper', borderRight: theme => `1px solid ${theme.palette.divider}`, zIndex: 1200, overflow: 'hidden' }}>
                         <WhatsAppStyleNavigation
                           organizations={mockOrganizations}
@@ -779,8 +795,8 @@ function App() {
                           onScreenShare={handleScreenShare}
                           onOpenFiles={handleOpenFiles}
                         />
-                        <Box sx={{ position: 'absolute', top: 8, right: 8 }}>
-                          <IconButton size="small" onClick={handleToggleSidebar}>
+                        <Box sx={{ position: 'absolute', top: 16, right: 16 }}>
+                          <IconButton size="medium" onClick={handleToggleSidebar} sx={{ bgcolor: 'grey.100' }}>
                             <ChevronLeft />
                           </IconButton>
                         </Box>
@@ -790,42 +806,44 @@ function App() {
                 </>
               ) : (
                 <>
+                  {/* Desktop: Persistent sidebar */}
                   <Box
                     sx={{
-                      width: sidebarOpen ? 320 : 0,
-                      transition: 'width 0.2s ease',
-                      borderRight: theme => (sidebarOpen ? `1px solid ${theme.palette.divider}` : 'none'),
+                      width: sidebarOpen ? 320 : 60,
+                      transition: 'width 0.3s ease',
+                      borderRight: theme => `1px solid ${theme.palette.divider}`,
                       overflow: 'hidden',
                       position: 'relative',
                       minWidth: 0,
                     }}
                   >
-                    <WhatsAppStyleNavigation
-                      organizations={mockOrganizations}
-                      personalGroups={mockPersonalGroups}
-                      personalUsers={mockPersonalUsers}
-                      currentUserId="user_owner_123"
-                      onNavigate={handleWhatsAppNavigate}
-                      onVideoCall={handleVideoCall}
-                      onAudioCall={handleAudioCall}
-                      onScreenShare={handleScreenShare}
-                      onOpenFiles={handleOpenFiles}
-                    />
+                    {sidebarOpen ? (
+                      <WhatsAppStyleNavigation
+                        organizations={mockOrganizations}
+                        personalGroups={mockPersonalGroups}
+                        personalUsers={mockPersonalUsers}
+                        currentUserId="user_owner_123"
+                        onNavigate={handleWhatsAppNavigate}
+                        onVideoCall={handleVideoCall}
+                        onAudioCall={handleAudioCall}
+                        onScreenShare={handleScreenShare}
+                        onOpenFiles={handleOpenFiles}
+                      />
+                    ) : (
+                      <Box sx={{ width: 60, height: '100%', bgcolor: 'background.paper', display: 'flex', flexDirection: 'column', alignItems: 'center', py: 2 }}>
+                        <IconButton onClick={handleToggleSidebar} sx={{ mb: 2 }}>
+                          <ChevronRight />
+                        </IconButton>
+                      </Box>
+                    )}
                     {sidebarOpen && (
-                      <Box sx={{ position: 'absolute', top: 8, right: 8 }}>
+                      <Box sx={{ position: 'absolute', top: 16, right: 16 }}>
                         <IconButton size="small" onClick={handleToggleSidebar}>
                           <ChevronLeft />
                         </IconButton>
                       </Box>
                     )}
                   </Box>
-                  {!sidebarOpen && (
-                    <Box sx={{ position: 'absolute', top: 8, left: 8, zIndex: 2000 }}>
-                      <IconButton size="small" onClick={handleToggleSidebar} aria-label="Open sidebar">
-                        <ChevronRight />
-                      </IconButton>
-                    </Box>
-                  )}
                 </>
               )}
               <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>

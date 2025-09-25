@@ -35,6 +35,10 @@ import {
   Tabs,
   Grid,
   Slide,
+  useMediaQuery,
+  useTheme,
+  Drawer,
+  SwipeableDrawer,
 } from '@mui/material';
 import {
   Send as SendIcon,
@@ -199,6 +203,10 @@ export const EntityChatView: React.FC<EntityChatViewProps> = ({
   currentUserId,
   currentUserFourWords,
 }) => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const isTablet = useMediaQuery(theme.breakpoints.between('md', 'lg'));
+  
   const [messages, setMessages] = useState<Message[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
@@ -214,6 +222,7 @@ export const EntityChatView: React.FC<EntityChatViewProps> = ({
   const [selectedTab, setSelectedTab] = useState(0); // 0: Chat, 1: Members, 2: Files
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
+  const [membersDrawerOpen, setMembersDrawerOpen] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageInputRef = useRef<HTMLInputElement>(null);
@@ -577,59 +586,106 @@ export const EntityChatView: React.FC<EntityChatViewProps> = ({
   }
 
   return (
-    <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
-      {/* Header */}
-      <Paper elevation={2} sx={{ p: 2, borderRadius: 0 }}>
-        <Stack direction="row" alignItems="center" spacing={2}>
-          <Avatar sx={{ bgcolor: 'primary.main' }}>
-            {getEntityIcon()}
-          </Avatar>
-          <Box sx={{ flex: 1 }}>
-            <Typography variant="h6" fontWeight={600}>
-              {entityName || `${entityType} ${entityId}`}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              {entityType === 'user' ? 'Direct Message' : `${members.length} members`}
-            </Typography>
-          </Box>
-          <Stack direction="row" spacing={1}>
-            <Tooltip title="Audio Call">
-              <IconButton onClick={handleStartAudioCall}>
-                <PhoneIcon />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="Video Call">
-              <IconButton onClick={handleStartVideoCall}>
-                <VideocamIcon />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="Search">
-              <IconButton>
-                <SearchIcon />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="More Options">
-              <IconButton>
-                <MoreVertIcon />
-              </IconButton>
-            </Tooltip>
+    <Box sx={{ 
+      height: '100vh', 
+      display: 'flex', 
+      flexDirection: isMobile ? 'column' : 'row',
+      maxWidth: '100vw',
+      overflow: 'hidden'
+    }}>
+      {/* Main Chat Area */}
+      <Box sx={{ 
+        flex: 1, 
+        display: 'flex', 
+        flexDirection: 'column',
+        minWidth: 0, // Allow flex shrink
+        height: '100%'
+      }}>
+        {/* Header */}
+        <Paper elevation={2} sx={{ 
+          p: isMobile ? 1.5 : 2, 
+          borderRadius: 0,
+          zIndex: theme.zIndex.appBar - 1
+        }}>
+          <Stack direction="row" alignItems="center" spacing={2}>
+            <Avatar sx={{ bgcolor: 'primary.main', width: 40, height: 40 }}>
+              {getEntityIcon()}
+            </Avatar>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography 
+                variant={isMobile ? "subtitle1" : "h6"} 
+                fontWeight={600}
+                noWrap
+              >
+                {entityName || `${entityType} ${entityId}`}
+              </Typography>
+              <Typography variant="body2" color="text.secondary" noWrap>
+                {entityType === 'user' ? 'Direct Message' : `${members.length} members`}
+              </Typography>
+            </Box>
+            
+            <Stack direction="row" spacing={0.5}>
+              {/* Members Button - Always visible */}
+              {entityType !== 'user' && (
+                <Tooltip title="View Members">
+                  <IconButton 
+                    onClick={() => isMobile ? setMembersDrawerOpen(true) : setSelectedTab(1)}
+                    color={selectedTab === 1 && !isMobile ? "primary" : "default"}
+                  >
+                    <Badge badgeContent={members.length} color="primary" max={99}>
+                      <GroupIcon />
+                    </Badge>
+                  </IconButton>
+                </Tooltip>
+              )}
+              
+              <Tooltip title="Audio Call">
+                <IconButton onClick={handleStartAudioCall} size={isMobile ? "small" : "medium"}>
+                  <PhoneIcon />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Video Call">
+                <IconButton onClick={handleStartVideoCall} size={isMobile ? "small" : "medium"}>
+                  <VideocamIcon />
+                </IconButton>
+              </Tooltip>
+              {!isMobile && (
+                <>
+                  <Tooltip title="Search">
+                    <IconButton size="small">
+                      <SearchIcon />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="More Options">
+                    <IconButton size="small">
+                      <MoreVertIcon />
+                    </IconButton>
+                  </Tooltip>
+                </>
+              )}
+            </Stack>
           </Stack>
-        </Stack>
 
-        {/* Tabs */}
-        <Tabs value={selectedTab} onChange={(e, v) => setSelectedTab(v)} sx={{ mt: 1 }}>
-          <Tab label="Chat" />
-          {entityType !== 'user' && <Tab label={`Members (${members.length})`} />}
-          <Tab label="Files" />
-        </Tabs>
-      </Paper>
+          {/* Desktop Tabs - Only show on desktop */}
+          {!isMobile && (
+            <Tabs value={selectedTab} onChange={(e, v) => setSelectedTab(v)} sx={{ mt: 1 }}>
+              <Tab label="Chat" />
+              {entityType !== 'user' && <Tab label={`Members (${members.length})`} />}
+              <Tab label="Files" />
+            </Tabs>
+          )}
+        </Paper>
 
-      {/* Content */}
-      <Box sx={{ flex: 1, overflow: 'hidden' }}>
-        {selectedTab === 0 && (
+        {/* Chat Content - Always visible on mobile, tab-based on desktop */}
+        {(isMobile || selectedTab === 0) && (
           <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
             {/* Messages */}
-            <Box sx={{ flex: 1, overflow: 'auto', p: 1 }}>
+            <Box sx={{ 
+              flex: 1, 
+              overflow: 'auto', 
+              p: isMobile ? 1 : 2,
+              maxHeight: isMobile ? 'calc(100vh - 180px)' : 'calc(100vh - 220px)'
+            }}>
               <Stack spacing={1}>
                 {messages.map((message) => (
                   <motion.div
@@ -729,7 +785,15 @@ export const EntityChatView: React.FC<EntityChatViewProps> = ({
             </AnimatePresence>
 
             {/* Message Input */}
-            <Box sx={{ p: 2, bgcolor: 'background.paper', borderTop: 1, borderColor: 'divider' }}>
+            <Box sx={{ 
+              p: isMobile ? 1.5 : 2, 
+              bgcolor: 'background.paper', 
+              borderTop: 1, 
+              borderColor: 'divider',
+              position: 'sticky',
+              bottom: 0,
+              zIndex: 1
+            }}>
               <Stack direction="row" spacing={1} alignItems="flex-end">
                 <IconButton>
                   <AttachFileIcon />
@@ -766,10 +830,11 @@ export const EntityChatView: React.FC<EntityChatViewProps> = ({
           </Box>
         )}
 
-        {selectedTab === 1 && entityType !== 'user' && (
-          <Box sx={{ p: 2 }}>
+        {/* Desktop Members Panel */}
+        {!isMobile && selectedTab === 1 && entityType !== 'user' && (
+          <Box sx={{ p: 2, height: '100%', overflow: 'auto' }}>
             <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
-              <Typography variant="h6">Members</Typography>
+              <Typography variant="h6">Members ({members.length})</Typography>
               <Button
                 variant="outlined"
                 startIcon={<AddIcon />}
@@ -781,44 +846,66 @@ export const EntityChatView: React.FC<EntityChatViewProps> = ({
 
             <List>
               {members.map((member) => (
-                <ListItem key={member.id}>
-                  <ListItemAvatar>
-                    <Badge
-                      variant="dot"
-                      color={getStatusColor(member.status) as any}
-                      anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-                    >
-                      <Avatar>{member.name[0]}</Avatar>
-                    </Badge>
-                  </ListItemAvatar>
-                  <ListItemText
-                    primary={member.name}
-                    secondary={
-                      <Stack direction="row" alignItems="center" spacing={1}>
-                        <Typography variant="caption">{member.fourWordAddress}</Typography>
-                        <Chip label={member.role} size="small" variant="outlined" />
-                        <Typography variant="caption" color="text.secondary">
-                          {member.status === 'online' ? 'Online' : `Last seen ${formatTimeAgo(member.lastSeen)}`}
+                <ListItem key={member.id} disablePadding>
+                  <ListItemButton sx={{ borderRadius: 1, mb: 0.5 }}>
+                    <ListItemAvatar>
+                      <Badge
+                        variant="dot"
+                        color={getStatusColor(member.status) as any}
+                        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                      >
+                        <Avatar sx={{ width: 40, height: 40 }}>{member.name[0]}</Avatar>
+                      </Badge>
+                    </ListItemAvatar>
+                    <ListItemText
+                      primary={
+                        <Typography variant="subtitle2" fontWeight={600}>
+                          {member.name}
                         </Typography>
-                      </Stack>
-                    }
-                  />
-                  {member.id !== currentUserId && (
-                    <IconButton
-                      edge="end"
-                      onClick={() => handleRemoveMember(member)}
-                      color="error"
-                    >
-                      <RemoveIcon />
-                    </IconButton>
-                  )}
+                      }
+                      secondary={
+                        <Stack spacing={0.5}>
+                          <Typography variant="caption" color="text.secondary">
+                            {member.fourWordAddress}
+                          </Typography>
+                          <Stack direction="row" alignItems="center" spacing={1}>
+                            <Chip 
+                              label={member.role} 
+                              size="small" 
+                              variant={member.role === 'admin' ? 'filled' : 'outlined'}
+                              color={member.role === 'admin' ? 'primary' : 'default'}
+                            />
+                            <Typography variant="caption" color="text.secondary">
+                              {member.status === 'online' ? '🟢 Online' : `Last seen ${formatTimeAgo(member.lastSeen)}`}
+                            </Typography>
+                          </Stack>
+                        </Stack>
+                      }
+                    />
+                    {member.id !== currentUserId && (
+                      <Tooltip title="Remove Member">
+                        <IconButton
+                          edge="end"
+                          size="small"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRemoveMember(member);
+                          }}
+                          color="error"
+                        >
+                          <RemoveIcon />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                  </ListItemButton>
                 </ListItem>
               ))}
             </List>
           </Box>
         )}
 
-        {selectedTab === 2 && (
+        {/* Desktop Files Panel */}
+        {!isMobile && selectedTab === 2 && (
           <Box sx={{ p: 2 }}>
             <Typography variant="h6" gutterBottom>Files</Typography>
             <Typography color="text.secondary">File sharing coming soon...</Typography>
@@ -826,6 +913,99 @@ export const EntityChatView: React.FC<EntityChatViewProps> = ({
         )}
       </Box>
 
+
+      {/* Mobile Members Drawer */}
+      {isMobile && entityType !== 'user' && (
+        <SwipeableDrawer
+          anchor="right"
+          open={membersDrawerOpen}
+          onClose={() => setMembersDrawerOpen(false)}
+          onOpen={() => setMembersDrawerOpen(true)}
+          PaperProps={{
+            sx: { 
+              width: '85vw',
+              maxWidth: 400
+            }
+          }}
+        >
+          <Box sx={{ p: 2 }}>
+            <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
+              <Typography variant="h6">Members ({members.length})</Typography>
+              <IconButton onClick={() => setMembersDrawerOpen(false)}>
+                <CloseIcon />
+              </IconButton>
+            </Stack>
+            
+            <Button
+              variant="outlined"
+              fullWidth
+              startIcon={<AddIcon />}
+              onClick={() => setShowAddMember(true)}
+              sx={{ mb: 2 }}
+            >
+              Add Member
+            </Button>
+
+            <List dense>
+              {members.map((member) => (
+                <ListItem key={member.id} disablePadding>
+                  <ListItemButton sx={{ borderRadius: 1, mb: 0.5 }}>
+                    <ListItemAvatar>
+                      <Badge
+                        variant="dot"
+                        color={getStatusColor(member.status) as any}
+                        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                      >
+                        <Avatar sx={{ width: 36, height: 36 }}>{member.name[0]}</Avatar>
+                      </Badge>
+                    </ListItemAvatar>
+                    <ListItemText
+                      primary={
+                        <Typography variant="subtitle2" fontWeight={600}>
+                          {member.name}
+                        </Typography>
+                      }
+                      secondary={
+                        <Stack spacing={0.5}>
+                          <Typography variant="caption" color="text.secondary" noWrap>
+                            {member.fourWordAddress}
+                          </Typography>
+                          <Stack direction="row" alignItems="center" spacing={1}>
+                            <Chip 
+                              label={member.role} 
+                              size="small" 
+                              variant={member.role === 'admin' ? 'filled' : 'outlined'}
+                              color={member.role === 'admin' ? 'primary' : 'default'}
+                            />
+                            <Typography variant="caption" color="text.secondary">
+                              {member.status === 'online' ? '🟢' : '⚫'}
+                            </Typography>
+                          </Stack>
+                        </Stack>
+                      }
+                    />
+                    {member.id !== currentUserId && (
+                      <Tooltip title="Remove Member">
+                        <IconButton
+                          edge="end"
+                          size="small"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRemoveMember(member);
+                          }}
+                          color="error"
+                        >
+                          <RemoveIcon />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                  </ListItemButton>
+                </ListItem>
+              ))}
+            </List>
+          </Box>
+        </SwipeableDrawer>
+      )}
       {/* Add Member Dialog */}
       <Dialog open={showAddMember} onClose={() => setShowAddMember(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Add Member to {entityType}</DialogTitle>

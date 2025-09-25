@@ -48,6 +48,7 @@ import { EncryptionProvider, EncryptionStatus } from './components/encryption'
 
   // Responsive Layout  
   import { useSidebarBehavior } from './components/responsive'
+  import ResponsiveLayout from './components/layout/ResponsiveLayout'
 
 // Navigation - both old and new
 import { WhatsAppStyleNavigation } from './components/navigation/WhatsAppStyleNavigation'
@@ -164,21 +165,10 @@ function App() {
     avg_latency_ms: 0,
   })
   
-  // Use responsive sidebar behavior - but start open by default
+  // Use responsive sidebar behavior with proper defaults
   const { defaultOpen } = useSidebarBehavior()
-  const [sidebarOpen, setSidebarOpen] = useState(true) // Start open by default
+  const [sidebarOpen, setSidebarOpen] = useState(defaultOpen)
   const handleToggleSidebar = () => setSidebarOpen(o => !o)
-  const isSmall = useMediaQuery('(max-width:600px)') // More reasonable mobile breakpoint
-
-  useEffect(() => {
-    // Only auto-close on very small mobile screens
-    if (isSmall) {
-      setSidebarOpen(false)
-    } else {
-      // Keep sidebar open by default on larger screens
-      setSidebarOpen(true)
-    }
-  }, [isSmall])
 
   useEffect(() => {
     // Check if user already has an identity stored (don't auto-generate)
@@ -757,141 +747,64 @@ function App() {
           {/* Conditionally render breadcrumb navigation */}
           {useContextNav && <BreadcrumbNavigation />}
           
-          {/* Using experimental UI as default */}
-          {/* New WhatsApp-style UI */}
-            <Box sx={{ display: 'flex', height: '100vh', position: 'relative' }}>
-              {/* Responsive Sidebar */}
-              {isSmall ? (
-                <>
-                  {/* Mobile: Hamburger menu always visible when closed */}
-                  {!sidebarOpen && (
-                    <Box sx={{ position: 'absolute', top: 16, left: 16, zIndex: 2000 }}>
-                      <IconButton 
-                        size="medium" 
-                        onClick={handleToggleSidebar} 
-                        aria-label="Open sidebar"
-                        sx={{ 
-                          bgcolor: 'background.paper', 
-                          boxShadow: 2,
-                          '&:hover': { bgcolor: 'grey.100' }
-                        }}
-                      >
-                        <MenuIcon />
-                      </IconButton>
-                    </Box>
-                  )}
-                  {sidebarOpen && (
-                    <>
-                      <Box onClick={handleToggleSidebar} sx={{ position: 'absolute', inset: 0, bgcolor: 'rgba(0,0,0,0.5)', zIndex: 1199 }} />
-                      <Box sx={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: '85vw', maxWidth: 360, bgcolor: 'background.paper', borderRight: theme => `1px solid ${theme.palette.divider}`, zIndex: 1200, overflow: 'hidden' }}>
-                        <WhatsAppStyleNavigation
-                          organizations={mockOrganizations}
-                          personalGroups={mockPersonalGroups}
-                          personalUsers={mockPersonalUsers}
-                          currentUserId="user_owner_123"
-                          onNavigate={handleWhatsAppNavigate}
-                          onVideoCall={handleVideoCall}
-                          onAudioCall={handleAudioCall}
-                          onScreenShare={handleScreenShare}
-                          onOpenFiles={handleOpenFiles}
-                        />
-                        <Box sx={{ position: 'absolute', top: 16, right: 16 }}>
-                          <IconButton size="medium" onClick={handleToggleSidebar} sx={{ bgcolor: 'grey.100' }}>
-                            <ChevronLeft />
-                          </IconButton>
-                        </Box>
-                      </Box>
-                    </>
-                  )}
-                </>
-              ) : (
-                <>
-                  {/* Desktop: Persistent sidebar */}
-                  <Box
-                    sx={{
-                      width: sidebarOpen ? 320 : 60,
-                      transition: 'width 0.3s ease',
-                      borderRight: theme => `1px solid ${theme.palette.divider}`,
-                      overflow: 'hidden',
-                      position: 'relative',
-                      minWidth: 0,
-                    }}
-                  >
-                    {sidebarOpen ? (
-                      <WhatsAppStyleNavigation
-                        organizations={mockOrganizations}
-                        personalGroups={mockPersonalGroups}
-                        personalUsers={mockPersonalUsers}
-                        currentUserId="user_owner_123"
-                        onNavigate={handleWhatsAppNavigate}
-                        onVideoCall={handleVideoCall}
-                        onAudioCall={handleAudioCall}
-                        onScreenShare={handleScreenShare}
-                        onOpenFiles={handleOpenFiles}
-                      />
-                    ) : (
-                      <Box sx={{ width: 60, height: '100%', bgcolor: 'background.paper', display: 'flex', flexDirection: 'column', alignItems: 'center', py: 2 }}>
-                        <IconButton onClick={handleToggleSidebar} sx={{ mb: 2 }}>
-                          <ChevronRight />
-                        </IconButton>
-                      </Box>
-                    )}
-                    {sidebarOpen && (
-                      <Box sx={{ position: 'absolute', top: 16, right: 16 }}>
-                        <IconButton size="small" onClick={handleToggleSidebar}>
-                          <ChevronLeft />
-                        </IconButton>
-                      </Box>
-                    )}
-                  </Box>
-                </>
-              )}
-              <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                <AppBar position="sticky" elevation={1} sx={{ 
-                  backgroundColor: theme => theme.palette.background.paper,
-                  color: theme => theme.palette.text.primary,
-                  borderBottom: theme => `1px solid ${theme.palette.divider}`
-                }}>
-                  <HeaderComponent 
-                    onMenuClick={handleToggleSidebar}
-                    showMenuButton={false}
-                  />
-                </AppBar>
-                <Box sx={{ flex: 1, overflow: 'auto', bgcolor: 'grey.50' }}>
-                  <Suspense fallback={<Box sx={{ p: 3 }}><Typography>Loading…</Typography></Box>}>
-                  <Routes>
-                    <Route path="/" element={<PersonalHomeDashboard />} />
-                    <Route path="/group/:groupId" element={<GroupPage />} />
-                    <Route path="/user/:userId" element={<UserPage />} />
-                    <Route path="/channel/:channelId" element={<ChannelPage />} />
-                    <Route path="/project/:projectId" element={<ProjectPage />} />
-                    <Route path="/org/:orgId/channel/:channelId" element={<ChannelPage />} />
-                    <Route path="/org/:orgId/project/:projectId" element={<ProjectPage />} />
-                    <Route path="/org/:orgId/group/:groupId" element={<GroupPage />} />
-                    <Route path="/org/:orgId/user/:userId" element={<UserPage />} />
-                    {/* Commented out - missing test components
-                    <Route path="/test" element={<SimpleTest />} />
-                    <Route path="/test/page" element={<TestPage />} />
-                    <Route path="/test/collaboration" element={<CollaborativeEditingTest />} />
-                    <Route path="/test/simple" element={<SimpleCollaborationTest />} /> */}
-                    <Route path="/dev/console" element={<MessageConsole />} />
-                    <Route path="/dev/website" element={<WebsitePublishPanel />} />
-                    <Route path="/org/:orgId/*" element={<UnifiedDashboard userId="user_owner_123" userName="Owner" />} />
-                    <Route path="*" element={<Navigate to="/" replace />} />
-                  </Routes>
-                  </Suspense>
-                </Box>
-              </Box>
-              
-              {/* WebRTC Communication Hub removed to avoid duplicate FABs */}
-              {/* Quick Actions in experimental UI */}
-              <QuickActionsBar
-                context={{ type: navigationContext.mode as any, entity: navigationContext }}
-                onAction={handleQuickAction}
-                position="bottom-right"
-                notifications={0}
+          {/* Using ResponsiveLayout component for proper responsive behavior */}
+          <ResponsiveLayout
+            sidebarOpen={sidebarOpen}
+            onSidebarToggle={handleToggleSidebar}
+            header={
+              <HeaderComponent 
+                onMenuClick={handleToggleSidebar}
+                showMenuButton={true}
               />
+            }
+            sidebar={
+              <WhatsAppStyleNavigation
+                organizations={mockOrganizations}
+                personalGroups={mockPersonalGroups}
+                personalUsers={mockPersonalUsers}
+                currentUserId="user_owner_123"
+                onNavigate={handleWhatsAppNavigate}
+                onVideoCall={handleVideoCall}
+                onAudioCall={handleAudioCall}
+                onScreenShare={handleScreenShare}
+                onOpenFiles={handleOpenFiles}
+              />
+            }
+            maxWidth="xl"
+          >
+            <Box sx={{ height: '100%', bgcolor: 'grey.50' }}>
+              <Suspense fallback={<Box sx={{ p: 3 }}><Typography>Loading…</Typography></Box>}>
+                <Routes>
+                  <Route path="/" element={<PersonalHomeDashboard />} />
+                  <Route path="/group/:groupId" element={<GroupPage />} />
+                  <Route path="/user/:userId" element={<UserPage />} />
+                  <Route path="/channel/:channelId" element={<ChannelPage />} />
+                  <Route path="/project/:projectId" element={<ProjectPage />} />
+                  <Route path="/org/:orgId/channel/:channelId" element={<ChannelPage />} />
+                  <Route path="/org/:orgId/project/:projectId" element={<ProjectPage />} />
+                  <Route path="/org/:orgId/group/:groupId" element={<GroupPage />} />
+                  <Route path="/org/:orgId/user/:userId" element={<UserPage />} />
+                  {/* Commented out - missing test components
+                  <Route path="/test" element={<SimpleTest />} />
+                  <Route path="/test/page" element={<TestPage />} />
+                  <Route path="/test/collaboration" element={<CollaborativeEditingTest />} />
+                  <Route path="/test/simple" element={<SimpleCollaborationTest />} /> */}
+                  <Route path="/dev/console" element={<MessageConsole />} />
+                  <Route path="/dev/website" element={<WebsitePublishPanel />} />
+                  <Route path="/org/:orgId/*" element={<UnifiedDashboard userId="user_owner_123" userName="Owner" />} />
+                  <Route path="*" element={<Navigate to="/" replace />} />
+                </Routes>
+              </Suspense>
             </Box>
+            
+            {/* Quick Actions in experimental UI */}
+            <QuickActionsBar
+              context={{ type: navigationContext.mode as any, entity: navigationContext }}
+              onAction={handleQuickAction}
+              position="bottom-right"
+              notifications={0}
+            />
+          </ResponsiveLayout>
           </BrowserRouter>
   
   {/* Overview Modal */}

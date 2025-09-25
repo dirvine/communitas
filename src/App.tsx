@@ -12,6 +12,8 @@ import {
   FormControlLabel,
   Chip,
   Stack,
+  TextField,
+  InputAdornment,
 } from '@mui/material'
 import {
   Menu as MenuIcon,
@@ -20,6 +22,8 @@ import {
   ChevronRight,
   Lan as LanIcon,
   Home as HomeIcon,
+  Language as LanguageIcon,
+  Search as SearchIcon,
 } from '@mui/icons-material'
 import useMediaQuery from '@mui/material/useMediaQuery'
 import { SnackbarProvider } from 'notistack'
@@ -370,6 +374,79 @@ function App() {
     showMenuButton?: boolean;
   }) => {
     const navigate = useNavigate();
+    const [urlBarValue, setUrlBarValue] = React.useState('');
+    const [urlBarFocused, setUrlBarFocused] = React.useState(false);
+
+    // Four-word address validation
+    const validateFourWords = (input: string): boolean => {
+      const pattern = /^[a-z]+-[a-z]+-[a-z]+-[a-z]+$/;
+      return pattern.test(input.trim().toLowerCase());
+    };
+
+    // Handle URL bar navigation
+    const handleUrlNavigation = (fourWordAddress: string) => {
+      const cleanAddress = fourWordAddress.trim().toLowerCase();
+      if (validateFourWords(cleanAddress)) {
+        console.log('Navigating to four-word address:', cleanAddress);
+        
+        // Check if this is a known entity from our mock data
+        const matchingOrg = mockOrganizations.find(org => 
+          org.networkIdentity.fourWords === cleanAddress
+        );
+        
+        if (matchingOrg) {
+          // Navigate to organization view
+          const orgPath = `/org/${matchingOrg.id}`;
+          navigate(orgPath);
+          
+          // Update navigation context for organization
+          setNavigationContext({
+            mode: 'organization',
+            organizationId: matchingOrg.id,
+            organizationName: matchingOrg.name,
+            fourWords: cleanAddress,
+          });
+          
+          console.log(`✅ Navigated to organization: ${matchingOrg.name}`);
+        } else {
+          // For unknown addresses, navigate to a generic network view
+          // Update navigation context for network browsing
+          setNavigationContext({
+            mode: 'personal',
+            fourWords: cleanAddress,
+          });
+          
+          // Navigate to home with the four-word context
+          navigate('/');
+          
+          console.log(`✅ Set network context for: ${cleanAddress}`);
+        }
+        
+        setUrlBarValue(cleanAddress);
+      } else {
+        console.warn('Invalid four-word address format:', cleanAddress);
+        
+        // Show visual error feedback
+        setUrlBarValue(''); // Clear invalid input
+        
+        console.error(`❌ Invalid address format. Please use: word-word-word-word`);
+      }
+    };
+
+    // Handle Enter key press in URL bar
+    const handleUrlBarKeyPress = (event: React.KeyboardEvent) => {
+      if (event.key === 'Enter') {
+        handleUrlNavigation(urlBarValue);
+      }
+    };
+
+    // Update URL bar when navigation context changes
+    React.useEffect(() => {
+      if (navigationContext.fourWords && !urlBarFocused) {
+        setUrlBarValue(navigationContext.fourWords);
+      }
+    }, [navigationContext.fourWords, urlBarFocused]);
+
     return (
     <Toolbar sx={{ gap: 1 }}>
       {showMenuButton && (
@@ -389,7 +466,6 @@ function App() {
         variant="h6" 
         component="div" 
         sx={{ 
-          flexGrow: 1,
           background: (theme) => theme.gradients?.primary,
           WebkitBackgroundClip: 'text',
           WebkitTextFillColor: 'transparent',
@@ -400,10 +476,70 @@ function App() {
           overflow: 'hidden',
           textOverflow: 'ellipsis',
           minWidth: 0,
+          flexShrink: 0,
         }}
       >
         Communitas
       </Typography>
+      
+      {/* Four-Word Address URL Bar */}
+      <Box sx={{ 
+        display: { xs: 'none', sm: 'flex' }, 
+        flexGrow: 1, 
+        mx: 2, 
+        maxWidth: 400 
+      }}>
+        <TextField
+          value={urlBarValue}
+          onChange={(e) => setUrlBarValue(e.target.value)}
+          onKeyPress={handleUrlBarKeyPress}
+          onFocus={() => setUrlBarFocused(true)}
+          onBlur={() => setUrlBarFocused(false)}
+          placeholder="Enter four-word address (e.g., ocean-forest-moon-star)"
+          size="small"
+          fullWidth
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <LanguageIcon sx={{ color: 'text.secondary', fontSize: '1.1rem' }} />
+              </InputAdornment>
+            ),
+            endAdornment: urlBarValue && (
+              <InputAdornment position="end">
+                <IconButton 
+                  size="small" 
+                  onClick={() => handleUrlNavigation(urlBarValue)}
+                  sx={{ p: 0.5 }}
+                >
+                  <SearchIcon sx={{ fontSize: '1rem' }} />
+                </IconButton>
+              </InputAdornment>
+            ),
+            sx: {
+              backgroundColor: 'background.paper',
+              borderRadius: 3,
+              '& .MuiOutlinedInput-notchedOutline': {
+                borderColor: 'divider',
+                borderWidth: 1,
+              },
+              '&:hover .MuiOutlinedInput-notchedOutline': {
+                borderColor: 'primary.main',
+              },
+              '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                borderColor: 'primary.main',
+                borderWidth: 2,
+              }
+            }
+          }}
+          sx={{
+            '& .MuiInputBase-input': {
+              fontSize: '0.9rem',
+              fontFamily: 'monospace',
+              py: 1,
+            }
+          }}
+        />
+      </Box>
       <Box sx={{ 
         display: 'flex', 
         alignItems: 'center', 

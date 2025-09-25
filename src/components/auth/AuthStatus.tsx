@@ -14,6 +14,12 @@ import {
   Stack,
   CircularProgress,
   Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  List,
+  ListItem,
+  Alert,
   Tooltip,
 } from '@mui/material';
 import {
@@ -29,6 +35,7 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { LoginDialog } from './LoginDialog';
 import { ProfileManager } from './ProfileManager';
+import SettingsInterface from '../settings/SettingsInterface';
 
 interface AuthStatusProps {
   compact?: boolean;
@@ -44,6 +51,8 @@ export const AuthStatus: React.FC<AuthStatusProps> = ({
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
   const [loginInitialMode, setLoginInitialMode] = useState<'login' | 'create'>('login');
   const [profileDialogOpen, setProfileDialogOpen] = useState(false);
+  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
+  const [securityKeysDialogOpen, setSecurityKeysDialogOpen] = useState(false);
   const [networkStatus, setNetworkStatus] = useState<{ connected: boolean; peers: number } | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
 
@@ -90,6 +99,16 @@ export const AuthStatus: React.FC<AuthStatusProps> = ({
 
   const handleOpenProfile = () => {
     setProfileDialogOpen(true);
+    handleClose();
+  };
+
+  const handleOpenSettings = () => {
+    setSettingsDialogOpen(true);
+    handleClose();
+  };
+
+  const handleOpenSecurityKeys = () => {
+    setSecurityKeysDialogOpen(true);
     handleClose();
   };
 
@@ -296,7 +315,7 @@ export const AuthStatus: React.FC<AuthStatusProps> = ({
           </ListItemText>
         </MenuItem>
 
-        <MenuItem onClick={handleClose}>
+        <MenuItem onClick={handleOpenSettings}>
           <ListItemIcon>
             <SettingsIcon fontSize="small" />
           </ListItemIcon>
@@ -305,7 +324,7 @@ export const AuthStatus: React.FC<AuthStatusProps> = ({
           </ListItemText>
         </MenuItem>
 
-        <MenuItem onClick={handleClose}>
+        <MenuItem onClick={handleOpenSecurityKeys}>
           <ListItemIcon>
             <KeyIcon fontSize="small" />
           </ListItemIcon>
@@ -367,6 +386,90 @@ export const AuthStatus: React.FC<AuthStatusProps> = ({
         }}
       >
         <ProfileManager onClose={() => setProfileDialogOpen(false)} />
+      </Dialog>
+
+      {/* Settings Dialog */}
+      <Dialog
+        open={settingsDialogOpen}
+        onClose={() => setSettingsDialogOpen(false)}
+        maxWidth="lg"
+        fullWidth
+        PaperProps={{
+          sx: {
+            minHeight: '60vh',
+          },
+        }}
+      >
+        <SettingsInterface />
+      </Dialog>
+
+      {/* Security & Keys Dialog */}
+      <Dialog
+        open={securityKeysDialogOpen}
+        onClose={() => setSecurityKeysDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>Security & Keys Management</DialogTitle>
+        <DialogContent>
+          <Alert severity="info" sx={{ mb: 2 }}>
+            <Typography variant="body2">
+              Advanced security and key management features. Manage your cryptographic keys and security settings.
+            </Typography>
+          </Alert>
+          
+          <Box sx={{ mt: 2 }}>
+            <Typography variant="h6" gutterBottom>
+              Post-Quantum Cryptography Keys
+            </Typography>
+            <List>
+              <ListItem>
+                <ListItemIcon>
+                  <KeyIcon />
+                </ListItemIcon>
+                <ListItemText
+                  primary="ML-DSA Signing Key"
+                  secondary="Used for message and document signing"
+                />
+                <Button variant="outlined" size="small">
+                  View Details
+                </Button>
+              </ListItem>
+              <ListItem>
+                <ListItemIcon>
+                  <SecurityIcon />
+                </ListItemIcon>
+                <ListItemText
+                  primary="ML-KEM Encryption Key"
+                  secondary="Used for secure communications"
+                />
+                <Button variant="outlined" size="small">
+                  View Details
+                </Button>
+              </ListItem>
+            </List>
+            
+            <Typography variant="h6" gutterBottom sx={{ mt: 3 }}>
+              Key Management Actions
+            </Typography>
+            <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
+              <Button variant="outlined" startIcon={<KeyIcon />}>
+                Export Keys
+              </Button>
+              <Button variant="outlined" startIcon={<SecurityIcon />}>
+                Backup Keys
+              </Button>
+              <Button variant="outlined" color="warning">
+                Regenerate Keys
+              </Button>
+            </Stack>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setSecurityKeysDialogOpen(false)}>
+            Close
+          </Button>
+        </DialogActions>
       </Dialog>
     </>
   );

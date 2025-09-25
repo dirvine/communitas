@@ -27,7 +27,7 @@ export function generateFourWords(): string {
     ['eagle', 'wolf', 'bear', 'fox', 'owl', 'hawk', 'lion', 'tiger'],
     ['star', 'moon', 'sun', 'cloud', 'storm', 'wind', 'fire', 'ice']
   ];
-  return words.map(group => group[Math.floor(Math.random() * group.length)]).join('-');
+  return words.map(group => group[Math.floor(Math.random() * group.length)]).join(' ');
 }
 
 /**

@@ -255,25 +255,51 @@ export default function UnifiedNavigation({
           </Collapse>
         )}
 
-        <ListItemButton
-          selected={isActive('/files')}
-          onClick={() => handleNavigate('/files')}
-        >
+        <ListItemButton onClick={() => toggleSection('storage')}>
           <ListItemIcon>
             <FolderIcon />
           </ListItemIcon>
-          {!collapsed && <ListItemText primary="My Files" />}
+          {!collapsed && (
+            <>
+              <ListItemText primary="My Storage" />
+              {expandedSections.has('storage') ? <ExpandLess /> : <ExpandMore />}
+            </>
+          )}
         </ListItemButton>
-
-        <ListItemButton
-          selected={isActive('/website')}
-          onClick={() => handleNavigate('/website')}
-        >
-          <ListItemIcon>
-            <WebsiteIcon />
-          </ListItemIcon>
-          {!collapsed && <ListItemText primary="My Website" />}
-        </ListItemButton>
+        
+        {!collapsed && (
+          <Collapse in={expandedSections.has('storage')} timeout="auto" unmountOnExit>
+            <List component="div" disablePadding>
+              <ListItemButton
+                sx={{ pl: 4 }}
+                selected={isActive('/personal/website')}
+                onClick={() => handleNavigate('/personal/website')}
+              >
+                <ListItemIcon>
+                  <WebsiteIcon fontSize="small" />
+                </ListItemIcon>
+                <ListItemText 
+                  primary="Website Storage" 
+                  secondary="Plain markdown files"
+                />
+              </ListItemButton>
+              
+              <ListItemButton
+                sx={{ pl: 4 }}
+                selected={isActive('/personal/data')}
+                onClick={() => handleNavigate('/personal/data')}
+              >
+                <ListItemIcon>
+                  <FolderOutlined fontSize="small" />
+                </ListItemIcon>
+                <ListItemText 
+                  primary="Data Storage" 
+                  secondary="Encrypted files"
+                />
+              </ListItemButton>
+            </List>
+          </Collapse>
+        )}
       </List>
 
       <Divider />

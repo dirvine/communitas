@@ -34,6 +34,9 @@ import {
   FormControl,
   InputLabel,
   Fab,
+  Tabs,
+  Tab,
+  Badge,
 } from '@mui/material';
 import {
   Folder as FolderIcon,
@@ -68,6 +71,10 @@ import {
   Description as DocumentIcon,
   Archive as ArchiveIcon,
   CloudOff as OfflineIcon,
+  Language as WebsiteIcon,
+  Storage as DataIcon,
+  Public as PublicIcon,
+  Group as GroupIcon,
 } from '@mui/icons-material';
 import { invoke } from '@tauri-apps/api/core';
 import { format } from 'date-fns';
@@ -108,6 +115,8 @@ interface EncryptionStatus {
   health_status: 'healthy' | 'degraded' | 'critical';
 }
 
+type StorageArea = 'website' | 'data';
+
 interface StoragePanelProps {
   entityType: 'individual' | 'group' | 'channel' | 'project';
   entityId: string;
@@ -115,6 +124,7 @@ interface StoragePanelProps {
   fourWords: string;
   permissions: string[];
   encryptionStatus: EncryptionStatus | null;
+  initialArea?: StorageArea;
 }
 
 const StoragePanel: React.FC<StoragePanelProps> = ({
@@ -164,7 +174,12 @@ const StoragePanel: React.FC<StoragePanelProps> = ({
     };
   }
 
-  const [items, setItems] = useState<StorageItem[]>([]);
+  // Storage area state
+  const [currentArea, setCurrentArea] = useState<StorageArea>(initialArea || 'website');
+  
+  // Separate state for each storage area
+  const [websiteItems, setWebsiteItems] = useState<StorageItem[]>([]);
+  const [dataItems, setDataItems] = useState<StorageItem[]>([]);
   const [currentPath, setCurrentPath] = useState('/');
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -174,7 +189,8 @@ const StoragePanel: React.FC<StoragePanelProps> = ({
   const [sortBy, setSortBy] = useState<'name' | 'size' | 'modified'>('name');
   const [filterType, setFilterType] = useState<'all' | 'files' | 'folders'>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [stats, setStats] = useState<StorageStats | null>(null);
+  const [websiteStats, setWebsiteStats] = useState<StorageStats | null>(null);
+  const [dataStats, setDataStats] = useState<StorageStats | null>(null);
   const [isOffline, setIsOffline] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; item: StorageItem } | null>(null);
   const [renameDialog, setRenameDialog] = useState<{ open: boolean; item: StorageItem | null }>({ open: false, item: null });
@@ -182,6 +198,10 @@ const StoragePanel: React.FC<StoragePanelProps> = ({
   const [newFolderName, setNewFolderName] = useState('');
   const [newItemName, setNewItemName] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Get current items based on active area
+  const items = currentArea === 'website' ? websiteItems : dataItems;
+  const stats = currentArea === 'website' ? websiteStats : dataStats;
 
   const canWrite = permissions.includes('write') || permissions.includes('admin');
   const canDelete = permissions.includes('admin');
@@ -200,14 +220,23 @@ const StoragePanel: React.FC<StoragePanelProps> = ({
     return unsubscribe;
   }, []);
 
-  // Load storage items - local-first approach
-  const loadItems = useCallback(async () => {
+  // Get storage root path based on current area
+  const getStorageRoot = (area: StorageArea) => {
+    return area === 'website' ? '/web' : '/personal';
+  };
+
+  // Load storage items for specific area
+  const loadItems = useCallback(async (area?: StorageArea) => {
+    const targetArea = area || currentArea;
+    const rootPath = getStorageRoot(targetArea);
+    const fullPath = rootPath + currentPath;
+    
     try {
       setLoading(true);
       setError(null);
 
-      // Use local-first storage
-      const files = await localStorage.list(entityId, currentPath);
+      // Use local-first storage with area-specific path
+      const files = await localStorage.list(entityId, fullPath);
 
       // Convert to StorageItem format
       const storageItems: StorageItem[] = files.map(file => ({
@@ -217,20 +246,30 @@ const StoragePanel: React.FC<StoragePanelProps> = ({
         size: file.size,
         modified: file.modifiedAt,
         mime_type: file.contentType,
-        encrypted: encryptionStatus?.enabled || false,
-        shared: false, // Will be updated when we get sharing info from network
+        encrypted: targetArea === 'data', // Data area is always encrypted
+        shared: targetArea === 'data' && entityType !== 'individual', // Shared if data storage and not individual
         permissions: permissions,
       }));
 
-      setItems(storageItems);
+      // Update the appropriate state
+      if (targetArea === 'website') {
+        setWebsiteItems(storageItems);
+      } else {
+        setDataItems(storageItems);
+      }
 
       // Try to load stats if online (non-blocking)
       if (localStorage.isOnline) {
         try {
           const storageStats = await invoke('core_storage_stats', {
             entityId,
+            path: rootPath,
           });
-          setStats(storageStats as StorageStats);
+          if (targetArea === 'website') {
+            setWebsiteStats(storageStats as StorageStats);
+          } else {
+            setDataStats(storageStats as StorageStats);
+          }
         } catch (err) {
           // Stats are optional, don't fail the whole operation
           console.warn('Could not load storage stats:', err);
@@ -240,36 +279,60 @@ const StoragePanel: React.FC<StoragePanelProps> = ({
       console.error('Failed to load storage items:', err);
       setError('Failed to load storage items. Working in offline mode.');
       // Still show empty list rather than crashing
-      setItems([]);
+      if (targetArea === 'website') {
+        setWebsiteItems([]);
+      } else {
+        setDataItems([]);
+      }
     } finally {
       setLoading(false);
     }
-  }, [entityId, currentPath, localStorage, encryptionStatus, permissions]);
+  }, [entityId, currentPath, localStorage, encryptionStatus, permissions, currentArea, entityType]);
 
-  // Upload file with threshold encryption
+  // Handle area change
+  const handleAreaChange = (event: React.SyntheticEvent, newArea: StorageArea) => {
+    setCurrentArea(newArea);
+    setCurrentPath('/'); // Reset path when switching areas
+    setSelectedItems(new Set()); // Clear selection
+    loadItems(newArea); // Load items for new area
+  };
+
+  // Upload file with appropriate encryption based on storage area
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (!files || files.length === 0 || !canWrite) return;
 
     setUploading(true);
     try {
+      const rootPath = getStorageRoot(currentArea);
+      
       for (const file of files) {
         const arrayBuffer = await file.arrayBuffer();
         const content = new Uint8Array(arrayBuffer);
+        const fullPath = `${rootPath}${currentPath}/${file.name}`;
 
-        // Get recipients for encryption (entity members)
-        const recipients = await invoke('core_entity_get_members', {
-          entityId,
-        }) as string[];
+        if (currentArea === 'website') {
+          // Website storage: use regular file operations (no encryption)
+          await invoke('core_entity_write_file', {
+            entityId,
+            entityType,
+            path: fullPath,
+            content: Array.from(content),
+          });
+        } else {
+          // Data storage: use threshold encryption
+          const recipients = await invoke('core_entity_get_members', {
+            entityId,
+          }) as string[];
 
-        // Upload with threshold encryption
-        await invoke('core_entity_write_file_sealed', {
-          entityId,
-          entityType,
-          path: `${currentPath}/${file.name}`,
-          content: Array.from(content),
-          recipients,
-        });
+          await invoke('core_entity_write_file_sealed', {
+            entityId,
+            entityType,
+            path: fullPath,
+            content: Array.from(content),
+            recipients,
+          });
+        }
       }
 
       await loadItems();
@@ -284,13 +347,24 @@ const StoragePanel: React.FC<StoragePanelProps> = ({
     }
   };
 
-  // Download file with threshold decryption
+  // Download file with appropriate decryption based on storage area
   const handleDownload = async (item: StorageItem) => {
     try {
-      const content = await invoke('core_entity_read_file_sealed', {
-        entityId,
-        path: item.path,
-      }) as number[];
+      let content: number[];
+      
+      if (currentArea === 'website') {
+        // Website storage: use regular file operations (no decryption)
+        content = await invoke('core_entity_read_file', {
+          entityId,
+          path: item.path,
+        }) as number[];
+      } else {
+        // Data storage: use threshold decryption
+        content = await invoke('core_entity_read_file_sealed', {
+          entityId,
+          path: item.path,
+        }) as number[];
+      }
 
       // Convert to blob and download
       const blob = new Blob([new Uint8Array(content)], { type: item.mime_type || 'application/octet-stream' });
@@ -311,9 +385,12 @@ const StoragePanel: React.FC<StoragePanelProps> = ({
     if (!newFolderName.trim() || !canWrite) return;
 
     try {
+      const rootPath = getStorageRoot(currentArea);
+      const fullPath = `${rootPath}${currentPath}/${newFolderName.trim()}`;
+      
       await invoke('core_storage_create_folder', {
         entityId,
-        path: `${currentPath}/${newFolderName.trim()}`,
+        path: fullPath,
       });
 
       setNewFolderDialog(false);
@@ -333,7 +410,7 @@ const StoragePanel: React.FC<StoragePanelProps> = ({
       for (const item of itemsToDelete) {
         await invoke('core_storage_delete', {
           entityId,
-          path: item.path,
+          path: item.path, // Path should already include the correct root from loadItems
         });
       }
 
@@ -350,7 +427,8 @@ const StoragePanel: React.FC<StoragePanelProps> = ({
     if (!renameDialog.item || !newItemName.trim() || !canWrite) return;
 
     try {
-      const newPath = currentPath + '/' + newItemName.trim();
+      const rootPath = getStorageRoot(currentArea);
+      const newPath = `${rootPath}${currentPath}/${newItemName.trim()}`;
       await invoke('core_storage_rename', {
         entityId,
         oldPath: renameDialog.item.path,
@@ -464,8 +542,15 @@ const StoragePanel: React.FC<StoragePanelProps> = ({
     });
 
   useEffect(() => {
-    loadItems();
-  }, [loadItems]);
+    // Load items for both areas on mount
+    loadItems('website');
+    loadItems('data');
+  }, []);
+
+  // Reload current area when switching
+  useEffect(() => {
+    loadItems(currentArea);
+  }, [currentArea, loadItems]);
 
   // Refresh on entity:refresh event
   useEffect(() => {
@@ -492,8 +577,66 @@ const StoragePanel: React.FC<StoragePanelProps> = ({
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* Storage Header */}
       <Paper elevation={0} sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
-        {/* Encryption Status */}
-        {encryptionStatus && (
+        {/* Storage Area Tabs */}
+        <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
+          <Tabs value={currentArea} onChange={handleAreaChange} aria-label="storage areas">
+            <Tab 
+              icon={<WebsiteIcon />}
+              label={
+                <Stack direction="row" alignItems="center" spacing={1}>
+                  <Typography variant="body2">Website Storage</Typography>
+                  <Badge 
+                    badgeContent={websiteStats?.file_count || 0} 
+                    color="primary"
+                    variant="standard"
+                  />
+                </Stack>
+              } 
+              value="website" 
+              iconPosition="start"
+            />
+            <Tab 
+              icon={currentArea === 'data' ? <LockIcon /> : <DataIcon />}
+              label={
+                <Stack direction="row" alignItems="center" spacing={1}>
+                  <Typography variant="body2">Data Storage</Typography>
+                  <Badge 
+                    badgeContent={dataStats?.file_count || 0} 
+                    color="secondary"
+                    variant="standard"
+                  />
+                  {currentArea === 'data' && (
+                    <Chip 
+                      label="Encrypted" 
+                      size="small" 
+                      color="secondary" 
+                      variant="outlined"
+                    />
+                  )}
+                </Stack>
+              }
+              value="data" 
+              iconPosition="start"
+            />
+          </Tabs>
+        </Box>
+
+        {/* Storage Area Description */}
+        <Alert 
+          severity={currentArea === 'website' ? 'info' : 'warning'}
+          icon={currentArea === 'website' ? <PublicIcon /> : <LockIcon />}
+          sx={{ mb: 2 }}
+        >
+          <Typography variant="body2">
+            {currentArea === 'website' 
+              ? `Website Storage: Plain markdown files for public website content. Files stored here are not encrypted and can be published as a decentralized website.`
+              : `Data Storage: Threshold encrypted files shared with ${entityType} members. All files are automatically encrypted using ${encryptionStatus?.threshold.k || 2}-of-${(encryptionStatus?.threshold.k || 2) + (encryptionStatus?.threshold.m || 1)} threshold encryption.`
+            }
+          </Typography>
+        </Alert>
+
+        {/* Encryption Status for Data Storage */}
+        {currentArea === 'data' && encryptionStatus && (
           <Alert
             severity={getHealthColor(encryptionStatus.health_status) as any}
             icon={

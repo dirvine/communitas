@@ -52,6 +52,22 @@ export function generateFourWordGradient(fourWords: string): string {
 }
 
 /**
+ * Convert four-word address from URL format (dashes) to display format (spaces)
+ */
+export function fourWordsForDisplay(fourWords: string): string {
+  if (!fourWords) return fourWords
+  return fourWords.replace(/-/g, ' ')
+}
+
+/**
+ * Convert four-word address from display format (spaces) to URL format (dashes)
+ */
+export function fourWordsForUrl(fourWords: string): string {
+  if (!fourWords) return fourWords
+  return fourWords.replace(/\s+/g, '-')
+}
+
+/**
  * Generate a color scheme from four-word address
  */
 export function generateFourWordColors(fourWords: string) {

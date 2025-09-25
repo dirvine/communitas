@@ -129,13 +129,11 @@ export const MarkdownBrowser: React.FC<MarkdownBrowserProps> = ({
 
   // Parse URL to extract identity and path
   const parseUrl = useCallback((url: string) => {
-    // Handle both dash-separated (for URL compatibility) and space-separated formats
-    const match = url.match(/^([a-z]+[-\s][a-z]+[-\s][a-z]+[-\s][a-z]+)(?:\/(.+))?$/)
+    // URLs must maintain dash format for compatibility, bookmarks, and sharing
+    const match = url.match(/^([a-z]+-[a-z]+-[a-z]+-[a-z]+)(?:\/(.+))?$/)
     if (match) {
-      // Convert URL-friendly dashes to display-friendly spaces
-      const identity = match[1].replace(/-/g, ' ')
       return {
-        identity: identity,
+        identity: match[1], // Keep dashed format for URLs
         path: match[2] || 'home.md'
       }
     }

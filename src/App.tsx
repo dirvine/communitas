@@ -24,6 +24,8 @@ import {
   Home as HomeIcon,
   Language as LanguageIcon,
   Search as SearchIcon,
+  Person as PersonIcon,
+  Router as RouterIcon,
 } from '@mui/icons-material'
 import useMediaQuery from '@mui/material/useMediaQuery'
 import { SnackbarProvider } from 'notistack'
@@ -37,6 +39,9 @@ import { ThemeProvider, ThemeSwitcher } from './components/theme'
 
 // Authentication System
 import { AuthProvider, AuthStatus, useAuth } from './components/auth'
+
+// Network Connection Service
+import { NetworkConnectionService } from './services/network/NetworkConnectionService'
 
 // Encryption System
 import { EncryptionProvider, EncryptionStatus } from './components/encryption'
@@ -374,9 +379,11 @@ function App() {
     showMenuButton?: boolean;
   }) => {
     const navigate = useNavigate();
+    const { authState } = useAuth();
     const [urlBarValue, setUrlBarValue] = React.useState('');
     const [urlBarFocused, setUrlBarFocused] = React.useState(false);
     const [urlBarError, setUrlBarError] = React.useState('');
+    const [networkState, setNetworkState] = React.useState<any>(null);
 
     // Four-word address validation
     const validateFourWords = (input: string): boolean => {
@@ -449,6 +456,19 @@ function App() {
       }
     }, [navigationContext.fourWords, urlBarFocused]);
 
+    // Subscribe to network state for connection info
+    React.useEffect(() => {
+      const networkService = NetworkConnectionService.getInstance();
+      const updateNetworkState = (state: any) => {
+        setNetworkState(state);
+      };
+      
+      // Subscribe to updates and get unsubscribe function
+      const unsubscribe = networkService.subscribe(updateNetworkState);
+      
+      return unsubscribe;
+    }, []);
+
     return (
     <Toolbar sx={{ gap: 1 }}>
       {showMenuButton && (
@@ -483,6 +503,78 @@ function App() {
       >
         Communitas
       </Typography>
+
+      {/* Identity Display - Your Identity and Connection Location */}
+      <Box sx={{ 
+        display: 'flex', 
+        alignItems: 'center', 
+        gap: { xs: 0.5, md: 1 }, 
+        mx: { xs: 0.5, md: 1 },
+        flexShrink: 0
+      }}>
+        {/* User's Own Identity */}
+        <Tooltip title="Your identity - share this for others to find you" arrow>
+          <Chip
+            icon={<PersonIcon sx={{ fontSize: { xs: '0.8rem', md: '1rem' } }} />}
+            label={authState.user?.fourWordAddress || 'Not connected'}
+            variant="outlined"
+            size="small"
+            sx={{
+              fontFamily: 'monospace',
+              fontSize: { xs: '0.65rem', md: '0.75rem' },
+              backgroundColor: 'background.paper',
+              borderColor: 'primary.main',
+              color: 'primary.main',
+              '& .MuiChip-icon': {
+                color: 'primary.main'
+              },
+              cursor: 'pointer',
+              maxWidth: { xs: '120px', sm: '180px', md: 'none' },
+              '& .MuiChip-label': {
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }
+            }}
+            onClick={() => {
+              if (authState.user?.fourWordAddress) {
+                navigator.clipboard.writeText(authState.user.fourWordAddress);
+                console.log('📋 Copied your identity to clipboard:', authState.user.fourWordAddress);
+              }
+            }}
+          />
+        </Tooltip>
+
+        {/* Current Connection Location */}
+        <Tooltip title="Your connection location - share this for others to bootstrap from you" arrow>
+          <Chip
+            icon={<RouterIcon sx={{ fontSize: { xs: '0.8rem', md: '1rem' } }} />}
+            label={networkState?.endpointFourWords || 'local-mode'}
+            variant="outlined"
+            size="small"
+            sx={{
+              fontFamily: 'monospace',
+              fontSize: { xs: '0.65rem', md: '0.75rem' },
+              backgroundColor: 'background.paper',
+              borderColor: 'secondary.main',
+              color: 'secondary.main',
+              '& .MuiChip-icon': {
+                color: 'secondary.main'
+              },
+              cursor: 'pointer',
+              maxWidth: { xs: '120px', sm: '180px', md: 'none' },
+              '& .MuiChip-label': {
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }
+            }}
+            onClick={() => {
+              const location = networkState?.endpointFourWords || 'local-mode';
+              navigator.clipboard.writeText(location);
+              console.log('📋 Copied connection location to clipboard:', location);
+            }}
+          />
+        </Tooltip>
+      </Box>
       
       {/* Four-Word Address URL Bar */}
       <Box sx={{ 

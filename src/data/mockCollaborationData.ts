@@ -17,7 +17,7 @@ const generateFourWords = () => {
     ['eagle', 'wolf', 'bear', 'fox', 'owl', 'hawk', 'lion', 'tiger'],
     ['star', 'moon', 'sun', 'cloud', 'storm', 'wind', 'fire', 'ice']
   ];
-  return words.map(group => group[Math.floor(Math.random() * group.length)]).join('-');
+  return words.map(group => group[Math.floor(Math.random() * group.length)]).join(' ');
 };
 
 // Mock Organizations
@@ -28,7 +28,7 @@ export const mockOrganizations: Organization[] = [
     name: 'Acme Corporation',
     description: 'Global technology solutions',
     networkIdentity: {
-      fourWords: 'ocean-blue-eagle-star',
+      fourWords: 'ocean blue eagle star',
       publicKey: 'pk_acme_123',
       dhtAddress: 'dht://acme'
     },
@@ -49,7 +49,7 @@ export const mockOrganizations: Organization[] = [
         isPrivate: false,
         members: ['user-1', 'user-2', 'user-3'],
         networkIdentity: {
-          fourWords: 'valley-green-wolf-moon',
+          fourWords: 'valley green wolf moon',
           publicKey: 'pk_channel_1',
           dhtAddress: 'dht://channel-1'
         },
@@ -71,7 +71,7 @@ export const mockOrganizations: Organization[] = [
         isPrivate: false,
         members: ['user-1', 'user-2'],
         networkIdentity: {
-          fourWords: 'mountain-silver-fox-cloud',
+          fourWords: 'mountain silver fox cloud',
           publicKey: 'pk_channel_2',
           dhtAddress: 'dht://channel-2'
         },
@@ -93,7 +93,7 @@ export const mockOrganizations: Organization[] = [
         isPrivate: false,
         members: ['user-3', 'user-4'],
         networkIdentity: {
-          fourWords: 'desert-golden-hawk-storm',
+          fourWords: 'desert golden hawk storm',
           publicKey: 'pk_channel_3',
           dhtAddress: 'dht://channel-3'
         },
@@ -118,7 +118,7 @@ export const mockOrganizations: Organization[] = [
         admins: ['user-1'],
         isPersonal: false,
         networkIdentity: {
-          fourWords: 'river-crystal-lion-wind',
+          fourWords: 'river crystal lion wind',
           publicKey: 'pk_group_org_1',
           dhtAddress: 'dht://group-org-1'
         },
@@ -141,7 +141,7 @@ export const mockOrganizations: Organization[] = [
         admins: ['user-3'],
         isPersonal: false,
         networkIdentity: {
-          fourWords: 'island-shadow-tiger-fire',
+          fourWords: 'island shadow tiger fire',
           publicKey: 'pk_group_org_2',
           dhtAddress: 'dht://group-org-2'
         },
@@ -167,7 +167,7 @@ export const mockOrganizations: Organization[] = [
         permissions: ['all'],
         joinedAt: new Date('2024-01-01'),
         networkIdentity: {
-          fourWords: 'prairie-bright-owl-ice',
+          fourWords: 'prairie bright owl ice',
           publicKey: 'pk_alice',
           dhtAddress: 'dht://alice'
         },
@@ -191,7 +191,7 @@ export const mockOrganizations: Organization[] = [
         permissions: ['manage_users', 'manage_content'],
         joinedAt: new Date('2024-01-02'),
         networkIdentity: {
-          fourWords: 'ocean-misty-bear-sun',
+          fourWords: 'ocean misty bear sun',
           publicKey: 'pk_bob',
           dhtAddress: 'dht://bob'
         },
@@ -215,7 +215,7 @@ export const mockOrganizations: Organization[] = [
         permissions: ['read', 'write'],
         joinedAt: new Date('2024-01-03'),
         networkIdentity: {
-          fourWords: 'forest-blue-eagle-cloud',
+          fourWords: 'forest blue eagle cloud',
           publicKey: 'pk_carol',
           dhtAddress: 'dht://carol'
         },
@@ -251,7 +251,7 @@ export const mockOrganizations: Organization[] = [
           }
         ],
         networkIdentity: {
-          fourWords: 'mountain-green-wolf-star',
+          fourWords: 'mountain green wolf star',
           publicKey: 'pk_project_1',
           dhtAddress: 'dht://project-1'
         },
@@ -275,7 +275,7 @@ export const mockOrganizations: Organization[] = [
         status: 'planning',
         milestones: [],
         networkIdentity: {
-          fourWords: 'valley-silver-fox-moon',
+          fourWords: 'valley silver fox moon',
           publicKey: 'pk_project_2',
           dhtAddress: 'dht://project-2'
         },
@@ -306,7 +306,7 @@ export const mockOrganizations: Organization[] = [
     name: 'Tech Startup Inc',
     description: 'Innovation in AI and blockchain',
     networkIdentity: {
-      fourWords: 'desert-crystal-hawk-wind',
+      fourWords: 'desert crystal hawk wind',
       publicKey: 'pk_techstartup',
       dhtAddress: 'dht://techstartup'
     },
@@ -342,7 +342,7 @@ export const mockPersonalGroups: Group[] = [
     admins: ['user-1'],
     isPersonal: true,
     networkIdentity: {
-      fourWords: 'island-bright-lion-storm',
+      fourWords: 'island bright lion storm',
       publicKey: 'pk_family',
       dhtAddress: 'dht://family'
     },
@@ -364,7 +364,7 @@ export const mockPersonalGroups: Group[] = [
     admins: ['user-1'],
     isPersonal: true,
     networkIdentity: {
-      fourWords: 'prairie-shadow-tiger-fire',
+      fourWords: 'prairie shadow tiger fire',
       publicKey: 'pk_friends',
       dhtAddress: 'dht://friends'
     },
@@ -386,7 +386,7 @@ export const mockPersonalGroups: Group[] = [
     admins: ['user-1', 'user-10'],
     isPersonal: true,
     networkIdentity: {
-      fourWords: 'river-misty-owl-ice',
+      fourWords: 'river misty owl ice',
       publicKey: 'pk_bookclub',
       dhtAddress: 'dht://bookclub'
     },
@@ -412,7 +412,7 @@ export const mockPersonalUsers: PersonalUser[] = [
     relationship: 'friend',
     lastContact: new Date('2024-01-19'),
     networkIdentity: {
-      fourWords: 'ocean-golden-bear-sun',
+      fourWords: 'ocean golden bear sun',
       publicKey: 'pk_david',
       dhtAddress: 'dht://david'
     },
@@ -434,7 +434,7 @@ export const mockPersonalUsers: PersonalUser[] = [
     relationship: 'colleague',
     lastContact: new Date('2024-01-18'),
     networkIdentity: {
-      fourWords: 'forest-silver-eagle-cloud',
+      fourWords: 'forest silver eagle cloud',
       publicKey: 'pk_emma',
       dhtAddress: 'dht://emma'
     },
@@ -456,7 +456,7 @@ export const mockPersonalUsers: PersonalUser[] = [
     relationship: 'friend',
     lastContact: new Date('2024-01-17'),
     networkIdentity: {
-      fourWords: 'mountain-crystal-wolf-moon',
+      fourWords: 'mountain crystal wolf moon',
       publicKey: 'pk_frank',
       dhtAddress: 'dht://frank'
     },
@@ -478,7 +478,7 @@ export const mockPersonalUsers: PersonalUser[] = [
     relationship: 'contact',
     lastContact: new Date('2024-01-15'),
     networkIdentity: {
-      fourWords: 'valley-green-fox-star',
+      fourWords: 'valley green fox star',
       publicKey: 'pk_grace',
       dhtAddress: 'dht://grace'
     },
@@ -499,7 +499,7 @@ export const mockPersonalUsers: PersonalUser[] = [
     userId: 'user-9',
     relationship: 'colleague',
     networkIdentity: {
-      fourWords: 'desert-blue-hawk-wind',
+      fourWords: 'desert blue hawk wind',
       publicKey: 'pk_henry',
       dhtAddress: 'dht://henry'
     },
@@ -524,7 +524,7 @@ export const mockSharedFiles: SharedFile[] = [
     size: 2048,
     mimeType: 'text/markdown',
     networkIdentity: {
-      fourWords: 'river-bright-lion-storm',
+      fourWords: 'river bright lion storm',
       publicKey: 'pk_file_1',
       dhtAddress: 'dht://file-1'
     },
@@ -547,12 +547,12 @@ export const mockSharedFiles: SharedFile[] = [
     size: 5120,
     mimeType: 'text/html',
     networkIdentity: {
-      fourWords: 'island-shadow-tiger-fire',
+      fourWords: 'island shadow tiger fire',
       publicKey: 'pk_file_2',
       dhtAddress: 'dht://file-2'
     },
     forwardIdentity: {
-      fourWords: 'prairie-misty-owl-ice',
+      fourWords: 'prairie misty owl ice',
       publicKey: 'pk_file_2_forward',
       dhtAddress: 'dht://file-2-forward'
     },
@@ -575,7 +575,7 @@ export const mockSharedFiles: SharedFile[] = [
     size: 1048576,
     mimeType: 'application/pdf',
     networkIdentity: {
-      fourWords: 'ocean-golden-bear-sun',
+      fourWords: 'ocean golden bear sun',
       publicKey: 'pk_file_3',
       dhtAddress: 'dht://file-3'
     },
@@ -597,11 +597,11 @@ export const mockSharedFiles: SharedFile[] = [
 export const mockPublishedWebsite: PublishedWebsite = {
   id: 'website-1',
   name: 'Acme Corp Public Site',
-  domain: 'ocean-blue-eagle-star',
+  domain: 'ocean blue eagle star',
   files: mockSharedFiles.filter(f => f.mimeType.includes('html') || f.mimeType.includes('markdown')),
   indexFile: 'index.html',
   networkIdentity: {
-    fourWords: 'ocean-blue-eagle-star',
+    fourWords: 'ocean blue eagle star',
     publicKey: 'pk_website_1',
     dhtAddress: 'dht://website-1'
   },

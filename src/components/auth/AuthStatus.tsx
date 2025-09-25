@@ -64,11 +64,14 @@ export const AuthStatus: React.FC<AuthStatusProps> = ({
   const open = Boolean(anchorEl);
 
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
+    console.log('🔵 AuthStatus avatar clicked!', authState.isAuthenticated);
     if (authState.isAuthenticated) {
       // Navigate directly to personal storage areas
+      console.log('🔵 Calling switchToPersonal()');
       switchToPersonal();
       // Small delay to ensure context switch completes, then select storage
       setTimeout(() => {
+        console.log('🔵 Calling selectEntity overview');
         selectEntity('overview');
       }, 100);
     } else {

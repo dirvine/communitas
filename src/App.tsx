@@ -592,7 +592,7 @@ function App() {
           onKeyPress={handleUrlBarKeyPress}
           onFocus={() => setUrlBarFocused(true)}
           onBlur={() => setUrlBarFocused(false)}
-          placeholder="Enter four-word address (e.g., ocean-blue-eagle-star)"
+          placeholder="Enter four-word address (e.g., ocean blue eagle star)"
           size="small"
           fullWidth
           error={!!urlBarError}

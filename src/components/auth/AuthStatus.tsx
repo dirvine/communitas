@@ -33,6 +33,7 @@ import {
   AccountCircle as AccountCircleIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNavigation } from '../../contexts/NavigationContext';
 import { LoginDialog } from './LoginDialog';
 import { ProfileManager } from './ProfileManager';
 import SettingsInterface from '../settings/SettingsInterface';
@@ -47,6 +48,7 @@ export const AuthStatus: React.FC<AuthStatusProps> = ({
   showLabel = true,
 }) => {
   const { authState, logout, getNetworkStatus } = useAuth();
+  const { switchToPersonal, selectEntity } = useNavigation();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
   const [loginInitialMode, setLoginInitialMode] = useState<'login' | 'create'>('login');
@@ -63,12 +65,24 @@ export const AuthStatus: React.FC<AuthStatusProps> = ({
 
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     if (authState.isAuthenticated) {
-      setAnchorEl(event.currentTarget);
-      // Update network status when menu opens
-      updateNetworkStatus();
+      // Navigate directly to personal storage areas
+      switchToPersonal();
+      // Small delay to ensure context switch completes, then select storage
+      setTimeout(() => {
+        selectEntity('overview');
+      }, 100);
     } else {
       setLoginInitialMode('login');
       setLoginDialogOpen(true);
+    }
+  };
+
+  const handleMenuClick = (event: React.MouseEvent<HTMLElement>) => {
+    event.stopPropagation();
+    if (authState.isAuthenticated) {
+      setAnchorEl(event.currentTarget);
+      // Update network status when menu opens
+      updateNetworkStatus();
     }
   };
 
@@ -170,37 +184,54 @@ export const AuthStatus: React.FC<AuthStatusProps> = ({
     <>
       <Stack direction="row" spacing={1} alignItems="center">
         <Tooltip
-          title={`Signed in as ${user.name} (${user.fourWordAddress})`}
+          title={`Click to access your storage disks • Settings: ${user.fourWordAddress}`}
           arrow
           placement="bottom"
         >
-          <IconButton
-            onClick={handleClick}
-            size={compact ? 'small' : 'medium'}
-            sx={{
-              border: '1px solid',
-              borderColor: 'divider',
-              '&:hover': {
-                backgroundColor: 'action.hover',
-              },
-            }}
-          >
-            <Avatar
+          <Box sx={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
+            <IconButton
+              onClick={handleClick}
+              size={compact ? 'small' : 'medium'}
               sx={{
-                width: compact ? 28 : 36,
-                height: compact ? 28 : 36,
-                bgcolor: 'primary.main',
-                fontSize: compact ? '0.875rem' : '1rem',
-                fontWeight: 600,
+                border: '1px solid',
+                borderColor: 'divider',
+                '&:hover': {
+                  backgroundColor: 'action.hover',
+                  borderColor: 'primary.main',
+                },
               }}
             >
-              {user.name.charAt(0).toUpperCase()}
-            </Avatar>
-          </IconButton>
+              <Avatar
+                sx={{
+                  width: compact ? 28 : 36,
+                  height: compact ? 28 : 36,
+                  bgcolor: 'primary.main',
+                  fontSize: compact ? '0.875rem' : '1rem',
+                  fontWeight: 600,
+                }}
+              >
+                {user.name.charAt(0).toUpperCase()}
+              </Avatar>
+            </IconButton>
+            {!compact && (
+              <IconButton
+                size="small"
+                onClick={handleMenuClick}
+                sx={{ 
+                  ml: 0.5,
+                  '&:hover': {
+                    backgroundColor: 'action.hover',
+                  },
+                }}
+              >
+                <SettingsIcon fontSize="small" />
+              </IconButton>
+            )}
+          </Box>
         </Tooltip>
 
         {showLabel && !compact && (
-          <Box sx={{ minWidth: 0 }}>
+          <Box sx={{ minWidth: 0, cursor: 'pointer' }} onClick={handleClick}>
             <Typography
               variant="body2"
               fontWeight={600}
@@ -209,6 +240,9 @@ export const AuthStatus: React.FC<AuthStatusProps> = ({
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap',
                 maxWidth: 120,
+                '&:hover': {
+                  color: 'primary.main',
+                },
               }}
             >
               {user.name}
@@ -222,6 +256,9 @@ export const AuthStatus: React.FC<AuthStatusProps> = ({
                 whiteSpace: 'nowrap',
                 maxWidth: 120,
                 display: 'block',
+                '&:hover': {
+                  color: 'primary.main',
+                },
               }}
             >
               {user.fourWordAddress}
@@ -330,6 +367,22 @@ export const AuthStatus: React.FC<AuthStatusProps> = ({
           </ListItemIcon>
           <ListItemText>
             <Typography variant="body2">Security & Keys</Typography>
+          </ListItemText>
+        </MenuItem>
+
+        <MenuItem onClick={() => {
+          handleClose();
+          switchToPersonal();
+          setTimeout(() => {
+            selectEntity('overview');
+          }, 100);
+        }}>
+          <ListItemIcon>
+            <AccountCircleIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>
+            <Typography variant="body2">My Storage Disks</Typography>
+            <Typography variant="caption" color="text.secondary">Website & Data Storage</Typography>
           </ListItemText>
         </MenuItem>
 

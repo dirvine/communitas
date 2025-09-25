@@ -66,13 +66,13 @@ export const AuthStatus: React.FC<AuthStatusProps> = ({
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     console.log('🔵 AuthStatus avatar clicked!', authState.isAuthenticated);
     if (authState.isAuthenticated) {
-      // Navigate directly to personal storage areas
+      // Navigate to personal context and directly open storage workspace
       console.log('🔵 Calling switchToPersonal()');
       switchToPersonal();
-      // Small delay to ensure context switch completes, then select storage
+      // Dispatch storage workspace event directly to ensure it opens
       setTimeout(() => {
-        console.log('🔵 Calling selectEntity overview');
-        selectEntity('overview');
+        console.log('🔵 Dispatching open-storage-workspace event');
+        window.dispatchEvent(new CustomEvent('open-storage-workspace'));
       }, 100);
     } else {
       setLoginInitialMode('login');

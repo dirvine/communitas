@@ -89,6 +89,7 @@ import { networkService } from './services/network/NetworkConnectionService'
 import OverviewDashboard from './components/OverviewDashboard'
 // import FirstRunWizard from './components/onboarding/FirstRunWizard'
 import QuickActionsBar, { SettingsButton } from './components/QuickActionsBar'
+import { PersonalHomeDashboard } from './components/dashboard/PersonalHomeDashboard'
 import StorageWorkspaceDialog from './components/storage/StorageWorkspaceDialog'
 
 const IdentityTab = React.lazy(() => import('./components/tabs/IdentityTab'))
@@ -839,28 +840,7 @@ function App() {
                 <Box sx={{ flex: 1, overflow: 'auto', bgcolor: 'grey.50' }}>
                   <Suspense fallback={<Box sx={{ p: 3 }}><Typography>Loading…</Typography></Box>}>
                   <Routes>
-                    <Route path="/" element={
-                      <Box sx={{
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        height: '100%', flexDirection: 'column', p: 3 }}>
-                        {/* Prominent Endpoint Status Display */}
-                        <Box sx={{ mb: 4, width: '100%', maxWidth: 500 }}>
-                          <EndpointStatusDisplay />
-                        </Box>
-                        
-                        <Typography variant="h5" color="text.secondary" gutterBottom>
-                          Welcome to Communitas
-                        </Typography>
-                        <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-                          Select a contact, group, or organization to start collaborating
-                        </Typography>
-                        
-                        <Stack spacing={2} alignItems="center">
-                          <TestButton />
-                          
-                        </Stack>
-                      </Box>
-                    } />
+                    <Route path="/" element={<PersonalHomeDashboard />} />
                     <Route path="/group/:groupId" element={<GroupPage />} />
                     <Route path="/user/:userId" element={<UserPage />} />
                     {/* Commented out - missing test components

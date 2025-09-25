@@ -103,6 +103,8 @@ const UnifiedDashboard = React.lazy(() => import('./components/unified/UnifiedDa
 const MessageConsole = React.lazy(() => import('./components/dev/MessageConsole').then(m => ({ default: m.MessageConsole })))
 const GroupPage = React.lazy(() => import('./components/pages/GroupPage').then(m => ({ default: m.GroupPage })))
 const UserPage = React.lazy(() => import('./components/pages/UserPage').then(m => ({ default: m.UserPage })))
+const ChannelPage = React.lazy(() => import('./components/pages/ChannelPage').then(m => ({ default: m.ChannelPage })))
+const ProjectPage = React.lazy(() => import('./components/pages/ProjectPage').then(m => ({ default: m.ProjectPage })))
 
 // Test button component that uses React Router navigation
 const TestButton: React.FC = () => {
@@ -843,6 +845,12 @@ function App() {
                     <Route path="/" element={<PersonalHomeDashboard />} />
                     <Route path="/group/:groupId" element={<GroupPage />} />
                     <Route path="/user/:userId" element={<UserPage />} />
+                    <Route path="/channel/:channelId" element={<ChannelPage />} />
+                    <Route path="/project/:projectId" element={<ProjectPage />} />
+                    <Route path="/org/:orgId/channel/:channelId" element={<ChannelPage />} />
+                    <Route path="/org/:orgId/project/:projectId" element={<ProjectPage />} />
+                    <Route path="/org/:orgId/group/:groupId" element={<GroupPage />} />
+                    <Route path="/org/:orgId/user/:userId" element={<UserPage />} />
                     {/* Commented out - missing test components
                     <Route path="/test" element={<SimpleTest />} />
                     <Route path="/test/page" element={<TestPage />} />
@@ -851,7 +859,6 @@ function App() {
                     <Route path="/dev/console" element={<MessageConsole />} />
                     <Route path="/dev/website" element={<WebsitePublishPanel />} />
                     <Route path="/org/:orgId/*" element={<UnifiedDashboard userId="user_owner_123" userName="Owner" />} />
-                    <Route path="/project/:projectId/*" element={<UnifiedDashboard userId="user_owner_123" userName="Owner" />} />
                     <Route path="*" element={<Navigate to="/" replace />} />
                   </Routes>
                   </Suspense>

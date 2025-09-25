@@ -6,6 +6,20 @@ The platform uses Four-Word identities (like "ocean-forest-moon-star") for human
 
 Built with Tauri v2 for the desktop application and headless nodes for network infrastructure, Communitas provides the functionality of WhatsApp, Dropbox, Slack, and Zoom in a single privacy-focused, quantum-resistant platform.
 
+## Development vs Production Status
+
+**Development Environment**: ✅ Fully functional
+- Comprehensive chat system for all entity types (group, user, channel, project, organization)
+- Real backend integration with environment-aware fallbacks  
+- WebRTC audio/video calling with live signaling server
+- Threading, member management, and four-word identity validation
+- Both browser and Tauri desktop environments supported
+
+**Production Environment**: ⚠️ Architectural limitations
+- WebRTC signaling requires external server infrastructure (not bundled in Tauri builds)
+- Hard-coded localhost URLs in Tauri mode prevent production deployment
+- Node.js WebSocket server only available in development concurrent setup
+
 # User Preferences
 
 Preferred communication style: Simple, everyday language.

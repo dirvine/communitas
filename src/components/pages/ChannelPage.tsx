@@ -3,13 +3,13 @@ import { useParams } from 'react-router-dom'
 import { Box, Typography } from '@mui/material'
 import { EntityChatView } from '../chat/EntityChatView'
 
-export const UserPage: React.FC = () => {
-  const { userId } = useParams()
+export const ChannelPage: React.FC = () => {
+  const { orgId, channelId } = useParams()
 
-  if (!userId) {
+  if (!channelId) {
     return (
       <Box sx={{ p: 3 }}>
-        <Typography>User not found</Typography>
+        <Typography>Channel not found</Typography>
       </Box>
     )
   }
@@ -17,9 +17,9 @@ export const UserPage: React.FC = () => {
   return (
     <Box sx={{ height: '100vh' }}>
       <EntityChatView
-        entityId={userId}
-        entityType="user"
-        entityName={`Contact ${userId}`}
+        entityId={channelId}
+        entityType="channel"
+        entityName={`Channel #${channelId}`}
         currentUserId="current-user-id"
         currentUserFourWords="your-current-four-words"
       />
@@ -27,4 +27,4 @@ export const UserPage: React.FC = () => {
   )
 }
 
-export default UserPage
+export default ChannelPage

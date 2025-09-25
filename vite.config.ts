@@ -25,6 +25,19 @@ export default defineConfig({
     headers: {
       'Access-Control-Allow-Origin': '*',
     },
+    proxy: {
+      // Proxy WebSocket requests to our backend server
+      '/ws': {
+        target: 'ws://localhost:3001',
+        ws: true,
+        changeOrigin: true,
+      },
+      // Also proxy API requests 
+      '/api': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      }
+    }
   },
   envPrefix: ['VITE_', 'TAURI_'],
   build: {

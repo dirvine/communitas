@@ -129,15 +129,30 @@ export const MarkdownBrowser: React.FC<MarkdownBrowserProps> = ({
 
   // Parse URL to extract identity and path
   const parseUrl = useCallback((url: string) => {
-    // URLs must maintain dash format for compatibility, bookmarks, and sharing
-    const match = url.match(/^([a-z]+-[a-z]+-[a-z]+-[a-z]+)(?:\/(.+))?$/)
-    if (match) {
-      return {
-        identity: match[1], // Keep dashed format for URLs
-        path: match[2] || 'home.md'
-      }
+    const trimmedUrl = url.trim()
+    
+    // Split identity and path parts
+    const slashIndex = trimmedUrl.indexOf('/')
+    let identityPart = slashIndex >= 0 ? trimmedUrl.substring(0, slashIndex) : trimmedUrl
+    let pathPart = slashIndex >= 0 ? trimmedUrl.substring(slashIndex + 1) : ''
+    
+    // Default to home.md if no path specified or path is empty
+    if (!pathPart || pathPart.trim() === '') {
+      pathPart = 'home.md'
     }
-    return { identity: '', path: '' }
+    
+    // Only normalize the identity part: lowercase and convert spaces to dashes
+    const normalizedIdentity = identityPart.toLowerCase().replace(/\s+/g, '-')
+    
+    // Check if normalized identity matches four-word pattern
+    if (!/^[a-z]+-[a-z]+-[a-z]+-[a-z]+$/.test(normalizedIdentity)) {
+      return { identity: '', path: '' }
+    }
+    
+    return {
+      identity: normalizedIdentity, // Normalized dashed format for URLs  
+      path: pathPart               // Path with proper default handling
+    }
   }, [])
 
   // Get or create publisher for identity
@@ -195,9 +210,12 @@ export const MarkdownBrowser: React.FC<MarkdownBrowserProps> = ({
         }
       }
 
-      // Update state
-      setCurrentUrl(url)
-      setAddressBarUrl(url)
+      // Construct canonical URL with normalized dashed identity
+      const canonicalUrl = path === 'home.md' ? identity : `${identity}/${path}`
+      
+      // Update state with canonical URL format
+      setCurrentUrl(canonicalUrl)
+      setAddressBarUrl(canonicalUrl)
       setContent(content)
       setTitle(pageTitle)
 
@@ -207,10 +225,10 @@ export const MarkdownBrowser: React.FC<MarkdownBrowserProps> = ({
         setTableOfContents(toc)
       }
 
-      // Add to navigation history
+      // Add to navigation history with canonical URL
       if (addToHistory) {
         const entry: NavigationEntry = {
-          url,
+          url: canonicalUrl,
           title: pageTitle,
           timestamp: Date.now()
         }
@@ -226,8 +244,8 @@ export const MarkdownBrowser: React.FC<MarkdownBrowserProps> = ({
       // Update navigation buttons
       updateNavigationState()
 
-      // Check if bookmarked
-      setIsBookmarked(bookmarks.some(b => b.url === url))
+      // Check if bookmarked using canonical URL
+      setIsBookmarked(bookmarks.some(b => b.url === canonicalUrl))
 
       // Scroll to top
       if (contentRef.current) {

@@ -25,13 +25,13 @@ export const generateFourWordIdentity = async (seed?: string): Promise<string> =
   let h = 0
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0
   const parts = [h, h >>> 8, h >>> 16, h >>> 24].map((v, idx) => pick((v + idx * 7 + rand(1000)) % wordList.length))
-  return parts.join('-')
+  return parts.join(' ')
 }
 
 export const validateFourWordIdentity = async (four_words: string): Promise<boolean> => {
   const ok = await safeInvoke<boolean>('validate_four_word_identity', { four_words })
   if (ok != null) return !!ok
-  return /^[a-z]+-[a-z]+-[a-z]+-[a-z]+$/.test(four_words)
+  return /^[a-z]+ [a-z]+ [a-z]+ [a-z]+$/.test(four_words)
 }
 
 export const claimFourWordIdentity = async (four_words: string): Promise<boolean> => {

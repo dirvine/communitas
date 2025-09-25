@@ -376,6 +376,7 @@ function App() {
     const navigate = useNavigate();
     const [urlBarValue, setUrlBarValue] = React.useState('');
     const [urlBarFocused, setUrlBarFocused] = React.useState(false);
+    const [urlBarError, setUrlBarError] = React.useState('');
 
     // Four-word address validation
     const validateFourWords = (input: string): boolean => {
@@ -423,11 +424,12 @@ function App() {
         }
         
         setUrlBarValue(cleanAddress);
+        setUrlBarError(''); // Clear any previous errors
       } else {
         console.warn('Invalid four-word address format:', cleanAddress);
         
         // Show visual error feedback
-        setUrlBarValue(''); // Clear invalid input
+        setUrlBarError('Invalid format. Please use: word-word-word-word');
         
         console.error(`❌ Invalid address format. Please use: word-word-word-word`);
       }
@@ -491,13 +493,18 @@ function App() {
       }}>
         <TextField
           value={urlBarValue}
-          onChange={(e) => setUrlBarValue(e.target.value)}
+          onChange={(e) => {
+            setUrlBarValue(e.target.value);
+            if (urlBarError) setUrlBarError(''); // Clear error on typing
+          }}
           onKeyPress={handleUrlBarKeyPress}
           onFocus={() => setUrlBarFocused(true)}
           onBlur={() => setUrlBarFocused(false)}
-          placeholder="Enter four-word address (e.g., ocean-forest-moon-star)"
+          placeholder="Enter four-word address (e.g., ocean-blue-eagle-star)"
           size="small"
           fullWidth
+          error={!!urlBarError}
+          helperText={urlBarError}
           InputProps={{
             startAdornment: (
               <InputAdornment position="start">

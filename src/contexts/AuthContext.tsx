@@ -47,7 +47,6 @@ export interface UserIdentity {
   fourWordAddress: string;
   name: string;
   avatar?: string;
-  email?: string;
   profile: {
     bio?: string;
     organization?: string;
@@ -87,7 +86,7 @@ export interface AuthContextType {
   // Authentication methods
   login: (fourWordAddress: string, password?: string) => Promise<boolean>;
   logout: () => Promise<void>;
-  createIdentity: (name: string, email?: string, options?: { fourWords?: string; publicKey?: number[]; seedPhrase?: string; dhtPacket?: unknown; password?: string }) => Promise<UserIdentity>;
+  createIdentity: (name: string, options?: { fourWords?: string; publicKey?: number[]; seedPhrase?: string; dhtPacket?: unknown; password?: string }) => Promise<UserIdentity>;
   registerPasskey: () => Promise<boolean>;
   signInWithPasskey: () => Promise<boolean>;
   
@@ -259,8 +258,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 profile: data.profile || {},
                 permissions: data.permissions || [],
                 createdAt: data.createdAt || new Date().toISOString(),
-                lastActive: new Date().toISOString(),
-                email: data.email
+                lastActive: new Date().toISOString()
               };
               console.log(`✅ Identity validated by node: ${nodeUrl}`);
               break;
@@ -402,7 +400,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  const createIdentity = async (name: string, email?: string, options?: { fourWords?: string; publicKey?: number[]; seedPhrase?: string; dhtPacket?: unknown; password?: string }): Promise<UserIdentity> => {
+  const createIdentity = async (name: string, options?: { fourWords?: string; publicKey?: number[]; seedPhrase?: string; dhtPacket?: unknown; password?: string }): Promise<UserIdentity> => {
     try {
       setAuthState(prev => ({ ...prev, loading: true, error: null }));
 
@@ -435,7 +433,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             body: JSON.stringify({
               action: 'register',
               name,
-              email,
               fourWordAddress,
               password: options?.password
             })
@@ -462,7 +459,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const newIdentity: UserIdentity = {
         id: `id_${Date.now()}`,
         name,
-        email,
         fourWordAddress,
         publicKey: 'generated',
         profile: {},

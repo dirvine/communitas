@@ -22,7 +22,7 @@ communitas-core = { path = "../communitas-core" }
 communitas-container = { path = "../crates/communitas-container" }
 
 # Saorsa Core - needed for direct use
-saorsa-core = { git = "https://github.com/dirvine/saorsa-core-foundation.git", branch = "main" }
+saorsa-core = { git = "https://github.com/dirvine/saorsa-core-foundation.git", rev = "fa49064" }
 saorsa-fec = "0.4.11"
 
 # Networking

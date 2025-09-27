@@ -24,7 +24,7 @@ identifier = "com.p2pfoundation.communitas"
 
 [dependencies]
 # P2P Foundation - use published saorsa-core
-saorsa-core = { git = "https://github.com/dirvine/saorsa-core-foundation.git", branch = "main" }
+saorsa-core = { git = "https://github.com/dirvine/saorsa-core-foundation.git", rev = "fa49064" }
 
 # Async runtime
 tokio = { version = "1.39", features = ["full"] }

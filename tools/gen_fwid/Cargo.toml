@@ -6,7 +6,7 @@ edition = "2021"
 [workspace]
 
 [dependencies]
-saorsa-core = { git = "https://github.com/dirvine/saorsa-core-foundation.git", branch = "main" }
+saorsa-core = { git = "https://github.com/dirvine/saorsa-core-foundation.git", rev = "fa49064" }
 anyhow = "1.0"
 rand = "0.8"
 tokio = { version = "1.39", features = ["full"] }

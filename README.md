@@ -15,7 +15,7 @@ Two apps, one core:
 - **Security**: Post-quantum cryptography with end-to-end encryption
 - **Collaboration**: Real-time document editing, file sharing, and team coordination
 
-Backed by Saorsa Core (crates.io `saorsa-core`, v0.3.17): DHT, QUIC, identities, groups, messaging, virtual disks, and security.
+Backed by Saorsa Core (crates.io `saorsa-core`, v0.3.25): DHT, QUIC, identities, groups, messaging, virtual disks, and security.
 
 ## 🚀 Quick Start (Desktop Dev)
 

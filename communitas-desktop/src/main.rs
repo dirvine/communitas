@@ -7,6 +7,13 @@
 // See the LICENSE-AGPL-3.0 and LICENSE-COMMERCIAL.md files for details.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+// Security: Enforce no-panic policy in production code
+#![cfg_attr(
+    not(test),
+    forbid(clippy::unwrap_used, clippy::expect_used, clippy::panic)
+)]
+// Allow these in tests for convenience
+#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
 mod container;
 mod core_cmds;

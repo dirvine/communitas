@@ -18,6 +18,14 @@
 //! This crate contains all the core functionality shared between the desktop app
 //! and the headless node/CLI, without any UI dependencies.
 
+// Security: Enforce no-panic policy in production code
+#![cfg_attr(
+    not(test),
+    forbid(clippy::unwrap_used, clippy::expect_used, clippy::panic)
+)]
+// Allow these in tests for convenience
+#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
+
 pub mod core_context;
 pub mod dht_schemas;
 pub mod error;

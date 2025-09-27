@@ -331,18 +331,13 @@ export class FileProcessor {
   }
 
   private static encryptAES(data: Uint8Array, password: string): Uint8Array {
-    // Simple XOR-based placeholder encryption. Replace with proper AES-GCM via Rust backend in production.
-    const key = new TextEncoder().encode(password);
-    const out = new Uint8Array(data.length);
-    for (let i = 0; i < data.length; i++) {
-      out[i] = data[i] ^ key[i % key.length];
-    }
-    return out;
+    // SECURITY: This is a critical path that must use proper encryption
+    throw new Error('SECURITY: XOR encryption removed. Must implement proper AES-GCM encryption via Rust/Tauri backend. See communitas-core cryptography module.');
   }
 
   private static decryptAES(encryptedData: Uint8Array, password: string): Uint8Array {
-    // Symmetric with encryptAES XOR placeholder
-    return this.encryptAES(encryptedData, password);
+    // SECURITY: This is a critical path that must use proper encryption
+    throw new Error('SECURITY: XOR decryption removed. Must implement proper AES-GCM decryption via Rust/Tauri backend. See communitas-core cryptography module.');
   }
 
   /**

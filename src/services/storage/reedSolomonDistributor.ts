@@ -183,9 +183,11 @@ export class ReedSolomonDistributor {
    * JavaScript fallback for Reed-Solomon encoding
    */
   private static async fallbackReedSolomonEncoding(shard: EncryptedShard): Promise<ReedSolomonShard[]> {
-    console.log('Using JavaScript fallback for Reed-Solomon encoding');
+    console.warn('SECURITY WARNING: Using JavaScript fallback for Reed-Solomon encoding with weak XOR-based parity');
+    console.warn('This should only be used as a temporary fallback when Rust implementation fails');
     
     // Simple XOR-based redundancy as fallback (not true Reed-Solomon)
+    // TODO: Replace with proper Reed-Solomon implementation or fail gracefully
     const shardSize = Math.ceil(shard.data.length / this.DATA_SHARDS);
     const reedSolomonShards: ReedSolomonShard[] = [];
     

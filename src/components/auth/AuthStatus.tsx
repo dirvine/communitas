@@ -36,6 +36,7 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigation } from '../../contexts/NavigationContext';
 import { LoginDialog } from './LoginDialog';
+import { UnifiedAuthFlow } from './UnifiedAuthFlow';
 import { ProfileManager } from './ProfileManager';
 import SettingsInterface from '../settings/SettingsInterface';
 
@@ -161,11 +162,24 @@ export const AuthStatus: React.FC<AuthStatusProps> = ({
           )}
         </Stack>
 
-        <LoginDialog
-          open={loginDialogOpen}
-          onClose={() => setLoginDialogOpen(false)}
-          initialMode={loginInitialMode}
-        />
+        {loginDialogOpen && (
+          <Box
+            sx={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 9999,
+            }}
+          >
+            <UnifiedAuthFlow
+              initialMode={loginInitialMode}
+              onSuccess={() => setLoginDialogOpen(false)}
+              onCancel={() => setLoginDialogOpen(false)}
+            />
+          </Box>
+        )}
       </>
     );
   }

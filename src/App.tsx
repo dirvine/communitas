@@ -68,6 +68,7 @@ import { ensureIdentity } from './utils/identity'
 // WebRTC Communication
 import { SimpleCommunicationHub } from './components/webrtc'
 import { LoginDialog } from './components/auth/LoginDialog'
+import { UnifiedAuthFlow } from './components/auth/UnifiedAuthFlow'
 
 // Communication
 import { EntitySelector } from './components/communication/EntitySelector'
@@ -825,7 +826,25 @@ function App() {
     </>
   )}
   
-  <LoginDialog open={authDialogOpen} onClose={() => setAuthDialogOpen(false)} />
+  {/* Replace LoginDialog with UnifiedAuthFlow */}
+  {authDialogOpen && (
+    <Box
+      sx={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        zIndex: 9999,
+      }}
+    >
+      <UnifiedAuthFlow
+        initialMode="login"
+        onSuccess={() => setAuthDialogOpen(false)}
+        onCancel={() => setAuthDialogOpen(false)}
+      />
+    </Box>
+  )}
   
   {/* Unified Storage Workspace Dialog */}
   <StorageWorkspaceDialog

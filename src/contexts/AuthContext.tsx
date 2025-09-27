@@ -177,10 +177,50 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       setAuthState(prev => ({ ...prev, loading: true, error: null }));
 
+      // Smart authentication: If only password is provided (fourWordAddress is empty),
+      // try to find a matching vault on this device
+      let actualFourWords = fourWordAddress;
+
+      if (!fourWordAddress && password) {
+        console.log('🔍 Attempting password-only login...');
+        const matchingVault = await localVault.tryDecryptWithPassword(password);
+
+        if (matchingVault) {
+          console.log('✅ Found matching vault for password');
+          actualFourWords = matchingVault.fourWords;
+
+          // Use the decrypted vault data directly
+          const identity = matchingVault.vault.identity;
+          if (identity) {
+            setAuthState({
+              isAuthenticated: true,
+              user: {
+                ...identity,
+                lastActive: new Date().toISOString(),
+              },
+              loading: false,
+              error: null,
+            });
+
+            // Store in localStorage for quick checks
+            localStorage.setItem('communitas-four-words', identity.fourWordAddress);
+            localStorage.setItem('communitas-user-name', identity.name);
+            localStorage.setItem('communitas-has-vault', 'true');
+
+            console.log('✅ Password-only login successful:', identity.fourWordAddress);
+            return true;
+          }
+        } else {
+          throw new Error('No matching account found. Please provide your four-word identity.');
+        }
+      }
+
       // Validate four-word address format
-      if (!fourWordAddress || !fourWordAddress.includes('-')) {
+      if (!actualFourWords || !actualFourWords.includes('-')) {
         throw new Error('Invalid four-word address format');
       }
+
+      fourWordAddress = actualFourWords;
 
       // Try to validate identity with testnet nodes
       let identity: UserIdentity | null = null;
@@ -444,7 +484,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       localStorage.setItem('communitas-four-words', newIdentity.fourWordAddress);
       localStorage.setItem('communitas-user-name', newIdentity.name);
       localStorage.setItem('communitas-identity', JSON.stringify(newIdentity));
-      
+
+      // Create a proper vault for this identity
+      try {
+        const vault = await localVault.openVault(newIdentity.fourWordAddress, options?.password || fourWordAddress);
+        await localVault.updateIdentity(newIdentity);
+        console.log('✅ Created local vault for new identity');
+      } catch (vaultError) {
+        console.warn('Could not create vault:', vaultError);
+      }
+
       // Store in offline storage
       await offlineStorage.store('current_identity', newIdentity, {
         encrypt: true,

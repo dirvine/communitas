@@ -43,7 +43,7 @@ import {
   Folder as StorageIcon,
 } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
-import { mockOrganizations, mockPersonalGroups, mockPersonalUsers } from '../../data/mockCollaborationData';
+import { useEntityDirectory } from '../../contexts/EntityDirectoryContext';
 
 interface EntitySelectorProps {
   open: boolean;
@@ -79,36 +79,37 @@ export const EntitySelector: React.FC<EntitySelectorProps> = ({
   actionType,
   title,
 }) => {
+  const { personalUsers, personalGroups, organizations } = useEntityDirectory();
   const [tabValue, setTabValue] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filteredPeople, setFilteredPeople] = useState(mockPersonalUsers);
-  const [filteredGroups, setFilteredGroups] = useState(mockPersonalGroups);
-  const [filteredOrgs, setFilteredOrgs] = useState(mockOrganizations);
+  const [filteredPeople, setFilteredPeople] = useState(personalUsers);
+  const [filteredGroups, setFilteredGroups] = useState(personalGroups);
+  const [filteredOrgs, setFilteredOrgs] = useState(organizations);
 
   useEffect(() => {
     const lowerSearch = searchTerm.toLowerCase();
     
     setFilteredPeople(
-      mockPersonalUsers.filter(person =>
+      personalUsers.filter(person =>
         person.name.toLowerCase().includes(lowerSearch) ||
         person.networkIdentity?.fourWords?.toLowerCase().includes(lowerSearch)
       )
     );
     
     setFilteredGroups(
-      mockPersonalGroups.filter(group =>
+      personalGroups.filter(group =>
         group.name.toLowerCase().includes(lowerSearch) ||
         group.description?.toLowerCase().includes(lowerSearch)
       )
     );
     
     setFilteredOrgs(
-      mockOrganizations.filter(org =>
+      organizations.filter(org =>
         org.name.toLowerCase().includes(lowerSearch) ||
         org.description?.toLowerCase().includes(lowerSearch)
       )
     );
-  }, [searchTerm]);
+  }, [searchTerm, personalUsers, personalGroups, organizations]);
 
   const getActionIcon = () => {
     switch (actionType) {

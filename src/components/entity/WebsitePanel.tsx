@@ -44,6 +44,7 @@ import {
   VideoFile as VideoIcon,
   AudioFile as AudioIcon,
   Description as DocumentIcon,
+  Add as AddIcon,
   Link as LinkIcon,
   FormatBold as BoldIcon,
   FormatItalic as ItalicIcon,
@@ -510,7 +511,7 @@ const WebsitePanel: React.FC<WebsitePanelProps> = ({
               }}
             >
               <TextField
-                ref={editorRef}
+                inputRef={editorRef}
                 multiline
                 fullWidth
                 value={content}

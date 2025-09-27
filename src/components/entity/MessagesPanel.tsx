@@ -40,6 +40,7 @@ import {
   VideoFile as VideoIcon,
   AudioFile as AudioIcon,
   Description as DocumentIcon,
+  Close as CloseIcon,
 } from '@mui/icons-material';
 import { invoke } from '@tauri-apps/api/core';
 import { format, isToday, isYesterday } from 'date-fns';

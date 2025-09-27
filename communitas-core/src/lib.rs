@@ -22,6 +22,7 @@ pub mod core_context;
 pub mod dht_schemas;
 pub mod error;
 pub mod keystore;
+pub mod messaging;
 pub mod security;
 pub mod storage;
 pub mod test_harness;

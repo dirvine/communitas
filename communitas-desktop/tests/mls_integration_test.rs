@@ -8,8 +8,7 @@
 
 #[cfg(test)]
 mod tests {
-    use communitas_core::messaging::{MlsClient, MlsConfig};
-    use saorsa_mls::GroupId;
+    use communitas_core::messaging::{GroupId, MlsClient, MlsConfig};
 
     #[tokio::test]
     async fn test_mls_client_creation() {
@@ -27,7 +26,10 @@ mod tests {
     #[tokio::test]
     async fn test_group_id_generation() {
         let group_id = GroupId::generate();
-        assert!(!group_id.to_string().is_empty(), "GroupId should generate non-empty string");
+        assert!(
+            !group_id.to_string().is_empty(),
+            "GroupId should generate non-empty string"
+        );
     }
 
     #[tokio::test]
@@ -40,14 +42,23 @@ mod tests {
         };
 
         assert!(config.enable_pqc, "PQC should be enabled by default");
-        assert_eq!(config.max_epochs, 1000, "Max epochs should be set correctly");
-        assert_eq!(config.key_rotation_interval, 100, "Key rotation interval should be set correctly");
+        assert_eq!(
+            config.max_epochs, 1000,
+            "Max epochs should be set correctly"
+        );
+        assert_eq!(
+            config.key_rotation_interval, 100,
+            "Key rotation interval should be set correctly"
+        );
     }
 
     #[tokio::test]
     async fn test_group_id_string_conversion() {
         let group_id = GroupId::generate();
         let group_id_string = group_id.to_string();
-        assert!(!group_id_string.is_empty(), "GroupId string representation should not be empty");
+        assert!(
+            !group_id_string.is_empty(),
+            "GroupId string representation should not be empty"
+        );
     }
 }

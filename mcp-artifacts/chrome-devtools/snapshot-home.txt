@@ -1,0 +1,13 @@
+# take_snapshot response
+## Page content
+uid=1_0 RootWebArea "127.0.0.1"
+  uid=1_1 heading "This site can’t be reached" level="1"
+  uid=1_2 StaticText "127.0.0.1"
+  uid=1_3 StaticText " refused to connect."
+  uid=1_4 StaticText "Try:"
+  uid=1_5 StaticText "Checking the connection"
+  uid=1_6 link "Checking the proxy and the firewall"
+    uid=1_7 StaticText "Checking the proxy and the firewall"
+  uid=1_8 StaticText "ERR_CONNECTION_REFUSED"
+  uid=1_9 button "Reload"
+  uid=1_10 button "Details"

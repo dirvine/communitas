@@ -39,11 +39,7 @@ import { NavigationProvider } from '../contexts/NavigationContext'
 import BreadcrumbNavigation from './navigation/BreadcrumbNavigation'
 
 // Mock data for testing
-import {
-  mockOrganizations,
-  mockPersonalGroups,
-  mockPersonalUsers,
-} from '../data/mockCollaborationData'
+import { EntityDirectoryProvider } from '../contexts/EntityDirectoryContext'
 
 // Tauri Context
 import { TauriProvider } from '../contexts/TauriContext'
@@ -56,6 +52,7 @@ import { LoginDialog } from './auth/LoginDialog'
 import { EntitySelector } from './communication/EntitySelector'
 import { GlobalSyncBar } from './sync/GlobalSyncBar'
 import { CompactEndpointStatus } from './network/EndpointStatusDisplay'
+import { NetworkStatusBar } from './NetworkStatusBar'
 
 import OverviewDashboard from './OverviewDashboard'
 import QuickActionsBar from './QuickActionsBar'
@@ -219,8 +216,11 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
           flexShrink: 0,
           ml: 'auto',
         }}>
-          {/* Compact Endpoint Status showing four-words or offline */}
-          <CompactEndpointStatus />
+          {/* Network Status Bar with Four-Word identities and bootstrap connection */}
+          <NetworkStatusBar onSyncClick={() => {
+            // Trigger sync - will be implemented with backend sync operations
+            console.log('Sync triggered from network status bar');
+          }} />
           <Button
             variant="outlined"
             size="small"
@@ -269,7 +269,8 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
     <TauriProvider>
       <AuthProvider>
         <EncryptionProvider>
-          <NavigationProvider>
+          <EntityDirectoryProvider>
+            <NavigationProvider>
             {/* Global Sync Status Bar */}
             <GlobalSyncBar
               userId="user_owner_123" // TODO: Use actual authenticated user ID
@@ -299,9 +300,6 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
                       <Box onClick={handleToggleSidebar} sx={{ position: 'absolute', inset: 0, bgcolor: 'rgba(0,0,0,0.35)', zIndex: 1199 }} />
                       <Box sx={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: '85vw', maxWidth: 360, bgcolor: 'background.paper', borderRight: theme => `1px solid ${theme.palette.divider}`, zIndex: 1200, overflow: 'hidden' }}>
                         <WhatsAppStyleNavigation
-                          organizations={mockOrganizations}
-                          personalGroups={mockPersonalGroups}
-                          personalUsers={mockPersonalUsers}
                           currentUserId="user_owner_123"
                           onNavigate={(path, entity) => {
                             console.log('WhatsApp Navigation:', path, entity)
@@ -335,9 +333,6 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
                     }}
                   >
                     <WhatsAppStyleNavigation
-                      organizations={mockOrganizations}
-                      personalGroups={mockPersonalGroups}
-                      personalUsers={mockPersonalUsers}
                       currentUserId="user_owner_123"
                       onNavigate={(path, entity) => {
                         console.log('WhatsApp Navigation:', path, entity)
@@ -437,7 +432,8 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
               onSelect={(entity, type) => console.log('Entity selected:', entity, type)}
               actionType={pendingAction || 'call'}
             />
-          </NavigationProvider>
+            </NavigationProvider>
+          </EntityDirectoryProvider>
         </EncryptionProvider>
       </AuthProvider>
     </TauriProvider>

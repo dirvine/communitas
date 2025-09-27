@@ -1,390 +1,40 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Box,
+  Paper,
   List,
-  ListItem,
   ListItemButton,
-  ListItemIcon,
   ListItemText,
   ListItemSecondaryAction,
   IconButton,
-  Avatar,
-  Badge,
-  Typography,
-  Button,
-  Collapse,
-  Divider,
-  Paper,
-  Slide,
-  Chip,
-  Stack,
   Tooltip,
-  alpha,
-  TextField,
-  InputAdornment,
+  Divider,
+  Typography,
+  Stack,
+  Collapse,
+  ListSubheader,
 } from '@mui/material';
 import {
+  Add as AddIcon,
+  Delete as DeleteIcon,
   Business as OrganizationIcon,
   Groups as GroupIcon,
   Person as PersonIcon,
-  VideoCall as VideoIcon,
-  Call as CallIcon,
-  ScreenShare as ScreenIcon,
   Folder as FolderIcon,
   Tag as ChannelIcon,
   Assignment as ProjectIcon,
-  ArrowBack as BackIcon,
   ExpandMore,
   ExpandLess,
-  Add as AddIcon,
-  Search as SearchIcon,
+  VideoCall as VideoIcon,
+  Call as CallIcon,
+  ScreenShare as ScreenIcon,
 } from '@mui/icons-material';
-import { Organization, Group, PersonalUser, Channel, Project, OrganizationUser } from '../../types/collaboration';
 import { useNavigation } from '../../contexts/NavigationContext';
-
-// Stable, top-level subcomponents to avoid remounts (prevents input focus loss)
-type ActionCallbacks = {
-  onVideoCall?: (entityId: string, entityType: string) => void;
-  onAudioCall?: (entityId: string, entityType: string) => void;
-  onScreenShare?: (entityId: string, entityType: string) => void;
-  onOpenFiles?: (entityId: string, entityType: string) => void;
-};
-
-const CollaborationActions: React.FC<{
-  entityId: string;
-  entityType: string;
-  size?: 'small' | 'medium';
-} & ActionCallbacks> = ({ entityId, entityType, size = 'small', onVideoCall, onAudioCall, onScreenShare, onOpenFiles }) => (
-  <Box className="entity-actions" sx={{ display: 'flex', gap: 0.5, opacity: 0, transition: 'opacity 0.2s' }}>
-    <Tooltip title="Video Call">
-      <IconButton
-        size={size}
-        onClick={(e) => {
-          e.stopPropagation();
-          onVideoCall?.(entityId, entityType);
-        }}
-        sx={{ color: 'primary.main', '&:hover': { bgcolor: alpha('#4CAF50', 0.1) } }}
-      >
-        <VideoIcon fontSize={size} />
-      </IconButton>
-    </Tooltip>
-    <Tooltip title="Audio Call">
-      <IconButton
-        size={size}
-        onClick={(e) => {
-          e.stopPropagation();
-          onAudioCall?.(entityId, entityType);
-        }}
-        sx={{ color: 'primary.main', '&:hover': { bgcolor: alpha('#2196F3', 0.1) } }}
-      >
-        <CallIcon fontSize={size} />
-      </IconButton>
-    </Tooltip>
-    <Tooltip title="Screen Share">
-      <IconButton
-        size={size}
-        onClick={(e) => {
-          e.stopPropagation();
-          onScreenShare?.(entityId, entityType);
-        }}
-        sx={{ color: 'primary.main', '&:hover': { bgcolor: alpha('#FF9800', 0.1) } }}
-      >
-        <ScreenIcon fontSize={size} />
-      </IconButton>
-    </Tooltip>
-    <Tooltip title="Files & Website">
-      <IconButton
-        size={size}
-        onClick={(e) => {
-          e.stopPropagation();
-          onOpenFiles?.(entityId, entityType);
-        }}
-        sx={{ color: 'primary.main', '&:hover': { bgcolor: alpha('#9C27B0', 0.1) } }}
-      >
-        <FolderIcon fontSize={size} />
-      </IconButton>
-    </Tooltip>
-  </Box>
-);
-
-interface MainNavigationProps extends ActionCallbacks {
-  organizations: Organization[];
-  personalGroups: Group[];
-  personalUsers: PersonalUser[];
-  showOrganizations: boolean;
-  setShowOrganizations: (v: boolean) => void;
-  onOrganizationSelected: (org: Organization) => void;
-  onNavigate: (path: string, entity: any) => void;
-  nav: ReturnType<typeof useNavigation>;
-}
-
-const MainNavigation: React.FC<MainNavigationProps> = ({
-  organizations,
-  personalGroups,
-  personalUsers,
-  showOrganizations,
-  setShowOrganizations,
-  onOrganizationSelected,
-  onNavigate,
-  nav,
-  onVideoCall,
-  onAudioCall,
-  onScreenShare,
-  onOpenFiles,
-}) => {
-  const [searchInput, setSearchInput] = useState('');
-  const [debouncedTerm, setDebouncedTerm] = useState('');
-  useEffect(() => {
-    const id = setTimeout(() => setDebouncedTerm(searchInput.trim().toLowerCase()), 180);
-    return () => clearTimeout(id);
-  }, [searchInput]);
-  const matchesQuery = (text?: string) => !debouncedTerm || (text ?? '').toLowerCase().includes(debouncedTerm);
-  return (
-    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* Global Search */}
-      <Box sx={{ p: 2, pb: 0 }}>
-        <TextField
-          fullWidth
-          size="small"
-          value={searchInput}
-          onChange={(e) => setSearchInput(e.target.value)}
-          placeholder="Search organizations, groups, contacts…"
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon fontSize="small" />
-              </InputAdornment>
-            ),
-          }}
-        />
-      </Box>
-      {/* Organizations Button at Top */}
-      <Box sx={{ p: 2 }}>
-        <Button
-          fullWidth
-          variant="contained"
-          startIcon={<OrganizationIcon />}
-          endIcon={showOrganizations ? <ExpandLess /> : <ExpandMore />}
-          onClick={() => setShowOrganizations(!showOrganizations)}
-          sx={{
-            justifyContent: 'space-between',
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            '&:hover': { background: 'linear-gradient(135deg, #764ba2 0%, #667eea 100%)' },
-          }}
-        >
-          Organizations ({organizations.length})
-        </Button>
-        <Collapse in={showOrganizations} timeout="auto" unmountOnExit>
-          <Paper elevation={3} sx={{ mt: 1, maxHeight: 300, overflow: 'auto' }}>
-            <List dense>
-              {organizations.filter(org => matchesQuery(org.name) || matchesQuery(org.networkIdentity.fourWords)).map(org => (
-                <ListItemButton
-                  key={org.id}
-                  onClick={() => { onOrganizationSelected(org); }}
-                  sx={{ '&:hover': { bgcolor: alpha('#667eea', 0.1) } }}
-                >
-                  <ListItemIcon>
-                    <Avatar sx={{ width: 32, height: 32 }}>{org.name[0]}</Avatar>
-                  </ListItemIcon>
-                  <ListItemText primary={org.name} secondary={org.networkIdentity.fourWords} />
-                </ListItemButton>
-              ))}
-              <Divider />
-              <ListItemButton>
-                <ListItemIcon>
-                  <AddIcon />
-                </ListItemIcon>
-                <ListItemText primary="Create Organization" />
-              </ListItemButton>
-            </List>
-          </Paper>
-        </Collapse>
-      </Box>
-      <Divider />
-      {/* Groups */}
-      <Box sx={{ flex: 1, overflow: 'auto' }}>
-        <Box sx={{ p: 2, pb: 1 }}>
-          <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>GROUPS</Typography>
-        </Box>
-        <List dense>
-          {personalGroups.filter(group => matchesQuery(group.name) || matchesQuery(group.networkIdentity.fourWords)).map(group => (
-            <ListItem
-              key={group.id}
-              sx={{ position: 'relative', '& .entity-actions': { opacity: 0 }, '&:hover': { bgcolor: 'action.hover', '& .entity-actions': { opacity: 1 } } }}
-              secondaryAction={<CollaborationActions entityId={group.id} entityType="group" onVideoCall={onVideoCall} onAudioCall={onAudioCall} onScreenShare={onScreenShare} onOpenFiles={onOpenFiles} />}
-            >
-              <ListItemButton onClick={() => { nav.selectEntity('group', group.id, group.name); onNavigate(`/group/${group.id}`, group); }} sx={{ pr: 16 }}>
-                <ListItemIcon>
-                  <Avatar sx={{ width: 40, height: 40 }}><GroupIcon /></Avatar>
-                </ListItemIcon>
-                <ListItemText
-                  primary={<Typography variant="body1" fontWeight={500}>{group.name}</Typography>}
-                  secondary={<Typography variant="caption" color="text.secondary">{group.members.length} members • {group.networkIdentity.fourWords}</Typography>}
-                />
-              </ListItemButton>
-            </ListItem>
-          ))}
-        </List>
-        <Divider sx={{ my: 1 }} />
-        {/* Contacts */}
-        <Box sx={{ p: 2, pb: 1 }}>
-          <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>CONTACTS</Typography>
-        </Box>
-        <List dense>
-          {personalUsers.filter(user => matchesQuery(user.name) || matchesQuery(user.networkIdentity.fourWords)).map(user => (
-            <ListItem
-              key={user.id}
-              sx={{ position: 'relative', '& .entity-actions': { opacity: 0 }, '&:hover': { bgcolor: 'action.hover', '& .entity-actions': { opacity: 1 } } }}
-              secondaryAction={<CollaborationActions entityId={user.id} entityType="user" onVideoCall={onVideoCall} onAudioCall={onAudioCall} onScreenShare={onScreenShare} onOpenFiles={onOpenFiles} />}
-            >
-              <ListItemButton onClick={() => { nav.selectEntity('individual', user.id, user.name); onNavigate(`/user/${user.id}`, user); }} sx={{ pr: 16 }}>
-                <ListItemIcon>
-                  <Badge variant="dot" color="success" invisible={Math.random() > 0.5} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
-                    <Avatar sx={{ width: 40, height: 40 }}>{user.name[0]}</Avatar>
-                  </Badge>
-                </ListItemIcon>
-                <ListItemText
-                  primary={<Typography variant="body1" fontWeight={500}>{user.name}</Typography>}
-                  secondary={<Typography variant="caption" color="text.secondary">{user.relationship} • {user.networkIdentity.fourWords}</Typography>}
-                />
-              </ListItemButton>
-            </ListItem>
-          ))}
-        </List>
-      </Box>
-    </Box>
-  );
-};
-
-interface OrgNavigationProps extends ActionCallbacks {
-  org: Organization;
-  expandedSections: { channels: boolean; projects: boolean; groups: boolean; users: boolean };
-  toggleSection: (k: keyof OrgNavigationProps['expandedSections']) => void;
-  onNavigate: (path: string, entity: any) => void;
-  nav: ReturnType<typeof useNavigation>;
-  onBack: () => void;
-}
-
-const OrganizationNavigation: React.FC<OrgNavigationProps> = ({ org, expandedSections, toggleSection, onNavigate, nav, onVideoCall, onAudioCall, onScreenShare, onOpenFiles, onBack }) => (
-  <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-    {/* Organization Header */}
-    <Box sx={{ p: 2, bgcolor: 'primary.main', color: 'primary.contrastText' }}>
-      <Stack direction="row" alignItems="center" spacing={1}>
-        <IconButton size="small" onClick={onBack} sx={{ color: 'inherit' }}>
-          <BackIcon />
-        </IconButton>
-        <Avatar sx={{ width: 32, height: 32, bgcolor: 'primary.dark' }}>{org.name[0]}</Avatar>
-        <Box sx={{ flex: 1 }}>
-          <Typography variant="subtitle1" fontWeight={600}>{org.name}</Typography>
-          <Typography variant="caption" sx={{ opacity: 0.9 }}>{org.networkIdentity.fourWords}</Typography>
-        </Box>
-      </Stack>
-    </Box>
-    <Box sx={{ flex: 1, overflow: 'auto' }}>
-      {/* Channels */}
-      <List dense>
-        <ListItemButton onClick={() => toggleSection('channels')}>
-          <ListItemIcon>
-            <ChannelIcon />
-          </ListItemIcon>
-          <ListItemText primary={<Stack direction="row" alignItems="center" spacing={1}><Typography variant="subtitle2" fontWeight={600}>CHANNELS</Typography><Chip label={org.channels.length} size="small" /></Stack>} />
-          {expandedSections.channels ? <ExpandLess /> : <ExpandMore />}
-        </ListItemButton>
-          <Collapse in={expandedSections.channels} timeout="auto" unmountOnExit>
-            {org.channels.map(channel => (
-            <ListItem key={channel.id} sx={{ pl: 3, '& .entity-actions': { opacity: 0 }, '&:hover .entity-actions': { opacity: 1 } }}
-              secondaryAction={<CollaborationActions entityId={channel.id} entityType="channel" onVideoCall={onVideoCall} onAudioCall={onAudioCall} onScreenShare={onScreenShare} onOpenFiles={onOpenFiles} />}
-            >
-              <ListItemButton onClick={() => { nav.selectEntity('channel', channel.id, channel.name); onNavigate(`/org/${org.id}/channel/${channel.id}`, channel); }} sx={{ pr: 16 }}>
-                <ListItemIcon><Typography variant="h6" color="text.secondary">#</Typography></ListItemIcon>
-                <ListItemText primary={channel.name} secondary={`${channel.members.length} members`} />
-              </ListItemButton>
-            </ListItem>
-          ))}
-        </Collapse>
-      </List>
-      <Divider />
-      {/* Projects */}
-      <List dense>
-        <ListItemButton onClick={() => toggleSection('projects')}>
-          <ListItemIcon>
-            <ProjectIcon />
-          </ListItemIcon>
-          <ListItemText primary={<Stack direction="row" alignItems="center" spacing={1}><Typography variant="subtitle2" fontWeight={600}>PROJECTS</Typography><Chip label={org.projects.length} size="small" /></Stack>} />
-          {expandedSections.projects ? <ExpandLess /> : <ExpandMore />}
-        </ListItemButton>
-          <Collapse in={expandedSections.projects} timeout="auto" unmountOnExit>
-            {org.projects.map(project => (
-            <ListItem key={project.id} sx={{ pl: 3, '& .entity-actions': { opacity: 0 }, '&:hover .entity-actions': { opacity: 1 } }}
-              secondaryAction={<CollaborationActions entityId={project.id} entityType="project" onVideoCall={onVideoCall} onAudioCall={onAudioCall} onScreenShare={onScreenShare} onOpenFiles={onOpenFiles} />}
-            >
-              <ListItemButton onClick={() => { nav.selectEntity('project', project.id, project.name); onNavigate(`/org/${org.id}/project/${project.id}`, project); }} sx={{ pr: 16 }}>
-                <ListItemIcon><ProjectIcon /></ListItemIcon>
-                <ListItemText primary={project.name} secondary={`${project.members.length} members • ${project.status}`} />
-              </ListItemButton>
-            </ListItem>
-          ))}
-        </Collapse>
-      </List>
-      <Divider />
-      {/* Org Groups */}
-      <List dense>
-        <ListItemButton onClick={() => toggleSection('groups')}>
-          <ListItemIcon>
-            <GroupIcon />
-          </ListItemIcon>
-          <ListItemText primary={<Stack direction="row" alignItems="center" spacing={1}><Typography variant="subtitle2" fontWeight={600}>GROUPS</Typography><Chip label={org.groups.length} size="small" /></Stack>} />
-          {expandedSections.groups ? <ExpandLess /> : <ExpandMore />}
-        </ListItemButton>
-          <Collapse in={expandedSections.groups} timeout="auto" unmountOnExit>
-            {org.groups.map(group => (
-            <ListItem key={group.id} sx={{ pl: 3 }}
-              secondaryAction={<CollaborationActions entityId={group.id} entityType="org-group" onVideoCall={onVideoCall} onAudioCall={onAudioCall} onScreenShare={onScreenShare} onOpenFiles={onOpenFiles} />}
-            >
-              <ListItemButton onClick={() => { nav.selectEntity('group', group.id, group.name); onNavigate(`/org/${org.id}/group/${group.id}`, group); }} sx={{ pr: 16 }}>
-                <ListItemIcon><Avatar sx={{ width: 32, height: 32 }}><GroupIcon fontSize="small" /></Avatar></ListItemIcon>
-                <ListItemText primary={group.name} secondary={`${group.members.length} members`} />
-              </ListItemButton>
-            </ListItem>
-          ))}
-        </Collapse>
-      </List>
-      <Divider />
-      {/* Users */}
-      <List dense>
-        <ListItemButton onClick={() => toggleSection('users')}>
-          <ListItemIcon>
-            <PersonIcon />
-          </ListItemIcon>
-        
-          <ListItemText primary={<Stack direction="row" alignItems="center" spacing={1}><Typography variant="subtitle2" fontWeight={600}>MEMBERS</Typography><Chip label={org.users.length} size="small" /></Stack>} />
-          {expandedSections.users ? <ExpandLess /> : <ExpandMore />}
-        </ListItemButton>
-          <Collapse in={expandedSections.users} timeout="auto" unmountOnExit>
-            {org.users.map(user => (
-            <ListItem key={user.id} sx={{ pl: 3 }}
-              secondaryAction={<CollaborationActions entityId={user.id} entityType="org-user" onVideoCall={onVideoCall} onAudioCall={onAudioCall} onScreenShare={onScreenShare} onOpenFiles={onOpenFiles} />}
-            >
-              <ListItemButton onClick={() => onNavigate(`/org/${org.id}/user/${user.id}`, user)}>
-                <ListItemIcon>
-                  <Badge variant="dot" color="success" invisible={Math.random() > 0.3}>
-                    <Avatar sx={{ width: 32, height: 32 }}>{user.name[0]}</Avatar>
-                  </Badge>
-                </ListItemIcon>
-                <ListItemText primary={user.name} secondary={<Stack direction="row" spacing={1} alignItems="center"><Chip label={user.role} size="small" variant="outlined" /></Stack>} />
-              </ListItemButton>
-            </ListItem>
-          ))}
-        </Collapse>
-      </List>
-    </Box>
-  </Box>
-);
+import { useEntityDirectory } from '../../contexts/EntityDirectoryContext';
+import { Organization, Group, PersonalUser, Channel, Project } from '../../types/collaboration';
+import { EntitySyncIndicator } from '../sync/EntitySyncIndicator';
 
 interface WhatsAppStyleNavigationProps {
-  organizations: Organization[];
-  personalGroups: Group[];
-  personalUsers: PersonalUser[];
   currentUserId: string;
   onNavigate: (path: string, entity: any) => void;
   onVideoCall?: (entityId: string, entityType: string) => void;
@@ -392,11 +42,51 @@ interface WhatsAppStyleNavigationProps {
   onScreenShare?: (entityId: string, entityType: string) => void;
   onOpenFiles?: (entityId: string, entityType: string) => void;
 }
+const ActionButtons: React.FC<{
+  entityId: string;
+  entityType: string;
+  onVideoCall?: (entityId: string, entityType: string) => void;
+  onAudioCall?: (entityId: string, entityType: string) => void;
+  onScreenShare?: (entityId: string, entityType: string) => void;
+  onOpenFiles?: (entityId: string, entityType: string) => void;
+}> = ({ entityId, entityType, onVideoCall, onAudioCall, onScreenShare, onOpenFiles }) => (
+  <Stack direction="row" spacing={0.5} alignItems="center">
+    {onVideoCall && (
+      <Tooltip title="Start video call">
+        <IconButton size="small" onClick={(event) => { event.stopPropagation(); onVideoCall(entityId, entityType); }}>
+          <VideoIcon fontSize="small" />
+        </IconButton>
+      </Tooltip>
+    )}
+    {onAudioCall && (
+      <Tooltip title="Start audio call">
+        <IconButton size="small" onClick={(event) => { event.stopPropagation(); onAudioCall(entityId, entityType); }}>
+          <CallIcon fontSize="small" />
+        </IconButton>
+      </Tooltip>
+    )}
+    {onScreenShare && (
+      <Tooltip title="Share screen">
+        <IconButton size="small" onClick={(event) => { event.stopPropagation(); onScreenShare(entityId, entityType); }}>
+          <ScreenIcon fontSize="small" />
+        </IconButton>
+      </Tooltip>
+    )}
+    {onOpenFiles && (
+      <Tooltip title="Open files">
+        <IconButton size="small" onClick={(event) => { event.stopPropagation(); onOpenFiles(entityId, entityType); }}>
+          <FolderIcon fontSize="small" />
+        </IconButton>
+      </Tooltip>
+    )}
+  </Stack>
+);
 
+const promptForName = (label: string) => {
+  const value = window.prompt(label);
+  return value ? value.trim() : '';
+};
 export const WhatsAppStyleNavigation: React.FC<WhatsAppStyleNavigationProps> = ({
-  organizations,
-  personalGroups,
-  personalUsers,
   currentUserId,
   onNavigate,
   onVideoCall,
@@ -405,172 +95,454 @@ export const WhatsAppStyleNavigation: React.FC<WhatsAppStyleNavigationProps> = (
   onOpenFiles,
 }) => {
   const nav = useNavigation();
-  const [showOrganizations, setShowOrganizations] = useState(false);
-  const [selectedOrganization, setSelectedOrganization] = useState<Organization | null>(null);
-  const [expandedSections, setExpandedSections] = useState({
-    channels: true,
-    projects: true,
-    groups: true,
-    users: true,
-  });
+  const {
+    organizations,
+    personalGroups,
+    personalUsers,
+    addOrganization,
+    removeOrganization,
+    addOrganizationGroup,
+    removeOrganizationGroup,
+    addOrganizationChannel,
+    removeOrganizationChannel,
+    addProject,
+    removeProject,
+    addPersonalGroup,
+    removePersonalGroup,
+    addPersonalUser,
+    removePersonalUser,
+    resetDirectory,
+  } = useEntityDirectory();
 
+  const [expandedOrganizationId, setExpandedOrganizationId] = useState<string | null>(null);
 
-  const handleOrganizationClick = (org: Organization) => {
-    setSelectedOrganization(org);
-    setShowOrganizations(false);
-    nav.switchToOrganization(org.id, org.name);
-    onNavigate(`/org/${org.id}`, org);
-  };
-
-  const handleBackToMain = () => {
-    setSelectedOrganization(null);
-    onNavigate('/', null);
-  };
-
-  const toggleSection = (section: keyof typeof expandedSections) => {
-    setExpandedSections(prev => ({
-      ...prev,
-      [section]: !prev[section],
-    }));
-  };
-
-  // Collaboration action buttons component
-  const CollaborationActions = ({ 
-    entityId, 
-    entityType,
-    size = 'small' 
-  }: { 
-    entityId: string; 
-    entityType: string;
-    size?: 'small' | 'medium';
-  }) => (
-    <Box className="entity-actions" sx={{ display: 'flex', gap: 0.5, opacity: 0, transition: 'opacity 0.2s' }}>
-      <Tooltip title="Video Call">
-        <IconButton
-          size={size}
-          onClick={(e) => {
-            e.stopPropagation();
-            onVideoCall?.(entityId, entityType);
-          }}
-          sx={{
-            color: 'primary.main',
-            '&:hover': { bgcolor: alpha('#4CAF50', 0.1) },
-          }}
-        >
-          <VideoIcon fontSize={size} />
-        </IconButton>
-      </Tooltip>
-      <Tooltip title="Audio Call">
-        <IconButton
-          size={size}
-          onClick={(e) => {
-            e.stopPropagation();
-            onAudioCall?.(entityId, entityType);
-          }}
-          sx={{
-            color: 'primary.main',
-            '&:hover': { bgcolor: alpha('#2196F3', 0.1) },
-          }}
-        >
-          <CallIcon fontSize={size} />
-        </IconButton>
-      </Tooltip>
-      <Tooltip title="Screen Share">
-        <IconButton
-          size={size}
-          onClick={(e) => {
-            e.stopPropagation();
-            onScreenShare?.(entityId, entityType);
-          }}
-          sx={{
-            color: 'primary.main',
-            '&:hover': { bgcolor: alpha('#FF9800', 0.1) },
-          }}
-        >
-          <ScreenIcon fontSize={size} />
-        </IconButton>
-      </Tooltip>
-      <Tooltip title="Files & Website">
-        <IconButton
-          size={size}
-          onClick={(e) => {
-            e.stopPropagation();
-            onOpenFiles?.(entityId, entityType);
-          }}
-          sx={{
-            color: 'primary.main',
-            '&:hover': { bgcolor: alpha('#9C27B0', 0.1) },
-          }}
-        >
-          <FolderIcon fontSize={size} />
-        </IconButton>
-      </Tooltip>
-    </Box>
+  const sortedPersonalGroups = useMemo(
+    () => [...personalGroups].sort((a, b) => a.name.localeCompare(b.name)),
+    [personalGroups]
+  );
+  const sortedContacts = useMemo(
+    () => [...personalUsers].sort((a, b) => a.name.localeCompare(b.name)),
+    [personalUsers]
+  );
+  const sortedOrganizations = useMemo(
+    () => [...organizations].sort((a, b) => a.name.localeCompare(b.name)),
+    [organizations]
   );
 
-  // Main navigation legacy inline version removed
+  const ensureExpanded = (organizationId: string) => {
+    setExpandedOrganizationId(prev => (prev === organizationId ? prev : organizationId));
+  };
 
-  
+  const handleNavigateGroup = (group: Group, organization?: Organization) => {
+    if (organization) {
+      nav.switchToOrganization(organization.id, organization.name);
+      nav.selectEntity('group', group.id, group.name);
+      onNavigate(`/org/${organization.id}/group/${group.id}`, { organization, group });
+    } else {
+      nav.switchToPersonal();
+      nav.selectEntity('group', group.id, group.name);
+      onNavigate(`/group/${group.id}`, group);
+    }
+  };
+
+  const handleNavigateChannel = (organization: Organization, channel: Channel) => {
+    nav.switchToOrganization(organization.id, organization.name);
+    nav.selectEntity('channel', channel.id, channel.name);
+    onNavigate(`/org/${organization.id}/channel/${channel.id}`, { organization, channel });
+  };
+
+  const handleNavigateProject = (organization: Organization, project: Project) => {
+    nav.switchToOrganization(organization.id, organization.name);
+    nav.selectEntity('project', project.id, project.name);
+    onNavigate(`/org/${organization.id}/project/${project.id}`, { organization, project });
+  };
+
+  const handleNavigateOrganization = (organization: Organization) => {
+    nav.switchToOrganization(organization.id, organization.name);
+    onNavigate(`/org/${organization.id}`, organization);
+  };
+
+  const handleNavigateContact = (contact: PersonalUser) => {
+    nav.switchToPersonal();
+    nav.selectEntity('individual', contact.id, contact.name);
+    onNavigate(`/user/${contact.id}`, contact);
+  };
+
+  const createPersonalGroup = () => {
+    const name = promptForName('Enter personal group name');
+    if (!name) return;
+    const group = addPersonalGroup({ name });
+    handleNavigateGroup(group);
+  };
+
+  const createContact = () => {
+    const name = promptForName('Enter contact name');
+    if (!name) return;
+    const contact = addPersonalUser({ name });
+    handleNavigateContact(contact);
+  };
+
+  const createOrganization = () => {
+    const name = promptForName('Enter organization name');
+    if (!name) return;
+    const organization = addOrganization({ name });
+    ensureExpanded(organization.id);
+    handleNavigateOrganization(organization);
+  };
+
+  const createOrganizationChannel = (organization: Organization) => {
+    const name = promptForName(`Channel name for ${organization.name}`);
+    if (!name) return;
+    const channel = addOrganizationChannel({ organizationId: organization.id, name });
+    ensureExpanded(organization.id);
+    handleNavigateChannel(organization, channel);
+  };
+
+  const createOrganizationGroup = (organization: Organization) => {
+    const name = promptForName(`Group name for ${organization.name}`);
+    if (!name) return;
+    const group = addOrganizationGroup({ organizationId: organization.id, name });
+    ensureExpanded(organization.id);
+    handleNavigateGroup(group, organization);
+  };
+
+  const createProject = (organization: Organization) => {
+    const name = promptForName(`Project name for ${organization.name}`);
+    if (!name) return;
+    const project = addProject({ organizationId: organization.id, name });
+    ensureExpanded(organization.id);
+    handleNavigateProject(organization, project);
+  };
 
   return (
-    <Box sx={{ width: 320, height: '100%', position: 'relative' }}>
-      {/* Main Navigation */}
-      <Paper
-        elevation={0}
-        sx={{
-          width: '100%',
-          height: '100%',
-          borderRight: 1,
-          borderColor: 'divider',
-          bgcolor: 'background.paper',
-        }}
-      >
-        <MainNavigation
-          organizations={organizations}
-          personalGroups={personalGroups}
-          personalUsers={personalUsers}
-          showOrganizations={showOrganizations}
-          setShowOrganizations={setShowOrganizations}
-          onOrganizationSelected={handleOrganizationClick}
-          onNavigate={onNavigate}
-          nav={nav}
-          onVideoCall={onVideoCall}
-          onAudioCall={onAudioCall}
-          onScreenShare={onScreenShare}
-          onOpenFiles={onOpenFiles}
-        />
-      </Paper>
+    <Paper
+      elevation={0}
+      sx={{
+        width: 320,
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        borderRight: theme => `1px solid ${theme.palette.divider}`,
+      }}
+    >
+      <Box sx={{ p: 2, pb: 1 }}>
+        <Stack direction="row" alignItems="center" justifyContent="space-between">
+          <Typography variant="h6" fontWeight={600}>
+            Entities
+          </Typography>
+          <Stack direction="row" spacing={1}>
+            <Tooltip title="Create organization">
+              <IconButton size="small" onClick={createOrganization}>
+                <OrganizationIcon />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Reset directory">
+              <IconButton size="small" onClick={() => resetDirectory()}>
+                <DeleteIcon />
+              </IconButton>
+            </Tooltip>
+          </Stack>
+        </Stack>
+      </Box>
 
-      {/* Organization Navigation Overlay */}
-      <Slide direction="right" in={!!selectedOrganization} mountOnEnter unmountOnExit>
-        <Paper
-          elevation={4}
-          sx={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: '100%',
-            height: '100%',
-            zIndex: 10,
-            bgcolor: 'background.paper',
-          }}
-        >
-          {selectedOrganization && (
-            <OrganizationNavigation
-              org={selectedOrganization}
-              expandedSections={expandedSections}
-              toggleSection={toggleSection}
-              onNavigate={onNavigate}
-              nav={nav}
-              onVideoCall={onVideoCall}
-              onAudioCall={onAudioCall}
-              onScreenShare={onScreenShare}
-              onOpenFiles={onOpenFiles}
-              onBack={handleBackToMain}
+      <Divider />
+
+      <List
+        dense
+        subheader={
+          <ListSubheader disableGutters component="div" sx={{ px: 2, py: 1 }}>
+            <Stack direction="row" alignItems="center" justifyContent="space-between">
+              <Stack direction="row" spacing={1} alignItems="center">
+                <GroupIcon fontSize="small" />
+                <Typography variant="subtitle2">Personal Groups</Typography>
+              </Stack>
+              <Tooltip title="Add personal group">
+                <IconButton size="small" onClick={createPersonalGroup}>
+                  <AddIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </Stack>
+          </ListSubheader>
+        }
+      >
+        {sortedPersonalGroups.length === 0 && (
+          <ListItemButton disabled>
+            <ListItemText primary="No personal groups yet" />
+          </ListItemButton>
+        )}
+        {sortedPersonalGroups.map(group => (
+          <ListItemButton key={group.id} onClick={() => handleNavigateGroup(group)}>
+            <ListItemText
+              primary={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  {group.name}
+                  <EntitySyncIndicator
+                    syncStatus={group.syncStatus}
+                    lastSyncedAt={group.lastSyncedAt}
+                    syncError={group.syncError}
+                    size="small"
+                    variant="icon"
+                  />
+                </Box>
+              }
+              secondary={group.networkIdentity.fourWords}
             />
-          )}
-        </Paper>
-      </Slide>
-    </Box>
+            <ListItemSecondaryAction>
+              <Stack direction="row" spacing={0.5} alignItems="center">
+                <ActionButtons
+                  entityId={group.id}
+                  entityType="group"
+                  onVideoCall={onVideoCall}
+                  onAudioCall={onAudioCall}
+                  onScreenShare={onScreenShare}
+                  onOpenFiles={onOpenFiles}
+                />
+                <Tooltip title="Remove group">
+                  <IconButton
+                    size="small"
+                    edge="end"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      removePersonalGroup(group.id);
+                    }}
+                  >
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              </Stack>
+            </ListItemSecondaryAction>
+          </ListItemButton>
+        ))}
+      </List>
+
+      <Divider />
+
+      <List
+        dense
+        subheader={
+          <ListSubheader disableGutters component="div" sx={{ px: 2, py: 1 }}>
+            <Stack direction="row" alignItems="center" justifyContent="space-between">
+              <Stack direction="row" spacing={1} alignItems="center">
+                <PersonIcon fontSize="small" />
+                <Typography variant="subtitle2">Contacts</Typography>
+              </Stack>
+              <Tooltip title="Add contact">
+                <IconButton size="small" onClick={createContact}>
+                  <AddIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </Stack>
+          </ListSubheader>
+        }
+      >
+        {sortedContacts.length === 0 && (
+          <ListItemButton disabled>
+            <ListItemText primary="No contacts yet" />
+          </ListItemButton>
+        )}
+        {sortedContacts.map(contact => (
+          <ListItemButton key={contact.id} onClick={() => handleNavigateContact(contact)}>
+            <ListItemText
+              primary={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  {contact.name}
+                  <EntitySyncIndicator
+                    syncStatus={contact.syncStatus}
+                    lastSyncedAt={contact.lastSyncedAt}
+                    syncError={contact.syncError}
+                    size="small"
+                    variant="icon"
+                  />
+                </Box>
+              }
+              secondary={contact.networkIdentity.fourWords}
+            />
+            <ListItemSecondaryAction>
+              <Stack direction="row" spacing={0.5} alignItems="center">
+                <ActionButtons
+                  entityId={contact.id}
+                  entityType="user"
+                  onVideoCall={onVideoCall}
+                  onAudioCall={onAudioCall}
+                  onScreenShare={onScreenShare}
+                  onOpenFiles={onOpenFiles}
+                />
+                <Tooltip title="Remove contact">
+                  <IconButton
+                    size="small"
+                    edge="end"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      removePersonalUser(contact.id);
+                    }}
+                  >
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              </Stack>
+            </ListItemSecondaryAction>
+          </ListItemButton>
+        ))}
+      </List>
+
+      <Divider />
+
+      <List
+        dense
+        subheader={
+          <ListSubheader disableGutters component="div" sx={{ px: 2, py: 1 }}>
+            <Stack direction="row" alignItems="center" justifyContent="space-between">
+              <Stack direction="row" spacing={1} alignItems="center">
+                <OrganizationIcon fontSize="small" />
+                <Typography variant="subtitle2">Organizations</Typography>
+              </Stack>
+              <Tooltip title="Create organization">
+                <IconButton size="small" onClick={createOrganization}>
+                  <AddIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </Stack>
+          </ListSubheader>
+        }
+        sx={{ flex: 1, overflowY: 'auto' }}
+      >
+        {sortedOrganizations.length === 0 && (
+          <ListItemButton disabled>
+            <ListItemText primary="No organizations yet" />
+          </ListItemButton>
+        )}
+        {sortedOrganizations.map(organization => {
+          const expanded = expandedOrganizationId === organization.id;
+          return (
+            <Box key={organization.id}>
+              <ListItemButton
+                onClick={() => {
+                  ensureExpanded(organization.id);
+                  handleNavigateOrganization(organization);
+                }}
+              >
+                <ListItemText
+                  primary={organization.name}
+                  secondary={organization.networkIdentity.fourWords}
+                />
+                <ListItemSecondaryAction>
+                  <Stack direction="row" spacing={0.5} alignItems="center">
+                    <IconButton size="small" onClick={(event) => { event.stopPropagation(); setExpandedOrganizationId(expanded ? null : organization.id); }}>
+                      {expanded ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
+                    </IconButton>
+                    <Tooltip title="Remove organization">
+                      <IconButton
+                        size="small"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          removeOrganization(organization.id);
+                          if (expandedOrganizationId === organization.id) {
+                            setExpandedOrganizationId(null);
+                          }
+                        }}
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </Stack>
+                </ListItemSecondaryAction>
+              </ListItemButton>
+              <Collapse in={expanded} timeout="auto" unmountOnExit>
+                <Box sx={{ pl: 2 }}>
+                  <Typography variant="caption" sx={{ pl: 1, pt: 1, display: 'block', fontWeight: 600 }}>
+                    Channels
+                  </Typography>
+                  <List dense disablePadding>
+                    {organization.channels.map(channel => (
+                      <ListItemButton key={channel.id} sx={{ pl: 2 }} onClick={() => handleNavigateChannel(organization, channel)}>
+                        <ListItemText primary={channel.name} secondary={channel.networkIdentity.fourWords} />
+                        <ListItemSecondaryAction>
+                          <Stack direction="row" spacing={0.5} alignItems="center">
+                            <ActionButtons
+                              entityId={channel.id}
+                              entityType="channel"
+                              onVideoCall={onVideoCall}
+                              onAudioCall={onAudioCall}
+                              onScreenShare={onScreenShare}
+                              onOpenFiles={onOpenFiles}
+                            />
+                            <Tooltip title="Remove channel">
+                              <IconButton size="small" onClick={(event) => { event.stopPropagation(); removeOrganizationChannel(organization.id, channel.id); }}>
+                                <DeleteIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          </Stack>
+                        </ListItemSecondaryAction>
+                      </ListItemButton>
+                    ))}
+                    <ListItemButton sx={{ pl: 2 }} onClick={(event) => { event.stopPropagation(); createOrganizationChannel(organization); }}>
+                      <ListItemText primary="Add channel" />
+                      <AddIcon fontSize="small" />
+                    </ListItemButton>
+                  </List>
+
+                  <Typography variant="caption" sx={{ pl: 1, pt: 2, display: 'block', fontWeight: 600 }}>
+                    Groups
+                  </Typography>
+                  <List dense disablePadding>
+                    {organization.groups.map(group => (
+                      <ListItemButton key={group.id} sx={{ pl: 2 }} onClick={() => handleNavigateGroup(group, organization)}>
+                        <ListItemText primary={group.name} secondary={group.networkIdentity.fourWords} />
+                        <ListItemSecondaryAction>
+                          <Stack direction="row" spacing={0.5} alignItems="center">
+                            <ActionButtons
+                              entityId={group.id}
+                              entityType="group"
+                              onVideoCall={onVideoCall}
+                              onAudioCall={onAudioCall}
+                              onScreenShare={onScreenShare}
+                              onOpenFiles={onOpenFiles}
+                            />
+                            <Tooltip title="Remove group">
+                              <IconButton size="small" onClick={(event) => { event.stopPropagation(); removeOrganizationGroup(organization.id, group.id); }}>
+                                <DeleteIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          </Stack>
+                        </ListItemSecondaryAction>
+                      </ListItemButton>
+                    ))}
+                    <ListItemButton sx={{ pl: 2 }} onClick={(event) => { event.stopPropagation(); createOrganizationGroup(organization); }}>
+                      <ListItemText primary="Add group" />
+                      <AddIcon fontSize="small" />
+                    </ListItemButton>
+                  </List>
+
+                  <Typography variant="caption" sx={{ pl: 1, pt: 2, display: 'block', fontWeight: 600 }}>
+                    Projects
+                  </Typography>
+                  <List dense disablePadding>
+                    {organization.projects.map(project => (
+                      <ListItemButton key={project.id} sx={{ pl: 2 }} onClick={() => handleNavigateProject(organization, project)}>
+                        <ListItemText primary={project.name} secondary={project.networkIdentity.fourWords} />
+                        <ListItemSecondaryAction>
+                          <Tooltip title="Remove project">
+                            <IconButton size="small" onClick={(event) => { event.stopPropagation(); removeProject(organization.id, project.id); }}>
+                              <DeleteIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        </ListItemSecondaryAction>
+                      </ListItemButton>
+                    ))}
+                    <ListItemButton sx={{ pl: 2 }} onClick={(event) => { event.stopPropagation(); createProject(organization); }}>
+                      <ListItemText primary="Add project" />
+                      <AddIcon fontSize="small" />
+                    </ListItemButton>
+                  </List>
+                </Box>
+              </Collapse>
+              <Divider />
+            </Box>
+          );
+        })}
+      </List>
+    </Paper>
   );
 };
+
+export default WhatsAppStyleNavigation;

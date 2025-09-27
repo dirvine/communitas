@@ -335,6 +335,61 @@ export class LocalVaultService {
   }
 
   /**
+   * Get all vault IDs (four-word addresses) stored on this device
+   */
+  async getAllVaultIds(): Promise<string[]> {
+    await this.initialize();
+
+    if (!this.db) {
+      throw new Error('Database not initialized');
+    }
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([VAULT_STORE_NAME], 'readonly');
+      const store = transaction.objectStore(VAULT_STORE_NAME);
+      const request = store.getAllKeys();
+
+      request.onsuccess = () => {
+        const keys = request.result as string[];
+        resolve(keys);
+      };
+
+      request.onerror = () => reject(new Error('Failed to get vault IDs'));
+    });
+  }
+
+  /**
+   * Try to decrypt any vault with the given password
+   * Returns the first successful match with four-word address
+   */
+  async tryDecryptWithPassword(password: string): Promise<{ fourWords: string; vault: VaultData } | null> {
+    await this.initialize();
+
+    // Get all vault IDs
+    const vaultIds = await this.getAllVaultIds();
+
+    // Try each vault with the provided password
+    for (const fourWords of vaultIds) {
+      try {
+        const encryptedVault = await this.getEncryptedVault(fourWords);
+        if (!encryptedVault) continue;
+
+        // Try to decrypt with the given password
+        const vaultData = await this.decryptVault(encryptedVault, password);
+
+        // If successful, return the match
+        return { fourWords, vault: vaultData };
+      } catch (error) {
+        // Password didn't match this vault, continue to next
+        continue;
+      }
+    }
+
+    // No matching vault found
+    return null;
+  }
+
+  /**
    * Close current vault (clear from memory)
    */
   closeVault(): void {

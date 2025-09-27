@@ -127,6 +127,64 @@ npm run test:run
 - **Anti-Phishing**: Four-word checksum validation prevents spoofing
 - **Forward Secrecy**: Regular key rotation with perfect forward secrecy
 
+### **Authentication & Identity Management**
+
+#### **Four-Word Identity System**
+The four-word address serves as the **permanent, universal identity** for users across all devices:
+- **Primary Identifier**: Required for first-time login on any new device
+- **Human-Memorable**: Four dictionary words are easier to remember than cryptographic keys
+- **Cross-Device Portability**: Your identity travels with you to any device
+- **DHT-Backed**: Identity metadata stored on the distributed network
+
+#### **Smart Local Authentication**
+Communitas provides intelligent authentication that adapts to user context:
+
+**Password-Only Login (Familiar Devices)**
+- When logging in on a previously-used device, only password is required
+- System automatically scans all local encrypted vaults
+- Uses PBKDF2-derived password hash as lookup key
+- Matches password against all stored accounts, auto-populating four-word address
+- Supports multiple accounts per device with account switching
+
+**Full Login (New Devices)**
+- Four-word address + password required for first login on new device
+- Creates local encrypted vault for future password-only access
+- Validates identity against DHT network when online
+
+**Passkey Support**
+- WebAuthn/FIDO2 integration for passwordless authentication
+- Platform authenticators (Touch ID, Face ID, Windows Hello)
+- Bound to specific device for enhanced security
+- Optional backup method alongside password authentication
+
+#### **Local Vault Architecture**
+Each device maintains encrypted vaults for authenticated accounts:
+```
+IndexedDB Storage Structure:
+├── encrypted-vaults/
+│   ├── [fourWordAddress1] → Encrypted vault with PBKDF2+AES-GCM
+│   ├── [fourWordAddress2] → Additional account vault
+│   └── password-locators/  → Password hash → fourWordAddress mapping
+```
+
+**Vault Security:**
+- PBKDF2 with 100,000 iterations for key derivation
+- AES-256-GCM for vault encryption
+- Per-vault salt and IV generation
+- SHA-256 checksums for integrity verification
+
+#### **Account Recovery Options**
+1. **Local Recovery**: Password-based vault decryption on familiar devices
+2. **Network Recovery**: Four-word address validation via DHT peers
+3. **Passkey Recovery**: Device-bound authentication if configured
+4. **Export/Import**: Encrypted vault backup and restoration
+
+#### **User Experience Principles**
+- **Clear Communication**: Users MUST understand four-word identity importance at registration
+- **Progressive Disclosure**: Simple password login when possible, full credentials when needed
+- **Multi-Account Support**: Seamless switching between identities on same device
+- **Security Transparency**: Clear indicators of authentication method and security level
+
 ### **Network Architecture**
 - **Transport**: QUIC over IPv4/IPv6 with PQC security
 - **Discovery**: DHT-based with trust-weighted routing

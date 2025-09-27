@@ -1,6 +1,14 @@
 // Communitas Headless Node
 // This binary runs a headless Communitas node using saorsa-core APIs
 
+// Security: Enforce no-panic policy in production code
+#![cfg_attr(
+    not(test),
+    forbid(clippy::unwrap_used, clippy::expect_used, clippy::panic)
+)]
+// Allow these in tests for convenience
+#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
+
 mod peer_cache;
 
 use anyhow::{Context, Result, anyhow};

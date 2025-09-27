@@ -14,7 +14,6 @@
     "windows": [
       {
         "title": "Communitas - Privacy, Security and Freedom (Saorsa)",
-        "url": "http://localhost:5001/",
         "width": 1200,
         "height": 800,
         "minWidth": 800,

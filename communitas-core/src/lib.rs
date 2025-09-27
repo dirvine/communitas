@@ -27,6 +27,7 @@
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
 pub mod core_context;
+pub mod dht_identity;
 pub mod dht_schemas;
 pub mod error;
 pub mod keystore;

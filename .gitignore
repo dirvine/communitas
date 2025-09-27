@@ -103,6 +103,16 @@ src-tauri/target/release/bundle/
 # Application data
 .communitas-data/
 
+# Security - Keys and secrets
+data/transport_*.key
+data/identity/
+*.key
+*.pem
+*.p12
+*.pfx
+secrets/
+keys/
+
 # Test artifacts
 test-results/
 src-tauri.old/

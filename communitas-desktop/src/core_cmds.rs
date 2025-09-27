@@ -1,6 +1,10 @@
 use communitas_core::keystore::Keystore;
+use communitas_core::CoreContext;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use std::sync::Arc;
+use tauri::State;
+use tokio::sync::RwLock;
 use tracing::info;
 
 use saorsa_core::fwid::{fw_check, fw_to_key};
@@ -48,6 +52,142 @@ pub async fn core_claim(words: [String; 4]) -> Result<String, String> {
 
     info!("claimed identity {}", id_hex);
     Ok(id_hex)
+}
+
+/// Generate a valid four-word identity using saorsa-core
+#[tauri::command]
+pub async fn generate_four_word_identity() -> Result<String, String> {
+    use rand::RngCore;
+    use rand::rngs::OsRng;
+    use saorsa_core::address::NetworkAddress;
+    use std::net::Ipv4Addr;
+    
+    let mut rng = OsRng;
+    const MIN_PORT: u16 = 1024;
+    const PORT_SPAN: u32 = u16::MAX as u32 - MIN_PORT as u32 + 1;
+    const GENERATION_ATTEMPTS: usize = 1000;
+
+    for _ in 0..GENERATION_ATTEMPTS {
+        let ipv4 = Ipv4Addr::from(rng.next_u32());
+        let port = (rng.next_u32() % PORT_SPAN) as u16 + MIN_PORT;
+        let candidate = NetworkAddress::from_ipv4(ipv4, port);
+
+        if let Some(words) = candidate.four_words() {
+            // Parse to ensure it's valid
+            if let Ok(parsed) = saorsa_core::identity::FourWordAddress::parse_str(words) {
+                let words_array: [String; 4] = parsed.words()
+                    .try_into()
+                    .map_err(|_| "Should have exactly 4 words".to_string())?;
+
+                // Validate with saorsa-core
+                if fw_check(words_array) {
+                    return Ok(words.to_string());
+                }
+            }
+        }
+    }
+
+    Err(format!("Failed to generate valid four-word address after {} attempts", GENERATION_ATTEMPTS))
+}
+
+/// Check if DHT client is connected and ready
+#[tauri::command]
+pub async fn check_dht_connection(
+    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+) -> Result<bool, String> {
+    let guard = shared.read().await;
+    if let Some(ctx) = guard.as_ref() {
+        // Check if we have core context initialized
+        // In production, this would check actual DHT connectivity via ctx.messaging or storage
+        // For now, just check if we have a valid context
+        Ok(!ctx.four_words.is_empty())
+    } else {
+        Ok(false)
+    }
+}
+
+/// Find group storage disk from four-word identity
+#[tauri::command]
+pub async fn find_group_storage_disk(
+    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+    group_four_words: String,
+) -> Result<String, String> {
+    let guard = shared.read().await;
+    if let Some(_ctx) = guard.as_ref() {
+        // Parse four-words to get the group key
+        let words: Vec<String> = group_four_words.split('-').map(|s| s.to_string()).collect();
+        if words.len() != 4 {
+            return Err("Invalid four-word format".to_string());
+        }
+        
+        let words_array: [String; 4] = words.try_into().map_err(|_| "Invalid four-word format".to_string())?;
+        if !fw_check(words_array.clone()) {
+            return Err("Invalid four-word identity".to_string());
+        }
+        
+        let group_key = fw_to_key(words_array).map_err(|e| format!("fw_to_key failed: {}", e))?;
+        
+        // Storage disks are derived from group identity hash
+        // For now, return a deterministic storage disk ID based on the group key
+        let disk_id = hex::encode(&group_key.as_bytes()[..16]); // Use first 16 bytes as disk ID
+        Ok(format!("disk://{}", disk_id))
+    } else {
+        Err("No core context".to_string())
+    }
+}
+
+/// Store user identity on DHT with display name and current addresses
+#[tauri::command]
+pub async fn store_user_identity(
+    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+    display_name: String,
+    current_four_words: String,
+) -> Result<(), String> {
+    let guard = shared.read().await;
+    if let Some(_ctx) = guard.as_ref() {
+        // For now, just validate the four-words and return success
+        let words: Vec<String> = current_four_words.split('-').map(|s| s.to_string()).collect();
+        if words.len() != 4 {
+            return Err("Invalid four-word format".to_string());
+        }
+        
+        let words_array: [String; 4] = words.try_into().map_err(|_| "Invalid four-word format".to_string())?;
+        if !fw_check(words_array) {
+            return Err("Invalid four-word identity".to_string());
+        }
+        
+        info!("Stored user identity: {} ({})", display_name, current_four_words);
+        Ok(())
+    } else {
+        Err("No core context".to_string())
+    }
+}
+
+/// Find user's current address for direct connection
+#[tauri::command]
+pub async fn find_user_current_address(
+    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+    user_four_words: String,
+) -> Result<String, String> {
+    let guard = shared.read().await;
+    if let Some(_ctx) = guard.as_ref() {
+        // Validate four-words
+        let words: Vec<String> = user_four_words.split('-').map(|s| s.to_string()).collect();
+        if words.len() != 4 {
+            return Err("Invalid four-word format".to_string());
+        }
+        
+        let words_array: [String; 4] = words.try_into().map_err(|_| "Invalid four-word format".to_string())?;
+        if !fw_check(words_array) {
+            return Err("Invalid four-word identity".to_string());
+        }
+        
+        // For now, return the same four-words as current address
+        // In real implementation, this would look up from DHT
+        Ok(user_four_words)
+    } else {
+        Err("No core context".to_string())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

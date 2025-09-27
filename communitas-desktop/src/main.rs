@@ -105,6 +105,11 @@ async fn main() -> anyhow::Result<()> {
         core_cmds::core_advertise,
         core_cmds::container_put,
         core_cmds::container_get,
+        core_cmds::generate_four_word_identity,
+        core_cmds::check_dht_connection,
+        core_cmds::find_group_storage_disk,
+        core_cmds::store_user_identity,
+        core_cmds::find_user_current_address,
         // Container engine
         container::container_init,
         container::container_put_object,

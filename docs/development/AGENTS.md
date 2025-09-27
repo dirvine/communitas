@@ -39,6 +39,57 @@ This playbook is for anyone (human or AI) automating Communitas. It captures the
 - Headless binary exposes the same container + sync stack via CLI. Config file controls FEC, bootstrap, update cadence, and metrics (`127.0.0.1:9600`).
 
 ## 6. Tooling & Workflows
+
+### Tauri Desktop App Development & Distribution
+
+**CRITICAL**: The Tauri app serves frontend assets from the `dist/` directory, NOT from a live dev server. You must build the frontend first.
+
+#### Development Workflow (Recommended)
+```bash
+# 1. Build frontend assets into dist/
+npm run build
+
+# 2. Run Tauri with built assets
+npm run tauri dev
+```
+
+#### Alternative: Live Dev Server (Hot Reload)
+```bash
+# Configure tauri.conf.json for live dev server:
+# "devUrl": "http://localhost:5173"
+# "beforeDevCommand": "npm run dev:frontend"
+
+npm run tauri dev  # Will start Vite dev server automatically
+```
+
+#### Distribution Build
+```bash
+# 1. Build optimized frontend
+npm run build
+
+# 2. Create Tauri bundle
+npm run tauri build
+```
+
+#### Common Issues & Solutions
+
+**Issue**: Tauri shows "Loading..." or placeholder content
+- **Cause**: `dist/` directory missing or contains old/placeholder content
+- **Fix**: Run `npm run build` to populate `dist/` with current frontend assets
+
+**Issue**: "frontendDist path doesn't exist" compilation error
+- **Cause**: `dist/` directory was deleted but `tauri.conf.json` references it
+- **Fix**: Create `dist/` directory or run `npm run build`
+
+**Issue**: Port conflicts with `devUrl`
+- **Cause**: Port 5000 often used by macOS AirTunes/ControlCenter
+- **Fix**: Use port 5173 (Vite default) or check `lsof -i :PORT`
+
+**Issue**: Changes not reflected in Tauri app
+- **Cause**: Serving stale assets from `dist/` instead of live dev server
+- **Fix**: Either run `npm run build` after changes OR configure `devUrl` properly
+
+### Build Commands Reference
 - **Rust**: `cargo fmt --all`, `cargo clippy --all-features -- -D clippy::panic -D clippy::unwrap_used -D clippy::expect_used`, `cargo test -p communitas-desktop`, `cargo test -p communitas-core`, `cargo test -p communitas-headless`.
 - **Node/React**: `npm ci`, `npm run typecheck`, `npm run test:run` (fast Vitest slice), `npm run build`.
 - **Desktop builds**: `cargo build --release -p communitas-desktop`, `npm run tauri build` for signed bundles (requires TAURI_PRIVATE_KEY in CI).

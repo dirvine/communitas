@@ -123,7 +123,7 @@ export const EntitySyncIndicator: React.FC<EntitySyncIndicatorProps> = ({
           icon={getIcon()}
           label={showLabel ? getLabel() : undefined}
           color={getColor() as any}
-          size={size}
+          size={size === 'large' ? 'medium' : size}
           onClick={onClick}
           sx={{
             cursor: onClick ? 'pointer' : 'default',

@@ -1,4 +1,0 @@
-# list_pages response
-## Pages
-0: about:blank
-1: http://127.0.0.1:5003/ [selected]

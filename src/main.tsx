@@ -2,6 +2,7 @@ import './polyfills'  // Import polyfills first
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'
+import TestApp from './TestApp'
 // import AppSimple from './AppSimple'  // Use simple app for testing
 // import AppMinimal from './AppMinimal'  // Use minimal app for testing
 import ErrorBoundary from './components/ErrorBoundary'
@@ -48,24 +49,26 @@ async function bootstrap() {
   })
 
   if (typeof window !== 'undefined' && (window as any).__TAURI__) {
-    try {
-      // Import the MCP plugin from local copy
-      const mcpModule = await import('./services/mcp-plugin.js')
-      console.info('[Communitas] MCP module loaded:', Object.keys(mcpModule))
-      
-      if (mcpModule.setupPluginListeners && typeof mcpModule.setupPluginListeners === 'function') {
-        await mcpModule.setupPluginListeners()
-        console.info('[Communitas] MCP plugin listeners initialised successfully')
-        
-        // Make it globally available for testing
-        (window as any).__MCP__ = mcpModule
-        console.info('[Communitas] MCP module available at window.__MCP__')
-      } else {
-        console.warn('[Communitas] setupPluginListeners not found in MCP module')
-      }
-    } catch (error) {
-      console.error('[Communitas] Failed to setup MCP plugin listeners:', error)
-    }
+    console.info('[Communitas] Tauri detected, skipping MCP plugin for now')
+    // MCP plugin temporarily disabled for debugging
+    // try {
+    //   // Import the MCP plugin from local copy
+    //   const mcpModule = await import('./services/mcp-plugin.js')
+    //   console.info('[Communitas] MCP module loaded:', Object.keys(mcpModule))
+    //   
+    //   if (mcpModule.setupPluginListeners && typeof mcpModule.setupPluginListeners === 'function') {
+    //     await mcpModule.setupPluginListeners()
+    //     console.info('[Communitas] MCP plugin listeners initialised successfully')
+    //     
+    //     // Make it globally available for testing
+    //     (window as any).__MCP__ = mcpModule
+    //     console.info('[Communitas] MCP module available at window.__MCP__')
+    //   } else {
+    //     console.warn('[Communitas] setupPluginListeners not found in MCP module')
+    //   }
+    // } catch (error) {
+    //   console.error('[Communitas] Failed to setup MCP plugin listeners:', error)
+    // }
   }
 
   // Test harnesses disabled for production stability

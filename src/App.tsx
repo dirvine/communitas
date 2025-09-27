@@ -193,14 +193,14 @@ function App() {
     let mounted = true
     const fetchHealth = async () => {
       try {
-        const res = await (await import('@tauri-apps/api/core')).invoke<any>('get_network_health')
+        const res = await (await import('@tauri-apps/api/core')).invoke<any>('health')
         if (!mounted) return
         setNetworkHealth({
-          status: res.status === 'connected' ? 'Connected' : 'Disconnected',
-          peer_count: res.peer_count ?? 0,
-          nat_type: res.nat_type ?? 'Unknown',
-          bandwidth_kbps: res.bandwidth_kbps ?? 0,
-          avg_latency_ms: res.avg_latency_ms ?? 0,
+          status: res.status === 'ok' ? 'Connected' : 'Disconnected',
+          peer_count: 0, // health command doesn't return peer count
+          nat_type: 'Unknown',
+          bandwidth_kbps: 0,
+          avg_latency_ms: 0,
         })
       } catch {
         // keep default

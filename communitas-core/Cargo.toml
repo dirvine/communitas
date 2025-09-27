@@ -57,7 +57,7 @@ deadpool-sqlite = "0.12.1"
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 once_cell = "1.19"
-four-word-networking = "2.3"
+four-word-networking = "2.6"
 getrandom = "0.2"
 base64 = "0.22"
 regex = "1.10"

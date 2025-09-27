@@ -1,398 +1,177 @@
-# Communitas — The Local‑First Collaboration App (saorsa-core)
+# Communitas — Local-First Collaboration Platform
 
-Communitas is a local‑first, PQC‑ready collaboration platform that unifies messaging, file sharing, voice/video calling, and web publishing into a single decentralized experience. Built without centralized servers or DNS, it features human‑verifiable Four-Word identities, per‑entity virtual disks for secure storage, real‑time collaboration tools, and DNS‑free website publishing. Organizations, groups, channels, projects, and individuals each get dedicated virtual storage with end‑to‑end encryption, voice/video capabilities, screen sharing, and collaborative document editing.
+> **Post-quantum collaboration: messaging, virtual disks, DNS-free websites with Four-Word identities.**
 
-Two apps, one core:
-- Desktop app (Tauri v2): rich UI with Tauri commands for automation
-- Headless node: bootstrap/seeding and personal nodes (future rewards)
+Communitas is a local-first, PQC-ready collaboration platform that unifies messaging, file sharing, voice/video calling, and web publishing using human-verifiable Four-Word addressing. Built on saorsa-core v0.3.25 with Tauri v2.
 
-## Key Capabilities
+---
 
-- **Messaging**: Text, voice messages, threads, reactions, and @mentions
-- **Voice/Video**: HD calls, screen sharing, and multi-participant conferencing
-- **Storage**: Per-entity virtual disks with collaborative editing and FEC protection
-- **Web Publishing**: DNS-free websites using Four-Word addresses
-- **Security**: Post-quantum cryptography with end-to-end encryption
-- **Collaboration**: Real-time document editing, file sharing, and team coordination
+## **🚀 Quick Start**
 
-Backed by Saorsa Core (crates.io `saorsa-core`, v0.3.25): DHT, QUIC, identities, groups, messaging, virtual disks, and security.
-
-## 🚀 Quick Start (Desktop Dev)
-
-Prerequisites
-- Node 20+
+### **Prerequisites**
+- Node.js 20+
 - Rust 1.85+
-- Platform deps for Tauri
+- Platform dependencies for Tauri v2
 
-Setup & Run
+### **Development Setup**
 ```bash
 git clone https://github.com/dirvine/communitas.git
 cd communitas
 npm install
+
+# Build frontend and run Tauri app
+npm run build
 npm run tauri dev
 ```
 
-## Headless Nodes & Testnet
-
-Deploy seeds and personal nodes across regions with systemd and cloud‑init. See `finalise/DEPLOY_TESTNET.md` for DigitalOcean templates, ports, and four‑word endpoints.
-
-### Multiple Node Setup
-
-#### Node 1 Configuration
+### **Testing**
 ```bash
-# Terminal 1
-export COMMUNITAS_LOCAL_BOOTSTRAP="127.0.0.1:9001"
-export COMMUNITAS_P2P_PORT="9002"
-export COMMUNITAS_DATA_DIR="./node1-data"
+# TypeScript validation
+npm run typecheck
 
-npm run tauri dev
+# Rust linting (strict policy)
+cargo clippy --all-features -- -D clippy::panic -D clippy::unwrap_used -D clippy::expect_used
+
+# Unit tests
+npm run test:run
+cargo test
 ```
 
-#### Node 2 Configuration
-```bash
-# Terminal 2
-export COMMUNITAS_LOCAL_BOOTSTRAP="127.0.0.1:9001"
-export COMMUNITAS_P2P_PORT="9003"
-export COMMUNITAS_DATA_DIR="./node2-data"
+---
 
-npm run tauri dev
-```
+## **📋 Key Features**
 
-#### Node 3 Configuration
-```bash
-# Terminal 3
-export COMMUNITAS_LOCAL_BOOTSTRAP="127.0.0.1:9001"
-export COMMUNITAS_P2P_PORT="9004"
-export COMMUNITAS_DATA_DIR="./node3-data"
+### **Four-Word Identity System**
+- **Human-Verifiable**: `ocean-blue-eagle-star` instead of cryptographic hashes
+- **Universal Addressing**: Users, organizations, websites, storage disks
+- **Anti-Phishing**: Dictionary validation prevents typosquatting
+- **DNS Replacement**: Cryptographically verified, decentralized naming
 
-npm run tauri dev
-```
+### **Entity-Based Collaboration**
+- **👤 Individuals**: Personal identity, private storage, direct messaging
+- **👥 Groups**: Team collaboration, shared virtual disks, voice calls
+- **🏢 Organizations**: Multi-channel communication, admin controls
+- **📁 Projects**: Structured workspaces, task management, version control
+- **📢 Channels**: Topic-focused discussions, threaded conversations
 
-## Architecture (at a glance)
-
-- Frontend: React + TypeScript + MUI (Tauri WebView)
-- Backend: Rust (Tauri v2)
-- Core: saorsa-core (DHT, QUIC, identities, groups, messaging, virtual disks)
-- Crypto: PQC (ML‑DSA/ML‑KEM); XChaCha20‑Poly1305 for sealing
-- Storage: content addressed, FEC‑sealed objects, per‑entity virtual disks
-
-## Entities & Modules
-
-Communitas organizes collaboration around five core entities, each with dedicated capabilities and virtual storage:
-
-### 🏢 Organizations
-**Purpose**: Large-scale collaboration hubs for companies, communities, or projects
-**Capabilities**:
-- Multi-channel communication with threads and reactions
-- Hierarchical group structure with admin controls
-- Shared virtual disk with collaborative document editing
-- Voice/video conferencing for up to 100 participants
-- Screen sharing and real-time collaboration tools
-- Web disk publishing for public documentation
-- Advanced member management with roles and permissions
-
-### 👥 Groups
-**Purpose**: Medium-sized teams working on specific initiatives
-**Capabilities**:
-- Real-time messaging with @mentions and emoji reactions
-- Shared virtual disk for project assets and documents
-- Voice calls and video conferencing
-- Screen sharing for presentations and demos
-- Threaded conversations for focused discussions
-- File sharing with automatic encryption
-- Member invitation via Four-Word addresses
-
-### 📢 Channels
-**Purpose**: Topic-focused communication streams within organizations/groups
-**Capabilities**:
-- Public and private channel types
-- Text messaging with rich formatting (Markdown)
-- Voice messages and audio clips
-- File attachments and media sharing
-- Thread creation for detailed discussions
-- Channel-specific virtual storage
-- Integration with external tools and services
-
-### 📁 Projects
-**Purpose**: Structured workspaces for development and creative work
-**Capabilities**:
-- Collaborative document editing (CRDT-based)
-- Version-controlled file storage
-- Real-time presence indicators
-- Integrated task management
-- Code sharing and review tools
-- Project-specific virtual disks
-- Automated backup and synchronization
-
-### 👤 Individuals
-**Purpose**: Personal identity and private communication
-**Capabilities**:
-- Direct messaging with end-to-end encryption
-- Personal virtual disk for private files
-- Identity verification via Four-Word addresses
-- Cross-device synchronization
-- Private key management and backup
-- Personal website publishing (DNS-free)
-- Secure contact management
-
-## Module Capabilities
-
-### 💬 Messaging & Communication
-- **Text Messaging**: Real-time chat with Markdown support, threads, and reactions
-- **Voice Messages**: Record and send audio clips directly in conversations
-- **Direct Messages**: Private one-on-one and group conversations
-- **Channel Broadcasting**: Public announcements and topic-based discussions
-- **File Attachments**: Drag-and-drop file sharing with automatic encryption
-
-### 🎥 Voice & Video
-- **Voice Calls**: High-quality audio communication with noise cancellation
-- **Video Conferencing**: HD video calls with screen sharing capabilities
-- **Group Calls**: Multi-participant audio/video sessions
-- **Screen Sharing**: Share entire screen or specific application windows
-- **Recording**: Optional call recording for meetings and presentations
-
-### 💾 Storage & Virtual Disks
-- **Virtual Disks**: Per-entity encrypted storage containers
-- **Collaborative Editing**: Real-time document collaboration with conflict resolution
-- **File Versioning**: Automatic version history and rollback capabilities
-- **FEC Protection**: Forward Error Correction for data resilience
-- **Content Addressing**: Secure file storage with cryptographic integrity
-- **Cross-Device Sync**: Automatic synchronization across all user devices
-
-### 🌐 Web Disk & Publishing
-- **DNS-Free Websites**: Publish websites using Four-Word addresses
-- **Static Site Hosting**: Host documentation, portfolios, and project sites
-- **Collaborative Web Editing**: Team-based website development
-- **Custom Domains**: Optional integration with traditional DNS
-- **CDN Integration**: Global content distribution for high-traffic sites
-
-### 🔐 Security & Privacy
-- **Post-Quantum Cryptography**: ML-DSA signatures and ML-KEM key exchange
-- **End-to-End Encryption**: All communications encrypted end-to-end
+### **Post-Quantum Security**
+- **ML-DSA Signatures**: Quantum-resistant identity verification
+- **ML-KEM Key Exchange**: Secure session establishment
+- **End-to-End Encryption**: All communications encrypted by default
 - **Forward Secrecy**: Perfect forward secrecy for all sessions
-- **Key Management**: Secure key storage in OS keyring
-- **Identity Verification**: Human-verifiable Four-Word addresses
-- **Anti-Phishing**: Built-in protection against identity spoofing
 
-## Docs & Automation
-
-- Communitas agents API: `AGENTS_API.md`
-- Saorsa core agents API: `../saorsa-core/AGENTS_API.md`
-- Testnet & bootstrap: `finalise/DEPLOY_TESTNET.md`
-
-## Security & Lint Policy
-
-- No panics/unwrap/expect in production code
-- Clippy policy:
-  - `cargo clippy --all-features -- -D clippy::panic -D clippy::unwrap_used -D clippy::expect_used`
-- Formatting: `cargo fmt --all` before commits/CI
-
-## Contributing
-
-- Conventional commits (`feat:`, `fix:`, `docs:`, `chore:`, etc.)
-- Ensure:
-  - `npm run typecheck`
-  - `cargo fmt --all`
-  - `cargo clippy --all-features -- -D clippy::panic -D clippy::unwrap_used -D clippy::expect_used`
-
-## License
-
-AGPL‑3.0 for open collaboration. Commercial licensing available via Saorsa Labs.
+### **Local-First Architecture**
+- **Offline Capable**: Core functionality works without network
+- **Real-Time Sync**: Background synchronization when connected
+- **Conflict Resolution**: Automatic merge with manual override options
+- **Data Ownership**: All data stored locally with optional P2P sharing
 
 ---
 
-### Repository settings (for maintainers)
+## **📚 Documentation**
 
-- Suggested GitHub description:
-  - “Local‑first PQC collaboration: messaging, channels, virtual disks per entity, and DNS‑free websites with Four‑Word identities. Powered by saorsa-core.”
-- Suggested topics:
-  - `p2p`, `quic`, `post-quantum`, `tauri`, `webrtc`, `dht`, `decentralized`, `collaboration`, `virtual-disk`, `dnsless-web`
-curl -X POST http://localhost:1420/api/organizations \
-  -H "Content-Type: application/json" \
-  -d '{"name": "Test Organization", "description": "Local testnet org"}'
-```
+### **Core Documentation**
+- **[DESIGN.md](DESIGN.md)**: System architecture and technical design
+- **[UX_FLOWS.md](UX_FLOWS.md)**: User experience patterns and interface design
+- **[ARCHITECTURE.md](ARCHITECTURE.md)**: Technical implementation details
 
-### 4. Verify P2P Connectivity
-```bash
-# Check if nodes can discover each other
-curl http://localhost:1420/api/network/peers
-```
+### **Development Resources**
+- **[docs/development/AGENTS.md](docs/development/AGENTS.md)**: Agent automation guide
+- **[docs/AGENTS_API.md](docs/AGENTS_API.md)**: API reference for automation
+- **[CLAUDE.md](CLAUDE.md)**: LLM helper documentation
 
-## 🐳 Docker Compose Setup
-
-Create `docker-compose.yml`:
-```yaml
-version: '3.8'
-
-services:
-  bootstrap:
-    build:
-      context: .
-      dockerfile: Dockerfile.bootstrap
-    ports:
-      - "9001:9001"
-      - "9100:9100"
-      - "9110:9110"
-      - "9120:9120"
-    environment:
-      - RUST_LOG=info
-
-  node1:
-    build: .
-    depends_on:
-      - bootstrap
-    environment:
-      - COMMUNITAS_LOCAL_BOOTSTRAP=bootstrap:9001
-      - COMMUNITAS_P2P_PORT=9002
-      - COMMUNITAS_DATA_DIR=/app/node1-data
-    volumes:
-      - ./node1-data:/app/node1-data
-
-  node2:
-    build: .
-    depends_on:
-      - bootstrap
-    environment:
-      - COMMUNITAS_LOCAL_BOOTSTRAP=bootstrap:9001
-      - COMMUNITAS_P2P_PORT=9003
-      - COMMUNITAS_DATA_DIR=/app/node2-data
-    volumes:
-      - ./node2-data:/app/node2-data
-```
-
-Run with:
-```bash
-docker-compose up -d
-```
-
-## 🔍 Monitoring & Debugging
-
-### Logs
-```bash
-# View application logs
-docker-compose logs -f
-
-# View specific service logs
-docker-compose logs -f bootstrap
-```
-
-### Network Inspection
-```bash
-# Check container networking
-docker network ls
-docker inspect communitas_default
-
-# Test connectivity between containers
-docker exec communitas_node1 curl http://bootstrap:9001/health
-```
-
-### Performance Monitoring
-```bash
-# Monitor resource usage
-docker stats
-
-# Check health endpoints
-curl http://localhost:1420/health
-curl http://localhost:1421/health  # Node 2
-curl http://localhost:1422/health  # Node 3
-```
-
-## 🛠️ Troubleshooting
-
-### Common Issues
-
-#### Bootstrap Node Not Starting
-```bash
-# Check bootstrap logs
-docker-compose logs bootstrap
-
-# Verify port binding
-netstat -tlnp | grep 9001
-```
-
-#### Nodes Can't Connect
-```bash
-# Check network connectivity
-docker exec communitas_node1 ping bootstrap
-
-# Verify environment variables
-docker exec communitas_node1 env | grep COMMUNITAS
-```
-
-#### Port Conflicts
-```bash
-# Find conflicting processes
-lsof -i :9001
-
-# Kill conflicting process
-kill $(lsof -t -i :9001)
-```
-
-### Debug Mode
-```bash
-# Enable debug logging
-export RUST_LOG=debug,communitas=trace,saorsa_core=debug
-
-# Run with debug symbols
-npm run tauri dev -- --debug
-```
-
-## 📊 Testnet Metrics
-
-Monitor these key metrics:
-- **Peer Count**: Number of connected nodes
-- **Message Latency**: Average message delivery time
-- **Storage Operations**: DHT put/get success rates
-- **Network Health**: Connection stability and uptime
-
-## 🗺️ Roadmap & Future Features
-
-### Current Status
-- ✅ Basic Tauri application structure
-- ✅ React frontend with TypeScript
-- ✅ Rust backend integration
-- ✅ Development environment setup
-- ✅ Core messaging system (text, voice, files)
-- ✅ Virtual disk storage per entity
-- ✅ Voice/video calling infrastructure
-- ✅ Screen sharing capabilities
-- ✅ Web disk publishing (DNS-free)
-- ✅ Four-Word identity system
-- ✅ Post-quantum cryptography
-- 🚧 Advanced UI component library
-- 🚧 Mobile application development
-
-### Active Development
-- **Real-time Collaboration**: Yjs CRDTs for collaborative document editing
-- **Enhanced Voice/Video**: WebRTC integration with PQC encryption
-- **Advanced Storage**: Improved FEC and cross-device synchronization
-- **Mobile Clients**: Native iOS/Android applications
-- **Plugin Architecture**: Extensible third-party integration system
-
-### Future Roadmap
-- **Local AI Integration**: On-device language models for assistance
-- **Storage Market**: Decentralized storage marketplace
-- **Federated Search**: Cross-network content discovery
-- **Advanced Collaboration**: Real-time whiteboarding and design tools
-- **Cross-platform Sync**: Seamless multi-device experience
-- **Decentralized Governance**: Community-driven feature development
-- **API Marketplace**: Third-party service integrations
-
-## 🎯 Next Steps
-
-1. **Scale Testing**: Add more nodes to test scalability
-2. **Load Testing**: Simulate high message volumes
-3. **Security Testing**: Test encryption and authentication
-4. **Performance Optimization**: Monitor and optimize resource usage
-
-## 📞 Support
-
-For issues with local testnet setup:
-1. Check the troubleshooting section above
-2. Review container logs: `docker-compose logs`
-3. Verify network connectivity between containers
-4. Ensure all required ports are available
+### **Deployment**
+- **[finalise/DEPLOY_TESTNET.md](finalise/DEPLOY_TESTNET.md)**: Network deployment guide
 
 ---
 
-**Happy testing! 🎉**
+## **🏗️ Project Structure**
+
+```
+communitas/
+├── src/                     # Legacy React SPA (maintained for regression)
+├── apps/communitas/         # Next-gen React console (future migration)
+├── communitas-core/         # Shared Rust business logic
+├── communitas-desktop/      # Tauri v2 desktop application
+├── communitas-headless/     # Bootstrap/seed node binary
+├── crates/                  # Additional Rust crates
+├── dist/                    # Built frontend assets (Tauri serves from here)
+├── docs/                    # Core documentation
+└── tools/                   # Development utilities
+```
+
+### **Key Commands**
+```bash
+# Development
+npm run build && npm run tauri dev
+
+# Production Build  
+npm run build && npm run tauri build
+
+# Quality Checks
+npm run typecheck && cargo clippy --all-features
+```
+
+---
+
+## **🌐 Network & Identity**
+
+### **Four-Word Addressing Example**
+```typescript
+// Create new organization with just display name
+const result = await createOrganization({ 
+  displayName: "Acme Corporation" 
+});
+// → { fourWords: "ocean-blue-eagle-star", entityId: "org-abc123" }
+
+// Others can find it using the four-words
+const entity = await findEntity("ocean-blue-eagle-star");
+// → Access organization workspace, channels, shared storage
+```
+
+### **Network Participation**
+- **Desktop Nodes**: Full participants with UI
+- **Headless Nodes**: Bootstrap/seed nodes for network infrastructure  
+- **Mobile Nodes**: Future lightweight clients
+- **Browser Bridge**: WebRTC bridge for web access
+
+---
+
+## **🔐 Security Model**
+
+### **Zero-Trust Architecture**
+- **Everything Encrypted**: All data encrypted at rest and in transit
+- **Cryptographic Verification**: Every entity verified by signature
+- **No Central Authority**: Fully decentralized with DHT consensus
+- **Quantum-Safe**: Post-quantum cryptography throughout
+
+### **Privacy Features**
+- **Local-First**: Data stays on your devices unless explicitly shared
+- **Selective Sharing**: Granular control over what gets shared with whom
+- **Anonymous Discovery**: Find public entities without revealing identity
+- **Plausible Deniability**: Private messages indistinguishable from noise
+
+---
+
+## **📄 License**
+
+**AGPL-3.0** for open collaboration. Commercial licensing available via [Saorsa Labs](mailto:saorsalabs@gmail.com).
+
+---
+
+## **🤝 Contributing**
+
+1. **Code Style**: Follow existing patterns and conventions
+2. **Commit Format**: Conventional commits (`feat:`, `fix:`, `docs:`)
+3. **Quality Gates**: All code must pass TypeScript + Rust linting
+4. **Testing**: Include tests for new functionality
+
+### **Development Standards**
+- **No Panics**: Rust code forbids `unwrap`/`expect`/`panic!` in production
+- **Type Safety**: Full TypeScript coverage with strict configuration
+- **Security First**: Post-quantum cryptography and secure defaults
+- **Local-First**: All features must work offline
+
+---
+
+**Ready to revolutionize collaboration? Start building the future of communication today! 🚀**

@@ -4,8 +4,8 @@
   "version": "0.1.1",
   "identifier": "com.p2pfoundation.communitas",
   "build": {
-    "beforeDevCommand": "npm run dev",
-    "devUrl": "http://localhost:5001/",
+    "beforeDevCommand": "npm run build",
+    "devUrl": null,
     "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"
   },

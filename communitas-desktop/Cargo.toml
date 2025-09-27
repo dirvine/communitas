@@ -30,9 +30,10 @@ ant-quic = "^0.8.17"
 
 # Utils
 uuid = { version = "1", features = ["v4", "serde"] }
-four-word-networking = "2.3"
+four-word-networking = "2.6"
 blake3 = "1.0"
 base64 = "0.22"
+rand = "0.8"
 
 # TLS/Security
 rustls = "0.23"

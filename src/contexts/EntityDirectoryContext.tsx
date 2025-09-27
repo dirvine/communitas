@@ -151,26 +151,19 @@ const defaultCapabilities: CollaborationCapabilities = {
   websitePublish: true,
 };
 
-const generateFourWords = () => {
-  const words = [
-    ['ocean', 'forest', 'mountain', 'desert', 'river', 'valley', 'island', 'prairie'],
-    ['blue', 'green', 'golden', 'silver', 'crystal', 'shadow', 'bright', 'misty'],
-    ['eagle', 'wolf', 'bear', 'fox', 'owl', 'hawk', 'lion', 'tiger'],
-    ['star', 'moon', 'sun', 'cloud', 'storm', 'wind', 'fire', 'ice'],
-  ];
-  return words
-    .map(group => group[Math.floor(Math.random() * group.length)])
-    .join('-');
+const generateFourWords = async (): Promise<string> => {
+  // Use real saorsa-core four-word generation
+  return await invoke<string>('generate_four_word_identity');
 };
 
 const createNetworkIdentity = (isOwned: boolean = true, providedFourWords?: string): NetworkIdentity => {
-  const fourWords = providedFourWords || generateFourWords();
+  const fourWords = providedFourWords || `temp-${nanoid(8)}`;
   return {
     fourWords,
     publicKey: `pk_${nanoid(12)}`,
     dhtAddress: `dht://${fourWords.replace(/-/g, '')}-${nanoid(6)}`,
     isOwned,
-    isValidated: !!providedFourWords, // If provided, assume it's validated
+    isValidated: !!providedFourWords, // Only validated if provided
   };
 };
 const MAX_OPERATION_ATTEMPTS = 3;
@@ -488,11 +481,18 @@ export const EntityDirectoryProvider: React.FC<EntityDirectoryProviderProps> = (
   // ============= Create Operations (Generate New Four-Words) =============
 
   const createOrganization = useCallback(async (input: CreateNewOrganizationInput): Promise<EntityOperationResult> => {
+    // Check DHT connection first
+    const isConnected = await invoke<boolean>('check_dht_connection');
+    if (!isConnected) {
+      throw new Error('Must be connected to DHT network to create entities');
+    }
+
     const now = new Date();
     const tempId = `org-${nanoid(8)}`;
 
     // Generate new Four-Words for this organization
-    const networkIdentity = createNetworkIdentity(true); // isOwned = true
+    const generatedFourWords = await generateFourWords();
+    const networkIdentity = createNetworkIdentity(true, generatedFourWords); // isOwned = true
 
     const organization: Organization = {
       id: tempId,
@@ -534,9 +534,16 @@ export const EntityDirectoryProvider: React.FC<EntityDirectoryProviderProps> = (
   }, [queueCreateOperation]);
 
   const createGroup = useCallback(async (input: CreateNewGroupInput): Promise<EntityOperationResult> => {
+    // Check DHT connection first
+    const isConnected = await invoke<boolean>('check_dht_connection');
+    if (!isConnected) {
+      throw new Error('Must be connected to DHT network to create entities');
+    }
+
     const now = new Date();
     const tempId = `group-${nanoid(8)}`;
-    const networkIdentity = createNetworkIdentity(true);
+    const generatedFourWords = await generateFourWords();
+    const networkIdentity = createNetworkIdentity(true, generatedFourWords);
 
     const group: Group = {
       id: tempId,
@@ -583,9 +590,16 @@ export const EntityDirectoryProvider: React.FC<EntityDirectoryProviderProps> = (
   }, [queueCreateOperation]);
 
   const createChannel = useCallback(async (input: CreateNewChannelInput): Promise<EntityOperationResult> => {
+    // Check DHT connection first
+    const isConnected = await invoke<boolean>('check_dht_connection');
+    if (!isConnected) {
+      throw new Error('Must be connected to DHT network to create entities');
+    }
+
     const now = new Date();
     const tempId = `channel-${nanoid(8)}`;
-    const networkIdentity = createNetworkIdentity(true);
+    const generatedFourWords = await generateFourWords();
+    const networkIdentity = createNetworkIdentity(true, generatedFourWords);
 
     const channel: Channel = {
       id: tempId,
@@ -624,9 +638,16 @@ export const EntityDirectoryProvider: React.FC<EntityDirectoryProviderProps> = (
   }, [queueCreateOperation]);
 
   const createProject = useCallback(async (input: CreateNewProjectInput): Promise<EntityOperationResult> => {
+    // Check DHT connection first
+    const isConnected = await invoke<boolean>('check_dht_connection');
+    if (!isConnected) {
+      throw new Error('Must be connected to DHT network to create entities');
+    }
+
     const now = new Date();
     const tempId = `project-${nanoid(8)}`;
-    const networkIdentity = createNetworkIdentity(true);
+    const generatedFourWords = await generateFourWords();
+    const networkIdentity = createNetworkIdentity(true, generatedFourWords);
 
     const project: Project = {
       id: tempId,
@@ -667,9 +688,16 @@ export const EntityDirectoryProvider: React.FC<EntityDirectoryProviderProps> = (
   }, [queueCreateOperation]);
 
   const createContact = useCallback(async (input: CreateNewContactInput): Promise<EntityOperationResult> => {
+    // Check DHT connection first
+    const isConnected = await invoke<boolean>('check_dht_connection');
+    if (!isConnected) {
+      throw new Error('Must be connected to DHT network to create entities');
+    }
+
     const now = new Date();
     const tempId = `contact-${nanoid(8)}`;
-    const networkIdentity = createNetworkIdentity(true);
+    const generatedFourWords = await generateFourWords();
+    const networkIdentity = createNetworkIdentity(true, generatedFourWords);
 
     const user: PersonalUser = {
       id: tempId,

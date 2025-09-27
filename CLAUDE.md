@@ -39,7 +39,7 @@ Communitas is a local-first, PQC-ready collaboration platform that merges WhatsA
 The project includes Chrome DevTools MCP integration for advanced browser debugging and testing capabilities. This provides AI-assisted analysis of performance, UI issues, network requests, and React-specific debugging.
 
 ### Configuration
-Chrome DevTools MCP can be configured in `mcp-config.json`:
+Chrome DevTools MCP is configured in `.mcp.json` (project root):
 ```json
 {
   "mcpServers": {
@@ -57,16 +57,34 @@ Chrome DevTools MCP can be configured in `mcp-config.json`:
 - **Network Analysis**: Request monitoring, WebSocket connections, bundle sizes
 - **UI Validation**: DOM structure, CSS issues, component rendering
 - **React Debugging**: Re-render issues, Context usage, memory leaks
+- **Authentication Testing**: Login/logout flows, session management, user menu access
 
 ### Usage
-Run the test guide: `node test-chrome-devtools-mcp.js`
+The Chrome DevTools MCP can be used to test the web application at `http://localhost:5173/` (or port 5001 when serving built files).
 
 Key test areas for Communitas:
-- Authentication flow (avatar display, login/logout)
+- **Authentication flow**:
+  - ✅ User registration with automatic four-word identity generation
+  - ✅ Login with four-word address
+  - ✅ Single-click logout via improved user menu
+  - ✅ Session persistence with encrypted localStorage
+  - ✅ Password strength validation
+  - ✅ Passkey/WebAuthn support
+- **UI/UX improvements**:
+  - ✅ Dropdown arrow indicator on user avatar
+  - ✅ Professional menu design with user info header
+  - ✅ Network status display in menu
 - Theme switching (light/dark mode transitions)
 - Network connectivity (P2P connections, offline mode)
 - Tauri IPC communication
 - IndexedDB offline storage
+
+### Recent Improvements (2025-09-27)
+- **Fixed logout button visibility**: Now accessible with single click on avatar
+- **Improved authentication UX**: Professional user menu with clear options
+- **Created UnifiedAuthFlow component**: Modern authentication UI with glassmorphism effects
+- **Verified encrypted storage**: Web Crypto API with PBKDF2 and AES-GCM encryption
+- **Tested complete auth flow**: Registration, login, logout all working correctly
 
 ## Development Commands
 

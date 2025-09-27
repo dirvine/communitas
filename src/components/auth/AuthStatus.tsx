@@ -31,6 +31,7 @@ import {
   Key as KeyIcon,
   NetworkCheck as NetworkIcon,
   AccountCircle as AccountCircleIcon,
+  ArrowDropDown as ArrowDropDownIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigation } from '../../contexts/NavigationContext';
@@ -66,28 +67,16 @@ export const AuthStatus: React.FC<AuthStatusProps> = ({
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     console.log('🔵 AuthStatus avatar clicked!', authState.isAuthenticated);
     if (authState.isAuthenticated) {
-      // Navigate to personal context and directly open storage workspace
-      console.log('🔵 Calling switchToPersonal()');
-      switchToPersonal();
-      // Dispatch storage workspace event directly to ensure it opens
-      setTimeout(() => {
-        console.log('🔵 Dispatching open-storage-workspace event');
-        window.dispatchEvent(new CustomEvent('open-storage-workspace'));
-      }, 100);
+      // Open menu directly when avatar is clicked for better UX
+      setAnchorEl(event.currentTarget);
+      // Update network status when menu opens
+      updateNetworkStatus();
     } else {
       setLoginInitialMode('login');
       setLoginDialogOpen(true);
     }
   };
 
-  const handleMenuClick = (event: React.MouseEvent<HTMLElement>) => {
-    event.stopPropagation();
-    if (authState.isAuthenticated) {
-      setAnchorEl(event.currentTarget);
-      // Update network status when menu opens
-      updateNetworkStatus();
-    }
-  };
 
   const handleClose = () => {
     setAnchorEl(null);
@@ -187,50 +176,40 @@ export const AuthStatus: React.FC<AuthStatusProps> = ({
     <>
       <Stack direction="row" spacing={1} alignItems="center">
         <Tooltip
-          title={`Click to access your storage disks • Settings: ${user.fourWordAddress}`}
+          title={`Click to open menu • ${user.fourWordAddress}`}
           arrow
           placement="bottom"
         >
-          <Box sx={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
-            <IconButton
-              onClick={handleClick}
-              size={compact ? 'small' : 'medium'}
+          <Button
+            onClick={handleClick}
+            variant="outlined"
+            size={compact ? 'small' : 'medium'}
+            sx={{
+              p: 0.5,
+              minWidth: 'auto',
+              border: '1px solid',
+              borderColor: 'divider',
+              borderRadius: 2,
+              '&:hover': {
+                backgroundColor: 'action.hover',
+                borderColor: 'primary.main',
+              },
+            }}
+            endIcon={<ArrowDropDownIcon />}
+          >
+            <Avatar
               sx={{
-                border: '1px solid',
-                borderColor: 'divider',
-                '&:hover': {
-                  backgroundColor: 'action.hover',
-                  borderColor: 'primary.main',
-                },
+                width: compact ? 28 : 36,
+                height: compact ? 28 : 36,
+                bgcolor: 'primary.main',
+                fontSize: compact ? '0.875rem' : '1rem',
+                fontWeight: 600,
+                mr: 0.5,
               }}
             >
-              <Avatar
-                sx={{
-                  width: compact ? 28 : 36,
-                  height: compact ? 28 : 36,
-                  bgcolor: 'primary.main',
-                  fontSize: compact ? '0.875rem' : '1rem',
-                  fontWeight: 600,
-                }}
-              >
-                {user.name.charAt(0).toUpperCase()}
-              </Avatar>
-            </IconButton>
-            {!compact && (
-              <IconButton
-                size="small"
-                onClick={handleMenuClick}
-                sx={{ 
-                  ml: 0.5,
-                  '&:hover': {
-                    backgroundColor: 'action.hover',
-                  },
-                }}
-              >
-                <SettingsIcon fontSize="small" />
-              </IconButton>
-            )}
-          </Box>
+              {user.name.charAt(0).toUpperCase()}
+            </Avatar>
+          </Button>
         </Tooltip>
 
         {showLabel && !compact && (

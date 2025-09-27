@@ -29,7 +29,6 @@ import {
 } from '@mui/material';
 import {
   Person as PersonIcon,
-  Email as EmailIcon,
   Lock as LockIcon,
   Visibility as VisibilityIcon,
   VisibilityOff as VisibilityOffIcon,
@@ -93,13 +92,12 @@ export const UnifiedAuthFlow: React.FC<UnifiedAuthFlowProps> = ({
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [passwordStrength, setPasswordStrength] = useState<PasswordStrength>({ score: 0, label: '', color: 'error' });
-  const [identitySaved, setIdentitySaved] = useState(false);
+  const [identitySaved, setIdentitySaved] = useState(true);
   const [showIdentityModal, setShowIdentityModal] = useState(false);
   const [copiedToClipboard, setCopiedToClipboard] = useState(false);
 
   const [formData, setFormData] = useState({
     name: '',
-    email: '',
     password: '',
     confirmPassword: '',
     fourWordAddress: '',
@@ -144,7 +142,6 @@ export const UnifiedAuthFlow: React.FC<UnifiedAuthFlowProps> = ({
     const data = {
       fourWordAddress: generatedFourWords,
       name: formData.name,
-      email: formData.email,
       createdAt: new Date().toISOString(),
       warning: 'Keep this file secure - it contains your identity information'
     };
@@ -161,10 +158,6 @@ export const UnifiedAuthFlow: React.FC<UnifiedAuthFlowProps> = ({
     if (mode === 'register') {
       if (!formData.name.trim()) {
         setError('Name is required');
-        return false;
-      }
-      if (!formData.email.trim() || !validator.isEmail(formData.email)) {
-        setError('Valid email is required');
         return false;
       }
       if (!formData.password || formData.password.length < 8) {
@@ -213,7 +206,6 @@ export const UnifiedAuthFlow: React.FC<UnifiedAuthFlowProps> = ({
       if (mode === 'register') {
         const identity = await createIdentity(
           formData.name,
-          formData.email,
           { password: formData.password, fourWords: generatedFourWords }
         );
         if (identity) {
@@ -460,22 +452,6 @@ export const UnifiedAuthFlow: React.FC<UnifiedAuthFlowProps> = ({
                         startAdornment: (
                           <InputAdornment position="start">
                             <PersonIcon fontSize="small" />
-                          </InputAdornment>
-                        ),
-                      }}
-                    />
-
-                    <TextField
-                      fullWidth
-                      label="Email Address"
-                      type="email"
-                      value={formData.email}
-                      onChange={handleInputChange('email')}
-                      disabled={loading || success}
-                      InputProps={{
-                        startAdornment: (
-                          <InputAdornment position="start">
-                            <EmailIcon fontSize="small" />
                           </InputAdornment>
                         ),
                       }}
@@ -745,7 +721,6 @@ export const UnifiedAuthFlow: React.FC<UnifiedAuthFlowProps> = ({
                         setError(null);
                         setFormData({
                           name: '',
-                          email: '',
                           password: '',
                           confirmPassword: '',
                           fourWordAddress: '',

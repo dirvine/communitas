@@ -2,15 +2,14 @@ import React from 'react'
 import { useParams } from 'react-router-dom'
 import { Box, Typography } from '@mui/material'
 import { EntityChatView } from '../chat/EntityChatView'
+import EntityContentView from '../entity/EntityContentView'
 import { useAuth } from '../auth'
-import {
-  mockPersonalUsers,
-  mockOrganizations,
-} from '../../data/mockCollaborationData'
+import { useEntityDirectory } from '../../contexts/EntityDirectoryContext'
 
 export const UserPage: React.FC = () => {
   const { userId, orgId } = useParams()
   const { authState } = useAuth()
+  const { personalUsers, organizations } = useEntityDirectory()
 
   if (!userId) {
     return (
@@ -21,11 +20,11 @@ export const UserPage: React.FC = () => {
   }
 
   // Find the user in either personal contacts or organization members
-  let user = mockPersonalUsers.find(u => u.id === userId)
+  let user = personalUsers.find(u => u.id === userId)
   
   if (!user && orgId) {
     // Look in organization's channels and groups for users
-    const organization = mockOrganizations.find(org => org.id === orgId)
+    const organization = organizations.find(org => org.id === orgId)
     if (organization) {
       // Check all channels for this user
       for (const channel of organization.channels || []) {
@@ -51,7 +50,9 @@ export const UserPage: React.FC = () => {
               websitePublish: true
             },
             createdAt: new Date(),
-            updatedAt: new Date()
+            updatedAt: new Date(),
+            syncStatus: 'synced',
+            lastSyncedAt: new Date()
           }
           break
         }
@@ -81,7 +82,9 @@ export const UserPage: React.FC = () => {
                 websitePublish: true
               },
               createdAt: new Date(),
-              updatedAt: new Date()
+              updatedAt: new Date(),
+              syncStatus: 'synced',
+              lastSyncedAt: new Date()
             }
             break
           }
@@ -99,15 +102,25 @@ export const UserPage: React.FC = () => {
   }
 
   return (
-    <Box sx={{ height: '100vh' }}>
-      <EntityChatView
-        entityId={userId}
-        entityType="user"
-        entityName={user.name}
-        currentUserId={authState.user?.id || "user-owner-123"}
-        currentUserFourWords={authState.user?.fourWordAddress || "ocean-forest-moon-star"}
-        fourWordAddress={user.networkIdentity.fourWords}
-      />
+    <Box sx={{ height: '100vh', display: 'flex', gap: 2, p: 2, boxSizing: 'border-box' }}>
+      <Box sx={{ flex: 3, minWidth: 0 }}>
+        <EntityChatView
+          entityId={userId}
+          entityType="user"
+          entityName={user.name}
+          currentUserId={authState.user?.id || 'user-owner-123'}
+          currentUserFourWords={authState.user?.fourWordAddress || 'ocean-forest-moon-star'}
+          fourWordAddress={user.networkIdentity.fourWords}
+        />
+      </Box>
+      <Box sx={{ flex: 2, minWidth: 0 }}>
+        <EntityContentView
+          entityType="individual"
+          entityId={user.id}
+          entityName={user.name}
+          fourWords={user.networkIdentity.fourWords}
+        />
+      </Box>
     </Box>
   )
 }

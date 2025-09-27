@@ -459,8 +459,8 @@ pub async fn core_get_bootstrap_nodes() -> Result<Vec<String>, String> {
     if !config_path.exists() {
         // Return default bootstrap nodes if config doesn't exist
         return Ok(vec![
-            "ocean-forest-moon-star:443".to_string(),
-            "river-mountain-sun-cloud:443".to_string(),
+            "ocean-forest-moon-star".to_string(),
+            "river-mountain-sun-cloud".to_string(),
         ]);
     }
 

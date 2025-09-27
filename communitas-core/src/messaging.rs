@@ -25,9 +25,11 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info};
 
-use saorsa_mls::{CipherSuite, GroupId, MlsMessage, ApplicationMessage, MemberId};
 use saorsa_mls::crypto::DebugMlDsaSignature;
-use saorsa_seal::{EnvelopeKind, Recipient, RecipientId, SealPolicy, seal_bytes, Dht as SealDht};
+use saorsa_mls::{ApplicationMessage, CipherSuite, MemberId, MlsMessage};
+
+pub use saorsa_mls::GroupId;
+use saorsa_seal::{Dht as SealDht, EnvelopeKind, Recipient, RecipientId, SealPolicy, seal_bytes};
 
 use saorsa_core::identity::enhanced::EnhancedIdentity;
 
@@ -53,7 +55,6 @@ impl SealDht for MessageDht {
 
 /// MLS epoch type
 pub type Epoch = u64;
-
 
 /// MLS configuration for Communitas
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -167,7 +168,8 @@ impl MlsClient {
         identity: &EnhancedIdentity,
     ) -> Result<MlsMessage> {
         let groups = self.groups.read().await;
-        let group_state = groups.get(group_id)
+        let group_state = groups
+            .get(group_id)
             .ok_or_else(|| anyhow::anyhow!("Group not found: {:?}", group_id))?;
 
         let message = group_state.send_message(content, identity).await?;
@@ -185,7 +187,8 @@ impl MlsClient {
 
         // Get write lock to modify group state
         let mut groups = self.groups.write().await;
-        let group_state = groups.get_mut(&group_id)
+        let group_state = groups
+            .get_mut(&group_id)
             .ok_or_else(|| anyhow::anyhow!("Group not found for message: {:?}", group_id))?;
 
         let processed = group_state.process_message(message, identity).await?;
@@ -211,7 +214,10 @@ impl MlsClient {
         count: usize,
         _identity: &EnhancedIdentity,
     ) -> Result<Vec<Vec<u8>>> {
-        debug!("Generating {} key packages for group: {:?}", count, group_id);
+        debug!(
+            "Generating {} key packages for group: {:?}",
+            count, group_id
+        );
 
         // Generate proper key packages using saorsa-mls
         // This would need to be implemented based on the actual saorsa-mls API
@@ -337,7 +343,9 @@ impl MlsGroupState {
 
         // Encrypt the content using saorsa-seal for demonstration
         // This would normally be handled by saorsa-mls internally
-        let encrypted_content = self.encrypt_message_content(content, &self.group_id, self.epoch).await?;
+        let encrypted_content = self
+            .encrypt_message_content(content, &self.group_id, self.epoch)
+            .await?;
 
         let app_message = ApplicationMessage {
             epoch: self.epoch,
@@ -349,7 +357,9 @@ impl MlsGroupState {
                 // Create a placeholder signature using unsafe code for compilation
                 // This is a temporary workaround until we have proper MLS signature API
                 #[allow(invalid_value)]
-                unsafe { std::mem::MaybeUninit::<DebugMlDsaSignature>::zeroed().assume_init() }
+                unsafe {
+                    std::mem::MaybeUninit::<DebugMlDsaSignature>::zeroed().assume_init()
+                }
             },
         };
         let message = MlsMessage::Application(app_message);
@@ -397,7 +407,8 @@ impl MlsGroupState {
         epoch: u64,
     ) -> Result<Vec<u8>> {
         // Create recipients for the group members
-        let recipients: Vec<Recipient> = self.members
+        let recipients: Vec<Recipient> = self
+            .members
             .iter()
             .enumerate()
             .map(|(i, _member)| Recipient {
@@ -409,7 +420,7 @@ impl MlsGroupState {
         // Configure sealing policy with PQC encryption
         let policy = SealPolicy {
             n: self.members.len(), // Total recipients
-            t: 1, // Threshold - any member can decrypt
+            t: 1,                  // Threshold - any member can decrypt
             recipients,
             fec: saorsa_seal::FecParams {
                 data_shares: 1,
@@ -460,15 +471,16 @@ impl MlsGroupState {
         self.members = new_members;
 
         if self.members.len() < initial_len {
-            info!("Successfully removed member from group: {:?}", self.group_id);
+            info!(
+                "Successfully removed member from group: {:?}",
+                self.group_id
+            );
         } else {
             debug!("Member not found in group: {:?}", self.group_id);
         }
 
         Ok(())
     }
-
-
 
     /// Decrypt message content using saorsa-seal
     async fn decrypt_message_content(&self, ciphertext: &[u8]) -> Result<Vec<u8>> {
@@ -487,8 +499,6 @@ impl MlsGroupState {
         // This would need to be implemented based on the actual saorsa-mls API
         Ok(())
     }
-
-
 }
 
 /// Processed MLS message
@@ -521,19 +531,35 @@ pub struct GroupSettings {
 /// MLS group management operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum GroupOperation {
-    Create { name: String, members: Vec<EnhancedIdentity> },
-    Join { welcome_data: Vec<u8> },
+    Create {
+        name: String,
+        members: Vec<EnhancedIdentity>,
+    },
+    Join {
+        welcome_data: Vec<u8>,
+    },
     Leave,
-    AddMember { member: EnhancedIdentity },
-    RemoveMember { member: EnhancedIdentity },
-    UpdateSettings { settings: GroupSettings },
+    AddMember {
+        member: EnhancedIdentity,
+    },
+    RemoveMember {
+        member: EnhancedIdentity,
+    },
+    UpdateSettings {
+        settings: GroupSettings,
+    },
 }
 
 /// MLS message operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum MessageOperation {
-    Send { content: Vec<u8>, content_type: String },
-    Process { message_data: Vec<u8> },
+    Send {
+        content: Vec<u8>,
+        content_type: String,
+    },
+    Process {
+        message_data: Vec<u8>,
+    },
 }
 
 /// Error types for MLS operations
@@ -574,19 +600,25 @@ mod tests {
         let group_id = GroupId::generate();
         // Create a test identity using the manager approach
         let id_mgr = saorsa_core::identity::IdentityManager::new(
-            saorsa_core::identity::manager::IdentityManagerConfig::default()
+            saorsa_core::identity::manager::IdentityManagerConfig::default(),
         );
         let base_identity = id_mgr
-            .create_identity("test-user".to_string(), "test-user-four-words".to_string(), None, None)
+            .create_identity(
+                "test-user".to_string(),
+                "test-user-four-words".to_string(),
+                None,
+                None,
+            )
             .await
             .map_err(|e| anyhow::anyhow!("Failed to create base identity: {}", e))?;
 
-        let mut enhanced_mgr = saorsa_core::identity::enhanced::EnhancedIdentityManager::new(id_mgr);
+        let mut enhanced_mgr =
+            saorsa_core::identity::enhanced::EnhancedIdentityManager::new(id_mgr);
         let identity = enhanced_mgr
             .create_enhanced_identity(
                 base_identity,
                 "test-device".to_string(),
-                saorsa_core::identity::enhanced::DeviceType::Desktop
+                saorsa_core::identity::enhanced::DeviceType::Desktop,
             )
             .await
             .map_err(|e| anyhow::anyhow!("Failed to create enhanced identity: {}", e))?;

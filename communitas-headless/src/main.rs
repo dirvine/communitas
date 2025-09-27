@@ -543,21 +543,16 @@ async fn start_health_endpoint(
             }))
         });
 
-    let get_identity = warp::path("identity")
-        .and(warp::get())
-        .map(|| {
-            // Return current node identity info
-            warp::reply::json(&serde_json::json!({
-                "node_type": "communitas-headless",
-                "version": env!("CARGO_PKG_VERSION"),
-                "status": "active"
-            }))
-        });
+    let get_identity = warp::path("identity").and(warp::get()).map(|| {
+        // Return current node identity info
+        warp::reply::json(&serde_json::json!({
+            "node_type": "communitas-headless",
+            "version": env!("CARGO_PKG_VERSION"),
+            "status": "active"
+        }))
+    });
 
-    let routes = health
-        .or(metrics)
-        .or(authenticate)
-        .or(get_identity);
+    let routes = health.or(metrics).or(authenticate).or(get_identity);
 
     // Add CORS support
     let cors = cors()

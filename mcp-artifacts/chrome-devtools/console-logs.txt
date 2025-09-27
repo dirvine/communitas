@@ -1,0 +1,52 @@
+# list_console_messages response
+## Console messages
+Log> AuthStatus.tsx:78:10: 🟡 AuthStatus render - loginDialogOpen: false 🟡 AuthStatus render - loginDialogOpen: false
+Log> AuthStatus.tsx:78:10: 🟡 AuthStatus render - loginDialogOpen: false 🟡 AuthStatus render - loginDialogOpen: false
+Log> AuthStatus.tsx:78:10: 🟡 AuthStatus render - loginDialogOpen: false 🟡 AuthStatus render - loginDialogOpen: false
+Log> AuthStatus.tsx:78:10: 🟡 AuthStatus render - loginDialogOpen: false 🟡 AuthStatus render - loginDialogOpen: false
+Log> LoginDialog.tsx:65:10: 🟢 LoginDialog render - open: false 🟢 LoginDialog render - open: false
+Log> LoginDialog.tsx:65:10: 🟢 LoginDialog render - open: false 🟢 LoginDialog render - open: false
+Log> LoginDialog.tsx:65:10: 🟢 LoginDialog render - open: false 🟢 LoginDialog render - open: false
+Log> LoginDialog.tsx:65:10: 🟢 LoginDialog render - open: false 🟢 LoginDialog render - open: false
+Log> LoginDialog.tsx:65:10: 🟢 LoginDialog render - open: false 🟢 LoginDialog render - open: false
+Log> LoginDialog.tsx:65:10: 🟢 LoginDialog render - open: false 🟢 LoginDialog render - open: false
+Log> LoginDialog.tsx:65:10: 🟢 LoginDialog render - open: false 🟢 LoginDialog render - open: false
+Log> LoginDialog.tsx:65:10: 🟢 LoginDialog render - open: false 🟢 LoginDialog render - open: false
+undefined> useDHTSync.ts:147:14: [DHT] Sync disabled: not running inside Tauri runtime [DHT] Sync disabled: not running inside Tauri runtime
+undefined> useDHTSync.ts:147:14: [DHT] Sync disabled: not running inside Tauri runtime [DHT] Sync disabled: not running inside Tauri runtime
+undefined> react-router-dom.js?v=3e4118f8:4402:12: ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition. ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+undefined> react-router-dom.js?v=3e4118f8:4402:12: ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition. ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+undefined> react-router-dom.js?v=3e4118f8:4402:12: ⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath. ⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+undefined> react-router-dom.js?v=3e4118f8:4402:12: ⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath. ⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+Log> App.tsx:145:12: 🚀 Initializing network connection service... 🚀 Initializing network connection service...
+Log> App.tsx:145:12: 🚀 Initializing network connection service... 🚀 Initializing network connection service...
+undefined> useDHTSync.ts:147:14: [DHT] Sync disabled: not running inside Tauri runtime [DHT] Sync disabled: not running inside Tauri runtime
+undefined> useDHTSync.ts:147:14: [DHT] Sync disabled: not running inside Tauri runtime [DHT] Sync disabled: not running inside Tauri runtime
+Log> App.tsx:145:12: 🚀 Initializing network connection service... 🚀 Initializing network connection service...
+Log> App.tsx:145:12: 🚀 Initializing network connection service... 🚀 Initializing network connection service...
+Log> AuthStatus.tsx:78:10: 🟡 AuthStatus render - loginDialogOpen: false 🟡 AuthStatus render - loginDialogOpen: false
+Log> AuthStatus.tsx:78:10: 🟡 AuthStatus render - loginDialogOpen: false 🟡 AuthStatus render - loginDialogOpen: false
+Log> AuthStatus.tsx:78:10: 🟡 AuthStatus render - loginDialogOpen: false 🟡 AuthStatus render - loginDialogOpen: false
+Log> AuthStatus.tsx:78:10: 🟡 AuthStatus render - loginDialogOpen: false 🟡 AuthStatus render - loginDialogOpen: false
+Log> LoginDialog.tsx:65:10: 🟢 LoginDialog render - open: false 🟢 LoginDialog render - open: false
+Log> LoginDialog.tsx:65:10: 🟢 LoginDialog render - open: false 🟢 LoginDialog render - open: false
+Log> LoginDialog.tsx:65:10: 🟢 LoginDialog render - open: false 🟢 LoginDialog render - open: false
+Log> LoginDialog.tsx:65:10: 🟢 LoginDialog render - open: false 🟢 LoginDialog render - open: false
+Log> LoginDialog.tsx:65:10: 🟢 LoginDialog render - open: false 🟢 LoginDialog render - open: false
+Log> LoginDialog.tsx:65:10: 🟢 LoginDialog render - open: false 🟢 LoginDialog render - open: false
+Log> LoginDialog.tsx:65:10: 🟢 LoginDialog render - open: false 🟢 LoginDialog render - open: false
+Log> LoginDialog.tsx:65:10: 🟢 LoginDialog render - open: false 🟢 LoginDialog render - open: false
+Log> NetworkConnectionService.ts:41:12: 📵 Network auto-connection disabled for testing 📵 Network auto-connection disabled for testing
+Log> NetworkConnectionService.ts:41:12: 📵 Network auto-connection disabled for testing 📵 Network auto-connection disabled for testing
+Log> AuthStatus.tsx:78:10: 🟡 AuthStatus render - loginDialogOpen: false 🟡 AuthStatus render - loginDialogOpen: false
+Log> AuthStatus.tsx:78:10: 🟡 AuthStatus render - loginDialogOpen: false 🟡 AuthStatus render - loginDialogOpen: false
+Log> AuthStatus.tsx:78:10: 🟡 AuthStatus render - loginDialogOpen: false 🟡 AuthStatus render - loginDialogOpen: false
+Log> AuthStatus.tsx:78:10: 🟡 AuthStatus render - loginDialogOpen: false 🟡 AuthStatus render - loginDialogOpen: false
+Log> LoginDialog.tsx:65:10: 🟢 LoginDialog render - open: false 🟢 LoginDialog render - open: false
+Log> LoginDialog.tsx:65:10: 🟢 LoginDialog render - open: false 🟢 LoginDialog render - open: false
+Log> LoginDialog.tsx:65:10: 🟢 LoginDialog render - open: false 🟢 LoginDialog render - open: false
+Log> LoginDialog.tsx:65:10: 🟢 LoginDialog render - open: false 🟢 LoginDialog render - open: false
+undefined> OfflineStorageService.ts:295:16: Failed to retrieve from network, using cache: JSHandle@error Failed to retrieve from network, using cache: {}
+undefined> OfflineStorageService.ts:295:16: Failed to retrieve from network, using cache: JSHandle@error Failed to retrieve from network, using cache: {}
+undefined> OfflineStorageService.ts:295:16: Failed to retrieve from network, using cache: JSHandle@error Failed to retrieve from network, using cache: {}
+undefined> OfflineStorageService.ts:295:16: Failed to retrieve from network, using cache: JSHandle@error Failed to retrieve from network, using cache: {}

@@ -5,7 +5,7 @@
   "identifier": "com.p2pfoundation.communitas",
   "build": {
     "beforeDevCommand": "npm run dev",
-    "devUrl": "http://localhost:1422/",
+    "devUrl": "http://localhost:5001/",
     "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"
   },
@@ -14,6 +14,7 @@
     "windows": [
       {
         "title": "Communitas - Privacy, Security and Freedom (Saorsa)",
+        "url": "http://localhost:5001/",
         "width": 1200,
         "height": 800,
         "minWidth": 800,

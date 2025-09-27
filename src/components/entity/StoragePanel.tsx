@@ -134,6 +134,7 @@ const StoragePanel: React.FC<StoragePanelProps> = ({
   fourWords,
   permissions,
   encryptionStatus,
+  initialArea,
 }) => {
   // Try to use LocalStorage context, fall back to direct service if not available
   let localStorage: any = null;
@@ -388,7 +389,7 @@ const StoragePanel: React.FC<StoragePanelProps> = ({
       const rootPath = getStorageRoot(currentArea);
       const fullPath = `${rootPath}${currentPath}/${newFolderName.trim()}`;
       
-      await invoke('core_storage_create_folder', {
+      await invoke('core_storage_mkdir', {
         entityId,
         path: fullPath,
       });
@@ -788,7 +789,7 @@ const StoragePanel: React.FC<StoragePanelProps> = ({
             </IconButton>
 
             {/* Refresh */}
-            <IconButton onClick={loadItems}>
+            <IconButton onClick={() => { void loadItems(); }}>
               <RefreshIcon />
             </IconButton>
           </Stack>

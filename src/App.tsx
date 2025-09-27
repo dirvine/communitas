@@ -57,11 +57,7 @@ import BreadcrumbNavigation from './components/navigation/BreadcrumbNavigation'
 import ContextAwareSidebar from './components/navigation/ContextAwareSidebar'
 
 // Mock data for testing
-import {
-  mockOrganizations,
-  mockPersonalGroups,
-  mockPersonalUsers,
-} from './data/mockCollaborationData'
+import { EntityDirectoryProvider, useEntityDirectory } from './contexts/EntityDirectoryContext'
 
 // Tauri Context
 import { TauriProvider } from './contexts/TauriContext'
@@ -357,12 +353,13 @@ function App() {
     if (path.startsWith('/org/')) {
       const parts = path.split('/')
       const orgId = parts[2]
-      const org = mockOrganizations.find(o => o.id === orgId)
+      const orgName = (entity && 'name' in entity) ? entity.name : 'Organization'
+      const fourWords = (entity && entity.networkIdentity?.fourWords) || 'unknown-org'
       setNavigationContext({
         mode: 'organization',
         organizationId: orgId,
-        organizationName: org?.name || 'Organization',
-        fourWords: org?.networkIdentity.fourWords || 'unknown-org',
+        organizationName: orgName,
+        fourWords,
       })
     } else if (path === '/') {
       setNavigationContext({
@@ -379,6 +376,7 @@ function App() {
   }) => {
     const navigate = useNavigate();
     const { authState } = useAuth();
+    const { organizations } = useEntityDirectory();
     const [urlBarValue, setUrlBarValue] = React.useState('');
     const [urlBarFocused, setUrlBarFocused] = React.useState(false);
     const [urlBarError, setUrlBarError] = React.useState('');
@@ -397,7 +395,7 @@ function App() {
         console.log('Navigating to four-word address:', cleanAddress);
         
         // Check if this is a known entity from our mock data
-        const matchingOrg = mockOrganizations.find(org => 
+        const matchingOrg = organizations.find(org => 
           org.networkIdentity.fourWords === cleanAddress
         );
         
@@ -728,8 +726,9 @@ function App() {
     <TauriProvider>
       <AuthProvider>
         <EncryptionProvider>
-          <NavigationProvider>
-          <BrowserRouter>
+          <EntityDirectoryProvider>
+            <NavigationProvider>
+              <BrowserRouter>
           {/** Bridge navigation events to React Router */}
           {/* NavBridge temporarily disabled - causing infinite render loop
           {(() => {
@@ -759,9 +758,6 @@ function App() {
             }
             sidebar={
               <WhatsAppStyleNavigation
-                organizations={mockOrganizations}
-                personalGroups={mockPersonalGroups}
-                personalUsers={mockPersonalUsers}
                 currentUserId="user_owner_123"
                 onNavigate={handleWhatsAppNavigate}
                 onVideoCall={handleVideoCall}
@@ -805,7 +801,7 @@ function App() {
               notifications={0}
             />
           </ResponsiveLayout>
-          </BrowserRouter>
+              </BrowserRouter>
   
   {/* Overview Modal */}
   {showOverview && (
@@ -853,7 +849,8 @@ function App() {
     onSelect={handleEntitySelected}
     actionType={pendingAction || 'call'}
   />
-          </NavigationProvider>
+            </NavigationProvider>
+          </EntityDirectoryProvider>
         </EncryptionProvider>
       </AuthProvider>
     </TauriProvider>

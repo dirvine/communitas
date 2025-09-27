@@ -194,6 +194,193 @@ export class OfflineStorageService {
   }
 
   /**
+   * Batch store multiple items at once
+   */
+  async storeBatch(items: Array<{
+    key: string;
+    data: any;
+    options?: {
+      ttl?: number;
+      encrypt?: boolean;
+      syncOnline?: boolean;
+    };
+  }>): Promise<void> {
+    const batchPromises: Promise<void>[] = [];
+
+    // Start a single IndexedDB transaction for batch operation
+    if (this.db) {
+      const transaction = this.db.transaction(['cache'], 'readwrite');
+      const store = transaction.objectStore('cache');
+
+      for (const item of items) {
+        const entry: CacheEntry = {
+          key: item.key,
+          data: item.data,
+          timestamp: Date.now(),
+          expiresAt: item.options?.ttl ? Date.now() + item.options.ttl : undefined,
+          source: this.isOnline ? 'network' : 'local'
+        };
+
+        // Store in memory cache
+        this.cache.set(item.key, entry);
+
+        // Add to batch transaction
+        store.put(entry);
+
+        // If encrypted storage requested, add to batch promises
+        if (item.options?.encrypt) {
+          batchPromises.push(
+            invoke('core_private_put', {
+              key: item.key,
+              content: new TextEncoder().encode(JSON.stringify(item.data))
+            }).catch(error => {
+              console.warn(`Failed to store encrypted ${item.key}:`, error);
+            })
+          );
+        }
+
+        // Queue for sync if offline and sync requested
+        if (!this.isOnline && item.options?.syncOnline) {
+          this.addToSyncQueue('create', item.key, item.data);
+        }
+      }
+
+      // Wait for transaction to complete
+      await new Promise<void>((resolve, reject) => {
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = () => reject(transaction.error);
+      });
+    }
+
+    // Wait for all encrypted storage operations
+    if (batchPromises.length > 0) {
+      await Promise.all(batchPromises);
+    }
+
+    console.log(`📦 Batch stored ${items.length} items`);
+  }
+
+  /**
+   * Batch retrieve multiple items at once
+   */
+  async getBatch(keys: string[]): Promise<Map<string, any>> {
+    const results = new Map<string, any>();
+
+    // First check memory cache
+    const uncachedKeys: string[] = [];
+    for (const key of keys) {
+      const cached = this.cache.get(key);
+      if (cached && (!cached.expiresAt || cached.expiresAt > Date.now())) {
+        results.set(key, cached.data);
+      } else {
+        uncachedKeys.push(key);
+      }
+    }
+
+    // If all found in cache, return early
+    if (uncachedKeys.length === 0) {
+      return results;
+    }
+
+    // Batch fetch from IndexedDB
+    if (this.db) {
+      const transaction = this.db.transaction(['cache'], 'readonly');
+      const store = transaction.objectStore('cache');
+
+      const fetchPromises = uncachedKeys.map(key =>
+        new Promise<void>((resolve) => {
+          const request = store.get(key);
+          request.onsuccess = () => {
+            const entry = request.result as CacheEntry;
+            if (entry && (!entry.expiresAt || entry.expiresAt > Date.now())) {
+              results.set(key, entry.data);
+              // Update memory cache
+              this.cache.set(key, entry);
+            }
+            resolve();
+          };
+          request.onerror = () => resolve(); // Continue even if one fails
+        })
+      );
+
+      await Promise.all(fetchPromises);
+    }
+
+    // Try network fetch for still-missing keys
+    const stillMissing = uncachedKeys.filter(key => !results.has(key));
+    if (stillMissing.length > 0 && this.isOnline) {
+      const networkPromises = stillMissing.map(async key => {
+        try {
+          const data = await invoke('core_dht_get', { key });
+          if (data) {
+            results.set(key, data);
+            // Cache the result
+            await this.store(key, data, { ttl: 3600000 }); // 1 hour cache
+          }
+        } catch (error) {
+          console.warn(`Failed to fetch ${key} from network:`, error);
+        }
+      });
+
+      await Promise.all(networkPromises);
+    }
+
+    return results;
+  }
+
+  /**
+   * Batch delete multiple items
+   */
+  async removeBatch(keys: string[]): Promise<void> {
+    // Remove from memory cache
+    for (const key of keys) {
+      this.cache.delete(key);
+    }
+
+    // Batch delete from IndexedDB
+    if (this.db) {
+      const transaction = this.db.transaction(['cache'], 'readwrite');
+      const store = transaction.objectStore('cache');
+
+      for (const key of keys) {
+        store.delete(key);
+
+        // Add to sync queue if online sync is needed
+        if (!this.isOnline) {
+          this.addToSyncQueue('delete', key, null);
+        }
+      }
+
+      await new Promise<void>((resolve, reject) => {
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = () => reject(transaction.error);
+      });
+    }
+
+    console.log(`🗑️ Batch removed ${keys.length} items`);
+  }
+
+  /**
+   * Remove cached data
+   */
+  async remove(key: string): Promise<void> {
+    this.cache.delete(key);
+
+    try {
+      await this.deleteFromDB('cache', key);
+    } catch (error) {
+      console.warn(`[OfflineStorage] Failed to remove ${key} from IndexedDB cache`, error);
+    }
+
+    try {
+      await invoke('core_private_delete', { key });
+    } catch (error) {
+      // Not all environments expose delete; log at debug level only
+      console.debug('[OfflineStorage] core_private_delete unavailable or failed', error);
+    }
+  }
+
+  /**
    * Retrieve data with automatic fallback
    */
   async get<T = any>(key: string): Promise<T | null> {
@@ -309,6 +496,53 @@ export class OfflineStorageService {
     this.syncQueue.push(item);
     this.persistToDB('syncQueue', item);
     console.log(`📝 Added to sync queue: ${operation} ${resource}`);
+  }
+
+  /**
+   * Batch add operations to sync queue
+   */
+  async queueForSync(operations: Array<{
+    type: 'create' | 'update' | 'delete';
+    entity: string;
+    data: any;
+  }>): Promise<void> {
+    const batchItems: SyncQueueItem[] = [];
+
+    for (const op of operations) {
+      const item: SyncQueueItem = {
+        id: `sync_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        operation: op.type,
+        resource: op.entity,
+        data: op.data,
+        timestamp: Date.now(),
+        retryCount: 0
+      };
+
+      this.syncQueue.push(item);
+      batchItems.push(item);
+    }
+
+    // Batch persist to IndexedDB
+    if (this.db && batchItems.length > 0) {
+      const transaction = this.db.transaction(['syncQueue'], 'readwrite');
+      const store = transaction.objectStore('syncQueue');
+
+      for (const item of batchItems) {
+        store.put(item);
+      }
+
+      await new Promise<void>((resolve, reject) => {
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = () => reject(transaction.error);
+      });
+    }
+
+    console.log(`📝 Batch queued ${operations.length} operations for sync`);
+
+    // Try to process immediately if online
+    if (this.isOnline) {
+      this.processSyncQueue();
+    }
   }
 
   /**
@@ -534,6 +768,9 @@ export const offlineStorage = {
     syncOnline?: boolean;
   }): Promise<void> {
     return offlineStorage.instance.store(key, data, options);
+  },
+  async remove(key: string): Promise<void> {
+    return offlineStorage.instance.remove(key);
   },
   async get<T = any>(key: string): Promise<T | null> {
     return offlineStorage.instance.get<T>(key);

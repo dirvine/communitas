@@ -135,9 +135,22 @@ export const LoginDialog: React.FC<LoginDialogProps> = ({
 
     try {
       // Generate four-words
-      const fourWords = await generateFourWordIdentity()
+      const rawFourWords = await generateFourWordIdentity()
+      const normalizedFourWords = rawFourWords.replace(/\s+/g, '-');
       // Create identity with password (AuthContext will store encrypted info and DHT locator)
-      await createIdentity(formData.name.trim(), formData.email.trim() || undefined, { fourWords, password } as any)
+      await createIdentity(formData.name.trim(), formData.email.trim() || undefined, { fourWords: normalizedFourWords, password } as any)
+
+      // Browser fallback: ensure minimal identity data persists even if vault/tauri APIs are unavailable
+      localStorage.setItem('communitas-four-words', normalizedFourWords);
+      localStorage.setItem('communitas-user-name', formData.name.trim());
+      localStorage.setItem('communitas-identity', JSON.stringify({
+        name: formData.name.trim(),
+        email: formData.email.trim() || undefined,
+        fourWordAddress: normalizedFourWords,
+      }));
+      if (!localStorage.getItem('communitas-has-vault')) {
+        localStorage.setItem('communitas-has-vault', 'false');
+      }
       onSuccess?.();
       onClose();
       setFormData({ fourWordAddress: '', privateKey: '', name: '', email: '' })

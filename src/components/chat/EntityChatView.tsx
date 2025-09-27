@@ -91,6 +91,8 @@ import { invoke } from '@tauri-apps/api/core';
 import { validateFourWordIdentity } from '../../utils/identity';
 import { webRTCService } from '../../services/communication/WebRTCService';
 import { backendService } from '../../services/api/BackendService';
+import { useEntityDirectory } from '../../contexts/EntityDirectoryContext';
+import { loadMessages as loadStoredMessages, upsertMessage } from '../../utils/messageStore';
 
 // Transform backend message format to component format
 const transformBackendMessage = (backendMessage: any): Message => {
@@ -134,7 +136,7 @@ const transformBackendMember = (backendMember: any): Member => {
   };
 };
 
-interface Message {
+export interface Message {
   id: string;
   sender: {
     id: string;
@@ -203,6 +205,7 @@ export const EntityChatView: React.FC<EntityChatViewProps> = ({
   currentUserId,
   currentUserFourWords,
 }) => {
+  const { queueMessage } = useEntityDirectory();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const isTablet = useMediaQuery(theme.breakpoints.between('md', 'lg'));
@@ -226,31 +229,79 @@ export const EntityChatView: React.FC<EntityChatViewProps> = ({
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageInputRef = useRef<HTMLInputElement>(null);
+  const dataRequestIdRef = useRef(0);
+
+  const loadLocalMessages = useCallback(() => {
+    const stored = loadStoredMessages(entityType, entityId);
+    if (stored.length > 0) {
+      setMessages(stored);
+    }
+  }, [entityId, entityType]);
 
   // Load entity data and messages
   useEffect(() => {
-    loadEntityData();
-  }, [entityId, entityType]);
+    const requestId = ++dataRequestIdRef.current;
+
+    // Reset per-entity transient state before loading
+    setReplyingTo(null);
+    setActiveThread(null);
+    setSelectedMessage(null);
+    setMenuAnchor(null);
+    setMembersDrawerOpen(false);
+    setShowAddMember(false);
+    setNewMemberAddress('');
+    setNewMemberRole('member');
+    setSearchQuery('');
+    setNewMessage('');
+    setSending(false);
+
+    loadLocalMessages();
+    loadEntityData(requestId);
+  }, [entityId, entityType, loadLocalMessages]);
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      if (!detail) return;
+      if (detail.entityId === entityId && detail.entityType === entityType) {
+        loadLocalMessages();
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('messages:updated', handler as EventListener);
+      return () => window.removeEventListener('messages:updated', handler as EventListener);
+    }
+    return () => undefined;
+  }, [entityId, entityType, loadLocalMessages]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const loadEntityData = async () => {
-    setLoading(true);
-    try {
-      // Always set fallback data first to ensure component renders
-      const fallbackMessages = generateDemoMessages();
-      setMessages(fallbackMessages);
+  const guardStateUpdate = (requestId: number, updater: () => void) => {
+    if (dataRequestIdRef.current === requestId) {
+      updater();
+    }
+  };
 
-      // Always set fallback members first
+  const loadEntityData = async (requestId: number) => {
+    guardStateUpdate(requestId, () => setLoading(true));
+    try {
+      // Always ensure we have something rendered
+      guardStateUpdate(requestId, () => {
+        const current = loadStoredMessages(entityType, entityId);
+        if (current.length === 0) {
+          setMessages(generateDemoMessages());
+        }
+      });
+
       if (entityType !== 'user') {
         const fallbackMembers = generateDemoMembers();
-        setMembers(fallbackMembers);
+        guardStateUpdate(requestId, () => setMembers(fallbackMembers));
       } else {
-        // For user entities, create a simple member list
-        setMembers([
+        const fallbackMemberList: Member[] = [
           {
             id: entityId,
             name: entityName || 'Contact',
@@ -258,18 +309,19 @@ export const EntityChatView: React.FC<EntityChatViewProps> = ({
             role: 'member',
             status: Math.random() > 0.5 ? 'online' : 'offline',
             lastSeen: new Date().toISOString(),
-          }
-        ]);
+          },
+        ];
+        guardStateUpdate(requestId, () => setMembers(fallbackMemberList));
       }
 
       // Try to load real data, but don't block rendering if it fails
       try {
         const entityMessages = await loadMessages();
-        setMessages(entityMessages);
+        guardStateUpdate(requestId, () => setMessages(entityMessages));
 
         if (entityType !== 'user') {
           const entityMembers = await loadMembers();
-          setMembers(entityMembers);
+          guardStateUpdate(requestId, () => setMembers(entityMembers));
         }
       } catch (backendError) {
         console.log('Using fallback data - backend not available:', backendError);
@@ -277,11 +329,12 @@ export const EntityChatView: React.FC<EntityChatViewProps> = ({
       }
     } catch (error) {
       console.error('Failed to load entity data:', error);
-      // Ensure we always have some data even if everything fails
-      setMessages(generateDemoMessages());
-      setMembers(entityType !== 'user' ? generateDemoMembers() : []);
+      guardStateUpdate(requestId, () => {
+        setMessages(generateDemoMessages());
+        setMembers(entityType !== 'user' ? generateDemoMembers() : []);
+      });
     } finally {
-      setLoading(false);
+      guardStateUpdate(requestId, () => setLoading(false));
     }
   };
 
@@ -410,53 +463,47 @@ export const EntityChatView: React.FC<EntityChatViewProps> = ({
     if (!newMessage.trim() || sending) return;
 
     setSending(true);
+    const optimisticId = `temp-${Date.now()}`;
     try {
+      const timestamp = new Date().toISOString();
       const message: Message = {
-        id: `temp-${Date.now()}`,
+        id: optimisticId,
         sender: {
           id: currentUserId,
           name: 'You',
           fourWordAddress: currentUserFourWords,
         },
         content: newMessage.trim(),
-        timestamp: new Date().toISOString(),
+        timestamp,
         type: 'text',
         status: 'sending',
         reactions: [],
-        replyTo: replyingTo ? {
-          id: replyingTo.id,
-          sender: replyingTo.sender.name,
-          preview: replyingTo.content.slice(0, 50) + '...',
-        } : undefined,
+        replyTo: replyingTo
+          ? {
+              id: replyingTo.id,
+              sender: replyingTo.sender.name,
+              preview: replyingTo.content.slice(0, 50) + '...',
+            }
+          : undefined,
       };
 
-      // Optimistically add message to UI
       setMessages(prev => [...prev, message]);
       setNewMessage('');
       setReplyingTo(null);
+      upsertMessage(entityType, entityId, message);
 
-      // Send to backend using environment-aware service
-      const backendResult = await backendService.sendMessage(
-        entityType, 
-        entityId, 
-        message.content, 
-        replyingTo?.id
-      );
-
-      // Update message status after "sending"
-      setTimeout(() => {
-        setMessages(prev => prev.map(msg => 
-          msg.id === message.id 
-            ? { ...msg, status: 'sent' as const, id: `msg-${Date.now()}` }
-            : msg
-        ));
-      }, 1000);
-
+      queueMessage({
+        id: optimisticId,
+        entityId,
+        entityType: entityType === 'organization' ? 'group' : entityType,
+        content: message.content,
+        timestamp,
+      });
     } catch (error) {
       console.error('Failed to send message:', error);
       // Update message status to failed
       setMessages(prev => prev.map(msg => 
-        msg.id.startsWith('temp-')
+        msg.id === optimisticId
           ? { ...msg, status: 'failed' as const }
           : msg
       ));

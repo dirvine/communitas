@@ -234,11 +234,138 @@ export class NetworkConnectionService {
   }
 
   /**
+   * Connect via a specific Four-Words bootstrap node
+   * @param fourWords - The Four-Word identity of the bootstrap node to connect through
+   * @returns Promise<boolean> - true if connection successful
+   */
+  async connectViaFourWords(fourWords: string): Promise<boolean> {
+    console.log(`🔗 Attempting to connect via Four-Words: ${fourWords}`);
+
+    if (!this.invoke) {
+      console.error('❌ Backend not available for Four-Words connection');
+      return false;
+    }
+
+    // Update state to show we're connecting
+    this.updateState({
+      status: 'connecting',
+      lastConnectionAttempt: new Date(),
+      error: null
+    });
+
+    try {
+      // First validate the Four-Words format
+      const normalizedFourWords = fourWords.trim().toLowerCase().replace(/\s+/g, '-');
+
+      // Try to connect via the Four-Words bootstrap
+      const result = await this.invoke('connect_via_four_words', {
+        fourWords: normalizedFourWords
+      });
+
+      if (result) {
+        console.log(`✅ Successfully connected via Four-Words: ${normalizedFourWords}`);
+
+        // Add this to our bootstrap nodes
+        const currentNodes = this.state.bootstrapNodes;
+        if (!currentNodes.includes(normalizedFourWords)) {
+          const updatedNodes = [...currentNodes, normalizedFourWords];
+          this.updateState({ bootstrapNodes: updatedNodes });
+
+          // Save to storage for future use
+          await offlineStorage.store('bootstrap_nodes', updatedNodes, { encrypt: true });
+        }
+
+        // Now update the rest of the connection state
+        const peerCount = await this.getPeerCount();
+        const endpointFourWords = await this.getEndpointFourWords();
+        const userFourWords = await this.getUserFourWords();
+
+        this.updateState({
+          status: 'connected',
+          peers: peerCount,
+          lastSuccessfulConnection: new Date(),
+          error: null,
+          retryCount: 0,
+          endpointFourWords,
+          userFourWords
+        });
+
+        console.log(`📍 Connected with ${peerCount} peers`);
+        console.log(`📍 User: ${userFourWords}`);
+        console.log(`📍 Endpoint: ${endpointFourWords}`);
+
+        return true;
+      } else {
+        throw new Error('Connection via Four-Words failed');
+      }
+    } catch (error) {
+      console.error('❌ Four-Words connection failed:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Connection failed';
+
+      this.updateState({
+        status: 'error',
+        error: `Failed to connect via Four-Words: ${errorMessage}`
+      });
+
+      // Fall back to local mode after failure
+      setTimeout(() => {
+        if (this.state.status === 'error') {
+          this.updateState({ status: 'local' });
+        }
+      }, 3000);
+
+      return false;
+    }
+  }
+
+  /**
+   * Get the user's Four-Word identity
+   */
+  private async getUserFourWords(): Promise<string | null> {
+    if (!this.invoke) return null;
+
+    try {
+      // Try to get user Four-Words from backend
+      const userFourWords = await this.invoke('get_user_four_words');
+      if (userFourWords) {
+        return userFourWords;
+      }
+    } catch {
+      // Fall back to cached identity
+      const identity = await offlineStorage.get('current_identity');
+      if (identity) {
+        return identity.fourWordAddress || identity.four_word_address || null;
+      }
+    }
+
+    return null;
+  }
+
+  /**
    * Get bootstrap nodes from configuration
    */
   private async getBootstrapNodes(): Promise<string[]> {
     try {
-      // First try to get from backend
+      // First try to get saved bootstrap nodes
+      const saved = await offlineStorage.get<any[]>('bootstrap_nodes');
+      if (saved && Array.isArray(saved)) {
+        // Handle both string array and object array formats
+        const fourWords = saved.map(node => {
+          if (typeof node === 'string') {
+            return node;
+          } else if (node.fourWords) {
+            return node.fourWords;
+          }
+          return null;
+        }).filter(Boolean);
+
+        if (fourWords.length > 0) {
+          console.log(`Using ${fourWords.length} saved bootstrap nodes`);
+          return fourWords;
+        }
+      }
+
+      // Then try to get from backend
       if (this.invoke) {
         const nodes = await this.invoke('core_get_bootstrap_nodes');
         if (nodes && nodes.length > 0) {
@@ -246,20 +373,13 @@ export class NetworkConnectionService {
         }
       }
     } catch (error) {
-      console.warn('Failed to get bootstrap nodes from backend:', error);
-    }
-
-    // Fallback to cached nodes
-    const cached = await offlineStorage.get<string[]>('bootstrap_nodes');
-    if (cached && cached.length > 0) {
-      console.log('Using cached bootstrap nodes');
-      return cached;
+      console.warn('Failed to get bootstrap nodes:', error);
     }
 
     // Default bootstrap nodes
     return [
-      'ocean-forest-moon-star:443',
-      'river-mountain-sun-cloud:443'
+      'ocean-forest-moon-star',
+      'river-mountain-sun-cloud'
     ];
   }
 
@@ -305,7 +425,7 @@ export class NetworkConnectionService {
 
   /**
    * Get the endpoint's four-word address
-   * This represents the network location we're connected through
+   * This represents the network location we're connected through (our external IP)
    */
   private async getEndpointFourWords(): Promise<string | null> {
     if (!this.invoke) {
@@ -314,20 +434,32 @@ export class NetworkConnectionService {
     }
 
     try {
-      // Try to get actual endpoint from backend
-      const endpoint = await this.invoke('get_endpoint_address');
-      if (endpoint?.fourWords) {
-        return endpoint.fourWords;
+      // Try to get actual endpoint from backend - this should be the Four-Words
+      // representation of our external IP address that others can connect to
+      const endpointFourWords = await this.invoke('get_endpoint_four_words');
+      if (endpointFourWords) {
+        return endpointFourWords;
       }
     } catch {
-      // If command doesn't exist, generate based on bootstrap node
-      // In a real implementation, this would be the actual endpoint
-      if (this.state.bootstrapNodes.length > 0) {
-        const firstNode = this.state.bootstrapNodes[0];
-        // Extract four-word part if it's in the format "four-word-address:port"
-        const fourWordPart = firstNode.split(':')[0];
-        if (fourWordPart.includes('-')) {
-          return fourWordPart;
+      // Try alternative command
+      try {
+        const networkInfo = await this.invoke('get_network_info');
+        if (networkInfo?.endpointFourWords) {
+          return networkInfo.endpointFourWords;
+        }
+      } catch {
+        // If commands don't exist, generate based on bootstrap node
+        // This is a fallback for demo purposes
+        if (this.state.bootstrapNodes.length > 0) {
+          const firstNode = this.state.bootstrapNodes[0];
+          // Extract four-word part if it's in the format
+          const fourWordPart = firstNode.split(':')[0];
+          if (fourWordPart.includes('-')) {
+            // Generate a unique endpoint based on the bootstrap
+            const parts = fourWordPart.split('-');
+            // Swap some words to make it unique
+            return `${parts[2]}-${parts[0]}-relay-node`;
+          }
         }
       }
     }

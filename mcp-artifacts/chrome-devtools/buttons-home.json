@@ -1,0 +1,14 @@
+[
+  {
+    "text": "Reload",
+    "ariaLabel": null,
+    "role": null,
+    "id": "reload-button"
+  },
+  {
+    "text": "Details",
+    "ariaLabel": null,
+    "role": null,
+    "id": "details-button"
+  }
+]

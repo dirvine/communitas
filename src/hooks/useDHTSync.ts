@@ -3,6 +3,9 @@ import { listen, Event, UnlistenFn } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { useSnackbar } from 'notistack';
 
+const isTauriEnvironment = () =>
+  typeof window !== 'undefined' && Boolean((window as any).__TAURI__);
+
 // DHT Event Types
 export interface DHTSyncEvent {
   type: 
@@ -81,6 +84,11 @@ export const useDHTSync = ({
 
   // Subscribe to an entity for real-time updates
   const subscribeToEntity = useCallback(async (entityId: string) => {
+    if (!isTauriEnvironment()) {
+      console.debug('[DHT] Skipping subscribeToEntity outside Tauri runtime');
+      return;
+    }
+
     if (subscribedEntitiesRef.current.has(entityId)) {
       return; // Already subscribed
     }
@@ -108,6 +116,11 @@ export const useDHTSync = ({
 
   // Unsubscribe from an entity
   const unsubscribeFromEntity = useCallback(async (entityId: string) => {
+    if (!isTauriEnvironment()) {
+      console.debug('[DHT] Skipping unsubscribeFromEntity outside Tauri runtime');
+      return;
+    }
+
     if (!subscribedEntitiesRef.current.has(entityId)) {
       return; // Not subscribed
     }
@@ -189,6 +202,10 @@ export const useDHTSync = ({
   // Check sync status
   const checkSyncStatus = useCallback(async () => {
     try {
+      if (!isTauriEnvironment()) {
+        return;
+      }
+
       const status: NetworkStatus = await invoke('get_sync_status');
       setState(prev => ({
         ...prev,
@@ -209,6 +226,11 @@ export const useDHTSync = ({
 
   // Setup event listeners
   useEffect(() => {
+    if (!isTauriEnvironment()) {
+      console.debug('[DHT] Sync disabled: not running inside Tauri runtime');
+      return;
+    }
+
     const setupListeners = async () => {
       try {
         // Listen for global DHT events
@@ -284,6 +306,10 @@ export const useDHTSync = ({
 
   // Auto-reconnect logic
   useEffect(() => {
+    if (!isTauriEnvironment()) {
+      return;
+    }
+
     if (!state.connected && autoReconnect) {
       console.log('Connection lost, attempting to reconnect...');
       

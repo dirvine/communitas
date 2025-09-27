@@ -49,13 +49,22 @@ async function bootstrap() {
 
   if (typeof window !== 'undefined' && (window as any).__TAURI__) {
     try {
-      const { setupPluginListeners } = await import('tauri-plugin-mcp')
-      if (typeof setupPluginListeners === 'function') {
-        await setupPluginListeners()
-        console.info('[Communitas] MCP plugin listeners initialised')
+      // Import the MCP plugin from local copy
+      const mcpModule = await import('./services/mcp-plugin.js')
+      console.info('[Communitas] MCP module loaded:', Object.keys(mcpModule))
+      
+      if (mcpModule.setupPluginListeners && typeof mcpModule.setupPluginListeners === 'function') {
+        await mcpModule.setupPluginListeners()
+        console.info('[Communitas] MCP plugin listeners initialised successfully')
+        
+        // Make it globally available for testing
+        (window as any).__MCP__ = mcpModule
+        console.info('[Communitas] MCP module available at window.__MCP__')
+      } else {
+        console.warn('[Communitas] setupPluginListeners not found in MCP module')
       }
     } catch (error) {
-      console.warn('[Communitas] Failed to setup MCP plugin listeners', error)
+      console.error('[Communitas] Failed to setup MCP plugin listeners:', error)
     }
   }
 

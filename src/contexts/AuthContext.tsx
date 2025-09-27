@@ -439,6 +439,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         loading: false,
         error: null,
       }));
+
+      // Persist minimal auth context for browser startup without vault
+      localStorage.setItem('communitas-four-words', newIdentity.fourWordAddress);
+      localStorage.setItem('communitas-user-name', newIdentity.name);
+      localStorage.setItem('communitas-identity', JSON.stringify(newIdentity));
       
       // Store in offline storage
       await offlineStorage.store('current_identity', newIdentity, {

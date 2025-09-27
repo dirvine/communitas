@@ -6,6 +6,8 @@ export interface NetworkIdentity {
   fourWords: string; // e.g., "ocean-forest-moon-star"
   publicKey: string;
   dhtAddress: string;
+  isOwned?: boolean; // True if we created it, false if we're adding/joining an existing entity
+  isValidated?: boolean; // True if Four-Words have been validated via saorsa_core::fwid::fw_check
 }
 
 export interface CollaborationCapabilities {
@@ -16,6 +18,8 @@ export interface CollaborationCapabilities {
   websitePublish: boolean;
 }
 
+export type EntitySyncStatus = 'synced' | 'new' | 'dirty' | 'deleted' | 'error';
+
 export interface BaseEntity {
   id: string;
   name: string;
@@ -25,6 +29,9 @@ export interface BaseEntity {
   capabilities: CollaborationCapabilities;
   createdAt: Date;
   updatedAt: Date;
+  syncStatus?: EntitySyncStatus;
+  lastSyncedAt?: Date;
+  syncError?: string;
 }
 
 // Organization entities
@@ -87,7 +94,7 @@ export interface Milestone {
 export interface PersonalUser extends BaseEntity {
   type: 'personal_user';
   userId: string;
-  relationship: 'contact' | 'friend' | 'colleague' | 'blocked';
+  relationship: 'contact' | 'friend' | 'colleague' | 'family' | 'acquaintance' | 'blocked';
   lastContact?: Date;
 }
 

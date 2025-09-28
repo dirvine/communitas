@@ -450,59 +450,124 @@ pub async fn core_private_get(
         .map_err(|e| format!("get_encrypted failed: {}", e))
 }
 
-/// Get bootstrap nodes from configuration
+/// Get bootstrap nodes from bootstrap manager
 #[tauri::command]
-pub async fn core_get_bootstrap_nodes() -> Result<Vec<String>, String> {
-    // Load bootstrap configuration from file
-    let config_path = std::path::PathBuf::from("bootstrap.toml");
+pub async fn core_get_bootstrap_nodes(
+    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+) -> Result<Vec<String>, String> {
+    let guard = shared.read().await;
+    let ctx = guard
+        .as_ref()
+        .ok_or_else(|| "Core not initialized".to_string())?;
 
-    if !config_path.exists() {
-        // Return default bootstrap nodes if config doesn't exist
-        return Ok(vec![
+    if let Some(bootstrap_manager) = &ctx.bootstrap_manager {
+        // Get custom nodes and some bootstrap candidates
+        let mut nodes = bootstrap_manager.get_custom_nodes().await;
+        let candidates = bootstrap_manager
+            .get_bootstrap_candidates(10)
+            .await
+            .unwrap_or_default();
+        nodes.extend(candidates);
+        Ok(nodes)
+    } else {
+        // Return default nodes if bootstrap manager not available
+        Ok(vec![
             "ocean-forest-moon-star".to_string(),
             "river-mountain-sun-cloud".to_string(),
-        ]);
+        ])
     }
-
-    // Parse TOML configuration
-    let content = std::fs::read_to_string(&config_path)
-        .map_err(|e| format!("Failed to read bootstrap config: {}", e))?;
-
-    let config: toml::Value =
-        toml::from_str(&content).map_err(|e| format!("Failed to parse bootstrap config: {}", e))?;
-
-    // Extract seeds array
-    let seeds = config
-        .get("seeds")
-        .and_then(|v| v.as_array())
-        .ok_or_else(|| "No seeds array found in bootstrap config".to_string())?;
-
-    let mut bootstrap_nodes = Vec::new();
-    for seed in seeds {
-        if let Some(seed_str) = seed.as_str() {
-            bootstrap_nodes.push(seed_str.to_string());
-        }
-    }
-
-    Ok(bootstrap_nodes)
 }
 
-/// Update bootstrap nodes configuration
+/// Update bootstrap nodes (for backwards compatibility - now adds nodes)
 #[tauri::command]
-pub async fn core_update_bootstrap_nodes(nodes: Vec<String>) -> Result<bool, String> {
-    use std::collections::BTreeMap;
+pub async fn core_update_bootstrap_nodes(
+    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+    nodes: Vec<String>,
+) -> Result<bool, String> {
+    let guard = shared.read().await;
+    let ctx = guard
+        .as_ref()
+        .ok_or_else(|| "Core not initialized".to_string())?;
 
-    let mut config = BTreeMap::new();
-    config.insert(
-        "seeds".to_string(),
-        toml::Value::Array(nodes.into_iter().map(toml::Value::String).collect()),
-    );
+    if let Some(bootstrap_manager) = &ctx.bootstrap_manager {
+        for node in nodes {
+            let _ = bootstrap_manager.add_bootstrap_node(&node).await;
+        }
+        Ok(true)
+    } else {
+        Err("Bootstrap manager not available".to_string())
+    }
+}
 
-    let content =
-        toml::to_string(&config).map_err(|e| format!("Failed to serialize config: {}", e))?;
+/// Add a bootstrap node (four-word address or socket address)
+#[tauri::command]
+pub async fn core_add_bootstrap_node(
+    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+    node: String,
+) -> Result<bool, String> {
+    // Validate input
+    if node.is_empty() {
+        return Err("Bootstrap node cannot be empty".to_string());
+    }
+    if node.len() > 255 {
+        return Err("Bootstrap node address too long".to_string());
+    }
 
-    std::fs::write("bootstrap.toml", content)
-        .map_err(|e| format!("Failed to write bootstrap config: {}", e))?;
+    let guard = shared.read().await;
+    let ctx = guard
+        .as_ref()
+        .ok_or_else(|| "Core not initialized".to_string())?;
 
-    Ok(true)
+    if let Some(bootstrap_manager) = &ctx.bootstrap_manager {
+        bootstrap_manager.add_bootstrap_node(&node).await?;
+        Ok(true)
+    } else {
+        Err("Bootstrap manager not available".to_string())
+    }
+}
+
+/// Clear custom bootstrap nodes (keeps defaults)
+#[tauri::command]
+pub async fn core_clear_custom_nodes(
+    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+) -> Result<bool, String> {
+    let guard = shared.read().await;
+    let ctx = guard
+        .as_ref()
+        .ok_or_else(|| "Core not initialized".to_string())?;
+
+    if let Some(bootstrap_manager) = &ctx.bootstrap_manager {
+        bootstrap_manager.clear_custom_nodes().await?;
+        Ok(true)
+    } else {
+        Err("Bootstrap manager not available".to_string())
+    }
+}
+
+/// Get bootstrap statistics
+#[tauri::command]
+pub async fn core_get_bootstrap_stats(
+    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+) -> Result<serde_json::Value, String> {
+    let guard = shared.read().await;
+    let ctx = guard
+        .as_ref()
+        .ok_or_else(|| "Core not initialized".to_string())?;
+
+    if let Some(bootstrap_manager) = &ctx.bootstrap_manager {
+        let stats = bootstrap_manager.get_stats().await?;
+        Ok(serde_json::json!({
+            "total_nodes": stats.total_nodes,
+            "custom_nodes": stats.custom_nodes,
+            "quality_nodes": stats.quality_nodes,
+            "cache_path": stats.cache_path.to_string_lossy(),
+        }))
+    } else {
+        Ok(serde_json::json!({
+            "total_nodes": 0,
+            "custom_nodes": 0,
+            "quality_nodes": 0,
+            "cache_path": "",
+        }))
+    }
 }

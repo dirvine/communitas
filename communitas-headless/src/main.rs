@@ -9,9 +9,10 @@
 // Allow these in tests for convenience
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
-mod peer_cache;
-
 use anyhow::{Context, Result, anyhow};
+use communitas_core::bootstrap_integration::{
+    BootstrapConfig, EnhancedBootstrapManager, get_bootstrap_cache_path,
+};
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use clap::Parser;
@@ -40,9 +41,6 @@ use tracing_subscriber::EnvFilter;
 
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
-
-// Import peer cache types
-use crate::peer_cache::{PeerCache, PeerInfo};
 
 /// Try to self-update the binary using GitHub releases
 pub fn try_self_update() -> Result<Option<String>> {
@@ -753,24 +751,18 @@ async fn connect_to_peer(addr_str: String) -> Result<()> {
                         info!("Stored connection {} (total: {})", conn_id, conns.len());
                     }
 
-                    // Update peer cache with successful connection
+                    // Update bootstrap manager with successful connection
                     {
-                        let cache_guard = PEER_CACHE.read().await;
-                        if let Some(cache) = cache_guard.as_ref() {
-                            let peer_id = socket_addr.to_string();
-                            let peer_info = PeerInfo {
-                                identity: None, // Will be updated when we exchange identities
-                                address: socket_addr,
-                                public_key: None, // Will be updated from handshake
-                                last_connected: chrono::Utc::now().timestamp(),
-                                connection_count: 1,
-                                quality_score: 80, // Start with good score
-                            };
+                        let manager_guard = BOOTSTRAP_MANAGER.read().await;
+                        if let Some(manager) = manager_guard.as_ref() {
+                            let manager_clone = manager.clone();
+                            let addr_str = socket_addr.to_string();
 
-                            let cache_clone = cache.clone();
                             tokio::spawn(async move {
-                                if let Err(e) = cache_clone.add_peer(peer_id, peer_info).await {
-                                    warn!("Failed to update peer cache: {}", e);
+                                if let Err(e) = manager_clone.add_bootstrap_node(&addr_str).await {
+                                    warn!("Failed to update bootstrap cache: {}", e);
+                                } else {
+                                    debug!("Added peer {} to bootstrap cache", addr_str);
                                 }
                             });
                         }
@@ -895,13 +887,23 @@ async fn run_node(args: Args) -> Result<()> {
         .await
         .context("Failed to create storage directory")?;
 
-    // Initialize peer cache
-    let peer_cache = PeerCache::new(config.storage.base_dir.clone(), 100)?;
+    // Initialize bootstrap manager using saorsa-core
+    let bootstrap_config = BootstrapConfig {
+        max_cached_nodes: 5000,
+        default_nodes: config.bootstrap_nodes.clone(),
+        auto_discovery: true,
+        cache_path: config.storage.base_dir.join("bootstrap_cache.json"),
+        quality_threshold: 30,
+    };
+
+    let bootstrap_manager = EnhancedBootstrapManager::new(bootstrap_config).await
+        .context("Failed to initialize bootstrap manager")?;
+
     {
-        let mut cache_guard = PEER_CACHE.write().await;
-        *cache_guard = Some(Arc::new(peer_cache));
+        let mut manager_guard = BOOTSTRAP_MANAGER.write().await;
+        *manager_guard = Some(Arc::new(bootstrap_manager));
     }
-    info!("Initialized peer cache");
+    info!("Initialized bootstrap manager with saorsa-core");
 
     // Setup identity
     let identity_material = setup_identity(&config).await?;
@@ -969,15 +971,28 @@ async fn run_node(args: Args) -> Result<()> {
         }
     }
 
+    // Add cached peers from bootstrap manager
     {
-        let cache_guard = PEER_CACHE.read().await;
-        if let Some(cache) = cache_guard.as_ref() {
-            let cached_peers = cache.get_bootstrap_candidates(5).await;
-            info!("Found {} cached peers to try", cached_peers.len());
-
-            for peer_info in cached_peers {
-                if seen_resolved_addrs.insert(peer_info.address) {
-                    all_bootstrap_nodes.push(peer_info.address.to_string());
+        let manager_guard = BOOTSTRAP_MANAGER.read().await;
+        if let Some(manager) = manager_guard.as_ref() {
+            match manager.get_bootstrap_candidates(10).await {
+                Ok(candidates) => {
+                    info!("Found {} cached bootstrap candidates", candidates.len());
+                    for node in candidates {
+                        // Add socket addresses from the bootstrap node
+                        for addr in &node.addresses {
+                            if seen_resolved_addrs.insert(*addr) {
+                                all_bootstrap_nodes.push(addr.to_string());
+                            }
+                        }
+                        // Also add the node ID if it's not a socket address
+                        if !node.id.contains(':') && seen_unresolved.insert(node.id.clone()) {
+                            all_bootstrap_nodes.push(node.id);
+                        }
+                    }
+                }
+                Err(e) => {
+                    warn!("Failed to get bootstrap candidates: {}", e);
                 }
             }
         }
@@ -1128,7 +1143,7 @@ static OP_LOG: Lazy<AsyncRwLock<Vec<cc::Op>>> = Lazy::new(|| AsyncRwLock::new(Ve
 use ant_quic::HighLevelConnection;
 static ACTIVE_CONNECTIONS: Lazy<Arc<RwLock<HashMap<String, HighLevelConnection>>>> =
     Lazy::new(|| Arc::new(RwLock::new(HashMap::new())));
-static PEER_CACHE: Lazy<Arc<AsyncRwLock<Option<Arc<PeerCache>>>>> =
+static BOOTSTRAP_MANAGER: Lazy<Arc<AsyncRwLock<Option<Arc<EnhancedBootstrapManager>>>>> =
     Lazy::new(|| Arc::new(AsyncRwLock::new(None)));
 
 async fn ops_since(count: u64) -> Vec<cc::Op> {

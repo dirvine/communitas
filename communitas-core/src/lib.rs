@@ -26,9 +26,11 @@
 // Allow these in tests for convenience
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
+pub mod bootstrap_integration;
 pub mod core_context;
 pub mod dht_identity;
 pub mod dht_schemas;
+pub mod encrypted_storage;
 pub mod error;
 pub mod keystore;
 pub mod messaging;

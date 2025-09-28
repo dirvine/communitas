@@ -71,8 +71,7 @@ enum ContentType {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 enum CompressionType {
     None,
-    Zstd,
-    Lz4,
+    // Future: Zstd, Lz4 (when dependencies are added)
 }
 
 impl EncryptedVault {
@@ -239,11 +238,8 @@ impl EncryptedVault {
 
         // Decompress if needed
         let data = match entry.metadata.compression {
-            Some(CompressionType::Zstd) => {
-                zstd::decode_all(&decrypted[..])?
-            }
-            Some(CompressionType::Lz4) => {
-                lz4_flex::decompress_size_prepended(&decrypted)?
+            Some(CompressionType::None) => {
+                decrypted.to_vec()
             }
             _ => decrypted.to_vec(),
         };
@@ -373,16 +369,8 @@ impl EncryptedVault {
         content_type: ContentType,
         compression: Option<CompressionType>,
     ) -> Result<()> {
-        // Compress if requested
-        let compressed_data = match compression {
-            Some(CompressionType::Zstd) => {
-                zstd::encode_all(data, 3)?
-            }
-            Some(CompressionType::Lz4) => {
-                lz4_flex::compress_prepend_size(data)
-            }
-            _ => data.to_vec(),
-        };
+        // Compress if requested (currently no compression)
+        let compressed_data = data.to_vec();
 
         // Encrypt
         let encrypted = self.key_manager.encrypt(&self.encryption_key, &compressed_data)?;

@@ -32,34 +32,33 @@ impl NormalizedFourWords {
     }
 }
 
-/// Normalize four-word identity to canonical format
+/// Normalize four-word identity to canonical format with dictionary validation
 /// 
 /// Input: "Ocean-Forest Moon Sun" or "ocean forest-moon_sun"
-/// Output: "ocean-forest-moon-sun" (lowercase, dash-separated)
+/// Output: "ocean-forest-moon-sun" (lowercase, dash-separated, dictionary-validated)
 pub fn normalize_four_words(input: &str) -> Result<String, String> {
     let trimmed = input.trim().to_lowercase();
     
-    // Split on various separators and collect words
-    let words: Vec<&str> = trimmed
-        .split(&[' ', '-', '_'][..])
-        .filter(|w| !w.is_empty())
-        .collect();
+    // Replace various separators with hyphens
+    let candidate = trimmed
+        .replace(' ', "-")
+        .replace('_', "-");
     
-    if words.len() != 4 {
-        return Err(format!("Expected exactly 4 words, got {}", words.len()));
+    // Use saorsa-core for proper parsing and validation
+    let parsed = saorsa_core::identity::FourWordAddress::parse_str(&candidate)
+        .map_err(|e| format!("Invalid four-word identity: {}", e))?;
+    
+    let words_vec = parsed.words();
+    let words: [String; 4] = words_vec.try_into().map_err(|v: Vec<String>| {
+        format!("Four-word identity must contain exactly 4 words, found {}", v.len())
+    })?;
+    
+    // Validate words are in the dictionary
+    if !saorsa_core::fwid::fw_check(words) {
+        return Err("Four-word identity contains words outside the allowed dictionary".to_string());
     }
     
-    // Validate each word contains only letters
-    for word in &words {
-        if !word.chars().all(|c| c.is_ascii_lowercase()) {
-            return Err(format!("Invalid word '{}': must contain only lowercase letters", word));
-        }
-        if word.len() < 2 || word.len() > 16 {
-            return Err(format!("Invalid word '{}': must be 2-16 characters", word));
-        }
-    }
-    
-    Ok(words.join("-"))
+    Ok(parsed.as_str().to_string())
 }
 
 /// Derive DHT key for identity records

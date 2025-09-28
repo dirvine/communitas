@@ -64,7 +64,7 @@ impl InputValidator {
         }
     }
 
-    /// Validate and sanitize a four-word network identity
+    /// Validate and sanitize a four-word network identity using dictionary validation
     pub fn validate_four_words(&self, input: &str) -> Result<String, ValidationError> {
         if input.is_empty() {
             return Err(ValidationError::InvalidInput(
@@ -85,16 +85,23 @@ impl InputValidator {
         }
 
         let sanitized = input.trim().to_lowercase();
+        // Accept common separators but canonicalize to dash-separated
+        let candidate = sanitized.replace([' ', '_'], "-");
 
-        if !self
-            .four_words_pattern
-            .as_ref()
-            .is_some_and(|re| re.is_match(&sanitized))
-        {
+        // Use saorsa-core for proper four-word validation with dictionary
+        let parsed = saorsa_core::identity::FourWordAddress::parse_str(&candidate)
+            .map_err(|_| ValidationError::InvalidFormat)?;
+        
+        let words_vec = parsed.words();
+        let words: [String; 4] = words_vec.try_into()
+            .map_err(|_| ValidationError::InvalidFormat)?;
+        
+        // Validate words are in the dictionary
+        if !saorsa_core::fwid::fw_check(words) {
             return Err(ValidationError::InvalidFormat);
         }
 
-        Ok(sanitized)
+        Ok(parsed.as_str().to_string())
     }
 
     /// Validate four-word address format

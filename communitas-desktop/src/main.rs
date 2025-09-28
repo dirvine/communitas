@@ -19,6 +19,7 @@ mod container;
 mod core_cmds;
 mod core_commands;
 mod core_groups;
+mod core_storage;
 mod network;
 mod security;
 mod storage_fs;
@@ -132,6 +133,9 @@ async fn main() -> anyhow::Result<()> {
         core_commands::core_send_message_to_recipients,
         core_commands::core_get_bootstrap_nodes,
         core_commands::core_update_bootstrap_nodes,
+        core_commands::core_add_bootstrap_node,
+        core_commands::core_clear_custom_nodes,
+        core_commands::core_get_bootstrap_stats,
         core_groups::core_group_create,
         core_groups::core_group_add_member,
         core_groups::core_group_remove_member,
@@ -143,6 +147,22 @@ async fn main() -> anyhow::Result<()> {
         storage_fs::core_storage_delete,
         storage_fs::core_storage_rename,
         storage_fs::core_storage_stats,
+        // Encrypted storage
+        core_storage::core_storage_initialize,
+        core_storage::core_storage_login,
+        core_storage::core_storage_password_login,
+        core_storage::core_storage_store,
+        core_storage::core_storage_retrieve,
+        core_storage::core_storage_delete,
+        core_storage::core_storage_list_keys,
+        core_storage::core_storage_list_vaults,
+        core_storage::core_storage_get_sessions,
+        core_storage::core_storage_switch_vault,
+        core_storage::core_storage_logout,
+        core_storage::core_storage_export_vault,
+        core_storage::core_storage_import_vault,
+        core_storage::core_storage_store_identity,
+        core_storage::core_storage_get_stats,
         // Network helpers
         network::validate_four_words,
         network::connect_via_four_words,

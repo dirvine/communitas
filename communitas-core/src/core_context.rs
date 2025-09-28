@@ -1,3 +1,5 @@
+use crate::bootstrap_integration::EnhancedBootstrapManager;
+use crate::encrypted_storage::{EncryptedStorageManager, StorageConfig};
 use saorsa_core::chat::ChatManager;
 use saorsa_core::identity::IdentityManager;
 use saorsa_core::identity::enhanced::{DeviceType, EnhancedIdentity, EnhancedIdentityManager};
@@ -10,6 +12,7 @@ use saorsa_core::{
     identity::FourWordAddress,
 };
 use std::collections::HashMap;
+use std::sync::Arc;
 
 // Group key storage for membership updates
 use saorsa_core::api::GroupKeyPair;
@@ -23,6 +26,9 @@ pub struct CoreContext {
     pub chat: ChatManager,
     pub messaging: MessagingService,
     pub group_keys: HashMap<String, GroupKeyPair>,
+    pub bootstrap_manager: Option<Arc<EnhancedBootstrapManager>>,
+    pub encrypted_storage: Option<Arc<EncryptedStorageManager>>,
+    pub device_name: String,
 }
 
 impl CoreContext {
@@ -87,6 +93,30 @@ impl CoreContext {
                 .await
                 .map_err(|e| format!("Messaging init failed: {}", e))?;
 
+        // Bootstrap manager for network connectivity
+        let bootstrap_config = crate::bootstrap_integration::BootstrapConfig::default();
+        let bootstrap_manager = match EnhancedBootstrapManager::new(bootstrap_config).await {
+            Ok(manager) => {
+                // Start background tasks for bootstrap management
+                let _ = manager.start_background_tasks().await;
+                Some(Arc::new(manager))
+            }
+            Err(e) => {
+                tracing::warn!("Failed to create bootstrap manager: {}. Continuing without it.", e);
+                None
+            }
+        };
+
+        // Initialize encrypted storage manager
+        let storage_config = StorageConfig::default();
+        let encrypted_storage = match EncryptedStorageManager::new(storage_config).await {
+            Ok(manager) => Some(Arc::new(manager)),
+            Err(e) => {
+                tracing::warn!("Failed to create encrypted storage manager: {}. Continuing without it.", e);
+                None
+            }
+        };
+
         Ok(Self {
             four_words,
             identity: enhanced_identity,
@@ -94,8 +124,38 @@ impl CoreContext {
             chat,
             messaging,
             group_keys: HashMap::new(),
+            bootstrap_manager,
+            encrypted_storage,
+            device_name,
         })
     }
+    /// Get the encrypted storage manager, creating it if necessary
+    pub async fn get_storage_manager(&self) -> Result<Arc<EncryptedStorageManager>, String> {
+        if let Some(manager) = &self.encrypted_storage {
+            Ok(manager.clone())
+        } else {
+            // Create on-demand if not initialized
+            let storage_config = StorageConfig::default();
+            let manager = EncryptedStorageManager::new(storage_config)
+                .await
+                .map_err(|e| format!("Failed to create encrypted storage: {}", e))?;
+            Ok(Arc::new(manager))
+        }
+    }
+
+    /// Get current identity information
+    pub async fn get_current_identity(&self) -> Option<IdentityInfo> {
+        Some(IdentityInfo {
+            four_words: self.four_words.clone(),
+            display_name: self.identity.display_name.clone(),
+        })
+    }
+}
+
+/// Simple identity information structure
+pub struct IdentityInfo {
+    pub four_words: String,
+    pub display_name: String,
 }
 // Copyright (c) 2025 Saorsa Labs Limited
 //

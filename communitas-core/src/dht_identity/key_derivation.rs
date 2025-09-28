@@ -53,7 +53,9 @@ pub fn normalize_four_words(input: &str) -> Result<String, String> {
         format!("Four-word identity must contain exactly 4 words, found {}", v.len())
     })?;
     
-    // Validate words are in the dictionary
+    // IMPORTANT: Validate that all four words are in the four_word_networking dictionary
+    // This ensures identities use only valid, human-memorable dictionary words
+    // This is DIFFERENT from IP encoding which encodes IP+port into words
     if !saorsa_core::fwid::fw_check(words) {
         return Err("Four-word identity contains words outside the allowed dictionary".to_string());
     }

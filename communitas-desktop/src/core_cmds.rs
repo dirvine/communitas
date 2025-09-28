@@ -224,12 +224,18 @@ pub async fn core_advertise(addr: String, _storage_gb: u32) -> Result<AdvertiseR
     }
 
     // Optional fw4 encoding for IPv4
+    // IMPORTANT: The four_word_networking crate is designed to encode IP+port TOGETHER
+    // This is correct behavior - we encode the complete socket address into 4 words
+    // DO NOT try to separate IP from port - they are meant to be encoded together
     let mut endpoint_fw4: Option<String> = None;
     if let Some((ref ip, port)) = ipv4
         && let Ok(v4) = ip.parse::<std::net::Ipv4Addr>()
     {
+        // Create socket address with both IP and port
+        let socket_addr = std::net::SocketAddr::from((v4, port));
+        // Encode the complete address (IP+port) into 4 words
         let enc = four_word_networking::FourWordEncoder::new()
-            .encode_ipv4(v4, port)
+            .encode(socket_addr)
             .map_err(|e| format!("fw4 encode failed: {}", e))?;
         endpoint_fw4 = Some(enc.to_string().replace(' ', "-"));
     }

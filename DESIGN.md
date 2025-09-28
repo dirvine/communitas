@@ -46,22 +46,44 @@ Communitas is a local-first, post-quantum collaboration platform that unifies me
 Four-word addresses serve as the universal addressing system for all entities:
 
 **Uses:**
-- **IP4/IP6 Encoding**: Network address encoding (more than 4 words)
-- **DNS Replacement**: 4 valid dictionary words + hash for entity discovery
+- **IP4/IP6 Encoding**: Network address encoding (IP + port encoded together into 4+ words)
+- **DNS Replacement**: 4 valid dictionary words for entity discovery
 - **Entity Identity**: Users, websites, storage disks, groups, organizations
 - **Storage Discovery**: Group four-words → storage disk location
 
-**Implementation:**
-```rust
-// Generate valid four-words using saorsa-core
-let four_words = generate_four_word_identity().await?;
+**Critical Implementation Notes:**
 
-// Validate using dictionary
-let valid = fw_check(words_array);
+### **For Network Addresses (IP + Port)**
+The `four_word_networking` crate **correctly encodes IP and port together**:
+```rust
+// CORRECT: Encode IP+port together (as designed by the crate)
+let socket_addr = SocketAddr::from((ipv4_addr, port));
+let encoding = FourWordEncoder::new().encode(socket_addr)?;
+// Result: 4 words that encode BOTH IP and port
+
+// INCORRECT: DO NOT try to encode IP separately from port
+// The crate is designed to handle them together
+```
+
+### **For Entity Identities**
+Four-word identities must use **valid dictionary words only**:
+```rust
+// Validate all four words are in the dictionary
+let words: [String; 4] = parse_four_words(input)?;
+let valid = saorsa_core::fwid::fw_check(words);
+if !valid {
+    return Err("Words not in four-word-networking dictionary");
+}
 
 // Convert to entity key for DHT storage
 let entity_key = fw_to_key(words_array)?;
 ```
+
+**Key Distinctions:**
+- **Network Encoding**: IP+port → 4 words (encodes actual network address)
+- **Identity Validation**: 4 words → must be valid dictionary words (human-memorable)
+- **Never separate IP from port** when encoding network addresses
+- **Always validate** identity words against the dictionary
 
 ### **Entity Creation Flow**
 1. **DHT Connection Check**: Validate network connectivity

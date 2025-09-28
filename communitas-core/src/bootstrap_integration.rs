@@ -156,15 +156,17 @@ impl EnhancedBootstrapManager {
             .replace('_', "-")
     }
 
-    /// Check if a string is a valid four-word address
+    /// Check if a string is a valid four-word address using dictionary validation
     fn is_four_word_address(&self, input: &str) -> bool {
-        let parts: Vec<&str> = input.split('-').collect();
-
-        // Basic check: should have at least 4 words
-        // For IPv6, might have more words
-        parts.len() >= 4 && parts.iter().all(|part| {
-            !part.is_empty() && part.chars().all(|c| c.is_ascii_lowercase() || c == '-')
-        })
+        let candidate = input.trim().to_lowercase().replace([' ', '_'], "-");
+        
+        if let Ok(parsed) = saorsa_core::identity::FourWordAddress::parse_str(&candidate) {
+            let words_vec = parsed.words();
+            if let Ok(words) = words_vec.try_into() {
+                return saorsa_core::fwid::fw_check(words);
+            }
+        }
+        false
     }
 
     /// Get custom bootstrap nodes added by user

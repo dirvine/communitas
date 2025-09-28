@@ -22,6 +22,7 @@ use saorsa_core::api::GroupKeyPair;
 pub struct CoreContext {
     pub four_words: String,
     pub identity: EnhancedIdentity,
+    pub display_name: String,  // Store display name separately
     pub storage: StorageManager,
     pub chat: ChatManager,
     pub messaging: MessagingService,
@@ -59,14 +60,14 @@ impl CoreContext {
         // Identity manager and base identity
         let id_mgr = IdentityManager::new(IdentityManagerConfig::default());
         let base = id_mgr
-            .create_identity(display_name, four_words.clone(), None, None)
+            .create_identity(display_name.clone(), four_words.clone(), None, None)
             .await
             .map_err(|e| format!("Failed to create identity: {}", e))?;
 
         // Enhanced identity (PQC + threshold-ready)
         let mut enhanced_mgr = EnhancedIdentityManager::new(id_mgr);
         let enhanced_identity = enhanced_mgr
-            .create_enhanced_identity(base, device_name, device_type)
+            .create_enhanced_identity(base, device_name.clone(), device_type)
             .await
             .map_err(|e| format!("Failed to create enhanced identity: {}", e))?;
 
@@ -120,6 +121,7 @@ impl CoreContext {
         Ok(Self {
             four_words,
             identity: enhanced_identity,
+            display_name,
             storage,
             chat,
             messaging,
@@ -147,7 +149,7 @@ impl CoreContext {
     pub async fn get_current_identity(&self) -> Option<IdentityInfo> {
         Some(IdentityInfo {
             four_words: self.four_words.clone(),
-            display_name: self.identity.display_name.clone(),
+            display_name: self.display_name.clone(),
         })
     }
 }

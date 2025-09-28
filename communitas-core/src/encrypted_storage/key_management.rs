@@ -214,7 +214,7 @@ impl PasskeyManager {
         // In a real implementation, this would interact with WebAuthn API
         // For now, return a placeholder
         Ok(PasskeyCredential {
-            credential_id: blake3::hash(four_words.as_bytes()).to_vec(),
+            credential_id: blake3::hash(four_words.as_bytes()).as_bytes().to_vec(),
             public_key: vec![0u8; 65], // Placeholder for P-256 public key
         })
     }

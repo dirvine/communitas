@@ -11,7 +11,7 @@
 
 use anyhow::{Context, Result, anyhow};
 use communitas_core::bootstrap_integration::{
-    BootstrapConfig, EnhancedBootstrapManager, get_bootstrap_cache_path,
+    BootstrapConfig, EnhancedBootstrapManager,
 };
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
@@ -36,7 +36,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use tokio::signal;
 use tokio::sync::RwLock as AsyncRwLock;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 use tracing_subscriber::EnvFilter;
 
 #[cfg(unix)]
@@ -889,11 +889,11 @@ async fn run_node(args: Args) -> Result<()> {
 
     // Initialize bootstrap manager using saorsa-core
     let bootstrap_config = BootstrapConfig {
-        max_cached_nodes: 5000,
+        max_contacts: 5000,
         default_nodes: config.bootstrap_nodes.clone(),
         auto_discovery: true,
-        cache_path: config.storage.base_dir.join("bootstrap_cache.json"),
-        quality_threshold: 30,
+        cache_dir: config.storage.base_dir.join("bootstrap"),
+        quality_threshold: 0.3,
     };
 
     let bootstrap_manager = EnhancedBootstrapManager::new(bootstrap_config).await
@@ -978,16 +978,20 @@ async fn run_node(args: Args) -> Result<()> {
             match manager.get_bootstrap_candidates(10).await {
                 Ok(candidates) => {
                     info!("Found {} cached bootstrap candidates", candidates.len());
-                    for node in candidates {
-                        // Add socket addresses from the bootstrap node
-                        for addr in &node.addresses {
-                            if seen_resolved_addrs.insert(*addr) {
-                                all_bootstrap_nodes.push(addr.to_string());
+                    for node_str in candidates {
+                        // Check if it's a socket address or four-word address
+                        if node_str.contains(':') {
+                            // It's a socket address
+                            if let Ok(addr) = node_str.parse::<SocketAddr>() {
+                                if seen_resolved_addrs.insert(addr) {
+                                    all_bootstrap_nodes.push(node_str);
+                                }
                             }
-                        }
-                        // Also add the node ID if it's not a socket address
-                        if !node.id.contains(':') && seen_unresolved.insert(node.id.clone()) {
-                            all_bootstrap_nodes.push(node.id);
+                        } else {
+                            // It's a four-word address
+                            if seen_unresolved.insert(node_str.clone()) {
+                                all_bootstrap_nodes.push(node_str);
+                            }
                         }
                     }
                 }
@@ -1042,8 +1046,14 @@ async fn run_node(args: Args) -> Result<()> {
         info!("Delta generator enabled via COMMUNITAS_GENERATE_DELTAS");
     }
 
-    // Resolve listen address from args or env overrides
-    let mut listen_addr = args.listen;
+    // Resolve listen address from config, then args, then env overrides
+    let mut listen_addr = if !config.network.listen_addrs.is_empty() {
+        config.network.listen_addrs[0]
+    } else {
+        args.listen
+    };
+
+    // Allow environment variables to override
     if let Ok(s) = std::env::var("COMMUNITAS_QUIC_LISTEN") {
         if let Ok(sa) = s.parse::<SocketAddr>() {
             listen_addr = sa;
@@ -1053,6 +1063,11 @@ async fn run_node(args: Args) -> Result<()> {
     {
         listen_addr.set_port(p);
         listen_addr.set_ip(std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED));
+    }
+
+    // Override from command line if not default
+    if args.listen != SocketAddr::from(([0, 0, 0, 0], 0)) {
+        listen_addr = args.listen;
     }
 
     // Start QUIC delta server (raw public key, RFC 7250 style)
@@ -1074,17 +1089,8 @@ async fn run_node(args: Args) -> Result<()> {
     // Graceful shutdown
     info!("Performing graceful shutdown...");
 
-    // Save peer cache before shutdown
-    {
-        let cache_guard = PEER_CACHE.read().await;
-        if let Some(cache) = cache_guard.as_ref() {
-            if let Err(e) = cache.save().await {
-                warn!("Failed to save peer cache: {}", e);
-            } else {
-                info!("Peer cache saved successfully");
-            }
-        }
-    }
+    // Bootstrap cache is automatically saved by saorsa-core
+    info!("Bootstrap cache will be saved automatically by saorsa-core");
 
     // Close all active connections
     if let Ok(mut conns) = ACTIVE_CONNECTIONS.try_write() {

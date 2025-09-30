@@ -9,7 +9,6 @@ import {
   Avatar,
   Chip,
   IconButton,
-  Button,
   Divider,
   List,
   ListItemButton,
@@ -21,6 +20,11 @@ import {
   Tooltip,
   useTheme,
 } from '@mui/material';
+
+// Import modern UI components
+import { GlassCard } from '../ui/GlassCard';
+import { ModernButton } from '../ui/ModernButton';
+import { ModernLoader } from '../ui/ModernLoader';
 import {
   Storage as StorageIcon,
   Web as WebsiteIcon,
@@ -64,7 +68,7 @@ interface StorageStats {
   lastSync: Date;
 }
 
-const MotionCard = motion(Card);
+const MotionCard = motion(GlassCard);
 const MotionBox = motion(Box);
 
 export const PersonalHomeDashboard: React.FC = () => {
@@ -410,38 +414,42 @@ export const PersonalHomeDashboard: React.FC = () => {
                 Quick Actions
               </Typography>
               <Stack direction="row" spacing={2} flexWrap="wrap">
-                <Button
-                  variant="outlined"
+                <ModernButton
+                  variant="contained"
+                  gradient={true}
                   startIcon={<AddIcon />}
                   onClick={() => handleStorageClick('website')}
                 >
                   Create Website Page
-                </Button>
-                <Button
-                  variant="outlined"
+                </ModernButton>
+                <ModernButton
+                  variant="contained"
+                  gradient={true}
                   startIcon={<UploadIcon />}
                   onClick={() => handleStorageClick('data')}
                 >
                   Upload Files
-                </Button>
-                <Button
-                  variant="outlined"
+                </ModernButton>
+                <ModernButton
+                  variant="contained"
+                  gradient={true}
                   startIcon={<MessageIcon />}
                   onClick={() => {
                     // TODO: Navigate to messages
                   }}
                 >
                   New Message
-                </Button>
-                <Button
-                  variant="outlined"
+                </ModernButton>
+                <ModernButton
+                  variant="contained"
+                  gradient={true}
                   startIcon={<VideoCallIcon />}
                   onClick={() => {
                     // TODO: Start video call
                   }}
                 >
                   Start Call
-                </Button>
+                </ModernButton>
               </Stack>
             </CardContent>
           </MotionCard>

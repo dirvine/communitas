@@ -4,53 +4,11 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Communitas - P2P Chat & Diagnostics</title>
-    <script>
-      // Polyfill TextDecoder and TextEncoder before anything else loads
-      if (typeof window.TextDecoder === 'undefined') {
-        console.log('[Polyfill] Adding TextDecoder');
-        window.TextDecoder = class TextDecoder {
-          constructor(encoding = 'utf-8') {
-            this.encoding = encoding;
-          }
-          decode(input) {
-            if (!input) return '';
-            const bytes = input instanceof ArrayBuffer
-              ? new Uint8Array(input)
-              : new Uint8Array(input.buffer, input.byteOffset, input.byteLength);
-            let result = '';
-            for (let i = 0; i < bytes.length; i++) {
-              result += String.fromCharCode(bytes[i]);
-            }
-            return result;
-          }
-        };
-      }
-
-      if (typeof window.TextEncoder === 'undefined') {
-        console.log('[Polyfill] Adding TextEncoder');
-        window.TextEncoder = class TextEncoder {
-          constructor() {}
-          encode(input) {
-            const bytes = new Uint8Array(input.length);
-            for (let i = 0; i < input.length; i++) {
-              bytes[i] = input.charCodeAt(i);
-            }
-            return bytes;
-          }
-        };
-      }
-    </script>
-    <script type="module" crossorigin src="/assets/index-CRSm_u8M.js"></script>
+    <title>Communitas</title>
+    <script type="module" crossorigin src="/assets/index-VOwX_s9y.js"></script>
     <link rel="stylesheet" crossorigin href="/assets/index-Y1tyXipc.css">
   </head>
   <body>
-    <div id="root">
-      <!-- Fallback content in case React fails to load -->
-      <div style="padding: 20px; font-family: system-ui; text-align: center;">
-        <h1>🔄 Loading Communitas Debug...</h1>
-        <p>If this message persists, check the console for errors.</p>
-      </div>
-    </div>
+    <div id="root"></div>
   </body>
 </html>

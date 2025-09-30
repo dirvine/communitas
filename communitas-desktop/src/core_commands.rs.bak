@@ -629,7 +629,7 @@ pub async fn core_messages_send(
 pub async fn core_messages_edit(
     shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
     entity_id: String,
-    message_id: String,
+    #[serde(rename = "messageId")] message_id: String,
     content: String,
 ) -> Result<(), String> {
     let guard = shared.read().await;
@@ -647,7 +647,7 @@ pub async fn core_messages_edit(
 pub async fn core_messages_delete(
     shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
     entity_id: String,
-    message_id: String,
+    #[serde(rename = "messageId")] message_id: String,
 ) -> Result<(), String> {
     let guard = shared.read().await;
     let _ctx = guard
@@ -706,63 +706,4 @@ pub async fn core_entity_get_encryption_status(
         "keyRotationDate": chrono::Utc::now().to_rfc3339(),
         "status": "active"
     }))
-}
-
-// ===== Network Sync Management Commands =====
-
-/// Get current DHT sync status
-#[tauri::command]
-pub async fn get_sync_status(
-    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
-) -> Result<serde_json::Value, String> {
-    let guard = shared.read().await;
-    let ctx = guard
-        .as_ref()
-        .ok_or_else(|| "Core not initialized".to_string())?;
-
-    tracing::debug!("get_sync_status called");
-
-    // Return current network sync status
-    Ok(serde_json::json!({
-        "connected": true,
-        "peer_count": 0,
-        "syncing": false,
-        "last_sync": chrono::Utc::now().to_rfc3339()
-    }))
-}
-
-/// Subscribe to entity updates via DHT
-#[tauri::command]
-pub async fn subscribe_to_entity(
-    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
-    entity_id: String,
-    user_id: String,
-) -> Result<(), String> {
-    let guard = shared.read().await;
-    let _ctx = guard
-        .as_ref()
-        .ok_or_else(|| "Core not initialized".to_string())?;
-
-    tracing::debug!("subscribe_to_entity called for entity_id={}, user_id={}", entity_id, user_id);
-
-    // TODO: Implement actual DHT subscription
-    Ok(())
-}
-
-/// Unsubscribe from entity updates
-#[tauri::command]
-pub async fn unsubscribe_from_entity(
-    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
-    entity_id: String,
-    user_id: String,
-) -> Result<(), String> {
-    let guard = shared.read().await;
-    let _ctx = guard
-        .as_ref()
-        .ok_or_else(|| "Core not initialized".to_string())?;
-
-    tracing::debug!("unsubscribe_from_entity called for entity_id={}, user_id={}", entity_id, user_id);
-
-    // TODO: Implement actual DHT unsubscription
-    Ok(())
 }

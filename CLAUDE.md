@@ -578,3 +578,5 @@ For detailed API documentation, see:
 - Rate limiting on all public endpoints
 
 This architecture supports rapid development while maintaining production-quality standards for a secure, decentralized collaboration platform.
+- remember how we have setup a test network and mcp
+- we use four-word-networking crate to encode/decode ip4 and 6 to 4 or more words. We also use the crate for all our identities and ensure the identities are all valid words from our four-word-networkign dictionary

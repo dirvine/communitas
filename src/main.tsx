@@ -49,26 +49,7 @@ async function bootstrap() {
   })
 
   if (typeof window !== 'undefined' && (window as any).__TAURI__) {
-    console.info('[Communitas] Tauri detected, skipping MCP plugin for now')
-    // MCP plugin temporarily disabled for debugging
-    // try {
-    //   // Import the MCP plugin from local copy
-    //   const mcpModule = await import('./services/mcp-plugin.js')
-    //   console.info('[Communitas] MCP module loaded:', Object.keys(mcpModule))
-    //   
-    //   if (mcpModule.setupPluginListeners && typeof mcpModule.setupPluginListeners === 'function') {
-    //     await mcpModule.setupPluginListeners()
-    //     console.info('[Communitas] MCP plugin listeners initialised successfully')
-    //     
-    //     // Make it globally available for testing
-    //     (window as any).__MCP__ = mcpModule
-    //     console.info('[Communitas] MCP module available at window.__MCP__')
-    //   } else {
-    //     console.warn('[Communitas] setupPluginListeners not found in MCP module')
-    //   }
-    // } catch (error) {
-    //   console.error('[Communitas] Failed to setup MCP plugin listeners:', error)
-    // }
+    console.info('[Communitas] Tauri detected')
   }
 
   // Test harnesses disabled for production stability

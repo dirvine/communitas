@@ -11,7 +11,13 @@ import {
   Tooltip,
   Alert,
   CircularProgress,
+  Avatar,
+  Badge,
+  alpha,
+  useTheme,
 } from '@mui/material';
+import { styled } from '@mui/material/styles';
+import { motion } from 'framer-motion';
 import {
   ChatBubbleOutline as MessagesIcon,
   FolderOutlined as StorageIcon,
@@ -28,6 +34,9 @@ import { useNavigation } from '../../contexts/NavigationContext';
 import MessagesPanel from './MessagesPanel';
 import StoragePanel from './StoragePanel';
 import WebsitePanel from './WebsitePanel';
+import { GlassCard } from '../ui/GlassCard';
+import { ModernButton } from '../ui/ModernButton';
+import { designTokens } from '../../styles/theme';
 
 interface EncryptionStatus {
   enabled: boolean;
@@ -42,6 +51,67 @@ interface EntityContentViewProps {
   entityName: string;
   fourWords: string;
 }
+
+// Styled components for glassmorphism
+const StyledTabs = styled(Tabs)(({ theme }) => ({
+  background: alpha(theme.palette.background.paper, 0.8),
+  backdropFilter: 'blur(20px)',
+  borderRadius: designTokens.borderRadius.lg,
+  padding: theme.spacing(0.5),
+  '& .MuiTabs-indicator': {
+    background: designTokens.colors.primary.gradient,
+    height: 3,
+    borderRadius: designTokens.borderRadius.full,
+  },
+}));
+
+const StyledTab = styled(Tab)(({ theme }) => ({
+  borderRadius: designTokens.borderRadius.md,
+  transition: `all ${designTokens.transitions.normal}`,
+  '&:hover': {
+    background: alpha(theme.palette.primary.main, 0.1),
+  },
+  '&.Mui-selected': {
+    color: theme.palette.primary.main,
+  },
+}));
+
+const ProfileHeader = styled(GlassCard)(({ theme }) => ({
+  padding: theme.spacing(3),
+  marginBottom: theme.spacing(2),
+  background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.1)} 0%, ${alpha(theme.palette.secondary.main, 0.1)} 100%)`,
+}));
+
+const OnlineIndicator = styled(Badge)(({ theme }) => ({
+  '& .MuiBadge-badge': {
+    backgroundColor: '#44b700',
+    color: '#44b700',
+    boxShadow: `0 0 0 2px ${theme.palette.background.paper}`,
+    '&::after': {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      width: '100%',
+      height: '100%',
+      borderRadius: '50%',
+      animation: 'ripple 1.2s infinite ease-in-out',
+      border: '1px solid currentColor',
+      content: '""',
+    },
+  },
+  '@keyframes ripple': {
+    '0%': {
+      transform: 'scale(.8)',
+      opacity: 1,
+    },
+    '100%': {
+      transform: 'scale(2.4)',
+      opacity: 0,
+    },
+  },
+}));
+
+const MotionBox = motion(Box);
 
 const EntityContentView: React.FC<EntityContentViewProps> = ({
   entityType,
@@ -92,8 +162,7 @@ const EntityContentView: React.FC<EntityContentViewProps> = ({
   const loadEncryptionStatus = async () => {
     try {
       const status = await invoke('core_entity_get_encryption_status', {
-        entityId,
-        path: '/',
+        entity_id: entityId,
       });
       setEncryptionStatus(status as EncryptionStatus);
     } catch (err) {
@@ -105,7 +174,7 @@ const EntityContentView: React.FC<EntityContentViewProps> = ({
   const loadPermissions = async () => {
     try {
       const perms = await invoke('core_entity_get_permissions', {
-        entityId,
+        entity_id: entityId,
       });
       setPermissions(perms as string[]);
     } catch (err) {
@@ -169,13 +238,20 @@ const EntityContentView: React.FC<EntityContentViewProps> = ({
     );
   }
 
+  const theme = useTheme();
+
   return (
-    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* Entity Header */}
-      <Paper
-        elevation={2}
+    <MotionBox
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
+      sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}
+    >
+      {/* Entity Header with Glassmorphism */}
+      <ProfileHeader
+        variant="light"
+        elevation={0}
         sx={{
-          p: 2,
           mb: 2,
           background: theme => theme.palette.mode === 'dark'
             ? 'linear-gradient(135deg, rgba(66, 66, 66, 0.8) 0%, rgba(33, 33, 33, 0.8) 100%)'
@@ -184,28 +260,59 @@ const EntityContentView: React.FC<EntityContentViewProps> = ({
       >
         <Stack direction="row" alignItems="center" spacing={2}>
           {/* Entity Icon and Name */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1 }}>
-            <Box
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: 48,
-                height: 48,
-                borderRadius: 2,
-                bgcolor: `${getEntityColor()}.main`,
-                color: 'white',
-              }}
-            >
-              {getEntityIcon()}
-            </Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flex: 1 }}>
+            {entityType === 'individual' ? (
+              <OnlineIndicator
+                overlap="circular"
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                variant="dot"
+              >
+                <Avatar
+                  sx={{
+                    width: 56,
+                    height: 56,
+                    background: designTokens.colors.primary.gradient,
+                    fontSize: '1.5rem',
+                    fontWeight: 600,
+                  }}
+                >
+                  {entityName.charAt(0).toUpperCase()}
+                </Avatar>
+              </OnlineIndicator>
+            ) : (
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 56,
+                  height: 56,
+                  borderRadius: 2,
+                  background: designTokens.colors.primary.gradient,
+                  color: 'white',
+                }}
+              >
+                {getEntityIcon()}
+              </Box>
+            )}
             <Box>
               <Typography variant="h5" fontWeight="bold">
                 {entityName}
               </Typography>
-              <Typography variant="caption" color="text.secondary">
-                {fourWords}
-              </Typography>
+              <Stack direction="row" spacing={1} alignItems="center">
+                <Typography variant="body2" color="text.secondary">
+                  {fourWords}
+                </Typography>
+                {entityType === 'individual' && (
+                  <Chip
+                    label="Online"
+                    size="small"
+                    color="success"
+                    variant="filled"
+                    sx={{ height: 20, fontSize: '0.75rem' }}
+                  />
+                )}
+              </Stack>
             </Box>
           </Box>
 
@@ -236,7 +343,7 @@ const EntityContentView: React.FC<EntityContentViewProps> = ({
             </Tooltip>
           </Stack>
         </Stack>
-      </Paper>
+      </ProfileHeader>
 
       {/* Error Alert */}
       {error && (
@@ -245,37 +352,36 @@ const EntityContentView: React.FC<EntityContentViewProps> = ({
         </Alert>
       )}
 
-      {/* Content Tabs */}
-      <Paper sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-        <Tabs
+      {/* Content Tabs with Glassmorphism */}
+      <GlassCard variant="light" sx={{ flex: 1, display: 'flex', flexDirection: 'column', p: 2 }}>
+        <StyledTabs
           value={activeTab}
           onChange={handleTabChange}
           indicatorColor="primary"
           textColor="primary"
-          sx={{ borderBottom: 1, borderColor: 'divider' }}
         >
-          <Tab
+          <StyledTab
             icon={<MessagesIcon />}
             label="Messages"
             iconPosition="start"
             data-testid="messages-tab"
           />
-          <Tab
+          <StyledTab
             icon={<StorageIcon />}
             label="Storage"
             iconPosition="start"
             data-testid="storage-tab"
           />
-          <Tab
+          <StyledTab
             icon={<WebsiteIcon />}
             label="Website"
             iconPosition="start"
             data-testid="website-tab"
           />
-        </Tabs>
+        </StyledTabs>
 
         {/* Tab Panels */}
-        <Box sx={{ flex: 1, overflow: 'hidden' }}>
+        <Box sx={{ flex: 1, overflow: 'hidden', mt: 2 }}>
           {activeTab === 0 && (
             <MessagesPanel
               entityType={entityType}
@@ -305,8 +411,8 @@ const EntityContentView: React.FC<EntityContentViewProps> = ({
             />
           )}
         </Box>
-      </Paper>
-    </Box>
+      </GlassCard>
+    </MotionBox>
   );
 };
 

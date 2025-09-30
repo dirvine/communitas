@@ -75,12 +75,18 @@ import {
   Storage as DataIcon,
   Public as PublicIcon,
   Group as GroupIcon,
+  Language as LanguageOutlined,
 } from '@mui/icons-material';
 import { invoke } from '@tauri-apps/api/core';
 import { format } from 'date-fns';
 import { useLocalStorage } from '../../contexts/LocalStorageProvider';
 import { networkService } from '../../services/network/NetworkConnectionService';
 import { offlineStorage } from '../../services/storage/OfflineStorageService';
+import { GlassCard, GlassCardContent } from '../ui/GlassCard';
+import { ModernButton } from '../ui/ModernButton';
+import { designTokens } from '../../styles/theme';
+import { motion } from 'framer-motion';
+import { alpha, styled, useTheme } from '@mui/material/styles';
 
 interface StorageItem {
   name: string;
@@ -115,7 +121,26 @@ interface EncryptionStatus {
   health_status: 'healthy' | 'degraded' | 'critical';
 }
 
-type StorageArea = 'website' | 'data';
+type StorageArea = 'website' | 'data' | 'shared';
+
+// Styled components for glassmorphism
+const MotionCard = motion(GlassCard);
+const StorageSection = styled(GlassCard)(({ theme }) => ({
+  marginBottom: theme.spacing(2),
+  padding: theme.spacing(2),
+  background: alpha(theme.palette.background.paper, 0.6),
+  backdropFilter: 'blur(10px)',
+}));
+
+const StyledFab = styled(Fab)(({ theme }) => ({
+  background: designTokens.colors.primary.gradient,
+  color: '#ffffff',
+  boxShadow: designTokens.shadows.xl,
+  '&:hover': {
+    background: designTokens.colors.primary.gradient,
+    transform: 'scale(1.1)',
+  },
+}));
 
 interface StoragePanelProps {
   entityType: 'individual' | 'group' | 'channel' | 'project';
@@ -574,6 +599,182 @@ const StoragePanel: React.FC<StoragePanelProps> = ({
     );
   }
 
+  const theme = useTheme();
+
+  // For individual contacts, show a different layout with shared storage emphasized
+  if (entityType === 'individual') {
+    return (
+      <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', p: 2 }}>
+        <Grid container spacing={2}>
+          {/* Shared Storage Section */}
+          <Grid item xs={12} md={6}>
+            <MotionCard
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.5 }}
+              variant="light"
+              elevation={0}
+            >
+              <CardContent>
+                <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
+                  <ShareIcon color="primary" />
+                  <Typography variant="h6" fontWeight={600}>
+                    Shared with {entityName}
+                  </Typography>
+                  <Badge badgeContent={3} color="primary">
+                    <Box />
+                  </Badge>
+                </Stack>
+
+                <List dense>
+                  <ListItem>
+                    <ListItemIcon><FileIcon /></ListItemIcon>
+                    <ListItemText
+                      primary="Project Proposal.pdf"
+                      secondary="Shared 2 days ago • 2.4 MB"
+                    />
+                    <IconButton size="small"><DownloadIcon /></IconButton>
+                  </ListItem>
+                  <ListItem>
+                    <ListItemIcon><FolderIcon /></ListItemIcon>
+                    <ListItemText
+                      primary="Design Assets"
+                      secondary="Shared 1 week ago • 12 files"
+                    />
+                    <IconButton size="small"><MoreIcon /></IconButton>
+                  </ListItem>
+                </List>
+
+                <ModernButton
+                  variant="contained"
+                  gradient={true}
+                  startIcon={<AddIcon />}
+                  fullWidth
+                  sx={{ mt: 2 }}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  Share New Files
+                </ModernButton>
+              </CardContent>
+            </MotionCard>
+          </Grid>
+
+          {/* Their Website Section */}
+          <Grid item xs={12} md={6}>
+            <MotionCard
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.5, delay: 0.1 }}
+              variant="colored"
+              elevation={0}
+            >
+              <CardContent>
+                <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
+                  <WebsiteIcon color="info" />
+                  <Typography variant="h6" fontWeight={600}>
+                    {entityName}'s Website
+                  </Typography>
+                  <Chip label="Public" size="small" color="info" />
+                </Stack>
+
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="body2" color="text.secondary" gutterBottom>
+                    {fourWords}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Last updated 3 hours ago
+                  </Typography>
+                </Box>
+
+                <List dense>
+                  <ListItem>
+                    <ListItemIcon><FileIcon /></ListItemIcon>
+                    <ListItemText
+                      primary="index.md"
+                      secondary="Home page"
+                    />
+                  </ListItem>
+                  <ListItem>
+                    <ListItemIcon><FileIcon /></ListItemIcon>
+                    <ListItemText
+                      primary="portfolio.md"
+                      secondary="Work samples"
+                    />
+                  </ListItem>
+                </List>
+
+                <ModernButton
+                  variant="contained"
+                  gradient={true}
+                  startIcon={<LanguageOutlined />}
+                  fullWidth
+                  sx={{ mt: 2 }}
+                >
+                  Visit Website
+                </ModernButton>
+              </CardContent>
+            </MotionCard>
+          </Grid>
+
+          {/* Files They Shared Section */}
+          <Grid item xs={12}>
+            <MotionCard
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.2 }}
+              variant="light"
+              elevation={0}
+            >
+              <CardContent>
+                <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
+                  <FolderIcon color="secondary" />
+                  <Typography variant="h6" fontWeight={600}>
+                    Files from {entityName}
+                  </Typography>
+                  <Badge badgeContent={5} color="secondary">
+                    <Box />
+                  </Badge>
+                </Stack>
+
+                <Grid container spacing={2}>
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <Grid item xs={12} sm={6} md={4} key={i}>
+                      <Paper
+                        sx={{
+                          p: 2,
+                          cursor: 'pointer',
+                          background: alpha(theme.palette.background.paper, 0.6),
+                          backdropFilter: 'blur(10px)',
+                          '&:hover': {
+                            background: alpha(theme.palette.primary.main, 0.1),
+                          },
+                        }}
+                      >
+                        <Stack direction="row" spacing={2} alignItems="center">
+                          <FileIcon color="action" />
+                          <Box flex={1}>
+                            <Typography variant="body2">Document{i}.pdf</Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              1.2 MB • 2 days ago
+                            </Typography>
+                          </Box>
+                          <IconButton size="small">
+                            <DownloadIcon fontSize="small" />
+                          </IconButton>
+                        </Stack>
+                      </Paper>
+                    </Grid>
+                  ))}
+                </Grid>
+              </CardContent>
+            </MotionCard>
+          </Grid>
+        </Grid>
+      </Box>
+    );
+  }
+
+  // Original layout for groups/channels/projects
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* Storage Header */}

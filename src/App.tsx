@@ -36,6 +36,8 @@ import { featureFlags, useFeatureFlag } from './services/featureFlags'
 
 // Theme System
 import { ThemeProvider, ThemeSwitcher } from './components/theme'
+import { theme as modernTheme, darkTheme as modernDarkTheme } from './styles/theme'
+import { ThemeProvider as MuiThemeProvider } from '@mui/material/styles'
 
 // Authentication System
 import { AuthProvider, AuthStatus, useAuth } from './components/auth'
@@ -50,8 +52,14 @@ import { EncryptionProvider, EncryptionStatus } from './components/encryption'
   import { useSidebarBehavior } from './components/responsive'
   import ResponsiveLayout from './components/layout/ResponsiveLayout'
 
+// Modern UI Components
+import { GlassCard } from './components/ui/GlassCard'
+import { ModernButton } from './components/ui/ModernButton'
+import { ModernLoader } from './components/ui/ModernLoader'
+
 // Navigation - both old and new
-import { WhatsAppStyleNavigation } from './components/navigation/WhatsAppStyleNavigation'
+import { ModernNavigation } from './components/navigation/ModernNavigation'
+import { UIShowcase } from './components/UIShowcase'
 import { NavigationProvider } from './contexts/NavigationContext'
 import BreadcrumbNavigation from './components/navigation/BreadcrumbNavigation'
 import ContextAwareSidebar from './components/navigation/ContextAwareSidebar'
@@ -69,6 +77,7 @@ import { ensureIdentity } from './utils/identity'
 import { SimpleCommunicationHub } from './components/webrtc'
 import { LoginDialog } from './components/auth/LoginDialog'
 import { UnifiedAuthFlow } from './components/auth/UnifiedAuthFlow'
+import { EnhancedEntityDialog } from './components/entity/EnhancedEntityDialog'
 
 // Communication
 import { EntitySelector } from './components/communication/EntitySelector'
@@ -120,9 +129,10 @@ const TestButton: React.FC = () => {
 };
 
 
-function App() {
-  // console.log('App component rendering...')
-  
+// Inner component that has access to useNavigate() from BrowserRouter
+function AppContent() {
+  const navigate = useNavigate(); // Now we can use this hook!
+
   // Experimental mode is now the default
   // Enable all features
   React.useEffect(() => {
@@ -131,10 +141,10 @@ function App() {
     featureFlags.enable('four-word-identity')
     featureFlags.enable('unified-storage-ui')
   }, [])
-  
+
   // Check which features are enabled
   const useContextNav = useFeatureFlag('context-aware-navigation', 'user_owner_123')
-  
+
   // Navigation context for unified navigation
   const [navigationContext, setNavigationContext] = useState<{
     mode: 'personal' | 'organization' | 'project'
@@ -154,6 +164,8 @@ function App() {
   const [showStorageWorkspace, setShowStorageWorkspace] = useState(false)
   const [showEntitySelector, setShowEntitySelector] = useState(false)
   const [pendingAction, setPendingAction] = useState<'call' | 'video' | 'screen' | 'storage' | null>(null)
+  const [showContactDialog, setShowContactDialog] = useState(false)
+  const [networkState, setNetworkState] = useState<any>(null)
   const [networkHealth, setNetworkHealth] = useState<NetworkHealth>({
     status: 'Disconnected',
     peer_count: 0,
@@ -161,6 +173,13 @@ function App() {
     bandwidth_kbps: 0,
     avg_latency_ms: 0,
   })
+
+  // Theme state
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    const saved = localStorage.getItem('theme-mode')
+    return saved === 'dark'
+  })
+  const currentTheme = isDarkMode ? modernDarkTheme : modernTheme
   
   // Use responsive sidebar behavior with proper defaults
   const { defaultOpen } = useSidebarBehavior()
@@ -179,6 +198,15 @@ function App() {
     // Initialize network connection service (auto-connects on startup)
     console.log('🚀 Initializing network connection service...')
     // Network service will auto-connect in its constructor
+
+    // Subscribe to network state updates
+    const updateNetworkState = (state: any) => {
+      setNetworkState(state);
+    };
+
+    const unsubscribe = networkService.subscribe(updateNetworkState);
+
+    return unsubscribe;
   }, [])
 
   // Listen for global storage workspace open requests (from dashboards, etc.)
@@ -298,8 +326,12 @@ function App() {
   const handleQuickAction = (action: string) => {
     // Check if we have a selected entity or context
     const hasContext = navigationContext.organizationId || navigationContext.projectId || _selectedEntity
-    
+
     switch (action) {
+      case 'add_contact':
+        // Open the EnhancedEntityDialog for adding contacts
+        setShowContactDialog(true)
+        break
       case 'start_voice_call':
         if (hasContext) {
           const currentType = navigationContext.mode
@@ -350,6 +382,9 @@ function App() {
     console.log('WhatsApp Navigation:', path, entity)
     _setSelectedEntity(entity)
 
+    // CRITICAL: Navigate to the path using React Router
+    navigate(path);
+
     // Update navigation context based on path
     if (path.startsWith('/org/')) {
       const parts = path.split('/')
@@ -381,7 +416,6 @@ function App() {
     const [urlBarValue, setUrlBarValue] = React.useState('');
     const [urlBarFocused, setUrlBarFocused] = React.useState(false);
     const [urlBarError, setUrlBarError] = React.useState('');
-    const [networkState, setNetworkState] = React.useState<any>(null);
 
     // Four-word address validation
     const validateFourWords = (input: string): boolean => {
@@ -454,18 +488,6 @@ function App() {
       }
     }, [navigationContext.fourWords, urlBarFocused]);
 
-    // Subscribe to network state for connection info
-    React.useEffect(() => {
-      const networkService = NetworkConnectionService.getInstance();
-      const updateNetworkState = (state: any) => {
-        setNetworkState(state);
-      };
-      
-      // Subscribe to updates and get unsubscribe function
-      const unsubscribe = networkService.subscribe(updateNetworkState);
-      
-      return unsubscribe;
-    }, []);
 
     return (
     <Toolbar sx={{ gap: 1 }}>
@@ -729,7 +751,6 @@ function App() {
         <EncryptionProvider>
           <EntityDirectoryProvider>
             <NavigationProvider>
-              <BrowserRouter>
           {/** Bridge navigation events to React Router */}
           {/* NavBridge temporarily disabled - causing infinite render loop
           {(() => {
@@ -758,7 +779,7 @@ function App() {
               />
             }
             sidebar={
-              <WhatsAppStyleNavigation
+              <ModernNavigation
                 currentUserId="user_owner_123"
                 onNavigate={handleWhatsAppNavigate}
                 onVideoCall={handleVideoCall}
@@ -772,7 +793,12 @@ function App() {
             <Box sx={{ height: '100%', bgcolor: 'grey.50' }}>
               <Suspense fallback={<Box sx={{ p: 3 }}><Typography>Loading…</Typography></Box>}>
                 <Routes>
-                  <Route path="/" element={<PersonalHomeDashboard />} />
+                  <Route path="/" element={
+                    <GlassCard variant="light" hover={false} sx={{ p: 0, height: '100%' }}>
+                      <PersonalHomeDashboard />
+                    </GlassCard>
+                  } />
+                  <Route path="/ui-showcase" element={<UIShowcase />} />
                   <Route path="/group/:groupId" element={<GroupPage />} />
                   <Route path="/user/:userId" element={<UserPage />} />
                   <Route path="/channel/:channelId" element={<ChannelPage />} />
@@ -802,8 +828,7 @@ function App() {
               notifications={0}
             />
           </ResponsiveLayout>
-              </BrowserRouter>
-  
+
   {/* Overview Modal */}
   {showOverview && (
     <>
@@ -868,6 +893,14 @@ function App() {
     onSelect={handleEntitySelected}
     actionType={pendingAction || 'call'}
   />
+
+  {/* Enhanced Contact Dialog */}
+  <EnhancedEntityDialog
+    open={showContactDialog}
+    onClose={() => setShowContactDialog(false)}
+    entityType="contact"
+    isOnline={networkState?.status === 'connected'}
+  />
             </NavigationProvider>
           </EntityDirectoryProvider>
         </EncryptionProvider>
@@ -877,24 +910,35 @@ function App() {
 
   return (
     <ThemeProvider>
-      <ErrorBoundary>
-        <SnackbarProvider maxSnack={3} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
-          <Box
-            component="main"
-            role="main"
-            aria-label="Communitas P2P Collaboration Platform"
-            sx={{
-              '&:focus-visible': {
-                outline: 'none',
-              },
-            }}
-            tabIndex={-1}
-          >
-            {ThemedApp}
-          </Box>
-        </SnackbarProvider>
-      </ErrorBoundary>
+      <MuiThemeProvider theme={currentTheme}>
+        <ErrorBoundary>
+          <SnackbarProvider maxSnack={3} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
+            <Box
+              component="main"
+              role="main"
+              aria-label="Communitas P2P Collaboration Platform"
+              sx={{
+                '&:focus-visible': {
+                  outline: 'none',
+                },
+              }}
+              tabIndex={-1}
+            >
+              {ThemedApp}
+            </Box>
+          </SnackbarProvider>
+        </ErrorBoundary>
+      </MuiThemeProvider>
     </ThemeProvider>
+  )
+}
+
+// Main App wrapper that provides BrowserRouter context
+function App() {
+  return (
+    <BrowserRouter>
+      <AppContent />
+    </BrowserRouter>
   )
 }
 

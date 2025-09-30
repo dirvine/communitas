@@ -111,15 +111,18 @@ const MessagesPanel: React.FC<MessagesPanelProps> = ({
   const loadMessages = useCallback(async () => {
     try {
       setLoading(true);
+      console.log('🔵 Invoking core_messages_list with params:', { entity_id: entityId, limit: 100, offset: 0 });
       const result = await invoke('core_messages_list', {
-        entityId,
+        entity_id: entityId,
         limit: 100,
         offset: 0,
       });
+      console.log('✅ core_messages_list result:', result);
       setMessages(result as Message[]);
       setError(null);
     } catch (err) {
-      console.error('Failed to load messages:', err);
+      console.error('❌ Failed to load messages - full error:', err);
+      console.error('❌ Error type:', typeof err, 'Error keys:', Object.keys(err || {}));
       setError('Failed to load messages');
     } finally {
       setLoading(false);
@@ -133,7 +136,7 @@ const MessagesPanel: React.FC<MessagesPanelProps> = ({
     setSending(true);
     try {
       const message = await invoke('core_messages_send', {
-        entityId,
+        entity_id: entityId,
         content: newMessage.trim(),
         encrypted: true,
       });
@@ -155,9 +158,9 @@ const MessagesPanel: React.FC<MessagesPanelProps> = ({
 
     try {
       await invoke('core_messages_edit', {
-        entityId,
-        messageId: editingMessage,
-        newContent: editContent.trim(),
+        entity_id: entityId,
+        message_id: editingMessage,
+        content: editContent.trim(),
       });
 
       setMessages(prev => prev.map(msg =>
@@ -180,8 +183,8 @@ const MessagesPanel: React.FC<MessagesPanelProps> = ({
 
     try {
       await invoke('core_messages_delete', {
-        entityId,
-        messageId,
+        entity_id: entityId,
+        message_id: messageId,
       });
 
       setMessages(prev => prev.filter(msg => msg.id !== messageId));

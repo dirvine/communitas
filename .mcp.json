@@ -2,8 +2,18 @@
   "mcpServers": {
     "chrome-devtools": {
       "command": "npx",
-      "args": ["chrome-devtools-mcp@latest"]
+      "args": ["chrome-devtools-mcp@latest"],
+      "env": {
+        "CHROME_DEBUG_PORT": "9222"
+      }
+    },
+    "tauri-communitas": {
+      "command": "tauri-mcp",
+      "args": ["serve"],
+      "env": {
+        "TAURI_MCP_LOG_LEVEL": "debug",
+        "TAURI_APP_PATH": "/Users/davidirvine/Desktop/Devel/projects/target/debug/communitas-desktop"
+      }
     }
   }
 }
-

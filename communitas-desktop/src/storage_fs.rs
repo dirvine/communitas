@@ -277,7 +277,7 @@ pub async fn core_storage_mkdir(entity_id: String, path: String) -> Result<bool,
 }
 
 #[command]
-pub async fn core_storage_delete(entity_id: String, path: String) -> Result<bool, String> {
+pub async fn core_storage_fs_delete(entity_id: String, path: String) -> Result<bool, String> {
     let entity_root = storage_root(&entity_id)?;
     ensure_directory(&entity_root)?;
     let relative = normalize_relative_path(&path)?;

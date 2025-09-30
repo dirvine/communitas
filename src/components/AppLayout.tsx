@@ -34,7 +34,7 @@ import { EncryptionProvider, EncryptionStatus } from './encryption'
 import { useSidebarBehavior } from './responsive'
 
 // Navigation - both old and new
-import { WhatsAppStyleNavigation } from './navigation/WhatsAppStyleNavigation'
+import { ModernNavigation } from './navigation/ModernNavigation'
 import { NavigationProvider } from '../contexts/NavigationContext'
 import BreadcrumbNavigation from './navigation/BreadcrumbNavigation'
 
@@ -299,7 +299,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
                     <>
                       <Box onClick={handleToggleSidebar} sx={{ position: 'absolute', inset: 0, bgcolor: 'rgba(0,0,0,0.35)', zIndex: 1199 }} />
                       <Box sx={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: '85vw', maxWidth: 360, bgcolor: 'background.paper', borderRight: theme => `1px solid ${theme.palette.divider}`, zIndex: 1200, overflow: 'hidden' }}>
-                        <WhatsAppStyleNavigation
+                        <ModernNavigation
                           currentUserId="user_owner_123"
                           onNavigate={(path, entity) => {
                             console.log('WhatsApp Navigation:', path, entity)
@@ -332,7 +332,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
                       minWidth: 0,
                     }}
                   >
-                    <WhatsAppStyleNavigation
+                    <ModernNavigation
                       currentUserId="user_owner_123"
                       onNavigate={(path, entity) => {
                         console.log('WhatsApp Navigation:', path, entity)

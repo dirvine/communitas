@@ -71,36 +71,8 @@ async fn main() -> anyhow::Result<()> {
         // Raw SPKI pinning state
         .manage(Arc::new(RwLock::new(
             security::raw_spki::RawSpkiState::default(),
-        )));
-
-    // Only include the MCP plugin in development builds
-    #[cfg(debug_assertions)]
-    {
-        if std::env::var("TAURI_MCP_DISABLED").is_ok() {
-            info!("MCP plugin disabled by TAURI_MCP_DISABLED environment variable");
-        } else {
-            info!("Development build detected, enabling MCP plugin");
-
-            // Use a unique socket path to avoid conflicts
-            let socket_path = if let Ok(path) = std::env::var("TAURI_MCP_SOCKET_PATH") {
-                std::path::PathBuf::from(path)
-            } else {
-                // Generate a unique socket path using process ID
-                let pid = std::process::id();
-                std::path::PathBuf::from(format!("/tmp/tauri-mcp-communitas-{}.sock", pid))
-            };
-
-            info!("Using MCP socket path: {:?}", socket_path);
-
-            builder = builder.plugin(tauri_plugin_mcp::init_with_config(
-                tauri_plugin_mcp::PluginConfig::new("Communitas".to_string())
-                    .start_socket_server(true)
-                    .socket_path(socket_path),
-            ));
-        }
-    }
-
-    builder = builder.invoke_handler(tauri::generate_handler![
+        )))
+        .invoke_handler(tauri::generate_handler![
         // Core bindings (pointers-only DHT surface)
         core_cmds::core_claim,
         core_cmds::core_advertise,
@@ -136,6 +108,19 @@ async fn main() -> anyhow::Result<()> {
         core_commands::core_add_bootstrap_node,
         core_commands::core_clear_custom_nodes,
         core_commands::core_get_bootstrap_stats,
+        // Message management
+        core_commands::core_messages_list,
+        core_commands::core_messages_send,
+        core_commands::core_messages_edit,
+        core_commands::core_messages_delete,
+        // Entity permissions and encryption
+        core_commands::core_entity_get_permissions,
+        core_commands::core_entity_get_encryption_status,
+        // Network sync
+        core_commands::get_sync_status,
+        core_commands::subscribe_to_entity,
+        core_commands::unsubscribe_from_entity,
+        // Groups
         core_groups::core_group_create,
         core_groups::core_group_add_member,
         core_groups::core_group_remove_member,
@@ -144,25 +129,25 @@ async fn main() -> anyhow::Result<()> {
         storage_fs::core_storage_read,
         storage_fs::core_storage_write,
         storage_fs::core_storage_mkdir,
-        storage_fs::core_storage_delete,
+        storage_fs::core_storage_fs_delete,
         storage_fs::core_storage_rename,
         storage_fs::core_storage_stats,
         // Encrypted storage
         core_storage::core_storage_initialize,
-        core_storage::core_storage_login,
-        core_storage::core_storage_password_login,
-        core_storage::core_storage_store,
-        core_storage::core_storage_retrieve,
-        core_storage::core_storage_delete,
-        core_storage::core_storage_list_keys,
-        core_storage::core_storage_list_vaults,
-        core_storage::core_storage_get_sessions,
-        core_storage::core_storage_switch_vault,
-        core_storage::core_storage_logout,
-        core_storage::core_storage_export_vault,
-        core_storage::core_storage_import_vault,
-        core_storage::core_storage_store_identity,
-        core_storage::core_storage_get_stats,
+        // core_storage::core_storage_login,
+        // core_storage::core_storage_password_login,
+        // core_storage::core_storage_store,
+        // core_storage::core_storage_retrieve,
+        // core_storage::core_storage_vault_delete,
+        // core_storage::core_storage_list_keys,
+        // core_storage::core_storage_list_vaults,
+        // core_storage::core_storage_get_sessions,
+        // core_storage::core_storage_switch_vault,
+        // core_storage::core_storage_logout,
+        // core_storage::core_storage_export_vault,
+        // core_storage::core_storage_import_vault,
+        // core_storage::core_storage_store_identity,
+        // core_storage::core_storage_get_stats,
         // Network helpers
         network::validate_four_words,
         network::connect_via_four_words,

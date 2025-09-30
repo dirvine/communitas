@@ -43,7 +43,6 @@ rustls-pemfile = "2.0"
 tauri = { version = "2.6.1", features = ["custom-protocol"] }
 tauri-plugin-log = { version = "2" }
 tauri-plugin-updater = { version = "2" }
-tauri-plugin-mcp = { path = "../tauri-plugin-mcp" }
 
 # Async runtime (re-export from workspace)
 tokio = { version = "1.39", features = ["full"] }

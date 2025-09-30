@@ -687,49 +687,6 @@ export const EntityDirectoryProvider: React.FC<EntityDirectoryProviderProps> = (
     };
   }, [queueCreateOperation]);
 
-  const createContact = useCallback(async (input: CreateNewContactInput): Promise<EntityOperationResult> => {
-    // Check DHT connection first
-    const isConnected = await invoke<boolean>('check_dht_connection');
-    if (!isConnected) {
-      throw new Error('Must be connected to DHT network to create entities');
-    }
-
-    const now = new Date();
-    const tempId = `contact-${nanoid(8)}`;
-    const generatedFourWords = await generateFourWords();
-    const networkIdentity = createNetworkIdentity(true, generatedFourWords);
-
-    const user: PersonalUser = {
-      id: tempId,
-      type: 'personal_user',
-      name: input.displayName.trim(),
-      description: input.email,
-      userId: `user-${nanoid(8)}`,
-      relationship: input.relationship ?? 'colleague',
-      networkIdentity,
-      capabilities: { ...defaultCapabilities },
-      createdAt: now,
-      updatedAt: now,
-      lastContact: now,
-    };
-
-    const userWithMeta = withMetadata(user);
-
-    setState(prev => ({
-      ...prev,
-      personalUsers: [...prev.personalUsers, userWithMeta],
-    }));
-
-    queueCreateOperation('contact', userWithMeta);
-
-    return {
-      success: true,
-      entityId: tempId,
-      fourWords: networkIdentity.fourWords,
-      isOwned: true,
-      needsSync: true
-    };
-  }, [queueCreateOperation]);
 
   // ============= Add Operations (Use Existing Four-Words) =============
 
@@ -976,63 +933,6 @@ export const EntityDirectoryProvider: React.FC<EntityDirectoryProviderProps> = (
     enqueueOperation({
       id: `fetch-${nanoid(8)}`,
       entityType: 'project',
-      operation: 'resolve',
-      payload: { fourWords: validation.normalized, tempId },
-      timestamp: new Date().toISOString(),
-      attempts: 0,
-      status: 'pending'
-    });
-
-    return {
-      success: true,
-      entityId: tempId,
-      fourWords: validation.normalized!,
-      isOwned: false,
-      needsSync: true
-    };
-  }, [validateFourWords, enqueueOperation]);
-
-  const addExistingContact = useCallback(async (input: AddExistingContactInput): Promise<EntityOperationResult> => {
-    const validation = await validateFourWords(input.fourWords);
-    if (!validation.isValid) {
-      return {
-        success: false,
-        entityId: '',
-        fourWords: input.fourWords,
-        isOwned: false,
-        needsSync: false,
-        error: validation.error
-      };
-    }
-
-    const now = new Date();
-    const tempId = `contact-ext-${nanoid(8)}`;
-    const networkIdentity = createNetworkIdentity(false, validation.normalized);
-
-    const user: PersonalUser = {
-      id: tempId,
-      type: 'personal_user',
-      name: input.displayName || validation.normalized!,
-      description: `Contact: ${validation.normalized}`,
-      userId: validation.normalized!,
-      relationship: input.relationship ?? 'colleague',
-      networkIdentity,
-      capabilities: { ...defaultCapabilities },
-      createdAt: now,
-      updatedAt: now,
-      lastContact: now,
-    };
-
-    const userWithMeta = withMetadata(user, 'new');
-
-    setState(prev => ({
-      ...prev,
-      personalUsers: [...prev.personalUsers, userWithMeta],
-    }));
-
-    enqueueOperation({
-      id: `fetch-${nanoid(8)}`,
-      entityType: 'contact',
       operation: 'resolve',
       payload: { fourWords: validation.normalized, tempId },
       timestamp: new Date().toISOString(),
@@ -1320,6 +1220,76 @@ export const EntityDirectoryProvider: React.FC<EntityDirectoryProviderProps> = (
     queueDeleteOperation('group', groupId);
   }, [queueDeleteOperation]);
 
+  const createContact = useCallback(async (input: CreateNewContactInput): Promise<EntityOperationResult> => {
+    try {
+      // Try to generate real four-words from saorsa-core
+      let fourWords: string;
+      try {
+        const generated = await invoke<string>('generate_four_word_identity');
+        if (!generated) {
+          throw new Error('No four-words generated');
+        }
+        fourWords = generated;
+      } catch (error) {
+        // Fallback to temp four-words if generation fails (offline)
+        fourWords = `temp-${nanoid(8)}`;
+        console.log('Offline mode: using temporary four-words', fourWords);
+      }
+
+      const now = new Date();
+      const entityId = `contact-${nanoid(8)}`;
+
+      const user: PersonalUser = {
+        id: entityId,
+        type: 'personal_user',
+        name: input.displayName.trim(),
+        description: input.email,
+        userId: `user-${nanoid(8)}`,
+        relationship: input.relationship ?? 'colleague',
+        networkIdentity: {
+          fourWords,
+          publicKey: `pk_${nanoid(12)}`,
+          dhtAddress: `dht://${fourWords.replace(/-/g, '')}-${nanoid(6)}`,
+          isOwned: true,
+          isValidated: !fourWords.startsWith('temp-'), // Only validated if real four-words
+        },
+        capabilities: { ...defaultCapabilities },
+        createdAt: now,
+        updatedAt: now,
+        lastContact: now,
+      };
+
+      // Mark as 'new' since we just created it (needs sync)
+      const userWithMeta = withMetadata(user, 'new');
+
+      setState(prev => ({
+        ...prev,
+        personalUsers: [...prev.personalUsers, userWithMeta],
+      }));
+
+      // Queue for sync to create on network
+      queueCreateOperation('contact', userWithMeta);
+
+      return {
+        success: true,
+        entityId,
+        fourWords,
+        isOwned: true,
+        needsSync: true,
+      };
+    } catch (error) {
+      console.error('createContact error:', error);
+      return {
+        success: false,
+        entityId: '',
+        fourWords: '',
+        isOwned: true,
+        needsSync: false,
+        error: error instanceof Error ? error.message : 'Failed to create contact',
+      };
+    }
+  }, [queueCreateOperation]);
+
   const addPersonalUser = useCallback((input: CreatePersonalUserInput): PersonalUser => {
     const now = new Date();
     const user: PersonalUser = {
@@ -1347,6 +1317,116 @@ export const EntityDirectoryProvider: React.FC<EntityDirectoryProviderProps> = (
 
     return userWithMeta;
   }, [queueCreateOperation]);
+
+  const addExistingContact = useCallback(async (input: AddExistingContactInput): Promise<EntityOperationResult> => {
+    try {
+      // Normalize four-words input
+      const normalizedFourWords = input.fourWords.trim().toLowerCase().replace(/\s+/g, '-');
+
+      // Validate four-word format
+      const validationResult = await validateFourWords(normalizedFourWords);
+      if (!validationResult.isValid) {
+        return {
+          success: false,
+          entityId: '',
+          fourWords: normalizedFourWords,
+          isOwned: false,
+          needsSync: false,
+          error: validationResult.error || 'Invalid Four-Word format',
+        };
+      }
+
+      // Fetch identity from DHT
+      interface DHTIdentity {
+        id: string;
+        four_words: string;
+        display_name: string;
+        public_key: string;
+        dht_address: string;
+        bio?: string;
+        avatar_url?: string;
+      }
+
+      const dhtIdentity = await invoke<DHTIdentity>('core_fetch_identity', {
+        fourWords: normalizedFourWords,
+      });
+
+      // Create PersonalUser from DHT data
+      const now = new Date();
+      const user: PersonalUser = {
+        id: `contact-${nanoid(8)}`,
+        type: 'personal_user',
+        name: input.displayName || dhtIdentity.display_name,
+        description: dhtIdentity.bio,
+        userId: dhtIdentity.id,
+        relationship: input.relationship ?? 'colleague',
+        networkIdentity: {
+          fourWords: dhtIdentity.four_words,
+          publicKey: dhtIdentity.public_key,
+          dhtAddress: dhtIdentity.dht_address,
+          isOwned: false,
+          isValidated: true,
+        },
+        capabilities: { ...defaultCapabilities },
+        createdAt: now,
+        updatedAt: now,
+        lastContact: now,
+      };
+
+      // Mark as synced (not new) since we fetched from DHT
+      const userWithMeta = withMetadata(user, 'synced');
+
+      // Check for duplicates and add to state atomically
+      let wasAdded = false;
+      setState(prev => {
+        // Check if contact already exists
+        const existingContact = prev.personalUsers.find(
+          u => u.networkIdentity.fourWords === dhtIdentity.four_words
+        );
+
+        if (existingContact) {
+          // Don't add duplicate
+          wasAdded = false;
+          return prev;
+        }
+
+        // Add new contact
+        wasAdded = true;
+        return {
+          ...prev,
+          personalUsers: [...prev.personalUsers, userWithMeta],
+        };
+      });
+
+      if (!wasAdded) {
+        return {
+          success: false,
+          entityId: '',
+          fourWords: dhtIdentity.four_words,
+          isOwned: false,
+          needsSync: false,
+          error: 'Contact already exists with these four-words',
+        };
+      }
+
+      return {
+        success: true,
+        entityId: user.id,
+        fourWords: dhtIdentity.four_words,
+        isOwned: false,
+        needsSync: false,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        entityId: '',
+        fourWords: input.fourWords,
+        isOwned: false,
+        needsSync: false,
+        error: error instanceof Error ? error.message : 'Failed to add existing contact',
+      };
+    }
+  }, [validateFourWords]);
 
   const removePersonalUser = useCallback((userId: string) => {
     setState(prev => ({

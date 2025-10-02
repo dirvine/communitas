@@ -1,6 +1,6 @@
 # Communitas — Design & Architecture
 
-**Version**: 1.0 • **Date**: 2025-09-27 • **Status**: Current Implementation
+**Version**: 1.1 • **Date**: 2025-09-30 • **Status**: Current Implementation
 
 Communitas is a local-first, post-quantum collaboration platform that unifies messaging, file sharing, voice/video calling, and web publishing into a single decentralized experience using Four-Word addressing.
 
@@ -32,8 +32,9 @@ Communitas is a local-first, post-quantum collaboration platform that unifies me
 
 ### **Crate Organization**
 - **`communitas-core/`**: Business logic, saorsa-core integration, re-exports
-- **`communitas-desktop/`**: Tauri v2 app with IPC commands  
+- **`communitas-desktop/`**: Tauri v2 app with IPC commands
 - **`communitas-headless/`**: Bootstrap/seed nodes for network
+- **`communitas-bridge/`**: HTTP/REST testing bridge for browser-based testing (NEW: 2025-09-30)
 - **`communitas-container/`**: FEC/seal content operations
 - **`apps/communitas/`**: Next-gen React console (future migration target)
 - **`src/`**: Legacy React SPA (maintained for regression coverage)
@@ -223,16 +224,70 @@ The system elegantly resolves the circular dependency between root records and d
 ## **🛠️ Technical Implementation**
 
 ### **Development Workflow**
+
+**Standard Development:**
 ```bash
 # 1. Build frontend assets
 npm run build
 
-# 2. Run Tauri with built assets  
+# 2. Run Tauri with built assets
 npm run tauri dev
 
 # 3. Test entity creation flow
 npm run test:run
 ```
+
+**Browser-Based Testing (Bridge Server):**
+```bash
+# Terminal 1: Start bridge server
+cargo run -p communitas-bridge
+
+# Terminal 2: Start frontend dev server
+npm run dev
+
+# Bridge server exposes HTTP/REST API at localhost:3030
+# Enables testing with Chrome DevTools MCP and browser automation
+```
+
+### **Bridge Server Architecture (NEW: 2025-09-30)**
+
+The bridge server provides an HTTP/REST interface for testing Communitas with real P2P networking:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│              Browser Testing Layer                      │
+│         (Chrome DevTools MCP, automation)              │
+├─────────────────────────────────────────────────────────┤
+│              HTTP/REST Bridge Server                    │
+│              (localhost:3030, CORS enabled)            │
+├─────────────────────────────────────────────────────────┤
+│              CoreContext Integration                    │
+│         (Same as Tauri desktop application)            │
+├─────────────────────────────────────────────────────────┤
+│              Saorsa-Core Foundation                     │
+│  ┌─────────────┬──────────────┬──────────────────────┐ │
+│  │DHT Network  │QUIC Transport│Post-Quantum Crypto   │ │
+│  │(Kademlia)   │(ant-quic)    │(ML-DSA/ML-KEM)       │ │
+│  └─────────────┴──────────────┴──────────────────────┘ │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Key Features:**
+- **Real P2P Integration**: Uses actual saorsa-core networking (not mocked)
+- **HTTP/REST API**: Standard REST endpoints for easy testing
+- **CORS Enabled**: Supports browser-based testing tools
+- **Chrome DevTools MCP**: Enables AI-assisted testing workflows
+- **Testing Only**: Not for production use (security warning)
+
+**Available Endpoints:**
+- `GET /health` - Health check
+- `POST /api/core/initialize` - Initialize with four-word identity
+- `POST /api/channels` - Create channel
+- `GET /api/channels` - List channels
+- `POST /api/channels/:id/messages` - Send message
+- `POST /api/threads/create` - Create thread from message
+
+See `docs/BRIDGE_TESTING.md` for comprehensive testing guide.
 
 ### **Core Agent Flow**
 1. **Identity Claim**: `core_claim(words: [String; 4])` + keyring persistence
@@ -241,6 +296,15 @@ npm run test:run
 4. **Entity Operations**: Create/find entities using four-word addressing
 5. **Messaging**: End-to-end encrypted channels with MLS
 6. **Storage**: Virtual disks per entity with FEC protection
+
+### **Messaging State & Automerge CRDTs**
+- **Local-first cache**: Every conversation (channels, groups, DM threads) owns an Automerge document stored in IndexedDB via `offlineStorageService`.
+- **Optimistic delivery**: Messages are appended locally with UUIDv7 identifiers and merged with remote payloads once the backend responds.
+- **Conflict resolution**: Automerge handles concurrent edits/merges without manual conflict handling; metadata tracks version/updatedAt for deterministic replay.
+- **Thread-aware hydration**: Threads reuse the same Automerge machinery under the `thread:<threadId>` namespace. We hydrate cached replies first and then merge the latest payload from `core_thread_get_messages` to guarantee stable ordering.
+- **Thread Reply Composer (NEW: 2025-09-30)**: Threads now support in-drawer reply composition with full Automerge integration. Replies are optimistically added to the thread document, persisted to IndexedDB, and queued for backend sync under the parent entity context.
+- **Bridging to backend**: The environment-aware `BackendService` now fronts all message IPC (`core_channel_get_messages`, `core_thread_get_messages`, `core_create_thread`, `core_send_message_to_channel`), normalises saorsa-core DTOs, and funnels them into Automerge.
+- **Queue integration**: Failed sync attempts mark messages as `failed` in the CRDT, keeping UI state and persistence aligned with offline retries.
 
 ### **Security Model**
 - **Post-Quantum**: ML-DSA signatures, ML-KEM key exchange
@@ -342,14 +406,18 @@ npm run build && npm run tauri build
 
 ### **✅ Completed Features**
 - Four-word addressing with saorsa-core integration
-- Entity creation with DHT validation  
+- Entity creation with DHT validation
 - Tauri v2 desktop application framework
 - Post-quantum cryptography integration
 - Virtual disk storage architecture
 - MLS messaging scaffolding
+- Automerge-based messaging cache with offline-first sync
+- Thread reply composer with optimistic updates (2025-09-30)
+- HTTP/REST bridge server for browser-based testing (2025-09-30)
+- TypeScript strict mode with zero errors (2025-09-30)
 
 ### **🚧 In Progress**
-- Real-time collaboration (Yjs CRDTs)
+- Real-time document collaboration parity (graduating editors from Yjs to Automerge)
 - Voice/video calling infrastructure
 - Advanced UI component library
 - Mobile application development

@@ -96,7 +96,7 @@ impl SessionManager {
     }
 
     /// Add a new session
-    pub async fn add_session(&self, mut session: Session) -> Result<String, anyhow::Error> {
+    pub async fn add_session(&self, session: Session) -> Result<String, anyhow::Error> {
         let mut sessions = self.sessions.write().await;
 
         // Check for existing session with same four_words

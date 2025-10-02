@@ -10,7 +10,7 @@ use crate::dht_identity::{
     ContentId,
 };
 use saorsa_core::{
-    dht::{DhtCoreEngine, DhtKey, core_engine::NodeId},
+    dht::DhtCoreEngine,
     storage::StorageManager,
 };
 use std::collections::HashMap;
@@ -558,9 +558,10 @@ mod tests {
     use crate::dht_identity::{
         blobs::{RendezvousEntry, PageEntry},
     };
+    use saorsa_core::dht::core_engine::NodeId as DhtNodeId;
 
     fn create_test_dht() -> Arc<DhtCoreEngine> {
-        let node_id = NodeId::from_bytes([42u8; 32]);
+        let node_id = DhtNodeId::from_bytes([42u8; 32]);
         Arc::new(DhtCoreEngine::new(node_id).unwrap())
     }
 

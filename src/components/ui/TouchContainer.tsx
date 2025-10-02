@@ -332,11 +332,11 @@ export const TouchContainer: React.FC<TouchContainerProps> = ({
 
      try {
        // Use saorsa-core messaging to broadcast updates
-       await invoke('core_send_message_to_channel', {
-         channel_id: 'touch-collaboration',
-         message: JSON.stringify(update),
-         user_id: userId,
-       });
+      await invoke('core_send_message_to_channel', {
+        channel_id: 'touch-collaboration',
+        text: JSON.stringify(update),
+        user_id: userId,
+      });
      } catch (error) {
        console.error('Failed to broadcast collaborative update:', error);
      }
@@ -355,11 +355,11 @@ export const TouchContainer: React.FC<TouchContainerProps> = ({
          });
        } else {
          // Send to collaboration channel
-         await invoke('core_send_message_to_channel', {
-           channel_id: 'touch-collaboration',
-           message,
-           user_id: userId,
-         });
+        await invoke('core_send_message_to_channel', {
+          channel_id: 'touch-collaboration',
+          text: message,
+          user_id: userId,
+        });
        }
      } catch (error) {
        console.error('Failed to send collaborative message:', error);

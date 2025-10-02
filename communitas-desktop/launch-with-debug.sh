@@ -5,10 +5,10 @@
 
 echo "Starting Communitas with remote debugging enabled..."
 echo "Remote debugging port: 9222"
-echo "MCP socket will be at: /tmp/tauri-mcp-communitas-$$.sock"
+echo "Chrome DevTools remote debugging enabled"
 
 # Set environment variables for debugging
-export RUST_LOG=info,communitas=debug,tauri_plugin_mcp=debug
+export RUST_LOG=info,communitas=debug
 export WEBKIT_INSPECTOR_SERVER=127.0.0.1:9222  # For Linux/WebKit
 export TAURI_WEBVIEW_REMOTE_DEBUGGING_PORT=9222  # For Windows/Edge
 

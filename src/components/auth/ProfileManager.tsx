@@ -426,7 +426,7 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({
                   </ListItemIcon>
                   <ListItemText
                     primary="Email"
-                    secondary={user.email || 'Not provided'}
+                    secondary={(user as any).email || 'Not provided'}
                   />
                 </ListItem>
               </List>

@@ -1,18 +1,24 @@
 {
   "mcpServers": {
+    "applescript": {
+      "command": "npx",
+      "args": ["@peakmojo/applescript-mcp"],
+      "env": {}
+    },
+    "tauri-mcp": {
+      "command": "node",
+      "args": ["/Users/davidirvine/mcp-servers/tauri-plugin-mcp/mcp-server-ts/build/index.js"],
+      "env": {
+        "TAURI_MCP_CONNECTION_TYPE": "tcp",
+        "TAURI_MCP_TCP_HOST": "127.0.0.1",
+        "TAURI_MCP_TCP_PORT": "4000"
+      }
+    },
     "chrome-devtools": {
       "command": "npx",
       "args": ["chrome-devtools-mcp@latest"],
       "env": {
         "CHROME_DEBUG_PORT": "9222"
-      }
-    },
-    "tauri-communitas": {
-      "command": "tauri-mcp",
-      "args": ["serve"],
-      "env": {
-        "TAURI_MCP_LOG_LEVEL": "debug",
-        "TAURI_APP_PATH": "/Users/davidirvine/Desktop/Devel/projects/target/debug/communitas-desktop"
       }
     }
   }

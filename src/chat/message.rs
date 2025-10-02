@@ -18,6 +18,7 @@
 use crate::Identity;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 /// Unique message identifier
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
@@ -78,7 +79,7 @@ impl Message {
     #[must_use]
     pub fn new(sender: Identity, content: MessageContent) -> Self {
         Self {
-            id: MessageId(format!("msg-{}", chrono::Utc::now().timestamp())),
+            id: MessageId(format!("msg-{}", Uuid::now_v7())),
             sender,
             content,
             timestamp: Utc::now(),

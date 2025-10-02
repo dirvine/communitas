@@ -2,7 +2,6 @@ import './polyfills'  // Import polyfills first
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'
-import TestApp from './TestApp'
 // import AppSimple from './AppSimple'  // Use simple app for testing
 // import AppMinimal from './AppMinimal'  // Use minimal app for testing
 import ErrorBoundary from './components/ErrorBoundary'

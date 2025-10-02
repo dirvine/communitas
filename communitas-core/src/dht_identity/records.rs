@@ -5,7 +5,7 @@
 //! - ConnectionRecord: Fast-updating connectivity information
 //! - SiteManifestRecord: Website content manifest pointer
 
-use crate::dht_identity::{DhtKey, PROTOCOL_VERSION};
+use crate::dht_identity::PROTOCOL_VERSION;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 

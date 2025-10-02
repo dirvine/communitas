@@ -3,7 +3,7 @@
 //! This module will implement resilient storage using Reed-Solomon erasure coding.
 //! Currently a placeholder until we integrate with the existing reed_solomon_manager.
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use std::path::PathBuf;
 use tokio::fs;
 

@@ -93,10 +93,8 @@ import { NetworkStatusIndicator } from './components/network/NetworkStatusIndica
 import { EndpointStatusDisplay, CompactEndpointStatus } from './components/network/EndpointStatusDisplay'
 import { networkService } from './services/network/NetworkConnectionService'
 
-import OverviewDashboard from './components/OverviewDashboard'
 // import FirstRunWizard from './components/onboarding/FirstRunWizard'
 import QuickActionsBar, { SettingsButton } from './components/QuickActionsBar'
-import { PersonalHomeDashboard } from './components/dashboard/PersonalHomeDashboard'
 import StorageWorkspaceDialog from './components/storage/StorageWorkspaceDialog'
 
 const IdentityTab = React.lazy(() => import('./components/tabs/IdentityTab'))
@@ -158,7 +156,6 @@ function AppContent() {
     fourWords: undefined,
   })
 
-  const [showOverview, setShowOverview] = useState(false)
   const [authDialogOpen, setAuthDialogOpen] = useState(false)
   const [_selectedEntity, _setSelectedEntity] = useState<any>(null)
   const [showStorageWorkspace, setShowStorageWorkspace] = useState(false)
@@ -243,15 +240,6 @@ function AppContent() {
 
 
   // handleToggleSidebar defined above near sidebarOpen declaration
-
-  // Removed unused _setCurrentTab; keep modal toggles where needed
-  const _handleTabChange = (_newValue: number) => {
-    if (_newValue === 2) {
-      setShowOverview(true)
-    } else if (_newValue === 3) {
-      setAuthDialogOpen(true)
-    }
-  }
 
   // Collaboration feature handlers
   const handleVideoCall = (entityId?: string, entityType?: string) => {
@@ -681,10 +669,10 @@ function AppContent() {
   // Check if running in Tauri or browser
   // Show full UI in development mode or when in Tauri
   // In development, always show full UI to enable testing
-  const isDevelopment = import.meta.env.DEV
+  const isDevelopment = import.meta.env.DEV || true  // Force true for browser testing
   const showFullUI = isDevelopment || isTauriApp()
-  
-  // console.log('App render check:', { isDevelopment, isTauriApp: isTauriApp(), showFullUI })
+
+  console.log('App render check:', { isDevelopment, isTauriApp: isTauriApp(), showFullUI, envDEV: import.meta.env.DEV })
   
   if (!showFullUI) {
     console.log('Showing BrowserFallback')
@@ -793,11 +781,7 @@ function AppContent() {
             <Box sx={{ height: '100%', bgcolor: 'grey.50' }}>
               <Suspense fallback={<Box sx={{ p: 3 }}><Typography>Loading…</Typography></Box>}>
                 <Routes>
-                  <Route path="/" element={
-                    <GlassCard variant="light" hover={false} sx={{ p: 0, height: '100%' }}>
-                      <PersonalHomeDashboard />
-                    </GlassCard>
-                  } />
+                  <Route path="/" element={<UnifiedDashboard userId="user_owner_123" userName="Owner" />} />
                   <Route path="/ui-showcase" element={<UIShowcase />} />
                   <Route path="/group/:groupId" element={<GroupPage />} />
                   <Route path="/user/:userId" element={<UserPage />} />
@@ -829,28 +813,6 @@ function AppContent() {
             />
           </ResponsiveLayout>
 
-  {/* Overview Modal */}
-  {showOverview && (
-    <>
-      <Box
-        sx={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.5)',
-          zIndex: 1299,
-        }}
-        onClick={() => setShowOverview(false)}
-      />
-      <OverviewDashboard 
-        networkHealth={networkHealth} 
-        onClose={() => setShowOverview(false)}
-      />
-    </>
-  )}
-  
   {/* Replace LoginDialog with UnifiedAuthFlow */}
   {authDialogOpen && (
     <Box

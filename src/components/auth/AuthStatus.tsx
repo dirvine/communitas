@@ -53,7 +53,7 @@ export const AuthStatus: React.FC<AuthStatusProps> = ({
   const { switchToPersonal, selectEntity } = useNavigation();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
-  const [loginInitialMode, setLoginInitialMode] = useState<'login' | 'create'>('login');
+  const [loginInitialMode, setLoginInitialMode] = useState<'login' | 'register'>('login');
   const [profileDialogOpen, setProfileDialogOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [securityKeysDialogOpen, setSecurityKeysDialogOpen] = useState(false);
@@ -153,7 +153,7 @@ export const AuthStatus: React.FC<AuthStatusProps> = ({
             <Button
               variant="contained"
               startIcon={<SecurityIcon />}
-              onClick={() => { setLoginInitialMode('create'); setLoginDialogOpen(true); }}
+              onClick={() => { setLoginInitialMode('register'); setLoginDialogOpen(true); }}
               size="medium"
               color="primary"
             >

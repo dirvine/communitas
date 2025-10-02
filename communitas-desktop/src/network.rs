@@ -86,6 +86,42 @@ pub async fn connect_via_four_words(
         return Ok(false);
     }
 
+    // Try to use CoreContext for real P2P connection
+    let core_guard = core_state.read().await;
+    if let Some(core) = core_guard.as_ref() {
+        match core.connect_to_peer(&normalized).await {
+            Ok(()) => {
+                drop(core_guard);
+
+                // Update runtime state to reflect connection
+                let mut runtime = runtime_state.write().await;
+                if !runtime.bootstrap_nodes.iter().any(|node| node == &normalized) {
+                    runtime.bootstrap_nodes.push(normalized.clone());
+                }
+
+                // Get real peer count from CoreContext
+                let core_guard = core_state.read().await;
+                if let Some(core) = core_guard.as_ref() {
+                    runtime.peers = core.get_peer_count().await as u32;
+                    runtime.connected = core.is_p2p_running().await;
+                }
+                drop(core_guard);
+
+                runtime.last_error = None;
+                info!(target: "network", "Successfully connected to peer: {}", normalized);
+
+                sync_user_four_words(&runtime_state, &core_state).await;
+                return Ok(true);
+            }
+            Err(e) => {
+                tracing::error!("Failed to connect to peer via CoreContext: {}", e);
+                // Fall through to legacy behavior
+            }
+        }
+    }
+    drop(core_guard);
+
+    // Fallback: legacy behavior (add to bootstrap list only)
     {
         let mut runtime = runtime_state.write().await;
         if !runtime
@@ -102,7 +138,7 @@ pub async fn connect_via_four_words(
             .endpoint_four_words
             .get_or_insert_with(|| format!("{}-relay", normalized));
         runtime.last_error = None;
-        info!(target: "network", "Connected via bootstrap {}", normalized);
+        info!(target: "network", "Added to bootstrap list (legacy): {}", normalized);
     }
 
     sync_user_four_words(&runtime_state, &core_state).await;
@@ -154,7 +190,22 @@ pub async fn disconnect_from_network(
 #[tauri::command]
 pub async fn get_endpoint_four_words(
     runtime_state: State<'_, Arc<RwLock<NetworkRuntime>>>,
+    core_state: State<'_, Arc<RwLock<Option<CoreContext>>>>,
 ) -> Result<Option<String>, String> {
+    // Try to get from CoreContext first (real data from saorsa-core)
+    let core_guard = core_state.read().await;
+    if let Some(core) = core_guard.as_ref() {
+        if let Some(endpoint_words) = core.get_local_endpoint_four_words().await {
+            // Update runtime state with real endpoint
+            drop(core_guard);
+            let mut runtime = runtime_state.write().await;
+            runtime.endpoint_four_words = Some(endpoint_words.clone());
+            return Ok(Some(endpoint_words));
+        }
+    }
+    drop(core_guard);
+
+    // Fallback to runtime state if core not initialized
     let runtime = runtime_state.read().await;
     Ok(runtime.endpoint_four_words.clone())
 }
@@ -162,7 +213,36 @@ pub async fn get_endpoint_four_words(
 #[tauri::command]
 pub async fn get_network_status(
     runtime_state: State<'_, Arc<RwLock<NetworkRuntime>>>,
+    core_state: State<'_, Arc<RwLock<Option<CoreContext>>>>,
 ) -> Result<NetworkStatusPayload, String> {
+    // Try to get real status from CoreContext
+    let core_guard = core_state.read().await;
+    if let Some(core) = core_guard.as_ref() {
+        let is_running = core.is_p2p_running().await;
+        let peer_count = core.get_peer_count().await as u32;
+
+        drop(core_guard);
+
+        // Update runtime state with real data
+        let mut runtime = runtime_state.write().await;
+        runtime.connected = is_running;
+        runtime.peers = peer_count;
+
+        let status = if is_running {
+            "connected"
+        } else {
+            "local"
+        };
+
+        return Ok(NetworkStatusPayload {
+            status: status.to_string(),
+            peers: peer_count,
+            error: runtime.last_error.clone(),
+        });
+    }
+    drop(core_guard);
+
+    // Fallback to runtime state
     let runtime = runtime_state.read().await;
     let status = if runtime.connected {
         "connected"

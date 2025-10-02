@@ -168,11 +168,14 @@ export const WhatsAppStyleNavigation: React.FC<WhatsAppStyleNavigationProps> = (
     onNavigate(`/user/${contact.id}`, contact);
   };
 
-  const createPersonalGroup = () => {
+  const createPersonalGroup = async () => {
     const name = promptForName('Enter personal group name');
     if (!name) return;
-    const group = addPersonalGroup({ name });
-    handleNavigateGroup(group);
+    const result = await addPersonalGroup({ name });
+    if (result.success) {
+      const group = personalGroups.find(g => g.id === result.entityId);
+      if (group) handleNavigateGroup(group);
+    }
   };
 
   const createContact = () => {
@@ -182,12 +185,15 @@ export const WhatsAppStyleNavigation: React.FC<WhatsAppStyleNavigationProps> = (
     handleNavigateContact(contact);
   };
 
-  const createOrganization = () => {
+  const createOrganization = async () => {
     const name = promptForName('Enter organization name');
     if (!name) return;
-    const organization = addOrganization({ name });
-    ensureExpanded(organization.id);
-    handleNavigateOrganization(organization);
+    const result = await addOrganization({ name });
+    if (result.success) {
+      ensureExpanded(result.entityId);
+      const organization = organizations.find(o => o.id === result.entityId);
+      if (organization) handleNavigateOrganization(organization);
+    }
   };
 
   const createOrganizationChannel = (organization: Organization) => {

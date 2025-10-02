@@ -138,7 +138,7 @@ export const LoginDialog: React.FC<LoginDialogProps> = ({
       const rawFourWords = await generateFourWordIdentity()
       const normalizedFourWords = rawFourWords.replace(/\s+/g, '-');
       // Create identity with password (AuthContext will store encrypted info and DHT locator)
-      await createIdentity(formData.name.trim(), formData.email.trim() || undefined, { fourWords: normalizedFourWords, password } as any)
+      await createIdentity(formData.name.trim(), { fourWords: normalizedFourWords, password, email: formData.email.trim() || undefined } as any)
 
       // Browser fallback: ensure minimal identity data persists even if vault/tauri APIs are unavailable
       localStorage.setItem('communitas-four-words', normalizedFourWords);

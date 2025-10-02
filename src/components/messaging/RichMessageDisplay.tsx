@@ -67,6 +67,7 @@ import { invoke } from '@tauri-apps/api/core'
 import ReactMarkdown from 'react-markdown'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import backendService from '../../services/api/BackendService'
 
 interface RichMessage {
   id: string
@@ -130,6 +131,69 @@ interface RichMessageDisplayProps {
 }
 
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🎉']
+
+const mapBackendThreadMessageToRich = (
+  incoming: any,
+  fallbackChannelId: string,
+  fallbackThreadId?: string,
+): RichMessage => {
+  const sender = incoming.sender || {};
+  const attachments = Array.isArray(incoming.attachments)
+    ? incoming.attachments.map((attachment: any) => ({
+        id: attachment.id ?? `attachment-${Math.random().toString(36).slice(2)}`,
+        type: attachment.metadata?.kind ?? 'file',
+        name: attachment.filename ?? attachment.name ?? 'attachment',
+        size: attachment.size_bytes ?? attachment.size ?? 0,
+        url: attachment.url ?? '',
+        thumbnail: attachment.thumbnail ?? undefined,
+        mimeType: attachment.mime_type ?? 'application/octet-stream',
+      }))
+    : [];
+
+  return {
+    id: incoming.id ?? incoming.message_id ?? `thread-${Math.random().toString(36).slice(2)}`,
+    sender: {
+      id: incoming.sender_id ?? sender.id ?? 'unknown-sender',
+      name: incoming.sender_name ?? sender.name ?? 'Unknown',
+      avatar: sender.avatar,
+      fourWordAddress: incoming.sender_four_words ?? sender.four_words ?? 'unknown-user-address',
+    },
+    channelId: incoming.channel_id ?? fallbackChannelId,
+    content: {
+      text: incoming.content ?? incoming.markdown_raw ?? '',
+      markdown: incoming.markdown_formatted ?? undefined,
+      mentions: incoming.mentions ?? [],
+      links: incoming.links ?? [],
+    },
+    attachments,
+    threadId: incoming.thread_id ?? fallbackThreadId,
+    replyTo: incoming.reply_to_id
+      ? {
+          id: incoming.reply_to_id,
+          sender: '',
+          preview: incoming.reply_to_preview ?? '',
+        }
+      : undefined,
+    reactions: Array.isArray(incoming.reactions)
+      ? incoming.reactions.map((reaction: any) => ({
+          emoji: reaction.emoji ?? '',
+          users: reaction.users ?? [],
+        }))
+      : [],
+    timestamp: incoming.timestamp ?? new Date().toISOString(),
+    editedAt: incoming.edited_at ?? undefined,
+    deletedAt: incoming.deleted_at ?? undefined,
+    readBy: Array.isArray(incoming.read_by)
+      ? incoming.read_by.map((entry: any) => entry.user ?? entry)
+      : undefined,
+    status: 'delivered',
+    encrypted: Boolean(incoming.ephemeral ?? false),
+    ephemeral: Boolean(incoming.ephemeral ?? false),
+    pinned: Boolean(incoming.pinned ?? false),
+    starred: Boolean(incoming.starred ?? false),
+    signature: incoming.signature,
+  };
+};
 
 export const RichMessageDisplay: React.FC<RichMessageDisplayProps> = ({
   message,
@@ -216,16 +280,19 @@ export const RichMessageDisplay: React.FC<RichMessageDisplayProps> = ({
   // Load thread replies
   const loadThreadReplies = useCallback(async () => {
     if (!message.threadId) return
-    
+
     try {
-      const replies = await invoke<RichMessage[]>('get_thread_messages', {
-        threadId: message.threadId,
-      })
-      setThreadReplies(replies)
+      const backendReplies = await backendService.getThreadMessages(message.threadId)
+      const normalizedReplies = Array.isArray(backendReplies)
+        ? backendReplies.map(reply =>
+            mapBackendThreadMessageToRich(reply, message.channelId, message.threadId),
+          )
+        : []
+      setThreadReplies(normalizedReplies)
     } catch (error) {
       console.error('Failed to load thread replies:', error)
     }
-  }, [message.threadId])
+  }, [message.threadId, message.channelId])
   
   // Custom markdown components
   const markdownComponents = {

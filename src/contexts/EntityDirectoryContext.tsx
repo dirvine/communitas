@@ -17,6 +17,7 @@ import {
   CollaborationCapabilities,
   NetworkIdentity,
 } from '../types/collaboration';
+import { mockOrganizations, mockPersonalGroups, mockPersonalUsers } from '../data/mockCollaborationData';
 import {
   CreateNewOrganizationInput,
   CreateNewGroupInput,
@@ -31,7 +32,10 @@ import {
   EntityOperationResult,
   FourWordsValidationResult,
 } from '../types/entityOperations';
-import { markMessageStatus, removeMessage } from '../utils/messageStore';
+import {
+  markMessageStatus as markCachedMessageStatus,
+  removeMessage as removeCachedMessage,
+} from '../utils/messageStore';
 import { invoke } from '@tauri-apps/api/core';
 import { validateFourWordIdentity } from '../utils/identity';
 
@@ -119,7 +123,7 @@ interface EntityDirectoryContextValue extends Omit<EntityDirectoryState, 'operat
   // Validation
   validateFourWords: (fourWords: string) => Promise<FourWordsValidationResult>;
   // Legacy methods (will refactor later)
-  addOrganization: (input: CreateOrganizationInput) => Organization;
+  addOrganization: (input: CreateOrganizationInput) => Promise<EntityOperationResult>;
   removeOrganization: (organizationId: string) => void;
   addOrganizationGroup: (input: CreateGroupInput & { organizationId: string }) => Group;
   removeOrganizationGroup: (organizationId: string, groupId: string) => void;
@@ -127,7 +131,7 @@ interface EntityDirectoryContextValue extends Omit<EntityDirectoryState, 'operat
   removeOrganizationChannel: (organizationId: string, channelId: string) => void;
   addProject: (input: CreateProjectInput) => Project;
   removeProject: (organizationId: string, projectId: string) => void;
-  addPersonalGroup: (input: CreateGroupInput) => Group;
+  addPersonalGroup: (input: CreateGroupInput) => Promise<EntityOperationResult>;
   removePersonalGroup: (groupId: string) => void;
   addPersonalUser: (input: CreatePersonalUserInput) => PersonalUser;
   removePersonalUser: (userId: string) => void;
@@ -229,12 +233,87 @@ const reviveDates = (state: any): EntityDirectoryState => ({
 
 const serializeState = (state: EntityDirectoryState) => JSON.stringify(state);
 
-const initialState: EntityDirectoryState = {
-  organizations: [],
-  personalGroups: [],
-  personalUsers: [],
-  operations: [],
+const cloneDate = (value?: Date | string | null): Date | undefined => {
+  if (!value) {
+    return undefined;
+  }
+  return value instanceof Date ? new Date(value) : new Date(value);
 };
+
+const applySyncedMetadata = <T extends { createdAt?: Date; updatedAt?: Date }>(entity: T): T & EntityMetadata => ({
+  ...entity,
+  createdAt: cloneDate(entity.createdAt) ?? new Date(),
+  updatedAt: cloneDate(entity.updatedAt) ?? new Date(),
+  syncStatus: 'synced',
+  lastSyncedAt: cloneDate(entity.updatedAt) ?? new Date(),
+});
+
+const cloneOrganizationGraph = (org: Organization): Organization & EntityMetadata => ({
+  ...org,
+  createdAt: cloneDate(org.createdAt) ?? new Date(),
+  updatedAt: cloneDate(org.updatedAt) ?? new Date(),
+  channels: org.channels.map(channel => (
+    applySyncedMetadata({
+      ...channel,
+      createdAt: cloneDate(channel.createdAt) ?? new Date(),
+      updatedAt: cloneDate(channel.updatedAt) ?? new Date(),
+    })
+  )),
+  groups: org.groups.map(group => (
+    applySyncedMetadata({
+      ...group,
+      createdAt: cloneDate(group.createdAt) ?? new Date(),
+      updatedAt: cloneDate(group.updatedAt) ?? new Date(),
+    })
+  )),
+  users: org.users.map(user => ({
+    ...user,
+    createdAt: cloneDate(user.createdAt) ?? new Date(),
+    updatedAt: cloneDate(user.updatedAt) ?? new Date(),
+    joinedAt: cloneDate(user.joinedAt) ?? new Date(),
+  })),
+  projects: org.projects.map(project => (
+    applySyncedMetadata({
+      ...project,
+      createdAt: cloneDate(project.createdAt) ?? new Date(),
+      updatedAt: cloneDate(project.updatedAt) ?? new Date(),
+      startDate: cloneDate(project.startDate),
+      endDate: cloneDate(project.endDate),
+      milestones: project.milestones.map(milestone => ({
+        ...milestone,
+        dueDate: cloneDate(milestone.dueDate) ?? new Date(),
+      })),
+    })
+  )),
+  settings: { ...org.settings },
+  syncStatus: 'synced',
+  lastSyncedAt: cloneDate(org.updatedAt) ?? new Date(),
+});
+
+const clonePersonalGroupEntity = (group: Group): Group & EntityMetadata => (
+  applySyncedMetadata({
+    ...group,
+    createdAt: cloneDate(group.createdAt) ?? new Date(),
+    updatedAt: cloneDate(group.updatedAt) ?? new Date(),
+  })
+);
+
+const clonePersonalUserEntity = (user: PersonalUser): PersonalUser & EntityMetadata => ({
+  ...user,
+  createdAt: cloneDate(user.createdAt) ?? new Date(),
+  updatedAt: cloneDate(user.updatedAt) ?? new Date(),
+  lastContact: cloneDate(user.lastContact),
+  syncStatus: 'synced',
+  lastSyncedAt: cloneDate(user.updatedAt) ?? new Date(),
+});
+
+const createInitialState = (): EntityDirectoryState => ({
+  organizations: mockOrganizations.map(cloneOrganizationGraph),
+  personalGroups: mockPersonalGroups.map(clonePersonalGroupEntity),
+  personalUsers: mockPersonalUsers.map(clonePersonalUserEntity),
+  operations: [],
+});
+
 
 interface EntityDirectoryProviderProps {
   children: ReactNode;
@@ -243,19 +322,19 @@ interface EntityDirectoryProviderProps {
 export const EntityDirectoryProvider: React.FC<EntityDirectoryProviderProps> = ({ children }) => {
   const [state, setState] = useState<EntityDirectoryState>(() => {
     if (typeof window === 'undefined') {
-      return initialState;
+      return createInitialState();
     }
 
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
       if (!raw) {
-        return initialState;
+        return createInitialState();
       }
       const parsed = JSON.parse(raw);
       return reviveDates(parsed);
     } catch (error) {
       console.warn('Failed to load entity directory from storage:', error);
-      return initialState;
+      return createInitialState();
     }
   });
 
@@ -306,6 +385,8 @@ export const EntityDirectoryProvider: React.FC<EntityDirectoryProviderProps> = (
   }, []);
 
   const markOperationFailed = useCallback((operationId: string, error: string) => {
+    let failedMessage: MessageOperationPayload | null = null;
+
     setState(prev => {
       const operation = prev.operations.find(op => op.id === operationId);
       const updatedOperations = prev.operations.map(op =>
@@ -319,8 +400,7 @@ export const EntityDirectoryProvider: React.FC<EntityDirectoryProviderProps> = (
       ) as EntitySyncOperation[];
 
       if (operation && operation.entityType === 'message' && operation.attempts >= MAX_OPERATION_ATTEMPTS) {
-        const payload = operation.payload as MessageOperationPayload;
-        markMessageStatus(payload.entityType, payload.entityId, payload.id, 'failed');
+        failedMessage = operation.payload as MessageOperationPayload;
       }
 
       return {
@@ -328,6 +408,15 @@ export const EntityDirectoryProvider: React.FC<EntityDirectoryProviderProps> = (
         operations: updatedOperations,
       };
     });
+
+    if (failedMessage) {
+      void markCachedMessageStatus(
+        failedMessage.entityType,
+        failedMessage.entityId,
+        failedMessage.id,
+        'failed',
+      );
+    }
   }, []);
   const startOperationProcessing = useCallback((operationId: string) => {
     setState(prev => ({
@@ -362,7 +451,7 @@ export const EntityDirectoryProvider: React.FC<EntityDirectoryProviderProps> = (
   }, []);
 
   const resetDirectory = useCallback(() => {
-    setState(initialState);
+    setState(createInitialState());
   }, []);
 
   const queueCreateOperation = useCallback((entityType: EntitySyncEntityType, payload: Record<string, any>) => {
@@ -514,6 +603,72 @@ export const EntityDirectoryProvider: React.FC<EntityDirectoryProviderProps> = (
       createdAt: now,
       updatedAt: now,
     };
+
+    const scaffoldChannels: Array<Channel & EntityMetadata> = ['general', 'announcements'].map((label, index) =>
+      withMetadata({
+        id: `channel-${nanoid(8)}`,
+        type: 'channel',
+        name: label,
+        description: index === 0
+          ? 'Organization-wide updates and coordination hub.'
+          : 'Celebrate wins, broadcast timelines, and capture decisions.',
+        organizationId: tempId,
+        isPrivate: false,
+        members: [],
+        networkIdentity: createNetworkIdentity(true),
+        capabilities: { ...defaultCapabilities },
+        createdAt: now,
+        updatedAt: now,
+      })
+    );
+
+    const scaffoldProjects: Array<Project & EntityMetadata> = [
+      {
+        id: `project-${nanoid(8)}`,
+        type: 'project',
+        name: `${input.displayName.trim()} Launch Plan`,
+        description: 'Unified milestones to get your workspace live.',
+        organizationId: tempId,
+        leads: [],
+        members: [],
+        status: 'planning',
+        startDate: now,
+        endDate: undefined,
+        milestones: [
+          {
+            id: `milestone-${nanoid(6)}`,
+            name: 'Kickoff & Alignment',
+            description: 'Share vision, define success metrics, assign owners.',
+            dueDate: new Date(now.getTime() + 1000 * 60 * 60 * 24 * 7),
+            completed: false,
+          },
+        ],
+        networkIdentity: createNetworkIdentity(true),
+        capabilities: { ...defaultCapabilities },
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: `project-${nanoid(8)}`,
+        type: 'project',
+        name: 'Async Collaboration Toolkit',
+        description: 'Document rituals, templates, and automations to scale collaboration.',
+        organizationId: tempId,
+        leads: [],
+        members: [],
+        status: 'active',
+        startDate: now,
+        endDate: undefined,
+        milestones: [],
+        networkIdentity: createNetworkIdentity(true),
+        capabilities: { ...defaultCapabilities },
+        createdAt: now,
+        updatedAt: now,
+      },
+    ].map(project => withMetadata(project));
+
+    organization.channels = scaffoldChannels;
+    organization.projects = scaffoldProjects;
 
     const organizationWithMeta = withMetadata(organization);
 
@@ -949,40 +1104,57 @@ export const EntityDirectoryProvider: React.FC<EntityDirectoryProviderProps> = (
     };
   }, [validateFourWords, enqueueOperation]);
 
-  const addOrganization = useCallback((input: CreateOrganizationInput): Organization => {
-    const now = new Date();
-    const organization: Organization = {
-      id: `org-${nanoid(8)}`,
-      type: 'organization',
-      name: input.name.trim(),
-      description: input.description,
-      networkIdentity: createNetworkIdentity(),
-      capabilities: { ...defaultCapabilities },
-      owners: [],
-      channels: [],
-      groups: [],
-      users: [],
-      projects: [],
-      settings: {
-        allowGuestAccess: false,
-        defaultChannelPermissions: [],
-        websitePublishingEnabled: true,
-      },
-      createdAt: now,
-      updatedAt: now,
-    };
+  const addOrganization = useCallback(async (input: CreateOrganizationInput): Promise<EntityOperationResult> => {
+    try {
+      const now = new Date();
+      const organization: Organization = {
+        id: `org-${nanoid(8)}`,
+        type: 'organization',
+        name: input.name.trim(),
+        description: input.description,
+        networkIdentity: createNetworkIdentity(),
+        capabilities: { ...defaultCapabilities },
+        owners: [],
+        channels: [],
+        groups: [],
+        users: [],
+        projects: [],
+        settings: {
+          allowGuestAccess: false,
+          defaultChannelPermissions: [],
+          websitePublishingEnabled: true,
+        },
+        createdAt: now,
+        updatedAt: now,
+      };
 
-    const organizationWithMeta = withMetadata(organization);
+      const organizationWithMeta = withMetadata(organization);
 
-    setState(prev => ({
-      ...prev,
-      organizations: [...prev.organizations, organizationWithMeta],
-    }));
+      setState(prev => ({
+        ...prev,
+        organizations: [...prev.organizations, organizationWithMeta],
+      }));
 
-    queueCreateOperation('organization', organizationWithMeta);
+      queueCreateOperation('organization', organizationWithMeta);
 
-    return organizationWithMeta;
-  }, [queueCreateOperation]);
+      return {
+        success: true,
+        entityId: organization.id,
+        fourWords: organization.networkIdentity?.fourWords || '',
+        isOwned: true,
+        needsSync: true
+      };
+    } catch (error) {
+      return {
+        success: false,
+        entityId: '',
+        fourWords: '',
+        isOwned: false,
+        needsSync: false,
+        error: error instanceof Error ? error.message : 'Failed to create organization'
+      };
+    }
+  }, [queueCreateOperation, withMetadata]);
 
   const removeOrganization = useCallback((organizationId: string) => {
     setState(prev => ({
@@ -1175,33 +1347,50 @@ export const EntityDirectoryProvider: React.FC<EntityDirectoryProviderProps> = (
     queueDeleteOperation('project', projectId);
   }, [queueDeleteOperation]);
 
-  const addPersonalGroup = useCallback((input: CreateGroupInput): Group => {
-    const now = new Date();
-    const group: Group = {
-      id: `personal-group-${nanoid(8)}`,
-      type: 'group',
-      name: input.name.trim(),
-      description: input.description,
-      networkIdentity: createNetworkIdentity(),
-      capabilities: { ...defaultCapabilities },
-      createdAt: now,
-      updatedAt: now,
-      members: [],
-      admins: [],
-      isPersonal: true,
-    };
+  const addPersonalGroup = useCallback(async (input: CreateGroupInput): Promise<EntityOperationResult> => {
+    try {
+      const now = new Date();
+      const group: Group = {
+        id: `personal-group-${nanoid(8)}`,
+        type: 'group',
+        name: input.name.trim(),
+        description: input.description,
+        networkIdentity: createNetworkIdentity(),
+        capabilities: { ...defaultCapabilities },
+        createdAt: now,
+        updatedAt: now,
+        members: [],
+        admins: [],
+        isPersonal: true,
+      };
 
-    const groupWithMeta = withMetadata(group);
+      const groupWithMeta = withMetadata(group);
 
-    setState(prev => ({
-      ...prev,
-      personalGroups: [...prev.personalGroups, groupWithMeta],
-    }));
+      setState(prev => ({
+        ...prev,
+        personalGroups: [...prev.personalGroups, groupWithMeta],
+      }));
 
-    queueCreateOperation('group', groupWithMeta);
+      queueCreateOperation('group', groupWithMeta);
 
-    return groupWithMeta;
-  }, [queueCreateOperation]);
+      return {
+        success: true,
+        entityId: group.id,
+        fourWords: group.networkIdentity?.fourWords || '',
+        isOwned: true,
+        needsSync: true
+      };
+    } catch (error) {
+      return {
+        success: false,
+        entityId: '',
+        fourWords: '',
+        isOwned: false,
+        needsSync: false,
+        error: error instanceof Error ? error.message : 'Failed to create group'
+      };
+    }
+  }, [queueCreateOperation, withMetadata]);
 
   const removePersonalGroup = useCallback((groupId: string) => {
     setState(prev => ({
@@ -1533,12 +1722,19 @@ export const EntityDirectoryProvider: React.FC<EntityDirectoryProviderProps> = (
         case 'message': {
           // Send message via saorsa messaging
           const payload = entity as MessageOperationPayload;
-          await invoke('core_send_message', {
-            recipientId: payload.entityId,
-            content: payload.content
-          });
-
-          return payload.id;
+          switch (payload.entityType) {
+            case 'channel': {
+              await invoke('core_send_message_to_channel', {
+                channel_id: payload.entityId,
+                text: payload.content,
+              });
+              return payload.id;
+            }
+            default: {
+              console.warn(`Send not implemented for message entity type: ${payload.entityType}`);
+              return null;
+            }
+          }
         }
 
         default:
@@ -1753,7 +1949,7 @@ export const EntityDirectoryProvider: React.FC<EntityDirectoryProviderProps> = (
         try {
           if (operation.entityType === 'message') {
             const payload = operation.payload as MessageOperationPayload;
-            removeMessage(payload.entityType, payload.entityId, payload.id);
+            await removeCachedMessage(payload.entityType, payload.entityId, payload.id);
           } else {
             // Remove from DHT
             await invoke('core_dht_delete', {

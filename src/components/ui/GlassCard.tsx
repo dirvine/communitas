@@ -3,7 +3,14 @@ import { Card, CardProps } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import { designTokens } from '../../styles/theme';
 
-interface GlassCardProps extends CardProps {
+interface GlassCardProps extends Omit<CardProps, 'variant'> {
+  variant?: 'light' | 'dark' | 'colored' | 'gradient';
+  blur?: number;
+  hover?: boolean;
+  glow?: boolean;
+}
+
+interface StyledGlassCardProps {
   variant?: 'light' | 'dark' | 'colored' | 'gradient';
   blur?: number;
   hover?: boolean;
@@ -12,7 +19,7 @@ interface GlassCardProps extends CardProps {
 
 const StyledGlassCard = styled(Card, {
   shouldForwardProp: (prop) => !['variant', 'blur', 'hover', 'glow'].includes(prop as string),
-})<GlassCardProps>(({ theme, variant = 'light', blur = 20, hover = true, glow }) => ({
+})<StyledGlassCardProps>(({ theme, variant = 'light', blur = 20, hover = true, glow }) => ({
   position: 'relative',
   borderRadius: designTokens.borderRadius.xl,
   overflow: 'hidden',
@@ -223,9 +230,16 @@ export const GlassCardContent: React.FC<GlassCardContentProps> = ({ children, pa
 };
 
 export const GlassCard = React.forwardRef<HTMLDivElement, GlassCardProps>(
-  ({ children, ...props }, ref) => {
+  ({ children, variant, blur, hover, glow, ...props }, ref) => {
     return (
-      <StyledGlassCard ref={ref} {...props}>
+      <StyledGlassCard
+        ref={ref}
+        {...(props as any)}
+        variant={variant}
+        blur={blur}
+        hover={hover}
+        glow={glow}
+      >
         {children}
       </StyledGlassCard>
     );

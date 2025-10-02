@@ -25,6 +25,7 @@ Two apps, one core:
 
 - Desktop (Tauri) app: user‑facing collaboration UI, exposes Tauri commands for automation
 - Headless node: bootstrap/seed nodes and personal nodes for network support and (future) rewards
+- Bridge server (communitas-bridge): HTTP/REST testing interface for browser-based testing via Chrome DevTools MCP
 
 Under the hood is Saorsa Core (crates.io `saorsa-core`), providing DHT, QUIC, identity, group, messaging, virtual disk, and security foundations. See also `../saorsa-core/AGENTS_API.md` for the full core API surface.
 
@@ -98,6 +99,82 @@ Virtual Disk & Website (per entity: org/group/channel/project/individual)
 Groups (threshold ready)
 - `core_group_create(words: [string; 4]) -> { id_hex, words }`
 - `core_group_add_member(group_words: [string;4], member_words: [string;4]) -> bool`
+
+---
+
+## 2.1. Communitas Bridge Server — HTTP/REST Testing Interface
+
+The communitas-bridge crate provides an HTTP/REST API for browser-based testing with Chrome DevTools MCP. This enables AI agents and automation tools to test the full P2P stack via standard HTTP requests.
+
+**Architecture**:
+```
+Browser/Agent
+    ↓ HTTP/REST
+Bridge Server (localhost:3030)
+    ↓ Rust IPC
+Saorsa Core (P2P Network)
+```
+
+**Endpoints**:
+
+Core Initialization:
+- `GET /health` → `{ "status": "ok", "service": "communitas-bridge" }`
+- `POST /api/core/initialize` → Initialize with four-word identity
+  - Body: `{ "four_words": "ocean-forest-moon-star", "display_name": "Alice", "device_name": "Desktop" }`
+  - Returns: `{ "success": true }`
+- `GET /api/core/status` → Check initialization status
+  - Returns: `{ "initialized": true }`
+
+Channel Operations:
+- `POST /api/channels` → Create channel
+  - Body: `{ "name": "Test Channel", "description": "Channel description" }`
+  - Returns: `{ "id": "uuid", "name": "Test Channel", "description": "...", "created_at": "ISO8601" }`
+- `GET /api/channels` → List all channels
+  - Returns: `{ "channels": [ { "id": "uuid", "name": "...", "description": "...", "created_at": "..." } ] }`
+- `POST /api/channels/:id/messages` → Send message to channel
+  - Body: `{ "content": "Hello!", "recipients": ["ocean-forest-moon-star"], "reply_to_id": "optional" }`
+  - Returns: `{ "message_id": "uuid" }`
+
+Thread Operations:
+- `POST /api/threads/create` → Create thread from message
+  - Body: `{ "channel_id": "uuid", "parent_message_id": "uuid" }`
+  - Returns: `{ "thread_id": "uuid", "channel_id": "uuid", "parent_message_id": "uuid" }`
+
+Member Operations (stub):
+- `GET /api/:entity_type/:id/members` → Get entity members (stub)
+- `POST /api/:entity_type/:id/members` → Add member to entity (stub)
+
+**Example Test Flow**:
+```bash
+# Terminal 1: Start bridge server
+cargo run -p communitas-bridge
+
+# Terminal 2: Run tests
+curl http://localhost:3030/health
+curl -X POST http://localhost:3030/api/core/initialize \
+  -H "Content-Type: application/json" \
+  -d '{"four_words": "ocean-forest-moon-star", "display_name": "Test", "device_name": "CLI"}'
+
+curl -X POST http://localhost:3030/api/channels \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Test Channel", "description": "Test"}'
+
+curl http://localhost:3030/api/channels
+```
+
+**Integration with Chrome DevTools MCP**:
+See `BRIDGE_TESTING.md` for complete Chrome DevTools MCP integration examples, including:
+- Taking screenshots during test flows
+- Executing JavaScript test helpers
+- Monitoring network requests
+- Performance profiling
+
+**Security Note**: Bridge server is for testing only. CORS is enabled for all origins. Do not expose to production networks.
+
+---
+
+## 3. Tauri Commands (continued)
+
 - `core_group_remove_member(group_words: [string;4], member_words: [string;4]) -> bool`
 
 Security helpers (frontend)

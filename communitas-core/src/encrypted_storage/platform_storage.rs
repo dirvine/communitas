@@ -5,7 +5,7 @@
 //! - Windows: DPAPI (Data Protection API)
 //! - Linux: Secret Service API
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;

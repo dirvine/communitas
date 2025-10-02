@@ -17,9 +17,9 @@ path = "src/main.rs"
 communitas-core = { path = "../communitas-core" }
 communitas-container = { path = "../crates/communitas-container" }
 
-# Networking
+# Networking - use published crate with wildcard address fix
 ant-quic = "^0.8.17"
-saorsa-core = { git = "https://github.com/dirvine/saorsa-core-foundation.git", rev = "fa49064" }
+saorsa-core = "0.5.7"
 four-word-networking = "2.6"
 
 # CLI
@@ -46,7 +46,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Utils
 base64 = "0.22"
-uuid = { version = "1", features = ["v4", "serde"] }
+uuid = { version = "1", features = ["v4", "v7", "serde"] }
 rand = "0.8"
 hex = "0.4"
 ed25519-dalek = "2"

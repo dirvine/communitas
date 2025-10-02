@@ -42,6 +42,7 @@ import {
   NotificationsOff,
 } from '@mui/icons-material'
 import { invoke } from '@tauri-apps/api/core'
+import backendService from '../../services/api/BackendService'
 
 // Enhanced message type with P2P integration
 interface P2PMessage {
@@ -83,13 +84,6 @@ interface UserPresence {
 }
 
 // Message request for sending
-interface MessageRequest {
-  recipient: string
-  content: string
-  message_type: 'direct' | 'group'
-  group_id?: string
-}
-
 interface GroupChatInterfaceProps {
   groupId?: string
   onGroupChange?: (groupId: string) => void
@@ -129,16 +123,16 @@ const GroupChatInterface: React.FC<GroupChatInterfaceProps> = ({
     const initializeMessaging = async () => {
       try {
         setLoading(true)
-        
-        // Initialize messaging system
-        await invoke('initialize_messaging')
-        
-        // Load existing groups and messages
-        await loadGroups()
-        
-        if (groupId) {
-          await loadMessages(groupId)
-          setCurrentGroup(groups.find(g => g.id === groupId) || null)
+        const loadedGroups = await loadGroups()
+
+        const targetGroupId = groupId || loadedGroups[0]?.id
+        if (targetGroupId) {
+          const targetGroup = loadedGroups.find(g => g.id === targetGroupId) || null
+          setCurrentGroup(targetGroup)
+          await loadMessages(targetGroupId)
+          if (!groupId && targetGroup && onGroupChange) {
+            onGroupChange(targetGroup.id)
+          }
         }
       } catch (err) {
         console.error('Failed to initialize messaging:', err)
@@ -149,7 +143,7 @@ const GroupChatInterface: React.FC<GroupChatInterfaceProps> = ({
     }
 
     initializeMessaging()
-  }, [groupId])
+  }, [groupId, onGroupChange])
 
   // Auto-scroll when messages change
   useEffect(() => {
@@ -157,7 +151,7 @@ const GroupChatInterface: React.FC<GroupChatInterfaceProps> = ({
   }, [messages, scrollToBottom])
 
   // Load groups from backend
-  const loadGroups = async () => {
+  const loadGroups = async (): Promise<GroupInfo[]> => {
     try {
       // For now, we'll create mock groups since the backend doesn't have a get_groups command yet
       const mockGroups: GroupInfo[] = [
@@ -185,9 +179,11 @@ const GroupChatInterface: React.FC<GroupChatInterfaceProps> = ({
         }
       ]
       setGroups(mockGroups)
+      return mockGroups
     } catch (err) {
       console.error('Failed to load groups:', err)
       setError('Failed to load groups: ' + err)
+      return []
     }
   }
 
@@ -196,22 +192,21 @@ const GroupChatInterface: React.FC<GroupChatInterfaceProps> = ({
     try {
       setLoading(true)
       
-      const messages: P2PMessage[] = await invoke('get_messages', {
-        userId: null,
-        groupId: group_id,
-        limit: 50
-      })
-      
-      // Add status and metadata to messages
-      const enhancedMessages = messages.map(msg => ({
-        ...msg,
-        status: 'delivered' as const,
-        message_type: (msg.group_id ? 'group' : 'direct') as 'group' | 'direct',
+      const backendMessages = await backendService.getMessages('group', group_id)
+      const enhancedMessages: P2PMessage[] = (backendMessages ?? []).map((msg: any) => ({
+        id: msg.id ?? msg.message_id ?? `msg-${Math.random().toString(36).slice(2)}`,
+        sender: msg.sender_name ?? msg.sender ?? 'Unknown',
+        group_id,
+        content: msg.content ?? msg.text ?? '',
+        timestamp: msg.timestamp ?? new Date().toISOString(),
+        encrypted: Boolean(msg.encrypted ?? true),
+        message_type: 'group',
+        status: 'delivered',
         metadata: {
-          reactions: []
-        }
+          reactions: Array.isArray(msg.reactions) ? msg.reactions : [],
+        },
       }))
-      
+
       setMessages(enhancedMessages)
     } catch (err) {
       console.error('Failed to load messages:', err)
@@ -242,14 +237,8 @@ const GroupChatInterface: React.FC<GroupChatInterfaceProps> = ({
     setCurrentMessage('')
 
     try {
-      const messageRequest: MessageRequest = {
-        recipient: '', // Not needed for group messages
-        content: currentMessage.trim(),
-        message_type: 'group',
-        group_id: currentGroup.id
-      }
-
-      const messageId = await invoke<string>('send_group_message', { request: messageRequest })
+      const response = await backendService.sendMessage('group', currentGroup.id, currentMessage.trim())
+      const messageId = response?.id ?? response?.message_id ?? tempMessage.id
       
       // Update message status
       setMessages(prev => prev.map(msg => 

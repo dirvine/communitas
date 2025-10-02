@@ -6,12 +6,7 @@
 //! - Anti-quic transport identity binding
 //! - Security event logging and monitoring
 
-use crate::dht_identity::{
-    blobs::*,
-    key_derivation::*,
-    records::*,
-    storage::*,
-};
+use crate::dht_identity::storage::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -515,9 +510,8 @@ impl TofuValidator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dht_identity::{IdentityDescriptorBlob, IdentityRootRecord, NormalizedFourWords};
     // Tests for validation data structures and logic
-    use saorsa_core::dht::{DhtCoreEngine, core_engine::NodeId};
-    use std::sync::Arc;
 
     // Note: Full validator tests require proper StorageManager integration
     // These tests focus on data structures and validation logic

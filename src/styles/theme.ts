@@ -405,7 +405,7 @@ export const darkTheme = createTheme({
     MuiCard: {
       styleOverrides: {
         root: {
-          ...theme.components?.MuiCard?.styleOverrides?.root,
+          ...(typeof theme.components?.MuiCard?.styleOverrides?.root === 'object' ? theme.components.MuiCard.styleOverrides.root : {}),
           ...designTokens.glass.dark,
         },
       },
@@ -413,7 +413,7 @@ export const darkTheme = createTheme({
     MuiPaper: {
       styleOverrides: {
         root: {
-          ...theme.components?.MuiPaper?.styleOverrides?.root,
+          ...(typeof theme.components?.MuiPaper?.styleOverrides?.root === 'object' ? theme.components.MuiPaper.styleOverrides.root : {}),
           backgroundImage: 'none',
         },
       },

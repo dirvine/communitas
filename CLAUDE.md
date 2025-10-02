@@ -79,7 +79,22 @@ Key test areas for Communitas:
 - Tauri IPC communication
 - IndexedDB offline storage
 
-### Recent Improvements (2025-09-27)
+### Recent Improvements
+
+**2025-09-30: Enhanced Testing & TypeScript Quality**
+- **Bridge Server (communitas-bridge)**: HTTP/REST bridge for browser-based testing via Chrome DevTools MCP
+  - Real P2P integration with saorsa-core
+  - Endpoints: health, initialize, channels, messages, threads
+  - See `docs/BRIDGE_TESTING.md` for comprehensive testing guide
+- **Thread Reply Composer**: Automerge-integrated reply system for threads
+  - Optimistic updates with offline-first persistence
+  - Syncs to backend when network available
+- **TypeScript Error Resolution**: Fixed all 14 type errors
+  - `npm run typecheck` now passes cleanly
+  - Auth components, navigation, GlassCard, theme types all corrected
+- **Code Quality**: 137 of 141 tests passing, zero TypeScript warnings
+
+**2025-09-27: Authentication & UX**
 - **Fixed logout button visibility**: Now accessible with single click on avatar
 - **Improved authentication UX**: Professional user menu with clear options
 - **Created UnifiedAuthFlow component**: Modern authentication UI with glassmorphism effects
@@ -129,7 +144,76 @@ cargo clippy --all-features -- -D clippy::panic -D clippy::unwrap_used -D clippy
 npm run tauri build        # Build complete app for distribution
 ```
 
+### Bridge Server (Testing Mode)
+```bash
+# Terminal 1: Start bridge server
+cargo run -p communitas-bridge
+
+# Terminal 2: Start frontend dev server
+npm run dev
+
+# Bridge server provides HTTP/REST endpoints at http://localhost:3030
+# See docs/BRIDGE_TESTING.md for complete testing guide
+```
+
 ## Testing Strategy
+
+### Browser-Based Testing with Bridge Server
+The communitas-bridge crate provides an HTTP/REST interface for testing with Chrome DevTools MCP:
+
+**Architecture**:
+```
+Browser (Chrome DevTools MCP)
+    ↓ HTTP/REST
+Bridge Server (localhost:3030)
+    ↓ Rust IPC
+Saorsa Core (P2P Network)
+```
+
+**Available Endpoints**:
+- `GET /health` - Health check
+- `POST /api/core/initialize` - Initialize with four-word identity
+- `POST /api/channels` - Create channel
+- `GET /api/channels` - List channels
+- `POST /api/channels/:id/messages` - Send message
+- `POST /api/threads/create` - Create thread from message
+
+**Example Test Flow**:
+```javascript
+// 1. Initialize core
+await fetch('http://localhost:3030/api/core/initialize', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    four_words: 'ocean-forest-moon-star',
+    display_name: 'Test User',
+    device_name: 'Browser Test'
+  })
+})
+
+// 2. Create channel
+const channelResp = await fetch('http://localhost:3030/api/channels', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    name: 'Test Channel',
+    description: 'Created from browser'
+  })
+})
+
+// 3. Send message
+const channel = await channelResp.json()
+await fetch(`http://localhost:3030/api/channels/${channel.id}/messages`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    content: 'Hello from browser!',
+    recipients: ['ocean-forest-moon-star']
+  })
+})
+```
+
+See `docs/BRIDGE_TESTING.md` for complete testing scenarios and Chrome DevTools MCP integration examples.
 
 ### Unit Tests
 - Frontend: Vitest for React components in `src/**/*.test.tsx`
@@ -358,201 +442,19 @@ RUST_LOG=debug cargo run
 RUST_LOG=debug cargo test -- --nocapture
 ```
 
-## Tauri MCP (Model Context Protocol) Server
+## MCP Tooling Overview
 
-### Overview
-The Tauri MCP plugin provides a Unix socket-based server that enables AI agents and automation tools to interact with the Tauri application through a standardized protocol. When running in development mode, the server automatically starts and creates a socket at `/tmp/tauri-mcp-communitas-<pid>.sock`.
+Communitas now relies solely on the **Chrome DevTools MCP** defined in `.mcp.json`. The legacy Tauri-side MCP plugin and helper scripts have been removed to simplify automation and reduce local attack surface. To inspect or automate the running app during development:
 
-### Architecture
-- **Socket Server**: Unix domain socket for IPC communication
-- **Custom Protocol**: NOT standard JSON-RPC 2.0 - uses custom format (see protocol section)
-- **Tool-based Commands**: Modular system with specialized tools for different operations
-- **Event Bridge**: Bidirectional communication between Rust backend and JavaScript frontend
+1. Start the dev server (`npm run dev`).
+2. Launch the Chrome DevTools MCP inspector:
 
-### Protocol Format (IMPORTANT - NOT JSON-RPC)
-The MCP server uses a custom protocol format, NOT standard JSON-RPC:
-
-**Request Format:**
-```json
-{
-  "command": "ping",      // NOT "method"
-  "payload": {}           // NOT "params"
-}
-```
-
-**Response Format:**
-```json
-{
-  "success": true,        // Boolean success indicator
-  "data": {"value": null}, // Response data wrapped in object
-  "error": null           // Error message if failed
-}
-```
-
-**Critical Notes:**
-- Uses `command` field instead of `method`
-- Uses `payload` field instead of `params`
-- No `jsonrpc` or `id` fields required
-- Response has `success/data/error` structure
-- Many commands require `window_label: "main"` in payload
-
-### Available MCP Tools
-
-#### 1. **ping**
-- **Purpose**: Health check and connectivity verification
-- **Parameters**: None
-- **Returns**: `{ "message": "pong" }`
-- **Example**: Verify MCP server is responsive
-
-#### 2. **take_screenshot**
-- **Purpose**: Capture the current state of the application window
-- **Parameters**:
-  - `format` (optional): "png" or "jpeg" (default: "png")
-  - `quality` (optional): For JPEG, 0-100 (default: 90)
-- **Returns**: Base64-encoded screenshot data
-- **Use Case**: Visual regression testing, debugging UI states
-
-#### 3. **get_dom**
-- **Purpose**: Retrieve the current DOM structure of the webview
-- **Parameters**:
-  - `selector` (optional): CSS selector to filter elements
-  - `include_styles` (optional): Include computed styles (default: false)
-- **Returns**: JSON representation of DOM tree
-- **Use Case**: UI testing, element verification, accessibility checks
-
-#### 4. **execute_js**
-- **Purpose**: Execute arbitrary JavaScript in the webview context
-- **Parameters**:
-  - `script`: JavaScript code to execute
-  - `await_promise` (optional): Wait for promise resolution (default: false)
-- **Returns**: Script execution result (serialized to JSON)
-- **Security**: Sandboxed execution with Tauri security context
-- **Use Case**: Dynamic testing, state inspection, UI manipulation
-
-#### 5. **manage_window**
-- **Purpose**: Control window properties and behavior
-- **Parameters**:
-  - `action`: "minimize" | "maximize" | "unmaximize" | "hide" | "show" | "close" | "focus"
-  - `position` (optional): `{ x: number, y: number }`
-  - `size` (optional): `{ width: number, height: number }`
-- **Returns**: Success confirmation
-- **Use Case**: Window management during automated testing
-
-#### 6. **simulate_text_input**
-- **Purpose**: Simulate keyboard text input to focused element
-- **Parameters**:
-  - `text`: String to input
-  - `selector` (optional): CSS selector to focus before input
-  - `delay_ms` (optional): Delay between keystrokes (default: 10)
-- **Returns**: Success confirmation
-- **Use Case**: Form filling, text entry automation
-
-#### 7. **simulate_mouse_movement**
-- **Purpose**: Simulate mouse interactions
-- **Parameters**:
-  - `x`, `y`: Target coordinates
-  - `action`: "move" | "click" | "double_click" | "right_click"
-  - `selector` (optional): CSS selector to target element
-- **Returns**: Success confirmation
-- **Use Case**: UI interaction testing, button clicks
-
-#### 8. **get_element_position**
-- **Purpose**: Get bounding box and position of DOM element
-- **Parameters**:
-  - `selector`: CSS selector for target element
-- **Returns**: `{ x, y, width, height, top, left, bottom, right }`
-- **Use Case**: Precise element targeting for automation
-
-#### 9. **send_text_to_element**
-- **Purpose**: Send text directly to a specific element
-- **Parameters**:
-  - `selector`: CSS selector for target element
-  - `text`: Text to send
-  - `clear_first` (optional): Clear existing text (default: false)
-- **Returns**: Success confirmation
-- **Use Case**: Form automation, input field testing
-
-#### 10. **manage_local_storage**
-- **Purpose**: Interact with browser local storage
-- **Parameters**:
-  - `action`: "get" | "set" | "remove" | "clear"
-  - `key`: Storage key (for get/set/remove)
-  - `value`: Value to store (for set)
-- **Returns**: Retrieved value or success confirmation
-- **Use Case**: State management, testing storage persistence
-
-### MCP Connection Example (CORRECTED)
-```typescript
-// Connect to MCP server (example using Node.js)
-import net from 'net';
-
-const socket = net.createConnection('/tmp/tauri-mcp-communitas-12345.sock');
-
-// Send request in CORRECT FORMAT (NOT JSON-RPC)
-const request = {
-  command: 'execute_js',  // NOTE: "command" not "method"
-  payload: {              // NOTE: "payload" not "params"
-    window_label: 'main', // REQUIRED for most commands
-    code: 'document.querySelector("#login-button").click()'  // NOTE: "code" not "script"
-  }
-};
-
-socket.write(JSON.stringify(request) + '\n');  // NOTE: Must end with newline
-
-// Handle response
-socket.on('data', (data) => {
-  const response = JSON.parse(data.toString());
-  console.log('Result:', response.result);
-});
-```
-
-### Testing Workflow with MCP
-```javascript
-// 1. Health check
-await mcpCall('ping');
-
-// 2. Take initial screenshot
-const before = await mcpCall('take_screenshot');
-
-// 3. Fill login form
-await mcpCall('send_text_to_element', {
-  selector: '#four-words-input',
-  text: 'ocean-forest-moon-star'
-});
-
-// 4. Click login button
-await mcpCall('execute_js', {
-  script: `document.querySelector('#login-button').click()`
-});
-
-// 5. Wait and verify
-await sleep(1000);
-const dom = await mcpCall('get_dom', {
-  selector: '.user-profile'
-});
-
-// 6. Take after screenshot
-const after = await mcpCall('take_screenshot');
-```
-
-### Security Considerations
-- MCP server only runs in development mode
-- Socket is bound to localhost with restricted permissions
-- All JavaScript execution is sandboxed within Tauri's security context
-- No access to system APIs beyond what Tauri exposes
-- Commands are logged for audit trail
-
-### Debugging MCP
 ```bash
-# Find MCP socket
-ls -la /tmp/tauri-mcp-communitas-*.sock
-
-# Test with netcat
-echo '{"jsonrpc":"2.0","method":"ping","id":1}' | nc -U /tmp/tauri-mcp-communitas-12345.sock
-
-# Monitor MCP logs
-RUST_LOG=tauri_plugin_mcp=debug cargo tauri dev
+npx chrome-devtools-mcp@latest --browserUrl http://127.0.0.1:1420
 ```
+
+The inspector exposes structured DOM inspection, screenshot capture, and scripted automation through Chrome's debugging protocol without requiring custom socket servers.
+
 
 ## API Documentation
 

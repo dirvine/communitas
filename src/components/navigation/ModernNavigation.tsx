@@ -225,12 +225,7 @@ export const ModernNavigation: React.FC<ModernNavigationProps> = ({
   };
 
   const handleNavigateContact = (contact: PersonalUser) => {
-    nav.selectEntity({
-      id: contact.id,
-      type: 'user',
-      name: contact.name,
-      avatar: contact.avatar,
-    });
+    nav.selectEntity('individual', contact.id, contact.name);
     onNavigate(`/user/${contact.id}`, contact);
   };
 

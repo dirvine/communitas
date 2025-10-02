@@ -3,14 +3,14 @@
 //! Implements secure key derivation using PBKDF2 with 100,000 iterations
 //! as specified in DESIGN.md, with optional platform keyring support.
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use chacha20poly1305::{
     aead::{Aead, AeadCore, KeyInit},
     ChaCha20Poly1305, Key, Nonce,
 };
 use pbkdf2::pbkdf2_hmac;
 use sha2::Sha256;
-use zeroize::{Zeroize, Zeroizing};
+use zeroize::Zeroizing;
 
 /// Key manager for deriving and managing encryption keys
 pub struct KeyManager {

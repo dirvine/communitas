@@ -56,6 +56,8 @@ class MockTauriAPI {
     verified: true,
   };
 
+  private threads: Record<string, any[]> = {};
+
   async invoke(command: string, args?: any): Promise<any> {
     console.log(`[Mock Tauri] Invoking command: ${command}`, args);
     
@@ -80,9 +82,25 @@ class MockTauriAPI {
       
       case 'get_messages':
         return this.getMessages(args);
-      
+
       case 'send_message':
         return this.sendMessage(args);
+
+      case 'core_channel_get_messages':
+        return this.getMessages({ entityType: 'channel', entityId: args?.channel_id });
+
+      case 'core_thread_get_messages':
+        return this.getThreadMessages(args?.thread_id);
+
+      case 'core_send_message_to_channel':
+        return this.sendMessage({
+          entityType: 'channel',
+          entityId: args?.channel_id,
+          content: args?.text,
+        });
+
+      case 'core_create_thread':
+        return this.createThread(args?.parent_message_id, 'channel', args?.channel_id);
       
       case 'get_identity':
         return this.getIdentity();
@@ -156,15 +174,41 @@ class MockTauriAPI {
     return this.messages;
   }
 
+  private getThreadMessages(threadId?: string) {
+    if (!threadId) {
+      return [];
+    }
+    return this.threads[threadId] ?? [];
+  }
+
   private sendMessage(args: any) {
+    const entityType = args.entityType ?? (args.group_id ? 'group' : args.recipient ? 'direct' : 'channel');
+    const entityId = args.entityId ?? args.group_id ?? args.recipient ?? 'demo-channel';
     const newMessage = {
       id: `msg-${Date.now()}`,
       sender: 'Current User',
       content: args.content,
       timestamp: new Date().toISOString(),
       encrypted: true,
+      channel_id: entityType === 'channel' ? entityId : undefined,
+      group_id: entityType === 'group' ? entityId : undefined,
+      thread_id: entityType === 'thread' ? entityId : args.thread_id,
     };
-    this.messages.push(newMessage);
+    if (entityType === 'thread' && entityId) {
+      const list = this.threads[entityId] ?? [];
+      list.push({
+        id: newMessage.id,
+        sender: newMessage.sender,
+        sender_id: newMessage.sender,
+        sender_name: newMessage.sender,
+        content: newMessage.content,
+        timestamp: newMessage.timestamp,
+        thread_id: entityId,
+      });
+      this.threads[entityId] = list;
+    } else {
+      this.messages.push(newMessage);
+    }
     return newMessage;
   }
 
@@ -177,6 +221,18 @@ class MockTauriAPI {
       ...this.identity,
       ...args,
       id: `identity-${Date.now()}`,
+    };
+  }
+
+  private createThread(parentMessageId: string, entityType: string, entityId: string) {
+    const threadId = `thread-${Date.now()}`;
+    this.threads[threadId] = [];
+    return {
+      id: threadId,
+      parent_message_id: parentMessageId,
+      entity_type: entityType,
+      entity_id: entityId,
+      created_at: new Date().toISOString(),
     };
   }
 

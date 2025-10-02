@@ -5,6 +5,7 @@ import { MarkdownWebPublisher, WebBrowser } from './markdownPublisher'
 import { DHTStorage } from './dhtStorage'
 import { ReedSolomonEncoder } from './reedSolomon'
 import { NetworkIdentity, Organization, Group, PersonalUser, Project } from '../../types/collaboration'
+import { generateFourWordIdentity } from '../../utils/identity'
 
 export interface StorageSystemConfig {
   bootstrapNodes?: string[]
@@ -336,20 +337,13 @@ export class CompleteStorageSystem extends EventEmitter {
   }
 
   private async generateNetworkIdentity(): Promise<NetworkIdentity> {
-    const words = ['ocean', 'forest', 'mountain', 'river', 'sun', 'moon', 'star', 'cloud']
-    const selected = []
-    
-    for (let i = 0; i < 4; i++) {
-      const randomIndex = Math.floor(Math.random() * words.length)
-      selected.push(words[randomIndex])
-    }
-    
-    const fourWords = selected.join('-')
-    
+    const rawFourWords = await generateFourWordIdentity()
+    const normalized = rawFourWords.trim().toLowerCase().replace(/\s+/g, '-')
+
     return {
-      fourWords,
+      fourWords: normalized,
       publicKey: `pk_${Date.now()}`,
-      dhtAddress: `dht://${fourWords}`
+      dhtAddress: `dht://${normalized}`
     }
   }
 

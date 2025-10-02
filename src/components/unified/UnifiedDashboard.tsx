@@ -1,62 +1,51 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
-  Box,
-  Paper,
-  Typography,
-  IconButton,
+  alpha,
+  useTheme,
+} from '@mui/material/styles';
+import {
   Avatar,
+  AvatarGroup,
   Badge,
+  Box,
+  Button,
+  ButtonBase,
   Chip,
+  Divider,
+  Grid,
+  IconButton,
+  LinearProgress,
+  Stack,
   Tab,
   Tabs,
   Tooltip,
-  Button,
-  Card,
-  CardContent,
-  Grid,
-  Fade,
-  Zoom,
-  Grow,
-  alpha,
-  useTheme,
-  LinearProgress,
-  AvatarGroup,
-  Stack,
-  Divider,
+  Typography,
 } from '@mui/material';
 import {
+  ArrowForward as ArrowForwardIcon,
   Chat as ChatIcon,
-  Folder as FolderIcon,
-  VideoCall as VideoCallIcon,
-  Notifications as NotificationsIcon,
-  Search as SearchIcon,
-  Add as AddIcon,
+  CloudDone as CloudDoneIcon,
   CloudQueue as CloudIcon,
-  Speed as SpeedIcon,
-  Security as SecurityIcon,
-  Groups as GroupsIcon,
-  TrendingUp as TrendingUpIcon,
-  FiberManualRecord as OnlineIcon,
-  AccessTime as RecentIcon,
-  Star as StarIcon,
-  AttachFile as AttachmentIcon,
-  Mic as VoiceIcon,
-  PhotoCamera as CameraIcon,
-  ScreenShare as ScreenShareIcon,
-  KeyboardVoice as VoiceMessageIcon,
-  Image as ImageIcon,
   Description as DocumentIcon,
-  PlayCircle as VideoIcon,
-  CloudDone as SyncedIcon,
+  Folder as FolderIcon,
+  Groups as GroupsIcon,
+  Lan as LanIcon,
+  Notifications as NotificationsIcon,
+  ScreenShare as ScreenShareIcon,
+  Security as SecurityIcon,
+  Speed as SpeedIcon,
+  TrendingUp as TrendingUpIcon,
+  VideoCall as VideoCallIcon,
 } from '@mui/icons-material';
-import { motion, AnimatePresence } from 'framer-motion';
+import { formatDistanceToNow } from 'date-fns';
+import { motion, Variants } from 'framer-motion';
+
+import { GlassCard } from '../ui/GlassCard';
 import { ChatInterface } from '../chat/ChatInterface';
 import { FileManager } from '../storage/FileManager';
 
-// Wrap MUI components with motion for animations
 const MotionBox = motion(Box);
-const MotionCard = motion(Card);
-const MotionPaper = motion(Paper);
+const MotionStack = motion(Stack);
 
 interface UnifiedDashboardProps {
   userId: string;
@@ -67,22 +56,49 @@ interface UnifiedDashboardProps {
 interface QuickAction {
   id: string;
   title: string;
+  description: string;
   icon: React.ReactNode;
-  color: string;
   gradient: string;
   action: () => void;
   badge?: number;
 }
 
+interface InsightMetric {
+  id: string;
+  label: string;
+  value: string;
+  helper: string;
+  icon: React.ReactNode;
+  accent: string;
+  progress?: number;
+}
+
 interface RecentActivity {
   id: string;
-  type: 'message' | 'file' | 'call' | 'share';
   title: string;
   subtitle: string;
-  timestamp: Date;
-  avatar?: string;
   icon: React.ReactNode;
+  timestamp: Date;
+  tone: string;
 }
+
+const heroVariants: Variants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.6 },
+  },
+};
+
+const sectionVariants: Variants = {
+  hidden: { opacity: 0, y: 30 },
+  visible: ({ delay }: { delay: number }) => ({
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.6, delay },
+  }),
+};
 
 export const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({
   userId,
@@ -90,613 +106,675 @@ export const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({
   fourWords = 'ocean-forest-moon-star',
 }) => {
   const theme = useTheme();
-  const [activeTab, setActiveTab] = useState(0);
-  const [showNotifications, setShowNotifications] = useState(false);
-  const [onlineUsers] = useState(12);
-  const [unreadMessages] = useState(5);
-  const [pendingFiles] = useState(3);
+  const [focusTab, setFocusTab] = useState<'messages' | 'storage'>('messages');
 
-  const quickActions: QuickAction[] = [
+  const onlineUsers = 12;
+  const unreadMessages = 5;
+  const pendingFiles = 3;
+
+  const quickActions: QuickAction[] = useMemo(() => [
     {
-      id: 'new-chat',
-      title: 'Start Chat',
-      icon: <ChatIcon />,
-      color: '#00BFA5',
-      gradient: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      action: () => console.log('Start chat'),
+      id: 'chat',
+      title: 'Start a Conversation',
+      description: 'Spin up a private room with end-to-end encryption.',
+      icon: <ChatIcon fontSize="inherit" />,
+      gradient: 'linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%)',
+      action: () => window.dispatchEvent(new CustomEvent('open-chat-composer', { detail: { userId } })),
       badge: unreadMessages,
     },
     {
       id: 'video-call',
-      title: 'Video Call',
-      icon: <VideoCallIcon />,
-      color: '#FF6B6B',
-      gradient: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
-      action: () => console.log('Start video call'),
+      title: 'Launch a Video Room',
+      description: 'Secure HD meetings with zero centralized fallback.',
+      icon: <VideoCallIcon fontSize="inherit" />,
+      gradient: 'linear-gradient(135deg, #F97316 0%, #F43F5E 100%)',
+      action: () => window.dispatchEvent(new CustomEvent('start-video-call', { detail: { userId } })),
     },
     {
       id: 'open-storage',
-      title: 'Open Storage',
-      icon: <FolderIcon />,
-      color: '#4ECDC4',
-      gradient: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
-      action: () => {
-        const event = new CustomEvent('open-storage-workspace', { detail: { scope: 'personal', userId } })
-        window.dispatchEvent(event)
-      },
+      title: 'Open Your Vault',
+      description: 'Navigate personal, shared, and org storage at once.',
+      icon: <FolderIcon fontSize="inherit" />,
+      gradient: 'linear-gradient(135deg, #22D3EE 0%, #14B8A6 100%)',
+      action: () => window.dispatchEvent(new CustomEvent('open-storage-workspace', { detail: { scope: 'personal', userId } })),
       badge: pendingFiles,
     },
     {
-      id: 'screen-share',
-      title: 'Screen Share',
-      icon: <ScreenShareIcon />,
-      color: '#FF8C42',
-      gradient: 'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)',
-      action: () => console.log('Screen share'),
+      id: 'share-screen',
+      title: 'Share Your Screen',
+      description: 'Collaborate live with low-latency quantum-safe channels.',
+      icon: <ScreenShareIcon fontSize="inherit" />,
+      gradient: 'linear-gradient(135deg, #F59E0B 0%, #84CC16 100%)',
+      action: () => window.dispatchEvent(new CustomEvent('start-screen-share', { detail: { userId } })),
     },
-  ];
+  ], [pendingFiles, unreadMessages, userId]);
 
-  const recentActivities: RecentActivity[] = [
+  const insights: InsightMetric[] = useMemo(() => [
+    {
+      id: 'network',
+      label: 'Network Health',
+      value: `${onlineUsers} peers online`,
+      helper: 'Mesh is resilient across 4 regions',
+      icon: <LanIcon fontSize="small" />,
+      accent: theme.palette.primary.main,
+      progress: 92,
+    },
+    {
+      id: 'sync',
+      label: 'Sync Coverage',
+      value: '97% complete',
+      helper: 'Last backlog cleared 4 minutes ago',
+      icon: <CloudDoneIcon fontSize="small" />,
+      accent: theme.palette.success.main,
+      progress: 97,
+    },
+    {
+      id: 'security',
+      label: 'Security Posture',
+      value: 'All systems hardened',
+      helper: 'Passkeys + ML-DSA in active rotation',
+      icon: <SecurityIcon fontSize="small" />,
+      accent: theme.palette.secondary.main,
+      progress: 100,
+    },
+  ], [onlineUsers, theme.palette.primary.main, theme.palette.secondary.main, theme.palette.success.main]);
+
+  const recentActivities: RecentActivity[] = useMemo(() => [
     {
       id: '1',
-      type: 'message',
       title: 'Alice Johnson',
-      subtitle: 'Sent you a message about the project',
-      timestamp: new Date(Date.now() - 300000),
+      subtitle: 'Shared a thread update in "P2P Launch Sprint"',
       icon: <ChatIcon fontSize="small" />,
+      timestamp: new Date(Date.now() - 300000),
+      tone: theme.palette.primary.main,
     },
     {
       id: '2',
-      type: 'file',
       title: 'Bob Chen',
-      subtitle: 'Shared project-specs.pdf',
-      timestamp: new Date(Date.now() - 1800000),
+      subtitle: 'Uploaded architecture-v3.pdf to Shared Vault',
       icon: <DocumentIcon fontSize="small" />,
+      timestamp: new Date(Date.now() - 1800000),
+      tone: theme.palette.success.main,
     },
     {
       id: '3',
-      type: 'call',
       title: 'Team Standup',
-      subtitle: 'Video call ended (45 min)',
-      timestamp: new Date(Date.now() - 3600000),
+      subtitle: '45-minute call recorded & synced to workspace',
       icon: <VideoCallIcon fontSize="small" />,
+      timestamp: new Date(Date.now() - 3600000),
+      tone: theme.palette.info.main,
     },
     {
       id: '4',
-      type: 'share',
       title: 'Sarah Kim',
-      subtitle: 'Added you to "Design Assets" folder',
-      timestamp: new Date(Date.now() - 7200000),
+      subtitle: 'Granted you access to Design Assets collection',
       icon: <FolderIcon fontSize="small" />,
+      timestamp: new Date(Date.now() - 7200000),
+      tone: theme.palette.warning.main,
     },
-  ];
+  ], [theme.palette.info.main, theme.palette.primary.main, theme.palette.success.main, theme.palette.warning.main]);
 
-const containerVariants: any = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.1,
-      },
+  const workspaceHighlights = useMemo(() => [
+    {
+      id: 'org',
+      title: 'Organization Mode',
+      description: 'Switch to shared operations, approvals, and broadcast updates for your teams.',
+      icon: <GroupsIcon />,
+      accent: theme.palette.primary.main,
+      actionLabel: 'View organizations',
+      action: () => window.dispatchEvent(new CustomEvent('app:navigate', { detail: '/org/overview' })),
     },
-  };
-
-const itemVariants: any = {
-    hidden: { y: 20, opacity: 0 },
-    visible: {
-      y: 0,
-      opacity: 1,
-      transition: {
-        type: 'spring',
-        stiffness: 100,
-      },
+    {
+      id: 'projects',
+      title: 'Projects Canvas',
+      description: 'Plan, assign, and sync files with deterministic consensus across every node.',
+      icon: <SpeedIcon />,
+      accent: theme.palette.secondary.main,
+      actionLabel: 'Open projects',
+      action: () => window.dispatchEvent(new CustomEvent('app:navigate', { detail: '/project/overview' })),
     },
-  };
+    {
+      id: 'storage',
+      title: 'Identity Vaults',
+      description: 'Personal, shared, and public spaces encrypted with Reed-Solomon redundancy.',
+      icon: <CloudIcon />,
+      accent: theme.palette.success.main,
+      actionLabel: 'Go to storage',
+      action: () => window.dispatchEvent(new CustomEvent('open-storage-workspace', { detail: { scope: 'personal', userId } })),
+    },
+  ], [theme.palette.primary.main, theme.palette.secondary.main, theme.palette.success.main, userId]);
 
   return (
-    <Box
-      sx={{
-        height: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        background: theme.palette.mode === 'dark'
-          ? 'linear-gradient(135deg, #1e3c72 0%, #2a5298 100%)'
-          : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      }}
-    >
-      {/* Stunning Header */}
-      <MotionPaper
-        initial={{ y: -50, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ duration: 0.5 }}
-        elevation={0}
+    <Box sx={{ position: 'relative', minHeight: '100%', py: { xs: 5, md: 7 }, px: { xs: 2, sm: 3, lg: 4 } }}>
+      <Box
         sx={{
-          p: 3,
-          background: alpha(theme.palette.background.paper, 0.9),
-          backdropFilter: 'blur(20px)',
-          borderBottom: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+          position: 'absolute',
+          inset: 0,
+          background: theme.palette.mode === 'dark'
+            ? `radial-gradient(circle at 10% 20%, ${alpha(theme.palette.primary.light, 0.25)} 0%, transparent 45%),
+               radial-gradient(circle at 80% 10%, ${alpha(theme.palette.secondary.light, 0.2)} 0%, transparent 50%),
+               radial-gradient(circle at 50% 80%, ${alpha(theme.palette.success.light, 0.18)} 0%, transparent 55%)`
+            : `radial-gradient(circle at 10% 20%, ${alpha(theme.palette.primary.main, 0.18)} 0%, transparent 45%),
+               radial-gradient(circle at 80% 10%, ${alpha(theme.palette.secondary.main, 0.14)} 0%, transparent 50%),
+               radial-gradient(circle at 50% 80%, ${alpha(theme.palette.success.main, 0.15)} 0%, transparent 55%)`,
+          filter: 'saturate(140%)',
+          zIndex: 0,
         }}
-      >
-        <Grid container alignItems="center" spacing={3}>
-          <Grid xs={12} md={4}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-              <Badge
-                overlap="circular"
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-                badgeContent={
-                  <OnlineIcon sx={{ color: '#44b700', fontSize: 12 }} />
-                }
-              >
-                <Avatar
-                  sx={{
-                    width: 56,
-                    height: 56,
-                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                  }}
-                >
-                  {userName[0]}
-                </Avatar>
-              </Badge>
-              <Box>
-                <Typography variant="h5" fontWeight={600}>
-                  Welcome back, {userName}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {fourWords}
-                </Typography>
-              </Box>
-            </Box>
-          </Grid>
+      />
+      <Box
+        sx={{
+          position: 'absolute',
+          inset: 0,
+          backgroundImage: `linear-gradient(${alpha(theme.palette.common.white, theme.palette.mode === 'dark' ? 0.04 : 0.08)} 1px, transparent 1px),
+            linear-gradient(90deg, ${alpha(theme.palette.common.white, theme.palette.mode === 'dark' ? 0.04 : 0.08)} 1px, transparent 1px)` ,
+          backgroundSize: '120px 120px',
+          maskImage: 'radial-gradient(circle at center, rgba(0,0,0,0.7) 0%, transparent 70%)',
+          pointerEvents: 'none',
+          zIndex: 0,
+        }}
+      />
 
-          <Grid xs={12} md={4}>
-            <Stack direction="row" spacing={2} justifyContent="center">
-              <Chip
-                icon={<GroupsIcon />}
-                label={`${onlineUsers} Online`}
-                color="success"
-                variant="outlined"
-              />
-              <Chip
-                icon={<ChatIcon />}
-                label={`${unreadMessages} Unread`}
-                color="primary"
-                variant="outlined"
-              />
-              <Chip
-                icon={<CloudIcon />}
-                label="All Synced"
-                color="info"
-                variant="outlined"
-              />
-            </Stack>
-          </Grid>
-
-          <Grid xs={12} md={4}>
-            <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
-              <IconButton
+      <Stack spacing={{ xs: 4, md: 5 }} sx={{ position: 'relative', zIndex: 1, maxWidth: 1280, mx: 'auto' }}>
+        <MotionBox variants={heroVariants} initial="hidden" animate="visible">
+          <GlassCard variant="light" glow>
+            <Box sx={{ position: 'relative', overflow: 'hidden' }}>
+              <Box
                 sx={{
-                  background: alpha(theme.palette.primary.main, 0.1),
-                  '&:hover': {
-                    background: alpha(theme.palette.primary.main, 0.2),
-                  },
+                  position: 'absolute',
+                  top: '-20%',
+                  right: '-10%',
+                  width: 280,
+                  height: 280,
+                  background: 'radial-gradient(circle, rgba(99,102,241,0.28) 0%, transparent 60%)',
+                  filter: 'blur(20px)',
                 }}
-              >
-                <SearchIcon />
-              </IconButton>
-              <Badge badgeContent={3} color="error">
-                <IconButton
-                  sx={{
-                    background: alpha(theme.palette.primary.main, 0.1),
-                    '&:hover': {
-                      background: alpha(theme.palette.primary.main, 0.2),
-                    },
-                  }}
-                  onClick={() => setShowNotifications(!showNotifications)}
-                >
-                  <NotificationsIcon />
-                </IconButton>
-              </Badge>
-            </Box>
-          </Grid>
-        </Grid>
-      </MotionPaper>
-
-      {/* Quick Actions - Beautiful animated cards */}
-      <Box sx={{ px: 3, py: 2 }}>
-        <motion.div
-          variants={containerVariants}
-          initial="hidden"
-          animate="visible"
-        >
-          <Grid container spacing={2}>
-            {quickActions.map((action, index) => (
-              <Grid xs={6} sm={3} key={action.id}>
-                <MotionCard
-                  variants={itemVariants}
-                  whileHover={{ scale: 1.05, rotate: 1 }}
-                  whileTap={{ scale: 0.95 }}
-                  sx={{
-                    background: action.gradient,
-                    color: 'white',
-                    cursor: 'pointer',
-                    position: 'relative',
-                    overflow: 'hidden',
-                    '&::before': {
-                      content: '""',
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                      background: 'rgba(255,255,255,0.1)',
-                      transform: 'translateX(-100%)',
-                      transition: 'transform 0.3s',
-                    },
-                    '&:hover::before': {
-                      transform: 'translateX(0)',
-                    },
-                  }}
-                  onClick={action.action}
-                >
-                  <CardContent sx={{ textAlign: 'center', py: 3 }}>
-                    <Badge badgeContent={action.badge} color="error">
-                      <Box sx={{ fontSize: 40, mb: 1 }}>{action.icon}</Box>
-                    </Badge>
-                    <Typography variant="body1" fontWeight={500}>
-                      {action.title}
-                    </Typography>
-                  </CardContent>
-                </MotionCard>
-              </Grid>
-            ))}
-          </Grid>
-        </motion.div>
-      </Box>
-
-      {/* Main Content Area with Tabs */}
-      <MotionBox
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ delay: 0.3 }}
-        sx={{
-          flex: 1,
-          mx: 3,
-          mb: 3,
-          display: 'flex',
-          flexDirection: 'column',
-          background: alpha(theme.palette.background.paper, 0.95),
-          backdropFilter: 'blur(20px)',
-          borderRadius: 3,
-          overflow: 'hidden',
-          boxShadow: '0 20px 40px rgba(0,0,0,0.1)',
-        }}
-      >
-        <Box
-          sx={{
-            borderBottom: 1,
-            borderColor: 'divider',
-            background: alpha(theme.palette.primary.main, 0.05),
-          }}
-        >
-          <Tabs
-            value={activeTab}
-            onChange={(e, v) => setActiveTab(v)}
-            sx={{
-              '& .MuiTab-root': {
-                minHeight: 64,
-                fontSize: '1rem',
-                fontWeight: 500,
-              },
-            }}
-          >
-            <Tab
-              icon={<ChatIcon />}
-              label="Messages"
-              iconPosition="start"
-            />
-            <Tab
-              icon={<FolderIcon />}
-              label="Files"
-              iconPosition="start"
-            />
-            <Tab
-              icon={<VideoCallIcon />}
-              label="Meetings"
-              iconPosition="start"
-            />
-            <Tab
-              icon={<RecentIcon />}
-              label="Activity"
-              iconPosition="start"
-            />
-          </Tabs>
-        </Box>
-
-        <Box sx={{ flex: 1, overflow: 'hidden' }}>
-          <AnimatePresence mode="wait">
-            {activeTab === 0 && (
-              <MotionBox
-                key="chat"
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                sx={{ height: '100%' }}
-              >
-                <Grid container sx={{ height: '100%' }}>
-                  <Grid xs={12} md={4} sx={{ borderRight: 1, borderColor: 'divider' }}>
-                    {/* Chat List */}
-                    <Box sx={{ p: 2 }}>
-                      <Typography variant="h6" gutterBottom>
-                        Recent Conversations
-                      </Typography>
-                      {['Alice Johnson', 'Bob Chen', 'Team Chat', 'Project Alpha'].map((chat, i) => (
-                        <Paper
-                          key={i}
-                          sx={{
-                            p: 2,
-                            mb: 1,
-                            cursor: 'pointer',
-                            transition: 'all 0.3s',
-                            '&:hover': {
-                              transform: 'translateX(4px)',
-                              boxShadow: 2,
-                            },
-                          }}
-                        >
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                            <Badge
-                              variant="dot"
-                              color="success"
-                              invisible={i > 1}
-                            >
-                              <Avatar>{chat[0]}</Avatar>
-                            </Badge>
-                            <Box sx={{ flex: 1 }}>
-                              <Typography variant="body1" fontWeight={500}>
-                                {chat}
-                              </Typography>
-                              <Typography variant="caption" color="text.secondary">
-                                Last message 5 min ago
-                              </Typography>
-                            </Box>
-                            {i === 0 && (
-                              <Badge badgeContent={2} color="primary" />
-                            )}
-                          </Box>
-                        </Paper>
-                      ))}
-                    </Box>
-                  </Grid>
-                  <Grid xs={12} md={8}>
-                    <ChatInterface
-                      chatId="1"
-                      chatName="Alice Johnson"
-                      chatType="direct"
-                    />
-                  </Grid>
-                </Grid>
-              </MotionBox>
-            )}
-
-            {activeTab === 1 && (
-              <MotionBox
-                key="files"
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                sx={{ height: '100%' }}
-              >
-                <FileManager />
-              </MotionBox>
-            )}
-
-            {activeTab === 2 && (
-              <MotionBox
-                key="meetings"
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                sx={{ p: 4, textAlign: 'center' }}
-              >
-                <Grid container spacing={3} justifyContent="center">
-                  <Grid xs={12}>
-                    <Typography variant="h4" gutterBottom>
-                      Start or Join a Meeting
-                    </Typography>
-                  </Grid>
-                  <Grid xs={12} sm={6} md={4}>
-                    <MotionCard
-                      whileHover={{ scale: 1.05 }}
-                      sx={{
-                        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                        color: 'white',
-                        cursor: 'pointer',
-                        minHeight: 200,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      <CardContent sx={{ textAlign: 'center' }}>
-                        <VideoCallIcon sx={{ fontSize: 60, mb: 2 }} />
-                        <Typography variant="h6">
-                          Start Instant Meeting
-                        </Typography>
-                        <Typography variant="body2" sx={{ mt: 1, opacity: 0.9 }}>
-                          Start a video call right now
-                        </Typography>
-                      </CardContent>
-                    </MotionCard>
-                  </Grid>
-                  <Grid xs={12} sm={6} md={4}>
-                    <MotionCard
-                      whileHover={{ scale: 1.05 }}
-                      sx={{
-                        background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
-                        color: 'white',
-                        cursor: 'pointer',
-                        minHeight: 200,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      <CardContent sx={{ textAlign: 'center' }}>
-                        <VoiceIcon sx={{ fontSize: 60, mb: 2 }} />
-                        <Typography variant="h6">
-                          Voice Call
-                        </Typography>
-                        <Typography variant="body2" sx={{ mt: 1, opacity: 0.9 }}>
-                          Start a voice-only call
-                        </Typography>
-                      </CardContent>
-                    </MotionCard>
-                  </Grid>
-                  <Grid xs={12} sm={6} md={4}>
-                    <MotionCard
-                      whileHover={{ scale: 1.05 }}
-                      sx={{
-                        background: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
-                        color: 'white',
-                        cursor: 'pointer',
-                        minHeight: 200,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      <CardContent sx={{ textAlign: 'center' }}>
-                        <ScreenShareIcon sx={{ fontSize: 60, mb: 2 }} />
-                        <Typography variant="h6">
-                          Share Screen
-                        </Typography>
-                        <Typography variant="body2" sx={{ mt: 1, opacity: 0.9 }}>
-                          Share your screen with others
-                        </Typography>
-                      </CardContent>
-                    </MotionCard>
-                  </Grid>
-                </Grid>
-
-                {/* Recent Meetings */}
-                <Box sx={{ mt: 6 }}>
-                  <Typography variant="h5" gutterBottom>
-                    Recent Meetings
-                  </Typography>
-                  <Grid container spacing={2}>
-                    {['Team Standup', 'Project Review', 'Client Demo'].map((meeting, i) => (
-                      <Grid xs={12} key={i}>
-                        <Paper sx={{ p: 2 }}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                            <Avatar sx={{ bgcolor: 'primary.main' }}>
-                              <VideoCallIcon />
-                            </Avatar>
-                            <Box sx={{ flex: 1 }}>
-                              <Typography variant="body1" fontWeight={500}>
-                                {meeting}
-                              </Typography>
-                              <Typography variant="caption" color="text.secondary">
-                                {i === 0 ? 'Today at 10:00 AM' : `${i + 1} days ago`}
-                              </Typography>
-                            </Box>
-                            <AvatarGroup max={4}>
-                              <Avatar sx={{ width: 32, height: 32 }}>A</Avatar>
-                              <Avatar sx={{ width: 32, height: 32 }}>B</Avatar>
-                              <Avatar sx={{ width: 32, height: 32 }}>C</Avatar>
-                              <Avatar sx={{ width: 32, height: 32 }}>+5</Avatar>
-                            </AvatarGroup>
-                            <Button variant="outlined" size="small">
-                              View Recording
-                            </Button>
-                          </Box>
-                        </Paper>
-                      </Grid>
-                    ))}
-                  </Grid>
-                </Box>
-              </MotionBox>
-            )}
-
-            {activeTab === 3 && (
-              <MotionBox
-                key="activity"
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                sx={{ p: 3 }}
-              >
-                <Typography variant="h5" gutterBottom>
-                  Recent Activity
-                </Typography>
-                <Stack spacing={2}>
-                  {recentActivities.map((activity) => (
-                    <MotionPaper
-                      key={activity.id}
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      whileHover={{ x: 4 }}
-                      sx={{
-                        p: 2,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 2,
-                        cursor: 'pointer',
-                      }}
+              />
+              <Stack direction={{ xs: 'column', md: 'row' }} spacing={{ xs: 3, md: 6 }} sx={{ p: { xs: 3, md: 4 } }}>
+                <Stack spacing={2} flex={1}>
+                  <Stack direction="row" spacing={2} alignItems="center">
+                    <Badge
+                      overlap="circular"
+                      anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                      badgeContent={<Box sx={{ width: 14, height: 14, bgcolor: 'success.main', borderRadius: '50%', border: '2px solid white' }} />}
                     >
                       <Avatar
                         sx={{
-                          bgcolor: alpha(theme.palette.primary.main, 0.1),
-                          color: 'primary.main',
+                          width: 64,
+                          height: 64,
+                          fontSize: 28,
+                          fontWeight: 600,
+                          background: 'linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%)',
                         }}
                       >
-                        {activity.icon}
+                        {userName[0]}
                       </Avatar>
-                      <Box sx={{ flex: 1 }}>
-                        <Typography variant="body1" fontWeight={500}>
-                          {activity.title}
+                    </Badge>
+                    <Stack spacing={0.5}>
+                      <Typography variant="h4" fontWeight={700} sx={{ letterSpacing: '-0.02em' }}>
+                        Welcome back, {userName}
+                      </Typography>
+                      <Typography variant="body1" color="text.secondary">
+                        Orchestrate messaging, storage, and live collaboration from a single control surface.
+                      </Typography>
+                      <Stack direction="row" spacing={1} flexWrap="wrap">
+                        <Chip
+                          label={fourWords}
+                          icon={<GroupsIcon fontSize="small" />}
+                          variant="outlined"
+                          sx={{ borderColor: 'primary.main', fontWeight: 500 }}
+                        />
+                        <Chip
+                          label="Quantum-secured"
+                          icon={<SecurityIcon fontSize="small" />}
+                          color="success"
+                          variant="outlined"
+                        />
+                        <Chip
+                          label={`${onlineUsers} peers live`}
+                          icon={<TrendingUpIcon fontSize="small" />}
+                          variant="outlined"
+                          sx={{ borderColor: alpha(theme.palette.success.main, 0.4) }}
+                        />
+                      </Stack>
+                    </Stack>
+                  </Stack>
+                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                    <Button
+                      variant="contained"
+                      onClick={() => window.dispatchEvent(new CustomEvent('open-chat-composer', { detail: { userId } }))}
+                      endIcon={<ArrowForwardIcon />}
+                      sx={{
+                        px: 3.5,
+                        py: 1.5,
+                        borderRadius: 3,
+                        boxShadow: '0 20px 45px rgba(99, 102, 241, 0.25)',
+                      }}
+                    >
+                      Launch Messenger
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      color="inherit"
+                      onClick={() => window.dispatchEvent(new CustomEvent('open-invite-dialog'))}
+                      sx={{ px: 3.5, py: 1.5, borderRadius: 3 }}
+                    >
+                      Invite collaborators
+                    </Button>
+                  </Stack>
+                </Stack>
+                <Divider orientation="vertical" flexItem sx={{ display: { xs: 'none', md: 'block' }, opacity: 0.3 }} />
+                <Stack spacing={2} sx={{ minWidth: { md: 240 } }}>
+                  <Typography variant="overline" color="text.secondary">
+                    live signal
+                  </Typography>
+                  <Stack spacing={1.5}>
+                    {insights.map((metric) => (
+                      <Box
+                        key={metric.id}
+                        sx={{
+                          p: 2,
+                          borderRadius: 3,
+                          background: alpha(metric.accent, theme.palette.mode === 'dark' ? 0.2 : 0.1),
+                          border: `1px solid ${alpha(metric.accent, 0.2)}`,
+                        }}
+                      >
+                        <Stack direction="row" spacing={1.5} alignItems="center">
+                          <Box
+                            sx={{
+                              width: 36,
+                              height: 36,
+                              borderRadius: '50%',
+                              display: 'grid',
+                              placeItems: 'center',
+                              background: alpha(metric.accent, 0.25),
+                              color: metric.accent,
+                            }}
+                          >
+                            {metric.icon}
+                          </Box>
+                          <Box sx={{ flex: 1 }}>
+                            <Typography variant="subtitle2" fontWeight={600}>
+                              {metric.label}
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                              {metric.helper}
+                            </Typography>
+                          </Box>
+                          <Typography variant="subtitle1" fontWeight={600}>
+                            {metric.value}
+                          </Typography>
+                        </Stack>
+                        {typeof metric.progress === 'number' && (
+                          <LinearProgress
+                            variant="determinate"
+                            value={metric.progress}
+                            sx={{
+                              mt: 1.5,
+                              height: 6,
+                              borderRadius: 3,
+                              backgroundColor: alpha(metric.accent, 0.15),
+                              '& .MuiLinearProgress-bar': {
+                                borderRadius: 3,
+                                background: `linear-gradient(90deg, ${metric.accent}, ${alpha(metric.accent, 0.6)})`,
+                              },
+                            }}
+                          />
+                        )}
+                      </Box>
+                    ))}
+                  </Stack>
+                </Stack>
+              </Stack>
+            </Box>
+          </GlassCard>
+        </MotionBox>
+
+        <MotionBox
+          variants={sectionVariants}
+          initial="hidden"
+          animate="visible"
+          custom={{ delay: 0.15 }}
+        >
+          <Grid container spacing={3}>
+            <Grid item xs={12} lg={7}>
+              <GlassCard variant="light" hover>
+                <Stack spacing={3} sx={{ p: { xs: 3, md: 4 } }}>
+                  <Stack direction="row" alignItems="center" justifyContent="space-between">
+                    <Box>
+                      <Typography variant="h6" fontWeight={600}>
+                        Priority Actions
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        The quickest routes to impact across your nodes and teams.
+                      </Typography>
+                    </Box>
+                    <Tooltip title="View notifications">
+                      <IconButton onClick={() => window.dispatchEvent(new CustomEvent('open-notifications-center'))}>
+                        <Badge color="error" variant="dot">
+                          <NotificationsIcon />
+                        </Badge>
+                      </IconButton>
+                    </Tooltip>
+                  </Stack>
+
+                  <Grid container spacing={2}>
+                    {quickActions.map((action) => (
+                      <Grid item xs={12} md={6} key={action.id}>
+                        <motion.div whileHover={{ y: -4, scale: 1.01 }} whileTap={{ scale: 0.98 }}>
+                          <GlassCard
+                            variant="colored"
+                            hover
+                            onClick={action.action}
+                            sx={{
+                              cursor: 'pointer',
+                              background: action.gradient,
+                              color: 'common.white',
+                              minHeight: 150,
+                            }}
+                          >
+                            <ButtonBase
+                              focusRipple
+                              sx={{
+                                width: '100%',
+                                textAlign: 'left',
+                                display: 'flex',
+                                alignItems: 'flex-start',
+                                gap: 2,
+                                p: 3,
+                                color: 'inherit',
+                              }}
+                            >
+                              <Box
+                                sx={{
+                                  width: 48,
+                                  height: 48,
+                                  borderRadius: '16px',
+                                  background: 'rgba(255, 255, 255, 0.15)',
+                                  display: 'grid',
+                                  placeItems: 'center',
+                                  fontSize: 24,
+                                }}
+                              >
+                                {action.badge ? (
+                                  <Badge badgeContent={action.badge} color="error">
+                                    {action.icon}
+                                  </Badge>
+                                ) : (
+                                  action.icon
+                                )}
+                              </Box>
+                              <Box sx={{ flex: 1 }}>
+                                <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+                                  {action.title}
+                                </Typography>
+                                <Typography variant="body2" sx={{ opacity: 0.9 }}>
+                                  {action.description}
+                                </Typography>
+                              </Box>
+                              <ArrowForwardIcon sx={{ opacity: 0.7 }} />
+                            </ButtonBase>
+                          </GlassCard>
+                        </motion.div>
+                      </Grid>
+                    ))}
+                  </Grid>
+                </Stack>
+              </GlassCard>
+            </Grid>
+
+            <Grid item xs={12} lg={5}>
+              <GlassCard variant="light">
+                <Stack spacing={3} sx={{ p: { xs: 3, md: 4 } }}>
+                  <Box>
+                    <Typography variant="h6" fontWeight={600}>
+                      Operational Pulse
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Live health across your decentralized footprint.
+                    </Typography>
+                  </Box>
+
+                  <Stack spacing={2.5}>
+                    <Box>
+                      <Typography variant="overline" color="text.secondary">
+                        Active collaborators
+                      </Typography>
+                      <Stack direction="row" spacing={2} alignItems="center" sx={{ mt: 1 }}>
+                        <AvatarGroup max={5} spacing="small">
+                          {['Alice', 'Bob', 'Sarah', 'Diego', 'Lin'].map((name) => (
+                            <Avatar key={name} sx={{ bgcolor: alpha(theme.palette.primary.main, 0.85) }}>
+                              {name[0]}
+                            </Avatar>
+                          ))}
+                        </AvatarGroup>
+                        <Typography variant="subtitle1" fontWeight={600}>
+                          {onlineUsers} live
+                        </Typography>
+                      </Stack>
+                    </Box>
+
+                    <Divider flexItem sx={{ opacity: 0.1 }} />
+
+                    {insights.map((metric) => (
+                      <Stack key={metric.id} spacing={1.5}>
+                        <Stack direction="row" alignItems="center" spacing={1.5}>
+                          <Box
+                            sx={{
+                              width: 12,
+                              height: 12,
+                              borderRadius: '50%',
+                              background: metric.accent,
+                            }}
+                          />
+                          <Typography variant="subtitle2" fontWeight={600}>
+                            {metric.label}
+                          </Typography>
+                        </Stack>
+                        <Typography variant="h5" fontWeight={600}>
+                          {metric.value}
                         </Typography>
                         <Typography variant="body2" color="text.secondary">
-                          {activity.subtitle}
+                          {metric.helper}
                         </Typography>
-                      </Box>
-                      <Typography variant="caption" color="text.secondary">
-                        {new Date(activity.timestamp).toLocaleTimeString()}
-                      </Typography>
-                    </MotionPaper>
-                  ))}
+                        {typeof metric.progress === 'number' && (
+                          <LinearProgress
+                            variant="determinate"
+                            value={metric.progress}
+                            sx={{
+                              height: 6,
+                              borderRadius: 3,
+                              backgroundColor: alpha(metric.accent, 0.15),
+                              '& .MuiLinearProgress-bar': {
+                                borderRadius: 3,
+                                background: metric.accent,
+                              },
+                            }}
+                          />
+                        )}
+                      </Stack>
+                    ))}
+                  </Stack>
                 </Stack>
-              </MotionBox>
-            )}
-          </AnimatePresence>
-        </Box>
-      </MotionBox>
+              </GlassCard>
+            </Grid>
+          </Grid>
+        </MotionBox>
 
-      {/* Floating Action Button */}
-      <Zoom in={true}>
-        <Box
-          sx={{
-            position: 'fixed',
-            bottom: 24,
-            right: 24,
-          }}
+        <MotionStack
+          direction={{ xs: 'column', lg: 'row' }}
+          spacing={3}
+          variants={sectionVariants}
+          initial="hidden"
+          animate="visible"
+          custom={{ delay: 0.3 }}
         >
-          <IconButton
-            sx={{
-              width: 64,
-              height: 64,
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-              color: 'white',
-              boxShadow: '0 8px 32px rgba(102, 126, 234, 0.4)',
-              '&:hover': {
-                transform: 'scale(1.1)',
-                boxShadow: '0 12px 40px rgba(102, 126, 234, 0.6)',
-              },
-            }}
-          >
-            <AddIcon sx={{ fontSize: 32 }} />
-          </IconButton>
-        </Box>
-      </Zoom>
+          <GlassCard variant="light" sx={{ flex: 1 }}>
+            <Stack spacing={3} sx={{ p: { xs: 3, md: 4 } }}>
+              <Box>
+                <Typography variant="h6" fontWeight={600}>
+                  Activity Timeline
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  The latest signal across conversations, files, and calls.
+                </Typography>
+              </Box>
+
+              <Stack spacing={2.5}>
+                {recentActivities.map((activity, index) => (
+                  <Stack
+                    key={activity.id}
+                    direction="row"
+                    spacing={2.5}
+                    alignItems="flex-start"
+                    sx={{
+                      position: 'relative',
+                      '&::before': index === recentActivities.length - 1 ? undefined : {
+                        content: '""',
+                        position: 'absolute',
+                        left: 26,
+                        top: 44,
+                        bottom: -12,
+                        width: 2,
+                        background: alpha(activity.tone, 0.2),
+                      },
+                    }}
+                  >
+                    <Box
+                      sx={{
+                        width: 52,
+                        height: 52,
+                        borderRadius: '18px',
+                        background: alpha(activity.tone, 0.15),
+                        display: 'grid',
+                        placeItems: 'center',
+                        color: activity.tone,
+                        flexShrink: 0,
+                      }}
+                    >
+                      {activity.icon}
+                    </Box>
+                    <Stack spacing={0.75}>
+                      <Typography variant="subtitle1" fontWeight={600}>
+                        {activity.title}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {activity.subtitle}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {formatDistanceToNow(activity.timestamp, { addSuffix: true })}
+                      </Typography>
+                    </Stack>
+                  </Stack>
+                ))}
+              </Stack>
+            </Stack>
+          </GlassCard>
+
+          <Stack spacing={3} sx={{ width: { xs: '100%', lg: '28%' } }}>
+            {workspaceHighlights.map((workspace) => (
+              <motion.div key={workspace.id} whileHover={{ y: -4 }}>
+                <GlassCard variant="dark" hover onClick={workspace.action} sx={{ cursor: 'pointer' }}>
+                  <Stack spacing={2} sx={{ p: 3 }}>
+                    <Stack direction="row" spacing={1.5} alignItems="center">
+                      <Box
+                        sx={{
+                          width: 40,
+                          height: 40,
+                          borderRadius: '14px',
+                          background: alpha(workspace.accent, 0.18),
+                          display: 'grid',
+                          placeItems: 'center',
+                          color: workspace.accent,
+                        }}
+                      >
+                        {workspace.icon}
+                      </Box>
+                      <Typography variant="subtitle1" fontWeight={600}>
+                        {workspace.title}
+                      </Typography>
+                    </Stack>
+                    <Typography variant="body2" color="text.secondary">
+                      {workspace.description}
+                    </Typography>
+                    <Button
+                      variant="text"
+                      color="inherit"
+                      endIcon={<ArrowForwardIcon />}
+                      sx={{ alignSelf: 'flex-start', fontWeight: 600 }}
+                    >
+                      {workspace.actionLabel}
+                    </Button>
+                  </Stack>
+                </GlassCard>
+              </motion.div>
+            ))}
+          </Stack>
+        </MotionStack>
+
+        <MotionBox
+          variants={sectionVariants}
+          initial="hidden"
+          animate="visible"
+          custom={{ delay: 0.45 }}
+        >
+          <GlassCard variant="light">
+            <Stack spacing={3} sx={{ p: { xs: 3, md: 4 } }}>
+              <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems={{ xs: 'flex-start', md: 'center' }} justifyContent="space-between">
+                <Box>
+                  <Typography variant="h6" fontWeight={600}>
+                    Focus Canvas
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Dive straight into live conversations or secure storage without leaving the dashboard.
+                  </Typography>
+                </Box>
+                <Tabs
+                  value={focusTab}
+                  onChange={(_, value) => setFocusTab(value)}
+                  variant="standard"
+                  sx={{
+                    '& .MuiTab-root': {
+                      textTransform: 'none',
+                      fontWeight: 600,
+                    },
+                  }}
+                >
+                  <Tab value="messages" icon={<ChatIcon />} iconPosition="start" label="Messenger" />
+                  <Tab value="storage" icon={<FolderIcon />} iconPosition="start" label="Storage" />
+                </Tabs>
+              </Stack>
+
+              <Box
+                sx={{
+                  borderRadius: 3,
+                  overflow: 'hidden',
+                  border: `1px solid ${alpha(theme.palette.divider, 0.4)}`,
+                  backgroundColor: alpha(theme.palette.background.paper, 0.6),
+                  height: { xs: 420, md: 460 },
+                  display: 'flex',
+                }}
+              >
+                {focusTab === 'messages' ? (
+                  <ChatInterface
+                    chatId="demo-chat"
+                    chatName="Core Launch Team"
+                    chatType="group"
+                    participants={onlineUsers}
+                    onStartCall={(type) => window.dispatchEvent(new CustomEvent('start-call', { detail: { type } }))}
+                  />
+                ) : (
+                  <FileManager
+                    organizationId="org-demo"
+                    onFileSelect={(file) => window.dispatchEvent(new CustomEvent('storage:file-select', { detail: file }))}
+                  />
+                )}
+              </Box>
+            </Stack>
+          </GlassCard>
+        </MotionBox>
+      </Stack>
     </Box>
   );
 };
+
+export default UnifiedDashboard;

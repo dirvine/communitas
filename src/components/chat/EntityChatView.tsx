@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   Box,
   Paper,
@@ -91,8 +91,14 @@ import { invoke } from '@tauri-apps/api/core';
 import { validateFourWordIdentity } from '../../utils/identity';
 import { webRTCService } from '../../services/communication/WebRTCService';
 import { backendService } from '../../services/api/BackendService';
+import { logger } from '../../services/LoggingService';
 import { useEntityDirectory } from '../../contexts/EntityDirectoryContext';
-import { loadMessages as loadStoredMessages, upsertMessage } from '../../utils/messageStore';
+import {
+  loadMessages as loadCachedMessages,
+  mergeRemoteMessages,
+  upsertMessage as upsertCachedMessage,
+  markMessageStatus as markCachedMessageStatus,
+} from '../../utils/messageStore';
 
 // Transform backend message format to component format
 const transformBackendMessage = (backendMessage: any): Message => {
@@ -217,6 +223,14 @@ export const EntityChatView: React.FC<EntityChatViewProps> = ({
   const [newMessage, setNewMessage] = useState('');
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [activeThread, setActiveThread] = useState<Thread | null>(null);
+  const [threadReply, setThreadReply] = useState('');
+  const [sendingThreadReply, setSendingThreadReply] = useState(false);
+  const [threadLoading, setThreadLoading] = useState(false);
+  const [threadError, setThreadError] = useState<string | null>(null);
+  const parentThreadMessage = useMemo(
+    () => (activeThread ? messages.find(msg => msg.id === activeThread.parentMessageId) : undefined),
+    [activeThread, messages],
+  );
   const [showMembers, setShowMembers] = useState(false);
   const [showAddMember, setShowAddMember] = useState(false);
   const [newMemberAddress, setNewMemberAddress] = useState('');
@@ -230,13 +244,6 @@ export const EntityChatView: React.FC<EntityChatViewProps> = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageInputRef = useRef<HTMLInputElement>(null);
   const dataRequestIdRef = useRef(0);
-
-  const loadLocalMessages = useCallback(() => {
-    const stored = loadStoredMessages(entityType, entityId);
-    if (stored.length > 0) {
-      setMessages(stored);
-    }
-  }, [entityId, entityType]);
 
   // Load entity data and messages
   useEffect(() => {
@@ -255,25 +262,8 @@ export const EntityChatView: React.FC<EntityChatViewProps> = ({
     setNewMessage('');
     setSending(false);
 
-    loadLocalMessages();
     loadEntityData(requestId);
-  }, [entityId, entityType, loadLocalMessages]);
-
-  useEffect(() => {
-    const handler = (event: Event) => {
-      const detail = (event as CustomEvent).detail;
-      if (!detail) return;
-      if (detail.entityId === entityId && detail.entityType === entityType) {
-        loadLocalMessages();
-      }
-    };
-
-    if (typeof window !== 'undefined') {
-      window.addEventListener('messages:updated', handler as EventListener);
-      return () => window.removeEventListener('messages:updated', handler as EventListener);
-    }
-    return () => undefined;
-  }, [entityId, entityType, loadLocalMessages]);
+  }, [entityId, entityType]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -290,13 +280,6 @@ export const EntityChatView: React.FC<EntityChatViewProps> = ({
     guardStateUpdate(requestId, () => setLoading(true));
     try {
       // Always ensure we have something rendered
-      guardStateUpdate(requestId, () => {
-        const current = loadStoredMessages(entityType, entityId);
-        if (current.length === 0) {
-          setMessages(generateDemoMessages());
-        }
-      });
-
       if (entityType !== 'user') {
         const fallbackMembers = generateDemoMembers();
         guardStateUpdate(requestId, () => setMembers(fallbackMembers));
@@ -314,9 +297,18 @@ export const EntityChatView: React.FC<EntityChatViewProps> = ({
         guardStateUpdate(requestId, () => setMembers(fallbackMemberList));
       }
 
+      try {
+        const cachedMessages = await loadCachedMessages(entityType, entityId);
+        if (cachedMessages.length > 0) {
+          guardStateUpdate(requestId, () => setMessages(cachedMessages));
+        }
+      } catch (cacheError) {
+        logger.warn('Failed to load cached messages', { error: cacheError });
+      }
+
       // Try to load real data, but don't block rendering if it fails
       try {
-        const entityMessages = await loadMessages();
+        const entityMessages = await loadRemoteMessages();
         guardStateUpdate(requestId, () => setMessages(entityMessages));
 
         if (entityType !== 'user') {
@@ -324,11 +316,11 @@ export const EntityChatView: React.FC<EntityChatViewProps> = ({
           guardStateUpdate(requestId, () => setMembers(entityMembers));
         }
       } catch (backendError) {
-        console.log('Using fallback data - backend not available:', backendError);
+        logger.info('Using fallback data - backend not available', { error: backendError });
         // Fallback data already set above
       }
     } catch (error) {
-      console.error('Failed to load entity data:', error);
+      logger.error('Failed to load entity data', { error });
       guardStateUpdate(requestId, () => {
         setMessages(generateDemoMessages());
         setMembers(entityType !== 'user' ? generateDemoMembers() : []);
@@ -338,23 +330,21 @@ export const EntityChatView: React.FC<EntityChatViewProps> = ({
     }
   };
 
-  const loadMessages = async (): Promise<Message[]> => {
+  const loadRemoteMessages = async (): Promise<Message[]> => {
     try {
       // Check if backend service is available before calling
       if (!backendService || typeof backendService.getMessages !== 'function') {
-        console.log('Backend service not available, using demo messages');
-        return generateDemoMessages();
+        logger.info('Backend service not available, using demo messages');
+        return mergeRemoteMessages(entityType, entityId, generateDemoMessages());
       }
 
       // Use environment-aware backend service
       const messages = await backendService.getMessages(entityType, entityId);
-      
-      // Transform backend message format to component format
-      return messages.map(transformBackendMessage);
+      const transformed = messages.map(transformBackendMessage);
+      return await mergeRemoteMessages(entityType, entityId, transformed);
     } catch (error) {
-      console.log('Backend service failed, using demo messages:', error);
-      // Fallback to demo data if backend fails
-      return generateDemoMessages();
+      logger.info('Backend service failed, using demo messages', { error });
+      return mergeRemoteMessages(entityType, entityId, generateDemoMessages());
     }
   };
 
@@ -362,7 +352,7 @@ export const EntityChatView: React.FC<EntityChatViewProps> = ({
     try {
       // Check if backend service is available before calling
       if (!backendService || typeof backendService.getMembers !== 'function') {
-        console.log('Backend service not available, using demo members');
+        logger.info('Backend service not available, using demo members');
         return generateDemoMembers();
       }
 
@@ -372,7 +362,7 @@ export const EntityChatView: React.FC<EntityChatViewProps> = ({
       // Transform backend member format to component format
       return members.map(transformBackendMember);
     } catch (error) {
-      console.log('Backend service failed, using demo members:', error);
+      logger.info('Backend service failed, using demo members', { error });
       // Fallback to demo data if backend fails  
       return generateDemoMembers();
     }
@@ -490,7 +480,7 @@ export const EntityChatView: React.FC<EntityChatViewProps> = ({
       setMessages(prev => [...prev, message]);
       setNewMessage('');
       setReplyingTo(null);
-      upsertMessage(entityType, entityId, message);
+      await upsertCachedMessage(entityType, entityId, message);
 
       queueMessage({
         id: optimisticId,
@@ -500,15 +490,97 @@ export const EntityChatView: React.FC<EntityChatViewProps> = ({
         timestamp,
       });
     } catch (error) {
-      console.error('Failed to send message:', error);
+      logger.error('Failed to send message', { error });
       // Update message status to failed
-      setMessages(prev => prev.map(msg => 
+      setMessages(prev => prev.map(msg =>
         msg.id === optimisticId
           ? { ...msg, status: 'failed' as const }
           : msg
       ));
+      await markCachedMessageStatus(entityType, entityId, optimisticId, 'failed');
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleSendThreadReply = async () => {
+    if (!threadReply.trim() || sendingThreadReply || !activeThread) return;
+
+    setSendingThreadReply(true);
+    const optimisticId = `thread-temp-${Date.now()}`;
+    try {
+      const timestamp = new Date().toISOString();
+      const threadMessage: Message = {
+        id: optimisticId,
+        sender: {
+          id: currentUserId,
+          name: 'You',
+          fourWordAddress: currentUserFourWords,
+        },
+        content: threadReply.trim(),
+        timestamp,
+        type: 'text',
+        status: 'sending',
+        reactions: [],
+        threadId: activeThread.id,
+      };
+
+      // Optimistically update thread messages via Automerge
+      setActiveThread(prev => prev ? {
+        ...prev,
+        messages: [...prev.messages, threadMessage],
+        lastActivity: timestamp,
+      } : null);
+
+      setThreadReply('');
+
+      // Persist to Automerge storage
+      await upsertCachedMessage('thread', activeThread.id, threadMessage);
+
+      // Queue for backend sync (thread messages sync under parent channel/entity)
+      queueMessage({
+        id: optimisticId,
+        entityId: entityId, // Use parent entity ID
+        entityType: entityType === 'organization' ? 'group' : entityType, // Convert org to group
+        content: threadMessage.content,
+        timestamp,
+      });
+
+      // Update parent message thread count
+      const parentMsg = messages.find(m => m.id === activeThread.parentMessageId);
+      if (parentMsg) {
+        const updatedParent = {
+          ...parentMsg,
+          threadCount: (parentMsg.threadCount || 0) + 1,
+        };
+        setMessages(prev => prev.map(msg =>
+          msg.id === activeThread.parentMessageId ? updatedParent : msg
+        ));
+        await upsertCachedMessage(entityType, entityId, updatedParent);
+      }
+
+      // Mark as sent after a brief delay (simulating network)
+      setTimeout(async () => {
+        setActiveThread(prev => prev ? {
+          ...prev,
+          messages: prev.messages.map(msg =>
+            msg.id === optimisticId ? { ...msg, status: 'sent' as const } : msg
+          ),
+        } : null);
+        await markCachedMessageStatus('thread', activeThread.id, optimisticId, 'sent');
+      }, 500);
+    } catch (error) {
+      logger.error('Failed to send thread reply', { error });
+      // Update message status to failed
+      setActiveThread(prev => prev ? {
+        ...prev,
+        messages: prev.messages.map(msg =>
+          msg.id === optimisticId ? { ...msg, status: 'failed' as const } : msg
+        ),
+      } : null);
+      await markCachedMessageStatus('thread', activeThread.id, optimisticId, 'failed');
+    } finally {
+      setSendingThreadReply(false);
     }
   };
 
@@ -550,7 +622,7 @@ export const EntityChatView: React.FC<EntityChatViewProps> = ({
       setShowAddMember(false);
 
     } catch (error) {
-      console.error('Failed to add member:', error);
+      logger.error('Failed to add member', { error });
       alert('Failed to add member. Please try again.');
     }
   };
@@ -566,7 +638,7 @@ export const EntityChatView: React.FC<EntityChatViewProps> = ({
       // For demo, remove from local state
       setMembers(prev => prev.filter(m => m.id !== member.id));
     } catch (error) {
-      console.error('Failed to remove member:', error);
+      logger.error('Failed to remove member', { error });
       alert('Failed to remove member. Please try again.');
     }
   };
@@ -575,7 +647,7 @@ export const EntityChatView: React.FC<EntityChatViewProps> = ({
     try {
       await webRTCService.startAudioCall(entityId, entityType);
     } catch (error) {
-      console.error('Failed to start audio call:', error);
+      logger.error('Failed to start audio call', { error });
       alert('Failed to start audio call. Please check your microphone permissions.');
     }
   };
@@ -584,28 +656,81 @@ export const EntityChatView: React.FC<EntityChatViewProps> = ({
     try {
       await webRTCService.startVideoCall(entityId, entityType);
     } catch (error) {
-      console.error('Failed to start video call:', error);
+      logger.error('Failed to start video call', { error });
       alert('Failed to start video call. Please check your camera permissions.');
     }
   };
 
+  const collectThreadParticipants = (threadMessages: Message[]): string[] => {
+    const participants = new Set<string>();
+    threadMessages.forEach(msg => {
+      if (msg.sender?.fourWordAddress) {
+        participants.add(msg.sender.fourWordAddress);
+      } else if (msg.sender?.id) {
+        participants.add(msg.sender.id);
+      }
+    });
+    return Array.from(participants);
+  };
+
   const handleCreateThread = async (message: Message) => {
     try {
-      // Create thread using environment-aware backend service
-      const threadId = await backendService.createThread(message.id, entityType, entityId);
-      
-      // TODO: Open thread view UI
-      console.log('Thread created:', threadId);
-      setActiveThread({ 
-        id: threadId, 
+      setThreadError(null);
+      setThreadLoading(true);
+
+      let threadId = message.threadId;
+      let parentMessage = message;
+
+      if (!threadId) {
+        threadId = await backendService.createThread(message.id, entityType, entityId);
+        parentMessage = {
+          ...message,
+          threadId,
+        };
+      }
+
+      const cachedThreadMessages = await loadCachedMessages('thread', threadId);
+      setActiveThread({
+        id: threadId,
         parentMessageId: message.id,
-        messages: [],
-        participants: [],
-        lastActivity: new Date().toISOString()
+        messages: cachedThreadMessages,
+        participants: collectThreadParticipants(cachedThreadMessages),
+        lastActivity:
+          cachedThreadMessages.length > 0
+            ? cachedThreadMessages[cachedThreadMessages.length - 1].timestamp
+            : new Date().toISOString(),
+      });
+
+      const remoteThreadMessages = await backendService.getThreadMessages(threadId);
+      const normalizedThreadMessages = (remoteThreadMessages ?? []).map(transformBackendMessage);
+      const mergedThreadMessages = await mergeRemoteMessages('thread', threadId, normalizedThreadMessages);
+
+      const enrichedParent: Message = {
+        ...parentMessage,
+        threadId,
+        threadCount: mergedThreadMessages.length,
+      };
+
+      setMessages(prev =>
+        prev.map(msg => (msg.id === message.id ? enrichedParent : msg)),
+      );
+      await upsertCachedMessage(entityType, entityId, enrichedParent);
+
+      setActiveThread({
+        id: threadId,
+        parentMessageId: message.id,
+        messages: mergedThreadMessages,
+        participants: collectThreadParticipants(mergedThreadMessages),
+        lastActivity:
+          mergedThreadMessages.length > 0
+            ? mergedThreadMessages[mergedThreadMessages.length - 1].timestamp
+            : new Date().toISOString(),
       });
     } catch (error) {
-      console.error('Failed to create thread:', error);
-      alert('Failed to create thread. Please try again.');
+      logger.error('Failed to open thread', { error });
+      setThreadError('Unable to load thread. Please try again.');
+    } finally {
+      setThreadLoading(false);
     }
   };
 
@@ -1079,6 +1204,108 @@ export const EntityChatView: React.FC<EntityChatViewProps> = ({
                 </ListItem>
               ))}
             </List>
+          </Box>
+        </SwipeableDrawer>
+      )}
+
+      {activeThread && (
+        <SwipeableDrawer
+          anchor={isMobile ? 'bottom' : 'right'}
+          open={Boolean(activeThread)}
+          onClose={() => setActiveThread(null)}
+          onOpen={() => undefined}
+          disableSwipeToOpen={!isMobile}
+          PaperProps={
+            isMobile
+              ? { sx: { height: '65vh' } }
+              : { sx: { width: 420, maxWidth: '100vw' } }
+          }
+        >
+          <Box sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Stack direction="row" alignItems="center" justifyContent="space-between">
+              <Typography variant="h6">Thread</Typography>
+              <IconButton onClick={() => setActiveThread(null)}>
+                <CloseIcon />
+              </IconButton>
+            </Stack>
+
+            {parentThreadMessage && (
+              <Paper variant="outlined" sx={{ p: 1.5 }}>
+                <Typography variant="caption" color="text.secondary">
+                  Parent message
+                </Typography>
+                <Typography variant="subtitle2" sx={{ mt: 0.5 }}>
+                  {parentThreadMessage.sender?.name || parentThreadMessage.sender?.id || 'Unknown'}
+                </Typography>
+                <Typography variant="body2">
+                  {parentThreadMessage.content}
+                </Typography>
+              </Paper>
+            )}
+
+            {threadLoading && <LinearProgress />}
+            {threadError && <Alert severity="error">{threadError}</Alert>}
+
+            <Box sx={{ flex: 1, overflowY: 'auto' }}>
+              {activeThread.messages.length === 0 && !threadLoading ? (
+                <Typography color="text.secondary">No replies yet.</Typography>
+              ) : (
+                <Stack spacing={1.5}>
+                  {activeThread.messages.map(threadMessage => (
+                    <Paper key={threadMessage.id} variant="outlined" sx={{ p: 1.5 }}>
+                      <Stack direction="row" alignItems="center" spacing={1.5}>
+                        <Avatar sx={{ width: 32, height: 32 }}>
+                          {(threadMessage.sender?.name || threadMessage.sender?.id || '?')[0]}
+                        </Avatar>
+                        <Box sx={{ flex: 1 }}>
+                          <Typography variant="subtitle2">
+                            {threadMessage.sender?.name || threadMessage.sender?.id || 'Unknown'}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {new Date(threadMessage.timestamp).toLocaleString()}
+                          </Typography>
+                        </Box>
+                      </Stack>
+                      <Typography variant="body2" sx={{ mt: 1 }}>
+                        {threadMessage.content}
+                      </Typography>
+                    </Paper>
+                  ))}
+                </Stack>
+              )}
+            </Box>
+
+            {/* Thread Reply Composer */}
+            <Box sx={{ borderTop: 1, borderColor: 'divider', pt: 2 }}>
+              <TextField
+                fullWidth
+                size="small"
+                placeholder="Reply to thread..."
+                value={threadReply}
+                onChange={(e) => setThreadReply(e.target.value)}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendThreadReply();
+                  }
+                }}
+                disabled={sendingThreadReply}
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton
+                        size="small"
+                        onClick={handleSendThreadReply}
+                        disabled={!threadReply.trim() || sendingThreadReply}
+                        color="primary"
+                      >
+                        {sendingThreadReply ? <CircularProgress size={20} /> : <SendIcon />}
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                }}
+              />
+            </Box>
           </Box>
         </SwipeableDrawer>
       )}

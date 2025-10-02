@@ -1,5 +1,6 @@
 // Environment-aware API service that works in both browser and Tauri
 import { invoke } from '@tauri-apps/api/core';
+import { logger } from '../LoggingService';
 
 // Detect runtime environment
 const isTauri = () => {
@@ -39,7 +40,7 @@ class BrowserAPIService {
       messages.push(message);
       localStorage.setItem(key, JSON.stringify(messages.slice(-50))); // Keep last 50
     } catch (error) {
-      console.error('Failed to store message:', error);
+      logger.error('Failed to store message', { error, entityType, entityId });
     }
 
     return message;
@@ -101,7 +102,7 @@ class BrowserAPIService {
       localStorage.setItem(key, JSON.stringify(members));
       return true;
     } catch (error) {
-      console.error('Failed to add member:', error);
+      logger.error('Failed to add member', { error, entityType, entityId, fourWordAddress });
       return false;
     }
   }
@@ -115,14 +116,31 @@ class BrowserAPIService {
       localStorage.setItem(key, JSON.stringify(filtered));
       return true;
     } catch (error) {
-      console.error('Failed to remove member:', error);
+      logger.error('Failed to remove member', { error, entityType, entityId, memberId });
       return false;
     }
   }
 
   async createThread(messageId: string, entityType: string, entityId: string): Promise<string> {
-    // For browser, just return a mock thread ID
-    return `thread_${Date.now()}`;
+    // For browser, create a mock thread and seed local storage for consistency
+    const threadId = `thread_${Date.now()}`;
+    try {
+      const key = `messages-thread-${threadId}`;
+      localStorage.setItem(key, JSON.stringify([]));
+    } catch (error) {
+      logger.warn('Failed to seed local thread storage', { error, threadId });
+    }
+    return threadId;
+  }
+
+  async getThreadMessages(threadId: string): Promise<any[]> {
+    const key = `messages-thread-${threadId}`;
+    try {
+      const stored = localStorage.getItem(key);
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
   }
 }
 
@@ -137,22 +155,32 @@ class BackendService {
   async getMessages(entityType: string, entityId: string): Promise<any[]> {
     if (isTauri()) {
       try {
-        switch (entityType) {
-          case 'group':
-            return await invoke('core_group_get_messages', { groupId: entityId });
-          case 'channel':
-            return await invoke('core_channel_get_messages', { channelId: entityId });
-          case 'user':
-            return await invoke('core_get_direct_messages', { userId: entityId });
-          case 'project':
-            return await invoke('core_project_get_messages', { projectId: entityId });
-          case 'organization':
-            return await invoke('core_organization_get_messages', { organizationId: entityId });
-          default:
-            return [];
+        if (entityType === 'channel') {
+          return await invoke('core_channel_get_messages', {
+            channel_id: entityId,
+            limit: 200,
+          });
         }
+
+        if (entityType === 'thread') {
+          return await invoke('core_thread_get_messages', {
+            thread_id: entityId,
+          });
+        }
+
+        // Generic fallback for other entity types (not yet supported natively)
+        const fallback = await invoke('core_messages_list', {
+          entityId,
+          limit: 100,
+          offset: 0,
+        });
+        if (Array.isArray(fallback) && fallback.length > 0) {
+          return fallback;
+        }
+
+        return this.browserAPI.getMessages(entityType, entityId);
       } catch (error) {
-        console.warn('Tauri backend call failed, falling back to browser API:', error);
+        logger.warn('Tauri backend call failed, falling back to browser API', { error, entityType, entityId });
         return this.browserAPI.getMessages(entityType, entityId);
       }
     } else {
@@ -163,37 +191,42 @@ class BackendService {
   async sendMessage(entityType: string, entityId: string, content: string, replyToId?: string): Promise<any> {
     if (isTauri()) {
       try {
-        switch (entityType) {
-          case 'group':
-            return await invoke('core_send_message_to_group', { 
-              groupId: entityId, content, replyToId 
-            });
-          case 'channel':
-            return await invoke('core_send_message_to_channel', { 
-              channelId: entityId, content, replyToId 
-            });
-          case 'user':
-            return await invoke('core_send_direct_message', { 
-              userId: entityId, content, replyToId 
-            });
-          case 'project':
-            return await invoke('core_send_message_to_project', { 
-              projectId: entityId, content, replyToId 
-            });
-          case 'organization':
-            return await invoke('core_send_message_to_organization', { 
-              organizationId: entityId, content, replyToId 
-            });
-          default:
-            throw new Error(`Unsupported entity type: ${entityType}`);
+        if (entityType === 'channel') {
+          return await invoke('core_send_message_to_channel', {
+            channel_id: entityId,
+            text: content,
+            reply_to_id: replyToId,
+          });
         }
+
+        logger.warn('Send not implemented for entity type, falling back to browser API', { entityType });
+        return this.browserAPI.sendMessage(entityType, entityId, content, replyToId);
       } catch (error) {
-        console.warn('Tauri backend call failed, falling back to browser API:', error);
+        logger.warn('Tauri backend call failed, falling back to browser API', { error, entityType, entityId });
         return this.browserAPI.sendMessage(entityType, entityId, content, replyToId);
       }
     } else {
       return this.browserAPI.sendMessage(entityType, entityId, content, replyToId);
     }
+  }
+
+  async getThreadMessages(threadId: string): Promise<any[]> {
+    if (isTauri()) {
+      try {
+        const threadMessages = await invoke('core_thread_get_messages', {
+          thread_id: threadId,
+        });
+        if (Array.isArray(threadMessages) && threadMessages.length > 0) {
+          return threadMessages;
+        }
+        return this.browserAPI.getThreadMessages(threadId);
+      } catch (error) {
+        logger.warn('Tauri thread fetch failed, falling back to browser API', { error, threadId });
+        return this.browserAPI.getThreadMessages(threadId);
+      }
+    }
+
+    return this.browserAPI.getThreadMessages(threadId);
   }
 
   async getMembers(entityType: string, entityId: string): Promise<any[]> {
@@ -212,7 +245,7 @@ class BackendService {
             return [];
         }
       } catch (error) {
-        console.warn('Tauri backend call failed, falling back to browser API:', error);
+        logger.warn('Tauri backend call failed, falling back to browser API', { error, entityType, entityId });
         return this.browserAPI.getMembers(entityType, entityId);
       }
     } else {
@@ -249,7 +282,7 @@ class BackendService {
             return false;
         }
       } catch (error) {
-        console.warn('Tauri backend call failed, falling back to browser API:', error);
+        logger.warn('Tauri backend call failed, falling back to browser API', { error, entityType, entityId, fourWordAddress });
         return this.browserAPI.addMember(entityType, entityId, fourWordAddress, role);
       }
     } else {
@@ -283,7 +316,7 @@ class BackendService {
             return false;
         }
       } catch (error) {
-        console.warn('Tauri backend call failed, falling back to browser API:', error);
+        logger.warn('Tauri backend call failed, falling back to browser API', { error, entityType, entityId, memberId });
         return this.browserAPI.removeMember(entityType, entityId, memberId);
       }
     } else {
@@ -294,41 +327,34 @@ class BackendService {
   async createThread(messageId: string, entityType: string, entityId: string): Promise<string> {
     if (isTauri()) {
       try {
-        // Use entity-specific thread creation commands for better backend integration
-        switch (entityType) {
-          case 'group':
-            return await invoke<string>('core_create_group_thread', { 
-              groupId: entityId, messageId 
-            });
-          case 'channel':
-            return await invoke<string>('core_create_channel_thread', { 
-              channelId: entityId, messageId 
-            });
-          case 'user':
-            return await invoke<string>('core_create_direct_thread', { 
-              userId: entityId, messageId 
-            });
-          case 'project':
-            return await invoke<string>('core_create_project_thread', { 
-              projectId: entityId, messageId 
-            });
-          case 'organization':
-            return await invoke<string>('core_create_organization_thread', { 
-              organizationId: entityId, messageId 
-            });
-          default:
-            // Fallback to generic thread creation
-            return await invoke<string>('core_create_message_thread', { 
-              messageId, entityType, entityId 
-            });
+        if (entityType === 'channel') {
+          const thread = await invoke<any>('core_create_thread', {
+            channel_id: entityId,
+            parent_message_id: messageId,
+          });
+
+          if (typeof thread === 'string') {
+            return thread;
+          }
+
+          if (thread) {
+            if (typeof thread.id === 'string') {
+              return thread.id;
+            }
+            if (typeof thread.thread_id === 'string') {
+              return thread.thread_id;
+            }
+            if (typeof thread.threadId === 'string') {
+              return thread.threadId;
+            }
+          }
         }
       } catch (error) {
-        console.warn('Tauri backend call failed, falling back to browser API:', error);
-        return this.browserAPI.createThread(messageId, entityType, entityId);
+        logger.warn('Tauri backend call failed, falling back to browser API', { error, messageId, entityType, entityId });
       }
-    } else {
-      return this.browserAPI.createThread(messageId, entityType, entityId);
     }
+
+    return this.browserAPI.createThread(messageId, entityType, entityId);
   }
 }
 

@@ -93,11 +93,17 @@ export const EnhancedEntityDialog: React.FC<EnhancedEntityDialogProps> = ({
   mode: initialMode = 'create',
   isOnline = false,
 }) => {
-  const { createContact, addExistingContact } = useEntityDirectory();
+  const {
+    createContact,
+    addExistingContact,
+    createOrganization,
+    createGroup,
+  } = useEntityDirectory();
 
   // State
   const [mode, setMode] = useState<EntityOperationMode>(initialMode);
   const [displayName, setDisplayName] = useState('');
+  const [description, setDescription] = useState('');
   const [fourWords, setFourWords] = useState('');
   const [email, setEmail] = useState('');
   const [relationship, setRelationship] = useState<'friend' | 'family' | 'colleague' | 'acquaintance'>('colleague');
@@ -109,6 +115,7 @@ export const EnhancedEntityDialog: React.FC<EnhancedEntityDialogProps> = ({
   useEffect(() => {
     if (!open) {
       setDisplayName('');
+      setDescription('');
       setFourWords('');
       setEmail('');
       setRelationship('colleague');
@@ -164,17 +171,40 @@ export const EnhancedEntityDialog: React.FC<EnhancedEntityDialogProps> = ({
       let result: EntityOperationResult;
 
       if (mode === 'create') {
-        // Create new contact (works offline with temp four-words)
-        const input: CreateNewContactInput = {
-          displayName: displayName.trim(),
-          email: email.trim() || undefined,
-          relationship,
-        };
-        result = await createContact(input);
+        // Create new entity based on type
+        switch (entityType) {
+          case 'contact':
+            const contactInput: CreateNewContactInput = {
+              displayName: displayName.trim(),
+              email: email.trim() || undefined,
+              relationship,
+            };
+            result = await createContact(contactInput);
+            break;
+
+          case 'organization':
+            result = await createOrganization({
+              displayName: displayName.trim(),
+              description: description.trim() || undefined,
+            });
+            break;
+
+          case 'group':
+            result = await createGroup({
+              displayName: displayName.trim(),
+              description: description.trim() || undefined,
+            });
+            break;
+
+          default:
+            setError(`Creating ${entityType} is not yet supported`);
+            setLoading(false);
+            return;
+        }
       } else {
-        // Add existing contact (requires online, fetches from DHT)
+        // Add existing entity (requires online, fetches from DHT)
         if (!isOnline) {
-          setError('Must be online to add existing contacts from the network');
+          setError('Must be online to add existing entities from the network');
           setLoading(false);
           return;
         }
@@ -184,12 +214,19 @@ export const EnhancedEntityDialog: React.FC<EnhancedEntityDialogProps> = ({
           return;
         }
 
-        const input: AddExistingContactInput = {
-          fourWords: fourWords.trim().toLowerCase().replace(/\s+/g, '-'),
-          displayName: displayName.trim() || undefined,
-          relationship,
-        };
-        result = await addExistingContact(input);
+        // Only contacts support "add existing" for now
+        if (entityType === 'contact') {
+          const input: AddExistingContactInput = {
+            fourWords: fourWords.trim().toLowerCase().replace(/\s+/g, '-'),
+            displayName: displayName.trim() || undefined,
+            relationship,
+          };
+          result = await addExistingContact(input);
+        } else {
+          setError(`Adding existing ${entityType} is not yet supported`);
+          setLoading(false);
+          return;
+        }
       }
 
       if (result.success) {
@@ -215,20 +252,33 @@ export const EnhancedEntityDialog: React.FC<EnhancedEntityDialogProps> = ({
     }
   };
 
+  const getEntityLabel = () => {
+    switch (entityType) {
+      case 'organization': return 'Organization';
+      case 'group': return 'Group';
+      case 'contact': return 'Contact';
+      case 'channel': return 'Channel';
+      case 'project': return 'Project';
+      default: return 'Entity';
+    }
+  };
+
   const getDialogTitle = () => {
+    const label = getEntityLabel();
     if (mode === 'create') {
-      return isOnline ? 'Create New Contact' : 'Create New Contact (Offline)';
+      return isOnline ? `Create New ${label}` : `Create New ${label} (Offline)`;
     } else {
-      return 'Add Existing Contact';
+      return `Add Existing ${label}`;
     }
   };
 
   const getSubmitButtonText = () => {
+    const label = getEntityLabel();
     if (loading) return 'Processing...';
     if (mode === 'create') {
-      return isOnline ? 'Create Contact' : 'Create Offline';
+      return isOnline ? `Create ${label}` : 'Create Offline';
     } else {
-      return 'Add Contact';
+      return `Add ${label}`;
     }
   };
 
@@ -279,8 +329,8 @@ export const EnhancedEntityDialog: React.FC<EnhancedEntityDialogProps> = ({
         {/* Offline Notice for Add Mode */}
         {!isOnline && (
           <Alert severity="warning" sx={{ mb: 2 }}>
-            You're currently offline. You can create new contacts with temporary identities
-            that will be upgraded when you reconnect. Adding existing contacts requires network access.
+            You're currently offline. You can create new {entityType}s with temporary identities
+            that will be upgraded when you reconnect. Adding existing {entityType}s requires network access.
           </Alert>
         )}
 
@@ -303,7 +353,7 @@ export const EnhancedEntityDialog: React.FC<EnhancedEntityDialogProps> = ({
               value={fourWords}
               onChange={(e) => handleFourWordsChange(e.target.value)}
               error={!!validationError}
-              helperText={validationError || 'Enter the person\'s four-word network identity'}
+              helperText={validationError || `Enter the ${entityType}'s four-word network identity`}
               disabled={loading}
               required
               sx={{
@@ -316,13 +366,13 @@ export const EnhancedEntityDialog: React.FC<EnhancedEntityDialogProps> = ({
 
           <TextField
             autoFocus={mode === 'create'}
-            label="Display Name"
-            placeholder="Alice Smith"
+            label={entityType === 'contact' ? 'Display Name' : 'Name'}
+            placeholder={entityType === 'organization' ? 'Acme Corp' : entityType === 'group' ? 'Team Alpha' : 'Alice Smith'}
             fullWidth
             variant="outlined"
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
-            helperText={mode === 'add' ? 'Optional: Override the network display name' : 'Required'}
+            helperText={mode === 'add' ? 'Optional: Override the network name' : 'Required'}
             disabled={loading}
             required={mode === 'create'}
             sx={{
@@ -332,7 +382,28 @@ export const EnhancedEntityDialog: React.FC<EnhancedEntityDialogProps> = ({
             }}
           />
 
-          {mode === 'create' && (
+          {/* Description field for organizations and groups */}
+          {(entityType === 'organization' || entityType === 'group' || entityType === 'project' || entityType === 'channel') && mode === 'create' && (
+            <TextField
+              label="Description"
+              placeholder={`Describe the ${entityType}...`}
+              fullWidth
+              multiline
+              rows={3}
+              variant="outlined"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              disabled={loading}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: designTokens.borderRadius.md,
+                },
+              }}
+            />
+          )}
+
+          {/* Email field for contacts only */}
+          {entityType === 'contact' && mode === 'create' && (
             <TextField
               label="Email (Optional)"
               type="email"
@@ -350,22 +421,25 @@ export const EnhancedEntityDialog: React.FC<EnhancedEntityDialogProps> = ({
             />
           )}
 
-          <FormControl fullWidth>
-            <FormLabel sx={{ mb: 1, fontWeight: 500 }}>Relationship</FormLabel>
-            <Select
-              value={relationship}
-              onChange={(e) => setRelationship(e.target.value as typeof relationship)}
-              disabled={loading}
-              sx={{
-                borderRadius: designTokens.borderRadius.md,
-              }}
-            >
-              <MenuItem value="colleague">Colleague</MenuItem>
-              <MenuItem value="friend">Friend</MenuItem>
-              <MenuItem value="family">Family</MenuItem>
-              <MenuItem value="acquaintance">Acquaintance</MenuItem>
-            </Select>
-          </FormControl>
+          {/* Relationship field for contacts only */}
+          {entityType === 'contact' && (
+            <FormControl fullWidth>
+              <FormLabel sx={{ mb: 1, fontWeight: 500 }}>Relationship</FormLabel>
+              <Select
+                value={relationship}
+                onChange={(e) => setRelationship(e.target.value as typeof relationship)}
+                disabled={loading}
+                sx={{
+                  borderRadius: designTokens.borderRadius.md,
+                }}
+              >
+                <MenuItem value="colleague">Colleague</MenuItem>
+                <MenuItem value="friend">Friend</MenuItem>
+                <MenuItem value="family">Family</MenuItem>
+                <MenuItem value="acquaintance">Acquaintance</MenuItem>
+              </Select>
+            </FormControl>
+          )}
 
           {mode === 'create' && !isOnline && (
             <Alert severity="info" icon={<OfflineIcon />}>

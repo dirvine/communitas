@@ -229,6 +229,11 @@ export const ModernNavigation: React.FC<ModernNavigationProps> = ({
     onNavigate(`/user/${contact.id}`, contact);
   };
 
+  // Helper to check if entity is selected
+  const isEntitySelected = (entityType: string, entityId: string): boolean => {
+    return nav.state.entityType === entityType && nav.state.entityId === entityId;
+  };
+
   // Filter entities based on search
   const filteredEntities = useMemo(() => {
     if (!searchQuery) {
@@ -295,6 +300,7 @@ export const ModernNavigation: React.FC<ModernNavigationProps> = ({
             {filteredEntities.organizations.map((org) => (
               <StyledListItemButton
                 key={org.id}
+                selected={isEntitySelected('organization', org.id)}
                 onClick={() => onNavigate('/organization', org)}
               >
                 <Stack direction="row" spacing={2} alignItems="center" width="100%">
@@ -347,6 +353,7 @@ export const ModernNavigation: React.FC<ModernNavigationProps> = ({
             {filteredEntities.personalGroups.map((group) => (
               <StyledListItemButton
                 key={group.id}
+                selected={isEntitySelected('group', group.id)}
                 onClick={() => onNavigate('/group', group)}
               >
                 <Stack direction="row" spacing={2} alignItems="center" width="100%">
@@ -412,6 +419,7 @@ export const ModernNavigation: React.FC<ModernNavigationProps> = ({
             {filteredEntities.personalUsers.map((user) => (
               <StyledListItemButton
                 key={user.id}
+                selected={isEntitySelected('individual', user.id)}
                 onClick={() => handleNavigateContact(user)}
               >
                 <Stack direction="row" spacing={2} alignItems="center" width="100%">

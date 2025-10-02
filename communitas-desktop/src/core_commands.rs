@@ -739,9 +739,12 @@ pub async fn subscribe_to_entity(
     user_id: String,
 ) -> Result<(), String> {
     let guard = shared.read().await;
-    let _ctx = guard
-        .as_ref()
-        .ok_or_else(|| "Core not initialized".to_string())?;
+
+    // Gracefully handle offline/uninitialized state
+    if guard.as_ref().is_none() {
+        tracing::debug!("subscribe_to_entity skipped - Core not initialized (offline mode)");
+        return Ok(()); // Return success to avoid error notifications
+    }
 
     tracing::debug!("subscribe_to_entity called for entity_id={}, user_id={}", entity_id, user_id);
 
@@ -757,9 +760,12 @@ pub async fn unsubscribe_from_entity(
     user_id: String,
 ) -> Result<(), String> {
     let guard = shared.read().await;
-    let _ctx = guard
-        .as_ref()
-        .ok_or_else(|| "Core not initialized".to_string())?;
+
+    // Gracefully handle offline/uninitialized state
+    if guard.as_ref().is_none() {
+        tracing::debug!("unsubscribe_from_entity skipped - Core not initialized (offline mode)");
+        return Ok(()); // Return success to avoid error notifications
+    }
 
     tracing::debug!("unsubscribe_from_entity called for entity_id={}, user_id={}", entity_id, user_id);
 

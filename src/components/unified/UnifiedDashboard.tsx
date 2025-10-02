@@ -756,7 +756,7 @@ export const UnifiedDashboard: React.FC<UnifiedDashboardProps> = ({
               >
                 {focusTab === 'messages' ? (
                   <ChatInterface
-                    chatId="demo-chat"
+                    chatId="communitas-general"
                     chatName="Core Launch Team"
                     chatType="group"
                     participants={onlineUsers}

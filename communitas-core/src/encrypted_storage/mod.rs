@@ -198,7 +198,7 @@ impl EncryptedStorageManager {
         &self,
         four_words: &str,
         password: &str,
-        passkey: Option<Vec<u8>>,
+        _passkey: Option<Vec<u8>>,
     ) -> Result<Session> {
         let normalized = self.normalize_four_words(four_words);
 

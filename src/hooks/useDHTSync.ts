@@ -81,6 +81,12 @@ export const useDHTSync = ({
   const unlistenersRef = useRef<UnlistenFn[]>([]);
   const reconnectTimerRef = useRef<NodeJS.Timeout>();
   const subscribedEntitiesRef = useRef<Set<string>>(new Set());
+  const stateRef = useRef(state);
+
+  // Keep stateRef in sync with state
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
   // Subscribe to an entity for real-time updates
   const subscribeToEntity = useCallback(async (entityId: string) => {
@@ -91,6 +97,12 @@ export const useDHTSync = ({
 
     if (subscribedEntitiesRef.current.has(entityId)) {
       return; // Already subscribed
+    }
+
+    // Check CURRENT connection state (not stale closure)
+    if (!stateRef.current.connected) {
+      console.debug(`[DHT] Skipping subscription to ${entityId} - not connected`);
+      return;
     }
 
     try {
@@ -108,9 +120,8 @@ export const useDHTSync = ({
       console.log(`Subscribed to entity: ${entityId}`);
     } catch (error) {
       console.error(`Failed to subscribe to entity ${entityId}:`, error);
-      enqueueSnackbar(`Failed to subscribe to updates for ${entityId}`, {
-        variant: 'error',
-      });
+      // Don't show error notifications - subscription failures are expected in offline mode
+      // and will be handled by the backend gracefully
     }
   }, [userId, enqueueSnackbar]);
 
@@ -253,13 +264,11 @@ export const useDHTSync = ({
 
     setupListeners();
 
-    // Subscribe to initial entities
-    entityIds.forEach(entityId => {
-      subscribeToEntity(entityId);
+    // Initial status check (do this first to determine if we're connected)
+    checkSyncStatus().then(() => {
+      // Only subscribe to initial entities if we're connected
+      // The subscription will be handled by the effect below once connection is established
     });
-
-    // Initial status check
-    checkSyncStatus();
 
     // Setup periodic status check
     const statusInterval = setInterval(checkSyncStatus, 30000); // Check every 30 seconds
@@ -284,8 +293,14 @@ export const useDHTSync = ({
     };
   }, [userId]);
 
-  // Handle entity subscription changes
+  // Handle entity subscription changes (only when connected)
   useEffect(() => {
+    // Skip if not connected
+    if (!state.connected) {
+      console.debug('[DHT] Skipping entity subscriptions - not connected');
+      return;
+    }
+
     const currentEntities = new Set(entityIds);
     const subscribedEntities = subscribedEntitiesRef.current;
 
@@ -302,7 +317,7 @@ export const useDHTSync = ({
         unsubscribeFromEntity(entityId);
       }
     });
-  }, [entityIds, subscribeToEntity, unsubscribeFromEntity]);
+  }, [entityIds, state.connected, subscribeToEntity, unsubscribeFromEntity]);
 
   // Auto-reconnect logic
   useEffect(() => {

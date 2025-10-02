@@ -390,7 +390,7 @@ impl TofuValidator {
         }
         
         // Reconstruct the rotation message that was signed
-        let rotation_message = self.build_rotation_message(
+        let _rotation_message = self.build_rotation_message(
             &pinned.ml_dsa_key_hash,
             &identity.root_record.ml_dsa_key_hash,
             &identity.four_words.as_str(),

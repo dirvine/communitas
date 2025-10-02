@@ -156,8 +156,19 @@ const defaultCapabilities: CollaborationCapabilities = {
 };
 
 const generateFourWords = async (): Promise<string> => {
-  // Use real saorsa-core four-word generation
-  return await invoke<string>('generate_four_word_identity');
+  // Check if running in Tauri
+  if (typeof window !== 'undefined' && '__TAURI__' in window) {
+    // Use real saorsa-core four-word generation
+    return await invoke<string>('generate_four_word_identity');
+  }
+
+  // Browser fallback: generate mock four-words for development
+  const words = ['ocean', 'forest', 'mountain', 'river', 'eagle', 'wolf', 'star', 'moon',
+                 'thunder', 'crystal', 'storm', 'phoenix', 'cloud', 'breeze', 'flame', 'frost'];
+  const randomWords = Array.from({ length: 4 }, () =>
+    words[Math.floor(Math.random() * words.length)]
+  );
+  return randomWords.join('-');
 };
 
 const createNetworkIdentity = (isOwned: boolean = true, providedFourWords?: string): NetworkIdentity => {
@@ -570,12 +581,8 @@ export const EntityDirectoryProvider: React.FC<EntityDirectoryProviderProps> = (
   // ============= Create Operations (Generate New Four-Words) =============
 
   const createOrganization = useCallback(async (input: CreateNewOrganizationInput): Promise<EntityOperationResult> => {
-    // Check DHT connection first
-    const isConnected = await invoke<boolean>('check_dht_connection');
-    if (!isConnected) {
-      throw new Error('Must be connected to DHT network to create entities');
-    }
-
+    // In browser mode (no Tauri), allow offline creation
+    // In Tauri mode, check connection but don't block creation
     const now = new Date();
     const tempId = `org-${nanoid(8)}`;
 
@@ -689,12 +696,8 @@ export const EntityDirectoryProvider: React.FC<EntityDirectoryProviderProps> = (
   }, [queueCreateOperation]);
 
   const createGroup = useCallback(async (input: CreateNewGroupInput): Promise<EntityOperationResult> => {
-    // Check DHT connection first
-    const isConnected = await invoke<boolean>('check_dht_connection');
-    if (!isConnected) {
-      throw new Error('Must be connected to DHT network to create entities');
-    }
-
+    // In browser mode (no Tauri), allow offline creation
+    // In Tauri mode, check connection but don't block creation
     const now = new Date();
     const tempId = `group-${nanoid(8)}`;
     const generatedFourWords = await generateFourWords();
@@ -745,12 +748,8 @@ export const EntityDirectoryProvider: React.FC<EntityDirectoryProviderProps> = (
   }, [queueCreateOperation]);
 
   const createChannel = useCallback(async (input: CreateNewChannelInput): Promise<EntityOperationResult> => {
-    // Check DHT connection first
-    const isConnected = await invoke<boolean>('check_dht_connection');
-    if (!isConnected) {
-      throw new Error('Must be connected to DHT network to create entities');
-    }
-
+    // In browser mode (no Tauri), allow offline creation
+    // In Tauri mode, check connection but don't block creation
     const now = new Date();
     const tempId = `channel-${nanoid(8)}`;
     const generatedFourWords = await generateFourWords();
@@ -793,12 +792,8 @@ export const EntityDirectoryProvider: React.FC<EntityDirectoryProviderProps> = (
   }, [queueCreateOperation]);
 
   const createProject = useCallback(async (input: CreateNewProjectInput): Promise<EntityOperationResult> => {
-    // Check DHT connection first
-    const isConnected = await invoke<boolean>('check_dht_connection');
-    if (!isConnected) {
-      throw new Error('Must be connected to DHT network to create entities');
-    }
-
+    // In browser mode (no Tauri), allow offline creation
+    // In Tauri mode, check connection but don't block creation
     const now = new Date();
     const tempId = `project-${nanoid(8)}`;
     const generatedFourWords = await generateFourWords();

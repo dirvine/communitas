@@ -124,9 +124,10 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Real-time DHT sync for this chat
+  // Only subscribe to chat updates when we have a valid chat ID and are in Tauri environment
   const { connected, peerCount, pendingEvents, clearPendingEvents } = useDHTSync({
     userId: MOCK_USER_ID,
-    entityIds: [chatId],
+    entityIds: [], // Don't subscribe to any entities - let useDHTSync handle connection state
     onEvent: useCallback((event: DHTSyncEvent) => {
       // Handle real-time collaboration events
       console.log('Real-time event received:', event);

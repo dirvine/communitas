@@ -484,13 +484,13 @@ impl IdentityStorage {
         // Store in DHT (note: the DHT engine expects a mutable reference)
         // In a real implementation, we'd need to handle this properly
         // For now, this represents the interface we need
-        
+
         // Convert our DhtKey to saorsa-core's DhtKey format
-        let saorsa_key = saorsa_core::dht::DhtKey::from_bytes(*key);
-        
+        let _saorsa_key = saorsa_core::dht::DhtKey::from_bytes(*key);
+
         // The actual store operation would happen here
-        // self.dht.store(&saorsa_key, value).await?;
-        
+        // self.dht.store(&_saorsa_key, value).await?;
+
         // For now, we'll mark this as a placeholder that needs proper integration
         // with the mutable DHT reference
         Ok(())

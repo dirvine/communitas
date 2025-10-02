@@ -15,18 +15,24 @@
 // Allow these in tests for convenience
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
+mod commands;
 mod container;
 mod core_cmds;
 mod core_commands;
 mod core_groups;
 mod core_storage;
+mod crdt_manager;
 mod network;
 mod security;
+mod services;
 mod storage_fs;
 mod sync;
 
+use commands::org_commands::OrgState;
 use communitas_core::CoreContext;
-use std::sync::Arc;
+use crdt_manager::CrdtManager;
+use services::{channel_service::ChannelService, issue_service::IssueService};
+use std::{path::PathBuf, sync::Arc};
 use tokio::sync::RwLock;
 use tracing::info;
 
@@ -57,7 +63,26 @@ async fn main() -> anyhow::Result<()> {
 
     info!("Starting Communitas (saorsa-core integrated)");
 
+    // Initialize CRDT manager and services
+    let data_dir = dirs::data_local_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("communitas");
+    std::fs::create_dir_all(&data_dir)?;
+
+    let db_path = data_dir.join("communitas.db");
+    let crdt_manager = Arc::new(CrdtManager::new(&db_path).await?);
+
+    let channel_service = Arc::new(ChannelService::new(crdt_manager.clone()));
+    let issue_service = Arc::new(IssueService::new(crdt_manager.clone()));
+
+    let org_state = OrgState {
+        channel_service,
+        issue_service,
+    };
+
     let mut builder = tauri::Builder::default()
+        // Organization services state
+        .manage(org_state)
         // Shared saorsa-core context (initialized via core_initialize)
         .manage(Arc::new(RwLock::new(Option::<CoreContext>::None)))
         // Container engine state
@@ -165,6 +190,36 @@ async fn main() -> anyhow::Result<()> {
         security::raw_spki::sync_set_quic_pinned_spki,
         security::raw_spki::sync_clear_quic_pinned_spki,
         health,
+        // Organization commands - Channels
+        commands::org_commands::create_channel,
+        commands::org_commands::get_channel,
+        commands::org_commands::list_channels,
+        commands::org_commands::send_message,
+        commands::org_commands::get_messages,
+        commands::org_commands::create_thread,
+        commands::org_commands::get_thread_replies,
+        commands::org_commands::add_channel_member,
+        commands::org_commands::remove_channel_member,
+        commands::org_commands::get_channel_members,
+        // Organization commands - Projects
+        commands::org_commands::create_project,
+        commands::org_commands::get_project,
+        commands::org_commands::list_projects,
+        // Organization commands - Issues
+        commands::org_commands::create_issue,
+        commands::org_commands::get_issue,
+        commands::org_commands::list_issues,
+        commands::org_commands::list_issues_by_status,
+        commands::org_commands::update_issue_status,
+        commands::org_commands::assign_issue,
+        commands::org_commands::update_issue_priority,
+        commands::org_commands::add_issue_comment,
+        commands::org_commands::get_issue_comments,
+        // Sync commands
+        commands::org_commands::get_channel_sync_update,
+        commands::org_commands::apply_channel_sync_update,
+        commands::org_commands::get_issue_sync_update,
+        commands::org_commands::apply_issue_sync_update,
     ]);
 
     builder

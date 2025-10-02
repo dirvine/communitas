@@ -5,6 +5,7 @@ members = [
     "communitas-desktop",
     "communitas-headless",
     "communitas-bridge",
+    "communitas-tui",
     "crates/communitas-container",
 ]
 

@@ -110,6 +110,7 @@ const GroupPage = React.lazy(() => import('./components/pages/GroupPage').then(m
 const UserPage = React.lazy(() => import('./components/pages/UserPage').then(m => ({ default: m.UserPage })))
 const ChannelPage = React.lazy(() => import('./components/pages/ChannelPage').then(m => ({ default: m.ChannelPage })))
 const ProjectPage = React.lazy(() => import('./components/pages/ProjectPage').then(m => ({ default: m.ProjectPage })))
+const OrganizationViewWrapper = React.lazy(() => import('./components/views/OrganizationViewWrapper').then(m => ({ default: m.OrganizationViewWrapper })))
 
 // Test button component that uses React Router navigation
 const TestButton: React.FC = () => {
@@ -370,18 +371,26 @@ function AppContent() {
     console.log('WhatsApp Navigation:', path, entity)
     _setSelectedEntity(entity)
 
+    // Construct full path with entity ID
+    let fullPath = path;
+    if (entity && entity.id) {
+      // If path doesn't already include the ID, append it
+      if (!path.includes(entity.id)) {
+        fullPath = `${path}/${entity.id}`;
+      }
+    }
+
     // CRITICAL: Navigate to the path using React Router
-    navigate(path);
+    navigate(fullPath);
 
     // Update navigation context based on path
-    if (path.startsWith('/org/')) {
-      const parts = path.split('/')
-      const orgId = parts[2]
+    if (path.startsWith('/org/') || path.startsWith('/organization')) {
+      const orgId = entity?.id || fullPath.split('/').pop();
       const orgName = (entity && 'name' in entity) ? entity.name : 'Organization'
       const fourWords = (entity && entity.networkIdentity?.fourWords) || 'unknown-org'
       setNavigationContext({
         mode: 'organization',
-        organizationId: orgId,
+        organizationId: orgId || '',
         organizationName: orgName,
         fourWords,
       })
@@ -798,6 +807,7 @@ function AppContent() {
                   <Route path="/test/simple" element={<SimpleCollaborationTest />} /> */}
                   <Route path="/dev/console" element={<MessageConsole />} />
                   <Route path="/dev/website" element={<WebsitePublishPanel />} />
+                  <Route path="/organization/:orgId" element={<OrganizationViewWrapper />} />
                   <Route path="/org/:orgId/*" element={<UnifiedDashboard userId="user_owner_123" userName="Owner" />} />
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>

@@ -4,6 +4,7 @@
 //! as specified in DESIGN.md, with optional platform keyring support.
 
 use anyhow::Result;
+use base64::Engine;
 use chacha20poly1305::{
     aead::{Aead, AeadCore, KeyInit},
     ChaCha20Poly1305, Key, Nonce,
@@ -16,7 +17,6 @@ use zeroize::Zeroizing;
 pub struct KeyManager {
     iterations: u32,
     use_keyring: bool,
-    #[cfg(feature = "keyring")]
     keyring_service: String,
 }
 
@@ -26,7 +26,6 @@ impl KeyManager {
         Ok(Self {
             iterations,
             use_keyring,
-            #[cfg(feature = "keyring")]
             keyring_service: "com.p2pfoundation.communitas".to_string(),
         })
     }
@@ -58,7 +57,6 @@ impl KeyManager {
     }
 
     /// Store key in platform keyring (macOS Keychain, Windows Credential Manager, Linux Secret Service)
-    #[cfg(feature = "keyring")]
     pub async fn store_in_keyring(&self, four_words: &str, key: &[u8]) -> Result<()> {
         if !self.use_keyring {
             return Ok(());
@@ -67,19 +65,18 @@ impl KeyManager {
         use keyring::Entry;
 
         let entry = Entry::new(&self.keyring_service, four_words)
-            .context("Failed to create keyring entry")?;
+            .map_err(|e| anyhow::anyhow!("Failed to create keyring entry: {}", e))?;
 
         // Convert key to base64 for storage
-        let key_b64 = base64::encode(key);
+        let key_b64 = base64::engine::general_purpose::STANDARD.encode(key);
 
         entry.set_password(&key_b64)
-            .context("Failed to store key in keyring")?;
+            .map_err(|e| anyhow::anyhow!("Failed to store key in keyring: {}", e))?;
 
         Ok(())
     }
 
     /// Retrieve key from platform keyring
-    #[cfg(feature = "keyring")]
     pub async fn get_from_keyring(&self, four_words: &str) -> Result<Zeroizing<Vec<u8>>> {
         if !self.use_keyring {
             return Err(anyhow::anyhow!("Keyring not enabled"));
@@ -88,21 +85,20 @@ impl KeyManager {
         use keyring::Entry;
 
         let entry = Entry::new(&self.keyring_service, four_words)
-            .context("Failed to access keyring entry")?;
+            .map_err(|e| anyhow::anyhow!("Failed to access keyring entry: {}", e))?;
 
         let key_b64 = entry.get_password()
-            .context("Failed to retrieve key from keyring")?;
+            .map_err(|e| anyhow::anyhow!("Failed to retrieve key from keyring: {}", e))?;
 
         let key = Zeroizing::new(
-            base64::decode(&key_b64)
-                .context("Failed to decode key from keyring")?
+            base64::engine::general_purpose::STANDARD.decode(&key_b64)
+                .map_err(|e| anyhow::anyhow!("Failed to decode key from keyring: {}", e))?
         );
 
         Ok(key)
     }
 
     /// Delete key from platform keyring
-    #[cfg(feature = "keyring")]
     pub async fn delete_from_keyring(&self, four_words: &str) -> Result<()> {
         if !self.use_keyring {
             return Ok(());
@@ -111,27 +107,11 @@ impl KeyManager {
         use keyring::Entry;
 
         let entry = Entry::new(&self.keyring_service, four_words)
-            .context("Failed to access keyring entry")?;
+            .map_err(|e| anyhow::anyhow!("Failed to access keyring entry: {}", e))?;
 
-        entry.delete_password()
-            .context("Failed to delete key from keyring")?;
+        entry.delete_credential()
+            .map_err(|e| anyhow::anyhow!("Failed to delete key from keyring: {}", e))?;
 
-        Ok(())
-    }
-
-    // Stub implementations when keyring feature is disabled
-    #[cfg(not(feature = "keyring"))]
-    pub async fn store_in_keyring(&self, _four_words: &str, _key: &[u8]) -> Result<()> {
-        Ok(())
-    }
-
-    #[cfg(not(feature = "keyring"))]
-    pub async fn get_from_keyring(&self, _four_words: &str) -> Result<Zeroizing<Vec<u8>>> {
-        Err(anyhow::anyhow!("Keyring feature not enabled"))
-    }
-
-    #[cfg(not(feature = "keyring"))]
-    pub async fn delete_from_keyring(&self, _four_words: &str) -> Result<()> {
         Ok(())
     }
 
@@ -220,7 +200,7 @@ impl PasskeyManager {
     }
 
     /// Authenticate using passkey
-    pub async fn authenticate_passkey(&self, credential: &PasskeyCredential) -> Result<bool> {
+    pub async fn authenticate_passkey(&self, _credential: &PasskeyCredential) -> Result<bool> {
         // In a real implementation, this would verify the WebAuthn assertion
         // For now, return success
         Ok(true)

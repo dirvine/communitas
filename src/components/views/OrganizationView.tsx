@@ -100,16 +100,19 @@ import {
   Archive as ArchiveIcon,
 } from '@mui/icons-material';
 import { invoke } from '@tauri-apps/api/core';
-import { 
-  Organization, 
-  Project, 
-  Group, 
+import {
+  Organization,
+  Project,
+  Group,
   OrganizationHierarchy,
   Member,
   CreateProjectRequest,
   CreateGroupRequest,
 } from '../../types/organization';
 import { motion, AnimatePresence } from 'framer-motion';
+import { ChannelView } from '../organization/ChannelView';
+import { ProjectBoard } from '../organization/ProjectBoard';
+import { useEntityDirectory } from '../../contexts/EntityDirectoryContext';
 
 interface OrganizationViewProps {
   organization: Organization;
@@ -140,6 +143,7 @@ export const OrganizationView: React.FC<OrganizationViewProps> = ({
   onCall,
   onRefresh,
 }) => {
+  const { createProject, createGroup } = useEntityDirectory();
   const [activeTab, setActiveTab] = useState(0);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [searchQuery, setSearchQuery] = useState('');
@@ -148,9 +152,17 @@ export const OrganizationView: React.FC<OrganizationViewProps> = ({
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [createType, setCreateType] = useState<'project' | 'group'>('project');
   const [loading, setLoading] = useState(false);
+  const [createName, setCreateName] = useState('');
+  const [createDescription, setCreateDescription] = useState('');
+  const [createPriority, setCreatePriority] = useState<'low' | 'medium' | 'high' | 'critical'>('medium');
+  const [createStorageGb, setCreateStorageGb] = useState(5);
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const [selectedEntity, setSelectedEntity] = useState<Project | Group | null>(null);
   const [starred, setStarred] = useState<Set<string>>(new Set());
+  const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [channels, setChannels] = useState<any[]>([]);
+  const [currentUserId] = useState('user-1'); // TODO: Get from auth context
 
   // Mock data for recent activity
   const recentActivity = [
@@ -171,27 +183,47 @@ export const OrganizationView: React.FC<OrganizationViewProps> = ({
   ];
 
   const handleCreateEntity = async () => {
+    if (!createName.trim()) {
+      console.error('Name is required');
+      return;
+    }
+
     setLoading(true);
     try {
       if (createType === 'project') {
-        const request: CreateProjectRequest = {
-          name: 'New Project',
-          organization_id: organization.id,
-          priority: 'medium',
-          initial_storage_gb: 5,
-        };
-        await invoke('create_project_dht', { request });
+        const result = await createProject({
+          displayName: createName,
+          description: createDescription || undefined,
+          organizationId: organization.id,
+        });
+        if (!result.success) {
+          console.error('Failed to create project:', result.error);
+          alert(`Failed to create project: ${result.error || 'Unknown error'}`);
+          return;
+        }
       } else {
-        const request: CreateGroupRequest = {
-          name: 'New Group',
-          organization_id: organization.id,
-        };
-        await invoke('create_group_dht', { request });
+        const result = await createGroup({
+          displayName: createName,
+          description: createDescription || undefined,
+          organizationId: organization.id,
+        });
+        if (!result.success) {
+          console.error('Failed to create group:', result.error);
+          alert(`Failed to create group: ${result.error || 'Unknown error'}`);
+          return;
+        }
       }
+      // Reset form
+      setCreateName('');
+      setCreateDescription('');
+      setCreatePriority('medium');
+      setCreateStorageGb(5);
       setCreateDialogOpen(false);
       onRefresh();
     } catch (error) {
       console.error('Failed to create entity:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      alert(`Error creating ${createType}: ${errorMessage}`);
     } finally {
       setLoading(false);
     }
@@ -995,9 +1027,11 @@ export const OrganizationView: React.FC<OrganizationViewProps> = ({
       <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
         <Tabs value={activeTab} onChange={(_, newValue) => setActiveTab(newValue)}>
           <Tab label="Overview" icon={<DashboardIcon />} iconPosition="start" />
+          <Tab label={`Channels (${channels.length})`} icon={<ForumIcon />} iconPosition="start" />
           <Tab label={`Projects (${hierarchy.projects.length})`} icon={<FolderIcon />} iconPosition="start" />
+          <Tab label={`Project Board`} icon={<AccountTreeIcon />} iconPosition="start" />
           <Tab label={`Groups (${hierarchy.groups.length})`} icon={<GroupIcon />} iconPosition="start" />
-          <Tab label={`Members (${organization.members.length})`} icon={<PeopleIcon />} iconPosition="start" />
+          <Tab label={`Members (${organization.users?.length ?? 0})`} icon={<PeopleIcon />} iconPosition="start" />
         </Tabs>
       </Box>
 
@@ -1007,12 +1041,41 @@ export const OrganizationView: React.FC<OrganizationViewProps> = ({
           {renderOverviewTab()}
         </TabPanel>
         <TabPanel value={activeTab} index={1}>
-          {renderProjectsTab()}
+          {selectedChannelId ? (
+            <ChannelView
+              channelId={selectedChannelId}
+              currentUserId={currentUserId}
+              onStartCall={(type) => onCall('channel', selectedChannelId, type)}
+            />
+          ) : (
+            <Box sx={{ textAlign: 'center', py: 8 }}>
+              <Typography variant="h6" color="text.secondary">
+                Select a channel or create one to get started
+              </Typography>
+            </Box>
+          )}
         </TabPanel>
         <TabPanel value={activeTab} index={2}>
-          {renderGroupsTab()}
+          {renderProjectsTab()}
         </TabPanel>
         <TabPanel value={activeTab} index={3}>
+          {selectedProjectId ? (
+            <ProjectBoard
+              projectId={selectedProjectId}
+              currentUserId={currentUserId}
+            />
+          ) : (
+            <Box sx={{ textAlign: 'center', py: 8 }}>
+              <Typography variant="h6" color="text.secondary">
+                Select a project to view its board
+              </Typography>
+            </Box>
+          )}
+        </TabPanel>
+        <TabPanel value={activeTab} index={4}>
+          {renderGroupsTab()}
+        </TabPanel>
+        <TabPanel value={activeTab} index={5}>
           {renderMembersTab()}
         </TabPanel>
       </Box>
@@ -1077,6 +1140,9 @@ export const OrganizationView: React.FC<OrganizationViewProps> = ({
             label="Name"
             fullWidth
             variant="outlined"
+            value={createName}
+            onChange={(e) => setCreateName(e.target.value)}
+            required
           />
           <TextField
             margin="dense"
@@ -1085,12 +1151,18 @@ export const OrganizationView: React.FC<OrganizationViewProps> = ({
             multiline
             rows={3}
             variant="outlined"
+            value={createDescription}
+            onChange={(e) => setCreateDescription(e.target.value)}
           />
           {createType === 'project' && (
             <>
               <FormControl fullWidth margin="dense">
                 <InputLabel>Priority</InputLabel>
-                <Select label="Priority" defaultValue="medium">
+                <Select
+                  label="Priority"
+                  value={createPriority}
+                  onChange={(e) => setCreatePriority(e.target.value as 'low' | 'medium' | 'high' | 'critical')}
+                >
                   <MenuItem value="low">Low</MenuItem>
                   <MenuItem value="medium">Medium</MenuItem>
                   <MenuItem value="high">High</MenuItem>
@@ -1102,8 +1174,10 @@ export const OrganizationView: React.FC<OrganizationViewProps> = ({
                 label="Storage Allocation (GB)"
                 type="number"
                 fullWidth
-                defaultValue={5}
+                value={createStorageGb}
+                onChange={(e) => setCreateStorageGb(Number(e.target.value))}
                 variant="outlined"
+                inputProps={{ min: 1 }}
               />
             </>
           )}

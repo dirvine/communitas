@@ -85,7 +85,8 @@ async fn main() -> Result<()> {
         args.pbkdf2_iterations,
         !args.no_keyring,
         args.offline,
-    ).await?;
+    )
+    .await?;
 
     // Initialize identity if provided, otherwise show auth screen
     if let Some(identity) = args.identity {

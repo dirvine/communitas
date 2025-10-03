@@ -82,7 +82,8 @@ impl PasskeyManager {
     pub async fn delete_passkey(&self, four_words: &str) -> Result<()> {
         let path = self.passkey_info_path(four_words);
         if path.exists() {
-            fs::remove_file(&path).await
+            fs::remove_file(&path)
+                .await
                 .context("Failed to delete passkey")?;
             tracing::info!("Deleted passkey for {}", four_words);
         }
@@ -92,18 +93,20 @@ impl PasskeyManager {
     // Storage helpers
 
     fn passkey_info_path(&self, four_words: &str) -> std::path::PathBuf {
-        self.storage_path.join(format!("{}.passkey.json", four_words))
+        self.storage_path
+            .join(format!("{}.passkey.json", four_words))
     }
 
     async fn save_passkey_info(&self, info: &PasskeyInfo) -> Result<()> {
-        fs::create_dir_all(&self.storage_path).await
+        fs::create_dir_all(&self.storage_path)
+            .await
             .context("Failed to create passkey storage directory")?;
 
         let path = self.passkey_info_path(&info.four_words);
-        let data = serde_json::to_vec_pretty(info)
-            .context("Failed to serialize passkey info")?;
+        let data = serde_json::to_vec_pretty(info).context("Failed to serialize passkey info")?;
 
-        fs::write(&path, data).await
+        fs::write(&path, data)
+            .await
             .context("Failed to write passkey info")?;
 
         Ok(())
@@ -111,11 +114,10 @@ impl PasskeyManager {
 
     async fn load_passkey_info(&self, four_words: &str) -> Result<PasskeyInfo> {
         let path = self.passkey_info_path(four_words);
-        let data = fs::read(&path).await
-            .context("Passkey info not found")?;
+        let data = fs::read(&path).await.context("Passkey info not found")?;
 
-        let info: PasskeyInfo = serde_json::from_slice(&data)
-            .context("Failed to deserialize passkey info")?;
+        let info: PasskeyInfo =
+            serde_json::from_slice(&data).context("Failed to deserialize passkey info")?;
 
         Ok(info)
     }
@@ -146,7 +148,10 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let manager = PasskeyManager::new(temp_dir.path()).unwrap();
 
-        let info = manager.register_passkey("ocean-forest-moon-star", "MacBook Pro").await.unwrap();
+        let info = manager
+            .register_passkey("ocean-forest-moon-star", "MacBook Pro")
+            .await
+            .unwrap();
         assert_eq!(info.four_words, "ocean-forest-moon-star");
         assert_eq!(info.device_name, "MacBook Pro");
 
@@ -158,7 +163,12 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let manager = PasskeyManager::new(temp_dir.path()).unwrap();
 
-        assert!(manager.delete_passkey("ocean-forest-moon-star").await.is_ok());
+        assert!(
+            manager
+                .delete_passkey("ocean-forest-moon-star")
+                .await
+                .is_ok()
+        );
     }
 
     #[tokio::test]
@@ -166,10 +176,21 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let manager = PasskeyManager::new(temp_dir.path()).unwrap();
 
-        manager.register_passkey("ocean-forest-moon-star", "MacBook Pro").await.unwrap();
-        assert!(manager.mark_passkey_used("ocean-forest-moon-star").await.is_ok());
+        manager
+            .register_passkey("ocean-forest-moon-star", "MacBook Pro")
+            .await
+            .unwrap();
+        assert!(
+            manager
+                .mark_passkey_used("ocean-forest-moon-star")
+                .await
+                .is_ok()
+        );
 
-        let info = manager.get_passkey_info("ocean-forest-moon-star").await.unwrap();
+        let info = manager
+            .get_passkey_info("ocean-forest-moon-star")
+            .await
+            .unwrap();
         assert!(info.last_used.is_some());
     }
 }

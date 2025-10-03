@@ -102,8 +102,7 @@ impl AppConfigManager {
             let data = fs::read_to_string(&config_path)
                 .await
                 .context("Failed to read config file")?;
-            serde_json::from_str(&data)
-                .context("Failed to parse config file")?
+            serde_json::from_str(&data).context("Failed to parse config file")?
         } else {
             AppConfig::default()
         };
@@ -125,12 +124,18 @@ impl AppConfigManager {
     }
 
     /// Update last used identity
-    pub async fn set_last_identity(&mut self, four_words: String, display_name: String) -> Result<()> {
+    pub async fn set_last_identity(
+        &mut self,
+        four_words: String,
+        display_name: String,
+    ) -> Result<()> {
         self.config.last_identity = Some(four_words.clone());
 
         // Update or add to recent identities
         let now = current_timestamp();
-        if let Some(existing) = self.config.recent_identities
+        if let Some(existing) = self
+            .config
+            .recent_identities
             .iter_mut()
             .find(|r| r.four_words == four_words)
         {
@@ -146,15 +151,23 @@ impl AppConfigManager {
         }
 
         // Keep only 10 most recent
-        self.config.recent_identities.sort_by(|a, b| b.last_used.cmp(&a.last_used));
+        self.config
+            .recent_identities
+            .sort_by(|a, b| b.last_used.cmp(&a.last_used));
         self.config.recent_identities.truncate(10);
 
         self.save().await
     }
 
     /// Mark identity as having passkey
-    pub async fn set_identity_has_passkey(&mut self, four_words: &str, has_passkey: bool) -> Result<()> {
-        if let Some(identity) = self.config.recent_identities
+    pub async fn set_identity_has_passkey(
+        &mut self,
+        four_words: &str,
+        has_passkey: bool,
+    ) -> Result<()> {
+        if let Some(identity) = self
+            .config
+            .recent_identities
             .iter_mut()
             .find(|r| r.four_words == four_words)
         {
@@ -196,7 +209,9 @@ impl AppConfigManager {
 
     /// Remove identity from recent list
     pub async fn remove_recent_identity(&mut self, four_words: &str) -> Result<()> {
-        self.config.recent_identities.retain(|r| r.four_words != four_words);
+        self.config
+            .recent_identities
+            .retain(|r| r.four_words != four_words);
 
         // If this was the last identity, clear it
         if self.config.last_identity.as_deref() == Some(four_words) {
@@ -208,8 +223,8 @@ impl AppConfigManager {
 
     /// Save configuration to disk
     async fn save(&self) -> Result<()> {
-        let json = serde_json::to_string_pretty(&self.config)
-            .context("Failed to serialize config")?;
+        let json =
+            serde_json::to_string_pretty(&self.config).context("Failed to serialize config")?;
 
         fs::write(&self.config_path, json)
             .await
@@ -251,10 +266,10 @@ mod tests {
             .await
             .unwrap();
 
-        manager.set_last_identity(
-            "ocean-forest-moon-star".to_string(),
-            "Alice".to_string()
-        ).await.unwrap();
+        manager
+            .set_last_identity("ocean-forest-moon-star".to_string(), "Alice".to_string())
+            .await
+            .unwrap();
 
         assert_eq!(
             manager.get_config().last_identity,
@@ -276,10 +291,10 @@ mod tests {
 
         // Add 15 identities
         for i in 0..15 {
-            manager.set_last_identity(
-                format!("identity-{}", i),
-                format!("User {}", i)
-            ).await.unwrap();
+            manager
+                .set_last_identity(format!("identity-{}", i), format!("User {}", i))
+                .await
+                .unwrap();
         }
 
         // Should keep only 10 most recent
@@ -293,22 +308,18 @@ mod tests {
 
         // Create and save config
         {
-            let mut manager = AppConfigManager::new(config_dir.clone())
+            let mut manager = AppConfigManager::new(config_dir.clone()).await.unwrap();
+
+            manager
+                .set_last_identity("test-identity".to_string(), "Test User".to_string())
                 .await
                 .unwrap();
-
-            manager.set_last_identity(
-                "test-identity".to_string(),
-                "Test User".to_string()
-            ).await.unwrap();
 
             manager.set_auto_login(false).await.unwrap();
         }
 
         // Load config in new manager
-        let manager = AppConfigManager::new(config_dir)
-            .await
-            .unwrap();
+        let manager = AppConfigManager::new(config_dir).await.unwrap();
 
         assert_eq!(
             manager.get_config().last_identity,
@@ -325,16 +336,17 @@ mod tests {
             .unwrap();
 
         // Add identity
-        manager.set_last_identity(
-            "test-identity".to_string(),
-            "Test User".to_string()
-        ).await.unwrap();
+        manager
+            .set_last_identity("test-identity".to_string(), "Test User".to_string())
+            .await
+            .unwrap();
 
         // Initially no passkey
         assert!(!manager.get_config().recent_identities[0].has_passkey);
 
         // Set passkey
-        manager.set_identity_has_passkey("test-identity", true)
+        manager
+            .set_identity_has_passkey("test-identity", true)
             .await
             .unwrap();
 
@@ -349,15 +361,16 @@ mod tests {
             .unwrap();
 
         // Add identity
-        manager.set_last_identity(
-            "test-identity".to_string(),
-            "Test User".to_string()
-        ).await.unwrap();
+        manager
+            .set_last_identity("test-identity".to_string(), "Test User".to_string())
+            .await
+            .unwrap();
 
         assert_eq!(manager.get_config().recent_identities.len(), 1);
 
         // Remove it
-        manager.remove_recent_identity("test-identity")
+        manager
+            .remove_recent_identity("test-identity")
             .await
             .unwrap();
 

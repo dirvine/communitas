@@ -18,25 +18,25 @@ use tokio::sync::RwLock;
 pub enum ValidationError {
     #[error("Identity not pinned: {0}")]
     IdentityNotPinned(String),
-    
+
     #[error("Key rotation validation failed: {0}")]
     KeyRotationFailed(String),
-    
+
     #[error("Transport identity mismatch: {0}")]
     TransportMismatch(String),
-    
+
     #[error("Invalid continuity signature: {0}")]
     InvalidContinuitySignature(String),
-    
+
     #[error("Signature verification failed: {0}")]
     SignatureVerificationFailed(String),
-    
+
     #[error("Identity validation failed: {0}")]
     ValidationFailed(String),
-    
+
     #[error("Storage error: {0}")]
     StorageError(#[from] IdentityStorageError),
-    
+
     #[error("Cryptographic error: {0}")]
     CryptographicError(String),
 }
@@ -48,25 +48,25 @@ pub type ValidationResult<T> = std::result::Result<T, ValidationError>;
 pub struct PinnedIdentity {
     /// Four-word identity
     pub four_words: String,
-    
+
     /// Pinned ML-DSA public key hash
     pub ml_dsa_key_hash: [u8; 32],
-    
+
     /// Pinned ML-KEM public key hash
     pub ml_kem_key_hash: [u8; 32],
-    
+
     /// Pinned transport ID from ant-quic
     pub transport_id: [u8; 32],
-    
+
     /// First contact timestamp
     pub pinned_at: SystemTime,
-    
+
     /// Sequence number of the identity when pinned
     pub pinned_sequence: u32,
-    
+
     /// Trust level (can be upgraded through endorsements/verification)
     pub trust_level: TrustLevel,
-    
+
     /// Security events related to this identity
     pub security_events: Vec<SecurityEvent>,
 }
@@ -76,16 +76,16 @@ pub struct PinnedIdentity {
 pub enum TrustLevel {
     /// TOFU - trusted on first use (default)
     Tofu,
-    
+
     /// Manually verified by user
     UserVerified,
-    
+
     /// Verified through endorsement system
     EndorsementVerified,
-    
+
     /// High trust through multiple endorsements
     HighTrust,
-    
+
     /// Blocked/revoked identity
     Blocked,
 }
@@ -95,13 +95,13 @@ pub enum TrustLevel {
 pub struct SecurityEvent {
     /// Event type
     pub event_type: SecurityEventType,
-    
+
     /// Event timestamp
     pub timestamp: SystemTime,
-    
+
     /// Event description
     pub description: String,
-    
+
     /// Additional metadata
     pub metadata: HashMap<String, String>,
 }
@@ -111,22 +111,22 @@ pub struct SecurityEvent {
 pub enum SecurityEventType {
     /// Identity first pinned
     IdentityPinned,
-    
+
     /// Key rotation detected
     KeyRotation,
-    
+
     /// Transport identity changed
     TransportChanged,
-    
+
     /// Suspicious activity detected
     SuspiciousActivity,
-    
+
     /// Manual trust level change
     TrustLevelChanged,
-    
+
     /// Identity blocked
     IdentityBlocked,
-    
+
     /// Signature verification failure
     SignatureFailure,
 }
@@ -135,10 +135,10 @@ pub enum SecurityEventType {
 pub struct TofuValidator {
     /// Pinned identities database
     pinned_identities: Arc<RwLock<HashMap<String, PinnedIdentity>>>,
-    
+
     /// Storage backend
     storage: Arc<IdentityStorage>,
-    
+
     /// Validation policy configuration
     policy: ValidationPolicy,
 }
@@ -148,19 +148,19 @@ pub struct TofuValidator {
 pub struct ValidationPolicy {
     /// Allow TOFU on first contact
     pub allow_tofu: bool,
-    
+
     /// Require continuity signatures for key rotation
     pub require_continuity: bool,
-    
+
     /// Enable transport identity binding
     pub enable_transport_binding: bool,
-    
+
     /// Maximum allowed time skew for timestamps (seconds)
     pub max_time_skew: u64,
-    
+
     /// Minimum sequence number increment for updates
     pub min_sequence_increment: u32,
-    
+
     /// Enable security event logging
     pub enable_audit_logging: bool,
 }
@@ -183,19 +183,19 @@ impl Default for ValidationPolicy {
 pub struct ValidationResult_ {
     /// Whether the identity is valid
     pub is_valid: bool,
-    
+
     /// Whether this was a first contact (TOFU)
     pub is_first_contact: bool,
-    
+
     /// Whether key rotation occurred
     pub key_rotation_detected: bool,
-    
+
     /// Current trust level
     pub trust_level: TrustLevel,
-    
+
     /// Validation warnings (non-fatal issues)
     pub warnings: Vec<String>,
-    
+
     /// Security events generated during validation
     pub security_events: Vec<SecurityEvent>,
 }
@@ -211,65 +211,77 @@ impl TofuValidator {
     }
 
     /// Validate an identity using TOFU principles
-    pub async fn validate_identity(&self, identity: &ResolvedIdentity) -> ValidationResult<ValidationResult_> {
+    pub async fn validate_identity(
+        &self,
+        identity: &ResolvedIdentity,
+    ) -> ValidationResult<ValidationResult_> {
         let four_words = identity.four_words.as_str();
         let mut warnings = Vec::new();
         let mut security_events = Vec::new();
-        
+
         // Check if identity is already pinned
         let pinned_identities = self.pinned_identities.read().await;
         let existing_pin = pinned_identities.get(four_words).cloned();
         drop(pinned_identities);
-        
+
         if let Some(pinned) = existing_pin {
             // Validate against pinned identity
-            self.validate_against_pinned_identity(identity, &pinned, &mut warnings, &mut security_events).await
+            self.validate_against_pinned_identity(
+                identity,
+                &pinned,
+                &mut warnings,
+                &mut security_events,
+            )
+            .await
         } else {
             // First contact - TOFU validation
-            self.validate_first_contact(identity, &mut warnings, &mut security_events).await
+            self.validate_first_contact(identity, &mut warnings, &mut security_events)
+                .await
         }
     }
 
     /// Validate identity against pinned data
     async fn validate_against_pinned_identity(
-        &self, 
-        identity: &ResolvedIdentity, 
+        &self,
+        identity: &ResolvedIdentity,
         pinned: &PinnedIdentity,
         warnings: &mut Vec<String>,
-        security_events: &mut Vec<SecurityEvent>
+        security_events: &mut Vec<SecurityEvent>,
     ) -> ValidationResult<ValidationResult_> {
         let mut key_rotation_detected = false;
-        
+
         // Check sequence number progression
         if identity.root_record.sequence <= pinned.pinned_sequence {
             warnings.push("Non-increasing sequence number".to_string());
         }
-        
+
         // Check time progression
         let current_time = identity.root_record.timestamp;
-        let pinned_time = pinned.pinned_at
+        let pinned_time = pinned
+            .pinned_at
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis() as u64;
-            
+
         if current_time < pinned_time {
             return Err(ValidationError::ValidationFailed(
-                "Timestamp regression detected".to_string()
+                "Timestamp regression detected".to_string(),
             ));
         }
-        
+
         // Validate key continuity
         let current_ml_dsa_hash = identity.root_record.ml_dsa_key_hash;
         let current_ml_kem_hash = identity.root_record.ml_kem_key_hash;
-        
-        if current_ml_dsa_hash != pinned.ml_dsa_key_hash || 
-           current_ml_kem_hash != pinned.ml_kem_key_hash {
+
+        if current_ml_dsa_hash != pinned.ml_dsa_key_hash
+            || current_ml_kem_hash != pinned.ml_kem_key_hash
+        {
             key_rotation_detected = true;
-            
+
             if self.policy.require_continuity {
                 // Validate continuity signature if key rotation occurred
                 self.validate_key_rotation(identity, pinned).await?;
-                
+
                 security_events.push(SecurityEvent {
                     event_type: SecurityEventType::KeyRotation,
                     timestamp: SystemTime::now(),
@@ -278,7 +290,7 @@ impl TofuValidator {
                 });
             }
         }
-        
+
         // Validate transport identity binding
         if self.policy.enable_transport_binding {
             if identity.root_record.transport_id != pinned.transport_id {
@@ -288,16 +300,16 @@ impl TofuValidator {
                     description: "Transport identity changed".to_string(),
                     metadata: HashMap::new(),
                 });
-                
+
                 warnings.push("Transport identity changed".to_string());
             }
         }
-        
+
         // Update pinned identity if key rotation was valid
         if key_rotation_detected {
             self.update_pinned_identity(identity).await?;
         }
-        
+
         Ok(ValidationResult_ {
             is_valid: true,
             is_first_contact: false,
@@ -313,28 +325,30 @@ impl TofuValidator {
         &self,
         identity: &ResolvedIdentity,
         warnings: &mut Vec<String>,
-        security_events: &mut Vec<SecurityEvent>
+        security_events: &mut Vec<SecurityEvent>,
     ) -> ValidationResult<ValidationResult_> {
         if !self.policy.allow_tofu {
             return Err(ValidationError::ValidationFailed(
-                "TOFU not allowed by policy".to_string()
+                "TOFU not allowed by policy".to_string(),
             ));
         }
-        
+
         // Basic validation of the identity
-        identity.descriptor.validate()
+        identity
+            .descriptor
+            .validate()
             .map_err(|e| ValidationError::ValidationFailed(e))?;
-        
+
         // Verify signature
         match identity.descriptor.verify() {
-            Ok(true) => {},
+            Ok(true) => {}
             Ok(false) | Err(_) => {
                 return Err(ValidationError::SignatureVerificationFailed(
-                    "Invalid identity descriptor signature".to_string()
+                    "Invalid identity descriptor signature".to_string(),
                 ));
             }
         }
-        
+
         // Pin the identity
         let pinned_identity = PinnedIdentity {
             four_words: identity.four_words.as_str().to_string(),
@@ -346,20 +360,23 @@ impl TofuValidator {
             trust_level: TrustLevel::Tofu,
             security_events: Vec::new(),
         };
-        
+
         // Store the pinned identity
         {
             let mut pinned_identities = self.pinned_identities.write().await;
             pinned_identities.insert(identity.four_words.as_str().to_string(), pinned_identity);
         }
-        
+
         security_events.push(SecurityEvent {
             event_type: SecurityEventType::IdentityPinned,
             timestamp: SystemTime::now(),
-            description: format!("Identity {} pinned on first contact", identity.four_words.as_str()),
+            description: format!(
+                "Identity {} pinned on first contact",
+                identity.four_words.as_str()
+            ),
             metadata: HashMap::new(),
         });
-        
+
         Ok(ValidationResult_ {
             is_valid: true,
             is_first_contact: true,
@@ -372,23 +389,22 @@ impl TofuValidator {
 
     /// Validate key rotation with continuity signature
     async fn validate_key_rotation(
-        &self, 
-        identity: &ResolvedIdentity, 
-        pinned: &PinnedIdentity
+        &self,
+        identity: &ResolvedIdentity,
+        pinned: &PinnedIdentity,
     ) -> ValidationResult<()> {
         // Check if continuity proof is present
-        let continuity = identity.descriptor.continuity.as_ref()
-            .ok_or_else(|| ValidationError::KeyRotationFailed(
-                "No continuity proof for key rotation".to_string()
-            ))?;
-        
+        let continuity = identity.descriptor.continuity.as_ref().ok_or_else(|| {
+            ValidationError::KeyRotationFailed("No continuity proof for key rotation".to_string())
+        })?;
+
         // Verify that previous key hash matches pinned key
         if continuity.previous_key_hash != pinned.ml_dsa_key_hash {
             return Err(ValidationError::KeyRotationFailed(
-                "Previous key hash mismatch".to_string()
+                "Previous key hash mismatch".to_string(),
             ));
         }
-        
+
         // Reconstruct the rotation message that was signed
         let _rotation_message = self.build_rotation_message(
             &pinned.ml_dsa_key_hash,
@@ -397,21 +413,21 @@ impl TofuValidator {
             identity.root_record.sequence,
             identity.root_record.timestamp,
         );
-        
+
         // Verify continuity signature with the previous (pinned) key
         // Note: We'd need the previous public key bytes to verify
         // For now, we'll implement a placeholder that accepts valid structure
         if continuity.rotation_signature.is_empty() {
             return Err(ValidationError::InvalidContinuitySignature(
-                "Empty rotation signature".to_string()
+                "Empty rotation signature".to_string(),
             ));
         }
-        
+
         // In a full implementation, we would:
         // 1. Retrieve the previous ML-DSA public key from our pin store
         // 2. Verify the rotation signature against the rotation message
         // For now, we'll accept non-empty signatures as valid
-        
+
         Ok(())
     }
 
@@ -436,32 +452,39 @@ impl TofuValidator {
     /// Update pinned identity after successful validation
     async fn update_pinned_identity(&self, identity: &ResolvedIdentity) -> ValidationResult<()> {
         let mut pinned_identities = self.pinned_identities.write().await;
-        
+
         if let Some(pinned) = pinned_identities.get_mut(identity.four_words.as_str()) {
             pinned.ml_dsa_key_hash = identity.root_record.ml_dsa_key_hash;
             pinned.ml_kem_key_hash = identity.root_record.ml_kem_key_hash;
             pinned.transport_id = identity.root_record.transport_id;
             pinned.pinned_sequence = identity.root_record.sequence;
         }
-        
+
         Ok(())
     }
 
     /// Manually set trust level for an identity
-    pub async fn set_trust_level(&self, four_words: &str, trust_level: TrustLevel) -> ValidationResult<()> {
+    pub async fn set_trust_level(
+        &self,
+        four_words: &str,
+        trust_level: TrustLevel,
+    ) -> ValidationResult<()> {
         let mut pinned_identities = self.pinned_identities.write().await;
-        
+
         if let Some(pinned) = pinned_identities.get_mut(four_words) {
             let old_level = pinned.trust_level;
             pinned.trust_level = trust_level;
-            
+
             pinned.security_events.push(SecurityEvent {
                 event_type: SecurityEventType::TrustLevelChanged,
                 timestamp: SystemTime::now(),
-                description: format!("Trust level changed from {:?} to {:?}", old_level, trust_level),
+                description: format!(
+                    "Trust level changed from {:?} to {:?}",
+                    old_level, trust_level
+                ),
                 metadata: HashMap::new(),
             });
-            
+
             Ok(())
         } else {
             Err(ValidationError::IdentityNotPinned(four_words.to_string()))
@@ -471,17 +494,17 @@ impl TofuValidator {
     /// Block an identity
     pub async fn block_identity(&self, four_words: &str, reason: &str) -> ValidationResult<()> {
         let mut pinned_identities = self.pinned_identities.write().await;
-        
+
         if let Some(pinned) = pinned_identities.get_mut(four_words) {
             pinned.trust_level = TrustLevel::Blocked;
-            
+
             pinned.security_events.push(SecurityEvent {
                 event_type: SecurityEventType::IdentityBlocked,
                 timestamp: SystemTime::now(),
                 description: format!("Identity blocked: {}", reason),
                 metadata: HashMap::new(),
             });
-            
+
             Ok(())
         } else {
             Err(ValidationError::IdentityNotPinned(four_words.to_string()))
@@ -526,10 +549,10 @@ mod tests {
         // Create test descriptor
         let descriptor = IdentityDescriptorBlob::new(
             four_words.as_str().to_string(),
-            [3u8; 32], // root_digest
+            [3u8; 32],       // root_digest
             vec![1u8; 1952], // ml_dsa_public_key
             vec![2u8; 1184], // ml_kem_public_key
-            vec![], // transport_keys
+            vec![],          // transport_keys
             "Test User".to_string(),
         );
 
@@ -540,9 +563,9 @@ mod tests {
             1, // sequence
             timestamp,
             *blake3::hash(four_words.as_str().as_bytes()).as_bytes(), // identity_hash
-            [4u8; 32], // ml_dsa_key_hash
-            [5u8; 32], // ml_kem_key_hash
-            [6u8; 32], // transport_id
+            [4u8; 32],                                                // ml_dsa_key_hash
+            [5u8; 32],                                                // ml_kem_key_hash
+            [6u8; 32],                                                // transport_id
             descriptor_cid,
         );
 
@@ -595,10 +618,10 @@ mod tests {
         };
 
         match event.event_type {
-            SecurityEventType::IdentityPinned => {}, // Expected
+            SecurityEventType::IdentityPinned => {} // Expected
             _ => panic!("Wrong event type"),
         }
-        
+
         assert_eq!(event.description, "Test identity pinned");
     }
 
@@ -606,7 +629,7 @@ mod tests {
     async fn test_trust_levels() {
         assert_eq!(TrustLevel::Tofu, TrustLevel::Tofu);
         assert_ne!(TrustLevel::Tofu, TrustLevel::UserVerified);
-        
+
         let levels = vec![
             TrustLevel::Tofu,
             TrustLevel::UserVerified,
@@ -614,7 +637,7 @@ mod tests {
             TrustLevel::HighTrust,
             TrustLevel::Blocked,
         ];
-        
+
         assert_eq!(levels.len(), 5);
     }
 

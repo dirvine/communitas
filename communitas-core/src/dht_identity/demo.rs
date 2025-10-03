@@ -6,9 +6,9 @@ use crate::dht_identity::integration::*;
 pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🚀 Communitas DHT Identity System Demo");
     println!("======================================");
-    
+
     demonstrate_identity_lifecycle().await?;
-    
+
     Ok(())
 }
 

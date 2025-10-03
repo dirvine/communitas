@@ -34,10 +34,10 @@ pub struct EncryptedStorageManager;
 
 #[derive(Debug, Clone)]
 pub struct StorageConfig;
+use base64::{Engine as _, engine::general_purpose};
 use std::sync::Arc;
 use tauri::State;
 use tokio::sync::RwLock;
-use base64::{Engine as _, engine::general_purpose};
 
 /// Initialize encrypted storage for the current identity
 #[tauri::command]
@@ -50,7 +50,8 @@ pub async fn core_storage_initialize(
     let context = guard.as_ref().ok_or("Core context not initialized")?;
 
     // Get the current identity's four words
-    let identity = context.get_current_identity()
+    let identity = context
+        .get_current_identity()
         .await
         .ok_or("No current identity")?;
 

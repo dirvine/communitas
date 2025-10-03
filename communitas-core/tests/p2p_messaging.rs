@@ -29,12 +29,7 @@ fn random_four_words() -> String {
     let mut rng = rand::thread_rng();
 
     // Generate random bytes for IPv4 address using array construction
-    let octets: [u8; 4] = [
-        rng.r#gen(),
-        rng.r#gen(),
-        rng.r#gen(),
-        rng.r#gen()
-    ];
+    let octets: [u8; 4] = [rng.r#gen(), rng.r#gen(), rng.r#gen(), rng.r#gen()];
     let ip = std::net::Ipv4Addr::from(octets);
     let port: u16 = rng.gen_range(1024..65535);
 
@@ -173,8 +168,8 @@ async fn test_two_instances_send_message() -> anyhow::Result<()> {
 
     // Create SHARED DHT client for KEM key sharing between instances
     info!("Creating shared DHT client for KEM key exchange");
-    let shared_dht = DhtClient::new()
-        .map_err(|e| anyhow::anyhow!("Failed to create shared DHT: {}", e))?;
+    let shared_dht =
+        DhtClient::new().map_err(|e| anyhow::anyhow!("Failed to create shared DHT: {}", e))?;
 
     // Create CoreContext instances with shared DHT
     let mut ctx1 = CoreContext::initialize_with_shared_dht(
@@ -205,7 +200,9 @@ async fn test_two_instances_send_message() -> anyhow::Result<()> {
 
     // Connect peers
     // Get socket address and convert 0.0.0.0 to 127.0.0.1 for localhost testing
-    let mut socket_addr2 = ctx2.get_local_endpoint_socket().await
+    let mut socket_addr2 = ctx2
+        .get_local_endpoint_socket()
+        .await
         .ok_or_else(|| anyhow::anyhow!("User 2 has no socket endpoint"))?;
     info!("User 2 bound socket address: {}", socket_addr2);
 
@@ -220,7 +217,8 @@ async fn test_two_instances_send_message() -> anyhow::Result<()> {
     use four_word_networking::FourWordAdaptiveEncoder;
     let encoder = FourWordAdaptiveEncoder::new()
         .map_err(|e| anyhow::anyhow!("Failed to create encoder: {}", e))?;
-    let addr2 = encoder.encode(&socket_addr2.to_string())
+    let addr2 = encoder
+        .encode(&socket_addr2.to_string())
         .map_err(|e| anyhow::anyhow!("Failed to encode address: {}", e))?;
     let addr2 = addr2.replace(' ', "-");
 
@@ -235,17 +233,21 @@ async fn test_two_instances_send_message() -> anyhow::Result<()> {
     // Publish PeerInfo to shared DHT for message routing
     // This allows MessagingService to look up peer addresses and establish connections dynamically
     info!("Publishing PeerInfo to shared DHT for message routing");
-    ctx1.publish_peer_info_to_dht().await
+    ctx1.publish_peer_info_to_dht()
+        .await
         .map_err(|e| anyhow::anyhow!("Failed to publish ctx1 peer info: {}", e))?;
-    ctx2.publish_peer_info_to_dht().await
+    ctx2.publish_peer_info_to_dht()
+        .await
         .map_err(|e| anyhow::anyhow!("Failed to publish ctx2 peer info: {}", e))?;
     info!("✅ PeerInfo published for both instances");
 
     // Mark peers as online using IDENTITY addresses (for KEM key lookup)
     info!("Marking peers online for session key exchange");
-    ctx1.mark_peer_online(&four_words_2).await
+    ctx1.mark_peer_online(&four_words_2)
+        .await
         .map_err(|e| anyhow::anyhow!("Failed to mark user2 online: {}", e))?;
-    ctx2.mark_peer_online(&four_words_1).await
+    ctx2.mark_peer_online(&four_words_1)
+        .await
         .map_err(|e| anyhow::anyhow!("Failed to mark user1 online: {}", e))?;
     info!("✅ Peers marked online (using identity addresses)");
 
@@ -255,22 +257,32 @@ async fn test_two_instances_send_message() -> anyhow::Result<()> {
 
     // Create a channel on user 1
     info!("Creating channel on user 1");
-    let channel1 = ctx1.chat.create_channel(
-        "Test Channel".to_string(),
-        "Channel for testing".to_string(),
-        saorsa_core::chat::ChannelType::Public,
-        None,
-    ).await?;
+    let channel1 = ctx1
+        .chat
+        .create_channel(
+            "Test Channel".to_string(),
+            "Channel for testing".to_string(),
+            saorsa_core::chat::ChannelType::Public,
+            None,
+        )
+        .await?;
 
     let channel_id = channel1.id.0.to_string();
     info!("Created channel: {}", channel_id);
 
     // Add user 2 to the channel
     // NOTE: For P2P messaging with KEM encryption, we must use the IDENTITY address (where KEM keys are published)
-    info!("Adding user 2 to the channel using identity address: {}", four_words_2);
-    ctx1.add_channel_member(&channel_id, four_words_2.clone(), saorsa_core::chat::ChannelRole::Member)
-        .await
-        .map_err(|e| anyhow::anyhow!("Failed to add member: {}", e))?;
+    info!(
+        "Adding user 2 to the channel using identity address: {}",
+        four_words_2
+    );
+    ctx1.add_channel_member(
+        &channel_id,
+        four_words_2.clone(),
+        saorsa_core::chat::ChannelRole::Member,
+    )
+    .await
+    .map_err(|e| anyhow::anyhow!("Failed to add member: {}", e))?;
 
     info!("✅ User 2 added to channel");
 
@@ -280,7 +292,8 @@ async fn test_two_instances_send_message() -> anyhow::Result<()> {
     // Send message from user 1 to the channel
     info!("Sending message from user 1");
     let test_message = "Hello from User 1! This is a test message.";
-    let msg_id = ctx1.send_channel_message(&channel_id, test_message)
+    let msg_id = ctx1
+        .send_channel_message(&channel_id, test_message)
         .await
         .map_err(|e| anyhow::anyhow!("Failed to send message: {}", e))?;
 
@@ -292,7 +305,8 @@ async fn test_two_instances_send_message() -> anyhow::Result<()> {
 
     // Get messages from user 2's perspective
     info!("Checking messages received by user 2");
-    let messages = ctx2.get_channel_messages(&channel_id, 10)
+    let messages = ctx2
+        .get_channel_messages(&channel_id, 10)
         .await
         .map_err(|e| anyhow::anyhow!("Failed to get messages: {}", e))?;
 

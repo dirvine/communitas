@@ -4,11 +4,7 @@ use saorsa_core::chat::{Channel, ChannelType};
 
 impl Backend {
     /// Create a new channel
-    pub async fn create_channel(
-        &mut self,
-        name: String,
-        description: String,
-    ) -> Result<Channel> {
+    pub async fn create_channel(&mut self, name: String, description: String) -> Result<Channel> {
         let ctx = self.context_mut()?;
 
         ctx.chat

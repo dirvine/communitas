@@ -105,7 +105,9 @@ pub async fn handle_enter(state: &mut AppState, backend: &mut Backend) -> Result
                             .map(|m| {
                                 let content_str = match &m.content {
                                     saorsa_core::chat::MessageContent::Text(text) => text.clone(),
-                                    saorsa_core::chat::MessageContent::RichText { text, .. } => text.clone(),
+                                    saorsa_core::chat::MessageContent::RichText {
+                                        text, ..
+                                    } => text.clone(),
                                     saorsa_core::chat::MessageContent::System(sys_msg) => {
                                         format!("[System: {:?}]", sys_msg)
                                     }
@@ -119,7 +121,8 @@ pub async fn handle_enter(state: &mut AppState, backend: &mut Backend) -> Result
                                     author_id: m.author.clone(),
                                     author_name: m.author.clone(), // TODO: Get display name from identity
                                     content: content_str,
-                                    timestamp: m.created_at
+                                    timestamp: m
+                                        .created_at
                                         .duration_since(std::time::UNIX_EPOCH)
                                         .map(|d| d.as_secs() as i64)
                                         .unwrap_or(0),
@@ -151,7 +154,9 @@ pub async fn handle_enter(state: &mut AppState, backend: &mut Backend) -> Result
             // Open selected project's Kanban board
             if let Some(project) = state.entities.projects.get(state.navigation.selected_index) {
                 let project_id = project.id.clone();
-                state.navigation.navigate_to(View::ProjectIssues { project_id });
+                state
+                    .navigation
+                    .navigate_to(View::ProjectIssues { project_id });
                 state.navigation.selected_index = 0; // Reset selection
             }
         }
@@ -162,10 +167,7 @@ pub async fn handle_enter(state: &mut AppState, backend: &mut Backend) -> Result
 }
 
 /// Handle 'o' key - open organizations view
-pub async fn handle_open_organizations(
-    state: &mut AppState,
-    backend: &mut Backend,
-) -> Result<()> {
+pub async fn handle_open_organizations(state: &mut AppState, backend: &mut Backend) -> Result<()> {
     if !backend.is_logged_in() {
         state.set_status("Please initialize identity first (press 'i')");
         return Ok(());
@@ -194,7 +196,10 @@ pub async fn handle_open_organizations(
                 .collect();
 
             // Store all channels under default org (for now)
-            state.entities.channels.insert("default".to_string(), channel_data);
+            state
+                .entities
+                .channels
+                .insert("default".to_string(), channel_data);
         }
         Err(e) => {
             state.set_status(format!("Failed to load channels: {}", e));
@@ -254,7 +259,11 @@ pub fn handle_show_help(state: &mut AppState) {
 }
 
 /// Handle login submission
-pub async fn handle_login(state: &mut AppState, backend: &mut Backend, four_words: String) -> Result<()> {
+pub async fn handle_login(
+    state: &mut AppState,
+    backend: &mut Backend,
+    four_words: String,
+) -> Result<()> {
     state.set_status("🔄 Logging in...");
 
     // Validate four-word format
@@ -272,7 +281,10 @@ pub async fn handle_login(state: &mut AppState, backend: &mut Backend, four_word
 
     match backend.login(&four_words, password).await {
         Ok(session_info) => {
-            state.set_status(format!("✅ Logged in as {} ({})", session_info.four_words, session_info.display_name));
+            state.set_status(format!(
+                "✅ Logged in as {} ({})",
+                session_info.four_words, session_info.display_name
+            ));
 
             // Initialize CoreContext for P2P features
             state.set_status("🌐 Connecting to network...");
@@ -294,7 +306,11 @@ pub async fn handle_login(state: &mut AppState, backend: &mut Backend, four_word
 }
 
 /// Handle signup submission
-pub async fn handle_signup(state: &mut AppState, backend: &mut Backend, display_name: String) -> Result<()> {
+pub async fn handle_signup(
+    state: &mut AppState,
+    backend: &mut Backend,
+    display_name: String,
+) -> Result<()> {
     state.set_status("🔄 Generating secure identity...");
 
     if display_name.is_empty() {
@@ -312,10 +328,16 @@ pub async fn handle_signup(state: &mut AppState, backend: &mut Backend, display_
 
     state.set_status("🔒 Creating secure vault (this may take 10-30 seconds)...");
 
-    match backend.create_vault_with_timeout(&four_words, password, &display_name).await {
+    match backend
+        .create_vault_with_timeout(&four_words, password, &display_name)
+        .await
+    {
         Ok(session_info) => {
             state.set_status("✅ Vault created successfully");
-            state.set_status(format!("Welcome! Your identity: {} ({})", session_info.four_words, session_info.display_name));
+            state.set_status(format!(
+                "Welcome! Your identity: {} ({})",
+                session_info.four_words, session_info.display_name
+            ));
 
             // Initialize CoreContext for P2P features
             state.set_status("🌐 Initializing P2P features...");
@@ -408,10 +430,7 @@ pub async fn handle_create_thread(state: &mut AppState, backend: &mut Backend) -
                 let message_id = msg.id.clone();
                 state.set_status("Creating thread...");
 
-                match backend
-                    .create_thread(channel_id.clone(), message_id)
-                    .await
-                {
+                match backend.create_thread(channel_id.clone(), message_id).await {
                     Ok(thread_id) => {
                         state.set_status("Thread created");
                         state.navigation.navigate_to(View::Thread {
@@ -452,7 +471,10 @@ pub async fn handle_add_reaction(state: &mut AppState, backend: &mut Backend) ->
 
                 state.set_status("Adding reaction...");
 
-                match backend.add_reaction(channel_id, message_id, emoji.to_string()).await {
+                match backend
+                    .add_reaction(channel_id, message_id, emoji.to_string())
+                    .await
+                {
                     Ok(()) => {
                         state.set_status(format!("Added reaction: {}", emoji));
                     }

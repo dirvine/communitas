@@ -7,7 +7,7 @@ Targets: 6 droplets across AMS3, LON1, FRA1, NYC3, SFO3, SGP1. Ubuntu 24.04. **I
 ## 1) Prereqs
 - doctl authenticated or Terraform with DO provider.
 - SSH key uploaded to DO.
-- Release URLs for `communitas-node`, `communitas-autoupdater`, and `bootstrap` (all built with saorsa-core 0.3.18+).
+- Release URLs for `communitas-headless`, `communitas-autoupdater`, and `bootstrap` (all built with saorsa-core 0.3.18+).
 - Empty `bootstrap.toml` template ready.
 - Bootstrap node binary tested and working locally.
 
@@ -32,12 +32,14 @@ runcmd:
   - ufw --force enable
   - useradd -m -s /bin/bash communitas || true
   - mkdir -p /opt/communitas/bin /var/lib/communitas
-   - curl -L {{RELEASE_URL}} -o /opt/communitas/bin/communitas-node
+  - INSTANCE_ID={{INSTANCE_ID}}
+   - curl -L {{RELEASE_URL}} -o /opt/communitas/bin/communitas-headless
    - curl -L {{AUTO_URL}} -o /opt/communitas/bin/communitas-autoupdater
    - curl -L {{BOOTSTRAP_URL}} -o /opt/communitas/bin/bootstrap
-   - chmod +x /opt/communitas/bin/communitas-node /opt/communitas/bin/communitas-autoupdater /opt/communitas/bin/bootstrap
+   - chmod +x /opt/communitas/bin/communitas-headless /opt/communitas/bin/communitas-autoupdater /opt/communitas/bin/bootstrap
   - chown -R communitas:communitas /opt/communitas /var/lib/communitas
-  - install -d -o communitas -g communitas /etc/communitas
+  - install -d -o communitas -g communitas /etc/communitas/${INSTANCE_ID}
+  - install -d -o communitas -g communitas /var/lib/communitas/${INSTANCE_ID}
   - printf '%s\n' "[update]\nchannel=stable\n" > /etc/communitas/update.toml
    - systemctl daemon-reload
    - systemctl enable communitas.service
@@ -49,8 +51,10 @@ runcmd:
    - systemctl start communitas-bootstrap.service || true
 ```
 
+Set `{{INSTANCE_ID}}` to a stable identifier (for example `seed-node-1`). Each systemd unit below reuses the same value via `Environment=` variables to keep configuration and storage segregated per headless node. The binary will auto-create a default `config.toml` under the specified `--config` path on first launch if none exists.
+
 ### systemd units
-`/etc/systemd/system/communitas.service`:
+`/etc/systemd/system/communitas.service` (update the `Environment=` lines to match your instance):
 ```ini
 [Unit]
 Description=Communitas Node
@@ -59,7 +63,14 @@ Wants=network-online.target
 
 [Service]
 User=communitas
-ExecStart=/opt/communitas/bin/communitas-node --config /etc/communitas/config.toml
+Environment=COMMUNITAS_INSTANCE=seed-node-1
+Environment=COMMUNITAS_CONFIG=/etc/communitas/seed-node-1/config.toml
+Environment=COMMUNITAS_STORAGE=/var/lib/communitas/seed-node-1
+ExecStartPre=/usr/bin/install -d -o communitas -g communitas ${COMMUNITAS_STORAGE}
+ExecStart=/opt/communitas/bin/communitas-headless \\
+    --instance-id=${COMMUNITAS_INSTANCE} \\
+    --config=${COMMUNITAS_CONFIG} \\
+    --storage=${COMMUNITAS_STORAGE}
 Restart=always
 RestartSec=5
 LimitNOFILE=1048576
@@ -83,7 +94,7 @@ RestartSec=30
 WantedBy=multi-user.target
 ```
 
-`/etc/systemd/system/communitas-bootstrap.service` (for bootstrap nodes):
+`/etc/systemd/system/communitas-bootstrap.service` (for bootstrap nodes – set a distinct instance id/storage root):
 ```ini
 [Unit]
 Description=Communitas Bootstrap Node
@@ -92,7 +103,14 @@ Wants=network-online.target
 
 [Service]
 User=communitas
-ExecStart=/opt/communitas/bin/bootstrap
+Environment=COMMUNITAS_INSTANCE=bootstrap-node-1
+Environment=COMMUNITAS_CONFIG=/etc/communitas/bootstrap-node-1/config.toml
+Environment=COMMUNITAS_STORAGE=/var/lib/communitas/bootstrap-node-1
+ExecStartPre=/usr/bin/install -d -o communitas -g communitas ${COMMUNITAS_STORAGE}
+ExecStart=/opt/communitas/bin/communitas-headless \\
+    --instance-id=${COMMUNITAS_INSTANCE} \\
+    --config=${COMMUNITAS_CONFIG} \\
+    --storage=${COMMUNITAS_STORAGE}
 Restart=always
 RestartSec=5
 LimitNOFILE=1048576
@@ -102,19 +120,34 @@ WantedBy=multi-user.target
 ```
 
 ## 5) Config files
-`/etc/communitas/config.toml`:
+`/etc/communitas/seed-node-1/config.toml` (auto-created on first start; adjust values as needed):
 ```toml
-[node]
-storage_path = "/var/lib/communitas"
-listen_quic = ["0.0.0.0:443"]          # IPv4-first
-listen_webrtc = ["0.0.0.0:443"]
-# Optionally add IPv6 listeners:
-# listen_quic = ["0.0.0.0:443", "[::]:443"]
+# Optional: pre-assign the node identity (otherwise generated on first boot)
+identity = null
 
-[bootstrap]
-# Bootstrap node configuration - filled after four-word derivation (see next section)
-# For bootstrap nodes, this will be empty initially
-seeds = []
+bootstrap_nodes = [
+  # four-word-address:port entries go here
+]
+
+[storage]
+base_dir = "/var/lib/communitas/seed-node-1"
+cache_size_mb = 1024
+enable_fec = true
+fec_k = 8
+fec_m = 4
+
+[network]
+listen_addrs = ["0.0.0.0:443"]
+enable_ipv6 = true
+enable_webrtc = false
+quic_idle_timeout_ms = 30000
+quic_max_streams = 100
+
+[update]
+channel = "stable"
+check_interval_secs = 21600
+auto_update = true
+jitter_secs = 0
 ```
 
 ## 6) Derive four-word endpoints (post-provision)

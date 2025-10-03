@@ -6,9 +6,8 @@
 use communitas_core::{
     AuthService, SessionInfo,
     encrypted_storage::{
-        EncryptedStorageManager, StorageConfig, VaultInfo as CoreVaultInfo,
-        AppConfig, RecentIdentity as CoreRecentIdentity,
-        PasskeyInfo as CorePasskeyInfo,
+        AppConfig, EncryptedStorageManager, PasskeyInfo as CorePasskeyInfo,
+        RecentIdentity as CoreRecentIdentity, StorageConfig, VaultInfo as CoreVaultInfo,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -59,12 +58,10 @@ pub async fn auth_initialize(state: State<'_, AppState>) -> Result<(), String> {
     tracing::info!("Initializing authentication service");
 
     let config = StorageConfig::default();
-    let storage_manager = EncryptedStorageManager::new(config)
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to initialize storage: {}", e);
-            format!("Failed to initialize storage: {}", e)
-        })?;
+    let storage_manager = EncryptedStorageManager::new(config).await.map_err(|e| {
+        tracing::error!("Failed to initialize storage: {}", e);
+        format!("Failed to initialize storage: {}", e)
+    })?;
 
     let auth_service = AuthService::new(storage_manager);
 
@@ -165,7 +162,10 @@ pub async fn auth_login_password_only(
         display_name: session.display_name,
     };
 
-    tracing::info!("Password-only login successful: {}", session_info.four_words);
+    tracing::info!(
+        "Password-only login successful: {}",
+        session_info.four_words
+    );
     Ok(session_info)
 }
 
@@ -194,9 +194,7 @@ pub async fn auth_logout(state: State<'_, AppState>) -> Result<(), String> {
 ///
 /// Returns None if no user is logged in.
 #[tauri::command]
-pub async fn auth_get_session(
-    state: State<'_, AppState>,
-) -> Result<Option<SessionInfo>, String> {
+pub async fn auth_get_session(state: State<'_, AppState>) -> Result<Option<SessionInfo>, String> {
     let service = state.auth_service.read().await;
     let auth_service = service
         .as_ref()
@@ -264,7 +262,9 @@ pub async fn auth_get_config(state: State<'_, AppState>) -> Result<AppConfig, St
 
 /// Try auto-login with last used identity
 #[tauri::command]
-pub async fn auth_try_auto_login(state: State<'_, AppState>) -> Result<Option<SessionInfo>, String> {
+pub async fn auth_try_auto_login(
+    state: State<'_, AppState>,
+) -> Result<Option<SessionInfo>, String> {
     tracing::info!("Attempting auto-login");
 
     let mut service = state.auth_service.write().await;
@@ -291,7 +291,7 @@ pub async fn auth_try_auto_login(state: State<'_, AppState>) -> Result<Option<Se
 /// Get recent identities for quick access
 #[tauri::command]
 pub async fn auth_get_recent_identities(
-    state: State<'_, AppState>
+    state: State<'_, AppState>,
 ) -> Result<Vec<CoreRecentIdentity>, String> {
     tracing::info!("Getting recent identities");
 
@@ -310,10 +310,7 @@ pub async fn auth_get_recent_identities(
 
 /// Enable or disable auto-login
 #[tauri::command]
-pub async fn auth_set_auto_login(
-    state: State<'_, AppState>,
-    enabled: bool,
-) -> Result<(), String> {
+pub async fn auth_set_auto_login(state: State<'_, AppState>, enabled: bool) -> Result<(), String> {
     tracing::info!("Setting auto-login: {}", enabled);
 
     let service = state.auth_service.read().await;
@@ -321,7 +318,8 @@ pub async fn auth_set_auto_login(
         .as_ref()
         .ok_or_else(|| "Auth service not initialized".to_string())?;
 
-    auth_service.storage_manager()
+    auth_service
+        .storage_manager()
         .set_auto_login_enabled(enabled)
         .await
         .map_err(|e| format!("Failed to set auto-login: {}", e))?;
@@ -342,7 +340,8 @@ pub async fn auth_set_keyring_enabled(
         .as_ref()
         .ok_or_else(|| "Auth service not initialized".to_string())?;
 
-    auth_service.storage_manager()
+    auth_service
+        .storage_manager()
         .set_keyring_enabled(enabled)
         .await
         .map_err(|e| format!("Failed to set keyring: {}", e))?;
@@ -380,7 +379,11 @@ pub async fn auth_passkey_register(
     four_words: String,
     device_name: String,
 ) -> Result<PasskeyInfo, String> {
-    tracing::info!("Registering passkey for: {} on device: {}", four_words, device_name);
+    tracing::info!(
+        "Registering passkey for: {} on device: {}",
+        four_words,
+        device_name
+    );
 
     let mut service = state.auth_service.write().await;
     let auth_service = service
@@ -527,8 +530,13 @@ mod tests {
     async fn init_test_state() -> AppState {
         let state = AppState::new();
         // Use temp directory for each test to ensure isolation
-        let temp_dir = std::env::temp_dir().join(format!("communitas-test-{}",
-            SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_micros()));
+        let temp_dir = std::env::temp_dir().join(format!(
+            "communitas-test-{}",
+            SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_micros()
+        ));
         let config = StorageConfig {
             vault_dir: temp_dir,
             use_keyring: false, // Disable keyring in tests
@@ -586,7 +594,9 @@ mod tests {
             .unwrap();
 
         // Try to login with wrong password - should fail
-        let result = auth_service.login(&vault_name, "wrong-password", Some("Desktop")).await;
+        let result = auth_service
+            .login(&vault_name, "wrong-password", Some("Desktop"))
+            .await;
 
         assert!(result.is_err(), "Login should fail with wrong password");
         assert!(!auth_service.is_logged_in());
@@ -633,8 +643,14 @@ mod tests {
         let vault_two = test_vault_name("vault-two");
 
         // Create multiple vaults
-        auth_service.create_vault(&vault_one, "pass1", "User One").await.unwrap();
-        auth_service.create_vault(&vault_two, "pass2", "User Two").await.unwrap();
+        auth_service
+            .create_vault(&vault_one, "pass1", "User One")
+            .await
+            .unwrap();
+        auth_service
+            .create_vault(&vault_two, "pass2", "User Two")
+            .await
+            .unwrap();
 
         // List vaults
         let vaults = auth_service.list_vaults().await.unwrap();
@@ -656,20 +672,32 @@ mod tests {
         let vault_2 = test_vault_name("isolated-2");
 
         // Create vault 1
-        auth_service.create_vault(&vault_1, "password1", "User 1").await.unwrap();
+        auth_service
+            .create_vault(&vault_1, "password1", "User 1")
+            .await
+            .unwrap();
 
         // Create vault 2
-        auth_service.create_vault(&vault_2, "password2", "User 2").await.unwrap();
+        auth_service
+            .create_vault(&vault_2, "password2", "User 2")
+            .await
+            .unwrap();
 
         // Login to vault 1
-        let session1 = auth_service.login(&vault_1, "password1", Some("Desktop")).await.unwrap();
+        let session1 = auth_service
+            .login(&vault_1, "password1", Some("Desktop"))
+            .await
+            .unwrap();
         assert_eq!(session1.display_name, "User 1");
 
         // Logout
         auth_service.logout().await.unwrap();
 
         // Login to vault 2
-        let session2 = auth_service.login(&vault_2, "password2", Some("Desktop")).await.unwrap();
+        let session2 = auth_service
+            .login(&vault_2, "password2", Some("Desktop"))
+            .await
+            .unwrap();
         assert_eq!(session2.display_name, "User 2");
     }
 }

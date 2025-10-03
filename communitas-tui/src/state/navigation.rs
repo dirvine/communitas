@@ -64,9 +64,7 @@ impl Navigation {
 
     /// Get the current view
     pub fn current_view(&self) -> &View {
-        self.view_stack
-            .last()
-            .unwrap_or(&View::Dashboard)
+        self.view_stack.last().unwrap_or(&View::Dashboard)
     }
 
     /// Push a new view onto the stack

@@ -236,8 +236,7 @@ pub async fn create_issue(
     request: CreateIssueRequest,
     state: State<'_, OrgState>,
 ) -> Result<Issue, String> {
-    let priority =
-        IssuePriority::from_str(&request.priority).map_err(|e| e.to_string())?;
+    let priority = IssuePriority::from_str(&request.priority).map_err(|e| e.to_string())?;
 
     state
         .issue_service

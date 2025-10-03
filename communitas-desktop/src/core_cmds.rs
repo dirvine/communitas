@@ -1,5 +1,5 @@
-use communitas_core::keystore::Keystore;
 use communitas_core::CoreContext;
+use communitas_core::keystore::Keystore;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -61,7 +61,7 @@ pub async fn generate_four_word_identity() -> Result<String, String> {
     use rand::rngs::OsRng;
     use saorsa_core::address::NetworkAddress;
     use std::net::Ipv4Addr;
-    
+
     let mut rng = OsRng;
     const MIN_PORT: u16 = 1024;
     const PORT_SPAN: u32 = u16::MAX as u32 - MIN_PORT as u32 + 1;
@@ -75,7 +75,8 @@ pub async fn generate_four_word_identity() -> Result<String, String> {
         if let Some(words) = candidate.four_words() {
             // Parse to ensure it's valid
             if let Ok(parsed) = saorsa_core::identity::FourWordAddress::parse_str(words) {
-                let words_array: [String; 4] = parsed.words()
+                let words_array: [String; 4] = parsed
+                    .words()
                     .try_into()
                     .map_err(|_| "Should have exactly 4 words".to_string())?;
 
@@ -87,7 +88,10 @@ pub async fn generate_four_word_identity() -> Result<String, String> {
         }
     }
 
-    Err(format!("Failed to generate valid four-word address after {} attempts", GENERATION_ATTEMPTS))
+    Err(format!(
+        "Failed to generate valid four-word address after {} attempts",
+        GENERATION_ATTEMPTS
+    ))
 }
 
 /// Check if DHT client is connected and ready
@@ -119,14 +123,16 @@ pub async fn find_group_storage_disk(
         if words.len() != 4 {
             return Err("Invalid four-word format".to_string());
         }
-        
-        let words_array: [String; 4] = words.try_into().map_err(|_| "Invalid four-word format".to_string())?;
+
+        let words_array: [String; 4] = words
+            .try_into()
+            .map_err(|_| "Invalid four-word format".to_string())?;
         if !fw_check(words_array.clone()) {
             return Err("Invalid four-word identity".to_string());
         }
-        
+
         let group_key = fw_to_key(words_array).map_err(|e| format!("fw_to_key failed: {}", e))?;
-        
+
         // Storage disks are derived from group identity hash
         // For now, return a deterministic storage disk ID based on the group key
         let disk_id = hex::encode(&group_key.as_bytes()[..16]); // Use first 16 bytes as disk ID
@@ -146,17 +152,25 @@ pub async fn store_user_identity(
     let guard = shared.read().await;
     if let Some(_ctx) = guard.as_ref() {
         // For now, just validate the four-words and return success
-        let words: Vec<String> = current_four_words.split('-').map(|s| s.to_string()).collect();
+        let words: Vec<String> = current_four_words
+            .split('-')
+            .map(|s| s.to_string())
+            .collect();
         if words.len() != 4 {
             return Err("Invalid four-word format".to_string());
         }
-        
-        let words_array: [String; 4] = words.try_into().map_err(|_| "Invalid four-word format".to_string())?;
+
+        let words_array: [String; 4] = words
+            .try_into()
+            .map_err(|_| "Invalid four-word format".to_string())?;
         if !fw_check(words_array) {
             return Err("Invalid four-word identity".to_string());
         }
-        
-        info!("Stored user identity: {} ({})", display_name, current_four_words);
+
+        info!(
+            "Stored user identity: {} ({})",
+            display_name, current_four_words
+        );
         Ok(())
     } else {
         Err("No core context".to_string())
@@ -176,12 +190,14 @@ pub async fn find_user_current_address(
         if words.len() != 4 {
             return Err("Invalid four-word format".to_string());
         }
-        
-        let words_array: [String; 4] = words.try_into().map_err(|_| "Invalid four-word format".to_string())?;
+
+        let words_array: [String; 4] = words
+            .try_into()
+            .map_err(|_| "Invalid four-word format".to_string())?;
         if !fw_check(words_array) {
             return Err("Invalid four-word identity".to_string());
         }
-        
+
         // For now, return the same four-words as current address
         // In real implementation, this would look up from DHT
         Ok(user_four_words)

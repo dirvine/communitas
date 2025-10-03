@@ -1,19 +1,16 @@
 use crate::state::{AppState, EntityType};
 use ratatui::{
+    Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, Paragraph},
-    Frame,
 };
 
 /// Render main dashboard with entity type selector
 pub fn render(f: &mut Frame, area: Rect, state: &AppState) {
     let block = Block::default()
-        .title(format!(
-            "Communitas TUI v{}",
-            env!("CARGO_PKG_VERSION")
-        ))
+        .title(format!("Communitas TUI v{}", env!("CARGO_PKG_VERSION")))
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Cyan));
 
@@ -22,9 +19,9 @@ pub fn render(f: &mut Frame, area: Rect, state: &AppState) {
         .direction(Direction::Vertical)
         .margin(2)
         .constraints([
-            Constraint::Length(3),  // Title
-            Constraint::Min(10),    // Entity list
-            Constraint::Length(8),  // Instructions
+            Constraint::Length(3), // Title
+            Constraint::Min(10),   // Entity list
+            Constraint::Length(8), // Instructions
         ])
         .split(block.inner(area));
 

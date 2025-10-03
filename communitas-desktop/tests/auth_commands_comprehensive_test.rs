@@ -8,13 +8,12 @@ use communitas_core::{
     encrypted_storage::{EncryptedStorageManager, StorageConfig},
 };
 use communitas_desktop::commands::auth::{
-    AppState, auth_initialize, auth_create_vault, auth_login, auth_logout,
-    auth_get_session, auth_list_vaults, auth_try_auto_login, auth_get_recent_identities,
-    auth_passkey_register, auth_passkey_authenticate, auth_passkey_has_passkey,
-    auth_login_password_only,
+    AppState, auth_create_vault, auth_get_recent_identities, auth_get_session, auth_initialize,
+    auth_list_vaults, auth_login, auth_login_password_only, auth_logout, auth_passkey_authenticate,
+    auth_passkey_has_passkey, auth_passkey_register, auth_try_auto_login,
 };
-use tempfile::TempDir;
 use tauri::State;
+use tempfile::TempDir;
 
 /// Helper to create isolated test state
 async fn create_test_state() -> (AppState, TempDir) {
@@ -320,12 +319,10 @@ async fn test_passkey_has_passkey() {
     .unwrap();
 
     // No passkey initially
-    let has_passkey = auth_passkey_has_passkey(
-        State::from(&state),
-        "passkey-check-vault".to_string(),
-    )
-    .await
-    .unwrap();
+    let has_passkey =
+        auth_passkey_has_passkey(State::from(&state), "passkey-check-vault".to_string())
+            .await
+            .unwrap();
 
     assert!(!has_passkey);
 
@@ -347,12 +344,10 @@ async fn test_passkey_has_passkey() {
     .unwrap();
 
     // Should have passkey now
-    let has_passkey = auth_passkey_has_passkey(
-        State::from(&state),
-        "passkey-check-vault".to_string(),
-    )
-    .await
-    .unwrap();
+    let has_passkey =
+        auth_passkey_has_passkey(State::from(&state), "passkey-check-vault".to_string())
+            .await
+            .unwrap();
 
     assert!(has_passkey);
 }
@@ -390,11 +385,8 @@ async fn test_passkey_authentication() {
     auth_logout(State::from(&state)).await.unwrap();
 
     // Authenticate with passkey
-    let result = auth_passkey_authenticate(
-        State::from(&state),
-        "passkey-auth-test".to_string(),
-    )
-    .await;
+    let result =
+        auth_passkey_authenticate(State::from(&state), "passkey-auth-test".to_string()).await;
 
     assert!(result.is_ok());
     let session = result.unwrap();
@@ -490,11 +482,7 @@ async fn test_password_only_login() {
     .unwrap();
 
     // Login without knowing four-word address
-    let result = auth_login_password_only(
-        State::from(&state),
-        password.to_string(),
-    )
-    .await;
+    let result = auth_login_password_only(State::from(&state), password.to_string()).await;
 
     assert!(result.is_ok());
     let session = result.unwrap();

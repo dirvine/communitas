@@ -519,7 +519,10 @@ pub async fn core_add_bootstrap_node(
         .ok_or_else(|| "Core not initialized".to_string())?;
 
     if let Some(bootstrap_manager) = &ctx.bootstrap_manager {
-        bootstrap_manager.add_bootstrap_node(&node).await.map_err(|e| e.to_string())?;
+        bootstrap_manager
+            .add_bootstrap_node(&node)
+            .await
+            .map_err(|e| e.to_string())?;
         Ok(true)
     } else {
         Err("Bootstrap manager not available".to_string())
@@ -537,7 +540,10 @@ pub async fn core_clear_custom_nodes(
         .ok_or_else(|| "Core not initialized".to_string())?;
 
     if let Some(bootstrap_manager) = &ctx.bootstrap_manager {
-        bootstrap_manager.clear_custom_nodes().await.map_err(|e| e.to_string())?;
+        bootstrap_manager
+            .clear_custom_nodes()
+            .await
+            .map_err(|e| e.to_string())?;
         Ok(true)
     } else {
         Err("Bootstrap manager not available".to_string())
@@ -555,7 +561,10 @@ pub async fn core_get_bootstrap_stats(
         .ok_or_else(|| "Core not initialized".to_string())?;
 
     if let Some(bootstrap_manager) = &ctx.bootstrap_manager {
-        let stats = bootstrap_manager.get_stats().await.map_err(|e| e.to_string())?;
+        let stats = bootstrap_manager
+            .get_stats()
+            .await
+            .map_err(|e| e.to_string())?;
         Ok(serde_json::json!({
             "total_nodes": stats.total_nodes,
             "custom_nodes": stats.custom_nodes,
@@ -582,8 +591,16 @@ pub async fn core_messages_list(
     limit: u32,
     offset: u32,
 ) -> Result<Vec<serde_json::Value>, String> {
-    eprintln!("🟢 core_messages_list ENTERED with entity_id={}, limit={}, offset={}", entity_id, limit, offset);
-    tracing::warn!("🟢 core_messages_list called with entity_id={}, limit={}, offset={}", entity_id, limit, offset);
+    eprintln!(
+        "🟢 core_messages_list ENTERED with entity_id={}, limit={}, offset={}",
+        entity_id, limit, offset
+    );
+    tracing::warn!(
+        "🟢 core_messages_list called with entity_id={}, limit={}, offset={}",
+        entity_id,
+        limit,
+        offset
+    );
 
     let guard = shared.read().await;
     let ctx = guard
@@ -746,7 +763,11 @@ pub async fn subscribe_to_entity(
         return Ok(()); // Return success to avoid error notifications
     }
 
-    tracing::debug!("subscribe_to_entity called for entity_id={}, user_id={}", entity_id, user_id);
+    tracing::debug!(
+        "subscribe_to_entity called for entity_id={}, user_id={}",
+        entity_id,
+        user_id
+    );
 
     // TODO: Implement actual DHT subscription
     Ok(())
@@ -767,7 +788,11 @@ pub async fn unsubscribe_from_entity(
         return Ok(()); // Return success to avoid error notifications
     }
 
-    tracing::debug!("unsubscribe_from_entity called for entity_id={}, user_id={}", entity_id, user_id);
+    tracing::debug!(
+        "unsubscribe_from_entity called for entity_id={}, user_id={}",
+        entity_id,
+        user_id
+    );
 
     // TODO: Implement actual DHT unsubscription
     Ok(())
@@ -792,7 +817,10 @@ pub async fn core_entity_update(
         if n.len() > 100 {
             return Err("Name too long (max 100 characters)".to_string());
         }
-        if !n.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == ' ') {
+        if !n
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == ' ')
+        {
             return Err("Name contains invalid characters".to_string());
         }
     }

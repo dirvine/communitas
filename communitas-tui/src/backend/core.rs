@@ -1,7 +1,7 @@
 use anyhow::Result;
 use communitas_core::{
     AuthService, CoreContext, SessionInfo,
-    encrypted_storage::{EncryptedStorageManager, StorageConfig, RecentIdentity},
+    encrypted_storage::{EncryptedStorageManager, RecentIdentity, StorageConfig},
 };
 use saorsa_core::identity::enhanced::DeviceType;
 use std::path::PathBuf;
@@ -85,10 +85,16 @@ impl Backend {
         tracing::info!("Creating vault for: {}", four_words);
 
         // Create vault via auth service
-        let _vault_id = self.auth_service.create_vault(four_words, password, display_name).await?;
+        let _vault_id = self
+            .auth_service
+            .create_vault(four_words, password, display_name)
+            .await?;
 
         // Login to the new vault
-        let session_info = self.auth_service.login(four_words, password, Some("TUI")).await?;
+        let session_info = self
+            .auth_service
+            .login(four_words, password, Some("TUI"))
+            .await?;
 
         tracing::info!("Vault created and logged in: {}", four_words);
         Ok(session_info)
@@ -101,29 +107,29 @@ impl Backend {
         password: &str,
         display_name: &str,
     ) -> Result<SessionInfo> {
-        use tokio::time::{timeout, Duration};
-        
+        use tokio::time::{Duration, timeout};
+
         let result = timeout(
             Duration::from_secs(60), // 60 second timeout
-            self.create_vault(four_words, password, display_name)
-        ).await;
-        
+            self.create_vault(four_words, password, display_name),
+        )
+        .await;
+
         match result {
             Ok(Ok(session_info)) => Ok(session_info),
             Ok(Err(e)) => Err(e),
-            Err(_) => Err(anyhow::anyhow!("Vault creation timed out after 60 seconds"))
+            Err(_) => Err(anyhow::anyhow!("Vault creation timed out after 60 seconds")),
         }
     }
 
     /// Login with four-word identity and password
-    pub async fn login(
-        &mut self,
-        four_words: &str,
-        password: &str,
-    ) -> Result<SessionInfo> {
+    pub async fn login(&mut self, four_words: &str, password: &str) -> Result<SessionInfo> {
         tracing::info!("Logging in: {}", four_words);
 
-        let session_info = self.auth_service.login(four_words, password, Some("TUI")).await?;
+        let session_info = self
+            .auth_service
+            .login(four_words, password, Some("TUI"))
+            .await?;
 
         tracing::info!("Login successful: {}", four_words);
         Ok(session_info)
@@ -189,7 +195,9 @@ impl Backend {
 
     /// Initialize CoreContext with current session
     pub async fn initialize_core_context(&mut self) -> Result<()> {
-        let session = self.auth_service.get_current_session()
+        let session = self
+            .auth_service
+            .get_current_session()
             .ok_or_else(|| anyhow::anyhow!("No active session"))?;
 
         tracing::info!("Initializing CoreContext for: {}", session.four_words);

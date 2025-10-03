@@ -1,9 +1,9 @@
 //! Error types for the bridge server
 
 use axum::{
+    Json,
     http::StatusCode,
     response::{IntoResponse, Response},
-    Json,
 };
 use serde_json::json;
 use thiserror::Error;
@@ -32,9 +32,10 @@ impl IntoResponse for BridgeError {
             BridgeError::Network(msg) => (StatusCode::SERVICE_UNAVAILABLE, msg),
             BridgeError::CommandFailed(msg) => (StatusCode::BAD_REQUEST, msg),
             BridgeError::InvalidRequest(msg) => (StatusCode::BAD_REQUEST, msg),
-            BridgeError::Serialization(err) => {
-                (StatusCode::BAD_REQUEST, format!("Serialization error: {}", err))
-            }
+            BridgeError::Serialization(err) => (
+                StatusCode::BAD_REQUEST,
+                format!("Serialization error: {}", err),
+            ),
             BridgeError::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
         };
 

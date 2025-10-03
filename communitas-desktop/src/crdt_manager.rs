@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use chrono::Utc;
-use libsql::{params, Builder, Connection, Database};
+use libsql::{Builder, Connection, Database, params};
 use std::path::Path;
 use yrs::{Doc, ReadTxn, Transact};
 
@@ -77,8 +77,8 @@ impl CrdtManager {
                 let mut txn = doc.transact_mut();
                 // Decode and apply update using correct API
                 use yrs::updates::decoder::Decode;
-                let update = yrs::Update::decode_v1(&state)
-                    .context("Failed to decode Yrs state")?;
+                let update =
+                    yrs::Update::decode_v1(&state).context("Failed to decode Yrs state")?;
                 txn.apply_update(update);
             }
             Ok(doc)
@@ -119,8 +119,8 @@ impl CrdtManager {
         {
             let mut txn = doc.transact_mut();
             use yrs::updates::decoder::Decode;
-            let decoded_update = yrs::Update::decode_v1(update)
-                .context("Failed to decode update")?;
+            let decoded_update =
+                yrs::Update::decode_v1(update).context("Failed to decode update")?;
             txn.apply_update(decoded_update);
         }
         self.save_document(doc_id, entity_type, entity_id, &doc)
@@ -178,7 +178,9 @@ impl CrdtManager {
 
     /// Get database connection for custom queries
     pub fn connection(&self) -> Result<Connection> {
-        self.db.connect().context("Failed to get database connection")
+        self.db
+            .connect()
+            .context("Failed to get database connection")
     }
 }
 

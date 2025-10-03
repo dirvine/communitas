@@ -10,12 +10,10 @@
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
 use anyhow::{Context, Result, anyhow};
-use communitas_core::bootstrap_integration::{
-    BootstrapConfig, EnhancedBootstrapManager,
-};
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use clap::Parser;
+use communitas_core::bootstrap_integration::{BootstrapConfig, EnhancedBootstrapManager};
 use ed25519_dalek::SigningKey as Ed25519SecretKey;
 use four_word_networking::FourWordAdaptiveEncoder;
 use once_cell::sync::Lazy;
@@ -30,6 +28,7 @@ use saorsa_core::quantum_crypto::{
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::convert::TryInto;
+use std::env;
 use std::io::ErrorKind;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
@@ -89,13 +88,17 @@ pub fn try_self_update() -> Result<Option<String>> {
     long_about = None
 )]
 struct Args {
-    /// Configuration file path
-    #[arg(short, long, default_value = "/etc/communitas/config.toml")]
-    config: PathBuf,
+    /// Configuration file path (defaults to per-instance directory under the user config root)
+    #[arg(short, long)]
+    config: Option<PathBuf>,
 
-    /// Storage directory
-    #[arg(short, long, default_value = "/var/lib/communitas")]
-    storage: PathBuf,
+    /// Storage directory (defaults to per-instance directory under the user data root)
+    #[arg(short, long)]
+    storage: Option<PathBuf>,
+
+    /// Identifier used to segregate config and data directories when running multiple instances
+    #[arg(long)]
+    instance_id: Option<String>,
 
     /// Listen address
     /// If not provided, you can set COMMUNITAS_QUIC_PORT or COMMUNITAS_QUIC_LISTEN.
@@ -187,63 +190,171 @@ struct UpdateConfig {
 
 impl Default for Config {
     fn default() -> Self {
-        Self {
-            identity: None,
-            bootstrap_nodes: vec![
-                "ocean-forest-moon-star:443".to_string(),
-                "river-mountain-sun-cloud:443".to_string(),
-            ],
-            storage: StorageConfig {
-                base_dir: PathBuf::from("/var/lib/communitas"),
-                cache_size_mb: 1024,
-                enable_fec: true,
-                fec_k: 8,
-                fec_m: 4,
-            },
-            network: NetworkConfig {
-                listen_addrs: vec![std::net::SocketAddr::new(
-                    std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED),
-                    443,
-                )],
-                enable_ipv6: true,
-                enable_webrtc: false,
-                quic_idle_timeout_ms: 30000,
-                quic_max_streams: 100,
-            },
-            update: UpdateConfig {
-                channel: "stable".to_string(),
-                check_interval_secs: 21600, // 6 hours
-                auto_update: true,
-                jitter_secs: 0, // No jitter needed for saorsa-core 0.3.18+
-            },
+        default_config_with_storage(PathBuf::from("communitas-data"))
+    }
+}
+
+fn default_config_with_storage(base_dir: PathBuf) -> Config {
+    Config {
+        identity: None,
+        bootstrap_nodes: vec![
+            "ocean-forest-moon-star:443".to_string(),
+            "river-mountain-sun-cloud:443".to_string(),
+        ],
+        storage: StorageConfig {
+            base_dir,
+            cache_size_mb: 1024,
+            enable_fec: true,
+            fec_k: 8,
+            fec_m: 4,
+        },
+        network: NetworkConfig {
+            listen_addrs: vec![std::net::SocketAddr::new(
+                std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED),
+                443,
+            )],
+            enable_ipv6: true,
+            enable_webrtc: false,
+            quic_idle_timeout_ms: 30000,
+            quic_max_streams: 100,
+        },
+        update: UpdateConfig {
+            channel: "stable".to_string(),
+            check_interval_secs: 21600, // 6 hours
+            auto_update: true,
+            jitter_secs: 0, // No jitter needed for saorsa-core 0.3.18+
+        },
+    }
+}
+
+fn sanitize_instance_id(raw: &str) -> String {
+    let mut sanitized: String = raw
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '-'
+            }
+        })
+        .collect();
+    sanitized.truncate(64);
+    if sanitized.trim_matches('-').is_empty() {
+        "communitas".to_string()
+    } else {
+        sanitized.trim_matches('-').to_string()
+    }
+}
+
+fn default_instance_id() -> String {
+    let host = env::var("COMMUNITAS_INSTANCE_HOST")
+        .or_else(|_| env::var("HOSTNAME"))
+        .or_else(|_| env::var("COMPUTERNAME"))
+        .unwrap_or_else(|_| "communitas".to_string());
+    let host = sanitize_instance_id(&host.to_lowercase());
+    let pid = std::process::id();
+    format!("{}-{}", host, pid)
+}
+
+fn ensure_absolute(path: &Path) -> Result<PathBuf> {
+    if path.is_absolute() {
+        return Ok(path.to_path_buf());
+    }
+    let cwd = env::current_dir().context("Failed to determine current working directory")?;
+    Ok(cwd.join(path))
+}
+
+fn resolve_config_path(args: &Args, instance_id: &str) -> Result<PathBuf> {
+    if let Some(ref cli_path) = args.config {
+        return ensure_absolute(cli_path);
+    }
+
+    if let Ok(env_path) = env::var("COMMUNITAS_CONFIG_PATH") {
+        return ensure_absolute(Path::new(&env_path));
+    }
+
+    let base = if let Ok(env_dir) = env::var("COMMUNITAS_CONFIG_DIR") {
+        ensure_absolute(Path::new(&env_dir))?
+    } else if let Some(dir) = dirs::config_dir() {
+        dir
+    } else {
+        anyhow::bail!(
+            "Unable to determine configuration directory. Set --config or COMMUNITAS_CONFIG_PATH."
+        );
+    };
+
+    Ok(base
+        .join("communitas")
+        .join(sanitize_instance_id(instance_id))
+        .join("config.toml"))
+}
+
+enum StoragePathHint {
+    CommandLine(PathBuf),
+    Env(PathBuf),
+    Default(PathBuf),
+}
+
+impl StoragePathHint {
+    fn path(&self) -> &Path {
+        match self {
+            StoragePathHint::CommandLine(p)
+            | StoragePathHint::Env(p)
+            | StoragePathHint::Default(p) => p.as_path(),
         }
     }
 }
 
-async fn load_or_create_config(path: &PathBuf) -> Result<Config> {
-    if path.exists() {
+fn resolve_storage_hint(args: &Args, instance_id: &str) -> Result<StoragePathHint> {
+    if let Some(ref cli_storage) = args.storage {
+        return ensure_absolute(cli_storage).map(StoragePathHint::CommandLine);
+    }
+
+    if let Ok(env_path) = env::var("COMMUNITAS_DATA_PATH") {
+        return ensure_absolute(Path::new(&env_path)).map(StoragePathHint::Env);
+    }
+
+    let base = if let Ok(env_dir) = env::var("COMMUNITAS_DATA_DIR") {
+        ensure_absolute(Path::new(&env_dir))?
+    } else if let Some(dir) = dirs::data_dir() {
+        dir
+    } else if let Some(dir) = dirs::home_dir() {
+        dir.join(".communitas")
+    } else {
+        anyhow::bail!(
+            "Unable to determine storage directory. Set --storage or COMMUNITAS_DATA_PATH."
+        );
+    };
+
+    let storage = base
+        .join("communitas")
+        .join(sanitize_instance_id(instance_id));
+    Ok(StoragePathHint::Default(storage))
+}
+
+async fn load_or_create_config(path: &Path, default_config: Config) -> Result<Config> {
+    if tokio::fs::try_exists(path).await? {
         let content = tokio::fs::read_to_string(path)
             .await
-            .context("Failed to read config file")?;
+            .with_context(|| format!("Failed to read config file {}", path.display()))?;
         toml::from_str(&content).context("Failed to parse config")
     } else {
-        // Create default config
-        let config = Config::default();
         let parent = path.parent().context("Invalid config path")?;
         tokio::fs::create_dir_all(parent)
             .await
-            .context("Failed to create config directory")?;
+            .with_context(|| format!("Failed to create config directory {}", parent.display()))?;
 
-        let content = toml::to_string_pretty(&config).context("Failed to serialize config")?;
+        let content = toml::to_string_pretty(&default_config)
+            .context("Failed to serialize default config")?;
         tokio::fs::write(path, content)
             .await
-            .context("Failed to write config")?;
+            .with_context(|| format!("Failed to write config file {}", path.display()))?;
 
-        Ok(config)
+        Ok(default_config)
     }
 }
 
-async fn save_config(path: &PathBuf, config: &Config) -> Result<()> {
+async fn save_config(path: &Path, config: &Config) -> Result<()> {
     let content = toml::to_string_pretty(config).context("Failed to serialize config")?;
     tokio::fs::write(path, content)
         .await
@@ -795,10 +906,51 @@ async fn run_node(args: Args) -> Result<()> {
         }
         return Ok(());
     }
-    // Load or create config
-    let mut config = load_or_create_config(&args.config).await?;
+    let instance_id = args
+        .instance_id
+        .as_deref()
+        .map(sanitize_instance_id)
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(default_instance_id);
+
+    let config_path = resolve_config_path(&args, &instance_id)?;
+    let config_path = ensure_absolute(&config_path)?;
+    let storage_hint = resolve_storage_hint(&args, &instance_id)?;
+    let storage_default = ensure_absolute(storage_hint.path())?;
+
+    let config_exists = tokio::fs::try_exists(&config_path).await?;
+    let mut config = load_or_create_config(
+        &config_path,
+        default_config_with_storage(storage_default.clone()),
+    )
+    .await?;
     let mut config_dirty = false;
-    info!("Loaded configuration from {:?}", args.config);
+    info!(
+        "Loaded configuration from {} (instance {})",
+        config_path.display(),
+        instance_id
+    );
+
+    match storage_hint {
+        StoragePathHint::CommandLine(_) | StoragePathHint::Env(_) => {
+            if config.storage.base_dir != storage_default {
+                config.storage.base_dir = storage_default.clone();
+                config_dirty = true;
+            }
+        }
+        StoragePathHint::Default(_) => {
+            if !config_exists && config.storage.base_dir != storage_default {
+                config.storage.base_dir = storage_default.clone();
+                config_dirty = true;
+            }
+        }
+    }
+
+    let storage_base = ensure_absolute(&config.storage.base_dir)?;
+    if storage_base != config.storage.base_dir {
+        config.storage.base_dir = storage_base.clone();
+        config_dirty = true;
+    }
 
     let mut canonical_bootstrap_addrs: HashSet<SocketAddr> = HashSet::new();
     for existing in &config.bootstrap_nodes {
@@ -896,7 +1048,8 @@ async fn run_node(args: Args) -> Result<()> {
         quality_threshold: 0.3,
     };
 
-    let bootstrap_manager = EnhancedBootstrapManager::new(bootstrap_config).await
+    let bootstrap_manager = EnhancedBootstrapManager::new(bootstrap_config)
+        .await
         .context("Failed to initialize bootstrap manager")?;
 
     {
@@ -913,7 +1066,7 @@ async fn run_node(args: Args) -> Result<()> {
         config_dirty = true;
     }
     if config_dirty {
-        save_config(&args.config, &config).await?;
+        save_config(&config_path, &config).await?;
     }
     info!("Node identity: {}", identity);
 
@@ -1278,13 +1431,67 @@ mod tests {
     async fn test_load_or_create_config() {
         let temp_dir = tempdir().unwrap();
         let config_path = temp_dir.path().join("config.toml");
+        let storage_root = temp_dir.path().join("data-root");
 
         // First call should create default config
-        let config1 = load_or_create_config(&config_path).await.unwrap();
+        let config1 = load_or_create_config(
+            &config_path,
+            default_config_with_storage(storage_root.clone()),
+        )
+        .await
+        .unwrap();
         assert!(config_path.exists());
+        assert_eq!(config1.storage.base_dir, storage_root);
 
         // Second call should load existing config
-        let config2 = load_or_create_config(&config_path).await.unwrap();
+        let config2 = load_or_create_config(
+            &config_path,
+            default_config_with_storage(temp_dir.path().join("other")),
+        )
+        .await
+        .unwrap();
         assert_eq!(config1.update.channel, config2.update.channel);
+        assert_eq!(config2.storage.base_dir, storage_root);
+    }
+
+    #[test]
+    fn test_resolve_paths_respects_env() {
+        let temp = tempdir().unwrap();
+        let config_dir = temp.path().join("cfg");
+        let data_dir = temp.path().join("data");
+        std::fs::create_dir_all(&config_dir).unwrap();
+        std::fs::create_dir_all(&data_dir).unwrap();
+
+        // Safety: setting process-wide env vars in a test scope is acceptable because we
+        // immediately clean them up before the test exits.
+        unsafe {
+            env::set_var("COMMUNITAS_CONFIG_DIR", &config_dir);
+            env::set_var("COMMUNITAS_DATA_DIR", &data_dir);
+        }
+
+        let args = Args {
+            config: None,
+            storage: None,
+            instance_id: Some("Test Node".to_string()),
+            listen: "0.0.0.0:0".parse().unwrap(),
+            bootstrap: Vec::new(),
+            metrics: false,
+            metrics_addr: "127.0.0.1:9600".parse().unwrap(),
+            self_update: false,
+        };
+
+        let instance = sanitize_instance_id("Test Node");
+        let config_path = resolve_config_path(&args, &instance).unwrap();
+        assert!(config_path.starts_with(&config_dir));
+        assert_eq!(config_path.file_name().unwrap(), "config.toml");
+
+        let storage_hint = resolve_storage_hint(&args, &instance).unwrap();
+        let storage_path = ensure_absolute(storage_hint.path()).unwrap();
+        assert!(storage_path.starts_with(&data_dir.join("communitas")));
+
+        unsafe {
+            env::remove_var("COMMUNITAS_CONFIG_DIR");
+            env::remove_var("COMMUNITAS_DATA_DIR");
+        }
     }
 }

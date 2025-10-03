@@ -19,17 +19,17 @@
 //! TreeKEM key exchange, and group management capabilities.
 
 use anyhow::Result;
+use hex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info};
-use hex;
 
 use saorsa_mls::{CipherSuite, MlsMessage};
 
 pub use saorsa_mls::GroupId;
-use saorsa_seal::{Dht as SealDht};
+use saorsa_seal::Dht as SealDht;
 
 use saorsa_core::identity::enhanced::EnhancedIdentity;
 
@@ -51,8 +51,12 @@ impl MessageDht {
 
 impl SealDht for MessageDht {
     fn put(&self, key: &[u8; 32], value: &[u8], _ttl: Option<u64>) -> Result<(), anyhow::Error> {
-        debug!("DHT PUT: key={:?}, value_len={}", hex::encode(key), value.len());
-        
+        debug!(
+            "DHT PUT: key={:?}, value_len={}",
+            hex::encode(key),
+            value.len()
+        );
+
         // Store in our in-memory storage (would be actual DHT in production)
         let storage = self.storage.clone();
         tokio::task::block_in_place(|| {
@@ -62,14 +66,14 @@ impl SealDht for MessageDht {
                 storage_guard.insert(*key, value.to_vec());
             })
         });
-        
+
         info!("Successfully stored message of {} bytes", value.len());
         Ok(())
     }
 
     fn get(&self, key: &[u8; 32]) -> Result<Vec<u8>, anyhow::Error> {
         debug!("DHT GET: key={:?}", hex::encode(key));
-        
+
         // Retrieve from our in-memory storage (would be actual DHT in production)
         let storage = self.storage.clone();
         let result = tokio::task::block_in_place(|| {
@@ -79,12 +83,12 @@ impl SealDht for MessageDht {
                 storage_guard.get(key).cloned()
             })
         });
-        
+
         match result {
             Some(data) => {
                 info!("Successfully retrieved message of {} bytes", data.len());
                 Ok(data)
-            },
+            }
             None => {
                 debug!("Message not found for key: {:?}", hex::encode(key));
                 Err(anyhow::anyhow!("Message not found"))
@@ -380,12 +384,18 @@ impl MlsGroupState {
         // For now, return a placeholder message
         // In production, this would create a proper MLS application message
         // with real encryption and signatures
-        
-        info!("Would send {} bytes to group {:?}", content.len(), self.group_id);
-        
+
+        info!(
+            "Would send {} bytes to group {:?}",
+            content.len(),
+            self.group_id
+        );
+
         // Create a placeholder message - this needs to be replaced with real MLS message creation
         // when saorsa-mls API is fully available
-        Err(anyhow::anyhow!("MLS message sending not yet implemented - placeholder"))
+        Err(anyhow::anyhow!(
+            "MLS message sending not yet implemented - placeholder"
+        ))
     }
 
     /// Process an incoming message
@@ -430,21 +440,25 @@ impl MlsGroupState {
     ) -> Result<Vec<u8>> {
         // For now, use simple ChaCha20-Poly1305 encryption
         // In production, this would use saorsa-seal with proper MLS group keys
-        
+
         // Create a deterministic key from group_id and epoch
         let key_material = format!("{}:epoch:{}", group_id, epoch);
         let key_hash = blake3::hash(key_material.as_bytes());
-        
+
         // Use first 32 bytes as ChaCha20 key
         let key = *key_hash.as_bytes();
-        
+
         // Simple encryption: XOR with key hash (placeholder for real encryption)
         let mut encrypted = content.clone();
         for (i, byte) in encrypted.iter_mut().enumerate() {
             *byte ^= key[i % 32];
         }
-        
-        info!("Encrypted {} bytes for group {:?}", encrypted.len(), group_id);
+
+        info!(
+            "Encrypted {} bytes for group {:?}",
+            encrypted.len(),
+            group_id
+        );
         Ok(encrypted)
     }
 
@@ -646,13 +660,13 @@ impl MessagingService {
     pub async fn new(config: MlsConfig) -> Result<Self> {
         let mls_client = MlsClient::new(config).await?;
         let dht_storage = MessageDht::new();
-        
+
         Ok(Self {
             mls_client,
             dht_storage,
         })
     }
-    
+
     /// Create a new group with MLS encryption
     pub async fn create_group(
         &self,
@@ -660,14 +674,20 @@ impl MessagingService {
         creator_identity: &EnhancedIdentity,
     ) -> Result<GroupId> {
         let group_id = GroupId::generate();
-        
+
         // Create MLS group
-        let _group_state = self.mls_client.create_group(group_id.clone(), creator_identity).await?;
-        
-        info!("Created new encrypted group: {} ({:?})", group_name, group_id);
+        let _group_state = self
+            .mls_client
+            .create_group(group_id.clone(), creator_identity)
+            .await?;
+
+        info!(
+            "Created new encrypted group: {} ({:?})",
+            group_name, group_id
+        );
         Ok(group_id)
     }
-    
+
     /// Send an encrypted message to a group
     pub async fn send_group_message(
         &self,
@@ -678,17 +698,22 @@ impl MessagingService {
         // For now, just store the message directly in DHT
         // In production, this would:
         // 1. Create MLS message with proper encryption
-        // 2. Serialize and seal the message 
+        // 2. Serialize and seal the message
         // 3. Store in DHT with proper access controls
-        
+
         let message_key = blake3::hash(&content);
-        self.dht_storage.put(message_key.as_bytes(), &content, Some(3600))
+        self.dht_storage
+            .put(message_key.as_bytes(), &content, Some(3600))
             .map_err(|e| anyhow::anyhow!("Failed to store message: {}", e))?;
-        
-        info!("Successfully stored message ({} bytes) for group: {:?}", content.len(), group_id);
+
+        info!(
+            "Successfully stored message ({} bytes) for group: {:?}",
+            content.len(),
+            group_id
+        );
         Ok(())
     }
-    
+
     /// Retrieve and decrypt messages from a group
     pub async fn get_group_messages(
         &self,
@@ -700,12 +725,12 @@ impl MessagingService {
         // 2. Unseal the messages using saorsa-seal
         // 3. Decrypt using MLS group keys
         // 4. Return decrypted messages
-        
+
         // For now, return empty list as placeholder
         debug!("Retrieving messages for group: {:?}", group_id);
         Ok(vec![])
     }
-    
+
     /// Join an existing group via welcome message
     pub async fn join_group(
         &self,
@@ -713,19 +738,19 @@ impl MessagingService {
         identity: &EnhancedIdentity,
     ) -> Result<GroupId> {
         let group_state = self.mls_client.join_group(welcome_data, identity).await?;
-        
+
         info!("Successfully joined group: {:?}", group_state.group_id);
         Ok(group_state.group_id)
     }
-    
+
     /// Leave a group
     pub async fn leave_group(&self, group_id: &GroupId) -> Result<()> {
         self.mls_client.leave_group(group_id).await?;
-        
+
         info!("Successfully left group: {:?}", group_id);
         Ok(())
     }
-    
+
     /// List all groups the user is a member of
     pub async fn list_groups(&self) -> Vec<GroupId> {
         self.mls_client.list_groups().await

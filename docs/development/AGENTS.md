@@ -8,7 +8,7 @@ This playbook is for anyone (human or AI) automating Communitas. It captures the
 - `apps/communitas/` – React/Material UI console that now fronts the identity and storage surfaces. Uses the Tauri bindings defined in `communitas-desktop`.
 - `communitas-desktop/` – Tauri v2 desktop crate. The only place we expose IPC commands (see `src/core_commands.rs`, `core_groups.rs`, `core_cmds.rs`, `container.rs`, `sync.rs`, `security/raw_spki.rs`).
  - `communitas-core/` – Shared Rust library. `CoreContext` wires saorsa-core (v0.3.23) managers together (including the exported `get_user_four_words` helpers), persists PQC identities to the platform keyring, and caches group signing keys.
-- `communitas-headless/` – Headless QUIC node with self-update, bootstrap, and metrics support. Ideal for CI smoke checks and autonomous seeders.
+- `communitas-headless/` – Headless QUIC node with self-update, bootstrap, and metrics support. Ideal for CI smoke checks and autonomous seeders. Pass `--instance-id`, `--config`, and `--storage` (or set the matching `COMMUNITAS_*` env vars) when running more than one node so each instance keeps its own config and data roots.
 - `crates/communitas-container/` – Pointer-only container/CRDT engine that produces signed tips and optional FEC metadata. Desktop and headless both depend on it.
 - `src/` – Legacy React SPA still compiled for regression coverage. Tests under `src/**/__tests__` remain part of CI; do not delete until the migration completes.
 
@@ -94,6 +94,7 @@ npm run tauri build
 - **Node/React**: `npm ci`, `npm run typecheck`, `npm run test:run` (fast Vitest slice), `npm run build`.
 - **Desktop builds**: `cargo build --release -p communitas-desktop`, `npm run tauri build` for signed bundles (requires TAURI_PRIVATE_KEY in CI).
 - **Headless smoke**: `cargo build --release -p communitas-headless` then `./target/release/communitas-headless --help`.
+- **Headless instance launch**: `./target/release/communitas-headless --instance-id seed-a --config ~/.config/communitas/seed-a/config.toml --storage ~/.local/share/communitas/seed-a` (binary will bootstrap the config file if it does not exist).
 - GitHub workflows in `.github/workflows/` assume Node 20 and Rust stable; keep scripts aligned when changing tooling.
 
 ## 7. Observability & Logs

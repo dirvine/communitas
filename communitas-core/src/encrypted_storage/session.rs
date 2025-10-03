@@ -22,9 +22,9 @@ pub struct Session {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AuthMethod {
     Password,
-    PasswordOnly,  // Familiar device login
+    PasswordOnly, // Familiar device login
     Passkey,
-    Combined,      // Password + Passkey
+    Combined, // Password + Passkey
 }
 
 impl Session {

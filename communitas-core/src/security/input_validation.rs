@@ -91,11 +91,12 @@ impl InputValidator {
         // Use saorsa-core for proper four-word validation with dictionary
         let parsed = saorsa_core::identity::FourWordAddress::parse_str(&candidate)
             .map_err(|_| ValidationError::InvalidFormat)?;
-        
+
         let words_vec = parsed.words();
-        let words: [String; 4] = words_vec.try_into()
+        let words: [String; 4] = words_vec
+            .try_into()
             .map_err(|_| ValidationError::InvalidFormat)?;
-        
+
         // Validate words are in the dictionary
         if !saorsa_core::fwid::fw_check(words) {
             return Err(ValidationError::InvalidFormat);

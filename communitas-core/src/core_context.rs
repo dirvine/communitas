@@ -27,7 +27,7 @@ use saorsa_core::api::GroupKeyPair;
 pub struct CoreContext {
     pub four_words: String,
     pub identity: EnhancedIdentity,
-    pub display_name: String,  // Store display name separately
+    pub display_name: String, // Store display name separately
     pub storage: StorageManager,
     pub chat: ChatManager,
     pub messaging: MessagingService,
@@ -35,9 +35,9 @@ pub struct CoreContext {
     pub bootstrap_manager: Option<Arc<EnhancedBootstrapManager>>,
     pub encrypted_storage: Option<Arc<EncryptedStorageManager>>,
     pub device_name: String,
-    pub local_endpoint: Option<NetworkAddress>,  // Local network endpoint
-    pub dht_client: DhtClient,  // For direct DHT access
-    pub p2p_node: Option<Arc<TokioRwLock<P2PNode>>>,  // P2P networking node
+    pub local_endpoint: Option<NetworkAddress>, // Local network endpoint
+    pub dht_client: DhtClient,                  // For direct DHT access
+    pub p2p_node: Option<Arc<TokioRwLock<P2PNode>>>, // P2P networking node
 }
 
 impl CoreContext {
@@ -111,7 +111,10 @@ impl CoreContext {
                 Some(Arc::new(manager))
             }
             Err(e) => {
-                tracing::warn!("Failed to create bootstrap manager: {}. Continuing without it.", e);
+                tracing::warn!(
+                    "Failed to create bootstrap manager: {}. Continuing without it.",
+                    e
+                );
                 None
             }
         };
@@ -121,7 +124,10 @@ impl CoreContext {
         let encrypted_storage = match EncryptedStorageManager::new(storage_config).await {
             Ok(manager) => Some(Arc::new(manager)),
             Err(e) => {
-                tracing::warn!("Failed to create encrypted storage manager: {}. Continuing without it.", e);
+                tracing::warn!(
+                    "Failed to create encrypted storage manager: {}. Continuing without it.",
+                    e
+                );
                 None
             }
         };
@@ -129,8 +135,8 @@ impl CoreContext {
         // NOTE: P2P networking is now handled by MessagingService internally
         // We don't create a separate P2P node to avoid port conflicts
         // The messaging service already starts ant-quic networking
-        let local_endpoint = None;  // Will be populated from messaging service if needed
-        let p2p_node = None;  // Messaging service handles P2P internally
+        let local_endpoint = None; // Will be populated from messaging service if needed
+        let p2p_node = None; // Messaging service handles P2P internally
 
         let ctx = Self {
             four_words,
@@ -228,7 +234,10 @@ impl CoreContext {
                 Some(Arc::new(manager))
             }
             Err(e) => {
-                tracing::warn!("Failed to create bootstrap manager: {}. Continuing without it.", e);
+                tracing::warn!(
+                    "Failed to create bootstrap manager: {}. Continuing without it.",
+                    e
+                );
                 None
             }
         };
@@ -238,7 +247,10 @@ impl CoreContext {
         let encrypted_storage = match EncryptedStorageManager::new(storage_config).await {
             Ok(manager) => Some(Arc::new(manager)),
             Err(e) => {
-                tracing::warn!("Failed to create encrypted storage manager: {}. Continuing without it.", e);
+                tracing::warn!(
+                    "Failed to create encrypted storage manager: {}. Continuing without it.",
+                    e
+                );
                 None
             }
         };
@@ -258,7 +270,7 @@ impl CoreContext {
             encrypted_storage,
             device_name,
             local_endpoint,
-            dht_client: shared_dht.clone(),  // Use the shared DHT client
+            dht_client: shared_dht.clone(), // Use the shared DHT client
             p2p_node,
         };
 
@@ -278,12 +290,14 @@ impl CoreContext {
     /// Publish this node's peer information to the DHT for discovery
     /// This enables other peers to find our network address via DHT lookup
     pub async fn publish_peer_info_to_dht(&self) -> Result<(), String> {
-        use serde_json::json;
         use chrono::Utc;
+        use serde_json::json;
         use std::net::{IpAddr, Ipv4Addr};
 
         // Get our socket address
-        let mut socket = self.get_local_endpoint_socket().await
+        let mut socket = self
+            .get_local_endpoint_socket()
+            .await
             .ok_or_else(|| "No local endpoint available".to_string())?;
 
         // Replace unspecified address (0.0.0.0) with localhost for local testing
@@ -304,7 +318,9 @@ impl CoreContext {
         let serialized = serde_json::to_vec(&peer_info)
             .map_err(|e| format!("Failed to serialize PeerInfo: {}", e))?;
 
-        self.dht_client.put(key, serialized).await
+        self.dht_client
+            .put(key, serialized)
+            .await
             .map_err(|e| format!("Failed to publish PeerInfo to DHT: {}", e))?;
 
         Ok(())
@@ -388,10 +404,7 @@ impl CoreContext {
     }
 
     /// Get members of a channel
-    pub async fn get_channel_members(
-        &self,
-        channel_id: &str,
-    ) -> Result<Vec<String>, String> {
+    pub async fn get_channel_members(&self, channel_id: &str) -> Result<Vec<String>, String> {
         use saorsa_core::chat::ChannelId;
 
         // ChannelId is just a String wrapper
@@ -425,20 +438,27 @@ impl CoreContext {
 
         // Get channel from ChatManager to access members
         let chat_channel_id = ChatChannelId(channel_id.to_string());
-        let channel = self.chat.get_channel(&chat_channel_id).await
+        let channel = self
+            .chat
+            .get_channel(&chat_channel_id)
+            .await
             .map_err(|e| format!("Failed to get channel: {}", e))?;
 
         // Convert channel members to FourWordAddress recipients
         // Each member's user_id is a four-word address string (e.g., "ocean-forest-moon-star")
-        let recipients: Vec<FourWordAddress> = channel.members
+        let recipients: Vec<FourWordAddress> = channel
+            .members
             .iter()
             .filter_map(|member| {
                 // user_id is the four-word address string
                 match FourWordAddress::parse_str(&member.user_id) {
                     Ok(addr) => Some(addr),
                     Err(e) => {
-                        tracing::warn!("Failed to parse member {} as FourWordAddress: {}",
-                            member.user_id, e);
+                        tracing::warn!(
+                            "Failed to parse member {} as FourWordAddress: {}",
+                            member.user_id,
+                            e
+                        );
                         None
                     }
                 }
@@ -446,11 +466,17 @@ impl CoreContext {
             .collect();
 
         if recipients.is_empty() {
-            return Err(format!("No valid recipients found for channel {}", channel_id));
+            return Err(format!(
+                "No valid recipients found for channel {}",
+                channel_id
+            ));
         }
 
-        tracing::info!("Sending P2P message to {} recipients in channel {}",
-            recipients.len(), channel_id);
+        tracing::info!(
+            "Sending P2P message to {} recipients in channel {}",
+            recipients.len(),
+            channel_id
+        );
 
         // Create message content for P2P delivery
         let message_content = MessageContent::Text(content.to_string());
@@ -475,12 +501,16 @@ impl CoreContext {
             let mut result = None;
 
             for attempt in 1..=3 {
-                match self.messaging.send_message(
-                    recipients.clone(),
-                    message_content.clone(),
-                    msg_channel_id,
-                    options.clone()
-                ).await {
+                match self
+                    .messaging
+                    .send_message(
+                        recipients.clone(),
+                        message_content.clone(),
+                        msg_channel_id,
+                        options.clone(),
+                    )
+                    .await
+                {
                     Ok(send_result) => {
                         if attempt > 1 {
                             tracing::info!("✅ Message sent successfully on attempt {}", attempt);
@@ -490,8 +520,13 @@ impl CoreContext {
                     }
                     Err(e) => {
                         let err_str = e.to_string();
-                        if err_str.contains("No session key established") || err_str.contains("No established PQC session") {
-                            tracing::warn!("Attempt {}/3: PQC session not ready, waiting for key exchange...", attempt);
+                        if err_str.contains("No session key established")
+                            || err_str.contains("No established PQC session")
+                        {
+                            tracing::warn!(
+                                "Attempt {}/3: PQC session not ready, waiting for key exchange...",
+                                attempt
+                            );
                             tracing::debug!("Key exchange error: {}", err_str);
                             last_error = Some(e);
 
@@ -499,7 +534,8 @@ impl CoreContext {
                                 // Wait progressively longer for key exchange to complete
                                 let wait_ms = 500 * attempt as u64;
                                 tracing::debug!("Waiting {}ms before retry...", wait_ms);
-                                tokio::time::sleep(tokio::time::Duration::from_millis(wait_ms)).await;
+                                tokio::time::sleep(tokio::time::Duration::from_millis(wait_ms))
+                                    .await;
                             }
                         } else {
                             // Different error - fail immediately
@@ -522,13 +558,19 @@ impl CoreContext {
 
         // Count successful deliveries
         use saorsa_core::messaging::DeliveryStatus;
-        let successful_count = delivery_receipt.delivery_status
+        let successful_count = delivery_receipt
+            .delivery_status
             .iter()
             .filter(|(_, status)| matches!(status, DeliveryStatus::Delivered(_)))
             .count();
 
-        tracing::info!("✅ Sent P2P message {} to channel {} - Delivered to {}/{} recipients",
-            msg_id_str, channel_id, successful_count, delivery_receipt.delivery_status.len());
+        tracing::info!(
+            "✅ Sent P2P message {} to channel {} - Delivered to {}/{} recipients",
+            msg_id_str,
+            channel_id,
+            successful_count,
+            delivery_receipt.delivery_status.len()
+        );
 
         Ok(msg_id_str)
     }
@@ -600,9 +642,9 @@ impl CoreContext {
         }
 
         // Fallback to stored endpoint
-        self.local_endpoint.as_ref().and_then(|addr| {
-            addr.four_words().map(|words| words.to_string())
-        })
+        self.local_endpoint
+            .as_ref()
+            .and_then(|addr| addr.four_words().map(|words| words.to_string()))
     }
 
     /// Get the local endpoint as a socket address
@@ -615,9 +657,9 @@ impl CoreContext {
         }
 
         // Fallback to stored endpoint
-        self.local_endpoint.as_ref().and_then(|addr| {
-            addr.to_string().parse().ok()
-        })
+        self.local_endpoint
+            .as_ref()
+            .and_then(|addr| addr.to_string().parse().ok())
     }
 
     /// Parse an address string into NetworkAddress
@@ -635,7 +677,9 @@ impl CoreContext {
     /// Create and start a P2P node
     /// Returns the node and the actual bound address (with OS-assigned port)
     #[allow(dead_code)]
-    async fn create_p2p_node(endpoint: &NetworkAddress) -> Result<(P2PNode, NetworkAddress), String> {
+    async fn create_p2p_node(
+        endpoint: &NetworkAddress,
+    ) -> Result<(P2PNode, NetworkAddress), String> {
         tracing::debug!("Creating P2P node with endpoint: {}", endpoint);
 
         // Convert NetworkAddress to string for listen_on
@@ -654,7 +698,8 @@ impl CoreContext {
             .map_err(|e| format!("Failed to start P2P node: {}", e))?;
 
         // Get the actual bound address from the node
-        let actual_addr_str = node.local_addr()
+        let actual_addr_str = node
+            .local_addr()
             .ok_or_else(|| "Node has no local address".to_string())?;
 
         tracing::info!("P2P node bound to actual address: {}", actual_addr_str);
@@ -676,13 +721,18 @@ impl CoreContext {
         // Convert hyphens to spaces - the decoder expects space-separated words
         let space_separated = four_words.replace('-', " ");
 
-        let socket_addr_str = encoder.decode(&space_separated)
-            .map_err(|e| format!("Failed to decode four-word address '{}': {}", space_separated, e))?;
+        let socket_addr_str = encoder.decode(&space_separated).map_err(|e| {
+            format!(
+                "Failed to decode four-word address '{}': {}",
+                space_separated, e
+            )
+        })?;
 
         tracing::info!("Connecting to peer: {} ({})", four_words, socket_addr_str);
 
         // Connect via MessagingService with plain socket address string
-        self.messaging.connect_peer(&socket_addr_str)
+        self.messaging
+            .connect_peer(&socket_addr_str)
             .await
             .map_err(|e| format!("Failed to connect to peer: {}", e))?;
 
@@ -715,12 +765,17 @@ impl CoreContext {
         // Convert hyphens to spaces - the decoder expects space-separated words
         let space_separated = four_words.replace('-', " ");
 
-        let decoded = encoder.decode(&space_separated)
-            .map_err(|e| format!("Failed to decode four-word address '{}': {}", space_separated, e))?;
+        let decoded = encoder.decode(&space_separated).map_err(|e| {
+            format!(
+                "Failed to decode four-word address '{}': {}",
+                space_separated, e
+            )
+        })?;
 
         // Parse the decoded string as NetworkAddress
         // The decoded format should be "ip:port"
-        decoded.parse::<NetworkAddress>()
+        decoded
+            .parse::<NetworkAddress>()
             .map_err(|e| format!("Failed to parse network address '{}': {}", decoded, e))
     }
 }

@@ -5,13 +5,20 @@ use saorsa_core::messaging::{ChannelId as MessagingChannelId, MessageContent};
 
 impl Backend {
     /// Get messages from a channel
-    pub async fn get_channel_messages(&mut self, channel_id: String) -> Result<Vec<saorsa_core::chat::Message>> {
+    pub async fn get_channel_messages(
+        &mut self,
+        channel_id: String,
+    ) -> Result<Vec<saorsa_core::chat::Message>> {
         let ctx = self.context_mut()?;
 
         // Try to load messages from storage
         let storage_key = format!("chat:channel:{}:messages", channel_id);
 
-        match ctx.storage.get_encrypted::<Vec<saorsa_core::chat::Message>>(&storage_key).await {
+        match ctx
+            .storage
+            .get_encrypted::<Vec<saorsa_core::chat::Message>>(&storage_key)
+            .await
+        {
             Ok(messages) => Ok(messages),
             Err(e) => {
                 // Storage error or no messages yet - return empty vec
@@ -73,10 +80,8 @@ impl Backend {
     ) -> Result<String> {
         let ctx = self.context_mut()?;
 
-        let recipients: Vec<FourWordAddress> = recipients
-            .into_iter()
-            .map(FourWordAddress)
-            .collect();
+        let recipients: Vec<FourWordAddress> =
+            recipients.into_iter().map(FourWordAddress).collect();
 
         let channel_uuid = uuid::Uuid::parse_str(&channel_id)?;
         let (msg_id, _receipt) = ctx
@@ -174,14 +179,22 @@ impl Backend {
             .unwrap_or_default();
         thread_messages.push(msg_id.to_string());
         ctx.storage
-            .store_encrypted(&thread_key, &thread_messages, std::time::Duration::from_secs(86400 * 30), None)
+            .store_encrypted(
+                &thread_key,
+                &thread_messages,
+                std::time::Duration::from_secs(86400 * 30),
+                None,
+            )
             .await?;
 
         Ok(msg_id.to_string())
     }
 
     /// Get thread messages
-    pub async fn get_thread_messages(&mut self, thread_id: String) -> Result<Vec<saorsa_core::chat::Message>> {
+    pub async fn get_thread_messages(
+        &mut self,
+        thread_id: String,
+    ) -> Result<Vec<saorsa_core::chat::Message>> {
         let ctx = self.context_mut()?;
 
         let thread_key = format!("chat:thread:{}:messages", thread_id);
@@ -191,7 +204,11 @@ impl Backend {
                 let mut messages = Vec::new();
                 for msg_id in message_ids {
                     let msg_key = format!("chat:message:{}", msg_id);
-                    if let Ok(msg) = ctx.storage.get_encrypted::<saorsa_core::chat::Message>(&msg_key).await {
+                    if let Ok(msg) = ctx
+                        .storage
+                        .get_encrypted::<saorsa_core::chat::Message>(&msg_key)
+                        .await
+                    {
                         messages.push(msg);
                     }
                 }

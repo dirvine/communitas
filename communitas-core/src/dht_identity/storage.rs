@@ -3,16 +3,8 @@
 //! This module provides the storage layer that integrates with saorsa-core's DHT
 //! and storage systems to persist identity records and blobs.
 
-use crate::dht_identity::{
-    blobs::*,
-    key_derivation::*,
-    records::*,
-    ContentId,
-};
-use saorsa_core::{
-    dht::DhtCoreEngine,
-    storage::StorageManager,
-};
+use crate::dht_identity::{ContentId, blobs::*, key_derivation::*, records::*};
+use saorsa_core::{dht::DhtCoreEngine, storage::StorageManager};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -23,19 +15,19 @@ use tokio::sync::RwLock;
 pub enum IdentityStorageError {
     #[error("DHT operation failed: {0}")]
     DhtError(#[from] anyhow::Error),
-    
+
     #[error("Serialization failed: {0}")]
     SerializationError(#[from] serde_cbor::Error),
-    
+
     #[error("Identity not found: {0}")]
     IdentityNotFound(String),
-    
+
     #[error("Invalid identity record: {0}")]
     InvalidIdentity(String),
-    
+
     #[error("Storage limit exceeded: {0}")]
     StorageLimitExceeded(String),
-    
+
     #[error("Blob not found: {0}")]
     BlobNotFound(String),
 }
@@ -46,10 +38,10 @@ pub type StorageResult<T> = std::result::Result<T, IdentityStorageError>;
 pub struct IdentityStorage {
     /// DHT engine for small records
     dht: Arc<DhtCoreEngine>,
-    
+
     /// Storage manager for large blobs
     storage: Arc<StorageManager>,
-    
+
     /// Local cache for frequently accessed items
     cache: Arc<RwLock<IdentityCache>>,
 }
@@ -59,13 +51,13 @@ pub struct IdentityStorage {
 struct IdentityCache {
     /// Cached identity root records
     root_records: HashMap<[u8; 32], CachedItem<IdentityRootRecord>>,
-    
+
     /// Cached connection records
     connection_records: HashMap<[u8; 32], CachedItem<ConnectionRecord>>,
-    
+
     /// Cached site manifest records
     site_records: HashMap<[u8; 32], CachedItem<SiteManifestRecord>>,
-    
+
     /// Cached blobs by content ID
     blobs: HashMap<ContentId, CachedItem<Vec<u8>>>,
 }
@@ -86,10 +78,11 @@ impl<T> CachedItem<T> {
             ttl_seconds,
         }
     }
-    
+
     fn is_expired(&self) -> bool {
         if let Some(ttl) = self.ttl_seconds {
-            let age = self.cached_at
+            let age = self
+                .cached_at
                 .elapsed()
                 .unwrap_or(std::time::Duration::ZERO)
                 .as_secs() as u32;
@@ -105,16 +98,16 @@ impl<T> CachedItem<T> {
 pub struct ResolvedIdentity {
     /// Four-word identity
     pub four_words: NormalizedFourWords,
-    
+
     /// Root record from DHT
     pub root_record: IdentityRootRecord,
-    
+
     /// Identity descriptor blob
     pub descriptor: IdentityDescriptorBlob,
-    
+
     /// Optional connection information
     pub connection_info: Option<(ConnectionRecord, ConnectionBlob)>,
-    
+
     /// Optional site manifest
     pub site_info: Option<(SiteManifestRecord, SiteManifestBlob)>,
 }
@@ -134,11 +127,11 @@ impl IdentityStorage {
         // First store the descriptor blob
         let descriptor_bytes = identity.descriptor.to_cbor()?;
         let descriptor_cid = self.store_blob(&descriptor_bytes).await?;
-        
+
         // Ensure the descriptor CID matches what's in the root record
         if descriptor_cid != identity.root_record.descriptor_cid {
             return Err(IdentityStorageError::InvalidIdentity(
-                "Descriptor CID mismatch".to_string()
+                "Descriptor CID mismatch".to_string(),
             ));
         }
 
@@ -146,13 +139,13 @@ impl IdentityStorage {
         if let Some((conn_record, conn_blob)) = &identity.connection_info {
             let conn_bytes = conn_blob.to_cbor()?;
             let conn_cid = self.store_blob(&conn_bytes).await?;
-            
+
             if conn_record.connection_cid != conn_cid {
                 return Err(IdentityStorageError::InvalidIdentity(
-                    "Connection CID mismatch".to_string()
+                    "Connection CID mismatch".to_string(),
                 ));
             }
-            
+
             // Store connection record in DHT
             let conn_key = derive_connection_key(&identity.four_words);
             let conn_record_bytes = conn_record.to_cbor()?;
@@ -162,13 +155,13 @@ impl IdentityStorage {
         if let Some((site_record, site_manifest)) = &identity.site_info {
             let site_bytes = site_manifest.to_cbor()?;
             let site_cid = self.store_blob(&site_bytes).await?;
-            
+
             if site_record.site_cid != site_cid {
                 return Err(IdentityStorageError::InvalidIdentity(
-                    "Site CID mismatch".to_string()
+                    "Site CID mismatch".to_string(),
                 ));
             }
-            
+
             // Store site record in DHT
             let site_key = derive_site_key(&identity.four_words);
             let site_record_bytes = site_record.to_cbor()?;
@@ -184,7 +177,10 @@ impl IdentityStorage {
     }
 
     /// Retrieve a complete identity from storage
-    pub async fn retrieve_identity(&self, four_words: &str) -> StorageResult<Option<ResolvedIdentity>> {
+    pub async fn retrieve_identity(
+        &self,
+        four_words: &str,
+    ) -> StorageResult<Option<ResolvedIdentity>> {
         let normalized = NormalizedFourWords::new(four_words)
             .map_err(|e| IdentityStorageError::InvalidIdentity(e))?;
 
@@ -199,26 +195,29 @@ impl IdentityStorage {
         let expected_identity_hash = *blake3::hash(normalized.as_str().as_bytes()).as_bytes();
         if root_record.identity_hash != expected_identity_hash {
             return Err(IdentityStorageError::InvalidIdentity(
-                "Identity hash mismatch".to_string()
+                "Identity hash mismatch".to_string(),
             ));
         }
 
         // Get the descriptor blob
-        let descriptor_bytes = self.retrieve_blob(&root_record.descriptor_cid).await?
+        let descriptor_bytes = self
+            .retrieve_blob(&root_record.descriptor_cid)
+            .await?
             .ok_or_else(|| IdentityStorageError::BlobNotFound("Identity descriptor".to_string()))?;
-        
+
         let descriptor = IdentityDescriptorBlob::from_cbor(&descriptor_bytes)?;
 
         // Validate descriptor
-        descriptor.validate()
+        descriptor
+            .validate()
             .map_err(|e| IdentityStorageError::InvalidIdentity(e))?;
 
         // Verify signature
         match descriptor.verify() {
-            Ok(true) => {}, // Valid signature
+            Ok(true) => {} // Valid signature
             Ok(false) | Err(_) => {
                 return Err(IdentityStorageError::InvalidIdentity(
-                    "Invalid descriptor signature".to_string()
+                    "Invalid descriptor signature".to_string(),
                 ));
             }
         }
@@ -228,8 +227,9 @@ impl IdentityStorage {
             let conn_key = derive_connection_key(&normalized);
             if let Some(conn_record) = self.get_connection_record(&conn_key).await? {
                 if conn_record.connection_cid == conn_cid {
-                    let conn_bytes = self.retrieve_blob(&conn_cid).await?
-                        .ok_or_else(|| IdentityStorageError::BlobNotFound("Connection blob".to_string()))?;
+                    let conn_bytes = self.retrieve_blob(&conn_cid).await?.ok_or_else(|| {
+                        IdentityStorageError::BlobNotFound("Connection blob".to_string())
+                    })?;
                     let conn_blob = ConnectionBlob::from_cbor(&conn_bytes)?;
                     Some((conn_record, conn_blob))
                 } else {
@@ -247,8 +247,9 @@ impl IdentityStorage {
             let site_key = derive_site_key(&normalized);
             if let Some(site_record) = self.get_site_record(&site_key).await? {
                 if site_record.site_cid == site_cid {
-                    let site_bytes = self.retrieve_blob(&site_cid).await?
-                        .ok_or_else(|| IdentityStorageError::BlobNotFound("Site manifest".to_string()))?;
+                    let site_bytes = self.retrieve_blob(&site_cid).await?.ok_or_else(|| {
+                        IdentityStorageError::BlobNotFound("Site manifest".to_string())
+                    })?;
                     let site_manifest = SiteManifestBlob::from_cbor(&site_bytes)?;
                     Some((site_record, site_manifest))
                 } else {
@@ -272,10 +273,10 @@ impl IdentityStorage {
 
     /// Update connection information for an identity
     pub async fn update_connection(
-        &self, 
-        four_words: &str, 
+        &self,
+        four_words: &str,
         connection_record: &ConnectionRecord,
-        connection_blob: &ConnectionBlob
+        connection_blob: &ConnectionBlob,
     ) -> StorageResult<()> {
         let normalized = NormalizedFourWords::new(four_words)
             .map_err(|e| IdentityStorageError::InvalidIdentity(e))?;
@@ -287,7 +288,7 @@ impl IdentityStorage {
         // Verify CID matches
         if connection_record.connection_cid != conn_cid {
             return Err(IdentityStorageError::InvalidIdentity(
-                "Connection CID mismatch".to_string()
+                "Connection CID mismatch".to_string(),
             ));
         }
 
@@ -309,7 +310,9 @@ impl IdentityStorage {
             let root_bytes = root_record.to_cbor()?;
             self.store_dht_record(&id_key, root_bytes).await?;
         } else {
-            return Err(IdentityStorageError::IdentityNotFound(four_words.to_string()));
+            return Err(IdentityStorageError::IdentityNotFound(
+                four_words.to_string(),
+            ));
         }
 
         Ok(())
@@ -317,16 +320,17 @@ impl IdentityStorage {
 
     /// Update site information for an identity
     pub async fn update_site(
-        &self, 
-        four_words: &str, 
+        &self,
+        four_words: &str,
         site_record: &SiteManifestRecord,
-        site_manifest: &SiteManifestBlob
+        site_manifest: &SiteManifestBlob,
     ) -> StorageResult<()> {
         let normalized = NormalizedFourWords::new(four_words)
             .map_err(|e| IdentityStorageError::InvalidIdentity(e))?;
 
         // Validate site manifest
-        site_manifest.validate()
+        site_manifest
+            .validate()
             .map_err(|e| IdentityStorageError::InvalidIdentity(e))?;
 
         // Store the site manifest blob
@@ -336,7 +340,7 @@ impl IdentityStorage {
         // Verify CID matches
         if site_record.site_cid != site_cid {
             return Err(IdentityStorageError::InvalidIdentity(
-                "Site CID mismatch".to_string()
+                "Site CID mismatch".to_string(),
             ));
         }
 
@@ -358,7 +362,9 @@ impl IdentityStorage {
             let root_bytes = root_record.to_cbor()?;
             self.store_dht_record(&id_key, root_bytes).await?;
         } else {
-            return Err(IdentityStorageError::IdentityNotFound(four_words.to_string()));
+            return Err(IdentityStorageError::IdentityNotFound(
+                four_words.to_string(),
+            ));
         }
 
         Ok(())
@@ -397,23 +403,26 @@ impl IdentityStorage {
         // Retrieve from DHT
         if let Some(bytes) = self.retrieve_dht_record(key).await? {
             let record = IdentityRootRecord::from_cbor(&bytes)?;
-            
+
             // Cache the result
             {
                 let mut cache = self.cache.write().await;
                 cache.root_records.insert(
                     key.clone(),
-                    CachedItem::new(record.clone(), record.ttl_seconds)
+                    CachedItem::new(record.clone(), record.ttl_seconds),
                 );
             }
-            
+
             Ok(Some(record))
         } else {
             Ok(None)
         }
     }
 
-    async fn get_connection_record(&self, key: &[u8; 32]) -> StorageResult<Option<ConnectionRecord>> {
+    async fn get_connection_record(
+        &self,
+        key: &[u8; 32],
+    ) -> StorageResult<Option<ConnectionRecord>> {
         // Check cache first
         {
             let cache = self.cache.read().await;
@@ -427,16 +436,16 @@ impl IdentityStorage {
         // Retrieve from DHT
         if let Some(bytes) = self.retrieve_dht_record(key).await? {
             let record = ConnectionRecord::from_cbor(&bytes)?;
-            
+
             // Cache the result
             {
                 let mut cache = self.cache.write().await;
                 cache.connection_records.insert(
                     key.clone(),
-                    CachedItem::new(record.clone(), Some(record.ttl_seconds))
+                    CachedItem::new(record.clone(), Some(record.ttl_seconds)),
                 );
             }
-            
+
             Ok(Some(record))
         } else {
             Ok(None)
@@ -457,16 +466,16 @@ impl IdentityStorage {
         // Retrieve from DHT
         if let Some(bytes) = self.retrieve_dht_record(key).await? {
             let record = SiteManifestRecord::from_cbor(&bytes)?;
-            
+
             // Cache the result
             {
                 let mut cache = self.cache.write().await;
                 cache.site_records.insert(
                     key.clone(),
-                    CachedItem::new(record.clone(), Some(record.ttl_seconds))
+                    CachedItem::new(record.clone(), Some(record.ttl_seconds)),
                 );
             }
-            
+
             Ok(Some(record))
         } else {
             Ok(None)
@@ -476,9 +485,10 @@ impl IdentityStorage {
     async fn store_dht_record(&self, key: &[u8; 32], value: Vec<u8>) -> StorageResult<()> {
         // Validate size limit
         if value.len() > super::DHT_RECORD_MAX_SIZE {
-            return Err(IdentityStorageError::StorageLimitExceeded(
-                format!("DHT record too large: {} bytes", value.len())
-            ));
+            return Err(IdentityStorageError::StorageLimitExceeded(format!(
+                "DHT record too large: {} bytes",
+                value.len()
+            )));
         }
 
         // Store in DHT (note: the DHT engine expects a mutable reference)
@@ -499,7 +509,7 @@ impl IdentityStorage {
     async fn retrieve_dht_record(&self, key: &[u8; 32]) -> StorageResult<Option<Vec<u8>>> {
         // Convert our DhtKey to saorsa-core's DhtKey format
         let saorsa_key = saorsa_core::dht::DhtKey::from_bytes(*key);
-        
+
         // Retrieve from DHT
         match self.dht.retrieve(&saorsa_key).await {
             Ok(data) => Ok(data),
@@ -510,7 +520,7 @@ impl IdentityStorage {
     async fn store_blob(&self, data: &[u8]) -> StorageResult<ContentId> {
         // Calculate content address
         let cid = derive_content_address(data);
-        
+
         // Check cache first
         {
             let cache = self.cache.read().await;
@@ -518,17 +528,19 @@ impl IdentityStorage {
                 return Ok(cid);
             }
         }
-        
+
         // Store in content-addressed storage via StorageManager
         // The actual storage operation would use the saorsa-core StorageManager
         // For now, this is a placeholder that represents the intended interface
-        
+
         // Cache the data
         {
             let mut cache = self.cache.write().await;
-            cache.blobs.insert(cid, CachedItem::new(data.to_vec(), None));
+            cache
+                .blobs
+                .insert(cid, CachedItem::new(data.to_vec(), None));
         }
-        
+
         Ok(cid)
     }
 
@@ -542,7 +554,7 @@ impl IdentityStorage {
                 }
             }
         }
-        
+
         // Retrieve from content-addressed storage via StorageManager
         // The actual retrieval would use the saorsa-core StorageManager
         // For now, return None to indicate not found
@@ -555,9 +567,7 @@ impl IdentityStorage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dht_identity::{
-        blobs::{RendezvousEntry, PageEntry},
-    };
+    use crate::dht_identity::blobs::{PageEntry, RendezvousEntry};
     use saorsa_core::dht::core_engine::NodeId as DhtNodeId;
 
     fn create_test_dht() -> Arc<DhtCoreEngine> {
@@ -601,9 +611,9 @@ mod tests {
             1, // sequence
             timestamp,
             *blake3::hash(four_words.as_str().as_bytes()).as_bytes(), // identity_hash
-            [4u8; 32], // ml_dsa_key_hash
-            [5u8; 32], // ml_kem_key_hash
-            [6u8; 32], // transport_id
+            [4u8; 32],                                                // ml_dsa_key_hash
+            [5u8; 32],                                                // ml_kem_key_hash
+            [6u8; 32],                                                // transport_id
             descriptor_cid,
         );
 
@@ -621,10 +631,10 @@ mod tests {
         let dht = create_test_dht();
         // Skip storage manager creation for now
         // let storage = create_test_storage();
-        
+
         // Test that we can create the storage instance
         // let identity_storage = IdentityStorage::new(dht, storage);
-        
+
         // For now, just test that the DHT was created successfully
         // Note: node_id is private, so we can't access it directly in tests
         // This test just verifies the DHT was created without error
@@ -633,16 +643,16 @@ mod tests {
     #[tokio::test]
     async fn test_four_word_key_derivation_integration() {
         let four_words = NormalizedFourWords::new("ocean forest moon star").unwrap();
-        
+
         let id_key = derive_identity_key(&four_words);
         let conn_key = derive_connection_key(&four_words);
         let site_key = derive_site_key(&four_words);
-        
+
         // Keys should be different
         assert_ne!(id_key, conn_key);
         assert_ne!(id_key, site_key);
         assert_ne!(conn_key, site_key);
-        
+
         // Keys should be deterministic
         assert_eq!(id_key, derive_identity_key(&four_words));
     }
@@ -650,7 +660,7 @@ mod tests {
     #[tokio::test]
     async fn test_resolved_identity_creation() {
         let identity = create_test_identity().await;
-        
+
         assert_eq!(identity.four_words.as_str(), "ocean-forest-moon-star");
         assert_eq!(identity.root_record.sequence, 1);
         assert_eq!(identity.descriptor.four_words, "ocean-forest-moon-star");
@@ -663,11 +673,11 @@ mod tests {
     async fn test_cache_item_expiration() {
         let item = CachedItem::new("test_data", Some(1)); // 1 second TTL
         assert!(!item.is_expired());
-        
+
         // Item without TTL never expires
         let permanent_item = CachedItem::new("permanent", None);
         assert!(!permanent_item.is_expired());
-        
+
         // Test with expired item (would need sleep to test properly)
         let expired_item = CachedItem {
             data: "expired",
@@ -682,7 +692,7 @@ mod tests {
         let four_words = "ocean-forest-moon-star";
         let normalized = NormalizedFourWords::new(four_words).unwrap();
         let expected_hash = *blake3::hash(normalized.as_str().as_bytes()).as_bytes();
-        
+
         // Test with correct hash
         let mut record = IdentityRootRecord::new(
             1,
@@ -693,10 +703,10 @@ mod tests {
             [3u8; 32],
             [4u8; 32],
         );
-        
+
         // Validation should pass (this would be done in the storage layer)
         assert_eq!(record.identity_hash, expected_hash);
-        
+
         // Test with incorrect hash
         record.identity_hash = [99u8; 32];
         assert_ne!(record.identity_hash, expected_hash);
@@ -719,15 +729,15 @@ mod tests {
             [1u8; 32], // transport_id
             rendezvous_nodes,
             1640995200000, // timestamp
-            3600, // ttl
+            3600,          // ttl
         );
 
         let conn_cid = conn_blob.content_address().unwrap();
-        
+
         let conn_record = ConnectionRecord::new(
-            1, // sequence
+            1,             // sequence
             1640995200000, // timestamp
-            [1u8; 32], // transport_id
+            [1u8; 32],     // transport_id
             conn_cid,
             3600, // ttl
         );
@@ -758,13 +768,13 @@ mod tests {
 
         let site_manifest = SiteManifestBlob::new("/index.html".to_string(), pages)
             .expect("Should create manifest");
-        
+
         site_manifest.validate().expect("Should be valid");
-        
+
         let site_cid = site_manifest.content_address().unwrap();
-        
+
         let site_record = SiteManifestRecord::new(
-            1, // sequence
+            1,             // sequence
             1640995200000, // timestamp
             site_cid,
             7200, // ttl

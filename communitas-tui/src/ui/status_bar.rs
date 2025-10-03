@@ -1,10 +1,10 @@
 use crate::state::AppState;
 use ratatui::{
+    Frame,
     layout::Rect,
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Paragraph},
-    Frame,
 };
 
 /// Render status bar at bottom of screen

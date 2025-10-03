@@ -60,11 +60,11 @@ struct EntryMetadata {
 /// Type of content stored
 #[derive(Debug, Clone, Serialize, Deserialize)]
 enum ContentType {
-    Identity,        // Core identity data
-    LocalFile,       // User files stored locally
-    CachedContent,   // Cached collaborative content
-    Configuration,   // App configuration
-    Session,         // Session data
+    Identity,      // Core identity data
+    LocalFile,     // User files stored locally
+    CachedContent, // Cached collaborative content
+    Configuration, // App configuration
+    Session,       // Session data
 }
 
 /// Compression type for stored data
@@ -144,11 +144,7 @@ impl EncryptedVault {
     }
 
     /// Load an existing vault
-    pub async fn load(
-        four_words: &str,
-        password: &str,
-        config: &StorageConfig,
-    ) -> Result<Self> {
+    pub async fn load(four_words: &str, password: &str, config: &StorageConfig) -> Result<Self> {
         let vault_path = config.vault_dir.join(four_words);
 
         // Load metadata
@@ -168,7 +164,8 @@ impl EncryptedVault {
         let data_store = if index_path.exists() {
             let encrypted_index = fs::read(&index_path).await?;
             // This decrypt() call will FAIL with wrong password due to AEAD authentication tag
-            let decrypted_index = key_manager.decrypt(&encryption_key, &encrypted_index)
+            let decrypted_index = key_manager
+                .decrypt(&encryption_key, &encrypted_index)
                 .context("Invalid password or corrupted vault")?;
             let entries: HashMap<String, EncryptedEntry> = serde_json::from_slice(&decrypted_index)
                 .context("Invalid password or corrupted vault index")?;
@@ -179,7 +176,8 @@ impl EncryptedVault {
             let verifier_path = vault_path.join("password.verifier");
             if verifier_path.exists() {
                 let encrypted_verifier = fs::read(&verifier_path).await?;
-                let _verification = key_manager.decrypt(&encryption_key, &encrypted_verifier)
+                let _verification = key_manager
+                    .decrypt(&encryption_key, &encrypted_verifier)
                     .context("Invalid password")?;
                 // Password is valid
             }
@@ -189,7 +187,8 @@ impl EncryptedVault {
         };
 
         // Load display name from encrypted identity data
-        let display_name = Self::load_display_name(&vault_path, &encryption_key, &key_manager).await
+        let display_name = Self::load_display_name(&vault_path, &encryption_key, &key_manager)
+            .await
             .unwrap_or_else(|_| "Unknown".to_string());
 
         let fec_storage = if config.enable_fec {
@@ -212,7 +211,8 @@ impl EncryptedVault {
 
     /// Store encrypted data
     pub async fn store(&self, key: &str, data: &[u8]) -> Result<()> {
-        self.store_internal(key, data, ContentType::LocalFile, None).await
+        self.store_internal(key, data, ContentType::LocalFile, None)
+            .await
     }
 
     /// Store with Forward Error Correction
@@ -253,7 +253,8 @@ impl EncryptedVault {
     /// Retrieve encrypted data
     pub async fn retrieve(&self, key: &str) -> Result<Vec<u8>> {
         let store = self.data_store.read().await;
-        let entry = store.get(key)
+        let entry = store
+            .get(key)
             .ok_or_else(|| anyhow::anyhow!("Key not found: {}", key))?;
 
         // Check if data is in FEC shards
@@ -266,13 +267,13 @@ impl EncryptedVault {
         }
 
         // Regular encrypted data
-        let decrypted = self.key_manager.decrypt(&self.encryption_key, &entry.encrypted_data)?;
+        let decrypted = self
+            .key_manager
+            .decrypt(&self.encryption_key, &entry.encrypted_data)?;
 
         // Decompress if needed
         let data = match entry.metadata.compression {
-            Some(CompressionType::None) => {
-                decrypted.to_vec()
-            }
+            Some(CompressionType::None) => decrypted.to_vec(),
             _ => decrypted.to_vec(),
         };
 
@@ -355,12 +356,19 @@ impl EncryptedVault {
     }
 
     /// Import vault from backup
-    pub async fn import(backup_data: &[u8], password: &str, config: &StorageConfig) -> Result<Self> {
+    pub async fn import(
+        backup_data: &[u8],
+        password: &str,
+        config: &StorageConfig,
+    ) -> Result<Self> {
         let export: VaultExport = serde_json::from_slice(backup_data)?;
 
         // Create vault with imported metadata
-        let key_manager = KeyManager::new(export.metadata.pbkdf2_iterations, config.use_keyring).await?;
-        let encryption_key = key_manager.derive_key(password, &export.metadata.salt).await?;
+        let key_manager =
+            KeyManager::new(export.metadata.pbkdf2_iterations, config.use_keyring).await?;
+        let encryption_key = key_manager
+            .derive_key(password, &export.metadata.salt)
+            .await?;
 
         let vault_path = config.vault_dir.join(&export.four_words);
         fs::create_dir_all(&vault_path).await?;
@@ -405,7 +413,9 @@ impl EncryptedVault {
         let compressed_data = data.to_vec();
 
         // Encrypt
-        let encrypted = self.key_manager.encrypt(&self.encryption_key, &compressed_data)?;
+        let encrypted = self
+            .key_manager
+            .encrypt(&self.encryption_key, &compressed_data)?;
 
         // Create entry
         let entry = EncryptedEntry {
@@ -438,7 +448,9 @@ impl EncryptedVault {
     async fn save_index(&self) -> Result<()> {
         let store = self.data_store.read().await;
         let index_json = serde_json::to_vec(&*store)?;
-        let encrypted_index = self.key_manager.encrypt(&self.encryption_key, &index_json)?;
+        let encrypted_index = self
+            .key_manager
+            .encrypt(&self.encryption_key, &index_json)?;
 
         let index_path = self.vault_path.join("index.enc");
         fs::write(index_path, encrypted_index).await?;
@@ -530,7 +542,9 @@ mod tests {
             key,
             salt,
             &config,
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
 
         // Store and retrieve data
         let test_data = b"Test data for vault";

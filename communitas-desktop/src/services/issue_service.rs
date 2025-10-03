@@ -230,9 +230,7 @@ impl IssueService {
             }
         }
 
-        self.crdt
-            .save_document(&doc_id, "issue", &id, &doc)
-            .await?;
+        self.crdt.save_document(&doc_id, "issue", &id, &doc).await?;
 
         // Save issue metadata
         let db = self.crdt.connection()?;
@@ -551,7 +549,13 @@ mod tests {
             .unwrap();
 
         let issue = service
-            .create_issue(&project.id, "Test Issue", None, IssuePriority::Medium, "user-1")
+            .create_issue(
+                &project.id,
+                "Test Issue",
+                None,
+                IssuePriority::Medium,
+                "user-1",
+            )
             .await
             .unwrap();
 

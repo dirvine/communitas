@@ -1,16 +1,19 @@
 //! HTTP request handlers for bridge API endpoints
 
-use crate::{error::{BridgeError, BridgeResult}, state::BridgeState};
+use crate::{
+    error::{BridgeError, BridgeResult},
+    state::BridgeState,
+};
 use axum::{
-    extract::{Path, Query, State},
     Json,
+    extract::{Path, Query, State},
 };
 use chrono::{DateTime, Utc};
 use saorsa_core::chat::{ChannelId, ChannelType, MessageId};
 use saorsa_core::identity::FourWordAddress;
 use saorsa_core::messaging::{ChannelId as MessagingChannelId, MessageContent};
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::sync::Arc;
 
 /// Health check endpoint
@@ -57,20 +60,28 @@ pub async fn create_channel(
 ) -> BridgeResult<Json<Value>> {
     // Validate input
     if req.name.is_empty() {
-        return Err(BridgeError::InvalidRequest("Channel name cannot be empty".to_string()));
+        return Err(BridgeError::InvalidRequest(
+            "Channel name cannot be empty".to_string(),
+        ));
     }
     if req.name.len() > 100 {
-        return Err(BridgeError::InvalidRequest("Channel name too long (max 100 chars)".to_string()));
+        return Err(BridgeError::InvalidRequest(
+            "Channel name too long (max 100 chars)".to_string(),
+        ));
     }
     if req.description.len() > 500 {
-        return Err(BridgeError::InvalidRequest("Description too long (max 500 chars)".to_string()));
+        return Err(BridgeError::InvalidRequest(
+            "Description too long (max 500 chars)".to_string(),
+        ));
     }
 
     let mut core_guard = state.core.write().await;
-    let core = core_guard.as_mut()
+    let core = core_guard
+        .as_mut()
         .ok_or_else(|| BridgeError::CommandFailed("Core not initialized".to_string()))?;
 
-    let channel = core.chat
+    let channel = core
+        .chat
         .create_channel(req.name, req.description, ChannelType::Public, None)
         .await
         .map_err(|e| BridgeError::CommandFailed(format!("create_channel failed: {}", e)))?;
@@ -85,21 +96,22 @@ pub async fn create_channel(
 }
 
 /// List all channels
-pub async fn list_channels(
-    State(state): State<Arc<BridgeState>>,
-) -> BridgeResult<Json<Value>> {
+pub async fn list_channels(State(state): State<Arc<BridgeState>>) -> BridgeResult<Json<Value>> {
     let mut core_guard = state.core.write().await;
-    let core = core_guard.as_mut()
+    let core = core_guard
+        .as_mut()
         .ok_or_else(|| BridgeError::CommandFailed("Core not initialized".to_string()))?;
 
-    let channel_ids = core.chat
+    let channel_ids = core
+        .chat
         .get_user_channels()
         .await
         .map_err(|e| BridgeError::CommandFailed(format!("get_user_channels failed: {}", e)))?;
 
     let mut channels = Vec::new();
     for id in channel_ids {
-        let channel = core.chat
+        let channel = core
+            .chat
             .get_channel(&id)
             .await
             .map_err(|e| BridgeError::CommandFailed(format!("get_channel failed: {}", e)))?;
@@ -129,7 +141,9 @@ pub async fn get_channel_messages(
 ) -> BridgeResult<Json<Value>> {
     // TODO: Implement via messaging service once API is clarified
     // ChatManager doesn't have get_channel_messages in saorsa-core 0.3.26
-    Ok(Json(json!({"messages": [], "note": "Pending saorsa-core API update"})))
+    Ok(Json(
+        json!({"messages": [], "note": "Pending saorsa-core API update"}),
+    ))
 }
 
 /// Send message to channel
@@ -147,31 +161,37 @@ pub async fn send_channel_message(
 ) -> BridgeResult<Json<Value>> {
     // Validate input
     if req.content.is_empty() {
-        return Err(BridgeError::InvalidRequest("Message content cannot be empty".to_string()));
+        return Err(BridgeError::InvalidRequest(
+            "Message content cannot be empty".to_string(),
+        ));
     }
     if req.content.len() > 10 * 1024 {
-        return Err(BridgeError::InvalidRequest("Message too long (max 10KB)".to_string()));
+        return Err(BridgeError::InvalidRequest(
+            "Message too long (max 10KB)".to_string(),
+        ));
     }
     if req.recipients.is_empty() {
-        return Err(BridgeError::InvalidRequest("Must specify at least one recipient".to_string()));
+        return Err(BridgeError::InvalidRequest(
+            "Must specify at least one recipient".to_string(),
+        ));
     }
 
     let core_guard = state.core.read().await;
-    let core = core_guard.as_ref()
+    let core = core_guard
+        .as_ref()
         .ok_or_else(|| BridgeError::CommandFailed("Core not initialized".to_string()))?;
 
     // Convert recipients to FourWordAddress
-    let recipients: Vec<FourWordAddress> = req.recipients
-        .into_iter()
-        .map(FourWordAddress)
-        .collect();
+    let recipients: Vec<FourWordAddress> =
+        req.recipients.into_iter().map(FourWordAddress).collect();
 
     // Parse channel UUID
     let channel_uuid = uuid::Uuid::parse_str(&channel_id)
         .map_err(|e| BridgeError::InvalidRequest(format!("Invalid channel ID: {}", e)))?;
 
     // Send message
-    let (msg_id, _receipt) = core.messaging
+    let (msg_id, _receipt) = core
+        .messaging
         .send_message(
             recipients,
             MessageContent::Text(req.content),
@@ -224,11 +244,16 @@ pub async fn create_thread(
     Json(req): Json<CreateThreadRequest>,
 ) -> BridgeResult<Json<Value>> {
     let mut core_guard = state.core.write().await;
-    let core = core_guard.as_mut()
+    let core = core_guard
+        .as_mut()
         .ok_or_else(|| BridgeError::CommandFailed("Core not initialized".to_string()))?;
 
-    let thread = core.chat
-        .create_thread(&ChannelId(req.channel_id), &MessageId(req.parent_message_id))
+    let thread = core
+        .chat
+        .create_thread(
+            &ChannelId(req.channel_id),
+            &MessageId(req.parent_message_id),
+        )
         .await
         .map_err(|e| BridgeError::CommandFailed(format!("create_thread failed: {}", e)))?;
 
@@ -246,7 +271,9 @@ pub async fn get_thread_messages(
 ) -> BridgeResult<Json<Value>> {
     // TODO: Implement via messaging service once API is clarified
     // ChatManager doesn't have get_thread_messages in saorsa-core 0.3.26
-    Ok(Json(json!({"messages": [], "note": "Pending saorsa-core API update"})))
+    Ok(Json(
+        json!({"messages": [], "note": "Pending saorsa-core API update"}),
+    ))
 }
 
 // ===== P2P Network Connection Endpoints =====
@@ -256,15 +283,20 @@ pub async fn get_network_connection_info(
     State(state): State<Arc<BridgeState>>,
 ) -> BridgeResult<Json<Value>> {
     let core_guard = state.core.read().await;
-    let core = core_guard.as_ref()
+    let core = core_guard
+        .as_ref()
         .ok_or_else(|| BridgeError::CommandFailed("Core not initialized".to_string()))?;
 
     // Get endpoint four-word address
-    let four_word_id = core.get_local_endpoint_four_words().await
+    let four_word_id = core
+        .get_local_endpoint_four_words()
+        .await
         .unwrap_or_else(|| "not-available".to_string());
 
     // Get listen address as string
-    let listen_addr = core.local_endpoint.as_ref()
+    let listen_addr = core
+        .local_endpoint
+        .as_ref()
         .map(|addr| addr.to_string())
         .unwrap_or_else(|| "not-available".to_string());
 
@@ -294,12 +326,13 @@ pub async fn connect_to_peer(
     let words: Vec<&str> = req.four_word_addr.split('-').collect();
     if words.len() != 4 {
         return Err(BridgeError::InvalidRequest(
-            "Four-word address must contain exactly 4 words separated by hyphens".to_string()
+            "Four-word address must contain exactly 4 words separated by hyphens".to_string(),
         ));
     }
 
     let core_guard = state.core.read().await;
-    let core = core_guard.as_ref()
+    let core = core_guard
+        .as_ref()
         .ok_or_else(|| BridgeError::CommandFailed("Core not initialized".to_string()))?;
 
     // Connect to peer using CoreContext
@@ -318,7 +351,8 @@ pub async fn get_connected_peers(
     State(state): State<Arc<BridgeState>>,
 ) -> BridgeResult<Json<Value>> {
     let core_guard = state.core.read().await;
-    let core = core_guard.as_ref()
+    let core = core_guard
+        .as_ref()
         .ok_or_else(|| BridgeError::CommandFailed("Core not initialized".to_string()))?;
 
     // Get connected peers from CoreContext
@@ -326,10 +360,12 @@ pub async fn get_connected_peers(
 
     let peers_json: Vec<Value> = peers
         .iter()
-        .map(|peer_id| json!({
-            "peer_id": peer_id,
-            "status": "connected",
-        }))
+        .map(|peer_id| {
+            json!({
+                "peer_id": peer_id,
+                "status": "connected",
+            })
+        })
         .collect();
 
     Ok(Json(json!({"peers": peers_json})))
@@ -346,7 +382,8 @@ pub async fn disconnect_from_peer(
     Json(req): Json<DisconnectFromPeerRequest>,
 ) -> BridgeResult<Json<Value>> {
     let _core_guard = state.core.read().await;
-    let _core = _core_guard.as_ref()
+    let _core = _core_guard
+        .as_ref()
         .ok_or_else(|| BridgeError::CommandFailed("Core not initialized".to_string()))?;
 
     // Note: CoreContext P2PNode doesn't currently expose disconnect_peer method

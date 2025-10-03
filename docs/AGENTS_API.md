@@ -342,11 +342,11 @@ await invoke('core_group_add_member', {
 ## 7. Headless Node & Bootstrap
 
 Headless binaries (in Communitas repo earlier and in product packaging):
-- `communitas-node` — run a PQC‑ready node with QUIC and DHT
+- `communitas-headless` — run a PQC‑ready node with QUIC and DHT
 - `communitas-autoupdater` — jittered 0–6h rollout, with signature checks
 
 Operational surface:
-- Config: TOML with listen addresses, storage path, bootstrap seeds
+- Config: TOML with listen addresses, storage path, bootstrap seeds (pass `--config`, `--storage`, and `--instance-id` or set the matching `COMMUNITAS_*` environment variables so each daemon keeps its own files)
 - Health: `/health`, metrics at `127.0.0.1:9600`
 - Systemd units, cloud‑init for DigitalOcean; default bootstrap in 6 regions
 - Four‑word endpoints computed from IPv4 and port for human presentation
@@ -405,4 +405,3 @@ Security validation
 ---
 
 This document is maintained with the code. If an API here differs from the code in `src-tauri/src`, the code is the source of truth. Please open issues/PRs with proposed changes to keep agents in sync.
-

@@ -1,5 +1,5 @@
 use anyhow::Result;
-use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
 /// Initialize tracing/logging subsystem
 pub fn init(debug: bool) -> Result<()> {

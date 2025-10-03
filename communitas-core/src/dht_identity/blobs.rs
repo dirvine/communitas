@@ -5,10 +5,10 @@
 //! - ConnectionBlob: NAT traversal and networking information
 //! - SiteManifestBlob: Website content manifest
 
-use crate::dht_identity::{ContentId, PROTOCOL_VERSION, MAX_WEB_CONTENT_SIZE};
+use crate::dht_identity::{ContentId, MAX_WEB_CONTENT_SIZE, PROTOCOL_VERSION};
+use blake3::Hasher;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use blake3::Hasher;
 
 // Re-export PQC types from saorsa-core
 use saorsa_core::quantum_crypto::ant_quic_integration::{
@@ -21,10 +21,10 @@ pub struct TransportKeyEntry {
     /// SubjectPublicKeyInfo bytes
     #[serde(with = "serde_bytes")]
     pub spki: Vec<u8>,
-    
+
     /// Algorithm identifier (e.g., "Ed25519", "ML-DSA")
     pub algorithm: String,
-    
+
     /// Peer ID = blake3(spki)
     pub peer_id: [u8; 32],
 }
@@ -34,7 +34,7 @@ pub struct TransportKeyEntry {
 pub struct ContinuityProof {
     /// Hash of previous ML-DSA public key
     pub previous_key_hash: [u8; 32],
-    
+
     /// Rotation signature by previous key over (prev_hash, new_hash, four_words, seq, ts)
     #[serde(with = "serde_bytes")]
     pub rotation_signature: Vec<u8>,
@@ -45,7 +45,7 @@ pub struct ContinuityProof {
 pub struct MediaAssets {
     /// Avatar image content ID
     pub avatar_cid: Option<ContentId>,
-    
+
     /// Banner image content ID  
     pub banner_cid: Option<ContentId>,
 }
@@ -57,47 +57,47 @@ pub struct IdentityDescriptorBlob {
     /// Blob format version
     #[serde(rename = "v")]
     pub version: u8,
-    
+
     /// Normalized four-word identity
     #[serde(rename = "four")]
     pub four_words: String,
-    
+
     /// Hash of IdentityRootRecord core content (excluding descriptor_cid) this descriptor binds to
     #[serde(rename = "root_digest")]
     pub root_digest: [u8; 32],
-    
+
     /// ML-DSA-65 public key (1952 bytes)
     #[serde(rename = "ml_dsa_pub", with = "serde_bytes")]
     pub ml_dsa_public_key: Vec<u8>,
-    
-    /// ML-KEM-768 public key (1184 bytes) 
+
+    /// ML-KEM-768 public key (1184 bytes)
     #[serde(rename = "ml_kem_pub", with = "serde_bytes")]
     pub ml_kem_public_key: Vec<u8>,
-    
+
     /// Transport keys for ant-quic integration
     #[serde(rename = "transport_keys")]
     pub transport_keys: Vec<TransportKeyEntry>,
-    
+
     /// Preferred display name (max 128 bytes)
     #[serde(rename = "preferred_display_name")]
     pub preferred_display_name: String,
-    
+
     /// Optional continuity proof for key rotation
     #[serde(rename = "continuity", skip_serializing_if = "Option::is_none")]
     pub continuity: Option<ContinuityProof>,
-    
+
     /// Optional site manifest CID
     #[serde(rename = "site_manifest_cid", skip_serializing_if = "Option::is_none")]
     pub site_manifest_cid: Option<ContentId>,
-    
+
     /// Optional media assets
     #[serde(rename = "media", skip_serializing_if = "Option::is_none")]
     pub media: Option<MediaAssets>,
-    
+
     /// Optional capability flags and policies
     #[serde(rename = "capabilities", skip_serializing_if = "Option::is_none")]
     pub capabilities: Option<BTreeMap<String, serde_cbor::Value>>,
-    
+
     /// ML-DSA signature over canonical CBOR of all fields except signature
     #[serde(rename = "sig", with = "serde_bytes")]
     pub signature: Vec<u8>,
@@ -109,23 +109,23 @@ pub struct ConnectionBlob {
     /// Blob format version  
     #[serde(rename = "v")]
     pub version: u8,
-    
+
     /// Transport ID for consistency check
     #[serde(rename = "peer")]
     pub peer_transport_id: [u8; 32],
-    
+
     /// Bootstrap/rendezvous nodes for NAT traversal coordination
     #[serde(rename = "rendezvous")]
     pub rendezvous_nodes: Vec<RendezvousEntry>,
-    
+
     /// Optional relay hints (not mandatory for ant-quic)
     #[serde(rename = "relays", skip_serializing_if = "Option::is_none")]
     pub relay_hints: Option<Vec<RelayEntry>>,
-    
+
     /// Connection policy settings
     #[serde(rename = "policy")]
     pub policy: ConnectionPolicy,
-    
+
     /// Freshness information
     #[serde(rename = "freshness")]
     pub freshness: FreshnessInfo,
@@ -136,7 +136,7 @@ pub struct ConnectionBlob {
 pub struct RendezvousEntry {
     /// Address (host:port or four-word endpoint with explicit port)
     pub address: String,
-    
+
     /// Priority for selection (lower = higher priority)
     pub priority: u8,
 }
@@ -146,7 +146,7 @@ pub struct RendezvousEntry {
 pub struct RelayEntry {
     /// Relay identifier or address
     pub id: String,
-    
+
     /// Priority for selection
     pub priority: u8,
 }
@@ -156,7 +156,7 @@ pub struct RelayEntry {
 pub struct ConnectionPolicy {
     /// Allow relay-assisted connections if direct fails
     pub allow_relays: bool,
-    
+
     /// Support path migration/multi-path
     pub path_migration: bool,
 }
@@ -166,7 +166,7 @@ pub struct ConnectionPolicy {
 pub struct FreshnessInfo {
     /// Creation/update timestamp (milliseconds since epoch)
     pub timestamp: u64,
-    
+
     /// Suggested TTL in seconds
     pub ttl_seconds: u32,
 }
@@ -177,19 +177,19 @@ pub struct SiteManifestBlob {
     /// Blob format version
     #[serde(rename = "v")]
     pub version: u8,
-    
+
     /// Index file path (e.g., "/index.html")
     #[serde(rename = "index")]
     pub index_file: String,
-    
+
     /// Page/file entries
     #[serde(rename = "pages")]
     pub pages: Vec<PageEntry>,
-    
+
     /// Overall integrity hash (blake3 of concatenated page hashes)
     #[serde(rename = "integrity")]
     pub integrity_hash: [u8; 32],
-    
+
     /// Optional compression method for content chunks
     #[serde(rename = "compression", skip_serializing_if = "Option::is_none")]
     pub compression: Option<String>,
@@ -200,16 +200,16 @@ pub struct SiteManifestBlob {
 pub struct PageEntry {
     /// URL path (e.g., "/about.html", "/images/logo.png")
     pub path: String,
-    
+
     /// Content ID of the page data
     pub content_id: ContentId,
-    
+
     /// Size in bytes
     pub size_bytes: u32,
-    
+
     /// MIME type
     pub mime_type: String,
-    
+
     /// Content hash for integrity check
     pub content_hash: [u8; 32],
 }
@@ -253,20 +253,19 @@ impl IdentityDescriptorBlob {
         // Create a copy without signature for signing
         let mut signing_copy = self.clone();
         signing_copy.signature = Vec::new();
-        
+
         serde_cbor::to_vec(&signing_copy)
     }
 
     /// Sign the descriptor with ML-DSA private key
     pub fn sign(&mut self, secret_key: &MlDsaSecretKey) -> Result<(), String> {
-        let signing_bytes = self.signing_bytes()
+        let signing_bytes = self
+            .signing_bytes()
             .map_err(|e| format!("CBOR serialization error: {}", e))?;
 
         // Use saorsa-core's ML-DSA signing
-        let signature = saorsa_core::quantum_crypto::ml_dsa_sign(
-            secret_key,
-            &signing_bytes
-        ).map_err(|e| format!("Signing error: {}", e))?;
+        let signature = saorsa_core::quantum_crypto::ml_dsa_sign(secret_key, &signing_bytes)
+            .map_err(|e| format!("Signing error: {}", e))?;
 
         self.signature = signature.as_bytes().to_vec();
         Ok(())
@@ -278,7 +277,8 @@ impl IdentityDescriptorBlob {
             return Err("No signature present".to_string());
         }
 
-        let signing_bytes = self.signing_bytes()
+        let signing_bytes = self
+            .signing_bytes()
             .map_err(|e| format!("CBOR serialization error: {}", e))?;
 
         // Parse the public key and signature
@@ -289,11 +289,8 @@ impl IdentityDescriptorBlob {
             .map_err(|e| format!("Invalid signature: {}", e))?;
 
         // Use saorsa-core's ML-DSA verification
-        saorsa_core::quantum_crypto::ml_dsa_verify(
-            &public_key,
-            &signing_bytes,
-            &signature
-        ).map_err(|e| format!("Verification error: {}", e))
+        saorsa_core::quantum_crypto::ml_dsa_verify(&public_key, &signing_bytes, &signature)
+            .map_err(|e| format!("Verification error: {}", e))
     }
 
     /// Serialize to canonical CBOR bytes
@@ -309,7 +306,9 @@ impl IdentityDescriptorBlob {
     /// Calculate content address (CID) of this blob
     pub fn content_address(&self) -> Result<ContentId, serde_cbor::Error> {
         let cbor_bytes = self.to_cbor()?;
-        Ok(crate::dht_identity::key_derivation::derive_content_address(&cbor_bytes))
+        Ok(crate::dht_identity::key_derivation::derive_content_address(
+            &cbor_bytes,
+        ))
     }
 
     /// Validate the descriptor for correctness
@@ -336,7 +335,7 @@ impl IdentityDescriptorBlob {
             if key_entry.spki.is_empty() {
                 return Err("Empty SPKI in transport key".to_string());
             }
-            
+
             let computed_peer_id = *blake3::hash(&key_entry.spki).as_bytes();
             if computed_peer_id != key_entry.peer_id {
                 return Err("Invalid peer_id in transport key".to_string());
@@ -391,7 +390,9 @@ impl ConnectionBlob {
     /// Calculate content address (CID) of this blob
     pub fn content_address(&self) -> Result<ContentId, serde_cbor::Error> {
         let cbor_bytes = self.to_cbor()?;
-        Ok(crate::dht_identity::key_derivation::derive_content_address(&cbor_bytes))
+        Ok(crate::dht_identity::key_derivation::derive_content_address(
+            &cbor_bytes,
+        ))
     }
 }
 
@@ -400,12 +401,11 @@ impl SiteManifestBlob {
     pub fn new(index_file: String, pages: Vec<PageEntry>) -> Result<Self, String> {
         // Calculate total size
         let total_size: u64 = pages.iter().map(|p| p.size_bytes as u64).sum();
-        
+
         if total_size > MAX_WEB_CONTENT_SIZE as u64 {
             return Err(format!(
                 "Total content size {} exceeds limit {}",
-                total_size,
-                MAX_WEB_CONTENT_SIZE
+                total_size, MAX_WEB_CONTENT_SIZE
             ));
         }
 
@@ -438,7 +438,9 @@ impl SiteManifestBlob {
     /// Calculate content address (CID) of this blob
     pub fn content_address(&self) -> Result<ContentId, serde_cbor::Error> {
         let cbor_bytes = self.to_cbor()?;
-        Ok(crate::dht_identity::key_derivation::derive_content_address(&cbor_bytes))
+        Ok(crate::dht_identity::key_derivation::derive_content_address(
+            &cbor_bytes,
+        ))
     }
 
     /// Validate the manifest
@@ -456,8 +458,7 @@ impl SiteManifestBlob {
         if total_size > MAX_WEB_CONTENT_SIZE as u64 {
             return Err(format!(
                 "Total content size {} exceeds limit {}",
-                total_size,
-                MAX_WEB_CONTENT_SIZE
+                total_size, MAX_WEB_CONTENT_SIZE
             ));
         }
 
@@ -467,7 +468,7 @@ impl SiteManifestBlob {
             hasher.update(&page.content_hash);
         }
         let expected_integrity: [u8; 32] = hasher.finalize().into();
-        
+
         if expected_integrity != self.integrity_hash {
             return Err("Integrity hash mismatch".to_string());
         }
@@ -501,7 +502,7 @@ mod tests {
     fn create_test_transport_key() -> TransportKeyEntry {
         let spki = b"test_spki_data".to_vec();
         let peer_id = *blake3::hash(&spki).as_bytes();
-        
+
         TransportKeyEntry {
             spki,
             algorithm: "Ed25519".to_string(),
@@ -512,7 +513,7 @@ mod tests {
     fn create_test_identity_descriptor() -> IdentityDescriptorBlob {
         IdentityDescriptorBlob::new(
             "ocean-forest-moon-star".to_string(),
-            [1u8; 32], // root_digest
+            [1u8; 32],       // root_digest
             vec![2u8; 1952], // ml_dsa_public_key (approximate size)
             vec![3u8; 1184], // ml_kem_public_key (approximate size)
             vec![create_test_transport_key()],
@@ -523,7 +524,7 @@ mod tests {
     #[test]
     fn test_identity_descriptor_creation() {
         let descriptor = create_test_identity_descriptor();
-        
+
         assert_eq!(descriptor.version, PROTOCOL_VERSION);
         assert_eq!(descriptor.four_words, "ocean-forest-moon-star");
         assert_eq!(descriptor.root_digest, [1u8; 32]);
@@ -536,41 +537,44 @@ mod tests {
     fn test_identity_descriptor_validation() {
         let descriptor = create_test_identity_descriptor();
         descriptor.validate().expect("Should be valid");
-        
+
         // Test invalid four words
         let mut invalid = descriptor.clone();
         invalid.four_words = "invalid".to_string();
         assert!(invalid.validate().is_err());
-        
+
         // Test long display name - should fail validation when set directly
         let mut long_name = descriptor.clone();
         long_name.preferred_display_name = "x".repeat(129);
-        assert!(long_name.validate().is_err(), "Should fail validation for long display name");
+        assert!(
+            long_name.validate().is_err(),
+            "Should fail validation for long display name"
+        );
     }
 
     #[test]
     fn test_identity_descriptor_cbor_serialization() {
         let descriptor = create_test_identity_descriptor();
-        
+
         let cbor_bytes = descriptor.to_cbor().expect("Should serialize");
         assert!(!cbor_bytes.is_empty());
-        
-        let deserialized = IdentityDescriptorBlob::from_cbor(&cbor_bytes)
-            .expect("Should deserialize");
+
+        let deserialized =
+            IdentityDescriptorBlob::from_cbor(&cbor_bytes).expect("Should deserialize");
         assert_eq!(descriptor, deserialized);
     }
 
     #[test]
     fn test_identity_descriptor_content_address() {
         let descriptor = create_test_identity_descriptor();
-        
+
         let cid1 = descriptor.content_address().expect("Should compute CID");
         let cid2 = descriptor.content_address().expect("Should compute CID");
-        
+
         // Same content should produce same CID
         assert_eq!(cid1, cid2);
-        
-        // Different content should produce different CID  
+
+        // Different content should produce different CID
         let mut different = descriptor.clone();
         different.preferred_display_name = "Different User".to_string();
         let cid3 = different.content_address().expect("Should compute CID");
@@ -580,14 +584,18 @@ mod tests {
     #[test]
     fn test_identity_descriptor_signing_bytes() {
         let descriptor = create_test_identity_descriptor();
-        
-        let signing_bytes = descriptor.signing_bytes().expect("Should get signing bytes");
+
+        let signing_bytes = descriptor
+            .signing_bytes()
+            .expect("Should get signing bytes");
         assert!(!signing_bytes.is_empty());
-        
+
         // Signing bytes should be deterministic
-        let signing_bytes2 = descriptor.signing_bytes().expect("Should get signing bytes");
+        let signing_bytes2 = descriptor
+            .signing_bytes()
+            .expect("Should get signing bytes");
         assert_eq!(signing_bytes, signing_bytes2);
-        
+
         // Adding signature should not affect signing bytes
         let mut signed = descriptor.clone();
         signed.signature = vec![99u8; 100];
@@ -612,7 +620,7 @@ mod tests {
             [4u8; 32], // transport_id
             rendezvous,
             1640995200000, // timestamp
-            3600, // ttl
+            3600,          // ttl
         );
 
         assert_eq!(blob.version, PROTOCOL_VERSION);
@@ -637,8 +645,7 @@ mod tests {
         );
 
         let cbor_bytes = blob.to_cbor().expect("Should serialize");
-        let deserialized = ConnectionBlob::from_cbor(&cbor_bytes)
-            .expect("Should deserialize");
+        let deserialized = ConnectionBlob::from_cbor(&cbor_bytes).expect("Should deserialize");
         assert_eq!(blob, deserialized);
 
         let cid = blob.content_address().expect("Should compute CID");
@@ -675,19 +682,17 @@ mod tests {
 
     #[test]
     fn test_site_manifest_validation() {
-        let pages = vec![
-            PageEntry {
-                path: "/index.html".to_string(),
-                content_id: [1u8; 32],
-                size_bytes: 1024,
-                mime_type: "text/html".to_string(),
-                content_hash: [10u8; 32],
-            },
-        ];
+        let pages = vec![PageEntry {
+            path: "/index.html".to_string(),
+            content_id: [1u8; 32],
+            size_bytes: 1024,
+            mime_type: "text/html".to_string(),
+            content_hash: [10u8; 32],
+        }];
 
         let manifest = SiteManifestBlob::new("/index.html".to_string(), pages)
             .expect("Should create manifest");
-        
+
         manifest.validate().expect("Should be valid");
 
         // Test missing index file
@@ -712,7 +717,7 @@ mod tests {
                 content_hash: [20u8; 32],
             },
         ];
-        
+
         let duplicate_manifest = SiteManifestBlob::new("/test.html".to_string(), duplicate_pages);
         assert!(duplicate_manifest.is_ok()); // Created successfully
         assert!(duplicate_manifest.unwrap().validate().is_err()); // But validation fails
@@ -737,7 +742,7 @@ mod tests {
     fn test_transport_key_validation() {
         let spki = b"test_spki_data".to_vec();
         let correct_peer_id = *blake3::hash(&spki).as_bytes();
-        
+
         // Valid transport key
         let valid_key = TransportKeyEntry {
             spki: spki.clone(),
@@ -773,6 +778,8 @@ mod tests {
         );
 
         assert_eq!(descriptor.preferred_display_name.len(), 128);
-        descriptor.validate().expect("Should be valid after truncation");
+        descriptor
+            .validate()
+            .expect("Should be valid after truncation");
     }
 }

@@ -6,8 +6,8 @@
 use anyhow::Result;
 use base64::Engine;
 use chacha20poly1305::{
-    aead::{Aead, AeadCore, KeyInit},
     ChaCha20Poly1305, Key, Nonce,
+    aead::{Aead, AeadCore, KeyInit},
 };
 use pbkdf2::pbkdf2_hmac;
 use sha2::Sha256;
@@ -35,36 +35,33 @@ impl KeyManager {
         let password = password.to_string();
         let salt = salt.to_vec();
         let iterations = self.iterations;
-        
+
         tokio::task::spawn_blocking(move || {
             let mut key = Zeroizing::new(vec![0u8; 32]); // ChaCha20-Poly1305 uses 256-bit keys
-            
+
             // PBKDF2 with SHA-256 and configured iterations (100,000 as per DESIGN.md)
-            pbkdf2_hmac::<Sha256>(
-                password.as_bytes(),
-                &salt,
-                iterations,
-                &mut key,
-            );
-            
+            pbkdf2_hmac::<Sha256>(password.as_bytes(), &salt, iterations, &mut key);
+
             Ok(key) as Result<Zeroizing<Vec<u8>>>
-        }).await
+        })
+        .await
         .map_err(|e| anyhow::anyhow!("Failed to derive key: {}", e))?
     }
 
     /// Hash password for lookup (different from key derivation)
     pub async fn hash_password(&self, password: &str) -> Result<Vec<u8>> {
         let password = password.to_string();
-        
+
         tokio::task::spawn_blocking(move || {
             use blake3::Hasher;
-            
+
             let mut hasher = Hasher::new();
             hasher.update(b"communitas:password:v1:");
             hasher.update(password.as_bytes());
-            
+
             Ok(hasher.finalize().as_bytes().to_vec())
-        }).await
+        })
+        .await
         .map_err(|e| anyhow::anyhow!("Failed to hash password: {}", e))?
     }
 
@@ -82,7 +79,8 @@ impl KeyManager {
         // Convert key to base64 for storage
         let key_b64 = base64::engine::general_purpose::STANDARD.encode(key);
 
-        entry.set_password(&key_b64)
+        entry
+            .set_password(&key_b64)
             .map_err(|e| anyhow::anyhow!("Failed to store key in keyring: {}", e))?;
 
         Ok(())
@@ -99,12 +97,14 @@ impl KeyManager {
         let entry = Entry::new(&self.keyring_service, four_words)
             .map_err(|e| anyhow::anyhow!("Failed to access keyring entry: {}", e))?;
 
-        let key_b64 = entry.get_password()
+        let key_b64 = entry
+            .get_password()
             .map_err(|e| anyhow::anyhow!("Failed to retrieve key from keyring: {}", e))?;
 
         let key = Zeroizing::new(
-            base64::engine::general_purpose::STANDARD.decode(&key_b64)
-                .map_err(|e| anyhow::anyhow!("Failed to decode key from keyring: {}", e))?
+            base64::engine::general_purpose::STANDARD
+                .decode(&key_b64)
+                .map_err(|e| anyhow::anyhow!("Failed to decode key from keyring: {}", e))?,
         );
 
         Ok(key)
@@ -121,7 +121,8 @@ impl KeyManager {
         let entry = Entry::new(&self.keyring_service, four_words)
             .map_err(|e| anyhow::anyhow!("Failed to access keyring entry: {}", e))?;
 
-        entry.delete_credential()
+        entry
+            .delete_credential()
             .map_err(|e| anyhow::anyhow!("Failed to delete key from keyring: {}", e))?;
 
         Ok(())
@@ -204,7 +205,10 @@ mod tests {
         assert_eq!(&*key1, &*key2);
 
         // Different password should produce different key
-        let key3 = manager.derive_key("different_password", &salt).await.unwrap();
+        let key3 = manager
+            .derive_key("different_password", &salt)
+            .await
+            .unwrap();
         assert_ne!(&*key1, &*key3);
 
         // Different salt should produce different key
@@ -254,7 +258,10 @@ mod tests {
         let master_key = vec![0u8; 32];
 
         let subkey1 = manager.derive_subkey(&master_key, "files").await.unwrap();
-        let subkey2 = manager.derive_subkey(&master_key, "metadata").await.unwrap();
+        let subkey2 = manager
+            .derive_subkey(&master_key, "metadata")
+            .await
+            .unwrap();
 
         // Different contexts should produce different subkeys
         assert_ne!(subkey1, subkey2);

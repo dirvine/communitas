@@ -11,20 +11,20 @@
 //! 2. Content-Addressed Blobs: Signed, verifiable larger data structures
 //! 3. Erasure-Coded Storage: Actual content with redundancy
 
+pub mod blobs;
+pub mod demo;
+pub mod integration;
 pub mod key_derivation;
 pub mod records;
-pub mod blobs;
 pub mod storage;
 pub mod validation;
-pub mod integration;
-pub mod demo;
 
+pub use blobs::*;
+pub use integration::*;
 pub use key_derivation::*;
 pub use records::*;
-pub use blobs::*;
 pub use storage::*;
 pub use validation::*;
-pub use integration::*;
 
 /// DHT record size limit from saorsa-core
 pub const DHT_RECORD_MAX_SIZE: usize = 512;

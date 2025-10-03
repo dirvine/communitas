@@ -1,21 +1,21 @@
 use ratatui::{
-    layout::{Constraint, Direction, Layout, Rect, Alignment},
+    Frame,
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph, Wrap},
-    Frame,
 };
 
-use crate::state::{navigation::FocusedPanel, AppState};
+use crate::state::{AppState, navigation::FocusedPanel};
 
 /// Render the authentication view (login or signup)
 pub fn render(f: &mut Frame, area: Rect, state: &AppState) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(7),  // Header
-            Constraint::Min(1),     // Content
-            Constraint::Length(3),  // Instructions
+            Constraint::Length(7), // Header
+            Constraint::Min(1),    // Content
+            Constraint::Length(3), // Instructions
         ])
         .split(area);
 
@@ -103,10 +103,7 @@ fn render_login_option(f: &mut Frame, area: Rect, state: &AppState) {
                 Style::default().fg(Color::DarkGray),
             ))
         } else {
-            Line::from(Span::styled(
-                input_text,
-                Style::default().fg(Color::White),
-            ))
+            Line::from(Span::styled(input_text, Style::default().fg(Color::White)))
         };
         lines.push(input_line);
         lines.push(Line::from(""));
@@ -126,7 +123,11 @@ fn render_login_option(f: &mut Frame, area: Rect, state: &AppState) {
             } else {
                 "  Use arrow keys to select"
             },
-            Style::default().fg(if is_selected { Color::Green } else { Color::DarkGray }),
+            Style::default().fg(if is_selected {
+                Color::Green
+            } else {
+                Color::DarkGray
+            }),
         )));
     }
 
@@ -176,10 +177,7 @@ fn render_signup_option(f: &mut Frame, area: Rect, state: &AppState) {
                 Style::default().fg(Color::DarkGray),
             ))
         } else {
-            Line::from(Span::styled(
-                input_text,
-                Style::default().fg(Color::White),
-            ))
+            Line::from(Span::styled(input_text, Style::default().fg(Color::White)))
         };
         lines.push(input_line);
         lines.push(Line::from(""));
@@ -199,7 +197,11 @@ fn render_signup_option(f: &mut Frame, area: Rect, state: &AppState) {
             } else {
                 "  Use arrow keys to select"
             },
-            Style::default().fg(if is_selected { Color::Green } else { Color::DarkGray }),
+            Style::default().fg(if is_selected {
+                Color::Green
+            } else {
+                Color::DarkGray
+            }),
         )));
     }
 

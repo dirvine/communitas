@@ -1,9 +1,9 @@
 use ratatui::{
+    Frame,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
-    Frame,
 };
 
 use crate::state::AppState;
@@ -97,7 +97,11 @@ fn render_project_detail(f: &mut Frame, area: Rect, state: &AppState) {
     };
 
     let block = Block::default()
-        .title(format!("{} {}", selected_project.icon.as_deref().unwrap_or("📋"), selected_project.name))
+        .title(format!(
+            "{} {}",
+            selected_project.icon.as_deref().unwrap_or("📋"),
+            selected_project.name
+        ))
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Cyan));
 
@@ -120,7 +124,9 @@ fn render_project_detail(f: &mut Frame, area: Rect, state: &AppState) {
     if !issue_counts.is_empty() {
         lines.push(Line::from(Span::styled(
             "Issue Status:",
-            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
         )));
         lines.push(Line::from(""));
 
@@ -191,11 +197,51 @@ pub fn render_kanban_board(f: &mut Frame, area: Rect, state: &AppState, project_
         ])
         .split(area);
 
-    render_kanban_column(f, chunks[0], state, project_id, "backlog", "📦 Backlog", Color::Gray);
-    render_kanban_column(f, chunks[1], state, project_id, "todo", "📝 Todo", Color::Blue);
-    render_kanban_column(f, chunks[2], state, project_id, "in-progress", "🚀 In Progress", Color::Yellow);
-    render_kanban_column(f, chunks[3], state, project_id, "done", "✅ Done", Color::Green);
-    render_kanban_column(f, chunks[4], state, project_id, "canceled", "❌ Canceled", Color::DarkGray);
+    render_kanban_column(
+        f,
+        chunks[0],
+        state,
+        project_id,
+        "backlog",
+        "📦 Backlog",
+        Color::Gray,
+    );
+    render_kanban_column(
+        f,
+        chunks[1],
+        state,
+        project_id,
+        "todo",
+        "📝 Todo",
+        Color::Blue,
+    );
+    render_kanban_column(
+        f,
+        chunks[2],
+        state,
+        project_id,
+        "in-progress",
+        "🚀 In Progress",
+        Color::Yellow,
+    );
+    render_kanban_column(
+        f,
+        chunks[3],
+        state,
+        project_id,
+        "done",
+        "✅ Done",
+        Color::Green,
+    );
+    render_kanban_column(
+        f,
+        chunks[4],
+        state,
+        project_id,
+        "canceled",
+        "❌ Canceled",
+        Color::DarkGray,
+    );
 }
 
 /// Render a single Kanban column

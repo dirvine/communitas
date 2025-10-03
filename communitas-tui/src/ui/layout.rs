@@ -1,8 +1,8 @@
 use crate::state::{AppState, View};
 use crate::ui::{auth, dashboard, organizations, projects, status_bar};
 use ratatui::{
-    layout::{Constraint, Direction, Layout, Rect},
     Frame,
+    layout::{Constraint, Direction, Layout, Rect},
 };
 
 /// Render main layout with status bar at bottom
@@ -10,8 +10,8 @@ pub fn render_layout(f: &mut Frame, state: &AppState) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Min(1),      // Main content
-            Constraint::Length(1),    // Status bar
+            Constraint::Min(1),    // Main content
+            Constraint::Length(1), // Status bar
         ])
         .split(f.area());
 
@@ -54,7 +54,11 @@ fn render_channel(f: &mut Frame, area: Rect, state: &AppState) {
 }
 
 fn render_thread(f: &mut Frame, area: Rect, state: &AppState) {
-    if let View::Thread { channel_id, thread_id } = state.navigation.current_view() {
+    if let View::Thread {
+        channel_id,
+        thread_id,
+    } = state.navigation.current_view()
+    {
         organizations::render_thread_view(f, area, state, channel_id, thread_id);
     }
 }

@@ -159,7 +159,7 @@ impl EnhancedBootstrapManager {
     /// Check if a string is a valid four-word address using dictionary validation
     fn is_four_word_address(&self, input: &str) -> bool {
         let candidate = input.trim().to_lowercase().replace([' ', '_'], "-");
-        
+
         if let Ok(parsed) = saorsa_core::identity::FourWordAddress::parse_str(&candidate) {
             let words_vec = parsed.words();
             if let Ok(words) = words_vec.try_into() {
@@ -195,15 +195,14 @@ impl EnhancedBootstrapManager {
 
         // Try to get some peers to count
         let manager = self.core_manager.read().await;
-        let peers = manager
-            .get_bootstrap_peers(100)
-            .await
-            .unwrap_or_default();
+        let peers = manager.get_bootstrap_peers(100).await.unwrap_or_default();
 
         let total_nodes = custom_count + peers.len();
         let quality_nodes = peers
             .iter()
-            .filter(|contact| contact.quality_metrics.quality_score >= self.config.quality_threshold)
+            .filter(|contact| {
+                contact.quality_metrics.quality_score >= self.config.quality_threshold
+            })
             .count();
 
         Ok(BootstrapStats {

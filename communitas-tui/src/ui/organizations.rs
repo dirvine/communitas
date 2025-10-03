@@ -1,9 +1,9 @@
 use ratatui::{
+    Frame,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
-    Frame,
 };
 
 use crate::state::AppState;
@@ -160,9 +160,7 @@ fn render_channel_detail(f: &mut Frame, area: Rect, state: &AppState) {
             Span::styled("Unread: ", Style::default().fg(Color::Yellow)),
             Span::styled(
                 format!("{} messages", selected_channel.unread_count),
-                Style::default()
-                    .fg(Color::Red)
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
             ),
         ]));
         lines.push(Line::from(""));
@@ -345,7 +343,11 @@ pub fn render_thread_view(
 ) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(5), Constraint::Min(3), Constraint::Length(3)])
+        .constraints([
+            Constraint::Length(5),
+            Constraint::Min(3),
+            Constraint::Length(3),
+        ])
         .split(area);
 
     // Thread header with parent message

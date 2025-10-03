@@ -23,11 +23,7 @@ impl Backend {
     }
 
     /// Update issue status (stub - requires org_commands integration)
-    pub async fn update_issue_status(
-        &mut self,
-        _issue_id: String,
-        _status: String,
-    ) -> Result<()> {
+    pub async fn update_issue_status(&mut self, _issue_id: String, _status: String) -> Result<()> {
         // TODO: Implement issue status update when org_commands are integrated
         Err(anyhow::anyhow!(
             "Issue status update not yet implemented in CoreContext"

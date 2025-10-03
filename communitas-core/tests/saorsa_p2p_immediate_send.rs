@@ -30,13 +30,15 @@ async fn create_test_node() -> Result<P2PNode> {
     let config = NodeConfig {
         peer_id: None,
         listen_addrs: vec![
-            "0.0.0.0:0".parse()?,  // IPv4 on OS-assigned port
-            "[::]:0".parse()?       // IPv6 on OS-assigned port
+            "0.0.0.0:0".parse()?, // IPv4 on OS-assigned port
+            "[::]:0".parse()?,    // IPv6 on OS-assigned port
         ],
         ..Default::default()
     };
 
-    P2PNode::new(config).await.map_err(|e| anyhow::anyhow!("Failed to create P2PNode: {}", e))
+    P2PNode::new(config)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to create P2PNode: {}", e))
 }
 
 /// Test 1: Basic Connection Lifecycle
@@ -81,7 +83,9 @@ async fn test_basic_connection_lifecycle() -> Result<()> {
 
     // Send message
     let message = b"Hello from node1";
-    node1.send_message(&peer2_id, "test", message.to_vec()).await?;
+    node1
+        .send_message(&peer2_id, "test", message.to_vec())
+        .await?;
     info!("✅ Message sent successfully");
 
     info!("✅ Test 1 PASSED");
@@ -106,7 +110,10 @@ async fn test_immediate_send_after_connect() -> Result<()> {
     let node2 = create_test_node().await?;
 
     let addrs2 = node2.listen_addrs().await;
-    let addr2_str = addrs2.first().expect("Node2 should have address").to_string();
+    let addr2_str = addrs2
+        .first()
+        .expect("Node2 should have address")
+        .to_string();
 
     info!("Node1: {:?}", node1.listen_addrs().await);
     info!("Node2: {:?}", addrs2);
@@ -117,27 +124,38 @@ async fn test_immediate_send_after_connect() -> Result<()> {
     let peer2_id = node1.connect_peer(&addr2_str).await?;
     let connect_duration = connect_start.elapsed();
 
-    info!("✅ Connected in {:?}, peer_id={}", connect_duration, peer2_id);
+    info!(
+        "✅ Connected in {:?}, peer_id={}",
+        connect_duration, peer2_id
+    );
 
     // CRITICAL: Send IMMEDIATELY with NO delay
     let send_start = Instant::now();
     info!("Sending message IMMEDIATELY (no wait)...");
 
     let message = b"Immediate message";
-    let send_result = node1.send_message(&peer2_id, "test", message.to_vec()).await;
+    let send_result = node1
+        .send_message(&peer2_id, "test", message.to_vec())
+        .await;
     let send_duration = send_start.elapsed();
 
     match send_result {
         Ok(_) => {
             info!("✅ Immediate send succeeded in {:?}", send_duration);
-            info!("Total time from connect to send: {:?}", connect_start.elapsed());
+            info!(
+                "Total time from connect to send: {:?}",
+                connect_start.elapsed()
+            );
             info!("✅ Test 2 PASSED");
             Ok(())
         }
         Err(e) => {
             info!("❌ Immediate send failed after {:?}: {}", send_duration, e);
             info!("Connection closed before send could complete");
-            info!("Time from connect to failure: {:?}", connect_start.elapsed());
+            info!(
+                "Time from connect to failure: {:?}",
+                connect_start.elapsed()
+            );
 
             // Check if connection is still active
             let is_active = node1.is_connection_active(&peer2_id).await;
@@ -172,7 +190,10 @@ async fn test_send_timing_analysis() -> Result<()> {
         let node2 = create_test_node().await?;
 
         let addrs2 = node2.listen_addrs().await;
-        let addr2_str = addrs2.first().expect("Node2 should have address").to_string();
+        let addr2_str = addrs2
+            .first()
+            .expect("Node2 should have address")
+            .to_string();
 
         // Connect
         let connect_start = Instant::now();
@@ -188,7 +209,9 @@ async fn test_send_timing_analysis() -> Result<()> {
         // Try to send
         let send_start = Instant::now();
         let message = b"test message";
-        let send_result = node1.send_message(&peer2_id, "test", message.to_vec()).await;
+        let send_result = node1
+            .send_message(&peer2_id, "test", message.to_vec())
+            .await;
         let send_duration = send_start.elapsed();
         let total_duration = connect_start.elapsed();
 
@@ -231,7 +254,10 @@ async fn test_connection_state_monitoring() -> Result<()> {
     let node2 = create_test_node().await?;
 
     let addrs2 = node2.listen_addrs().await;
-    let addr2_str = addrs2.first().expect("Node2 should have address").to_string();
+    let addr2_str = addrs2
+        .first()
+        .expect("Node2 should have address")
+        .to_string();
 
     info!("=== Before Connect ===");
     info!("Node1 addrs: {:?}", node1.listen_addrs().await);
@@ -243,31 +269,66 @@ async fn test_connection_state_monitoring() -> Result<()> {
     let peer2_id = node1.connect_peer(&addr2_str).await?;
     let connect_duration = connect_start.elapsed();
 
-    info!("\n=== Immediately After Connect ({:?}) ===", connect_duration);
+    info!(
+        "\n=== Immediately After Connect ({:?}) ===",
+        connect_duration
+    );
     info!("Peer ID: {}", peer2_id);
-    info!("Is peer connected: {}", node1.is_peer_connected(&peer2_id).await);
-    info!("Is connection active: {}", node1.is_connection_active(&peer2_id).await);
+    info!(
+        "Is peer connected: {}",
+        node1.is_peer_connected(&peer2_id).await
+    );
+    info!(
+        "Is connection active: {}",
+        node1.is_connection_active(&peer2_id).await
+    );
 
     // Check after short delay
     sleep(Duration::from_micros(50)).await;
     info!("\n=== After 50 microseconds ===");
-    info!("Is peer connected: {}", node1.is_peer_connected(&peer2_id).await);
-    info!("Is connection active: {}", node1.is_connection_active(&peer2_id).await);
+    info!(
+        "Is peer connected: {}",
+        node1.is_peer_connected(&peer2_id).await
+    );
+    info!(
+        "Is connection active: {}",
+        node1.is_connection_active(&peer2_id).await
+    );
 
     // Attempt send
     info!("\n=== Attempting Send ===");
-    let send_result = node1.send_message(&peer2_id, "test", b"test".to_vec()).await;
+    let send_result = node1
+        .send_message(&peer2_id, "test", b"test".to_vec())
+        .await;
 
     info!("\n=== After Send Attempt ===");
-    info!("Send result: {:?}", send_result.as_ref().map(|_| "OK").map_err(|e| e.to_string()));
-    info!("Is peer connected: {}", node1.is_peer_connected(&peer2_id).await);
-    info!("Is connection active: {}", node1.is_connection_active(&peer2_id).await);
+    info!(
+        "Send result: {:?}",
+        send_result
+            .as_ref()
+            .map(|_| "OK")
+            .map_err(|e| e.to_string())
+    );
+    info!(
+        "Is peer connected: {}",
+        node1.is_peer_connected(&peer2_id).await
+    );
+    info!(
+        "Is connection active: {}",
+        node1.is_connection_active(&peer2_id).await
+    );
 
     // Final state after delay
     sleep(Duration::from_millis(100)).await;
     info!("\n=== Final State (after 100ms) ===");
-    info!("Is peer connected: {}", node1.is_peer_connected(&peer2_id).await);
-    info!("Is connection active: {}", node1.is_connection_active(&peer2_id).await);
+    info!(
+        "Is peer connected: {}",
+        node1.is_peer_connected(&peer2_id).await
+    );
+    info!(
+        "Is connection active: {}",
+        node1.is_connection_active(&peer2_id).await
+    );
 
     match send_result {
         Ok(_) => info!("✅ Send succeeded"),
@@ -294,7 +355,10 @@ async fn test_multiple_rapid_sends() -> Result<()> {
     let node2 = create_test_node().await?;
 
     let addrs2 = node2.listen_addrs().await;
-    let addr2_str = addrs2.first().expect("Node2 should have address").to_string();
+    let addr2_str = addrs2
+        .first()
+        .expect("Node2 should have address")
+        .to_string();
 
     // Connect
     info!("Connecting...");
@@ -358,7 +422,9 @@ async fn test_run_diagnostics() -> Result<()> {
     println!("  cargo test --package communitas-core --test saorsa_p2p_immediate_send");
     println!();
     println!("Run specific:");
-    println!("  cargo test --package communitas-core --test saorsa_p2p_immediate_send test_immediate_send_after_connect -- --nocapture");
+    println!(
+        "  cargo test --package communitas-core --test saorsa_p2p_immediate_send test_immediate_send_after_connect -- --nocapture"
+    );
     println!("═══════════════════════════════════════════════════════════");
     println!();
 

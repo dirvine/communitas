@@ -147,12 +147,17 @@ mod tests {
     #[tokio::test]
     async fn test_fec_storage_basic() {
         let temp_dir = TempDir::new().unwrap();
-        let fec = FecStorage::new(&temp_dir.path().to_path_buf(), 1.5).await.unwrap();
+        let fec = FecStorage::new(&temp_dir.path().to_path_buf(), 1.5)
+            .await
+            .unwrap();
 
         let test_data = vec![42u8; 1000];
 
         // Store with FEC
-        let shard_paths = fec.store_with_fec("test_key", &test_data, 1.5).await.unwrap();
+        let shard_paths = fec
+            .store_with_fec("test_key", &test_data, 1.5)
+            .await
+            .unwrap();
         assert!(!shard_paths.is_empty());
 
         // Retrieve data

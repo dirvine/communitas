@@ -136,12 +136,8 @@ async fn test_channel_creation_name_too_long() {
 
     let long_name = "a".repeat(101); // Exceeds 100 character limit
 
-    let result = core_create_channel(
-        State::from(&shared),
-        long_name,
-        "Description".to_string(),
-    )
-    .await;
+    let result =
+        core_create_channel(State::from(&shared), long_name, "Description".to_string()).await;
 
     assert!(result.is_err());
     assert!(result.unwrap_err().contains("too long"));
@@ -163,12 +159,8 @@ async fn test_channel_creation_description_too_long() {
 
     let long_desc = "a".repeat(501); // Exceeds 500 character limit
 
-    let result = core_create_channel(
-        State::from(&shared),
-        "Valid Name".to_string(),
-        long_desc,
-    )
-    .await;
+    let result =
+        core_create_channel(State::from(&shared), "Valid Name".to_string(), long_desc).await;
 
     assert!(result.is_err());
     assert!(result.unwrap_err().contains("too long"));
@@ -381,9 +373,7 @@ async fn test_send_message_too_many_recipients() {
     .await
     .unwrap();
 
-    let recipients: Vec<String> = (0..101)
-        .map(|i| format!("user-{}-test-addr", i))
-        .collect();
+    let recipients: Vec<String> = (0..101).map(|i| format!("user-{}-test-addr", i)).collect();
 
     let result = core_send_message_to_recipients(
         State::from(&shared),
@@ -475,11 +465,8 @@ async fn test_bootstrap_nodes_operations() {
     assert!(!nodes.is_empty());
 
     // Add a bootstrap node
-    let result = core_add_bootstrap_node(
-        State::from(&shared),
-        "custom-node-addr".to_string(),
-    )
-    .await;
+    let result =
+        core_add_bootstrap_node(State::from(&shared), "custom-node-addr".to_string()).await;
 
     assert!(result.is_ok());
 
@@ -531,11 +518,7 @@ async fn test_add_bootstrap_node_too_long() {
 
     let long_node = "a".repeat(256); // Exceeds 255 limit
 
-    let result = core_add_bootstrap_node(
-        State::from(&shared),
-        long_node,
-    )
-    .await;
+    let result = core_add_bootstrap_node(State::from(&shared), long_node).await;
 
     assert!(result.is_err());
     assert!(result.unwrap_err().contains("too long"));
@@ -556,12 +539,9 @@ async fn test_clear_custom_nodes() {
     .unwrap();
 
     // Add custom node
-    core_add_bootstrap_node(
-        State::from(&shared),
-        "custom-node".to_string(),
-    )
-    .await
-    .unwrap();
+    core_add_bootstrap_node(State::from(&shared), "custom-node".to_string())
+        .await
+        .unwrap();
 
     // Clear custom nodes
     let result = core_clear_custom_nodes(State::from(&shared)).await;
@@ -587,21 +567,12 @@ async fn test_private_storage_put_get() {
     let data = b"test data content".to_vec();
 
     // Store data
-    let put_result = core_private_put(
-        State::from(&shared),
-        key.to_string(),
-        data.clone(),
-    )
-    .await;
+    let put_result = core_private_put(State::from(&shared), key.to_string(), data.clone()).await;
 
     assert!(put_result.is_ok());
 
     // Retrieve data
-    let get_result = core_private_get(
-        State::from(&shared),
-        key.to_string(),
-    )
-    .await;
+    let get_result = core_private_get(State::from(&shared), key.to_string()).await;
 
     assert!(get_result.is_ok());
     assert_eq!(get_result.unwrap(), data);
@@ -621,11 +592,7 @@ async fn test_private_storage_get_nonexistent() {
     .await
     .unwrap();
 
-    let result = core_private_get(
-        State::from(&shared),
-        "nonexistent-key".to_string(),
-    )
-    .await;
+    let result = core_private_get(State::from(&shared), "nonexistent-key".to_string()).await;
 
     assert!(result.is_err());
 }
@@ -652,11 +619,7 @@ async fn test_channel_members_list() {
     .await
     .unwrap();
 
-    let result = core_channel_list_members(
-        State::from(&shared),
-        channel.id.0.clone(),
-    )
-    .await;
+    let result = core_channel_list_members(State::from(&shared), channel.id.0.clone()).await;
 
     assert!(result.is_ok());
     let members = result.unwrap();
@@ -733,13 +696,7 @@ async fn test_messages_list_placeholder() {
     .await
     .unwrap();
 
-    let result = core_messages_list(
-        State::from(&shared),
-        "entity-id".to_string(),
-        10,
-        0,
-    )
-    .await;
+    let result = core_messages_list(State::from(&shared), "entity-id".to_string(), 10, 0).await;
 
     // Currently returns empty array (placeholder implementation)
     assert!(result.is_ok());
@@ -760,11 +717,7 @@ async fn test_entity_permissions_placeholder() {
     .await
     .unwrap();
 
-    let result = core_entity_get_permissions(
-        State::from(&shared),
-        "entity-id".to_string(),
-    )
-    .await;
+    let result = core_entity_get_permissions(State::from(&shared), "entity-id".to_string()).await;
 
     // Currently returns default permissions (placeholder)
     assert!(result.is_ok());
@@ -786,15 +739,15 @@ async fn test_entity_encryption_status_placeholder() {
     .await
     .unwrap();
 
-    let result = core_entity_get_encryption_status(
-        State::from(&shared),
-        "entity-id".to_string(),
-    )
-    .await;
+    let result =
+        core_entity_get_encryption_status(State::from(&shared), "entity-id".to_string()).await;
 
     // Currently returns default status (placeholder)
     assert!(result.is_ok());
     let status = result.unwrap();
     assert!(status.get("encrypted").is_some());
-    assert_eq!(status.get("algorithm").and_then(|v| v.as_str()), Some("ML-DSA-65"));
+    assert_eq!(
+        status.get("algorithm").and_then(|v| v.as_str()),
+        Some("ML-DSA-65")
+    );
 }

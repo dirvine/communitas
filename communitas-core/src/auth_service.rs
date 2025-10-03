@@ -9,9 +9,9 @@
 //! - Auto-login functionality
 
 use crate::encrypted_storage::{
-    EncryptedStorageManager, Session, VaultInfo, RecentIdentity, PasskeyInfo,
+    EncryptedStorageManager, PasskeyInfo, RecentIdentity, Session, VaultInfo,
 };
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 
 /// Session information for active authenticated user
@@ -280,7 +280,10 @@ impl AuthService {
             .as_ref()
             .ok_or_else(|| anyhow!("No active session"))?;
 
-        tracing::info!("AuthService: Enabling auto-login for {}", session.four_words);
+        tracing::info!(
+            "AuthService: Enabling auto-login for {}",
+            session.four_words
+        );
 
         // Store password in keyring via storage manager
         self.storage_manager
@@ -373,7 +376,11 @@ mod tests {
 
         // Login
         let session_info = auth_service
-            .login("ocean-forest-moon-star", "test-password", Some("Test Device"))
+            .login(
+                "ocean-forest-moon-star",
+                "test-password",
+                Some("Test Device"),
+            )
             .await
             .expect("Failed to login");
 

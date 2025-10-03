@@ -36,13 +36,13 @@
 //! └─────────────────────────────────────────────────────────┘
 //! ```
 
-pub mod key_management;
-pub mod vault;
+pub mod app_config;
 pub mod fec_storage;
+pub mod key_management;
+pub mod passkey;
 pub mod platform_storage;
 pub mod session;
-pub mod app_config;
-pub mod passkey;
+pub mod vault;
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -51,13 +51,13 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-pub use key_management::*;
-pub use vault::*;
+pub use app_config::*;
 pub use fec_storage::*;
+pub use key_management::*;
+pub use passkey::*;
 pub use platform_storage::*;
 pub use session::*;
-pub use app_config::*;
-pub use passkey::*;
+pub use vault::*;
 
 /// Configuration for the encrypted storage system
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -115,32 +115,33 @@ impl EncryptedStorageManager {
         // Initialize platform-specific storage
         let platform_storage = Arc::new(
             PlatformStorage::new(&config.vault_dir)
-                .context("Failed to initialize platform storage")?
+                .context("Failed to initialize platform storage")?,
         );
 
         // Initialize key manager with PBKDF2
         let key_manager = Arc::new(
             KeyManager::new(config.pbkdf2_iterations, config.use_keyring)
                 .await
-                .context("Failed to initialize key manager")?
+                .context("Failed to initialize key manager")?,
         );
 
         // Initialize app config manager (config stored in parent of vault_dir)
-        let config_dir = config.vault_dir
+        let config_dir = config
+            .vault_dir
             .parent()
             .unwrap_or(&config.vault_dir)
             .to_path_buf();
         let app_config = Arc::new(RwLock::new(
             AppConfigManager::new(config_dir.clone())
                 .await
-                .context("Failed to initialize app config")?
+                .context("Failed to initialize app config")?,
         ));
 
         // Initialize passkey manager (passkeys stored in config dir)
         let passkey_storage_dir = config_dir.join("passkeys");
         let passkey_manager = Arc::new(
             PasskeyManager::new(&passkey_storage_dir)
-                .context("Failed to initialize passkey manager")?
+                .context("Failed to initialize passkey manager")?,
         );
 
         Ok(Self {
@@ -171,7 +172,8 @@ impl EncryptedStorageManager {
 
         // Derive encryption key from password
         let salt = generate_salt();
-        let key = self.key_manager
+        let key = self
+            .key_manager
             .derive_key(password, &salt)
             .await
             .context("Failed to derive encryption key")?;
@@ -183,7 +185,8 @@ impl EncryptedStorageManager {
             key.clone(),
             salt,
             &self.config,
-        ).await
+        )
+        .await
         .context("Failed to create vault")?;
 
         // Store vault
@@ -210,7 +213,8 @@ impl EncryptedStorageManager {
         let password_hash = self.key_manager.hash_password(password).await?;
 
         // Find matching vault
-        let four_words = self.platform_storage
+        let four_words = self
+            .platform_storage
             .find_vault_by_password_hash(&password_hash)
             .await
             .context("No vault found for this password")?;
@@ -244,7 +248,8 @@ impl EncryptedStorageManager {
 
         // Update app config with last used identity
         let mut app_config = self.app_config.write().await;
-        app_config.set_last_identity(normalized.clone(), vault.display_name.clone())
+        app_config
+            .set_last_identity(normalized.clone(), vault.display_name.clone())
             .await
             .ok(); // Non-fatal if config update fails
 
@@ -272,13 +277,16 @@ impl EncryptedStorageManager {
 
         // Get vault
         let vaults = self.vaults.read().await;
-        let vault = vaults.get(&session.four_words)
+        let vault = vaults
+            .get(&session.four_words)
             .ok_or_else(|| anyhow::anyhow!("Vault not loaded"))?;
 
         // Store data
         if use_fec && self.config.enable_fec {
             // Use Forward Error Correction for important data
-            vault.store_with_fec(key, data, self.config.fec_redundancy).await
+            vault
+                .store_with_fec(key, data, self.config.fec_redundancy)
+                .await
         } else {
             // Simple encrypted storage
             vault.store(key, data).await
@@ -286,17 +294,14 @@ impl EncryptedStorageManager {
     }
 
     /// Retrieve encrypted data from a vault
-    pub async fn retrieve(
-        &self,
-        session_id: &str,
-        key: &str,
-    ) -> Result<Vec<u8>> {
+    pub async fn retrieve(&self, session_id: &str, key: &str) -> Result<Vec<u8>> {
         // Validate session
         let session = self.validate_session(session_id).await?;
 
         // Get vault
         let vaults = self.vaults.read().await;
-        let vault = vaults.get(&session.four_words)
+        let vault = vaults
+            .get(&session.four_words)
             .ok_or_else(|| anyhow::anyhow!("Vault not loaded"))?;
 
         // Retrieve data
@@ -339,26 +344,19 @@ impl EncryptedStorageManager {
     }
 
     /// Export vault for backup
-    pub async fn export_vault(
-        &self,
-        session_id: &str,
-        include_data: bool,
-    ) -> Result<Vec<u8>> {
+    pub async fn export_vault(&self, session_id: &str, include_data: bool) -> Result<Vec<u8>> {
         let session = self.validate_session(session_id).await?;
 
         let vaults = self.vaults.read().await;
-        let vault = vaults.get(&session.four_words)
+        let vault = vaults
+            .get(&session.four_words)
             .ok_or_else(|| anyhow::anyhow!("Vault not loaded"))?;
 
         vault.export(include_data).await
     }
 
     /// Import vault from backup
-    pub async fn import_vault(
-        &self,
-        backup_data: &[u8],
-        password: &str,
-    ) -> Result<String> {
+    pub async fn import_vault(&self, backup_data: &[u8], password: &str) -> Result<String> {
         let vault = EncryptedVault::import(backup_data, password, &self.config).await?;
         let four_words = vault.four_words.clone();
 
@@ -425,7 +423,9 @@ impl EncryptedStorageManager {
 
     /// Get recent identities
     pub async fn get_recent_identities(&self) -> Vec<RecentIdentity> {
-        self.app_config.read().await
+        self.app_config
+            .read()
+            .await
             .get_config()
             .recent_identities
             .clone()
@@ -442,13 +442,16 @@ impl EncryptedStorageManager {
         let normalized = self.normalize_four_words(four_words);
 
         // Register passkey
-        let info = self.passkey_manager
+        let info = self
+            .passkey_manager
             .register_passkey(&normalized, device_name)
             .await?;
 
         // Update app config to mark passkey as available
         let mut app_config = self.app_config.write().await;
-        app_config.set_identity_has_passkey(&normalized, true).await?;
+        app_config
+            .set_identity_has_passkey(&normalized, true)
+            .await?;
 
         Ok(info)
     }
@@ -465,7 +468,10 @@ impl EncryptedStorageManager {
         }
 
         // Mark passkey as used
-        self.passkey_manager.mark_passkey_used(&normalized).await.ok();
+        self.passkey_manager
+            .mark_passkey_used(&normalized)
+            .await
+            .ok();
 
         // Load vault using password from keyring
         if self.config.use_keyring {
@@ -478,7 +484,9 @@ impl EncryptedStorageManager {
         }
 
         // If no password in keyring, cannot proceed
-        anyhow::bail!("Passkey registered but vault password not found in keyring. Please login with password first.")
+        anyhow::bail!(
+            "Passkey registered but vault password not found in keyring. Please login with password first."
+        )
     }
 
     /// Check if passkey is registered for identity
@@ -500,7 +508,9 @@ impl EncryptedStorageManager {
 
         // Update app config
         let mut app_config = self.app_config.write().await;
-        app_config.set_identity_has_passkey(&normalized, false).await?;
+        app_config
+            .set_identity_has_passkey(&normalized, false)
+            .await?;
 
         Ok(())
     }
@@ -519,7 +529,8 @@ impl EncryptedStorageManager {
         // Delete vault directory from filesystem
         let vault_path = self.config.vault_dir.join(&normalized);
         if vault_path.exists() {
-            tokio::fs::remove_dir_all(&vault_path).await
+            tokio::fs::remove_dir_all(&vault_path)
+                .await
                 .map_err(|e| anyhow::anyhow!("Failed to delete vault directory: {}", e))?;
         }
 
@@ -539,7 +550,9 @@ impl EncryptedStorageManager {
     /// Store password in platform keyring (for auto-login)
     pub async fn store_password_in_keyring(&self, four_words: &str, password: &str) -> Result<()> {
         let normalized = self.normalize_four_words(four_words);
-        self.key_manager.store_in_keyring(&normalized, password.as_bytes()).await
+        self.key_manager
+            .store_in_keyring(&normalized, password.as_bytes())
+            .await
     }
 
     /// Remove password from platform keyring
@@ -587,7 +600,8 @@ impl EncryptedStorageManager {
 
     async fn validate_session(&self, session_id: &str) -> Result<Session> {
         let sessions = self.active_sessions.read().await;
-        let session = sessions.get(session_id)
+        let session = sessions
+            .get(session_id)
             .ok_or_else(|| anyhow::anyhow!("Invalid or expired session"))?;
 
         if session.is_expired() {
@@ -679,7 +693,10 @@ mod tests {
 
         // Store and retrieve data
         let test_data = b"Hello, encrypted world!";
-        manager.store(&session.id, "test_key", test_data, false).await.unwrap();
+        manager
+            .store(&session.id, "test_key", test_data, false)
+            .await
+            .unwrap();
 
         let retrieved = manager.retrieve(&session.id, "test_key").await.unwrap();
         assert_eq!(retrieved, test_data);
@@ -740,7 +757,10 @@ mod tests {
 
         // Store large data with FEC
         let large_data = vec![42u8; 1024 * 1024]; // 1MB
-        manager.store(&session.id, "large_file", &large_data, true).await.unwrap();
+        manager
+            .store(&session.id, "large_file", &large_data, true)
+            .await
+            .unwrap();
 
         // Retrieve should work even if some shards are corrupted
         let retrieved = manager.retrieve(&session.id, "large_file").await.unwrap();

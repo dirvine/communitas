@@ -168,8 +168,8 @@ impl ChannelService {
             let mut txn = doc.transact_mut();
 
             // Create message map with data using From trait
-            use yrs::{Array, MapPrelim};
             use std::collections::HashMap;
+            use yrs::{Array, MapPrelim};
 
             let mut map_entries: HashMap<String, yrs::Any> = HashMap::new();
             map_entries.insert("id".to_string(), msg_id.clone().into());
@@ -194,7 +194,14 @@ impl ChannelService {
         db.execute(
             "INSERT INTO messages (id, channel_id, thread_id, author_id, content, created_at)
              VALUES (?, ?, ?, ?, ?, ?)",
-            params![msg_id, channel_id, thread_id.clone(), author_id, content, now],
+            params![
+                msg_id,
+                channel_id,
+                thread_id.clone(),
+                author_id,
+                content,
+                now
+            ],
         )
         .await
         .context("Failed to save message")?;
@@ -319,12 +326,7 @@ impl ChannelService {
     }
 
     /// Add member to channel
-    pub async fn add_member(
-        &self,
-        channel_id: &str,
-        user_id: &str,
-        role: &str,
-    ) -> Result<()> {
+    pub async fn add_member(&self, channel_id: &str, user_id: &str, role: &str) -> Result<()> {
         let db = self.crdt.connection()?;
         let now = Utc::now().timestamp();
 
@@ -406,7 +408,12 @@ mod tests {
         let service = ChannelService::new(crdt);
 
         let channel = service
-            .create_channel("org-1", "general", Some("General chat".to_string()), "user-1")
+            .create_channel(
+                "org-1",
+                "general",
+                Some("General chat".to_string()),
+                "user-1",
+            )
             .await
             .unwrap();
 

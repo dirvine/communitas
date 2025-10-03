@@ -95,7 +95,11 @@ pub async fn connect_via_four_words(
 
                 // Update runtime state to reflect connection
                 let mut runtime = runtime_state.write().await;
-                if !runtime.bootstrap_nodes.iter().any(|node| node == &normalized) {
+                if !runtime
+                    .bootstrap_nodes
+                    .iter()
+                    .any(|node| node == &normalized)
+                {
                     runtime.bootstrap_nodes.push(normalized.clone());
                 }
 
@@ -228,11 +232,7 @@ pub async fn get_network_status(
         runtime.connected = is_running;
         runtime.peers = peer_count;
 
-        let status = if is_running {
-            "connected"
-        } else {
-            "local"
-        };
+        let status = if is_running { "connected" } else { "local" };
 
         return Ok(NetworkStatusPayload {
             status: status.to_string(),

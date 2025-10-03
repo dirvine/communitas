@@ -128,15 +128,20 @@ async fn test_immediate_send_after_connect() -> Result<()> {
             match write_result {
                 Ok(_) => {
                     println!("✅ Immediate send succeeded in {:?}", write_duration);
-                    println!("Total time from connect to write: {:?}",
-                             connect_start.elapsed());
+                    println!(
+                        "Total time from connect to write: {:?}",
+                        connect_start.elapsed()
+                    );
 
                     send.finish()?;
                     println!("✅ Test 2.1.3 PASSED");
                     Ok(())
                 }
                 Err(e) => {
-                    println!("❌ Immediate write failed after {:?}: {}", write_duration, e);
+                    println!(
+                        "❌ Immediate write failed after {:?}: {}",
+                        write_duration, e
+                    );
                     println!("Stream opened OK but write failed - connection closed?");
                     Err(e.into())
                 }
@@ -145,7 +150,10 @@ async fn test_immediate_send_after_connect() -> Result<()> {
         Err(e) => {
             println!("❌ Stream open failed after {:?}: {}", stream_duration, e);
             println!("Connection closed before stream could be opened");
-            println!("Time from connect to failure: {:?}", connect_start.elapsed());
+            println!(
+                "Time from connect to failure: {:?}",
+                connect_start.elapsed()
+            );
             Err(e.into())
         }
     }
@@ -220,7 +228,10 @@ async fn test_endpoint_closure_timing() -> Result<()> {
     let connect_duration = connect_start.elapsed();
 
     // Check immediately after connect
-    println!("\n=== Immediately After Connect ({:?}) ===", connect_duration);
+    println!(
+        "\n=== Immediately After Connect ({:?}) ===",
+        connect_duration
+    );
     println!("Node1 endpoint closed: {:?}", node1.close_reason());
     println!("Node2 endpoint closed: {:?}", node2.close_reason());
     println!("Connection stable ID: {}", connection.stable_id());
@@ -238,7 +249,13 @@ async fn test_endpoint_closure_timing() -> Result<()> {
     println!("\n=== After Stream Attempt ===");
     println!("Node1 endpoint closed: {:?}", node1.close_reason());
     println!("Node2 endpoint closed: {:?}", node2.close_reason());
-    println!("Stream result: {:?}", stream_result.as_ref().map(|_| "OK").map_err(|e| e.to_string()));
+    println!(
+        "Stream result: {:?}",
+        stream_result
+            .as_ref()
+            .map(|_| "OK")
+            .map_err(|e| e.to_string())
+    );
 
     match stream_result {
         Ok(_) => println!("✅ Stream opened successfully"),
@@ -370,7 +387,13 @@ async fn test_connection_state_inspection() -> Result<()> {
 
     println!("\n=== After Stream Attempt ===");
     println!("Node1 endpoint closed: {:?}", node1.close_reason());
-    println!("Stream result: {:?}", stream_result.as_ref().map(|_| "OK").map_err(|e| format!("{}", e)));
+    println!(
+        "Stream result: {:?}",
+        stream_result
+            .as_ref()
+            .map(|_| "OK")
+            .map_err(|e| format!("{}", e))
+    );
 
     // Final stats
     let final_stats = connection.stats();

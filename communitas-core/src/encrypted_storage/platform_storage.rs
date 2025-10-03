@@ -66,7 +66,8 @@ impl PlatformStorage {
         self.save_locators(&locators).await?;
 
         // Platform-specific secure storage
-        self.store_platform_specific(four_words, password_hash).await?;
+        self.store_platform_specific(four_words, password_hash)
+            .await?;
 
         Ok(())
     }
@@ -125,8 +126,8 @@ impl PlatformStorage {
             }
             PlatformType::Windows => {
                 // Use AppData\Local for secure data
-                let mut path = dirs::data_local_dir()
-                    .unwrap_or_else(|| PathBuf::from("C:\\ProgramData"));
+                let mut path =
+                    dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("C:\\ProgramData"));
                 path.push("communitas");
                 path.push("secure");
                 path.push(four_words);
@@ -134,13 +135,12 @@ impl PlatformStorage {
             }
             PlatformType::Linux => {
                 // Use XDG_DATA_HOME for secure data
-                let mut path = dirs::data_dir()
-                    .unwrap_or_else(|| {
-                        let mut home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("/tmp"));
-                        home.push(".local");
-                        home.push("share");
-                        home
-                    });
+                let mut path = dirs::data_dir().unwrap_or_else(|| {
+                    let mut home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("/tmp"));
+                    home.push(".local");
+                    home.push("share");
+                    home
+                });
                 path.push("communitas");
                 path.push("secure");
                 path.push(four_words);
@@ -315,7 +315,11 @@ impl PlatformStorage {
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
-    async fn store_platform_specific(&self, _four_words: &str, _password_hash: &[u8]) -> Result<()> {
+    async fn store_platform_specific(
+        &self,
+        _four_words: &str,
+        _password_hash: &[u8],
+    ) -> Result<()> {
         Ok(())
     }
 

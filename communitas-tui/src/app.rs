@@ -6,12 +6,9 @@ use anyhow::Result;
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers},
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use ratatui::{
-    backend::CrosstermBackend,
-    Terminal,
-};
+use ratatui::{Terminal, backend::CrosstermBackend};
 use std::io;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -61,12 +58,8 @@ impl App {
         let terminal = Terminal::new(backend_term)?;
 
         let state = AppState::new();
-        let backend = Backend::new_with_config(
-            data_dir,
-            pbkdf2_iterations,
-            use_keyring,
-            offline,
-        ).await?;
+        let backend =
+            Backend::new_with_config(data_dir, pbkdf2_iterations, use_keyring, offline).await?;
 
         Ok(Self {
             state,
@@ -80,7 +73,8 @@ impl App {
         use crate::state::View;
         self.state.navigation.view_stack.clear();
         self.state.navigation.view_stack.push(View::Auth);
-        self.state.set_status("Welcome! Please login or signup to continue");
+        self.state
+            .set_status("Welcome! Please login or signup to continue");
     }
 
     /// Initialize identity and CoreContext
@@ -92,9 +86,7 @@ impl App {
     ) -> Result<()> {
         self.state.set_status("Initializing identity...");
 
-        self.state
-            .network
-            .set_status(ConnectionStatus::Connecting);
+        self.state.network.set_status(ConnectionStatus::Connecting);
 
         // TODO: Implement proper password input
         let password = "default-password";
@@ -102,13 +94,19 @@ impl App {
         // Try to login with existing vault
         match self.backend.login(&four_words, password).await {
             Ok(session_info) => {
-                self.state.set_identity(session_info.four_words.clone(), session_info.display_name.clone());
+                self.state.set_identity(
+                    session_info.four_words.clone(),
+                    session_info.display_name.clone(),
+                );
 
                 // Initialize CoreContext for P2P features
                 if let Err(e) = self.backend.initialize_core_context().await {
                     tracing::warn!("Failed to initialize CoreContext: {}", e);
-                    self.state.set_status(format!("Logged in (local mode): {}", e));
-                    self.state.network.set_status(ConnectionStatus::Disconnected);
+                    self.state
+                        .set_status(format!("Logged in (local mode): {}", e));
+                    self.state
+                        .network
+                        .set_status(ConnectionStatus::Disconnected);
                 } else {
                     self.state.network.set_status(ConnectionStatus::Connected);
                     self.state.set_status("Identity initialized successfully");

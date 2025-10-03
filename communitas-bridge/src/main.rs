@@ -5,13 +5,13 @@
 
 #![forbid(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-mod server;
-mod handlers;
-mod state;
 mod error;
+mod handlers;
+mod server;
+mod state;
 
 use anyhow::Result;
-use tracing::{info, error};
+use tracing::{error, info};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]

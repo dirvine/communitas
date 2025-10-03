@@ -166,7 +166,7 @@ pub async fn handle_open_organizations(
     state: &mut AppState,
     backend: &mut Backend,
 ) -> Result<()> {
-    if !backend.is_initialized() {
+    if !backend.is_logged_in() {
         state.set_status("Please initialize identity first (press 'i')");
         return Ok(());
     }
@@ -255,23 +255,38 @@ pub fn handle_show_help(state: &mut AppState) {
 
 /// Handle login submission
 pub async fn handle_login(state: &mut AppState, backend: &mut Backend, four_words: String) -> Result<()> {
-    state.set_status("Logging in...");
+    state.set_status("🔄 Logging in...");
 
     // Validate four-word format
     let words: Vec<&str> = four_words.split('-').collect();
     if words.len() != 4 {
-        state.set_status("Invalid format. Use: word-word-word-word");
+        state.set_status("❌ Invalid format. Use: word-word-word-word");
         return Ok(());
     }
 
-    // Initialize backend with existing identity
-    match backend.initialize_identity(&four_words, "User", "TUI Device").await {
-        Ok(()) => {
-            state.set_status(format!("Logged in as {}", four_words));
+    // Login with existing identity (for now, use a placeholder password)
+    // TODO: Implement proper password input in TUI
+    let password = "default-password"; // This should be collected from user input
+
+    state.set_status("🔐 Verifying identity...");
+
+    match backend.login(&four_words, password).await {
+        Ok(session_info) => {
+            state.set_status(format!("✅ Logged in as {} ({})", session_info.four_words, session_info.display_name));
+
+            // Initialize CoreContext for P2P features
+            state.set_status("🌐 Connecting to network...");
+            if let Err(e) = backend.initialize_core_context().await {
+                tracing::warn!("Failed to initialize CoreContext: {}", e);
+                state.set_status(format!("⚠️ Logged in (local mode): {}", e));
+            } else {
+                state.set_status("🚀 Connected successfully");
+            }
+
             state.navigation.go_to_dashboard();
         }
         Err(e) => {
-            state.set_status(format!("Login failed: {}", e));
+            state.set_status(format!("❌ Login failed: {}", e));
         }
     }
 
@@ -280,21 +295,41 @@ pub async fn handle_login(state: &mut AppState, backend: &mut Backend, four_word
 
 /// Handle signup submission
 pub async fn handle_signup(state: &mut AppState, backend: &mut Backend, display_name: String) -> Result<()> {
-    state.set_status("Creating identity...");
+    state.set_status("🔄 Generating secure identity...");
 
     if display_name.is_empty() {
-        state.set_status("Display name cannot be empty");
+        state.set_status("❌ Display name cannot be empty");
         return Ok(());
     }
 
-    // Generate new identity
-    match backend.generate_identity(&display_name, "TUI Device").await {
-        Ok(four_words) => {
-            state.set_status(format!("Welcome! Your identity: {}", four_words));
+    // Generate new four-word identity
+    let four_words = Backend::generate_four_words();
+    state.set_status(&format!("🔑 Generated identity: {}", four_words));
+
+    // Create vault for new identity (use placeholder password for now)
+    // TODO: Implement proper password input in TUI
+    let password = "default-password"; // This should be collected from user input
+
+    state.set_status("🔒 Creating secure vault (this may take 10-30 seconds)...");
+
+    match backend.create_vault_with_timeout(&four_words, password, &display_name).await {
+        Ok(session_info) => {
+            state.set_status("✅ Vault created successfully");
+            state.set_status(format!("Welcome! Your identity: {} ({})", session_info.four_words, session_info.display_name));
+
+            // Initialize CoreContext for P2P features
+            state.set_status("🌐 Initializing P2P features...");
+            if let Err(e) = backend.initialize_core_context().await {
+                tracing::warn!("Failed to initialize CoreContext: {}", e);
+                state.set_status(format!("⚠️ Created (local mode): {}", e));
+            } else {
+                state.set_status("🚀 Ready for P2P collaboration");
+            }
+
             state.navigation.go_to_dashboard();
         }
         Err(e) => {
-            state.set_status(format!("Signup failed: {}", e));
+            state.set_status(format!("❌ Signup failed: {}", e));
         }
     }
 

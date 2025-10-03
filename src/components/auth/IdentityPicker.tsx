@@ -1,0 +1,303 @@
+import React, { useState, useEffect } from 'react';
+import {
+  Box,
+  Card,
+  CardContent,
+  Typography,
+  Button,
+  Avatar,
+  Chip,
+  Stack,
+  IconButton,
+  Tooltip,
+  CircularProgress,
+  Alert,
+  Divider,
+  alpha,
+} from '@mui/material';
+import {
+  Fingerprint as FingerprintIcon,
+  Add as AddIcon,
+  ArrowForward as ArrowForwardIcon,
+  AccessTime as AccessTimeIcon,
+  Security as SecurityIcon,
+} from '@mui/icons-material';
+import { invoke } from '@tauri-apps/api/core';
+
+// Recent identity from backend
+interface RecentIdentity {
+  four_words: string;
+  display_name: string;
+  last_used: number;
+  has_passkey: boolean;
+}
+
+// Passkey info from backend
+interface PasskeyInfo {
+  four_words: string;
+  registered_at: number;
+  last_used: number | null;
+  device_name: string;
+}
+
+interface IdentityPickerProps {
+  onSelectIdentity: (fourWords: string, usePasskey: boolean) => Promise<void>;
+  onCreateNew: () => void;
+}
+
+export const IdentityPicker: React.FC<IdentityPickerProps> = ({
+  onSelectIdentity,
+  onCreateNew,
+}) => {
+  const [identities, setIdentities] = useState<RecentIdentity[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [authenticating, setAuthenticating] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  // Load recent identities on mount
+  useEffect(() => {
+    loadRecentIdentities();
+  }, []);
+
+  const loadRecentIdentities = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Initialize encrypted storage
+      await invoke('auth_initialize');
+
+      // Get recent identities
+      const recent = await invoke<RecentIdentity[]>('auth_get_recent_identities');
+      setIdentities(recent);
+    } catch (err) {
+      console.error('Failed to load identities:', err);
+      setError('Failed to load identities. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSelectIdentity = async (fourWords: string, usePasskey: boolean) => {
+    try {
+      setAuthenticating(fourWords);
+      setError(null);
+      await onSelectIdentity(fourWords, usePasskey);
+    } catch (err: any) {
+      console.error('Authentication failed:', err);
+      setError(err?.message || 'Authentication failed. Please try again.');
+    } finally {
+      setAuthenticating(null);
+    }
+  };
+
+  const formatLastUsed = (timestamp: number): string => {
+    const now = Date.now();
+    const secondsAgo = Math.floor((now - timestamp * 1000) / 1000);
+
+    if (secondsAgo < 60) return 'Just now';
+    if (secondsAgo < 3600) return `${Math.floor(secondsAgo / 60)}m ago`;
+    if (secondsAgo < 86400) return `${Math.floor(secondsAgo / 3600)}h ago`;
+    if (secondsAgo < 604800) return `${Math.floor(secondsAgo / 86400)}d ago`;
+    return new Date(timestamp * 1000).toLocaleDateString();
+  };
+
+  const getAvatarColor = (fourWords: string): string => {
+    // Generate consistent color from four-word address
+    let hash = 0;
+    for (let i = 0; i < fourWords.length; i++) {
+      hash = fourWords.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const hue = Math.abs(hash % 360);
+    return `hsl(${hue}, 65%, 55%)`;
+  };
+
+  if (loading) {
+    return (
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: '400px',
+          gap: 2,
+        }}
+      >
+        <CircularProgress size={48} />
+        <Typography variant="body1" color="text.secondary">
+          Loading identities...
+        </Typography>
+      </Box>
+    );
+  }
+
+  return (
+    <Box
+      sx={{
+        maxWidth: 600,
+        width: '100%',
+        margin: '0 auto',
+        padding: 3,
+      }}
+    >
+      {/* Header */}
+      <Box sx={{ textAlign: 'center', mb: 4 }}>
+        <Typography variant="h4" gutterBottom fontWeight={600}>
+          Welcome to Communitas
+        </Typography>
+        <Typography variant="body1" color="text.secondary">
+          Select your identity to continue
+        </Typography>
+      </Box>
+
+      {/* Error Alert */}
+      {error && (
+        <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
+          {error}
+        </Alert>
+      )}
+
+      {/* Identity Cards */}
+      <Stack spacing={2}>
+        {identities.map((identity) => (
+          <Card
+            key={identity.four_words}
+            elevation={authenticating === identity.four_words ? 8 : 2}
+            sx={{
+              transition: 'all 0.2s ease',
+              cursor: authenticating ? 'default' : 'pointer',
+              '&:hover': authenticating
+                ? {}
+                : {
+                    elevation: 4,
+                    transform: 'translateY(-2px)',
+                  },
+              position: 'relative',
+              overflow: 'visible',
+            }}
+          >
+            <CardContent sx={{ p: 3 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                {/* Avatar */}
+                <Avatar
+                  sx={{
+                    width: 56,
+                    height: 56,
+                    bgcolor: getAvatarColor(identity.four_words),
+                    fontSize: '1.5rem',
+                    fontWeight: 600,
+                  }}
+                >
+                  {identity.display_name.charAt(0).toUpperCase()}
+                </Avatar>
+
+                {/* Identity Info */}
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography variant="h6" fontWeight={600} noWrap>
+                    {identity.display_name}
+                  </Typography>
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    sx={{
+                      fontFamily: 'monospace',
+                      fontSize: '0.85rem',
+                    }}
+                  >
+                    {identity.four_words}
+                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
+                    <AccessTimeIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
+                    <Typography variant="caption" color="text.secondary">
+                      {formatLastUsed(identity.last_used)}
+                    </Typography>
+                    {identity.has_passkey && (
+                      <Chip
+                        icon={<SecurityIcon />}
+                        label="Passkey"
+                        size="small"
+                        color="primary"
+                        variant="outlined"
+                        sx={{ ml: 1, height: 20 }}
+                      />
+                    )}
+                  </Box>
+                </Box>
+
+                {/* Action Buttons */}
+                <Stack direction="row" spacing={1}>
+                  {identity.has_passkey && (
+                    <Tooltip title="Sign in with biometric">
+                      <IconButton
+                        color="primary"
+                        disabled={authenticating !== null}
+                        onClick={() => handleSelectIdentity(identity.four_words, true)}
+                        sx={{
+                          bgcolor: (theme) => alpha(theme.palette.primary.main, 0.1),
+                          '&:hover': {
+                            bgcolor: (theme) => alpha(theme.palette.primary.main, 0.2),
+                          },
+                        }}
+                      >
+                        {authenticating === identity.four_words ? (
+                          <CircularProgress size={24} />
+                        ) : (
+                          <FingerprintIcon />
+                        )}
+                      </IconButton>
+                    </Tooltip>
+                  )}
+                  <Tooltip title="Sign in with password">
+                    <IconButton
+                      disabled={authenticating !== null}
+                      onClick={() => handleSelectIdentity(identity.four_words, false)}
+                    >
+                      <ArrowForwardIcon />
+                    </IconButton>
+                  </Tooltip>
+                </Stack>
+              </Box>
+            </CardContent>
+          </Card>
+        ))}
+      </Stack>
+
+      {/* Create New Identity */}
+      <Divider sx={{ my: 3 }}>
+        <Typography variant="body2" color="text.secondary">
+          or
+        </Typography>
+      </Divider>
+
+      <Button
+        fullWidth
+        variant="outlined"
+        size="large"
+        startIcon={<AddIcon />}
+        onClick={onCreateNew}
+        disabled={authenticating !== null}
+        sx={{
+          py: 1.5,
+          borderStyle: 'dashed',
+          borderWidth: 2,
+          '&:hover': {
+            borderStyle: 'dashed',
+            borderWidth: 2,
+          },
+        }}
+      >
+        Create New Identity
+      </Button>
+
+      {/* Info Text */}
+      <Typography
+        variant="caption"
+        color="text.secondary"
+        sx={{ display: 'block', textAlign: 'center', mt: 3 }}
+      >
+        Your identities are stored securely with end-to-end encryption
+      </Typography>
+    </Box>
+  );
+};

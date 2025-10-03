@@ -108,6 +108,23 @@ impl EncryptedVault {
 
         let key_manager = KeyManager::new(config.pbkdf2_iterations, config.use_keyring).await?;
 
+        // 🔒 SECURITY: Create password verifier for empty vaults
+        // This allows password validation even before any data is stored
+        let verifier_data = b"communitas:password:verifier:v1";
+        let encrypted_verifier = key_manager.encrypt(&encryption_key, verifier_data)?;
+        let verifier_path = vault_path.join("password.verifier");
+        fs::write(&verifier_path, encrypted_verifier).await?;
+
+        // Store identity data (display name) for loading
+        let identity_data = IdentityData {
+            display_name: display_name.clone(),
+            created_at: current_timestamp(),
+        };
+        let identity_json = serde_json::to_vec(&identity_data)?;
+        let encrypted_identity = key_manager.encrypt(&encryption_key, &identity_json)?;
+        let identity_path = vault_path.join("identity.enc");
+        fs::write(&identity_path, encrypted_identity).await?;
+
         let fec_storage = if config.enable_fec {
             Some(FecStorage::new(&vault_path, config.fec_redundancy).await?)
         } else {
@@ -145,14 +162,29 @@ impl EncryptedVault {
         let key_manager = KeyManager::new(metadata.pbkdf2_iterations, config.use_keyring).await?;
         let encryption_key = key_manager.derive_key(password, &metadata.salt).await?;
 
+        // 🔒 SECURITY FIX: Always validate password by decrypting something
         // Load encrypted entries index
         let index_path = vault_path.join("index.enc");
         let data_store = if index_path.exists() {
             let encrypted_index = fs::read(&index_path).await?;
-            let decrypted_index = key_manager.decrypt(&encryption_key, &encrypted_index)?;
-            let entries: HashMap<String, EncryptedEntry> = serde_json::from_slice(&decrypted_index)?;
+            // This decrypt() call will FAIL with wrong password due to AEAD authentication tag
+            let decrypted_index = key_manager.decrypt(&encryption_key, &encrypted_index)
+                .context("Invalid password or corrupted vault")?;
+            let entries: HashMap<String, EncryptedEntry> = serde_json::from_slice(&decrypted_index)
+                .context("Invalid password or corrupted vault index")?;
             RwLock::new(entries)
         } else {
+            // 🔒 SECURITY: For new vaults without index, validate password via password verifier
+            // Store a password verifier on vault creation to enable validation even for empty vaults
+            let verifier_path = vault_path.join("password.verifier");
+            if verifier_path.exists() {
+                let encrypted_verifier = fs::read(&verifier_path).await?;
+                let _verification = key_manager.decrypt(&encryption_key, &encrypted_verifier)
+                    .context("Invalid password")?;
+                // Password is valid
+            }
+            // If no verifier exists (legacy vault), we can't validate password for empty vaults
+            // This is acceptable as index.enc will be created on first data store
             RwLock::new(HashMap::new())
         };
 
@@ -471,8 +503,8 @@ fn current_timestamp() -> u64 {
     use std::time::{SystemTime, UNIX_EPOCH};
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs()
+        .map(|d| d.as_secs())
+        .unwrap_or(0) // Fallback to epoch if system time is before UNIX_EPOCH (should never happen)
 }
 
 #[cfg(test)]

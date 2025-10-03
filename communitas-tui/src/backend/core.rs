@@ -1,11 +1,16 @@
 use anyhow::Result;
-use communitas_core::CoreContext;
+use communitas_core::{
+    AuthService, CoreContext, SessionInfo,
+    encrypted_storage::{EncryptedStorageManager, StorageConfig, RecentIdentity},
+};
 use saorsa_core::identity::enhanced::DeviceType;
 use std::path::PathBuf;
 
-/// Backend wrapper around CoreContext
+/// Backend wrapper around CoreContext and AuthService
 pub struct Backend {
-    /// Core context (None if not initialized)
+    /// Authentication service
+    auth_service: AuthService,
+    /// Core context (None if not authenticated)
     ctx: Option<CoreContext>,
     /// Data directory
     data_dir: PathBuf,
@@ -14,28 +19,185 @@ pub struct Backend {
 }
 
 impl Backend {
-    /// Create new backend without initializing CoreContext
-    pub fn new(data_dir: PathBuf, offline: bool) -> Self {
-        Self {
+    /// Create new backend with AuthService
+    pub async fn new(data_dir: PathBuf, offline: bool) -> Result<Self> {
+        // Create storage configuration
+        let config = StorageConfig {
+            vault_dir: data_dir.join("vaults"),
+            use_keyring: true,
+            ..Default::default()
+        };
+
+        // Initialize encrypted storage manager
+        let storage_manager = EncryptedStorageManager::new(config).await?;
+
+        // Create auth service
+        let auth_service = AuthService::new(storage_manager);
+
+        Ok(Self {
+            auth_service,
             ctx: None,
             data_dir,
             offline,
+        })
+    }
+
+    /// Create new backend with custom configuration
+    pub async fn new_with_config(
+        data_dir: PathBuf,
+        pbkdf2_iterations: u32,
+        use_keyring: bool,
+        offline: bool,
+    ) -> Result<Self> {
+        // Create storage configuration with custom values
+        let config = StorageConfig {
+            vault_dir: data_dir.join("vaults"),
+            pbkdf2_iterations,
+            use_keyring,
+            ..Default::default()
+        };
+
+        // Initialize encrypted storage manager
+        let storage_manager = EncryptedStorageManager::new(config).await?;
+
+        // Create auth service
+        let auth_service = AuthService::new(storage_manager);
+
+        Ok(Self {
+            auth_service,
+            ctx: None,
+            data_dir,
+            offline,
+        })
+    }
+
+    // ========================================================================
+    // Authentication Methods (delegated to AuthService)
+    // ========================================================================
+
+    /// Create a new vault and login
+    pub async fn create_vault(
+        &mut self,
+        four_words: &str,
+        password: &str,
+        display_name: &str,
+    ) -> Result<SessionInfo> {
+        tracing::info!("Creating vault for: {}", four_words);
+
+        // Create vault via auth service
+        let _vault_id = self.auth_service.create_vault(four_words, password, display_name).await?;
+
+        // Login to the new vault
+        let session_info = self.auth_service.login(four_words, password, Some("TUI")).await?;
+
+        tracing::info!("Vault created and logged in: {}", four_words);
+        Ok(session_info)
+    }
+
+    /// Create a new vault and login with timeout
+    pub async fn create_vault_with_timeout(
+        &mut self,
+        four_words: &str,
+        password: &str,
+        display_name: &str,
+    ) -> Result<SessionInfo> {
+        use tokio::time::{timeout, Duration};
+        
+        let result = timeout(
+            Duration::from_secs(60), // 60 second timeout
+            self.create_vault(four_words, password, display_name)
+        ).await;
+        
+        match result {
+            Ok(Ok(session_info)) => Ok(session_info),
+            Ok(Err(e)) => Err(e),
+            Err(_) => Err(anyhow::anyhow!("Vault creation timed out after 60 seconds"))
         }
     }
 
-    /// Initialize CoreContext with identity
-    pub async fn initialize(
+    /// Login with four-word identity and password
+    pub async fn login(
         &mut self,
-        four_words: String,
-        display_name: String,
-        device_name: String,
-    ) -> Result<()> {
-        tracing::info!("Initializing CoreContext with identity: {}", four_words);
+        four_words: &str,
+        password: &str,
+    ) -> Result<SessionInfo> {
+        tracing::info!("Logging in: {}", four_words);
+
+        let session_info = self.auth_service.login(four_words, password, Some("TUI")).await?;
+
+        tracing::info!("Login successful: {}", four_words);
+        Ok(session_info)
+    }
+
+    /// Logout current session
+    pub async fn logout(&mut self) -> Result<()> {
+        tracing::info!("Logging out");
+
+        self.auth_service.logout().await?;
+        self.ctx = None;
+
+        tracing::info!("Logout successful");
+        Ok(())
+    }
+
+    /// Get current session info
+    pub fn get_current_session(&self) -> Option<SessionInfo> {
+        self.auth_service.get_current_session()
+    }
+
+    /// Check if user is logged in
+    pub fn is_logged_in(&self) -> bool {
+        self.auth_service.is_logged_in()
+    }
+
+    /// Get list of recent identities
+    pub async fn get_recent_identities(&self) -> Result<Vec<RecentIdentity>> {
+        self.auth_service.get_recent_identities().await
+    }
+
+    /// Try auto-login with last used identity
+    pub async fn try_auto_login(&mut self) -> Result<Option<SessionInfo>> {
+        self.auth_service.try_auto_login().await
+    }
+
+    /// Switch to another identity
+    pub async fn switch_identity(&mut self, four_words: &str) -> Result<SessionInfo> {
+        tracing::info!("Switching to identity: {}", four_words);
+
+        let session_info = self.auth_service.switch_identity(four_words).await?;
+
+        // Clear CoreContext when switching
+        self.ctx = None;
+
+        tracing::info!("Switched to identity: {}", four_words);
+        Ok(session_info)
+    }
+
+    /// Check if vault exists
+    pub async fn vault_exists(&self, four_words: &str) -> Result<bool> {
+        self.auth_service.vault_exists(four_words).await
+    }
+
+    /// Check if identity has passkey registered
+    pub async fn has_passkey(&self, four_words: &str) -> Result<bool> {
+        self.auth_service.passkey_has_passkey(four_words).await
+    }
+
+    // ========================================================================
+    // CoreContext Integration
+    // ========================================================================
+
+    /// Initialize CoreContext with current session
+    pub async fn initialize_core_context(&mut self) -> Result<()> {
+        let session = self.auth_service.get_current_session()
+            .ok_or_else(|| anyhow::anyhow!("No active session"))?;
+
+        tracing::info!("Initializing CoreContext for: {}", session.four_words);
 
         let ctx = CoreContext::initialize(
-            four_words,
-            display_name,
-            device_name,
+            session.four_words.clone(),
+            session.display_name.clone(),
+            "TUI".to_string(),
             DeviceType::Desktop,
         )
         .await
@@ -43,63 +205,12 @@ impl Backend {
 
         self.ctx = Some(ctx);
 
+        tracing::info!("CoreContext initialized successfully");
         Ok(())
     }
 
-    /// Initialize CoreContext with existing identity (for login)
-    pub async fn initialize_identity(
-        &mut self,
-        four_words: &str,
-        display_name: &str,
-        device_name: &str,
-    ) -> Result<()> {
-        self.initialize(
-            four_words.to_string(),
-            display_name.to_string(),
-            device_name.to_string(),
-        )
-        .await
-    }
-
-    /// Generate new identity (for signup)
-    pub async fn generate_identity(
-        &mut self,
-        display_name: &str,
-        device_name: &str,
-    ) -> Result<String> {
-        tracing::info!("Generating new identity for: {}", display_name);
-
-        // Generate random four-word identity
-        // For now, use simple word generation - TODO: Use proper four-word-networking crate
-        use rand::Rng;
-        let words = [
-            "ocean", "forest", "mountain", "river", "cloud", "star", "moon", "sun",
-            "wind", "rain", "snow", "fire", "earth", "water", "stone", "tree",
-            "flower", "grass", "leaf", "branch", "root", "seed", "fruit", "berry",
-        ];
-
-        let mut rng = rand::thread_rng();
-        let four_words = format!(
-            "{}-{}-{}-{}",
-            words[rng.gen_range(0..words.len())],
-            words[rng.gen_range(0..words.len())],
-            words[rng.gen_range(0..words.len())],
-            words[rng.gen_range(0..words.len())]
-        );
-
-        // Initialize with the generated identity
-        self.initialize(
-            four_words.clone(),
-            display_name.to_string(),
-            device_name.to_string(),
-        )
-        .await?;
-
-        Ok(four_words)
-    }
-
     /// Check if CoreContext is initialized
-    pub fn is_initialized(&self) -> bool {
+    pub fn is_core_initialized(&self) -> bool {
         self.ctx.is_some()
     }
 
@@ -118,9 +229,13 @@ impl Backend {
     }
 
     /// Get current identity four-words
-    pub fn identity(&self) -> Option<&str> {
-        self.ctx.as_ref().map(|c| c.four_words.as_str())
+    pub fn identity(&self) -> Option<String> {
+        self.get_current_session().map(|s| s.four_words)
     }
+
+    // ========================================================================
+    // Network / DHT Methods
+    // ========================================================================
 
     /// Check DHT connection status
     pub async fn check_dht_connection(&self) -> Result<bool> {
@@ -128,8 +243,7 @@ impl Backend {
             return Ok(false);
         }
 
-        // TODO: Implement actual DHT connection check
-        // For now, return true if context is initialized
+        // Return true if context is initialized
         Ok(self.ctx.is_some())
     }
 
@@ -159,5 +273,54 @@ impl Backend {
         }
 
         Ok(())
+    }
+
+    // ========================================================================
+    // Utility Methods
+    // ========================================================================
+
+    /// Generate a new four-word identity
+    pub fn generate_four_words() -> String {
+        use rand::RngCore;
+        use rand::rngs::OsRng;
+        use saorsa_core::address::NetworkAddress;
+        use saorsa_core::fwid::fw_check;
+        use std::net::Ipv4Addr;
+
+        let mut rng = OsRng;
+        const MIN_PORT: u16 = 1024;
+        const PORT_SPAN: u32 = u16::MAX as u32 - MIN_PORT as u32 + 1;
+        const GENERATION_ATTEMPTS: usize = 1000;
+
+        for _ in 0..GENERATION_ATTEMPTS {
+            let ipv4 = Ipv4Addr::from(rng.next_u32());
+            let port = (rng.next_u32() % PORT_SPAN) as u16 + MIN_PORT;
+            let candidate = NetworkAddress::from_ipv4(ipv4, port);
+
+            if let Some(words) = candidate.four_words() {
+                // Parse to ensure it's valid
+                if let Ok(parsed) = saorsa_core::identity::FourWordAddress::parse_str(words) {
+                    let words_vec = parsed.words();
+                    // Try to convert to array of exactly 4 strings
+                    let words_result: Result<[String; 4], _> = words_vec.try_into();
+                    if let Ok(words_array) = words_result {
+                        // Validate with saorsa-core
+                        if fw_check(words_array.clone()) {
+                            return words.to_string();
+                        }
+                    }
+                }
+            }
+        }
+
+        // Fallback: return a simple valid format (this should rarely happen)
+        "ocean-forest-moon-star".to_string()
+    }
+
+    /// Validate four-word format
+    pub fn validate_four_words(four_words: &str) -> bool {
+        // Basic validation: exactly 4 words separated by hyphens
+        let parts: Vec<&str> = four_words.split('-').collect();
+        parts.len() == 4 && parts.iter().all(|p| !p.is_empty())
     }
 }

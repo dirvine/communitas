@@ -2,6 +2,9 @@ export { AuthProvider, useAuth, ProtectedRoute } from '../../contexts/AuthContex
 export { LoginDialog } from './LoginDialog';
 export { ProfileManager } from './ProfileManager';
 export { AuthStatus } from './AuthStatus';
+export { IdentityPicker } from './IdentityPicker';
+export { IdentitySwitchMenu } from './IdentitySwitchMenu';
+export { PasskeyRegistration } from './PasskeyRegistration';
 export { RBACGuard, CreateGuard, UpdateGuard, DeleteGuard, ManageGuard, AccessDenied } from './RBACGuard';
 export { RoleManager } from './RoleManager';
 export type { UserIdentity, Permission, AuthState, AuthContextType } from '../../contexts/AuthContext';

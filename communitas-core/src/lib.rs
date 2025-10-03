@@ -26,6 +26,7 @@
 // Allow these in tests for convenience
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
+pub mod auth_service;
 pub mod bootstrap_integration;
 pub mod core_context;
 pub mod dht_identity;
@@ -39,6 +40,7 @@ pub mod storage;
 pub mod test_harness;
 
 // Re-export commonly used types
+pub use auth_service::{AuthService, SessionInfo};
 pub use core_context::CoreContext;
 pub use error::{AppError, AppResult as Result};
 

@@ -28,7 +28,7 @@ mod services;
 mod storage_fs;
 mod sync;
 
-use commands::org_commands::OrgState;
+use commands::{auth::AppState, org_commands::OrgState};
 use communitas_core::CoreContext;
 use crdt_manager::CrdtManager;
 use services::{channel_service::ChannelService, issue_service::IssueService};
@@ -80,7 +80,12 @@ async fn main() -> anyhow::Result<()> {
         issue_service,
     };
 
-    let mut builder = tauri::Builder::default()
+    // Initialize encrypted storage app state
+    let app_state = AppState::new();
+
+    let builder = tauri::Builder::default()
+        // Auth and encrypted storage state
+        .manage(app_state)
         // Organization services state
         .manage(org_state)
         // Shared saorsa-core context (initialized via core_initialize)
@@ -98,6 +103,27 @@ async fn main() -> anyhow::Result<()> {
             security::raw_spki::RawSpkiState::default(),
         )))
         .invoke_handler(tauri::generate_handler![
+        // Auth commands
+        commands::auth::auth_initialize,
+        commands::auth::auth_create_vault,
+        commands::auth::auth_login,
+        commands::auth::auth_login_password_only,
+        commands::auth::auth_logout,
+        commands::auth::auth_get_session,
+        commands::auth::auth_list_vaults,
+        commands::auth::auth_check_session,
+        // Auth config commands
+        commands::auth::auth_get_config,
+        commands::auth::auth_try_auto_login,
+        commands::auth::auth_get_recent_identities,
+        commands::auth::auth_set_auto_login,
+        commands::auth::auth_set_keyring_enabled,
+        // Passkey commands
+        commands::auth::auth_passkey_register,
+        commands::auth::auth_passkey_authenticate,
+        commands::auth::auth_passkey_has_passkey,
+        commands::auth::auth_passkey_get_info,
+        commands::auth::auth_passkey_delete,
         // Core bindings (pointers-only DHT surface)
         core_cmds::core_claim,
         core_cmds::core_advertise,
@@ -141,6 +167,9 @@ async fn main() -> anyhow::Result<()> {
         // Entity permissions and encryption
         core_commands::core_entity_get_permissions,
         core_commands::core_entity_get_encryption_status,
+        // Entity management
+        core_commands::core_entity_update,
+        core_commands::core_entity_delete,
         // Network sync
         core_commands::get_sync_status,
         core_commands::subscribe_to_entity,

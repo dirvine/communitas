@@ -18,6 +18,14 @@ import {
   Paper,
   Badge,
   Divider,
+  Menu,
+  MenuItem,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  ListItemIcon,
+  ListItemText,
 } from '@mui/material'
 import {
   Search,
@@ -30,8 +38,11 @@ import {
   MoreVert,
   People,
   Person,
+  Edit,
+  Delete,
 } from '@mui/icons-material'
 import { motion } from 'framer-motion'
+import { invoke } from '@tauri-apps/api/core'
 
 interface Group {
   id: string
@@ -56,7 +67,7 @@ interface Individual {
 
 const GroupsAndPeopleTab: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('')
-  const [groups] = useState<Group[]>([
+  const [groups, setGroups] = useState<Group[]>([
     {
       id: '1',
       name: 'Engineering Team',
@@ -99,7 +110,7 @@ const GroupsAndPeopleTab: React.FC = () => {
     },
   ])
 
-  const [individuals] = useState<Individual[]>([
+  const [individuals, setIndividuals] = useState<Individual[]>([
     {
       id: '1',
       name: 'Alice Johnson',
@@ -144,6 +155,13 @@ const GroupsAndPeopleTab: React.FC = () => {
     },
   ])
 
+  // Menu and dialog states
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null)
+  const [selectedEntity, setSelectedEntity] = useState<{ id: string; type: 'group' | 'individual'; data: Group | Individual } | null>(null)
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [editFormData, setEditFormData] = useState({ name: '', description: '' })
+
   const filteredGroups = groups.filter(group =>
     group.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     group.description.toLowerCase().includes(searchTerm.toLowerCase())
@@ -177,6 +195,91 @@ const GroupsAndPeopleTab: React.FC = () => {
       case 'away': return 'warning'
       case 'offline': return 'default'
       default: return 'default'
+    }
+  }
+
+  // Menu handlers
+  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, entity: Group | Individual, type: 'group' | 'individual') => {
+    setAnchorEl(event.currentTarget)
+    setSelectedEntity({ id: entity.id, type, data: entity })
+  }
+
+  const handleMenuClose = () => {
+    setAnchorEl(null)
+  }
+
+  const handleEditClick = () => {
+    if (selectedEntity) {
+      const data = selectedEntity.data
+      setEditFormData({
+        name: data.name,
+        description: 'description' in data ? data.description : '',
+      })
+      setEditDialogOpen(true)
+    }
+    handleMenuClose()
+  }
+
+  const handleDeleteClick = () => {
+    setDeleteDialogOpen(true)
+    handleMenuClose()
+  }
+
+  const handleEditSave = async () => {
+    if (!selectedEntity) return
+
+    try {
+      await invoke('core_entity_update', {
+        entityId: selectedEntity.id,
+        entityType: selectedEntity.type,
+        name: editFormData.name,
+        description: editFormData.description,
+      })
+
+      // Update local state
+      if (selectedEntity.type === 'group') {
+        setGroups(groups.map(g =>
+          g.id === selectedEntity.id
+            ? { ...g, name: editFormData.name, description: editFormData.description }
+            : g
+        ))
+      } else {
+        setIndividuals(individuals.map(i =>
+          i.id === selectedEntity.id
+            ? { ...i, name: editFormData.name }
+            : i
+        ))
+      }
+
+      setEditDialogOpen(false)
+      setSelectedEntity(null)
+    } catch (error) {
+      console.error('Failed to update entity:', error)
+      alert('Failed to update entity: ' + String(error))
+    }
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!selectedEntity) return
+
+    try {
+      await invoke('core_entity_delete', {
+        entityId: selectedEntity.id,
+        entityType: selectedEntity.type,
+      })
+
+      // Update local state
+      if (selectedEntity.type === 'group') {
+        setGroups(groups.filter(g => g.id !== selectedEntity.id))
+      } else {
+        setIndividuals(individuals.filter(i => i.id !== selectedEntity.id))
+      }
+
+      setDeleteDialogOpen(false)
+      setSelectedEntity(null)
+    } catch (error) {
+      console.error('Failed to delete entity:', error)
+      alert('Failed to delete entity: ' + String(error))
     }
   }
 
@@ -265,7 +368,10 @@ const GroupsAndPeopleTab: React.FC = () => {
                         color={group.type === 'private' ? 'default' : 'primary'}
                         variant="outlined"
                       />
-                      <IconButton size="small">
+                      <IconButton
+                        size="small"
+                        onClick={(e) => handleMenuOpen(e, group, 'group')}
+                      >
                         <MoreVert />
                       </IconButton>
                     </Stack>
@@ -401,7 +507,10 @@ const GroupsAndPeopleTab: React.FC = () => {
                         {individual.name.charAt(0)}
                       </Avatar>
                     </Badge>
-                    <IconButton size="small">
+                    <IconButton
+                      size="small"
+                      onClick={(e) => handleMenuOpen(e, individual, 'individual')}
+                    >
                       <MoreVert />
                     </IconButton>
                   </Stack>
@@ -486,6 +595,76 @@ const GroupsAndPeopleTab: React.FC = () => {
           </Typography>
         </Box>
       )}
+
+      {/* Context Menu */}
+      <Menu
+        anchorEl={anchorEl}
+        open={Boolean(anchorEl)}
+        onClose={handleMenuClose}
+      >
+        <MenuItem onClick={handleEditClick}>
+          <ListItemIcon>
+            <Edit fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Edit</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={handleDeleteClick} sx={{ color: 'error.main' }}>
+          <ListItemIcon>
+            <Delete fontSize="small" color="error" />
+          </ListItemIcon>
+          <ListItemText>Delete</ListItemText>
+        </MenuItem>
+      </Menu>
+
+      {/* Edit Dialog */}
+      <Dialog open={editDialogOpen} onClose={() => setEditDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Edit {selectedEntity?.type === 'group' ? 'Group' : 'Contact'}</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            margin="dense"
+            label="Name"
+            fullWidth
+            value={editFormData.name}
+            onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+            sx={{ mt: 2 }}
+          />
+          {selectedEntity?.type === 'group' && (
+            <TextField
+              margin="dense"
+              label="Description"
+              fullWidth
+              multiline
+              rows={3}
+              value={editFormData.description}
+              onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
+              sx={{ mt: 2 }}
+            />
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setEditDialogOpen(false)}>Cancel</Button>
+          <Button onClick={handleEditSave} variant="contained">
+            Save
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Delete {selectedEntity?.type === 'group' ? 'Group' : 'Contact'}?</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to delete "{selectedEntity?.data.name}"? This action cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
+          <Button onClick={handleDeleteConfirm} variant="contained" color="error">
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   )
 }

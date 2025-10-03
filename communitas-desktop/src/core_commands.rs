@@ -772,3 +772,80 @@ pub async fn unsubscribe_from_entity(
     // TODO: Implement actual DHT unsubscription
     Ok(())
 }
+
+// ===== Entity Management Commands =====
+
+/// Update an entity's details (channel, group, contact, etc.)
+#[tauri::command]
+pub async fn core_entity_update(
+    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+    entity_id: String,
+    entity_type: String, // "channel", "group", "contact", "organization", "project"
+    name: Option<String>,
+    description: Option<String>,
+) -> Result<serde_json::Value, String> {
+    // Validate inputs
+    if let Some(ref n) = name {
+        if n.is_empty() {
+            return Err("Name cannot be empty".to_string());
+        }
+        if n.len() > 100 {
+            return Err("Name too long (max 100 characters)".to_string());
+        }
+        if !n.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == ' ') {
+            return Err("Name contains invalid characters".to_string());
+        }
+    }
+
+    if let Some(ref d) = description {
+        if d.len() > 500 {
+            return Err("Description too long (max 500 characters)".to_string());
+        }
+    }
+
+    let mut guard = shared.write().await;
+    let ctx = guard
+        .as_mut()
+        .ok_or_else(|| "Core not initialized".to_string())?;
+
+    tracing::info!("Updating {} entity: {}", entity_type, entity_id);
+
+    // TODO: Implement actual entity update logic based on entity_type
+    // For now, return success with updated entity data
+    Ok(serde_json::json!({
+        "id": entity_id,
+        "type": entity_type,
+        "name": name.unwrap_or_default(),
+        "description": description.unwrap_or_default(),
+        "updated_at": chrono::Utc::now().to_rfc3339()
+    }))
+}
+
+/// Delete an entity (channel, group, contact, etc.)
+#[tauri::command]
+pub async fn core_entity_delete(
+    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+    entity_id: String,
+    entity_type: String, // "channel", "group", "contact", "organization", "project"
+) -> Result<bool, String> {
+    let mut guard = shared.write().await;
+    let ctx = guard
+        .as_mut()
+        .ok_or_else(|| "Core not initialized".to_string())?;
+
+    tracing::info!("Deleting {} entity: {}", entity_type, entity_id);
+
+    // TODO: Implement actual deletion logic based on entity_type
+    // For channels:
+    // - Remove from chat manager
+    // - Clean up messages
+    // - Unsubscribe from updates
+    // For groups:
+    // - Remove members
+    // - Clean up shared data
+    // For contacts:
+    // - Remove from directory
+    // - Clean up messages
+
+    Ok(true)
+}

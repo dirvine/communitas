@@ -60,7 +60,7 @@ export const ProfileManager: React.FC<ProfileManagerProps> = ({
   onClose,
   compact = false,
 }) => {
-  const { authState, updateProfile, signMessage, getNetworkStatus, logout } = useAuth();
+  const { authState, updateProfile, getNetworkStatus, logout } = useAuth();
   const { isMobile } = useResponsive();
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(false);

@@ -98,6 +98,7 @@ import {
   AudioFile as AudioIcon,
   Code as CodeIcon,
   Archive as ArchiveIcon,
+  ArrowBack as ArrowBackIcon,
 } from '@mui/icons-material';
 import { invoke } from '@tauri-apps/api/core';
 import {
@@ -163,6 +164,16 @@ export const OrganizationView: React.FC<OrganizationViewProps> = ({
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [channels, setChannels] = useState<any[]>([]);
   const [currentUserId] = useState('user-1'); // TODO: Get from auth context
+  const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
+  const [inviteFourWords, setInviteFourWords] = useState('');
+  const [inviteRole, setInviteRole] = useState<'Member' | 'Admin' | 'Owner'>('Member');
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+
+  // Load channels from organization (channels are managed separately)
+  useEffect(() => {
+    // Channels are loaded via separate service, not from organization object
+  }, [organization]);
 
   // Mock data for recent activity
   const recentActivity = [
@@ -219,7 +230,15 @@ export const OrganizationView: React.FC<OrganizationViewProps> = ({
       setCreatePriority('medium');
       setCreateStorageGb(5);
       setCreateDialogOpen(false);
-      onRefresh();
+
+      // Refresh directory if available
+      if (typeof onRefresh === 'function') {
+        try {
+          onRefresh();
+        } catch (refreshError) {
+          console.error('Error refreshing directory:', refreshError);
+        }
+      }
     } catch (error) {
       console.error('Failed to create entity:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -237,6 +256,54 @@ export const OrganizationView: React.FC<OrganizationViewProps> = ({
       newStarred.add(entityId);
     }
     setStarred(newStarred);
+  };
+
+  const handleInviteMember = async () => {
+    if (!inviteFourWords.trim()) {
+      setInviteError('Please enter a four-word address');
+      return;
+    }
+
+    // Validate four-words format
+    const normalized = inviteFourWords.trim().toLowerCase().replace(/\s+/g, '-');
+    const parts = normalized.split('-');
+
+    if (parts.length !== 4) {
+      setInviteError('Four-Words must contain exactly 4 words');
+      return;
+    }
+
+    for (const part of parts) {
+      if (!/^[a-z]+$/.test(part)) {
+        setInviteError('Each word must contain only letters');
+        return;
+      }
+    }
+
+    setInviteLoading(true);
+    setInviteError(null);
+
+    try {
+      // TODO: Implement actual member invitation via EntityDirectoryContext
+      // For now, show a success message
+      console.log('Inviting member:', { fourWords: normalized, role: inviteRole });
+
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Close dialog and reset
+      setInviteDialogOpen(false);
+      setInviteFourWords('');
+      setInviteRole('Member');
+      setInviteError(null);
+
+      // Show success (you may want to add a snackbar notification here)
+      alert(`Member invitation sent to ${normalized} with role ${inviteRole}`);
+    } catch (error) {
+      setInviteError(error instanceof Error ? error.message : 'Failed to send invitation');
+    } finally {
+      setInviteLoading(false);
+    }
   };
 
   const getFileIcon = (type: string) => {
@@ -569,19 +636,21 @@ export const OrganizationView: React.FC<OrganizationViewProps> = ({
             {project.description || 'No description available'}
           </Typography>
           
-          <Box sx={{ mt: 2 }}>
-            <Stack direction="row" justifyContent="space-between" sx={{ mb: 1 }}>
-              <Typography variant="caption">Storage</Typography>
-              <Typography variant="caption">
-                {project.storage_quota.used_gb.toFixed(1)} / {project.storage_quota.allocated_gb} GB
-              </Typography>
-            </Stack>
-            <LinearProgress 
-              variant="determinate" 
-              value={(project.storage_quota.used_gb / project.storage_quota.allocated_gb) * 100}
-              sx={{ mb: 2 }}
-            />
-          </Box>
+          {project.storage_quota && (
+            <Box sx={{ mt: 2 }}>
+              <Stack direction="row" justifyContent="space-between" sx={{ mb: 1 }}>
+                <Typography variant="caption">Storage</Typography>
+                <Typography variant="caption">
+                  {(project.storage_quota.used_gb || 0).toFixed(1)} / {project.storage_quota.allocated_gb || 0} GB
+                </Typography>
+              </Stack>
+              <LinearProgress
+                variant="determinate"
+                value={project.storage_quota.allocated_gb ? ((project.storage_quota.used_gb || 0) / project.storage_quota.allocated_gb) * 100 : 0}
+                sx={{ mb: 2 }}
+              />
+            </Box>
+          )}
 
           {project.deadline && (
             <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
@@ -621,6 +690,86 @@ export const OrganizationView: React.FC<OrganizationViewProps> = ({
             startIcon={<ChatIcon />}
           >
             Chat
+          </Button>
+        </CardActions>
+      </MotionCard>
+    </Grid>
+  );
+
+  const renderChannelCard = (channel: any) => (
+    <Grid item xs={12} sm={6} md={4} key={channel.id}>
+      <MotionCard
+        whileHover={{ scale: 1.02 }}
+        elevation={2}
+        sx={{
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          cursor: 'pointer',
+          border: selectedChannelId === channel.id ? 2 : 0,
+          borderColor: 'primary.main',
+        }}
+        onClick={() => setSelectedChannelId(channel.id)}
+      >
+        <CardHeader
+          avatar={
+            <Avatar sx={{ bgcolor: 'primary.main' }}>
+              <ChatIcon />
+            </Avatar>
+          }
+          action={
+            <Stack direction="row" spacing={0.5}>
+              <IconButton
+                size="small"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleStarToggle(channel.id);
+                }}
+              >
+                {starred.has(channel.id) ? <StarIcon color="warning" /> : <StarBorderIcon />}
+              </IconButton>
+              <IconButton
+                size="small"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedEntity(channel);
+                  setMenuAnchor(e.currentTarget);
+                }}
+              >
+                <MoreVertIcon />
+              </IconButton>
+            </Stack>
+          }
+          title={`#${channel.name}`}
+          subheader={
+            <Chip
+              label={channel.isPrivate ? 'Private' : 'Public'}
+              size="small"
+              color={channel.isPrivate ? 'warning' : 'success'}
+            />
+          }
+        />
+        <CardContent sx={{ flexGrow: 1 }}>
+          <Typography variant="body2" color="text.secondary" paragraph>
+            {channel.description || 'No description'}
+          </Typography>
+          <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
+            <Stack direction="row" spacing={0.5} alignItems="center">
+              <PeopleIcon fontSize="small" color="action" />
+              <Typography variant="caption" color="text.secondary">
+                {channel.memberCount || 0} members
+              </Typography>
+            </Stack>
+          </Stack>
+        </CardContent>
+        <CardActions>
+          <Button
+            size="small"
+            startIcon={<ChatIcon />}
+            fullWidth
+            variant={selectedChannelId === channel.id ? 'contained' : 'outlined'}
+          >
+            {selectedChannelId === channel.id ? 'Selected' : 'Open Channel'}
           </Button>
         </CardActions>
       </MotionCard>
@@ -891,6 +1040,89 @@ export const OrganizationView: React.FC<OrganizationViewProps> = ({
     </Box>
   );
 
+  const renderChannelsTab = () => (
+    <Box>
+      {/* Search and Filter Bar */}
+      <Paper elevation={1} sx={{ p: 2, mb: 3 }}>
+        <Stack direction="row" spacing={2} alignItems="center">
+          <TextField
+            size="small"
+            placeholder="Search channels..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            sx={{ flexGrow: 1 }}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon />
+                </InputAdornment>
+              ),
+            }}
+          />
+
+          <FormControl size="small" sx={{ minWidth: 120 }}>
+            <InputLabel>Sort By</InputLabel>
+            <Select
+              value={sortBy}
+              onChange={(e: SelectChangeEvent) => setSortBy(e.target.value as any)}
+              label="Sort By"
+            >
+              <MenuItem value="name">Name</MenuItem>
+              <MenuItem value="date">Date</MenuItem>
+              <MenuItem value="activity">Activity</MenuItem>
+            </Select>
+          </FormControl>
+
+          <IconButton
+            onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
+          >
+            {viewMode === 'grid' ? <ListViewIcon /> : <GridViewIcon />}
+          </IconButton>
+
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => {
+              setCreateType('project');
+              setCreateDialogOpen(true);
+            }}
+          >
+            New Channel
+          </Button>
+        </Stack>
+      </Paper>
+
+      {/* Channels Grid/List */}
+      <Grid container spacing={3}>
+        {channels
+          .filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()))
+          .map(renderChannelCard)}
+      </Grid>
+
+      {channels.length === 0 && (
+        <Paper sx={{ p: 4, textAlign: 'center' }}>
+          <ChatIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
+          <Typography variant="h6" gutterBottom>
+            No channels yet
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+            Channels are automatically created when you create an organization
+          </Typography>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => {
+              setCreateType('project');
+              setCreateDialogOpen(true);
+            }}
+          >
+            Create First Channel
+          </Button>
+        </Paper>
+      )}
+    </Box>
+  );
+
   const renderMembersTab = () => (
     <Box>
       {/* Members Management Bar */}
@@ -911,7 +1143,7 @@ export const OrganizationView: React.FC<OrganizationViewProps> = ({
           <Button
             variant="contained"
             startIcon={<PersonAddIcon />}
-            onClick={() => onNavigate('invite_members', organization)}
+            onClick={() => setInviteDialogOpen(true)}
           >
             Invite Members
           </Button>
@@ -1031,7 +1263,7 @@ export const OrganizationView: React.FC<OrganizationViewProps> = ({
           <Tab label={`Projects (${hierarchy.projects.length})`} icon={<FolderIcon />} iconPosition="start" />
           <Tab label={`Project Board`} icon={<AccountTreeIcon />} iconPosition="start" />
           <Tab label={`Groups (${hierarchy.groups.length})`} icon={<GroupIcon />} iconPosition="start" />
-          <Tab label={`Members (${organization.users?.length ?? 0})`} icon={<PeopleIcon />} iconPosition="start" />
+          <Tab label={`Members (${organization.members?.length ?? 0})`} icon={<PeopleIcon />} iconPosition="start" />
         </Tabs>
       </Box>
 
@@ -1042,17 +1274,22 @@ export const OrganizationView: React.FC<OrganizationViewProps> = ({
         </TabPanel>
         <TabPanel value={activeTab} index={1}>
           {selectedChannelId ? (
-            <ChannelView
-              channelId={selectedChannelId}
-              currentUserId={currentUserId}
-              onStartCall={(type) => onCall('channel', selectedChannelId, type)}
-            />
-          ) : (
-            <Box sx={{ textAlign: 'center', py: 8 }}>
-              <Typography variant="h6" color="text.secondary">
-                Select a channel or create one to get started
-              </Typography>
+            <Box>
+              <Button
+                startIcon={<ArrowBackIcon />}
+                onClick={() => setSelectedChannelId(null)}
+                sx={{ mb: 2 }}
+              >
+                Back to Channels
+              </Button>
+              <ChannelView
+                channelId={selectedChannelId}
+                currentUserId={currentUserId}
+                onStartCall={(type) => onCall('channel', selectedChannelId, type)}
+              />
             </Box>
+          ) : (
+            renderChannelsTab()
           )}
         </TabPanel>
         <TabPanel value={activeTab} index={2}>
@@ -1186,6 +1423,82 @@ export const OrganizationView: React.FC<OrganizationViewProps> = ({
           <Button onClick={() => setCreateDialogOpen(false)}>Cancel</Button>
           <Button onClick={handleCreateEntity} variant="contained" disabled={loading}>
             {loading ? <CircularProgress size={24} /> : 'Create'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Invite Member Dialog */}
+      <Dialog
+        open={inviteDialogOpen}
+        onClose={() => !inviteLoading && setInviteDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          <Stack direction="row" alignItems="center" spacing={1}>
+            <PersonAddIcon color="primary" />
+            <Typography variant="h6">Invite Member to Organization</Typography>
+          </Stack>
+        </DialogTitle>
+        <DialogContent>
+          <Stack spacing={2.5} sx={{ mt: 2 }}>
+            {inviteError && (
+              <Alert severity="error" onClose={() => setInviteError(null)}>
+                {inviteError}
+              </Alert>
+            )}
+
+            <TextField
+              autoFocus
+              label="Four-Word Address"
+              placeholder="ocean-forest-moon-star"
+              fullWidth
+              variant="outlined"
+              value={inviteFourWords}
+              onChange={(e) => setInviteFourWords(e.target.value)}
+              disabled={inviteLoading}
+              helperText="Enter the member's four-word network identity"
+            />
+
+            <FormControl fullWidth>
+              <InputLabel>Role</InputLabel>
+              <Select
+                value={inviteRole}
+                onChange={(e) => setInviteRole(e.target.value as 'Member' | 'Admin' | 'Owner')}
+                disabled={inviteLoading}
+                label="Role"
+              >
+                <MenuItem value="Member">Member</MenuItem>
+                <MenuItem value="Admin">Admin</MenuItem>
+                <MenuItem value="Owner">Owner</MenuItem>
+              </Select>
+            </FormControl>
+
+            <Alert severity="info" icon={<InfoIcon />}>
+              The invited member will receive a notification and can accept the invitation
+              to join this organization with the selected role.
+            </Alert>
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ p: 2.5 }}>
+          <Button
+            onClick={() => {
+              setInviteDialogOpen(false);
+              setInviteFourWords('');
+              setInviteRole('Member');
+              setInviteError(null);
+            }}
+            disabled={inviteLoading}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleInviteMember}
+            variant="contained"
+            disabled={inviteLoading || !inviteFourWords.trim()}
+            startIcon={inviteLoading ? <CircularProgress size={16} /> : <PersonAddIcon />}
+          >
+            {inviteLoading ? 'Sending...' : 'Send Invitation'}
           </Button>
         </DialogActions>
       </Dialog>

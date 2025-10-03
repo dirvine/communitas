@@ -32,28 +32,40 @@ impl KeyManager {
 
     /// Derive an encryption key from password using PBKDF2
     pub async fn derive_key(&self, password: &str, salt: &[u8]) -> Result<Zeroizing<Vec<u8>>> {
-        let mut key = Zeroizing::new(vec![0u8; 32]); // ChaCha20-Poly1305 uses 256-bit keys
-
-        // PBKDF2 with SHA-256 and configured iterations (100,000 as per DESIGN.md)
-        pbkdf2_hmac::<Sha256>(
-            password.as_bytes(),
-            salt,
-            self.iterations,
-            &mut key,
-        );
-
-        Ok(key)
+        let password = password.to_string();
+        let salt = salt.to_vec();
+        let iterations = self.iterations;
+        
+        tokio::task::spawn_blocking(move || {
+            let mut key = Zeroizing::new(vec![0u8; 32]); // ChaCha20-Poly1305 uses 256-bit keys
+            
+            // PBKDF2 with SHA-256 and configured iterations (100,000 as per DESIGN.md)
+            pbkdf2_hmac::<Sha256>(
+                password.as_bytes(),
+                &salt,
+                iterations,
+                &mut key,
+            );
+            
+            Ok(key) as Result<Zeroizing<Vec<u8>>>
+        }).await
+        .map_err(|e| anyhow::anyhow!("Failed to derive key: {}", e))?
     }
 
     /// Hash password for lookup (different from key derivation)
     pub async fn hash_password(&self, password: &str) -> Result<Vec<u8>> {
-        use blake3::Hasher;
-
-        let mut hasher = Hasher::new();
-        hasher.update(b"communitas:password:v1:");
-        hasher.update(password.as_bytes());
-
-        Ok(hasher.finalize().as_bytes().to_vec())
+        let password = password.to_string();
+        
+        tokio::task::spawn_blocking(move || {
+            use blake3::Hasher;
+            
+            let mut hasher = Hasher::new();
+            hasher.update(b"communitas:password:v1:");
+            hasher.update(password.as_bytes());
+            
+            Ok(hasher.finalize().as_bytes().to_vec())
+        }).await
+        .map_err(|e| anyhow::anyhow!("Failed to hash password: {}", e))?
     }
 
     /// Store key in platform keyring (macOS Keychain, Windows Credential Manager, Linux Secret Service)
@@ -174,43 +186,6 @@ impl KeyManager {
         rand::thread_rng().fill(&mut salt[..]);
         salt
     }
-}
-
-/// Passkey support for WebAuthn/FIDO2 authentication
-#[derive(Debug, Clone)]
-pub struct PasskeyManager {
-    relying_party: String,
-}
-
-impl PasskeyManager {
-    pub fn new() -> Self {
-        Self {
-            relying_party: "communitas.life".to_string(),
-        }
-    }
-
-    /// Register a new passkey for a four-word identity
-    pub async fn register_passkey(&self, four_words: &str) -> Result<PasskeyCredential> {
-        // In a real implementation, this would interact with WebAuthn API
-        // For now, return a placeholder
-        Ok(PasskeyCredential {
-            credential_id: blake3::hash(four_words.as_bytes()).as_bytes().to_vec(),
-            public_key: vec![0u8; 65], // Placeholder for P-256 public key
-        })
-    }
-
-    /// Authenticate using passkey
-    pub async fn authenticate_passkey(&self, _credential: &PasskeyCredential) -> Result<bool> {
-        // In a real implementation, this would verify the WebAuthn assertion
-        // For now, return success
-        Ok(true)
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct PasskeyCredential {
-    pub credential_id: Vec<u8>,
-    pub public_key: Vec<u8>,
 }
 
 #[cfg(test)]

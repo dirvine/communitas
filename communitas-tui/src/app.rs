@@ -37,7 +37,36 @@ impl App {
         let terminal = Terminal::new(backend_term)?;
 
         let state = AppState::new();
-        let backend = Backend::new(data_dir, offline);
+        let backend = Backend::new(data_dir, offline).await?;
+
+        Ok(Self {
+            state,
+            backend,
+            terminal,
+        })
+    }
+
+    /// Create new application with custom configuration
+    pub async fn new_with_config(
+        data_dir: PathBuf,
+        pbkdf2_iterations: u32,
+        use_keyring: bool,
+        offline: bool,
+    ) -> Result<Self> {
+        // Set up terminal
+        enable_raw_mode()?;
+        let mut stdout = io::stdout();
+        execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+        let backend_term = CrosstermBackend::new(stdout);
+        let terminal = Terminal::new(backend_term)?;
+
+        let state = AppState::new();
+        let backend = Backend::new_with_config(
+            data_dir,
+            pbkdf2_iterations,
+            use_keyring,
+            offline,
+        ).await?;
 
         Ok(Self {
             state,
@@ -59,7 +88,7 @@ impl App {
         &mut self,
         four_words: String,
         display_name: String,
-        device_name: String,
+        _device_name: String,
     ) -> Result<()> {
         self.state.set_status("Initializing identity...");
 
@@ -67,17 +96,23 @@ impl App {
             .network
             .set_status(ConnectionStatus::Connecting);
 
-        match self
-            .backend
-            .initialize(four_words.clone(), display_name.clone(), device_name)
-            .await
-        {
-            Ok(_) => {
-                self.state.set_identity(four_words, display_name);
-                self.state
-                    .network
-                    .set_status(ConnectionStatus::Connected);
-                self.state.set_status("Identity initialized successfully");
+        // TODO: Implement proper password input
+        let password = "default-password";
+
+        // Try to login with existing vault
+        match self.backend.login(&four_words, password).await {
+            Ok(session_info) => {
+                self.state.set_identity(session_info.four_words.clone(), session_info.display_name.clone());
+
+                // Initialize CoreContext for P2P features
+                if let Err(e) = self.backend.initialize_core_context().await {
+                    tracing::warn!("Failed to initialize CoreContext: {}", e);
+                    self.state.set_status(format!("Logged in (local mode): {}", e));
+                    self.state.network.set_status(ConnectionStatus::Disconnected);
+                } else {
+                    self.state.network.set_status(ConnectionStatus::Connected);
+                    self.state.set_status("Identity initialized successfully");
+                }
                 Ok(())
             }
             Err(e) => {

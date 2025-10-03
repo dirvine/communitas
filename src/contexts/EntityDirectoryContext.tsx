@@ -319,9 +319,9 @@ const clonePersonalUserEntity = (user: PersonalUser): PersonalUser & EntityMetad
 });
 
 const createInitialState = (): EntityDirectoryState => ({
-  organizations: mockOrganizations.map(cloneOrganizationGraph),
-  personalGroups: mockPersonalGroups.map(clonePersonalGroupEntity),
-  personalUsers: mockPersonalUsers.map(clonePersonalUserEntity),
+  organizations: [],
+  personalGroups: [],
+  personalUsers: [],
   operations: [],
 });
 
@@ -632,13 +632,13 @@ export const EntityDirectoryProvider: React.FC<EntityDirectoryProviderProps> = (
     const scaffoldProjects: Array<Project & EntityMetadata> = [
       {
         id: `project-${nanoid(8)}`,
-        type: 'project',
+        type: 'project' as const,
         name: `${input.displayName.trim()} Launch Plan`,
         description: 'Unified milestones to get your workspace live.',
         organizationId: tempId,
         leads: [],
         members: [],
-        status: 'planning',
+        status: 'planning' as const,
         startDate: now,
         endDate: undefined,
         milestones: [
@@ -657,13 +657,13 @@ export const EntityDirectoryProvider: React.FC<EntityDirectoryProviderProps> = (
       },
       {
         id: `project-${nanoid(8)}`,
-        type: 'project',
+        type: 'project' as const,
         name: 'Async Collaboration Toolkit',
         description: 'Document rituals, templates, and automations to scale collaboration.',
         organizationId: tempId,
         leads: [],
         members: [],
-        status: 'active',
+        status: 'active' as const,
         startDate: now,
         endDate: undefined,
         milestones: [],
@@ -2016,22 +2016,29 @@ export const EntityDirectoryProvider: React.FC<EntityDirectoryProviderProps> = (
     }
 
     let cancelled = false;
+    let processing = false;
 
     const process = async () => {
-      if (cancelled) return;
+      if (cancelled || processing) return;
+      processing = true;
+
       startOperationProcessing(nextOperation.id);
       try {
         await handleOperation(nextOperation);
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Synchronization failed';
         markOperationFailed(nextOperation.id, message);
+      } finally {
+        processing = false;
       }
     };
 
-    process();
+    // Debounce to prevent rapid re-execution
+    const timer = setTimeout(process, 100);
 
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
   }, [state.operations, handleOperation, markOperationFailed, startOperationProcessing]);
 

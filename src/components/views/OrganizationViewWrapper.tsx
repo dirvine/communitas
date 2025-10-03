@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useEntityDirectory } from '../../contexts/EntityDirectoryContext';
 import { OrganizationView } from './OrganizationView';
 import { Box, Typography, CircularProgress } from '@mui/material';
+import { Organization } from '../../types/organization';
 
 /**
  * Wrapper component that provides OrganizationView with required props from router params
@@ -10,7 +11,7 @@ import { Box, Typography, CircularProgress } from '@mui/material';
 export const OrganizationViewWrapper: React.FC = () => {
   const { orgId } = useParams<{ orgId: string }>();
   const navigate = useNavigate();
-  const { organizations, refreshDirectory } = useEntityDirectory();
+  const { organizations } = useEntityDirectory();
 
   // Find the organization by ID
   const organization = organizations.find(org => org.id === orgId);
@@ -55,10 +56,30 @@ export const OrganizationViewWrapper: React.FC = () => {
     users: organization.users
   });
 
-  // Map users to members to match the TypeScript interface
-  const organizationWithMembers = {
-    ...organization,
-    members: organization.users ?? [],
+  // Map EntityDirectory organization to proper Organization type
+  const organizationWithMembers: Organization = {
+    id: organization.id,
+    name: organization.name,
+    description: organization.description,
+    created_at: organization.createdAt ?? new Date(),
+    updated_at: organization.updatedAt ?? new Date(),
+    owner_id: (organization as any).ownerId ?? '',
+    members: (organization as any).members ?? [],
+    has_file_system: true,
+    storage_quota: {
+      allocated_gb: 10,
+      used_gb: 0,
+      available_gb: 10,
+      last_updated: new Date()
+    },
+    settings: (organization as any).settings ?? {
+      visibility: 'private' as const,
+      default_member_role: 'Member' as const,
+      allow_member_invitations: true,
+      require_approval_for_joins: false
+    },
+    groups: [] as any, // Groups are managed separately
+    projects: [] as any // Projects are managed separately
   };
 
   const groupsWithMembers = (organization.groups ?? []).map(group => ({
@@ -71,7 +92,7 @@ export const OrganizationViewWrapper: React.FC = () => {
     members: (project as any).users ?? [],
   }));
 
-  const hierarchy = {
+  const hierarchy: any = {
     organization: organizationWithMembers,
     groups: groupsWithMembers,
     projects: projectsWithMembers,
@@ -81,13 +102,18 @@ export const OrganizationViewWrapper: React.FC = () => {
 
   console.log('OrganizationWrapper - hierarchy built:', hierarchy);
 
+  const handleRefresh = async () => {
+    console.log('Refresh requested - reloading organization data');
+    // TODO: Implement refresh functionality
+  };
+
   return (
     <OrganizationView
       organization={organizationWithMembers}
       hierarchy={hierarchy}
       onNavigate={handleNavigate}
       onCall={handleCall}
-      onRefresh={refreshDirectory}
+      onRefresh={handleRefresh}
     />
   );
 };

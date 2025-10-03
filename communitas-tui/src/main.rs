@@ -50,9 +50,17 @@ struct Args {
     /// Skip network initialization (offline mode)
     #[arg(long)]
     offline: bool,
+
+    /// PBKDF2 iterations for testing (default: 100000)
+    #[arg(long, default_value = "100000")]
+    pbkdf2_iterations: u32,
+
+    /// Disable keyring for testing
+    #[arg(long)]
+    no_keyring: bool,
 }
 
-#[tokio::main]
+#[tokio::main(flavor = "multi_thread", worker_threads = 4)]
 async fn main() -> Result<()> {
     let args = Args::parse();
 
@@ -71,8 +79,13 @@ async fn main() -> Result<()> {
     std::fs::create_dir_all(&data_dir)?;
     tracing::info!("Data directory: {}", data_dir.display());
 
-    // Create and run application
-    let mut app = app::App::new(data_dir, args.offline).await?;
+    // Create and run application with custom configuration
+    let mut app = app::App::new_with_config(
+        data_dir,
+        args.pbkdf2_iterations,
+        !args.no_keyring,
+        args.offline,
+    ).await?;
 
     // Initialize identity if provided, otherwise show auth screen
     if let Some(identity) = args.identity {

@@ -37,7 +37,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useNavigation } from '../../contexts/NavigationContext';
 import { LoginDialog } from './LoginDialog';
 import { UnifiedAuthFlow } from './UnifiedAuthFlow';
-import { ProfileManager } from './ProfileManager';
+// Removed: ProfileManager - using ModernShellPrototype instead
 import SettingsInterface from '../settings/SettingsInterface';
 
 interface AuthStatusProps {
@@ -434,7 +434,10 @@ export const AuthStatus: React.FC<AuthStatusProps> = ({
           },
         }}
       >
-        <ProfileManager onClose={() => setProfileDialogOpen(false)} />
+        {/* Removed: ProfileManager - using ModernShellPrototype instead */}
+        <Box p={3}>
+          <Typography>Profile management available in main interface</Typography>
+        </Box>
       </Dialog>
 
       {/* Settings Dialog */}

@@ -1,9 +1,4 @@
-export { 
-  ResponsiveLayout, 
-  ResponsiveContainer, 
-  ResponsiveGrid,
-  useBreakpoints,
-} from '../layout/ResponsiveLayout';
+// Removed: ResponsiveLayout - using ModernShellPrototype instead
 
 export {
   ResponsiveCard,

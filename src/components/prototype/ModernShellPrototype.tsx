@@ -65,6 +65,14 @@ import {
   EditOutlined,
 } from '@mui/icons-material'
 import { styled } from '@mui/material/styles'
+import {
+  AddContactDialog,
+  EditContactDialog,
+  DeleteContactDialog,
+  type Contact,
+} from './ContactManagementDialogs'
+import { MessageReactionPicker, MessageReactionsDisplay } from './MessageReactionPicker'
+import { Star, StarBorder as StarOutlineIcon } from '@mui/icons-material'
 
 const TOKENS = {
   bgBase: '#101518',
@@ -91,11 +99,14 @@ type Conversation = {
   status?: 'sent' | 'delivered' | 'read'
   pinned?: boolean
   muted?: boolean
+  starred?: boolean // For favourites
+  lastMessageTime?: number // Unix timestamp for MRU sorting
   org?: string
   membersOnline?: number
   online?: boolean
   hasWebsite?: boolean
   description?: string
+  fourWords?: string // Four-word network address for contacts
   projectMeta?: {
     status: 'Active' | 'Planning' | 'Blocked'
     completion: number
@@ -118,7 +129,7 @@ type Message = {
   system?: boolean
   threadCount?: number
   latestReplyBy?: string
-  reactions?: { emoji: string; count: number }[]
+  reactions?: { emoji: string; count: number; userReacted?: boolean }[]
 }
 
 type DrawerTab = 'Overview' | 'Members' | 'Files' | 'Tasks' | 'Timeline' | 'Storage'
@@ -339,6 +350,10 @@ export const ModernShellPrototypeScreen: React.FC = () => {
   const [messageMenu, setMessageMenu] = useState<{ anchorEl: HTMLElement | null; message?: Message }>({ anchorEl: null })
   const [channelViewMode, setChannelViewMode] = useState<ChannelMode>('chat')
   const [projectViewMode, setProjectViewMode] = useState<ProjectMode>('chat')
+
+  // Contact management state
+  const [contactDialogMode, setContactDialogMode] = useState<'add' | 'edit' | 'delete' | null>(null)
+  const [selectedContact, setSelectedContact] = useState<Conversation | null>(null)
 
   const conversations = useMemo<Conversation[]>(
     () => [

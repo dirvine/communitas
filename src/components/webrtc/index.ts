@@ -1,5 +1,5 @@
 export { WebRTCService, webRTCService } from '../../services/webrtc/WebRTCService';
-export { SimpleCallInterface } from './SimpleCallInterface';
+// Removed: SimpleCallInterface - using modern shell instead
 export { SimpleCommunicationHub } from './SimpleCommunicationHub';
 
 export type {

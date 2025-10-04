@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Box, Fab, Snackbar, Alert } from '@mui/material';
 import { Phone, Message } from '@mui/icons-material';
 import { webRTCService, CallState } from '../../services/webrtc/WebRTCService';
-import { SimpleCallInterface } from './SimpleCallInterface';
+// Removed: SimpleCallInterface - using modern shell instead
 
 export const SimpleCommunicationHub: React.FC = () => {
   const [currentCall, setCurrentCall] = useState<CallState | null>(null);
@@ -51,11 +51,9 @@ export const SimpleCommunicationHub: React.FC = () => {
 
   return (
     <>
+      {/* Removed: SimpleCallInterface - using modern shell instead */}
       {currentCall && (
-        <SimpleCallInterface
-          call={currentCall}
-          onEndCall={handleEndCall}
-        />
+        <Box>Call interface placeholder - use modern shell</Box>
       )}
 
       {!currentCall && (

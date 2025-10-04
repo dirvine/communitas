@@ -744,7 +744,8 @@ function AppContent() {
 
   // First-run wizard removed in browser mode; use AuthStatus/Login dialog instead
 
-  if (location.pathname.startsWith('/prototype/modern-shell')) {
+  // Show ModernShellPrototype standalone at root and /prototype/modern-shell
+  if (location.pathname === '/' || location.pathname.startsWith('/prototype/modern-shell')) {
     return (
       <ThemeProvider>
         <MuiThemeProvider theme={modernDarkTheme}>
@@ -802,7 +803,7 @@ function AppContent() {
             <Box sx={{ height: '100%', bgcolor: 'grey.50' }}>
               <Suspense fallback={<Box sx={{ p: 3 }}><Typography>Loading…</Typography></Box>}>
                 <Routes>
-                  <Route path="/" element={<UnifiedDashboard userId="user_owner_123" userName="Owner" />} />
+                  <Route path="/" element={<ModernShellPrototypeScreen />} />
                   <Route path="/ui-showcase" element={<UIShowcase />} />
                   <Route path="/group/:groupId" element={<GroupPage />} />
                   <Route path="/user/:userId" element={<UserPage />} />

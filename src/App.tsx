@@ -63,6 +63,7 @@ import { UIShowcase } from './components/UIShowcase'
 import { NavigationProvider } from './contexts/NavigationContext'
 import BreadcrumbNavigation from './components/navigation/BreadcrumbNavigation'
 import ContextAwareSidebar from './components/navigation/ContextAwareSidebar'
+import { ModernShellPrototypeScreen } from './components/prototype/ModernShellPrototype'
 
 // Mock data for testing
 import { EntityDirectoryProvider, useEntityDirectory } from './contexts/EntityDirectoryContext'
@@ -131,6 +132,7 @@ const TestButton: React.FC = () => {
 // Inner component that has access to useNavigate() from BrowserRouter
 function AppContent() {
   const navigate = useNavigate(); // Now we can use this hook!
+  const location = useLocation();
 
   // Experimental mode is now the default
   // Enable all features
@@ -742,6 +744,16 @@ function AppContent() {
 
   // First-run wizard removed in browser mode; use AuthStatus/Login dialog instead
 
+  if (location.pathname.startsWith('/prototype/modern-shell')) {
+    return (
+      <ThemeProvider>
+        <MuiThemeProvider theme={modernDarkTheme}>
+          <ModernShellPrototypeScreen />
+        </MuiThemeProvider>
+      </ThemeProvider>
+    );
+  }
+
   const ThemedApp = (
     <TauriProvider>
       <AuthProvider>
@@ -796,6 +808,7 @@ function AppContent() {
                   <Route path="/user/:userId" element={<UserPage />} />
                   <Route path="/channel/:channelId" element={<ChannelPage />} />
                   <Route path="/project/:projectId" element={<ProjectPage />} />
+                  <Route path="/prototype/modern-shell" element={<ModernShellPrototypeScreen />} />
                   <Route path="/org/:orgId/channel/:channelId" element={<ChannelPage />} />
                   <Route path="/org/:orgId/project/:projectId" element={<ProjectPage />} />
                   <Route path="/org/:orgId/group/:groupId" element={<GroupPage />} />

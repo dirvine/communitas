@@ -62,6 +62,7 @@ import {
   HomeOutlined,
   LanguageOutlined,
   ArchiveOutlined,
+  EditOutlined,
 } from '@mui/icons-material'
 import { styled } from '@mui/material/styles'
 
@@ -75,6 +76,7 @@ const TOKENS = {
   accent: '#2EB67D',
   accentMuted: 'rgba(46, 182, 125, 0.15)',
   danger: '#E25555',
+  warning: '#F5B759',
 }
 
 type ConversationType = 'person' | 'group' | 'project' | 'channel' | 'organisation' | 'storage'
@@ -250,6 +252,7 @@ const presenceBadge = (conversation: Conversation) => {
   }
 }
 
+// Mock data from spec
 const channelThreadPreviews = [
   {
     id: 'thread-1',
@@ -327,7 +330,7 @@ const storageContainers = [
   },
 ]
 
-const ConversationPrototype: React.FC = () => {
+export const ModernShellPrototypeScreen: React.FC = () => {
   const isCompact = useMediaQuery((theme: Theme) => theme.breakpoints.down('lg'))
   const [activeFilter, setActiveFilter] = useState('all')
   const [drawerOpen, setDrawerOpen] = useState(true)
@@ -418,7 +421,7 @@ const ConversationPrototype: React.FC = () => {
         id: 'lauren',
         name: 'Lauren McFadyen',
         type: 'person',
-        snippet: 'That’s OK Lauren, no worries',
+        snippet: "That's OK Lauren, no worries",
         time: 'Yesterday',
         status: 'read',
         org: 'Direct messages',
@@ -451,7 +454,7 @@ const ConversationPrototype: React.FC = () => {
       {
         id: '3',
         author: 'David Allan',
-        text: 'Thanks for today guys, it’s a lot to go through, but very interesting meeting. We have a lot to think about here',
+        text: "Thanks for today guys, it's a lot to go through, but very interesting meeting. We have a lot to think about here",
         time: '21:35',
         self: true,
         status: 'read',
@@ -486,6 +489,8 @@ const ConversationPrototype: React.FC = () => {
   )
 
   const isOrganisationView = selectedConversation.type === 'organisation'
+  const isChannelView = selectedConversation.type === 'channel'
+  const isProjectView = selectedConversation.type === 'project'
   const isGroupConversation = selectedConversation.type !== 'person'
 
   useEffect(() => {
@@ -551,6 +556,7 @@ const ConversationPrototype: React.FC = () => {
     }
   }
 
+  // Render functions for different view modes
   const renderOrganisationOverview = () => (
     <Box
       sx={{
@@ -565,9 +571,10 @@ const ConversationPrototype: React.FC = () => {
         backgroundImage: 'radial-gradient(circle at 0% 0%, rgba(46,182,125,0.08), transparent 60%)',
       }}
     >
+      {/* Members Card with Remove/Edit actions */}
       <Box sx={{ bgcolor: alpha('#FFFFFF', 0.04), borderRadius: 3, p: 3, display: 'flex', flexDirection: 'column', gap: 1 }}>
         <Typography variant="subtitle1" fontWeight={600}>Members</Typography>
-        <Typography variant="body2" sx={{ color: TOKENS.textSecondary }}>Hover to see details or remove participants.</Typography>
+        <Typography variant="body2" sx={{ color: TOKENS.textSecondary }}>Hover to see details or manage participants.</Typography>
         <Stack spacing={1.2} sx={{ mt: 1 }}>
           {organisationOverviewData.members.map(member => (
             <Stack key={member.name} direction="row" spacing={1.5} alignItems="center" sx={{
@@ -583,20 +590,30 @@ const ConversationPrototype: React.FC = () => {
                 <Typography variant="body2" fontWeight={500}>{member.name}</Typography>
                 <Typography variant="caption" sx={{ color: TOKENS.textSecondary }}>{member.role} · {member.status}</Typography>
               </Box>
-              <Tooltip title="Message privately">
-                <IconButton size="small" sx={{ color: TOKENS.textSecondary }}><ReplyOutlined fontSize="inherit" /></IconButton>
+              <Tooltip title="Edit role">
+                <IconButton size="small" sx={{ color: TOKENS.textSecondary }} onClick={() => console.log('Edit member:', member.name)}>
+                  <EditOutlined fontSize="inherit" />
+                </IconButton>
               </Tooltip>
-              <Tooltip title="Remove">
-                <IconButton size="small" sx={{ color: TOKENS.textSecondary }}><CloseIcon fontSize="inherit" /></IconButton>
+              <Tooltip title="Message privately">
+                <IconButton size="small" sx={{ color: TOKENS.textSecondary }}>
+                  <ReplyOutlined fontSize="inherit" />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Remove from org">
+                <IconButton size="small" sx={{ color: TOKENS.danger }} onClick={() => console.log('Remove member:', member.name)}>
+                  <DeleteOutline fontSize="inherit" />
+                </IconButton>
               </Tooltip>
             </Stack>
           ))}
         </Stack>
       </Box>
 
+      {/* Projects Card with Archive action */}
       <Box sx={{ bgcolor: alpha('#FFFFFF', 0.04), borderRadius: 3, p: 3, display: 'flex', flexDirection: 'column', gap: 1 }}>
         <Typography variant="subtitle1" fontWeight={600}>Projects</Typography>
-        <Typography variant="body2" sx={{ color: TOKENS.textSecondary }}>Hover to open project workspace.</Typography>
+        <Typography variant="body2" sx={{ color: TOKENS.textSecondary }}>Hover to open project or archive.</Typography>
         <Stack spacing={1.2} sx={{ mt: 1 }}>
           {organisationOverviewData.projects.map(project => (
             <Box
@@ -612,12 +629,18 @@ const ConversationPrototype: React.FC = () => {
               }}
             >
               <FolderOutlined sx={{ color: TOKENS.accent }} />
-              <Typography variant="body2" fontWeight={500}>{project}</Typography>
+              <Typography variant="body2" fontWeight={500} sx={{ flexGrow: 1 }}>{project}</Typography>
+              <Tooltip title="Archive project">
+                <IconButton size="small" sx={{ color: TOKENS.textSecondary }} onClick={() => console.log('Archive project:', project)}>
+                  <ArchiveOutlined fontSize="inherit" />
+                </IconButton>
+              </Tooltip>
             </Box>
           ))}
         </Stack>
       </Box>
 
+      {/* Channels Card */}
       <Box sx={{ bgcolor: alpha('#FFFFFF', 0.04), borderRadius: 3, p: 3, display: 'flex', flexDirection: 'column', gap: 1 }}>
         <Typography variant="subtitle1" fontWeight={600}>Channels</Typography>
         <Typography variant="body2" sx={{ color: TOKENS.textSecondary }}>Hover to preview members.</Typography>
@@ -642,6 +665,7 @@ const ConversationPrototype: React.FC = () => {
         </Stack>
       </Box>
 
+      {/* Storage Card */}
       <Box sx={{ bgcolor: alpha('#FFFFFF', 0.04), borderRadius: 3, p: 3, display: 'flex', flexDirection: 'column', gap: 1 }}>
         <Typography variant="subtitle1" fontWeight={600}>Storage</Typography>
         <Typography variant="body2" sx={{ color: TOKENS.textSecondary }}>Manage encrypted vaults and virtual disks.</Typography>
@@ -664,7 +688,7 @@ const ConversationPrototype: React.FC = () => {
                     height: 6,
                     borderRadius: 999,
                     bgcolor: alpha('#FFFFFF', 0.1),
-                    '& .MuiLinearProgress-bar': { backgroundColor: container.status === 'Healthy' ? TOKENS.accent : '#F5B759' },
+                    '& .MuiLinearProgress-bar': { backgroundColor: container.status === 'Healthy' ? TOKENS.accent : TOKENS.warning },
                   }}
                 />
               </Stack>
@@ -693,94 +717,108 @@ const ConversationPrototype: React.FC = () => {
     </Box>
   )
 
-  const renderChannelMode = () => (
-    <Box sx={{ flexGrow: 1, px: 4, py: 4, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
-      {channelViewMode === 'threads' && (
-        <Stack spacing={2}>
-          {channelThreadPreviews.map(thread => (
-            <Box key={thread.id} sx={{ bgcolor: alpha('#FFFFFF', 0.04), borderRadius: 3, p: 2.5 }}>
-              <Typography variant="subtitle1" fontWeight={600}>{thread.title}</Typography>
-              <Typography variant="body2" sx={{ color: TOKENS.textSecondary, mt: 0.5 }}>{thread.summary}</Typography>
-              <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
-                <Button size="small" variant="outlined" sx={{ textTransform: 'none', borderRadius: 999, color: TOKENS.accent, borderColor: alpha(TOKENS.accent, 0.4) }}>Open thread</Button>
-                <Button size="small" variant="outlined" sx={{ textTransform: 'none', borderRadius: 999, color: TOKENS.textSecondary, borderColor: alpha('#FFFFFF', 0.2) }}>Reply privately</Button>
-              </Stack>
-            </Box>
-          ))}
-        </Stack>
-      )}
-      {channelViewMode === 'files' && (
-        <Stack spacing={1.2}>
-          {channelFiles.map(file => (
-            <Box key={file} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', bgcolor: alpha('#FFFFFF', 0.04), borderRadius: 2, px: 2, py: 1.2 }}>
-              <Typography variant="body2" fontWeight={500}>{file}</Typography>
-              <Stack direction="row" spacing={1}>
-                <Button size="small" variant="outlined" sx={{ textTransform: 'none', borderRadius: 999, color: TOKENS.accent, borderColor: alpha(TOKENS.accent, 0.4) }}>Open</Button>
-                <Button size="small" variant="outlined" sx={{ textTransform: 'none', borderRadius: 999, color: TOKENS.textSecondary, borderColor: alpha('#FFFFFF', 0.2) }}>Share</Button>
-              </Stack>
-            </Box>
-          ))}
-        </Stack>
-      )}
-      {channelViewMode === 'integrations' && (
-        <Stack spacing={1.2}>
-          {channelIntegrations.map(integration => (
-            <Box key={integration} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', bgcolor: alpha('#FFFFFF', 0.04), borderRadius: 2, px: 2, py: 1.2 }}>
-              <Box>
-                <Typography variant="body2" fontWeight={500}>{integration}</Typography>
-                <Typography variant="caption" sx={{ color: TOKENS.textSecondary }}>Connected · click to configure</Typography>
-              </Box>
-              <Button size="small" variant="outlined" sx={{ textTransform: 'none', borderRadius: 999, color: TOKENS.accent, borderColor: alpha(TOKENS.accent, 0.4) }}>Manage</Button>
-            </Box>
-          ))}
-        </Stack>
-      )}
-    </Box>
-  )
+  const renderChannelMode = () => {
+    // Only show non-chat modes when channel is selected
+    if (!isChannelView || channelViewMode === 'chat') {
+      return null
+    }
 
-  const renderProjectMode = () => (
-    <Box sx={{ flexGrow: 1, px: 4, py: 4, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 3 }}>
-      {projectViewMode === 'board' && (
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: 'repeat(3, 1fr)' }, gap: 2 }}>
-          {projectBoard.map(column => (
-            <Box key={column.title} sx={{ bgcolor: alpha('#FFFFFF', 0.04), borderRadius: 2, p: 2, display: 'flex', flexDirection: 'column', gap: 1.2 }}>
-              <Typography variant="subtitle2" fontWeight={600}>{column.title}</Typography>
-              {column.items.map(item => (
-                <Box key={item} sx={{ bgcolor: alpha('#FFFFFF', 0.06), borderRadius: 2, p: 1.5 }}>
-                  <Typography variant="body2" fontWeight={500}>{item}</Typography>
-                  <Typography variant="caption" sx={{ color: TOKENS.textSecondary }}>Assignee: Lauren</Typography>
-                </Box>
-              ))}
-              <Button size="small" variant="outlined" sx={{ textTransform: 'none', borderRadius: 999, color: TOKENS.textSecondary, borderColor: alpha('#FFFFFF', 0.2) }}>Add card</Button>
-            </Box>
-          ))}
-        </Box>
-      )}
-      {projectViewMode === 'tasks' && (
-        <Stack spacing={1.2}>
-          {projectTasks.map(task => (
-            <Box key={task.title} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', bgcolor: alpha('#FFFFFF', 0.04), borderRadius: 2, px: 2, py: 1.2 }}>
-              <Box>
-                <Typography variant="body2" fontWeight={500}>{task.title}</Typography>
-                <Typography variant="caption" sx={{ color: TOKENS.textSecondary }}>{task.assignee} · {task.status} · Due {task.due}</Typography>
+    return (
+      <Box sx={{ flexGrow: 1, px: 4, py: 4, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {channelViewMode === 'threads' && (
+          <Stack spacing={2}>
+            {channelThreadPreviews.map(thread => (
+              <Box key={thread.id} sx={{ bgcolor: alpha('#FFFFFF', 0.04), borderRadius: 3, p: 2.5 }}>
+                <Typography variant="subtitle1" fontWeight={600}>{thread.title}</Typography>
+                <Typography variant="body2" sx={{ color: TOKENS.textSecondary, mt: 0.5 }}>{thread.summary}</Typography>
+                <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
+                  <Button size="small" variant="outlined" sx={{ textTransform: 'none', borderRadius: 999, color: TOKENS.accent, borderColor: alpha(TOKENS.accent, 0.4) }}>Open thread</Button>
+                  <Button size="small" variant="outlined" sx={{ textTransform: 'none', borderRadius: 999, color: TOKENS.textSecondary, borderColor: alpha('#FFFFFF', 0.2) }}>Reply privately</Button>
+                </Stack>
               </Box>
-              <Stack direction="row" spacing={1}>
-                <Button size="small" variant="outlined" sx={{ textTransform: 'none', borderRadius: 999, color: TOKENS.accent, borderColor: alpha(TOKENS.accent, 0.4) }}>Update</Button>
-                <Button size="small" variant="outlined" sx={{ textTransform: 'none', borderRadius: 999, color: TOKENS.textSecondary, borderColor: alpha('#FFFFFF', 0.2) }}>Comment</Button>
-              </Stack>
-            </Box>
-          ))}
-        </Stack>
-      )}
-      {projectViewMode === 'timeline' && (
-        <Stack spacing={1.2}>
-          {projectTimeline.map(event => (
-            <Typography key={event} variant="body2" sx={{ color: TOKENS.textSecondary }}>{event}</Typography>
-          ))}
-        </Stack>
-      )}
-    </Box>
-  )
+            ))}
+          </Stack>
+        )}
+        {channelViewMode === 'files' && (
+          <Stack spacing={1.2}>
+            {channelFiles.map(file => (
+              <Box key={file} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', bgcolor: alpha('#FFFFFF', 0.04), borderRadius: 2, px: 2, py: 1.2 }}>
+                <Typography variant="body2" fontWeight={500}>{file}</Typography>
+                <Stack direction="row" spacing={1}>
+                  <Button size="small" variant="outlined" sx={{ textTransform: 'none', borderRadius: 999, color: TOKENS.accent, borderColor: alpha(TOKENS.accent, 0.4) }}>Open</Button>
+                  <Button size="small" variant="outlined" sx={{ textTransform: 'none', borderRadius: 999, color: TOKENS.textSecondary, borderColor: alpha('#FFFFFF', 0.2) }}>Share</Button>
+                </Stack>
+              </Box>
+            ))}
+          </Stack>
+        )}
+        {channelViewMode === 'integrations' && (
+          <Stack spacing={1.2}>
+            {channelIntegrations.map(integration => (
+              <Box key={integration} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', bgcolor: alpha('#FFFFFF', 0.04), borderRadius: 2, px: 2, py: 1.2 }}>
+                <Box>
+                  <Typography variant="body2" fontWeight={500}>{integration}</Typography>
+                  <Typography variant="caption" sx={{ color: TOKENS.textSecondary }}>Connected · click to configure</Typography>
+                </Box>
+                <Button size="small" variant="outlined" sx={{ textTransform: 'none', borderRadius: 999, color: TOKENS.accent, borderColor: alpha(TOKENS.accent, 0.4) }}>Manage</Button>
+              </Box>
+            ))}
+          </Stack>
+        )}
+      </Box>
+    )
+  }
+
+  const renderProjectMode = () => {
+    // Only show non-chat modes when project is selected
+    if (!isProjectView || projectViewMode === 'chat') {
+      return null
+    }
+
+    return (
+      <Box sx={{ flexGrow: 1, px: 4, py: 4, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 3 }}>
+        {projectViewMode === 'board' && (
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: 'repeat(3, 1fr)' }, gap: 2 }}>
+            {projectBoard.map(column => (
+              <Box key={column.title} sx={{ bgcolor: alpha('#FFFFFF', 0.04), borderRadius: 2, p: 2, display: 'flex', flexDirection: 'column', gap: 1.2 }}>
+                <Typography variant="subtitle2" fontWeight={600}>{column.title}</Typography>
+                {column.items.map(item => (
+                  <Box key={item} sx={{ bgcolor: alpha('#FFFFFF', 0.06), borderRadius: 2, p: 1.5 }}>
+                    <Typography variant="body2" fontWeight={500}>{item}</Typography>
+                    <Typography variant="caption" sx={{ color: TOKENS.textSecondary }}>Assignee: Lauren</Typography>
+                  </Box>
+                ))}
+                <Button size="small" variant="outlined" sx={{ textTransform: 'none', borderRadius: 999, color: TOKENS.textSecondary, borderColor: alpha('#FFFFFF', 0.2) }}>Add card</Button>
+              </Box>
+            ))}
+          </Box>
+        )}
+        {projectViewMode === 'tasks' && (
+          <Stack spacing={1.2}>
+            {projectTasks.map(task => (
+              <Box key={task.title} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', bgcolor: alpha('#FFFFFF', 0.04), borderRadius: 2, px: 2, py: 1.2 }}>
+                <Box>
+                  <Typography variant="body2" fontWeight={500}>{task.title}</Typography>
+                  <Typography variant="caption" sx={{ color: TOKENS.textSecondary }}>{task.assignee} · {task.status} · Due {task.due}</Typography>
+                </Box>
+                <Stack direction="row" spacing={1}>
+                  <Button size="small" variant="outlined" sx={{ textTransform: 'none', borderRadius: 999, color: TOKENS.accent, borderColor: alpha(TOKENS.accent, 0.4) }}>Update</Button>
+                  <Button size="small" variant="outlined" sx={{ textTransform: 'none', borderRadius: 999, color: TOKENS.textSecondary, borderColor: alpha('#FFFFFF', 0.2) }}>Comment</Button>
+                </Stack>
+              </Box>
+            ))}
+          </Stack>
+        )}
+        {projectViewMode === 'timeline' && (
+          <Stack spacing={1.2}>
+            {projectTimeline.map(event => (
+              <Typography key={event} variant="body2" sx={{ color: TOKENS.textSecondary }}>{event}</Typography>
+            ))}
+          </Stack>
+        )}
+      </Box>
+    )
+  }
 
   const renderChatTimeline = () => (
     <Box
@@ -926,3 +964,357 @@ const ConversationPrototype: React.FC = () => {
       </Stack>
     </Box>
   )
+
+  // Main component render
+  return (
+    <Box sx={{ display: 'flex', height: '100vh', bgcolor: TOKENS.bgBase, color: TOKENS.textPrimary }}>
+      {/* A. System Rail (52px) */}
+      <Box
+        sx={{
+          width: 52,
+          bgcolor: TOKENS.bgRaised,
+          borderRight: `1px solid ${TOKENS.borderSubtle}`,
+          display: 'flex',
+          flexDirection: 'column',
+          p: 1,
+          gap: 0.5,
+        }}
+      >
+        <Stack spacing={0.5} sx={{ flexGrow: 1 }}>
+          <Tooltip title="Home (⌘+1)" placement="right">
+            <SystemRailButton onClick={handleHome}>
+              <HomeOutlined />
+            </SystemRailButton>
+          </Tooltip>
+          <Tooltip title="Chats" placement="right">
+            <SystemRailButton>
+              <ChatBubbleOutline />
+            </SystemRailButton>
+          </Tooltip>
+          <Tooltip title="Organizations" placement="right">
+            <SystemRailButton>
+              <Apartment />
+            </SystemRailButton>
+          </Tooltip>
+          <Tooltip title="Discover" placement="right">
+            <SystemRailButton>
+              <ExploreOutlined />
+            </SystemRailButton>
+          </Tooltip>
+          <Tooltip title="Storage" placement="right">
+            <SystemRailButton>
+              <StorageOutlined />
+            </SystemRailButton>
+          </Tooltip>
+          {selectedConversation.hasWebsite && (
+            <Tooltip title="Website" placement="right">
+              <SystemRailButton onClick={handleWebsiteOpen} sx={{ color: TOKENS.accent }}>
+                <LanguageOutlined />
+              </SystemRailButton>
+            </Tooltip>
+          )}
+          <Tooltip title="Calls" placement="right">
+            <SystemRailButton>
+              <PhoneOutlined />
+            </SystemRailButton>
+          </Tooltip>
+        </Stack>
+        <Tooltip title="Settings" placement="right">
+          <SystemRailButton>
+            <SettingsOutlined />
+          </SystemRailButton>
+        </Tooltip>
+        <Avatar sx={{ width: 40, height: 40, cursor: 'pointer', mx: 'auto' }}>DA</Avatar>
+      </Box>
+
+      {/* B. Conversation List (320-360px) */}
+      <Box
+        sx={{
+          width: isCompact ? 280 : 360,
+          bgcolor: TOKENS.bgRaised,
+          borderRight: `1px solid ${TOKENS.borderSubtle}`,
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
+        {/* B1. Header */}
+        <Box sx={{ p: 2, borderBottom: `1px solid ${TOKENS.borderSubtle}` }}>
+          <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
+            <Typography variant="h6" fontWeight={600}>Chats</Typography>
+            <Stack direction="row" spacing={0.5}>
+              <IconButton size="small" sx={{ color: TOKENS.textSecondary }}><Add /></IconButton>
+              <IconButton size="small" sx={{ color: TOKENS.textSecondary }}><MoreHoriz /></IconButton>
+            </Stack>
+          </Stack>
+        </Box>
+
+        {/* B2. Filters */}
+        <Box sx={{ px: 2, py: 1.5, borderBottom: `1px solid ${TOKENS.borderSubtle}` }}>
+          <Stack direction="row" spacing={0.75} sx={{ overflowX: 'auto' }}>
+            {filters.map(f => (
+              <FilterChip
+                key={f.key}
+                label={f.label}
+                variant={activeFilter === f.key ? 'filled' : 'outlined'}
+                onClick={() => setActiveFilter(f.key)}
+              />
+            ))}
+          </Stack>
+        </Box>
+
+        {/* B3. Search */}
+        <Box sx={{ px: 2, py: 1.5 }}>
+          <InputBase
+            placeholder="Search..."
+            startAdornment={<SearchIcon sx={{ mr: 1, color: TOKENS.textSecondary }} />}
+            sx={{
+              width: '100%',
+              bgcolor: alpha('#FFFFFF', 0.05),
+              borderRadius: 2,
+              px: 1.5,
+              py: 0.75,
+              color: TOKENS.textPrimary,
+              fontSize: 14,
+            }}
+          />
+        </Box>
+
+        {/* B4. List Items */}
+        <Box sx={{ flexGrow: 1, overflowY: 'auto', px: 1 }}>
+          {filteredConversations.map(conv => {
+            const badge = presenceBadge(conv)
+            return (
+              <ConversationListItem
+                key={conv.id}
+                selected={conv.id === selectedConversationId}
+                onClick={() => setSelectedConversationId(conv.id)}
+              >
+                <Box sx={{ position: 'relative' }}>
+                  <Avatar sx={{ width: 48, height: 48, ...avatarShapeStyles[conv.type] }}>
+                    {conv.name.substring(0, 2).toUpperCase()}
+                  </Avatar>
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      bottom: -2,
+                      right: -2,
+                      width: 20,
+                      height: 20,
+                      borderRadius: '50%',
+                      bgcolor: badge.bg,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      border: `2px solid ${TOKENS.bgRaised}`,
+                    }}
+                  >
+                    {badge.icon}
+                  </Box>
+                </Box>
+                <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                  <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
+                    <Typography variant="body2" fontWeight={600} noWrap>{conv.name}</Typography>
+                    <Typography variant="caption" sx={{ color: TOKENS.textSecondary, flexShrink: 0 }}>{conv.time}</Typography>
+                  </Stack>
+                  <Stack direction="row" spacing={0.5} alignItems="center">
+                    <Typography variant="body2" sx={{ color: TOKENS.textSecondary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {conv.snippet}
+                    </Typography>
+                    {conv.status === 'read' && <CheckCircle sx={{ fontSize: 14, color: TOKENS.accent, flexShrink: 0 }} />}
+                  </Stack>
+                </Box>
+                {conv.unread && (
+                  <Badge badgeContent={conv.unread} sx={{ '& .MuiBadge-badge': { bgcolor: TOKENS.accent, color: '#000' } }} />
+                )}
+              </ConversationListItem>
+            )
+          })}
+        </Box>
+      </Box>
+
+      {/* C. Conversation Pane */}
+      <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', position: 'relative' }}>
+        {/* C1. Header */}
+        <Box
+          sx={{
+            height: 64,
+            bgcolor: TOKENS.bgRaised,
+            borderBottom: `1px solid ${TOKENS.borderSubtle}`,
+            px: 3,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <Stack direction="row" spacing={1.5} alignItems="center">
+            <Avatar sx={{ width: 40, height: 40 }}>{selectedConversation.name.substring(0, 2)}</Avatar>
+            <Box>
+              <Typography variant="subtitle1" fontWeight={600}>{selectedConversation.name}</Typography>
+              <Typography variant="caption" sx={{ color: TOKENS.textSecondary }}>{headerSubtitle}</Typography>
+            </Box>
+          </Stack>
+          <Stack direction="row" spacing={1}>
+            <Tooltip title="Call">
+              <IconButton sx={{ color: TOKENS.textSecondary }}><Call /></IconButton>
+            </Tooltip>
+            <Tooltip title="Video">
+              <IconButton sx={{ color: TOKENS.textSecondary }}><VideocamOutlined /></IconButton>
+            </Tooltip>
+            <Tooltip title={drawerOpen ? 'Close info' : 'Open info'}>
+              <IconButton sx={{ color: TOKENS.textSecondary }} onClick={() => setDrawerOpen(o => !o)}>
+                <InfoOutlined />
+              </IconButton>
+            </Tooltip>
+          </Stack>
+        </Box>
+
+        {/* View Mode Chips for Channels */}
+        {isChannelView && (
+          <Box sx={{ px: 3, py: 1.5, borderBottom: `1px solid ${TOKENS.borderSubtle}`, bgcolor: TOKENS.bgRaised }}>
+            <Stack direction="row" spacing={1}>
+              {channelModes.map(mode => (
+                <ViewChip
+                  key={mode.key}
+                  label={mode.label}
+                  variant={channelViewMode === mode.key ? 'filled' : 'outlined'}
+                  onClick={() => setChannelViewMode(mode.key)}
+                />
+              ))}
+            </Stack>
+          </Box>
+        )}
+
+        {/* View Mode Chips for Projects */}
+        {isProjectView && (
+          <Box sx={{ px: 3, py: 1.5, borderBottom: `1px solid ${TOKENS.borderSubtle}`, bgcolor: TOKENS.bgRaised }}>
+            <Stack direction="row" spacing={1}>
+              {projectModes.map(mode => (
+                <ViewChip
+                  key={mode.key}
+                  label={mode.label}
+                  variant={projectViewMode === mode.key ? 'filled' : 'outlined'}
+                  onClick={() => setProjectViewMode(mode.key)}
+                />
+              ))}
+            </Stack>
+          </Box>
+        )}
+
+        {/* C2. Content Area - renders different views based on mode */}
+        {isOrganisationView ? renderOrganisationOverview() :
+         isChannelView && channelViewMode !== 'chat' ? renderChannelMode() :
+         isProjectView && projectViewMode !== 'chat' ? renderProjectMode() :
+         renderChatTimeline()}
+
+        {/* C3. Composer (only show for chat modes) */}
+        {!isOrganisationView &&
+         ((!isChannelView && !isProjectView) ||
+          (isChannelView && channelViewMode === 'chat') ||
+          (isProjectView && projectViewMode === 'chat')) && (
+          <Box
+            sx={{
+              p: 2,
+              bgcolor: alpha(TOKENS.bgRaised, 0.95),
+              backdropFilter: 'blur(10px)',
+              borderTop: `1px solid ${TOKENS.borderSubtle}`,
+            }}
+          >
+            <Box
+              sx={{
+                bgcolor: alpha('#FFFFFF', 0.05),
+                borderRadius: 3,
+                px: 2,
+                py: 1.5,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1.5,
+              }}
+            >
+              <IconButton size="small" sx={{ color: TOKENS.textSecondary }}><EmojiEmotionsOutlined /></IconButton>
+              <IconButton size="small" sx={{ color: TOKENS.textSecondary }}><AttachFileOutlined /></IconButton>
+              <InputBase
+                placeholder="Message..."
+                sx={{ flexGrow: 1, color: TOKENS.textPrimary, fontSize: 14 }}
+              />
+              <IconButton size="small" sx={{ color: TOKENS.accent }}><SendRounded /></IconButton>
+            </Box>
+          </Box>
+        )}
+
+        {/* C4. Context Drawer */}
+        {drawerOpen && (
+          <Box
+            sx={{
+              position: 'absolute',
+              top: 64,
+              right: 0,
+              bottom: 0,
+              width: 320,
+              bgcolor: TOKENS.bgRaised,
+              borderLeft: `1px solid ${TOKENS.borderSubtle}`,
+              display: 'flex',
+              flexDirection: 'column',
+              zIndex: 10,
+            }}
+          >
+            {/* Drawer Tabs */}
+            <Box sx={{ px: 2, py: 1.5, borderBottom: `1px solid ${TOKENS.borderSubtle}` }}>
+              <Stack direction="row" spacing={0.75} sx={{ overflowX: 'auto', flexWrap: 'wrap', gap: 0.75 }}>
+                {(['Overview', 'Members', 'Files', 'Tasks', 'Timeline', 'Storage'] as DrawerTab[]).map(tab => (
+                  <DrawerTabChip
+                    key={tab}
+                    label={tab}
+                    size="small"
+                    variant={activeDrawerTab === tab ? 'filled' : 'outlined'}
+                    onClick={() => setActiveDrawerTab(tab)}
+                  />
+                ))}
+              </Stack>
+            </Box>
+
+            {/* Drawer Content */}
+            <Box sx={{ flexGrow: 1, overflowY: 'auto', p: 2 }}>
+              <Typography variant="body2" sx={{ color: TOKENS.textSecondary }}>
+                {activeDrawerTab} content goes here
+              </Typography>
+            </Box>
+          </Box>
+        )}
+      </Box>
+
+      {/* Message Context Menu */}
+      <Menu
+        anchorEl={messageMenu.anchorEl}
+        open={Boolean(messageMenu.anchorEl)}
+        onClose={handleMessageMenuClose}
+        sx={{ '& .MuiPaper-root': { bgcolor: TOKENS.bgRaised, color: TOKENS.textPrimary } }}
+      >
+        <MenuItem onClick={handleMessageMenuClose}>
+          <ListItemIcon><ReplyOutlined sx={{ color: TOKENS.textPrimary }} /></ListItemIcon>
+          <ListItemText>Reply</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={handleMessageMenuClose}>
+          <ListItemIcon><ForwardOutlined sx={{ color: TOKENS.textPrimary }} /></ListItemIcon>
+          <ListItemText>Forward</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={handleMessageMenuClose}>
+          <ListItemIcon><ContentCopyOutlined sx={{ color: TOKENS.textPrimary }} /></ListItemIcon>
+          <ListItemText>Copy</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={handleMessageMenuClose}>
+          <ListItemIcon><StarBorder sx={{ color: TOKENS.textPrimary }} /></ListItemIcon>
+          <ListItemText>Star</ListItemText>
+        </MenuItem>
+        <Divider />
+        <MenuItem onClick={handleMessageMenuClose}>
+          <ListItemIcon><ReportProblemOutlined sx={{ color: TOKENS.danger }} /></ListItemIcon>
+          <ListItemText sx={{ color: TOKENS.danger }}>Report</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={handleMessageMenuClose}>
+          <ListItemIcon><DeleteOutline sx={{ color: TOKENS.danger }} /></ListItemIcon>
+          <ListItemText sx={{ color: TOKENS.danger }}>Delete</ListItemText>
+        </MenuItem>
+      </Menu>
+    </Box>
+  )
+}

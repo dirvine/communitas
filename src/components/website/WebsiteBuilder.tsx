@@ -34,7 +34,7 @@ import {
 } from '@mui/icons-material';
 import { motion } from 'framer-motion';
 import { useResponsive, ResponsiveContainer, ResponsiveGrid } from '../responsive';
-import { BlogManager } from '../blog';
+// Removed: BlogManager - using modern shell instead
 
 // Website configuration interface
 interface WebsiteConfig {
@@ -355,7 +355,7 @@ export default function WebsiteBuilder() {
 
         {/* Content Tab */}
         {activeTab === 'content' && (
-          <BlogManager />
+          <Box>Content manager - use modern shell instead</Box>
         )}
 
         {/* Design Tab */}

@@ -98,7 +98,7 @@ import { networkService } from './services/network/NetworkConnectionService'
 import QuickActionsBar, { SettingsButton } from './components/QuickActionsBar'
 import StorageWorkspaceDialog from './components/storage/StorageWorkspaceDialog'
 
-const IdentityTab = React.lazy(() => import('./components/tabs/IdentityTab'))
+// Removed: IdentityTab - using modern shell instead
 const WebsitePublishPanel = React.lazy(() => import('./components/dev/WebsitePublishPanel'))
 const UnifiedDashboard = React.lazy(() => import('./components/unified/UnifiedDashboard').then(m => ({ default: m.UnifiedDashboard })))
 // Commented out - missing test components

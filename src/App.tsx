@@ -10,6 +10,7 @@ import { ThemeProvider as MuiThemeProvider } from '@mui/material/styles'
 
 // Modern Shell - The only UI we need
 import { ModernShellPrototypeScreen } from './components/prototype/ModernShellPrototype'
+import { SitesDemo } from './components/SitesDemo'
 
 // Contexts needed for ModernShell
 import { TauriProvider } from './contexts/TauriContext'
@@ -55,6 +56,7 @@ function AppContent() {
                 <Routes>
                   <Route path="/" element={<ModernShellPrototypeScreen />} />
                   <Route path="/prototype/modern-shell" element={<ModernShellPrototypeScreen />} />
+                  <Route path="/sites-demo" element={<SitesDemo />} />
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
               </EntityDirectoryProvider>

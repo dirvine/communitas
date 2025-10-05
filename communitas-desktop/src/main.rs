@@ -22,6 +22,9 @@ mod core_commands;
 mod core_groups;
 mod core_storage;
 mod crdt_manager;
+#[cfg(feature = "gossip_overlay")]
+mod gossip_commands;
+mod message_sync_commands;
 mod network;
 mod security;
 mod services;
@@ -102,6 +105,10 @@ async fn main() -> anyhow::Result<()> {
         .manage(Arc::new(RwLock::new(
             security::raw_spki::RawSpkiState::default(),
         )))
+        // Message sync service state
+        .manage(Arc::new(RwLock::new(
+            Option::<communitas_core::message_sync::MessageSyncService>::None,
+        )))
         .invoke_handler(tauri::generate_handler![
             // Auth commands
             commands::auth::auth_initialize,
@@ -170,6 +177,8 @@ async fn main() -> anyhow::Result<()> {
             // Entity management
             core_commands::core_entity_update,
             core_commands::core_entity_delete,
+            core_commands::core_entity_mute,
+            core_commands::core_entity_block,
             // Network sync
             core_commands::get_sync_status,
             core_commands::subscribe_to_entity,
@@ -218,6 +227,69 @@ async fn main() -> anyhow::Result<()> {
             sync::sync_fetch_deltas,
             security::raw_spki::sync_set_quic_pinned_spki,
             security::raw_spki::sync_clear_quic_pinned_spki,
+            // Message CRDT sync commands
+            message_sync_commands::message_sync_initialize,
+            message_sync_commands::message_sync_get_all_messages,
+            message_sync_commands::message_sync_receive_message,
+            message_sync_commands::message_sync_send_message,
+            message_sync_commands::message_sync_request_sync,
+            message_sync_commands::message_sync_handle_sync_response,
+            message_sync_commands::message_sync_get_sync_state,
+            message_sync_commands::message_sync_get_messages,
+            message_sync_commands::message_sync_needs_sync,
+            // Gossip overlay commands (feature-gated)
+            #[cfg(feature = "gossip_overlay")]
+            gossip_commands::gossip_initialize,
+            #[cfg(feature = "gossip_overlay")]
+            gossip_commands::gossip_store_message,
+            #[cfg(feature = "gossip_overlay")]
+            gossip_commands::gossip_get_all_messages,
+            #[cfg(feature = "gossip_overlay")]
+            gossip_commands::gossip_contains_message,
+            #[cfg(feature = "gossip_overlay")]
+            gossip_commands::gossip_remove_message,
+            #[cfg(feature = "gossip_overlay")]
+            gossip_commands::gossip_find_contact,
+            #[cfg(feature = "gossip_overlay")]
+            gossip_commands::gossip_add_contact,
+            #[cfg(feature = "gossip_overlay")]
+            gossip_commands::gossip_get_contacts,
+            #[cfg(feature = "gossip_overlay")]
+            gossip_commands::gossip_remove_contact,
+            #[cfg(feature = "gossip_overlay")]
+            gossip_commands::gossip_send_direct_message,
+            #[cfg(feature = "gossip_overlay")]
+            gossip_commands::gossip_subscribe_to_entity,
+            #[cfg(feature = "gossip_overlay")]
+            gossip_commands::gossip_publish_to_entity,
+            #[cfg(feature = "gossip_overlay")]
+            gossip_commands::gossip_join_entity,
+            #[cfg(feature = "gossip_overlay")]
+            gossip_commands::gossip_leave_entity,
+            #[cfg(feature = "gossip_overlay")]
+            gossip_commands::gossip_start_presence_beacons,
+            #[cfg(feature = "gossip_overlay")]
+            gossip_commands::gossip_stop_presence_beacons,
+            #[cfg(feature = "gossip_overlay")]
+            gossip_commands::gossip_is_peer_online,
+            #[cfg(feature = "gossip_overlay")]
+            gossip_commands::gossip_get_online_peers,
+            #[cfg(feature = "gossip_overlay")]
+            gossip_commands::gossip_add_favourite_contact,
+            #[cfg(feature = "gossip_overlay")]
+            gossip_commands::gossip_get_favourite_contacts,
+            #[cfg(feature = "gossip_overlay")]
+            gossip_commands::gossip_replicate_to_favourites,
+            #[cfg(feature = "gossip_overlay")]
+            gossip_commands::gossip_recover_from_favourite,
+            #[cfg(feature = "gossip_overlay")]
+            gossip_commands::gossip_site_publish,
+            #[cfg(feature = "gossip_overlay")]
+            gossip_commands::gossip_site_fetch,
+            #[cfg(feature = "gossip_overlay")]
+            gossip_commands::gossip_site_list,
+            #[cfg(feature = "gossip_overlay")]
+            gossip_commands::gossip_site_providers,
             health,
             // Organization commands - Channels
             commands::org_commands::create_channel,
@@ -250,6 +322,12 @@ async fn main() -> anyhow::Result<()> {
             commands::org_commands::get_issue_sync_update,
             commands::org_commands::apply_issue_sync_update,
         ]);
+
+    // Conditionally add gossip state management
+    #[cfg(feature = "gossip_overlay")]
+    let builder = builder.manage(Arc::new(RwLock::new(
+        Option::<communitas_core::gossip::GossipContext>::None,
+    )));
 
     builder
         .setup(|_app| Ok(()))

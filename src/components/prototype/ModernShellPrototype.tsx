@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react'
+import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react'
 import {
   Box,
   Typography,
@@ -20,6 +20,8 @@ import {
   Divider,
   Badge,
 } from '@mui/material'
+import { getMessageSyncService } from '../../services/MessageSyncService.browser'
+import type { CRDTMessage } from '../../types/crdt'
 import {
   ChatBubbleOutline,
   PeopleOutline,
@@ -57,11 +59,12 @@ import {
   ReportProblemOutlined,
   DeleteOutline,
   CheckBoxOutlineBlankOutlined,
-  KeyboardArrowDown,
   PersonOutline,
   HomeOutlined,
   LanguageOutlined,
   ArchiveOutlined,
+  MoreVert,
+  KeyboardArrowDown,
   EditOutlined,
 } from '@mui/icons-material'
 import { styled } from '@mui/material/styles'
@@ -355,6 +358,13 @@ export const ModernShellPrototypeScreen: React.FC = () => {
   const [contactDialogMode, setContactDialogMode] = useState<'add' | 'edit' | 'delete' | null>(null)
   const [selectedContact, setSelectedContact] = useState<Conversation | null>(null)
 
+  // Entity menu state
+  const [entityMenuAnchor, setEntityMenuAnchor] = useState<HTMLElement | null>(null)
+  const [sidebarMenuState, setSidebarMenuState] = useState<{ anchorEl: HTMLElement | null; conversation: Conversation | null }>({
+    anchorEl: null,
+    conversation: null,
+  })
+
   const conversations = useMemo<Conversation[]>(
     () => [
       {
@@ -448,50 +458,183 @@ export const ModernShellPrototypeScreen: React.FC = () => {
 
   const [selectedConversationId, setSelectedConversationId] = useState(() => conversations[0]?.id ?? '')
 
-  const messages = useMemo<Message[]>(
-    () => [
-      {
-        id: '1',
-        author: 'System',
-        text: 'You created this group',
-        time: 'Today',
-        self: false,
-        system: true,
-      },
-      {
-        id: '2',
-        author: 'System',
-        text: 'Messages and calls are end-to-end encrypted.',
-        time: 'Today',
-        self: false,
-        system: true,
-      },
-      {
-        id: '3',
-        author: 'David Allan',
-        text: "Thanks for today guys, it's a lot to go through, but very interesting meeting. We have a lot to think about here",
-        time: '21:35',
-        self: true,
-        status: 'read',
-        threadCount: 3,
-        latestReplyBy: 'Lauren',
-        reactions: [
-          { emoji: '👍', count: 4 },
-          { emoji: '🎉', count: 2 },
-        ],
-      },
-      {
-        id: '4',
-        author: 'Lauren',
-        text: 'Good to see you all. Will reflect and come back with thoughts. Using Communitas until something better is available? 😄',
-        time: '21:37',
-        self: false,
-        status: 'delivered',
-        reactions: [{ emoji: '😄', count: 3 }],
-      },
-    ],
-    []
-  )
+  // CRDT Message State
+  const [messages, setMessages] = useState<Message[]>([])
+  const [messageInputValue, setMessageInputValue] = useState('')
+  const [ourPeerId, setOurPeerId] = useState<string>('')
+  const messageSyncService = useRef(getMessageSyncService())
+  const syncIntervalRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Convert CRDT message to UI Message format
+  const convertCRDTToUIMessage = useCallback((crdtMsg: CRDTMessage, ourPeerId: string): Message => {
+    const isOurMessage = crdtMsg.metadata.author_peer_id === ourPeerId
+
+    return {
+      id: crdtMsg.metadata.id,
+      author: crdtMsg.content.author,
+      text: crdtMsg.content.text,
+      time: new Date(crdtMsg.metadata.timestamp).toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit'
+      }),
+      self: isOurMessage,
+      status: crdtMsg.local_state?.status?.toLowerCase() as 'sent' | 'delivered' | 'read' | undefined,
+      threadCount: crdtMsg.local_state?.thread_count,
+      latestReplyBy: crdtMsg.local_state?.latest_reply_by,
+      reactions: crdtMsg.local_state?.reactions?.map(r => ({
+        emoji: r.emoji,
+        count: r.count,
+        userReacted: r.user_reacted,
+      })),
+    }
+  }, [])
+
+  // Load messages for current conversation
+  const loadMessages = useCallback(async (entityId: string) => {
+    try {
+      const crdtMessages = await messageSyncService.current.getMessages(entityId)
+      const uiMessages = crdtMessages.map(msg => convertCRDTToUIMessage(msg, ourPeerId))
+      setMessages(uiMessages)
+      console.log(`📨 Loaded ${uiMessages.length} messages for entity ${entityId}`)
+    } catch (error) {
+      console.error('❌ Failed to load messages:', error)
+      // Show system messages on error
+      setMessages([
+        {
+          id: 'system-1',
+          author: 'System',
+          text: 'Messages are end-to-end encrypted.',
+          time: 'Today',
+          self: false,
+          system: true,
+        },
+      ])
+    }
+  }, [ourPeerId, convertCRDTToUIMessage])
+
+  // Initialize MessageSyncService with peer ID
+  useEffect(() => {
+    const initializeMessaging = async () => {
+      // Generate or retrieve four-word peer ID
+      // Priority: URL param > localStorage > default
+      const urlParams = new URLSearchParams(window.location.search)
+      const peerIdFromUrl = urlParams.get('peerId')
+      const peerIdFromStorage = localStorage.getItem('testPeerId')
+      const testPeerId = peerIdFromUrl || peerIdFromStorage || 'ocean-forest-moon-star'
+
+      // Save to localStorage for persistence
+      localStorage.setItem('testPeerId', testPeerId)
+      setOurPeerId(testPeerId)
+
+      try {
+        await messageSyncService.current.initialize(testPeerId)
+        console.log('✅ MessageSyncService initialized with peer:', testPeerId)
+
+        // Load existing messages for selected conversation
+        if (selectedConversationId) {
+          const crdtMessages = await messageSyncService.current.getMessages(selectedConversationId)
+          const uiMessages = crdtMessages.map(msg => convertCRDTToUIMessage(msg, testPeerId))
+          setMessages(uiMessages)
+        }
+      } catch (error) {
+        console.error('❌ Failed to initialize MessageSyncService:', error)
+      }
+    }
+
+    initializeMessaging()
+
+    // Cleanup on unmount
+    return () => {
+      if (syncIntervalRef.current) {
+        clearInterval(syncIntervalRef.current)
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Load messages when conversation changes
+  useEffect(() => {
+    if (selectedConversationId && ourPeerId) {
+      loadMessages(selectedConversationId)
+    }
+  }, [selectedConversationId, ourPeerId, loadMessages])
+
+  // Periodic sync for receiving new messages
+  useEffect(() => {
+    if (!selectedConversationId || !ourPeerId) return
+
+    // Poll for new messages every 2 seconds
+    const syncInterval = setInterval(async () => {
+      try {
+        const crdtMessages = await messageSyncService.current.getMessages(selectedConversationId)
+
+        // Only update if message count changed
+        setMessages(currentMessages => {
+          if (crdtMessages.length !== currentMessages.length) {
+            const uiMessages = crdtMessages.map(msg => convertCRDTToUIMessage(msg, ourPeerId))
+            console.log(`🔄 Synced: ${uiMessages.length} messages (was ${currentMessages.length})`)
+            return uiMessages
+          }
+          return currentMessages
+        })
+      } catch (error) {
+        console.error('❌ Sync failed:', error)
+      }
+    }, 2000)
+
+    syncIntervalRef.current = syncInterval
+
+    return () => {
+      clearInterval(syncInterval)
+      syncIntervalRef.current = null
+    }
+  }, [selectedConversationId, ourPeerId, convertCRDTToUIMessage])
+
+  // Send message handler
+  const handleSendMessage = useCallback(async () => {
+    if (!messageInputValue.trim() || !selectedConversationId || !ourPeerId) return
+
+    const text = messageInputValue.trim()
+    setMessageInputValue('') // Clear input immediately for better UX
+
+    try {
+      const conversation = conversations.find(c => c.id === selectedConversationId)
+      if (!conversation) return
+
+      // Determine entity type
+      const entityType = conversation.type === 'person' ? 'person' :
+                        conversation.type === 'group' ? 'group' :
+                        conversation.type === 'project' ? 'project' :
+                        conversation.type === 'channel' ? 'channel' : 'organisation'
+
+      // Send via CRDT service
+      const crdtMessage = await messageSyncService.current.sendMessage(
+        selectedConversationId,
+        entityType,
+        text,
+        conversation.name, // Use conversation name as author display name
+        undefined // No reply-to for now
+      )
+
+      // Optimistically add to UI
+      const uiMessage = convertCRDTToUIMessage(crdtMessage, ourPeerId)
+      setMessages(prev => [...prev, uiMessage])
+
+      console.log('✅ Message sent:', crdtMessage.metadata.id)
+    } catch (error) {
+      console.error('❌ Failed to send message:', error)
+      // Re-add text to input on failure
+      setMessageInputValue(text)
+    }
+  }, [messageInputValue, selectedConversationId, ourPeerId, conversations, convertCRDTToUIMessage])
+
+  // Handle Enter key to send
+  const handleKeyPress = useCallback((event: React.KeyboardEvent) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault()
+      handleSendMessage()
+    }
+  }, [handleSendMessage])
 
   const defaultConversationId = useMemo(
     () => conversations.find(c => c.type !== 'organisation')?.id ?? conversations[0]?.id ?? '',
@@ -568,6 +711,109 @@ export const ModernShellPrototypeScreen: React.FC = () => {
   const handleWebsiteOpen = () => {
     if (selectedConversation.hasWebsite) {
       console.log(`Open website for ${selectedConversation.name}`)
+    }
+  }
+
+  // Entity menu handlers
+  const handleEntityMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+    event.stopPropagation()
+    setEntityMenuAnchor(event.currentTarget)
+  }
+
+  const handleEntityMenuClose = () => {
+    setEntityMenuAnchor(null)
+  }
+
+  const handleSidebarMenuOpen = (event: React.MouseEvent<HTMLElement>, conversation: Conversation) => {
+    event.stopPropagation()
+    setSidebarMenuState({ anchorEl: event.currentTarget, conversation })
+  }
+
+  const handleSidebarMenuClose = () => {
+    setSidebarMenuState({ anchorEl: null, conversation: null })
+  }
+
+  const handleEntityEdit = () => {
+    setEntityMenuAnchor(null)
+    setSelectedContact(selectedConversation)
+    setContactDialogMode('edit')
+  }
+
+  const handleEntityDelete = () => {
+    setEntityMenuAnchor(null)
+    setSelectedContact(selectedConversation)
+    setContactDialogMode('delete')
+  }
+
+  const handleSidebarEntityEdit = () => {
+    if (sidebarMenuState.conversation) {
+      setSidebarMenuState({ anchorEl: null, conversation: null })
+      setSelectedContact(sidebarMenuState.conversation)
+      setContactDialogMode('edit')
+    }
+  }
+
+  const handleSidebarEntityDelete = () => {
+    if (sidebarMenuState.conversation) {
+      const conv = sidebarMenuState.conversation
+      setSidebarMenuState({ anchorEl: null, conversation: null })
+      setSelectedContact(conv)
+      setContactDialogMode('delete')
+    }
+  }
+
+  // Dialog callbacks that call Tauri backend
+  const handleSaveEntityEdit = async (id: string, updates: Partial<Conversation>) => {
+    try {
+      if (typeof window !== 'undefined' && '__TAURI__' in window) {
+        const { invoke } = await import('@tauri-apps/api/core')
+
+        // Find the entity type from the conversation
+        const entityType = selectedContact?.type || 'contact'
+
+        await invoke('core_entity_update', {
+          entityId: id,
+          entityType,
+          name: updates.name,
+          description: updates.snippet,
+        })
+
+        console.log(`✅ Updated ${entityType}: ${updates.name}`)
+      } else {
+        console.log(`🔶 Browser mode: Would update entity ${id}`, updates)
+      }
+
+      setContactDialogMode(null)
+      setSelectedContact(null)
+    } catch (error) {
+      console.error('Failed to update entity:', error)
+      alert(`Failed to update: ${error}`)
+    }
+  }
+
+  const handleConfirmEntityDelete = async (id: string) => {
+    try {
+      if (typeof window !== 'undefined' && '__TAURI__' in window) {
+        const { invoke } = await import('@tauri-apps/api/core')
+
+        // Find the entity type from the conversation
+        const entityType = selectedContact?.type || 'contact'
+
+        await invoke('core_entity_delete', {
+          entityId: id,
+          entityType,
+        })
+
+        console.log(`✅ Deleted ${entityType}: ${id}`)
+      } else {
+        console.log(`🔶 Browser mode: Would delete entity ${id}`)
+      }
+
+      setContactDialogMode(null)
+      setSelectedContact(null)
+    } catch (error) {
+      console.error('Failed to delete entity:', error)
+      alert(`Failed to delete: ${error}`)
     }
   }
 
@@ -941,7 +1187,7 @@ export const ModernShellPrototypeScreen: React.FC = () => {
                     {isGroupConversation && (
                       <Tooltip title="More options">
                         <IconButton size="small" sx={{ color: TOKENS.textSecondary }} onClick={event => handleMessageMenuOpen(event, msg)}>
-                          <KeyboardArrowDown fontSize="inherit" />
+                          <MoreVert fontSize="inherit" />
                         </IconButton>
                       </Tooltip>
                     )}
@@ -1103,6 +1349,12 @@ export const ModernShellPrototypeScreen: React.FC = () => {
                 key={conv.id}
                 selected={conv.id === selectedConversationId}
                 onClick={() => setSelectedConversationId(conv.id)}
+                sx={{
+                  position: 'relative',
+                  '&:hover .entity-menu-button': {
+                    opacity: 1,
+                  },
+                }}
               >
                 <Box sx={{ position: 'relative' }}>
                   <Avatar sx={{ width: 48, height: 48, ...avatarShapeStyles[conv.type] }}>
@@ -1128,7 +1380,25 @@ export const ModernShellPrototypeScreen: React.FC = () => {
                 </Box>
                 <Box sx={{ flexGrow: 1, minWidth: 0 }}>
                   <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
-                    <Typography variant="body2" fontWeight={600} noWrap>{conv.name}</Typography>
+                    <Stack direction="row" spacing={0.5} alignItems="center" sx={{ flexGrow: 1, minWidth: 0 }}>
+                      <Typography variant="body2" fontWeight={600} noWrap>{conv.name}</Typography>
+                      <IconButton
+                        className="entity-menu-button"
+                        size="small"
+                        onClick={(e) => handleSidebarMenuOpen(e, conv)}
+                        sx={{
+                          opacity: 0,
+                          transition: 'opacity 0.2s',
+                          color: TOKENS.textSecondary,
+                          padding: 0.25,
+                          '&:hover': {
+                            bgcolor: alpha('#FFFFFF', 0.08),
+                          },
+                        }}
+                      >
+                        <KeyboardArrowDown fontSize="small" />
+                      </IconButton>
+                    </Stack>
                     <Typography variant="caption" sx={{ color: TOKENS.textSecondary, flexShrink: 0 }}>{conv.time}</Typography>
                   </Stack>
                   <Stack direction="row" spacing={0.5} alignItems="center">
@@ -1163,17 +1433,45 @@ export const ModernShellPrototypeScreen: React.FC = () => {
         >
           <Stack direction="row" spacing={1.5} alignItems="center">
             <Avatar sx={{ width: 40, height: 40 }}>{selectedConversation.name.substring(0, 2)}</Avatar>
-            <Box>
-              <Typography variant="subtitle1" fontWeight={600}>{selectedConversation.name}</Typography>
-              <Typography variant="caption" sx={{ color: TOKENS.textSecondary }}>{headerSubtitle}</Typography>
+            <Box
+              onClick={handleEntityMenuOpen}
+              sx={{
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 0.5,
+                '&:hover': {
+                  '& .entity-dropdown-arrow': {
+                    opacity: 1,
+                  },
+                },
+              }}
+            >
+              <Box>
+                <Typography variant="subtitle1" fontWeight={600}>{selectedConversation.name}</Typography>
+                <Typography variant="caption" sx={{ color: TOKENS.textSecondary }}>{headerSubtitle}</Typography>
+              </Box>
+              <KeyboardArrowDown
+                className="entity-dropdown-arrow"
+                sx={{
+                  fontSize: 18,
+                  color: TOKENS.textSecondary,
+                  opacity: 0.5,
+                  transition: 'opacity 0.2s',
+                }}
+              />
             </Box>
           </Stack>
           <Stack direction="row" spacing={1}>
             <Tooltip title="Call">
-              <IconButton sx={{ color: TOKENS.textSecondary }}><Call /></IconButton>
+              <IconButton sx={{ color: TOKENS.textSecondary }}>
+                <Call />
+              </IconButton>
             </Tooltip>
             <Tooltip title="Video">
-              <IconButton sx={{ color: TOKENS.textSecondary }}><VideocamOutlined /></IconButton>
+              <IconButton sx={{ color: TOKENS.textSecondary }}>
+                <VideocamOutlined />
+              </IconButton>
             </Tooltip>
             <Tooltip title={drawerOpen ? 'Close info' : 'Open info'}>
               <IconButton sx={{ color: TOKENS.textSecondary }} onClick={() => setDrawerOpen(o => !o)}>
@@ -1249,9 +1547,19 @@ export const ModernShellPrototypeScreen: React.FC = () => {
               <IconButton size="small" sx={{ color: TOKENS.textSecondary }}><AttachFileOutlined /></IconButton>
               <InputBase
                 placeholder="Message..."
+                value={messageInputValue}
+                onChange={(e) => setMessageInputValue(e.target.value)}
+                onKeyPress={handleKeyPress}
                 sx={{ flexGrow: 1, color: TOKENS.textPrimary, fontSize: 14 }}
               />
-              <IconButton size="small" sx={{ color: TOKENS.accent }}><SendRounded /></IconButton>
+              <IconButton
+                size="small"
+                sx={{ color: TOKENS.accent }}
+                onClick={handleSendMessage}
+                disabled={!messageInputValue.trim()}
+              >
+                <SendRounded />
+              </IconButton>
             </Box>
           </Box>
         )}
@@ -1330,6 +1638,97 @@ export const ModernShellPrototypeScreen: React.FC = () => {
           <ListItemText sx={{ color: TOKENS.danger }}>Delete</ListItemText>
         </MenuItem>
       </Menu>
+
+      {/* Entity Menu (Header) */}
+      <Menu
+        anchorEl={entityMenuAnchor}
+        open={Boolean(entityMenuAnchor)}
+        onClose={handleEntityMenuClose}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+        PaperProps={{
+          sx: {
+            bgcolor: TOKENS.bgRaised,
+            border: `1px solid ${TOKENS.borderSubtle}`,
+            borderRadius: 2,
+            minWidth: 200,
+            mt: 0.5,
+          },
+        }}
+      >
+        <MenuItem onClick={handleEntityEdit}>
+          <ListItemIcon>
+            <EditOutlined fontSize="small" sx={{ color: TOKENS.textPrimary }} />
+          </ListItemIcon>
+          <ListItemText>Edit {selectedConversation.type === 'person' ? 'Contact' : 'Entity'}</ListItemText>
+        </MenuItem>
+        <Divider sx={{ my: 0.5, borderColor: TOKENS.borderSubtle }} />
+        <MenuItem onClick={handleEntityDelete}>
+          <ListItemIcon>
+            <DeleteOutline fontSize="small" sx={{ color: TOKENS.danger }} />
+          </ListItemIcon>
+          <ListItemText sx={{ color: TOKENS.danger }}>
+            Delete {selectedConversation.type === 'person' ? 'Contact' : 'Entity'}
+          </ListItemText>
+        </MenuItem>
+      </Menu>
+
+      {/* Entity Menu (Sidebar) */}
+      <Menu
+        anchorEl={sidebarMenuState.anchorEl}
+        open={Boolean(sidebarMenuState.anchorEl)}
+        onClose={handleSidebarMenuClose}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+        PaperProps={{
+          sx: {
+            bgcolor: TOKENS.bgRaised,
+            border: `1px solid ${TOKENS.borderSubtle}`,
+            borderRadius: 2,
+            minWidth: 200,
+            mt: 0.5,
+          },
+        }}
+      >
+        <MenuItem onClick={handleSidebarEntityEdit}>
+          <ListItemIcon>
+            <EditOutlined fontSize="small" sx={{ color: TOKENS.textPrimary }} />
+          </ListItemIcon>
+          <ListItemText>
+            Edit {sidebarMenuState.conversation?.type === 'person' ? 'Contact' : 'Entity'}
+          </ListItemText>
+        </MenuItem>
+        <Divider sx={{ my: 0.5, borderColor: TOKENS.borderSubtle }} />
+        <MenuItem onClick={handleSidebarEntityDelete}>
+          <ListItemIcon>
+            <DeleteOutline fontSize="small" sx={{ color: TOKENS.danger }} />
+          </ListItemIcon>
+          <ListItemText sx={{ color: TOKENS.danger }}>
+            Delete {sidebarMenuState.conversation?.type === 'person' ? 'Contact' : 'Entity'}
+          </ListItemText>
+        </MenuItem>
+      </Menu>
+
+      {/* Entity Management Dialogs */}
+      <EditContactDialog
+        open={contactDialogMode === 'edit'}
+        contact={selectedContact}
+        onClose={() => {
+          setContactDialogMode(null)
+          setSelectedContact(null)
+        }}
+        onSave={handleSaveEntityEdit}
+      />
+
+      <DeleteContactDialog
+        open={contactDialogMode === 'delete'}
+        contact={selectedContact}
+        onClose={() => {
+          setContactDialogMode(null)
+          setSelectedContact(null)
+        }}
+        onConfirm={handleConfirmEntityDelete}
+      />
     </Box>
   )
 }

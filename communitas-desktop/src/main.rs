@@ -290,6 +290,14 @@ async fn main() -> anyhow::Result<()> {
             gossip_commands::gossip_site_list,
             #[cfg(feature = "gossip_overlay")]
             gossip_commands::gossip_site_providers,
+            #[cfg(feature = "gossip_overlay")]
+            gossip_commands::gossip_get_own_identity,
+            #[cfg(feature = "gossip_overlay")]
+            gossip_commands::gossip_get_connection_status,
+            #[cfg(feature = "gossip_overlay")]
+            gossip_commands::gossip_add_bootstrap_peer,
+            #[cfg(feature = "gossip_overlay")]
+            gossip_commands::gossip_get_cached_peers,
             health,
             // Organization commands - Channels
             commands::org_commands::create_channel,

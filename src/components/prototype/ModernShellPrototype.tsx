@@ -76,6 +76,7 @@ import {
 } from './ContactManagementDialogs'
 import { MessageReactionPicker, MessageReactionsDisplay } from './MessageReactionPicker'
 import { Star, StarBorder as StarOutlineIcon } from '@mui/icons-material'
+import { ConnectionStatus } from '../ConnectionStatus'
 
 const TOKENS = {
   bgBase: '#101518',
@@ -1414,6 +1415,11 @@ export const ModernShellPrototypeScreen: React.FC = () => {
               </ConversationListItem>
             )
           })}
+        </Box>
+
+        {/* B5. Connection Status */}
+        <Box sx={{ borderTop: `1px solid ${TOKENS.borderSubtle}` }}>
+          <ConnectionStatus compact={true} refreshInterval={15000} />
         </Box>
       </Box>
 

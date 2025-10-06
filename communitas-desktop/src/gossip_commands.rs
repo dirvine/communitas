@@ -565,6 +565,98 @@ pub async fn gossip_site_providers(
     Ok(provider_hexes)
 }
 
+// ===== Connection Status Commands =====
+
+/// Get own four-word identity
+#[cfg(feature = "gossip_overlay")]
+#[tauri::command]
+pub async fn gossip_get_own_identity(
+    state: tauri::State<'_, GossipState>,
+) -> Result<String, String> {
+    let guard = state.read().await;
+    let ctx = guard.as_ref().ok_or("GossipContext not initialized")?;
+
+    // Get four-word identity from context
+    Ok(ctx.four_words().to_string())
+}
+
+/// Get connection status (online/offline, peer count, etc.)
+#[cfg(feature = "gossip_overlay")]
+#[tauri::command]
+pub async fn gossip_get_connection_status(
+    state: tauri::State<'_, GossipState>,
+) -> Result<ConnectionStatus, String> {
+    let guard = state.read().await;
+    let ctx = guard.as_ref().ok_or("GossipContext not initialized")?;
+
+    // Get peer count from contacts as proxy for connection status
+    let contacts = ctx.get_contacts()
+        .await
+        .map_err(|e| format!("Failed to get contacts: {}", e))?;
+
+    let peer_count = contacts.len();
+    let online = peer_count > 0;
+    let four_words = ctx.four_words().to_string();
+
+    Ok(ConnectionStatus {
+        online,
+        four_words,
+        peer_count,
+    })
+}
+
+/// Add bootstrap peer via four-word address
+/// This peer will be used to bootstrap into the network
+#[cfg(feature = "gossip_overlay")]
+#[tauri::command]
+pub async fn gossip_add_bootstrap_peer(
+    state: tauri::State<'_, GossipState>,
+    four_words: String,
+) -> Result<(), String> {
+    let guard = state.read().await;
+    let ctx = guard.as_ref().ok_or("GossipContext not initialized")?;
+
+    // Try to find the peer (may fail if offline or not discovered yet)
+    // Even if it fails, we can add to contacts for future discovery
+    match ctx.find_contact(&four_words).await {
+        Ok(peer_id) => {
+            // Successfully found peer - add to contacts
+            ctx.add_contact(four_words, peer_id)
+                .await
+                .map_err(|e| format!("Failed to add contact: {}", e))?;
+            Ok(())
+        }
+        Err(e) => {
+            // Not found yet - that's OK, they'll be discovered later
+            Err(format!("Peer not found (will retry on next connection): {}", e))
+        }
+    }
+}
+
+/// Get known contacts (for bootstrap/connection info)
+#[cfg(feature = "gossip_overlay")]
+#[tauri::command]
+pub async fn gossip_get_cached_peers(
+    state: tauri::State<'_, GossipState>,
+) -> Result<Vec<BootstrapPeer>, String> {
+    let guard = state.read().await;
+    let ctx = guard.as_ref().ok_or("GossipContext not initialized")?;
+
+    // Get contacts from context
+    let contacts = ctx.get_contacts()
+        .await
+        .map_err(|e| format!("Failed to get contacts: {}", e))?;
+
+    Ok(contacts.into_iter().map(|(four_words, peer_id_str)| {
+        BootstrapPeer {
+            four_words,
+            peer_id: peer_id_str,
+            last_seen: 0, // TODO: Track last seen timestamp
+            success_rate: 1.0, // Assume success for known contacts
+        }
+    }).collect())
+}
+
 // ===== DTOs for Serialization =====
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -583,4 +675,19 @@ pub struct AssetData {
 pub struct SiteData {
     pub site_id: String,
     pub assets: Vec<AssetData>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ConnectionStatus {
+    pub online: bool,
+    pub four_words: String,
+    pub peer_count: usize,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BootstrapPeer {
+    pub four_words: String,
+    pub peer_id: String,
+    pub last_seen: u64,
+    pub success_rate: f32,
 }

@@ -18,13 +18,25 @@ repository = "https://github.com/saorsalabs/communitas"
 homepage = "https://communitas.life"
 
 [workspace.dependencies]
-# Saorsa Core ecosystem
+# Saorsa Core ecosystem (will be phased out in favor of saorsa-gossip)
 saorsa-core = "0.3"
 saorsa-fec = "0.4.11"
 saorsa-mls = "0.1.5"
 saorsa-rsps = "0.2.0"
 saorsa-pqc = "0.3.12"
 saorsa-seal = "0.1.2"
+
+# Saorsa Gossip ecosystem (published crates from crates.io)
+saorsa-gossip-types = "0.1.6"
+saorsa-gossip-identity = "0.1.6"
+saorsa-gossip-crdt-sync = "0.1.6"
+saorsa-gossip-groups = "0.1.6"
+saorsa-gossip-presence = "0.1.6"
+saorsa-gossip-transport = "0.1.7"
+saorsa-gossip-membership = "0.1.6"
+saorsa-gossip-pubsub = "0.1.6"
+saorsa-gossip-coordinator = "0.1.6"
+saorsa-gossip-rendezvous = "0.1.6"
 
 # Networking
 ant-quic = "0.8.17"

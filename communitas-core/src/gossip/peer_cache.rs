@@ -14,6 +14,7 @@ use rusqlite::{Connection, params};
 use saorsa_gossip_types::PeerId;
 use std::net::SocketAddr;
 use std::path::Path;
+use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 use tracing::{debug, info, warn};
 
@@ -113,8 +114,9 @@ impl PeerCacheEntry {
 }
 
 /// Persistent peer cache using SQLite
+/// Thread-safe via Arc<Mutex<Connection>>
 pub struct PeerCache {
-    conn: Connection,
+    conn: Arc<Mutex<Connection>>,
 }
 
 impl PeerCache {
@@ -137,11 +139,13 @@ impl PeerCache {
         )?;
 
         info!("Loaded peer cache from {:?}", path);
-        Ok(Self { conn })
+        Ok(Self { conn: Arc::new(Mutex::new(conn)) })
     }
 
     /// Update peer on successful connection
     pub async fn update_success(&mut self, peer_id: PeerId, addr: SocketAddr) -> Result<()> {
+        let conn = self.conn.lock().expect("peer cache mutex poisoned");
+
         let peer_id_str = hex::encode(peer_id.as_bytes());
         let now = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
@@ -149,8 +153,7 @@ impl PeerCache {
             .as_secs() as i64;
 
         // Check if peer exists
-        let exists: bool = self
-            .conn
+        let exists: bool = conn
             .query_row(
                 "SELECT 1 FROM peers WHERE peer_id = ?1",
                 params![peer_id_str],
@@ -160,7 +163,7 @@ impl PeerCache {
 
         if exists {
             // Update existing entry
-            self.conn.execute(
+            conn.execute(
                 "UPDATE peers SET
                     addr_hints = ?2,
                     last_success = ?3,
@@ -171,7 +174,7 @@ impl PeerCache {
             debug!("Updated peer {} on success", peer_id_str);
         } else {
             // Insert new entry
-            self.conn.execute(
+            conn.execute(
                 "INSERT INTO peers (peer_id, addr_hints, nat_class, roles, last_success, success_count, failure_count)
                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
                 params![
@@ -192,9 +195,11 @@ impl PeerCache {
 
     /// Update peer on connection failure
     pub async fn update_failure(&mut self, peer_id: PeerId) -> Result<()> {
+        let conn = self.conn.lock().expect("peer cache mutex poisoned");
+
         let peer_id_str = hex::encode(peer_id.as_bytes());
 
-        self.conn.execute(
+        conn.execute(
             "UPDATE peers SET failure_count = failure_count + 1 WHERE peer_id = ?1",
             params![peer_id_str],
         )?;
@@ -205,8 +210,9 @@ impl PeerCache {
 
     /// Get top N peers sorted by score
     pub fn get_top_peers(&self, limit: usize) -> Vec<PeerCacheEntry> {
-        let mut stmt = self
-            .conn
+        let conn = self.conn.lock().expect("peer cache mutex poisoned");
+
+        let mut stmt = conn
             .prepare("SELECT peer_id, addr_hints, nat_class, roles, last_success, success_count, failure_count FROM peers")
             .ok();
 
@@ -268,8 +274,10 @@ impl PeerCache {
 
     /// Prune peers with high failure rates
     pub async fn prune_failed(&mut self, threshold_ratio: f64) -> Result<()> {
+        let conn = self.conn.lock().expect("peer cache mutex poisoned");
+
         // Remove peers where failure_count / (success_count + failure_count) > threshold
-        let count = self.conn.execute(
+        let count = conn.execute(
             "DELETE FROM peers WHERE
                 (failure_count * 1.0) / (success_count + failure_count) > ?1
                 AND (success_count + failure_count) > 5",
@@ -285,8 +293,9 @@ impl PeerCache {
 
     /// Get count of cached peers
     pub fn len(&self) -> usize {
-        self.conn
-            .query_row("SELECT COUNT(*) FROM peers", [], |row| row.get(0))
+        let conn = self.conn.lock().expect("peer cache mutex poisoned");
+
+        conn.query_row("SELECT COUNT(*) FROM peers", [], |row| row.get(0))
             .unwrap_or(0)
     }
 

@@ -34,8 +34,10 @@ mod sync;
 use commands::{auth::AppState, org_commands::OrgState};
 use communitas_core::CoreContext;
 use crdt_manager::CrdtManager;
+use saorsa_core::identity::enhanced::DeviceType;
 use services::{channel_service::ChannelService, issue_service::IssueService};
 use std::{path::PathBuf, sync::Arc};
+use tauri::Manager;
 use tokio::sync::RwLock;
 use tracing::info;
 
@@ -148,6 +150,9 @@ async fn main() -> anyhow::Result<()> {
             container::container_apply_ops,
             container::container_current_tip,
             core_commands::core_initialize,
+            core_commands::core_get_peer_id,
+            core_commands::core_get_user_info,
+            core_commands::core_set_display_name,
             core_commands::core_create_channel,
             core_commands::core_get_channels,
             core_commands::core_add_reaction,
@@ -338,7 +343,44 @@ async fn main() -> anyhow::Result<()> {
     )));
 
     builder
-        .setup(|_app| Ok(()))
+        .setup(|app| {
+            // Auto-initialize core if environment variables are set (for testing)
+            if let (Ok(peer_id), Ok(user_name)) = (
+                std::env::var("COMMUNITAS_PEER_ID"),
+                std::env::var("COMMUNITAS_USER_NAME"),
+            ) {
+                info!("🔧 Auto-initializing core with peer_id={}, user_name={}", peer_id, user_name);
+
+                // Get handle to state
+                let app_handle = app.handle().clone();
+
+                // Spawn initialization task
+                tauri::async_runtime::spawn(async move {
+                    match CoreContext::initialize(
+                        peer_id.clone(),
+                        user_name.clone(),
+                        "auto-init-device".to_string(),
+                        DeviceType::Desktop,
+                    )
+                    .await
+                    {
+                        Ok(ctx) => {
+                            let core_state = app_handle.state::<Arc<RwLock<Option<CoreContext>>>>();
+                            let mut guard = core_state.write().await;
+                            *guard = Some(ctx);
+                            info!("✅ Core auto-initialized successfully");
+                        }
+                        Err(e) => {
+                            tracing::error!("❌ Failed to auto-initialize core: {}", e);
+                        }
+                    }
+                });
+            } else {
+                info!("ℹ️  No auto-init environment variables found, core will be initialized manually");
+            }
+
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .map_err(|e| anyhow::anyhow!("Failed to run Tauri app: {}", e))?;
 

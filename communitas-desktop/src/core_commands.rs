@@ -41,9 +41,16 @@ pub async fn core_initialize(
         other => return Err(format!("Unknown device type: {}", other)),
     };
 
+    // Use display_name from parameter, or fall back to environment variable
+    let final_display_name = if display_name.is_empty() {
+        std::env::var("COMMUNITAS_USER_NAME").unwrap_or_default()
+    } else {
+        display_name
+    };
+
     let ctx = CoreContext::initialize(
         four_words,
-        display_name,
+        final_display_name,
         device_name.unwrap_or_else(|| "device".to_string()),
         dev_type,
     )
@@ -51,6 +58,51 @@ pub async fn core_initialize(
 
     let mut guard = shared.write().await;
     *guard = Some(ctx);
+    Ok(true)
+}
+
+/// Get the current user's peer ID (four-word address)
+/// Returns the peer ID from the initialized CoreContext
+#[tauri::command]
+pub async fn core_get_peer_id(
+    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+) -> Result<String, String> {
+    let guard = shared.read().await;
+    let ctx = guard
+        .as_ref()
+        .ok_or_else(|| "Core not initialized".to_string())?;
+
+    Ok(ctx.four_words.clone())
+}
+
+/// Get current user info (peer ID and display name)
+#[tauri::command]
+pub async fn core_get_user_info(
+    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+) -> Result<serde_json::Value, String> {
+    let guard = shared.read().await;
+    let ctx = guard
+        .as_ref()
+        .ok_or_else(|| "Core not initialized".to_string())?;
+
+    Ok(serde_json::json!({
+        "peerId": ctx.four_words,
+        "displayName": ctx.display_name,
+    }))
+}
+
+/// Update the current user's display name
+#[tauri::command]
+pub async fn core_set_display_name(
+    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+    display_name: String,
+) -> Result<bool, String> {
+    let mut guard = shared.write().await;
+    let ctx = guard
+        .as_mut()
+        .ok_or_else(|| "Core not initialized".to_string())?;
+
+    ctx.display_name = display_name;
     Ok(true)
 }
 
@@ -583,7 +635,7 @@ pub async fn core_get_bootstrap_stats(
 
 // ===== Message Management Commands =====
 
-/// List messages for an entity (contact, group, channel)
+/// List messages for an entity (contact, group, channel) using CRDT sync
 #[tauri::command]
 pub async fn core_messages_list(
     shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
@@ -591,15 +643,9 @@ pub async fn core_messages_list(
     limit: u32,
     offset: u32,
 ) -> Result<Vec<serde_json::Value>, String> {
-    eprintln!(
-        "🟢 core_messages_list ENTERED with entity_id={}, limit={}, offset={}",
+    tracing::info!(
+        "📋 core_messages_list called for entity_id={}, limit={}, offset={}",
         entity_id, limit, offset
-    );
-    tracing::warn!(
-        "🟢 core_messages_list called with entity_id={}, limit={}, offset={}",
-        entity_id,
-        limit,
-        offset
     );
 
     let guard = shared.read().await;
@@ -607,38 +653,102 @@ pub async fn core_messages_list(
         .as_ref()
         .ok_or_else(|| "Core not initialized".to_string())?;
 
-    // TODO: Implement message retrieval from ChatManager
-    // For now, return empty array to prevent errors
-    tracing::warn!("core_messages_list called but not yet fully implemented");
-    Ok(vec![])
+    // Get all messages for this entity from CRDT store
+    let sync_response = ctx
+        .message_sync
+        .get_all_messages(&entity_id)
+        .await
+        .map_err(|e| format!("Failed to get messages: {}", e))?;
+
+    // Convert CRDT messages to JSON (already sorted causally)
+    let messages: Vec<serde_json::Value> = sync_response
+        .messages
+        .iter()
+        .skip(offset as usize)
+        .take(limit as usize)
+        .map(|msg| {
+            serde_json::json!({
+                "id": msg.metadata.id,
+                "entityId": msg.metadata.entity_id,
+                "entityType": format!("{:?}", msg.metadata.entity_type).to_lowercase(),
+                "authorPeerId": msg.metadata.author_peer_id,
+                "text": msg.content.text,
+                "author": msg.content.author,
+                "timestamp": msg.metadata.timestamp,
+                "lamportClock": msg.metadata.lamport_clock,
+                "vectorClock": msg.metadata.vector_clock,
+                "replyToId": msg.metadata.reply_to_id,
+                "localState": msg.local_state,
+            })
+        })
+        .collect();
+
+    tracing::info!("✅ Returning {} messages for {}", messages.len(), entity_id);
+    Ok(messages)
 }
 
-/// Send a message to an entity
+/// Send a message to an entity using CRDT sync
 #[tauri::command]
 pub async fn core_messages_send(
     shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
     entity_id: String,
     content: String,
-    encrypted: bool,
+    entity_type: String,
+    reply_to_id: Option<String>,
 ) -> Result<serde_json::Value, String> {
+    tracing::info!(
+        "💬 core_messages_send called for entity_id={}, type={}",
+        entity_id,
+        entity_type
+    );
+
     let guard = shared.read().await;
     let ctx = guard
         .as_ref()
         .ok_or_else(|| "Core not initialized".to_string())?;
 
-    // TODO: Implement message sending via MessagingService
-    tracing::warn!("core_messages_send called but not yet fully implemented");
+    // Parse entity type
+    let entity_type_enum = match entity_type.to_lowercase().as_str() {
+        "person" => communitas_core::crdt::EntityType::Person,
+        "group" => communitas_core::crdt::EntityType::Group,
+        "project" => communitas_core::crdt::EntityType::Project,
+        "channel" => communitas_core::crdt::EntityType::Channel,
+        "organisation" => communitas_core::crdt::EntityType::Organisation,
+        _ => return Err(format!("Invalid entity type: {}", entity_type)),
+    };
 
-    // Return a mock message structure for now
-    Ok(serde_json::json!({
-        "id": format!("msg-{}", uuid::Uuid::new_v4()),
-        "entityId": entity_id,
-        "content": content,
-        "encrypted": encrypted,
-        "timestamp": chrono::Utc::now().to_rfc3339(),
-        "sender": ctx.four_words.clone(),
+    // Create message content
+    let message_content = communitas_core::crdt::MessageContent {
+        text: content.clone(),
+        author: ctx.display_name.clone(),
+        attachments: None,
+    };
+
+    // Send message through CRDT sync service
+    let crdt_message = ctx
+        .message_sync
+        .send_message(entity_id.clone(), entity_type_enum, message_content, reply_to_id)
+        .await
+        .map_err(|e| format!("Failed to send message: {}", e))?;
+
+    // Convert to JSON response
+    let response = serde_json::json!({
+        "id": crdt_message.metadata.id,
+        "entityId": crdt_message.metadata.entity_id,
+        "entityType": format!("{:?}", crdt_message.metadata.entity_type).to_lowercase(),
+        "authorPeerId": crdt_message.metadata.author_peer_id,
+        "text": crdt_message.content.text,
+        "author": crdt_message.content.author,
+        "timestamp": crdt_message.metadata.timestamp,
+        "lamportClock": crdt_message.metadata.lamport_clock,
+        "vectorClock": crdt_message.metadata.vector_clock,
+        "replyToId": crdt_message.metadata.reply_to_id,
+        "localState": crdt_message.local_state,
         "status": "sent"
-    }))
+    });
+
+    tracing::info!("✅ Message sent: {}", crdt_message.metadata.id);
+    Ok(response)
 }
 
 /// Edit an existing message
@@ -876,4 +986,57 @@ pub async fn core_entity_delete(
     // - Clean up messages
 
     Ok(true)
+}
+
+/// Mute/unmute entity notifications
+#[tauri::command]
+pub async fn core_entity_mute(
+    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+    entity_id: String,
+    entity_type: String,
+    muted: bool,
+) -> Result<bool, String> {
+    let guard = shared.read().await;
+    if guard.is_none() {
+        tracing::debug!("core_entity_mute skipped - Core not initialized (offline mode)");
+        return Ok(muted);
+    }
+
+    tracing::info!(
+        "{} notifications for {} entity: {}",
+        if muted { "Muting" } else { "Unmuting" },
+        entity_type,
+        entity_id
+    );
+
+    // TODO: Store mute preferences in local storage/database
+    // For now, just return success
+    Ok(muted)
+}
+
+/// Block/unblock a contact
+#[tauri::command]
+pub async fn core_entity_block(
+    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+    entity_id: String,
+    blocked: bool,
+) -> Result<bool, String> {
+    let guard = shared.read().await;
+    if guard.is_none() {
+        tracing::debug!("core_entity_block skipped - Core not initialized (offline mode)");
+        return Ok(blocked);
+    }
+
+    tracing::info!(
+        "{} contact: {}",
+        if blocked { "Blocking" } else { "Unblocking" },
+        entity_id
+    );
+
+    // TODO: Implement blocking logic:
+    // - Add to blocked list
+    // - Filter messages from blocked contacts
+    // - Prevent blocked contacts from seeing status/activity
+    // For now, just return success
+    Ok(blocked)
 }

@@ -19,6 +19,8 @@ import {
   InputBase,
   Divider,
   Badge,
+  Modal,
+  Paper,
 } from '@mui/material'
 import { getMessageSyncService } from '../../services/MessageSyncService.browser'
 import type { CRDTMessage } from '../../types/crdt'
@@ -66,6 +68,12 @@ import {
   MoreVert,
   KeyboardArrowDown,
   EditOutlined,
+  ExpandLess,
+  ExpandMore,
+  Tag,
+  Groups,
+  WorkOutline,
+  Message,
 } from '@mui/icons-material'
 import { styled } from '@mui/material/styles'
 import {
@@ -77,6 +85,9 @@ import {
 import { MessageReactionPicker, MessageReactionsDisplay } from './MessageReactionPicker'
 import { Star, StarBorder as StarOutlineIcon } from '@mui/icons-material'
 import { ConnectionStatus } from '../ConnectionStatus'
+import { useEntityDirectory } from '../../contexts/EntityDirectoryContext'
+import { useSnackbar } from 'notistack'
+import { AnimatePresence, motion } from 'framer-motion'
 
 const TOKENS = {
   bgBase: '#101518',
@@ -90,6 +101,8 @@ const TOKENS = {
   danger: '#E25555',
   warning: '#F5B759',
 }
+
+const LIST_ITEM_TRANSITION = { duration: 0.18, ease: [0.4, 0, 0.2, 1] as [number, number, number, number] }
 
 type ConversationType = 'person' | 'group' | 'project' | 'channel' | 'organisation' | 'storage'
 
@@ -106,13 +119,14 @@ type Conversation = {
   starred?: boolean // For favourites
   lastMessageTime?: number // Unix timestamp for MRU sorting
   org?: string
+  orgId?: string
   membersOnline?: number
   online?: boolean
   hasWebsite?: boolean
   description?: string
   fourWords?: string // Four-word network address for contacts
   projectMeta?: {
-    status: 'Active' | 'Planning' | 'Blocked'
+    status: 'Active' | 'Planning' | 'Blocked' | 'Completed' | 'Archived'
     completion: number
     owner: string
   }
@@ -121,7 +135,26 @@ type Conversation = {
     members: number
     integrations?: string[]
   }
+  scope?: 'organization' | 'personal'
 }
+
+type CommandPaletteEntityItem = {
+  id: string
+  type: 'entity'
+  conversation: Conversation
+  label: string
+  subtitle?: string
+}
+
+type CommandPaletteActionItem = {
+  id: string
+  type: 'action'
+  label: string
+  subtitle?: string
+  run: () => Promise<void> | void
+}
+
+type CommandPaletteItem = CommandPaletteEntityItem | CommandPaletteActionItem
 
 type Message = {
   id: string
@@ -138,15 +171,22 @@ type Message = {
 
 type DrawerTab = 'Overview' | 'Members' | 'Files' | 'Tasks' | 'Timeline' | 'Storage'
 
-type ChannelMode = 'chat' | 'threads' | 'files' | 'integrations'
-type ProjectMode = 'chat' | 'board' | 'tasks' | 'timeline'
+type ChannelMode = 'chat' | 'threads' | 'files' | 'website' | 'integrations'
+type ProjectMode = 'chat' | 'threads' | 'files' | 'website' | 'board' | 'tasks' | 'timeline'
+type GroupMode = 'chat' | 'threads' | 'files' | 'website'
+type PersonMode = 'chat' | 'threads' | 'files' | 'website'
 
-const filters: { key: string; label: string }[] = [
-  { key: 'all', label: 'All' },
-  { key: 'unread', label: 'Unread' },
-  { key: 'favourites', label: 'Favourites' },
-  { key: 'groups', label: 'Groups' },
+const scopeFilters: { key: 'all' | 'organization' | 'personal'; label: string }[] = [
+  { key: 'all', label: 'All Spaces' },
+  { key: 'organization', label: 'Organisations' },
+  { key: 'personal', label: 'Personal' },
+]
+
+const typeFilters: { key: 'all' | 'channels' | 'projects' | 'groups' | 'people'; label: string }[] = [
+  { key: 'all', label: 'All Types' },
+  { key: 'channels', label: 'Channels' },
   { key: 'projects', label: 'Projects' },
+  { key: 'groups', label: 'Groups' },
   { key: 'people', label: 'People' },
 ]
 
@@ -154,14 +194,32 @@ const channelModes: { key: ChannelMode; label: string }[] = [
   { key: 'chat', label: 'Chat' },
   { key: 'threads', label: 'Threads' },
   { key: 'files', label: 'Files' },
+  { key: 'website', label: 'Website' },
   { key: 'integrations', label: 'Integrations' },
 ]
 
 const projectModes: { key: ProjectMode; label: string }[] = [
   { key: 'chat', label: 'Chat' },
+  { key: 'threads', label: 'Threads' },
+  { key: 'files', label: 'Files' },
+  { key: 'website', label: 'Website' },
   { key: 'board', label: 'Board' },
   { key: 'tasks', label: 'Tasks' },
   { key: 'timeline', label: 'Timeline' },
+]
+
+const groupModes: { key: GroupMode; label: string }[] = [
+  { key: 'chat', label: 'Chat' },
+  { key: 'threads', label: 'Threads' },
+  { key: 'files', label: 'Files' },
+  { key: 'website', label: 'Website' },
+]
+
+const personModes: { key: PersonMode; label: string }[] = [
+  { key: 'chat', label: 'Chat' },
+  { key: 'threads', label: 'Threads' },
+  { key: 'files', label: 'Files' },
+  { key: 'website', label: 'Website' },
 ]
 
 const SystemRailButton = styled(IconButton)(({ theme }) => ({
@@ -248,21 +306,90 @@ const avatarShapeStyles: Record<ConversationType, React.CSSProperties> = {
   organisation: { borderRadius: 12, border: `1px solid ${alpha(TOKENS.accent, 0.4)}` },
 }
 
-const presenceBadge = (conversation: Conversation) => {
+const conversationTypeLabel: Record<ConversationType, string> = {
+  person: 'Direct message',
+  group: 'Group',
+  project: 'Project',
+  channel: 'Channel',
+  organisation: 'Organisation',
+  storage: 'Storage',
+}
+
+const getEntityColor = (conversation: Conversation): string => {
+  const isOrgScoped = !!conversation.org
+
+  switch (conversation.type) {
+    case 'storage': return TOKENS.accent
+    case 'organisation': return TOKENS.accent
+    case 'project': return '#00BFA5'
+    case 'channel': return '#42A5F5'
+    case 'group': return isOrgScoped ? '#AB47BC' : '#FF7043'
+    case 'person':
+      if (isOrgScoped) return '#26C6DA'
+      return conversation.online ? TOKENS.accent : alpha('#FFFFFF', 0.25)
+    default: return alpha('#FFFFFF', 0.25)
+  }
+}
+
+const getEntityIcon = (conversation: Conversation) => {
+  const isOrgScoped = !!conversation.org
+  const color = getEntityColor(conversation)
+
   switch (conversation.type) {
     case 'storage':
-      return { icon: <StorageOutlined sx={{ fontSize: 15, color: TOKENS.accent }} />, bg: alpha(TOKENS.accent, 0.18) }
+      return <StorageOutlined sx={{ fontSize: 16, color: alpha(color, 0.8) }} />
     case 'organisation':
-      return { icon: <Apartment sx={{ fontSize: 15, color: TOKENS.accent }} />, bg: alpha(TOKENS.accent, 0.18) }
+      return <Apartment sx={{ fontSize: 16, color: alpha(color, 0.8) }} />
     case 'project':
-      return { icon: <FolderOutlined sx={{ fontSize: 15, color: TOKENS.accent }} />, bg: alpha(TOKENS.accent, 0.12) }
+      return <WorkOutline sx={{ fontSize: 16, color: alpha(color, 0.8) }} />
     case 'channel':
-      return { icon: <GridView sx={{ fontSize: 15, color: TOKENS.textSecondary }} />, bg: alpha('#FFFFFF', 0.08) }
+      return <Tag sx={{ fontSize: 16, color: alpha(color, 0.8) }} />
     case 'group':
-      return { icon: <PeopleOutline sx={{ fontSize: 15, color: TOKENS.textSecondary }} />, bg: alpha('#FFFFFF', 0.08) }
+      if (isOrgScoped) {
+        return <Groups sx={{ fontSize: 16, color: alpha(color, 0.8) }} />
+      } else {
+        return <PeopleOutline sx={{ fontSize: 16, color: alpha(color, 0.8) }} />
+      }
+    case 'person':
+      if (isOrgScoped) {
+        return <Message sx={{ fontSize: 16, color: alpha(color, 0.8) }} />
+      } else {
+        return null
+      }
+    default:
+      return null
+  }
+}
+
+const presenceBadge = (conversation: Conversation) => {
+  const isOrgScoped = !!conversation.org
+  const color = getEntityColor(conversation)
+
+  switch (conversation.type) {
+    case 'storage':
+      return { icon: <StorageOutlined sx={{ fontSize: 18, color: '#FFFFFF' }} />, bg: color, borderColor: color }
+    case 'organisation':
+      return { icon: <Apartment sx={{ fontSize: 18, color: '#FFFFFF' }} />, bg: color, borderColor: color }
+    case 'project':
+      return { icon: <WorkOutline sx={{ fontSize: 18, color: '#FFFFFF' }} />, bg: color, borderColor: color }
+    case 'channel':
+      return { icon: <Tag sx={{ fontSize: 18, color: '#FFFFFF' }} />, bg: color, borderColor: color }
+    case 'group':
+      if (isOrgScoped) {
+        return { icon: <Groups sx={{ fontSize: 18, color: '#FFFFFF' }} />, bg: color, borderColor: color }
+      } else {
+        return { icon: <PeopleOutline sx={{ fontSize: 18, color: '#FFFFFF' }} />, bg: color, borderColor: color }
+      }
+    case 'person':
+      if (isOrgScoped) {
+        return { icon: <Message sx={{ fontSize: 18, color: '#FFFFFF' }} />, bg: color, borderColor: color }
+      } else {
+        const online = conversation.online ?? false
+        return { icon: null, bg: online ? TOKENS.accent : alpha('#FFFFFF', 0.25), borderColor: color }
+      }
     default: {
       const online = conversation.online ?? (conversation.membersOnline ?? 0) > 0
-      return { icon: null, bg: online ? TOKENS.accent : alpha('#FFFFFF', 0.25) }
+      return { icon: null, bg: online ? TOKENS.accent : alpha('#FFFFFF', 0.25), borderColor: color }
     }
   }
 }
@@ -347,17 +474,56 @@ const storageContainers = [
 
 export const ModernShellPrototypeScreen: React.FC = () => {
   const isCompact = useMediaQuery((theme: Theme) => theme.breakpoints.down('lg'))
-  const [activeFilter, setActiveFilter] = useState('all')
-  const [drawerOpen, setDrawerOpen] = useState(true)
+  const {
+    organizations,
+    personalGroups,
+    personalUsers,
+    createOrganization,
+    createChannel,
+    createProject,
+    createGroup,
+    createContact,
+  } = useEntityDirectory()
+  const { enqueueSnackbar } = useSnackbar()
+  const [scopeFilter, setScopeFilter] = useState<'all' | 'organization' | 'personal'>('all')
+  const [typeFilter, setTypeFilter] = useState<'all' | 'channels' | 'projects' | 'groups' | 'people'>('all')
+  const [drawerOpen, setDrawerOpen] = useState(false)
   const [activeDrawerTab, setActiveDrawerTab] = useState<DrawerTab>('Overview')
   const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null)
   const [messageMenu, setMessageMenu] = useState<{ anchorEl: HTMLElement | null; message?: Message }>({ anchorEl: null })
   const [channelViewMode, setChannelViewMode] = useState<ChannelMode>('chat')
   const [projectViewMode, setProjectViewMode] = useState<ProjectMode>('chat')
+  const [groupViewMode, setGroupViewMode] = useState<GroupMode>('chat')
+  const [personViewMode, setPersonViewMode] = useState<PersonMode>('chat')
+  const [preferencesLoaded, setPreferencesLoaded] = useState(false)
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false)
+  const [commandQuery, setCommandQuery] = useState('')
+  const commandInputRef = useRef<HTMLInputElement | null>(null)
+  const searchInputRef = useRef<HTMLInputElement | null>(null)
+  const scopeChipRefs = useRef<(HTMLElement | null)[]>([])
+  const typeChipRefs = useRef<(HTMLElement | null)[]>([])
+
+  // Organization expansion state
+  const [expandedOrgs, setExpandedOrgs] = useState<Set<string>>(new Set())
 
   // Contact management state
   const [contactDialogMode, setContactDialogMode] = useState<'add' | 'edit' | 'delete' | null>(null)
   const [selectedContact, setSelectedContact] = useState<Conversation | null>(null)
+
+  const conversationToContact = useCallback((conversation: Conversation): Contact => ({
+    id: conversation.id,
+    name: conversation.name,
+    fourWords: conversation.fourWords ?? conversation.id,
+    snippet: conversation.snippet,
+    time: conversation.time,
+    online: conversation.online,
+    starred: conversation.starred ?? false,
+    lastMessageTime: conversation.lastMessageTime,
+  }), [])
+
+  const dialogContact = useMemo(() => (
+    selectedContact ? conversationToContact(selectedContact) : null
+  ), [conversationToContact, selectedContact])
 
   // Entity menu state
   const [entityMenuAnchor, setEntityMenuAnchor] = useState<HTMLElement | null>(null)
@@ -366,109 +532,298 @@ export const ModernShellPrototypeScreen: React.FC = () => {
     conversation: null,
   })
 
-  const conversations = useMemo<Conversation[]>(
-    () => [
-      {
-        id: 'saorsa-labs',
-        name: 'Saorsa Labs (Group)',
-        type: 'group',
-        snippet: 'David: Thanks for today guys, lots to think about…',
-        time: '21:37',
-        unread: 3,
-        status: 'read',
-        pinned: true,
-        membersOnline: 3,
-        org: 'Saorsa Labs',
-        hasWebsite: true,
-      },
-      {
-        id: 'saorsa-org',
-        name: 'Saorsa Labs (Org)',
+  const conversations = useMemo<Conversation[]>(() => {
+    const formatTimestamp = (value?: Date | string) => {
+      if (!value) {
+        return ''
+      }
+
+      const date = value instanceof Date ? value : new Date(value)
+      if (Number.isNaN(date.getTime())) {
+        return ''
+      }
+
+      const diffMs = Date.now() - date.getTime()
+      const minuteMs = 60_000
+      const hourMs = 60 * minuteMs
+      const dayMs = 24 * hourMs
+
+      if (diffMs < hourMs) {
+        const minutes = Math.max(1, Math.round(diffMs / minuteMs))
+        return `${minutes}m`
+      }
+
+      if (diffMs < dayMs) {
+        return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+      }
+
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    }
+
+    const result: Conversation[] = []
+
+    organizations.forEach((org) => {
+      const orgName = org.name
+      result.push({
+        id: org.id,
+        name: orgName,
         type: 'organisation',
-        snippet: 'Org overview · 12 members · 6 projects',
-        time: '21:30',
+        snippet: org.description ?? 'Organisation overview',
+        time: formatTimestamp(org.updatedAt),
         status: 'read',
         pinned: true,
-        org: 'Saorsa Labs',
-        hasWebsite: true,
-      },
-      {
-        id: 'saorsa-general',
-        name: 'General (Channel)',
-        type: 'channel',
-        snippet: 'Pinned note: Launch plan checkpoint tomorrow 10:00',
-        time: '20:12',
-        unread: 5,
+        org: orgName,
+        orgId: org.id,
+        membersOnline: org.users?.length ?? 0,
+        hasWebsite: org.settings?.websitePublishingEnabled ?? false,
+        scope: 'organization',
+        fourWords: org.networkIdentity?.fourWords,
+      })
+
+      org.channels?.forEach((channel) => {
+        result.push({
+          id: channel.id,
+          name: channel.name.startsWith('#') ? channel.name : `#${channel.name}`,
+          type: 'channel',
+          snippet: channel.topic ?? 'Channel updates',
+          time: formatTimestamp(channel.updatedAt),
+          status: 'read',
+          org: orgName,
+          orgId: org.id,
+          channelMeta: {
+            topic: channel.topic ?? 'General updates',
+            members: channel.members?.length ?? 0,
+          },
+          scope: 'organization',
+          fourWords: channel.networkIdentity?.fourWords,
+        })
+      })
+
+      org.projects?.forEach((project) => {
+        const ownerName = org.users?.find((user) => project.leads.includes(user.userId))?.name ?? 'Unassigned'
+        const completedMilestones = project.milestones?.filter((milestone) => milestone.completed).length ?? 0
+        const totalMilestones = project.milestones?.length ?? 0
+        const completion = totalMilestones > 0 ? Math.round((completedMilestones / totalMilestones) * 100) : 0
+        const statusLabel = project.status === 'planning'
+          ? 'Planning'
+          : project.status === 'active'
+          ? 'Active'
+          : project.status === 'completed'
+          ? 'Completed'
+          : 'Archived'
+
+        result.push({
+          id: project.id,
+          name: project.name,
+          type: 'project',
+          snippet: `${statusLabel} · ${project.members.length} members`,
+          time: formatTimestamp(project.updatedAt ?? project.createdAt),
+          status: 'read',
+          org: orgName,
+          orgId: org.id,
+          projectMeta: {
+            status: statusLabel as NonNullable<Conversation['projectMeta']>['status'],
+            completion,
+            owner: ownerName,
+          },
+          scope: 'organization',
+          fourWords: project.networkIdentity?.fourWords,
+        })
+      })
+
+      org.groups?.forEach((group) => {
+        result.push({
+          id: group.id,
+          name: group.name,
+          type: 'group',
+          snippet: `${group.members.length} members · ${group.admins.length} admins`,
+          time: formatTimestamp(group.updatedAt ?? group.createdAt),
+          status: 'read',
+          org: orgName,
+          orgId: org.id,
+          membersOnline: group.members.length,
+          scope: 'organization',
+          fourWords: group.networkIdentity?.fourWords,
+        })
+      })
+    })
+
+    personalGroups.forEach((group) => {
+      result.push({
+        id: group.id,
+        name: group.name,
+        type: 'group',
+        snippet: `${group.members.length} members`,
+        time: formatTimestamp(group.updatedAt ?? group.createdAt),
         status: 'read',
-        org: 'Saorsa Labs',
-        channelMeta: {
-          topic: 'Company-wide updates and announcements.',
-          members: 42,
-          integrations: ['Calendar', 'Storage Bot'],
-        },
-      },
-      {
-        id: 'project-lumos',
-        name: 'Project Lumos',
-        type: 'project',
-        snippet: 'Storage pipeline deployed to region FRA1',
-        time: '17:05',
-        unread: 2,
-        status: 'delivered',
-        org: 'Saorsa Labs',
-        hasWebsite: true,
-        projectMeta: {
-          status: 'Active',
-          completion: 72,
-          owner: 'Lauren McFadyen',
-        },
-      },
-      {
-        id: 'storage-ops',
-        name: 'Storage Ops',
-        type: 'storage',
-        snippet: '🔔 Backup failed on lon1-seed-02',
-        time: '16:40',
-        unread: 1,
-        status: 'sent',
-        org: 'Systems',
-      },
-      {
-        id: 'ben-thomson',
-        name: 'Ben Thomson',
+        org: 'Personal',
+        orgId: undefined,
+        membersOnline: group.members.length,
+        scope: 'personal',
+        fourWords: group.networkIdentity?.fourWords,
+      })
+    })
+
+    personalUsers.forEach((user) => {
+      result.push({
+        id: user.id,
+        name: user.name,
         type: 'person',
-        snippet: 'Ok I will put the kilt away then 😄😄',
-        time: '18:21',
-        status: 'delivered',
-        org: 'Direct messages',
-        online: true,
-      },
-      {
-        id: 'lauren',
-        name: 'Lauren McFadyen',
-        type: 'person',
-        snippet: "That's OK Lauren, no worries",
-        time: 'Yesterday',
+        snippet: user.relationship ? `Relationship: ${user.relationship}` : 'Direct message',
+        time: formatTimestamp(user.lastContact ?? user.updatedAt ?? user.createdAt),
         status: 'read',
-        org: 'Direct messages',
+        org: 'Personal',
+        orgId: undefined,
+        scope: 'personal',
         online: false,
-      },
-    ],
-    []
-  )
+        fourWords: user.networkIdentity?.fourWords,
+      })
+    })
+
+    return result
+  }, [organizations, personalGroups, personalUsers])
 
   const [selectedConversationId, setSelectedConversationId] = useState(() => conversations[0]?.id ?? '')
+
+  useEffect(() => {
+    if (conversations.length === 0) {
+      return
+    }
+
+    const hasSelection = conversations.some((conversation) => conversation.id === selectedConversationId)
+    if (!selectedConversationId || !hasSelection) {
+      const fallback = conversations.find((conversation) => conversation.type !== 'organisation') ?? conversations[0]
+      if (fallback) {
+        setSelectedConversationId(fallback.id)
+      }
+    }
+  }, [conversations, selectedConversationId])
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        setIsCommandPaletteOpen(prev => !prev)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
+
+  useEffect(() => {
+    if (!isCommandPaletteOpen) {
+      return
+    }
+
+    setCommandQuery('')
+    const frame = window.requestAnimationFrame(() => {
+      commandInputRef.current?.focus()
+      commandInputRef.current?.select()
+    })
+
+    return () => window.cancelAnimationFrame(frame)
+  }, [isCommandPaletteOpen])
 
   // CRDT Message State
   const [messages, setMessages] = useState<Message[]>([])
   const [messageInputValue, setMessageInputValue] = useState('')
   const [ourPeerId, setOurPeerId] = useState<string>('')
+  const [ourDisplayName, setOurDisplayName] = useState<string>('')
+  const [connectionMenuAnchor, setConnectionMenuAnchor] = useState<null | HTMLElement>(null)
+  const [addConnectionDialogOpen, setAddConnectionDialogOpen] = useState(false)
+  const [connectionWordsInput, setConnectionWordsInput] = useState('')
+  const [editDisplayNameDialogOpen, setEditDisplayNameDialogOpen] = useState(false)
+  const [displayNameInput, setDisplayNameInput] = useState('')
   const messageSyncService = useRef(getMessageSyncService())
   const syncIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
+  // Compute storage key after ourPeerId state is declared
+  const preferenceStorageKey = `modern-shell-preferences-${ourPeerId || 'default'}`
+
+  useEffect(() => {
+    if (preferencesLoaded) {
+      return
+    }
+
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    try {
+      const raw = window.localStorage.getItem(preferenceStorageKey)
+
+      if (!raw) {
+        if (
+          organizations.length === 0 &&
+          personalGroups.length === 0 &&
+          personalUsers.length === 0
+        ) {
+          return
+        }
+
+        const defaultExpanded = new Set<string>()
+        organizations.forEach((organization) => defaultExpanded.add(organization.name))
+        if ((personalGroups.length > 0) || (personalUsers.length > 0)) {
+          defaultExpanded.add('Personal Space')
+        }
+        if (defaultExpanded.size > 0) {
+          setExpandedOrgs(defaultExpanded)
+        }
+      } else {
+        const parsed = JSON.parse(raw) as {
+          scopeFilter?: typeof scopeFilter
+          typeFilter?: typeof typeFilter
+          expandedOrgs?: string[]
+        }
+
+        const validScopeFilters: Array<typeof scopeFilter> = ['all', 'organization', 'personal']
+        const validTypeFilters: Array<typeof typeFilter> = ['all', 'channels', 'projects', 'groups', 'people']
+
+        if (parsed.scopeFilter && validScopeFilters.includes(parsed.scopeFilter)) {
+          setScopeFilter(parsed.scopeFilter)
+        }
+        if (parsed.typeFilter && validTypeFilters.includes(parsed.typeFilter)) {
+          setTypeFilter(parsed.typeFilter)
+        }
+        if (Array.isArray(parsed.expandedOrgs)) {
+          setExpandedOrgs(new Set(parsed.expandedOrgs))
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to load shell preferences', error)
+    } finally {
+      setPreferencesLoaded(true)
+    }
+  }, [
+    preferencesLoaded,
+    preferenceStorageKey,
+    organizations,
+    personalGroups,
+    personalUsers,
+  ])
+
+  useEffect(() => {
+    if (!preferencesLoaded || typeof window === 'undefined') {
+      return
+    }
+
+    const payload = {
+      scopeFilter,
+      typeFilter,
+      expandedOrgs: Array.from(expandedOrgs),
+    }
+
+    try {
+      window.localStorage.setItem(preferenceStorageKey, JSON.stringify(payload))
+    } catch (error) {
+      console.warn('Failed to persist shell preferences', error)
+    }
+  }, [expandedOrgs, preferenceStorageKey, preferencesLoaded, scopeFilter, typeFilter])
+
   // Convert CRDT message to UI Message format
   const convertCRDTToUIMessage = useCallback((crdtMsg: CRDTMessage, ourPeerId: string): Message => {
-    const isOurMessage = crdtMsg.metadata.author_peer_id === ourPeerId
+    const isOurMessage = crdtMsg.metadata.authorPeerId === ourPeerId
 
     return {
       id: crdtMsg.metadata.id,
@@ -479,13 +834,13 @@ export const ModernShellPrototypeScreen: React.FC = () => {
         minute: '2-digit'
       }),
       self: isOurMessage,
-      status: crdtMsg.local_state?.status?.toLowerCase() as 'sent' | 'delivered' | 'read' | undefined,
-      threadCount: crdtMsg.local_state?.thread_count,
-      latestReplyBy: crdtMsg.local_state?.latest_reply_by,
-      reactions: crdtMsg.local_state?.reactions?.map(r => ({
+      status: crdtMsg.localState?.status?.toLowerCase() as 'sent' | 'delivered' | 'read' | undefined,
+      threadCount: crdtMsg.localState?.threadCount,
+      latestReplyBy: crdtMsg.localState?.latestReplyBy,
+      reactions: crdtMsg.localState?.reactions?.map(r => ({
         emoji: r.emoji,
         count: r.count,
-        userReacted: r.user_reacted,
+        userReacted: r.userReacted,
       })),
     }
   }, [])
@@ -516,16 +871,47 @@ export const ModernShellPrototypeScreen: React.FC = () => {
   // Initialize MessageSyncService with peer ID
   useEffect(() => {
     const initializeMessaging = async () => {
-      // Generate or retrieve four-word peer ID
-      // Priority: URL param > localStorage > default
-      const urlParams = new URLSearchParams(window.location.search)
-      const peerIdFromUrl = urlParams.get('peerId')
-      const peerIdFromStorage = localStorage.getItem('testPeerId')
-      const testPeerId = peerIdFromUrl || peerIdFromStorage || 'ocean-forest-moon-star'
+      let testPeerId = 'ocean-forest-moon-star' // default fallback
+      let testDisplayName = '' // default empty
 
-      // Save to localStorage for persistence
+      // Check if running in Tauri - try to get user info from backend with retry
+      if (window.__TAURI__?.tauri?.invoke) {
+        let retries = 5
+        let userInfoRetrieved = false
+
+        while (retries > 0 && !userInfoRetrieved) {
+          try {
+            const userInfo = await window.__TAURI__.tauri.invoke<{ peerId: string; displayName: string }>('core_get_user_info')
+            if (userInfo && userInfo.peerId) {
+              testPeerId = userInfo.peerId
+              testDisplayName = userInfo.displayName || ''
+              console.log('✅ Got user info from Tauri backend:', { peerId: testPeerId, displayName: testDisplayName })
+              userInfoRetrieved = true
+            }
+          } catch (err) {
+            retries--
+            if (retries > 0) {
+              console.log(`⚠️  Core not initialized yet, retrying... (${retries} attempts left)`)
+              await new Promise(resolve => setTimeout(resolve, 200))
+            } else {
+              console.log('⚠️  Core not initialized after retries, will use fallback values')
+            }
+          }
+        }
+      } else {
+        // Browser mode - use URL param or localStorage
+        const urlParams = new URLSearchParams(window.location.search)
+        const peerIdFromUrl = urlParams.get('peerId')
+        const peerIdFromStorage = localStorage.getItem('testPeerId')
+        testPeerId = peerIdFromUrl || peerIdFromStorage || testPeerId
+        testDisplayName = localStorage.getItem('testDisplayName') || ''
+      }
+
+      // Save to localStorage for persistence and set state
       localStorage.setItem('testPeerId', testPeerId)
+      localStorage.setItem('testDisplayName', testDisplayName)
       setOurPeerId(testPeerId)
+      setOurDisplayName(testDisplayName)
 
       try {
         await messageSyncService.current.initialize(testPeerId)
@@ -637,6 +1023,67 @@ export const ModernShellPrototypeScreen: React.FC = () => {
     }
   }, [handleSendMessage])
 
+  // Connection menu handlers
+  const handleCopyConnectionWords = useCallback(() => {
+    if (ourPeerId) {
+      navigator.clipboard.writeText(ourPeerId)
+      console.log('✅ Copied connection words:', ourPeerId)
+      setConnectionMenuAnchor(null)
+    }
+  }, [ourPeerId])
+
+  const handleAddConnection = useCallback(async () => {
+    if (!connectionWordsInput.trim()) {
+      console.warn('⚠️  Connection words cannot be empty')
+      return
+    }
+
+    if (window.__TAURI__?.tauri?.invoke) {
+      try {
+        await window.__TAURI__.tauri.invoke('core_add_bootstrap_node', {
+          node: connectionWordsInput.trim()
+        })
+        console.log('✅ Added bootstrap node:', connectionWordsInput.trim())
+        setConnectionWordsInput('')
+        setAddConnectionDialogOpen(false)
+      } catch (err) {
+        console.error('❌ Failed to add bootstrap node:', err)
+      }
+    } else {
+      console.log('📝 Would add connection:', connectionWordsInput.trim())
+      setConnectionWordsInput('')
+      setAddConnectionDialogOpen(false)
+    }
+  }, [connectionWordsInput])
+
+  const handleSaveDisplayName = useCallback(async () => {
+    if (!displayNameInput.trim()) {
+      console.warn('⚠️  Display name cannot be empty')
+      return
+    }
+
+    if (window.__TAURI__?.tauri?.invoke) {
+      try {
+        await window.__TAURI__.tauri.invoke('core_set_display_name', {
+          displayName: displayNameInput.trim()
+        })
+        console.log('✅ Display name updated:', displayNameInput.trim())
+        setOurDisplayName(displayNameInput.trim())
+        localStorage.setItem('testDisplayName', displayNameInput.trim())
+        setDisplayNameInput('')
+        setEditDisplayNameDialogOpen(false)
+      } catch (err) {
+        console.error('❌ Failed to update display name:', err)
+      }
+    } else {
+      console.log('📝 Would update display name:', displayNameInput.trim())
+      setOurDisplayName(displayNameInput.trim())
+      localStorage.setItem('testDisplayName', displayNameInput.trim())
+      setDisplayNameInput('')
+      setEditDisplayNameDialogOpen(false)
+    }
+  }, [displayNameInput])
+
   const defaultConversationId = useMemo(
     () => conversations.find(c => c.type !== 'organisation')?.id ?? conversations[0]?.id ?? '',
     [conversations]
@@ -647,14 +1094,279 @@ export const ModernShellPrototypeScreen: React.FC = () => {
     [conversations, selectedConversationId]
   )
 
+  const activeOrg = useMemo(() => {
+    if (!selectedConversation) {
+      return organizations[0] ?? null
+    }
+
+    if (selectedConversation.type === 'organisation') {
+      return organizations.find(org => org.id === selectedConversation.id) ?? null
+    }
+
+    if (selectedConversation.orgId) {
+      return organizations.find(org => org.id === selectedConversation.orgId) ?? null
+    }
+
+    return organizations[0] ?? null
+  }, [organizations, selectedConversation])
+
   const isOrganisationView = selectedConversation.type === 'organisation'
+  const isGroupView = selectedConversation.type === 'group'
+  const isPersonView = selectedConversation.type === 'person'
   const isChannelView = selectedConversation.type === 'channel'
   const isProjectView = selectedConversation.type === 'project'
   const isGroupConversation = selectedConversation.type !== 'person'
 
+  const focusConversationById = useCallback((conversationId: string, orgNameToExpand?: string) => {
+    setSelectedConversationId(conversationId)
+    if (orgNameToExpand) {
+      setExpandedOrgs(prev => {
+        const next = new Set(prev)
+        next.add(orgNameToExpand)
+        return next
+      })
+    }
+  }, [])
+
+  const closeCommandPalette = useCallback(() => {
+    setIsCommandPaletteOpen(false)
+    setCommandQuery('')
+  }, [])
+
+  const runCreateOrganizationCommand = useCallback(async (nameHint?: string) => {
+    const displayName = nameHint?.trim() || 'New Organization'
+    try {
+      const result = await createOrganization({ displayName, description: undefined })
+      if (!result.success) {
+        enqueueSnackbar(result.error ?? 'Failed to create organisation', { variant: 'error' })
+        return
+      }
+      enqueueSnackbar(`Created organisation “${displayName}”`, { variant: 'success' })
+      focusConversationById(result.entityId, displayName)
+      closeCommandPalette()
+    } catch (error) {
+      console.error('Create organisation failed', error)
+      enqueueSnackbar('Failed to create organisation', { variant: 'error' })
+    }
+  }, [closeCommandPalette, createOrganization, enqueueSnackbar, focusConversationById])
+
+  const runCreateChannelCommand = useCallback(async (nameHint?: string) => {
+    const org = activeOrg
+    if (!org) {
+      enqueueSnackbar('Select an organisation to create a channel.', { variant: 'warning' })
+      return
+    }
+
+    const displayName = nameHint?.trim() || 'new-channel'
+
+    try {
+      const result = await createChannel({
+        organizationId: org.id,
+        displayName,
+        description: undefined,
+        isPrivate: false,
+      })
+
+      if (!result.success) {
+        enqueueSnackbar(result.error ?? 'Failed to create channel', { variant: 'error' })
+        return
+      }
+
+      enqueueSnackbar(`Created #${displayName}`, { variant: 'success' })
+      focusConversationById(result.entityId, org.name)
+      closeCommandPalette()
+    } catch (error) {
+      console.error('Create channel failed', error)
+      enqueueSnackbar('Failed to create channel', { variant: 'error' })
+    }
+  }, [activeOrg, closeCommandPalette, createChannel, enqueueSnackbar, focusConversationById])
+
+  const runCreateProjectCommand = useCallback(async (nameHint?: string) => {
+    const org = activeOrg
+    if (!org) {
+      enqueueSnackbar('Select an organisation to create a project.', { variant: 'warning' })
+      return
+    }
+
+    const displayName = nameHint?.trim() || 'New Project'
+
+    try {
+      const result = await createProject({
+        organizationId: org.id,
+        displayName,
+        description: undefined,
+      })
+
+      if (!result.success) {
+        enqueueSnackbar(result.error ?? 'Failed to create project', { variant: 'error' })
+        return
+      }
+
+      enqueueSnackbar(`Created project “${displayName}”`, { variant: 'success' })
+      focusConversationById(result.entityId, org.name)
+      closeCommandPalette()
+    } catch (error) {
+      console.error('Create project failed', error)
+      enqueueSnackbar('Failed to create project', { variant: 'error' })
+    }
+  }, [activeOrg, closeCommandPalette, createProject, enqueueSnackbar, focusConversationById])
+
+  const runCreateGroupCommand = useCallback(async (nameHint?: string, scope: 'organization' | 'personal' = 'organization') => {
+    if (scope === 'organization' && !activeOrg) {
+      enqueueSnackbar('Select an organisation to create a group.', { variant: 'warning' })
+      return
+    }
+
+    const displayName = nameHint?.trim() || (scope === 'organization' ? 'New Team Group' : 'New Personal Group')
+
+    try {
+      const result = await createGroup({
+        displayName,
+        description: undefined,
+        organizationId: scope === 'organization' ? activeOrg?.id : undefined,
+      })
+
+      if (!result.success) {
+        enqueueSnackbar(result.error ?? 'Failed to create group', { variant: 'error' })
+        return
+      }
+
+      const orgName = scope === 'organization' ? activeOrg?.name : 'Personal Space'
+      enqueueSnackbar(`Created group “${displayName}”`, { variant: 'success' })
+      focusConversationById(result.entityId, orgName)
+      closeCommandPalette()
+    } catch (error) {
+      console.error('Create group failed', error)
+      enqueueSnackbar('Failed to create group', { variant: 'error' })
+    }
+  }, [activeOrg, closeCommandPalette, createGroup, enqueueSnackbar, focusConversationById])
+
+  const runCreateContactCommand = useCallback(async (nameHint?: string) => {
+    const displayName = nameHint?.trim() || 'New Contact'
+
+    try {
+      const result = await createContact({
+        displayName,
+        relationship: 'colleague',
+      })
+
+      if (!result.success) {
+        enqueueSnackbar(result.error ?? 'Failed to create contact', { variant: 'error' })
+        return
+      }
+
+      enqueueSnackbar(`Created contact “${displayName}”`, { variant: 'success' })
+      focusConversationById(result.entityId, 'Personal Space')
+      closeCommandPalette()
+    } catch (error) {
+      console.error('Create contact failed', error)
+      enqueueSnackbar('Failed to create contact', { variant: 'error' })
+    }
+  }, [closeCommandPalette, createContact, enqueueSnackbar, focusConversationById])
+
+  const focusFirstScopeChip = useCallback(() => {
+    scopeChipRefs.current.find(Boolean)?.focus()
+  }, [])
+
+  const focusLastScopeChip = useCallback(() => {
+    const chips = scopeChipRefs.current.filter(Boolean)
+    chips[chips.length - 1]?.focus()
+  }, [])
+
+  const focusFirstTypeChip = useCallback(() => {
+    typeChipRefs.current.find(Boolean)?.focus()
+  }, [])
+
+  const focusLastTypeChip = useCallback(() => {
+    const chips = typeChipRefs.current.filter(Boolean)
+    chips[chips.length - 1]?.focus()
+  }, [])
+
+  const handleSearchKeyDown = useCallback((event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      if (scopeChipRefs.current.length > 0) {
+        focusFirstScopeChip()
+      } else if (typeChipRefs.current.length > 0) {
+        focusFirstTypeChip()
+      }
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      if (typeChipRefs.current.length > 0) {
+        focusLastTypeChip()
+      } else if (scopeChipRefs.current.length > 0) {
+        focusLastScopeChip()
+      }
+    }
+  }, [focusFirstScopeChip, focusFirstTypeChip, focusLastScopeChip, focusLastTypeChip])
+
+  const handleScopeChipKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>, index: number) => {
+    if (event.key === 'ArrowRight') {
+      event.preventDefault()
+      const next = scopeChipRefs.current[index + 1]
+      if (next) {
+        next.focus()
+      } else if (typeChipRefs.current.length > 0) {
+        focusFirstTypeChip()
+      } else {
+        searchInputRef.current?.focus()
+      }
+    } else if (event.key === 'ArrowLeft') {
+      event.preventDefault()
+      const prev = scopeChipRefs.current[index - 1]
+      if (prev) {
+        prev.focus()
+      } else {
+        searchInputRef.current?.focus()
+      }
+    } else if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      if (typeChipRefs.current.length > 0) {
+        focusFirstTypeChip()
+      } else {
+        searchInputRef.current?.focus()
+      }
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      searchInputRef.current?.focus()
+    }
+  }, [focusFirstTypeChip])
+
+  const handleTypeChipKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>, index: number) => {
+    if (event.key === 'ArrowRight') {
+      event.preventDefault()
+      const next = typeChipRefs.current[index + 1]
+      if (next) {
+        next.focus()
+      } else {
+        searchInputRef.current?.focus()
+      }
+    } else if (event.key === 'ArrowLeft') {
+      event.preventDefault()
+      const prev = typeChipRefs.current[index - 1]
+      if (prev) {
+        prev.focus()
+      } else {
+        focusLastScopeChip()
+      }
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      if (scopeChipRefs.current.length > 0) {
+        focusLastScopeChip()
+      } else {
+        searchInputRef.current?.focus()
+      }
+    } else if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      searchInputRef.current?.focus()
+    }
+  }, [focusLastScopeChip])
+
   useEffect(() => {
     setChannelViewMode('chat')
     setProjectViewMode('chat')
+    setGroupViewMode('chat')
+    setPersonViewMode('chat')
   }, [selectedConversationId])
 
   const headerSubtitle = useMemo(() => {
@@ -678,22 +1390,271 @@ export const ModernShellPrototypeScreen: React.FC = () => {
     }
   }, [selectedConversation])
 
-  const filteredConversations = useMemo(() => {
-    switch (activeFilter) {
-      case 'unread':
-        return conversations.filter(c => (c.unread ?? 0) > 0)
-      case 'favourites':
-        return conversations.filter(c => c.pinned)
-      case 'groups':
-        return conversations.filter(c => c.type === 'group')
-      case 'projects':
-        return conversations.filter(c => c.type === 'project')
-      case 'people':
-        return conversations.filter(c => c.type === 'person')
-      default:
-        return conversations
+  // Toggle organization expansion
+  const toggleOrgExpansion = (orgName: string) => {
+    setExpandedOrgs(prev => {
+      const next = new Set(prev)
+      if (next.has(orgName)) {
+        next.delete(orgName)
+      } else {
+        next.add(orgName)
+      }
+      return next
+    })
+  }
+
+  // Group conversations by organization
+  const organizedConversations = useMemo(() => {
+    // Get all orgs
+    const orgs = conversations.filter(c => c.type === 'organisation')
+
+    // Get standalone items (not belonging to any org)
+    const personalItems = conversations.filter(c => c.scope === 'personal')
+
+    const standalone = conversations.filter(c =>
+      c.type !== 'organisation' &&
+      c.type !== 'storage' &&
+      c.scope !== 'personal' &&
+      !orgs.some(org => c.org === org.name.replace(' (Org)', ''))
+    )
+
+    // Build hierarchical structure
+    const result: Array<Conversation & { children?: Conversation[] }> = []
+
+    orgs.forEach(org => {
+      const orgName = org.name.replace(' (Org)', '')
+      const children = conversations.filter(c =>
+        c.org === orgName &&
+        c.id !== org.id &&
+        c.type !== 'storage' // Exclude storage from sidebar
+      )
+      result.push({ ...org, children })
+    })
+
+    if (personalItems.length > 0) {
+      result.push({
+        id: 'personal-space',
+        name: 'Personal Space',
+        type: 'organisation',
+        snippet: 'Direct messages and personal groups',
+        time: '',
+        status: 'read',
+        org: 'Personal Space',
+        scope: 'personal',
+        children: personalItems,
+      })
     }
-  }, [conversations, activeFilter])
+
+    // Add standalone items
+    result.push(...standalone)
+
+    return result
+  }, [conversations])
+
+  const filteredConversations = useMemo(() => {
+    const matchesScope = (conversation: Conversation) => {
+      if (scopeFilter === 'all') {
+        return true
+      }
+      if (scopeFilter === 'organization') {
+        return conversation.scope !== 'personal'
+      }
+      return conversation.scope === 'personal'
+    }
+
+    const matchesType = (conversation: Conversation) => {
+      if (typeFilter === 'all') {
+        return true
+      }
+
+      switch (typeFilter) {
+        case 'channels':
+          return conversation.type === 'channel'
+        case 'projects':
+          return conversation.type === 'project'
+        case 'groups':
+          return conversation.type === 'group'
+        case 'people':
+          return conversation.type === 'person'
+        default:
+          return true
+      }
+    }
+
+    return organizedConversations.reduce<Array<Conversation & { children?: Conversation[] }>>((acc, conversation) => {
+      if (conversation.type === 'organisation') {
+        const conversationScope = conversation.scope === 'personal' ? 'personal' : 'organization'
+        if (scopeFilter !== 'all' && scopeFilter !== conversationScope) {
+          return acc
+        }
+
+        if (!conversation.children) {
+          if (typeFilter === 'all') {
+            acc.push(conversation)
+          }
+          return acc
+        }
+
+        const scopedChildren = conversation.children.filter(child => matchesScope(child) && matchesType(child))
+
+        if (typeFilter === 'all') {
+          acc.push({ ...conversation, children: scopedChildren })
+        } else if (scopedChildren.length > 0) {
+          acc.push({ ...conversation, children: scopedChildren })
+        }
+
+        return acc
+      }
+
+      if (!matchesScope(conversation) || !matchesType(conversation)) {
+        return acc
+      }
+
+      acc.push(conversation)
+      return acc
+    }, [])
+  }, [organizedConversations, scopeFilter, typeFilter])
+
+  const normalizedCommandQuery = commandQuery.trim().toLowerCase()
+
+  const entityCommandItems = useMemo<CommandPaletteEntityItem[]>(() => {
+    const matches = normalizedCommandQuery
+      ? conversations.filter(conversation => {
+          const haystack = [
+            conversation.name,
+            conversation.snippet,
+            conversation.org ?? '',
+            conversation.scope === 'organization' ? 'organisation' : conversation.scope ?? '',
+            conversation.type,
+          ]
+            .join(' ')
+            .toLowerCase()
+          return haystack.includes(normalizedCommandQuery)
+        })
+      : conversations
+
+    const unique = new Map<string, Conversation>()
+    matches.forEach(match => {
+      if (!unique.has(match.id)) {
+        unique.set(match.id, match)
+      }
+    })
+
+    return Array.from(unique.values())
+      .slice(0, 10)
+      .map<CommandPaletteEntityItem>(conversation => ({
+        id: `entity-${conversation.id}`,
+        type: 'entity',
+        conversation,
+        label: conversation.name,
+        subtitle: conversation.org ? `${conversation.org} · ${conversation.type}` : conversation.type,
+      }))
+  }, [conversations, normalizedCommandQuery])
+
+  const quickCommandItems = useMemo<CommandPaletteActionItem[]>(() => {
+    const trimmedQuery = commandQuery.trim()
+    const normalized = trimmedQuery.toLowerCase()
+    const matchesQuery = (label: string, subtitle?: string) => {
+      if (!normalized) return true
+      const haystack = `${label} ${subtitle ?? ''}`.toLowerCase()
+      return haystack.includes(normalized)
+    }
+
+    const actions: CommandPaletteActionItem[] = []
+
+    const orgNameSuggestion = trimmedQuery || undefined
+
+    const orgActionLabel = trimmedQuery
+      ? `Create organisation “${trimmedQuery}”`
+      : 'Create new organisation'
+    const orgActionSubtitle = 'Generate a workspace with starter channels and projects'
+    if (matchesQuery(orgActionLabel, orgActionSubtitle)) {
+      actions.push({
+        id: 'action-create-organisation',
+        type: 'action',
+        label: orgActionLabel,
+        subtitle: orgActionSubtitle,
+        run: () => runCreateOrganizationCommand(orgNameSuggestion),
+      })
+    }
+
+    if (activeOrg) {
+      const channelLabel = trimmedQuery
+        ? `Create channel “${trimmedQuery}” in ${activeOrg.name}`
+        : `Create channel in ${activeOrg.name}`
+      const channelSubtitle = '#channel · Visible to everyone in the organisation'
+      if (matchesQuery(channelLabel, channelSubtitle)) {
+        actions.push({
+          id: 'action-create-channel',
+          type: 'action',
+          label: channelLabel,
+          subtitle: channelSubtitle,
+          run: () => runCreateChannelCommand(trimmedQuery || undefined),
+        })
+      }
+
+      const projectLabel = trimmedQuery
+        ? `Create project “${trimmedQuery}” in ${activeOrg.name}`
+        : `Create project in ${activeOrg.name}`
+      const projectSubtitle = 'Track milestones, owners, and progress'
+      if (matchesQuery(projectLabel, projectSubtitle)) {
+        actions.push({
+          id: 'action-create-project',
+          type: 'action',
+          label: projectLabel,
+          subtitle: projectSubtitle,
+          run: () => runCreateProjectCommand(trimmedQuery || undefined),
+        })
+      }
+
+      const groupLabel = trimmedQuery
+        ? `Create group “${trimmedQuery}” in ${activeOrg.name}`
+        : `Create group in ${activeOrg.name}`
+      const groupSubtitle = 'Smaller teams with dedicated permissions'
+      if (matchesQuery(groupLabel, groupSubtitle)) {
+        actions.push({
+          id: 'action-create-org-group',
+          type: 'action',
+          label: groupLabel,
+          subtitle: groupSubtitle,
+          run: () => runCreateGroupCommand(trimmedQuery || undefined, 'organization'),
+        })
+      }
+    }
+
+    const personalGroupLabel = trimmedQuery
+      ? `Create personal group “${trimmedQuery}”`
+      : 'Create personal group'
+    const personalGroupSubtitle = 'Coordinate with friends or family in your private space'
+    if (matchesQuery(personalGroupLabel, personalGroupSubtitle)) {
+      actions.push({
+        id: 'action-create-personal-group',
+        type: 'action',
+        label: personalGroupLabel,
+        subtitle: personalGroupSubtitle,
+        run: () => runCreateGroupCommand(trimmedQuery || undefined, 'personal'),
+      })
+    }
+
+    const contactLabel = trimmedQuery ? `Add contact “${trimmedQuery}”` : 'Add contact'
+    const contactSubtitle = 'Start a private thread with a new contact'
+    if (matchesQuery(contactLabel, contactSubtitle)) {
+      actions.push({
+        id: 'action-create-contact',
+        type: 'action',
+        label: contactLabel,
+        subtitle: contactSubtitle,
+        run: () => runCreateContactCommand(trimmedQuery || undefined),
+      })
+    }
+
+    return actions
+  }, [activeOrg, commandQuery, runCreateChannelCommand, runCreateContactCommand, runCreateGroupCommand, runCreateOrganizationCommand, runCreateProjectCommand])
+
+  const commandItems = useMemo<CommandPaletteItem[]>(() => {
+    const combined = [...quickCommandItems, ...entityCommandItems]
+    return combined.slice(0, 12)
+  }, [entityCommandItems, quickCommandItems])
 
   const handleMessageMenuOpen = (event: React.MouseEvent<HTMLElement>, message: Message) => {
     setMessageMenu({ anchorEl: event.currentTarget, message })
@@ -706,13 +1667,21 @@ export const ModernShellPrototypeScreen: React.FC = () => {
       setSelectedConversationId(defaultConversationId)
       setChannelViewMode('chat')
       setProjectViewMode('chat')
+      setGroupViewMode('chat')
+      setPersonViewMode('chat')
     }
   }
 
   const handleWebsiteOpen = () => {
-    if (selectedConversation.hasWebsite) {
-      console.log(`Open website for ${selectedConversation.name}`)
-    }
+    // Open website storage page for the selected entity
+    // This will connect to saorsa-sites using the entity's four-word identity
+    const fourWords = selectedConversation.fourWords || selectedConversation.id
+    console.log(`🌐 Opening website for ${selectedConversation.name}`)
+    console.log(`   Entity: ${selectedConversation.type}`)
+    console.log(`   Four Words: ${fourWords}`)
+    console.log(`   ID: ${selectedConversation.id}`)
+    // TODO: Navigate to website storage page or open saorsa-sites interface
+    // This would typically call: navigate(`/website/${fourWords}`) or invoke Tauri command
   }
 
   // Entity menu handlers
@@ -762,6 +1731,26 @@ export const ModernShellPrototypeScreen: React.FC = () => {
       setContactDialogMode('delete')
     }
   }
+
+  const handleCommandItemSelect = useCallback(async (item: CommandPaletteItem) => {
+    if (item.type === 'entity') {
+      const orgName = item.conversation.scope === 'personal'
+        ? 'Personal Space'
+        : item.conversation.type === 'organisation'
+          ? item.conversation.name
+          : item.conversation.org
+      focusConversationById(item.conversation.id, orgName ?? undefined)
+      closeCommandPalette()
+      return
+    }
+
+    try {
+      await item.run()
+    } catch (error) {
+      console.error('Command action failed', error)
+      enqueueSnackbar('Command failed', { variant: 'error' })
+    }
+  }, [closeCommandPalette, enqueueSnackbar, focusConversationById])
 
   // Dialog callbacks that call Tauri backend
   const handleSaveEntityEdit = async (id: string, updates: Partial<Conversation>) => {
@@ -1082,6 +2071,60 @@ export const ModernShellPrototypeScreen: React.FC = () => {
     )
   }
 
+  const renderGroupMode = () => {
+    // Only show non-chat modes when group is selected
+    if (!isGroupView || groupViewMode === 'chat') {
+      return null
+    }
+
+    return (
+      <Box sx={{ flexGrow: 1, px: 4, py: 4, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {groupViewMode === 'threads' && (
+          <Typography variant="body2" sx={{ color: TOKENS.textSecondary }}>
+            Threads view for groups - Coming soon
+          </Typography>
+        )}
+        {groupViewMode === 'files' && (
+          <Typography variant="body2" sx={{ color: TOKENS.textSecondary }}>
+            Files view for groups - Coming soon
+          </Typography>
+        )}
+        {groupViewMode === 'website' && (
+          <Typography variant="body2" sx={{ color: TOKENS.textSecondary }}>
+            Website management for groups - Coming soon
+          </Typography>
+        )}
+      </Box>
+    )
+  }
+
+  const renderPersonMode = () => {
+    // Only show non-chat modes when person is selected
+    if (!isPersonView || personViewMode === 'chat') {
+      return null
+    }
+
+    return (
+      <Box sx={{ flexGrow: 1, px: 4, py: 4, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {personViewMode === 'threads' && (
+          <Typography variant="body2" sx={{ color: TOKENS.textSecondary }}>
+            Threads view for people - Coming soon
+          </Typography>
+        )}
+        {personViewMode === 'files' && (
+          <Typography variant="body2" sx={{ color: TOKENS.textSecondary }}>
+            Files view for people - Coming soon
+          </Typography>
+        )}
+        {personViewMode === 'website' && (
+          <Typography variant="body2" sx={{ color: TOKENS.textSecondary }}>
+            Website management for people - Coming soon
+          </Typography>
+        )}
+      </Box>
+    )
+  }
+
   const renderChatTimeline = () => (
     <Box
       sx={{
@@ -1308,17 +2351,264 @@ export const ModernShellPrototypeScreen: React.FC = () => {
               <IconButton size="small" sx={{ color: TOKENS.textSecondary }}><MoreHoriz /></IconButton>
             </Stack>
           </Stack>
+          {/* Current User Indicator */}
+          {ourPeerId && (
+            <>
+              <Box
+                onClick={(e) => setConnectionMenuAnchor(e.currentTarget)}
+                sx={{
+                  mt: 1.5,
+                  p: 1.5,
+                  bgcolor: alpha(TOKENS.accent, 0.1),
+                  borderRadius: 2,
+                  border: `1px solid ${alpha(TOKENS.accent, 0.3)}`,
+                  cursor: 'pointer',
+                  '&:hover': {
+                    bgcolor: alpha(TOKENS.accent, 0.15),
+                  }
+                }}
+              >
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <Avatar
+                    sx={{
+                      width: 32,
+                      height: 32,
+                      bgcolor: TOKENS.accent,
+                      fontSize: 14,
+                      fontWeight: 600
+                    }}
+                  >
+                    {ourDisplayName
+                      ? ourDisplayName.substring(0, 2).toUpperCase()
+                      : ourPeerId.split('-')[0].substring(0, 2).toUpperCase()
+                    }
+                  </Avatar>
+                  <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                    <Typography
+                      variant="body2"
+                      fontWeight={600}
+                      sx={{ color: TOKENS.textPrimary }}
+                    >
+                      {ourDisplayName || ourPeerId.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
+                    </Typography>
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color: TOKENS.textSecondary,
+                        fontSize: 11,
+                        fontFamily: 'monospace'
+                      }}
+                    >
+                      {ourPeerId}
+                    </Typography>
+                  </Box>
+                  <KeyboardArrowDown sx={{ color: TOKENS.textSecondary, fontSize: 18 }} />
+                </Stack>
+              </Box>
+
+              {/* Connection Menu */}
+              <Menu
+                anchorEl={connectionMenuAnchor}
+                open={Boolean(connectionMenuAnchor)}
+                onClose={() => setConnectionMenuAnchor(null)}
+                PaperProps={{
+                  sx: {
+                    bgcolor: TOKENS.bgRaised,
+                    border: `1px solid ${TOKENS.borderSubtle}`,
+                    borderRadius: 2,
+                    minWidth: 280,
+                  }
+                }}
+              >
+                <Box sx={{ px: 2, py: 1.5, borderBottom: `1px solid ${TOKENS.borderSubtle}` }}>
+                  <Typography variant="caption" sx={{ color: TOKENS.textSecondary, textTransform: 'uppercase', fontWeight: 600 }}>
+                    Your Connection Words
+                  </Typography>
+                  <Box sx={{ mt: 1, p: 1.5, bgcolor: alpha(TOKENS.accent, 0.05), borderRadius: 1, border: `1px solid ${alpha(TOKENS.accent, 0.2)}` }}>
+                    <Typography variant="body2" sx={{ color: TOKENS.textPrimary, fontFamily: 'monospace', fontSize: 13, wordBreak: 'break-all' }}>
+                      {ourPeerId}
+                    </Typography>
+                  </Box>
+                </Box>
+                <MenuItem onClick={handleCopyConnectionWords} sx={{ color: TOKENS.textPrimary, '&:hover': { bgcolor: TOKENS.surfaceActive } }}>
+                  <ListItemIcon>
+                    <ContentCopyOutlined fontSize="small" sx={{ color: TOKENS.textSecondary }} />
+                  </ListItemIcon>
+                  <ListItemText>Copy Connection Words</ListItemText>
+                </MenuItem>
+                <MenuItem onClick={() => { setConnectionMenuAnchor(null); setDisplayNameInput(ourDisplayName); setEditDisplayNameDialogOpen(true); }} sx={{ color: TOKENS.textPrimary, '&:hover': { bgcolor: TOKENS.surfaceActive } }}>
+                  <ListItemIcon>
+                    <EditOutlined fontSize="small" sx={{ color: TOKENS.textSecondary }} />
+                  </ListItemIcon>
+                  <ListItemText>Edit Display Name</ListItemText>
+                </MenuItem>
+                <Divider sx={{ my: 0.5, borderColor: TOKENS.borderSubtle }} />
+                <MenuItem onClick={() => { setConnectionMenuAnchor(null); setAddConnectionDialogOpen(true); }} sx={{ color: TOKENS.textPrimary, '&:hover': { bgcolor: TOKENS.surfaceActive } }}>
+                  <ListItemIcon>
+                    <Add fontSize="small" sx={{ color: TOKENS.accent }} />
+                  </ListItemIcon>
+                  <ListItemText>Add Connection</ListItemText>
+                </MenuItem>
+              </Menu>
+
+              {/* Add Connection Dialog */}
+              <Modal
+                open={addConnectionDialogOpen}
+                onClose={() => setAddConnectionDialogOpen(false)}
+              >
+                <Paper
+                  sx={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    width: 450,
+                    bgcolor: TOKENS.bgRaised,
+                    border: `1px solid ${TOKENS.borderSubtle}`,
+                    borderRadius: 3,
+                    p: 3,
+                  }}
+                >
+                  <Typography variant="h6" sx={{ color: TOKENS.textPrimary, mb: 1 }}>
+                    Add Connection
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: TOKENS.textSecondary, mb: 3 }}>
+                    Paste the connection words shared by another user to connect to them.
+                  </Typography>
+                  <InputBase
+                    fullWidth
+                    multiline
+                    rows={3}
+                    value={connectionWordsInput}
+                    onChange={(e) => setConnectionWordsInput(e.target.value)}
+                    placeholder="ocean-forest-moon-star"
+                    sx={{
+                      bgcolor: TOKENS.bgBase,
+                      border: `1px solid ${TOKENS.borderSubtle}`,
+                      borderRadius: 2,
+                      p: 1.5,
+                      color: TOKENS.textPrimary,
+                      fontFamily: 'monospace',
+                      fontSize: 13,
+                      '& ::placeholder': {
+                        color: TOKENS.textSecondary,
+                        opacity: 0.5,
+                      }
+                    }}
+                  />
+                  <Stack direction="row" spacing={2} sx={{ mt: 3 }}>
+                    <Button
+                      onClick={() => setAddConnectionDialogOpen(false)}
+                      sx={{ color: TOKENS.textSecondary }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      variant="contained"
+                      onClick={handleAddConnection}
+                      disabled={!connectionWordsInput.trim()}
+                      sx={{
+                        bgcolor: TOKENS.accent,
+                        color: '#fff',
+                        '&:hover': { bgcolor: alpha(TOKENS.accent, 0.8) },
+                        '&:disabled': { bgcolor: alpha(TOKENS.accent, 0.3) }
+                      }}
+                    >
+                      Add Connection
+                    </Button>
+                  </Stack>
+                </Paper>
+              </Modal>
+
+              {/* Edit Display Name Dialog */}
+              <Modal
+                open={editDisplayNameDialogOpen}
+                onClose={() => setEditDisplayNameDialogOpen(false)}
+              >
+                <Paper
+                  sx={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    width: 450,
+                    bgcolor: TOKENS.bgRaised,
+                    border: `1px solid ${TOKENS.borderSubtle}`,
+                    borderRadius: 3,
+                    p: 3,
+                  }}
+                >
+                  <Typography variant="h6" sx={{ color: TOKENS.textPrimary, mb: 1 }}>
+                    Edit Display Name
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: TOKENS.textSecondary, mb: 3 }}>
+                    Choose how you appear to others in the network.
+                  </Typography>
+                  <InputBase
+                    fullWidth
+                    value={displayNameInput}
+                    onChange={(e) => setDisplayNameInput(e.target.value)}
+                    placeholder="Your Name"
+                    sx={{
+                      bgcolor: TOKENS.bgBase,
+                      border: `1px solid ${TOKENS.borderSubtle}`,
+                      borderRadius: 2,
+                      p: 1.5,
+                      color: TOKENS.textPrimary,
+                      fontSize: 14,
+                    }}
+                  />
+                  <Stack direction="row" spacing={2} sx={{ mt: 3 }}>
+                    <Button onClick={() => setEditDisplayNameDialogOpen(false)} sx={{ color: TOKENS.textSecondary }}>
+                      Cancel
+                    </Button>
+                    <Button
+                      variant="contained"
+                      onClick={handleSaveDisplayName}
+                      disabled={!displayNameInput.trim()}
+                      sx={{
+                        bgcolor: TOKENS.accent,
+                        color: '#fff',
+                        '&:hover': { bgcolor: alpha(TOKENS.accent, 0.8) },
+                        '&:disabled': { bgcolor: alpha(TOKENS.accent, 0.3) }
+                      }}
+                    >
+                      Save
+                    </Button>
+                  </Stack>
+                </Paper>
+              </Modal>
+            </>
+          )}
         </Box>
 
         {/* B2. Filters */}
-        <Box sx={{ px: 2, py: 1.5, borderBottom: `1px solid ${TOKENS.borderSubtle}` }}>
+        <Box sx={{ px: 2, py: 1.5, borderBottom: `1px solid ${TOKENS.borderSubtle}`, display: 'grid', gap: 1.25 }}>
           <Stack direction="row" spacing={0.75} sx={{ overflowX: 'auto' }}>
-            {filters.map(f => (
+            {scopeFilters.map((filter, index) => (
               <FilterChip
-                key={f.key}
-                label={f.label}
-                variant={activeFilter === f.key ? 'filled' : 'outlined'}
-                onClick={() => setActiveFilter(f.key)}
+                key={filter.key}
+                label={filter.label}
+                variant={scopeFilter === filter.key ? 'filled' : 'outlined'}
+                onClick={() => setScopeFilter(filter.key)}
+                ref={el => {
+                  scopeChipRefs.current[index] = el as HTMLElement | null
+                }}
+                onKeyDown={(event) => handleScopeChipKeyDown(event as React.KeyboardEvent<HTMLDivElement>, index)}
+              />
+            ))}
+          </Stack>
+          <Stack direction="row" spacing={0.75} sx={{ overflowX: 'auto' }}>
+            {typeFilters.map((filter, index) => (
+              <FilterChip
+                key={filter.key}
+                label={filter.label}
+                variant={typeFilter === filter.key ? 'filled' : 'outlined'}
+                onClick={() => setTypeFilter(filter.key)}
+                ref={el => {
+                  typeChipRefs.current[index] = el as HTMLElement | null
+                }}
+                onKeyDown={(event) => handleTypeChipKeyDown(event as React.KeyboardEvent<HTMLDivElement>, index)}
               />
             ))}
           </Stack>
@@ -1327,7 +2617,9 @@ export const ModernShellPrototypeScreen: React.FC = () => {
         {/* B3. Search */}
         <Box sx={{ px: 2, py: 1.5 }}>
           <InputBase
-            placeholder="Search..."
+            placeholder="Search or jump (⌘K)"
+            inputRef={searchInputRef}
+            onKeyDown={handleSearchKeyDown}
             startAdornment={<SearchIcon sx={{ mr: 1, color: TOKENS.textSecondary }} />}
             sx={{
               width: '100%',
@@ -1343,86 +2635,253 @@ export const ModernShellPrototypeScreen: React.FC = () => {
 
         {/* B4. List Items */}
         <Box sx={{ flexGrow: 1, overflowY: 'auto', px: 1 }}>
-          {filteredConversations.map(conv => {
-            const badge = presenceBadge(conv)
-            return (
-              <ConversationListItem
-                key={conv.id}
-                selected={conv.id === selectedConversationId}
-                onClick={() => setSelectedConversationId(conv.id)}
-                sx={{
-                  position: 'relative',
-                  '&:hover .entity-menu-button': {
-                    opacity: 1,
-                  },
-                }}
-              >
-                <Box sx={{ position: 'relative' }}>
-                  <Avatar sx={{ width: 48, height: 48, ...avatarShapeStyles[conv.type] }}>
-                    {conv.name.substring(0, 2).toUpperCase()}
-                  </Avatar>
-                  <Box
-                    sx={{
-                      position: 'absolute',
-                      bottom: -2,
-                      right: -2,
-                      width: 20,
-                      height: 20,
-                      borderRadius: '50%',
-                      bgcolor: badge.bg,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      border: `2px solid ${TOKENS.bgRaised}`,
-                    }}
+          <AnimatePresence initial={false}>
+            {filteredConversations.map(conv => {
+              const badge = presenceBadge(conv)
+              const entityIcon = getEntityIcon(conv)
+              const isOrg = conv.type === 'organisation'
+              const orgName = isOrg ? conv.name.replace(' (Org)', '') : null
+              const isExpanded = orgName ? expandedOrgs.has(orgName) : false
+              const hasChildren = (conv as any).children?.length > 0
+
+              if (isOrg) {
+                return (
+                  <motion.div
+                    key={conv.id}
+                    layout
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    transition={LIST_ITEM_TRANSITION}
                   >
-                    {badge.icon}
-                  </Box>
-                </Box>
-                <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                  <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
-                    <Stack direction="row" spacing={0.5} alignItems="center" sx={{ flexGrow: 1, minWidth: 0 }}>
-                      <Typography variant="body2" fontWeight={600} noWrap>{conv.name}</Typography>
-                      <IconButton
-                        className="entity-menu-button"
-                        size="small"
-                        onClick={(e) => handleSidebarMenuOpen(e, conv)}
+                    <Box
+                      onClick={() => {
+                        if (hasChildren) {
+                          toggleOrgExpansion(orgName!)
+                        }
+                        setSelectedConversationId(conv.id)
+                      }}
+                      sx={{
+                        px: 2,
+                        py: 1.5,
+                        mt: 2,
+                        mb: 0.5,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1,
+                        cursor: 'pointer',
+                        bgcolor: conv.id === selectedConversationId ? alpha('#FFFFFF', 0.08) : 'transparent',
+                        borderRadius: 2,
+                        '&:hover': {
+                          bgcolor: alpha('#FFFFFF', 0.05),
+                        },
+                      }}
+                    >
+                      {hasChildren && (
+                        <IconButton
+                          size="small"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            toggleOrgExpansion(orgName!)
+                          }}
+                          sx={{ color: TOKENS.textSecondary, padding: 0.5 }}
+                        >
+                          {isExpanded ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
+                        </IconButton>
+                      )}
+                      {entityIcon}
+                      <Typography
+                        variant="caption"
+                        fontWeight={700}
                         sx={{
-                          opacity: 0,
-                          transition: 'opacity 0.2s',
-                          color: TOKENS.textSecondary,
-                          padding: 0.25,
-                          '&:hover': {
-                            bgcolor: alpha('#FFFFFF', 0.08),
-                          },
+                          color: TOKENS.textPrimary,
+                          textTransform: 'uppercase',
+                          letterSpacing: 0.5,
+                          flexGrow: 1,
                         }}
                       >
-                        <KeyboardArrowDown fontSize="small" />
-                      </IconButton>
-                    </Stack>
-                    <Typography variant="caption" sx={{ color: TOKENS.textSecondary, flexShrink: 0 }}>{conv.time}</Typography>
-                  </Stack>
-                  <Stack direction="row" spacing={0.5} alignItems="center">
-                    <Typography variant="body2" sx={{ color: TOKENS.textSecondary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {conv.snippet}
-                    </Typography>
-                    {conv.status === 'read' && <CheckCircle sx={{ fontSize: 14, color: TOKENS.accent, flexShrink: 0 }} />}
-                  </Stack>
-                </Box>
-                {conv.unread && (
-                  <Badge badgeContent={conv.unread} sx={{ '& .MuiBadge-badge': { bgcolor: TOKENS.accent, color: '#000' } }} />
-                )}
-              </ConversationListItem>
-            )
-          })}
-        </Box>
+                        {conv.name.replace(' (Org)', '')}
+                      </Typography>
+                      {conv.membersOnline && conv.membersOnline > 0 && (
+                        <Typography variant="caption" sx={{ color: TOKENS.textSecondary }}>
+                          {conv.membersOnline} online
+                        </Typography>
+                      )}
+                    </Box>
 
-        {/* B5. Connection Status */}
-        <Box sx={{ borderTop: `1px solid ${TOKENS.borderSubtle}` }}>
-          <ConnectionStatus compact={true} refreshInterval={15000} />
+                    <AnimatePresence initial={false}>
+                      {isExpanded && (conv as any).children?.map((child: Conversation) => {
+                        const childBadge = presenceBadge(child)
+                        const childIcon = getEntityIcon(child)
+                        return (
+                          <motion.div
+                            key={child.id}
+                            layout
+                            initial={{ opacity: 0, y: 6 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -6 }}
+                            transition={LIST_ITEM_TRANSITION}
+                          >
+                            <ConversationListItem
+                              selected={child.id === selectedConversationId}
+                              onClick={() => setSelectedConversationId(child.id)}
+                              sx={{
+                                position: 'relative',
+                                pl: 4,
+                                '&:hover .entity-menu-button': {
+                                  opacity: 1,
+                                },
+                              }}
+                            >
+                              <Box sx={{ position: 'relative' }}>
+                                <Avatar sx={{ width: 40, height: 40, ...avatarShapeStyles[child.type] }}>
+                                  {child.name.substring(0, 2).toUpperCase()}
+                                </Avatar>
+                                <Box
+                                  sx={{
+                                    position: 'absolute',
+                                    bottom: -2,
+                                    right: -2,
+                                    width: 18,
+                                    height: 18,
+                                    borderRadius: '50%',
+                                    bgcolor: childBadge.bg,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    border: `2px solid ${TOKENS.bgRaised}`,
+                                  }}
+                                >
+                                  {childBadge.icon && React.cloneElement(childBadge.icon, { sx: { fontSize: 14, color: '#FFFFFF' } })}
+                                </Box>
+                              </Box>
+                              <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                                <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
+                                  <Stack direction="row" spacing={0.5} alignItems="center" sx={{ flexGrow: 1, minWidth: 0 }}>
+                                    {childIcon}
+                                    <Typography variant="body2" fontWeight={500} noWrap>{child.name}</Typography>
+                                    <IconButton
+                                      className="entity-menu-button"
+                                      size="small"
+                                      onClick={(e) => handleSidebarMenuOpen(e, child)}
+                                      sx={{
+                                        opacity: 0,
+                                        transition: 'opacity 0.2s',
+                                        color: TOKENS.textSecondary,
+                                        padding: 0.25,
+                                        '&:hover': {
+                                          bgcolor: alpha('#FFFFFF', 0.08),
+                                        },
+                                      }}
+                                    >
+                                      <KeyboardArrowDown fontSize="small" />
+                                    </IconButton>
+                                  </Stack>
+                                  <Typography variant="caption" sx={{ color: TOKENS.textSecondary, flexShrink: 0 }}>{child.time}</Typography>
+                                </Stack>
+                                <Stack direction="row" spacing={0.5} alignItems="center">
+                                  <Typography variant="caption" sx={{ color: TOKENS.textSecondary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {child.snippet}
+                                  </Typography>
+                                  {child.status === 'read' && <CheckCircle sx={{ fontSize: 12, color: TOKENS.accent, flexShrink: 0 }} />}
+                                </Stack>
+                              </Box>
+                              {child.unread && (
+                                <Badge badgeContent={child.unread} sx={{ '& .MuiBadge-badge': { bgcolor: TOKENS.accent, color: '#000', fontSize: 10, minWidth: 16, height: 16 } }} />
+                              )}
+                            </ConversationListItem>
+                          </motion.div>
+                        )
+                      })}
+                    </AnimatePresence>
+                  </motion.div>
+                )
+              }
+
+              return (
+                <motion.div
+                  key={conv.id}
+                  layout
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={LIST_ITEM_TRANSITION}
+                >
+                  <ConversationListItem
+                    selected={conv.id === selectedConversationId}
+                    onClick={() => setSelectedConversationId(conv.id)}
+                    sx={{
+                      position: 'relative',
+                      '&:hover .entity-menu-button': {
+                        opacity: 1,
+                      },
+                    }}
+                  >
+                    <Box sx={{ position: 'relative' }}>
+                      <Avatar sx={{ width: 48, height: 48, ...avatarShapeStyles[conv.type] }}>
+                        {conv.name.substring(0, 2).toUpperCase()}
+                      </Avatar>
+                      {!entityIcon && badge.icon && (
+                        <Box
+                          sx={{
+                            position: 'absolute',
+                            bottom: -2,
+                            right: -2,
+                            width: 20,
+                            height: 20,
+                            borderRadius: '50%',
+                            bgcolor: badge.bg,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            border: `2px solid ${TOKENS.bgRaised}`,
+                          }}
+                        >
+                          {badge.icon && React.cloneElement(badge.icon, { sx: { fontSize: 14, color: '#FFFFFF' } })}
+                        </Box>
+                      )}
+                    </Box>
+                    <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                      <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
+                        <Stack direction="row" spacing={0.5} alignItems="center" sx={{ flexGrow: 1, minWidth: 0 }}>
+                          {entityIcon}
+                          <Typography variant="body2" fontWeight={500} noWrap>{conv.name}</Typography>
+                          <IconButton
+                            className="entity-menu-button"
+                            size="small"
+                            onClick={(e) => handleSidebarMenuOpen(e, conv)}
+                            sx={{
+                              opacity: 0,
+                              transition: 'opacity 0.2s',
+                              color: TOKENS.textSecondary,
+                              padding: 0.25,
+                              '&:hover': {
+                                bgcolor: alpha('#FFFFFF', 0.08),
+                              },
+                            }}
+                          >
+                            <KeyboardArrowDown fontSize="small" />
+                          </IconButton>
+                        </Stack>
+                        <Typography variant="caption" sx={{ color: TOKENS.textSecondary, flexShrink: 0 }}>{conv.time}</Typography>
+                      </Stack>
+                      <Stack direction="row" spacing={0.5} alignItems="center">
+                        <Typography variant="caption" sx={{ color: TOKENS.textSecondary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {conv.snippet}
+                        </Typography>
+                        {conv.status === 'read' && <CheckCircle sx={{ fontSize: 12, color: TOKENS.accent, flexShrink: 0 }} />}
+                      </Stack>
+                    </Box>
+                    {conv.unread && (
+                      <Badge badgeContent={conv.unread} sx={{ '& .MuiBadge-badge': { bgcolor: TOKENS.accent, color: '#000', fontSize: 10, minWidth: 20, height: 20 } }} />
+                    )}
+                  </ConversationListItem>
+                </motion.div>
+              )
+            })}
+          </AnimatePresence>
         </Box>
       </Box>
-
       {/* C. Conversation Pane */}
       <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', position: 'relative' }}>
         {/* C1. Header */}
@@ -1479,6 +2938,16 @@ export const ModernShellPrototypeScreen: React.FC = () => {
                 <VideocamOutlined />
               </IconButton>
             </Tooltip>
+            <Tooltip title="Files">
+              <IconButton sx={{ color: TOKENS.textSecondary }} onClick={() => console.log('Open files for:', selectedConversation.name)}>
+                <FolderOutlined />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Website">
+              <IconButton sx={{ color: TOKENS.textSecondary }} onClick={handleWebsiteOpen}>
+                <LanguageOutlined />
+              </IconButton>
+            </Tooltip>
             <Tooltip title={drawerOpen ? 'Close info' : 'Open info'}>
               <IconButton sx={{ color: TOKENS.textSecondary }} onClick={() => setDrawerOpen(o => !o)}>
                 <InfoOutlined />
@@ -1519,17 +2988,53 @@ export const ModernShellPrototypeScreen: React.FC = () => {
           </Box>
         )}
 
+        {/* View Mode Chips for Groups */}
+        {isGroupView && (
+          <Box sx={{ px: 3, py: 1.5, borderBottom: `1px solid ${TOKENS.borderSubtle}`, bgcolor: TOKENS.bgRaised }}>
+            <Stack direction="row" spacing={1}>
+              {groupModes.map(mode => (
+                <ViewChip
+                  key={mode.key}
+                  label={mode.label}
+                  variant={groupViewMode === mode.key ? 'filled' : 'outlined'}
+                  onClick={() => setGroupViewMode(mode.key)}
+                />
+              ))}
+            </Stack>
+          </Box>
+        )}
+
+        {/* View Mode Chips for People */}
+        {isPersonView && (
+          <Box sx={{ px: 3, py: 1.5, borderBottom: `1px solid ${TOKENS.borderSubtle}`, bgcolor: TOKENS.bgRaised }}>
+            <Stack direction="row" spacing={1}>
+              {personModes.map(mode => (
+                <ViewChip
+                  key={mode.key}
+                  label={mode.label}
+                  variant={personViewMode === mode.key ? 'filled' : 'outlined'}
+                  onClick={() => setPersonViewMode(mode.key)}
+                />
+              ))}
+            </Stack>
+          </Box>
+        )}
+
         {/* C2. Content Area - renders different views based on mode */}
         {isOrganisationView ? renderOrganisationOverview() :
          isChannelView && channelViewMode !== 'chat' ? renderChannelMode() :
          isProjectView && projectViewMode !== 'chat' ? renderProjectMode() :
+         isGroupView && groupViewMode !== 'chat' ? renderGroupMode() :
+         isPersonView && personViewMode !== 'chat' ? renderPersonMode() :
          renderChatTimeline()}
 
         {/* C3. Composer (only show for chat modes) */}
         {!isOrganisationView &&
-         ((!isChannelView && !isProjectView) ||
+         ((!isChannelView && !isProjectView && !isGroupView && !isPersonView) ||
           (isChannelView && channelViewMode === 'chat') ||
-          (isProjectView && projectViewMode === 'chat')) && (
+          (isProjectView && projectViewMode === 'chat') ||
+          (isGroupView && groupViewMode === 'chat') ||
+          (isPersonView && personViewMode === 'chat')) && (
           <Box
             sx={{
               p: 2,
@@ -1668,6 +3173,18 @@ export const ModernShellPrototypeScreen: React.FC = () => {
           </ListItemIcon>
           <ListItemText>Edit {selectedConversation.type === 'person' ? 'Contact' : 'Entity'}</ListItemText>
         </MenuItem>
+        {selectedConversation?.type === 'organisation' && (
+          <MenuItem onClick={() => {
+            setActiveDrawerTab('Storage')
+            setDrawerOpen(true)
+            handleEntityMenuClose()
+          }}>
+            <ListItemIcon>
+              <StorageOutlined fontSize="small" sx={{ color: TOKENS.textPrimary }} />
+            </ListItemIcon>
+            <ListItemText>Storage</ListItemText>
+          </MenuItem>
+        )}
         <Divider sx={{ my: 0.5, borderColor: TOKENS.borderSubtle }} />
         <MenuItem onClick={handleEntityDelete}>
           <ListItemIcon>
@@ -1704,6 +3221,19 @@ export const ModernShellPrototypeScreen: React.FC = () => {
             Edit {sidebarMenuState.conversation?.type === 'person' ? 'Contact' : 'Entity'}
           </ListItemText>
         </MenuItem>
+        {sidebarMenuState.conversation?.type === 'organisation' && (
+          <MenuItem onClick={() => {
+            setSelectedConversationId(sidebarMenuState.conversation!.id)
+            setActiveDrawerTab('Storage')
+            setDrawerOpen(true)
+            handleSidebarMenuClose()
+          }}>
+            <ListItemIcon>
+              <StorageOutlined fontSize="small" sx={{ color: TOKENS.textPrimary }} />
+            </ListItemIcon>
+            <ListItemText>Storage</ListItemText>
+          </MenuItem>
+        )}
         <Divider sx={{ my: 0.5, borderColor: TOKENS.borderSubtle }} />
         <MenuItem onClick={handleSidebarEntityDelete}>
           <ListItemIcon>
@@ -1715,10 +3245,134 @@ export const ModernShellPrototypeScreen: React.FC = () => {
         </MenuItem>
       </Menu>
 
+      <Modal
+        open={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+        closeAfterTransition
+      >
+        <Box
+          sx={{
+            minHeight: '100vh',
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'center',
+            pt: 12,
+          }}
+        >
+          <Paper
+            elevation={8}
+            sx={{
+              width: 'min(640px, 90vw)',
+              bgcolor: TOKENS.bgRaised,
+              borderRadius: 3,
+              border: `1px solid ${TOKENS.borderSubtle}`,
+              boxShadow: '0px 24px 48px rgba(0,0,0,0.35)',
+              overflow: 'hidden',
+            }}
+          >
+            <Box sx={{ px: 3, py: 2, borderBottom: `1px solid ${TOKENS.borderSubtle}` }}>
+              <InputBase
+                inputRef={commandInputRef}
+                value={commandQuery}
+                onChange={(event) => setCommandQuery(event.target.value)}
+                placeholder="Jump to organisation, channel, project…"
+                startAdornment={<SearchIcon sx={{ mr: 1.5, color: TOKENS.textSecondary }} />}
+                sx={{
+                  width: '100%',
+                  fontSize: 16,
+                  fontWeight: 500,
+                  color: TOKENS.textPrimary,
+                }}
+              />
+            </Box>
+            <Box sx={{ maxHeight: 320, overflowY: 'auto', p: 1.5, display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+              {commandItems.length > 0 ? (
+                commandItems.map(item => (
+                  <Box
+                    key={item.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => handleCommandItemSelect(item)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        handleCommandItemSelect(item)
+                      }
+                    }}
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      px: 2,
+                      py: 1.25,
+                      borderRadius: 2,
+                      cursor: 'pointer',
+                      bgcolor:
+                        item.type === 'entity' && item.conversation.id === selectedConversationId
+                          ? alpha(TOKENS.accent, 0.12)
+                          : 'transparent',
+                      transition: 'background 120ms ease',
+                      outline: 'none',
+                      '&:hover': {
+                        bgcolor: alpha(TOKENS.accent, 0.16),
+                      },
+                      '&:focus-visible': {
+                        boxShadow: `0 0 0 1px ${alpha(TOKENS.accent, 0.8)}`,
+                      },
+                    }}
+                  >
+                    {item.type === 'entity' ? (
+                      <>
+                        <Stack direction="row" spacing={1.5} alignItems="center" sx={{ minWidth: 0 }}>
+                          <Avatar sx={{ width: 36, height: 36, fontSize: 14, ...avatarShapeStyles[item.conversation.type] }}>
+                            {item.conversation.name.substring(0, 2).toUpperCase()}
+                          </Avatar>
+                          <Box sx={{ minWidth: 0 }}>
+                            <Typography variant="body2" fontWeight={600} noWrap>{item.conversation.name}</Typography>
+                            <Typography variant="caption" sx={{ color: TOKENS.textSecondary }} noWrap>
+                              {item.conversation.org ?? (item.conversation.scope === 'personal' ? 'Personal Space' : 'Organisation')} · {conversationTypeLabel[item.conversation.type]}
+                            </Typography>
+                          </Box>
+                        </Stack>
+                        <Typography variant="caption" sx={{ color: TOKENS.textSecondary, flexShrink: 0 }}>
+                          {item.conversation.time}
+                        </Typography>
+                      </>
+                    ) : (
+                      <>
+                        <Stack direction="row" spacing={1.5} alignItems="center" sx={{ minWidth: 0 }}>
+                          <Avatar sx={{ width: 36, height: 36, fontSize: 16, bgcolor: alpha(TOKENS.accent, 0.18), color: TOKENS.accent }}>
+                            <Add fontSize="small" />
+                          </Avatar>
+                          <Box sx={{ minWidth: 0 }}>
+                            <Typography variant="body2" fontWeight={600} noWrap>{item.label}</Typography>
+                            {item.subtitle && (
+                              <Typography variant="caption" sx={{ color: TOKENS.textSecondary }} noWrap>
+                                {item.subtitle}
+                              </Typography>
+                            )}
+                          </Box>
+                        </Stack>
+                        <Typography variant="caption" sx={{ color: TOKENS.textSecondary, flexShrink: 0 }}>
+                          Action
+                        </Typography>
+                      </>
+                    )}
+                  </Box>
+                ))
+              ) : (
+                <Typography variant="body2" sx={{ color: TOKENS.textSecondary, px: 2, py: 4, textAlign: 'center' }}>
+                  No matching entities. Try different keywords.
+                </Typography>
+              )}
+            </Box>
+          </Paper>
+        </Box>
+      </Modal>
+
       {/* Entity Management Dialogs */}
       <EditContactDialog
         open={contactDialogMode === 'edit'}
-        contact={selectedContact}
+        contact={dialogContact}
         onClose={() => {
           setContactDialogMode(null)
           setSelectedContact(null)
@@ -1728,7 +3382,7 @@ export const ModernShellPrototypeScreen: React.FC = () => {
 
       <DeleteContactDialog
         open={contactDialogMode === 'delete'}
-        contact={selectedContact}
+        contact={dialogContact}
         onClose={() => {
           setContactDialogMode(null)
           setSelectedContact(null)

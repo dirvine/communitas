@@ -139,19 +139,28 @@ export const UnifiedAuthFlow: React.FC<UnifiedAuthFlowProps> = ({
   };
 
   const downloadIdentity = () => {
-    const data = {
-      fourWordAddress: generatedFourWords,
-      name: formData.name,
-      createdAt: new Date().toISOString(),
-      warning: 'Keep this file secure - it contains your identity information'
-    };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `communitas-identity-${generatedFourWords}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+    try {
+      console.log('📥 Starting identity backup download...');
+      const data = {
+        fourWordAddress: generatedFourWords,
+        name: formData.name,
+        createdAt: new Date().toISOString(),
+        warning: 'Keep this file secure - it contains your identity information'
+      };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `communitas-identity-${generatedFourWords}.json`;
+      document.body.appendChild(a); // Append to DOM for compatibility
+      a.click();
+      document.body.removeChild(a); // Clean up
+      URL.revokeObjectURL(url);
+      console.log('✅ Identity backup download initiated');
+    } catch (err) {
+      console.error('Failed to download identity:', err);
+      alert('Failed to download backup. Please copy your four-word identity manually.');
+    }
   };
 
   const validateForm = (): boolean => {
@@ -168,10 +177,7 @@ export const UnifiedAuthFlow: React.FC<UnifiedAuthFlowProps> = ({
         setError('Passwords do not match');
         return false;
       }
-      if (!identitySaved) {
-        setError('Please confirm that you have saved your four-word identity');
-        return false;
-      }
+      // Note: identitySaved check removed - that's for the success modal, not pre-registration
     } else {
       // In quick login mode, only password is required
       if (loginMode === 'quick') {
@@ -237,13 +243,20 @@ export const UnifiedAuthFlow: React.FC<UnifiedAuthFlowProps> = ({
   };
 
   const handlePasskeyAuth = async () => {
+    console.log('handlePasskeyAuth called', { mode, isAuthenticated: authState.isAuthenticated });
     setLoading(true);
     setError(null);
 
     try {
       if (mode === 'register' && authState.isAuthenticated) {
-        await registerPasskey();
-        setSuccess(true);
+        console.log('Registering passkey...');
+        const result = await registerPasskey();
+        if (result) {
+          console.log('✅ Passkey enrolled successfully');
+          setError('✅ Touch ID / Face ID enrolled successfully!');
+          // Clear success message after 3 seconds
+          setTimeout(() => setError(null), 3000);
+        }
       } else {
         const success = await signInWithPasskey();
         if (success) {
@@ -254,7 +267,9 @@ export const UnifiedAuthFlow: React.FC<UnifiedAuthFlowProps> = ({
         }
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Passkey authentication failed');
+      console.error('Passkey error:', err);
+      const errorMsg = err instanceof Error ? err.message : 'Passkey operation failed';
+      setError(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -324,7 +339,24 @@ export const UnifiedAuthFlow: React.FC<UnifiedAuthFlowProps> = ({
             >
               Download Identity Backup
             </Button>
+
+            <Button
+              variant="outlined"
+              fullWidth
+              startIcon={<FingerprintIcon />}
+              onClick={handlePasskeyAuth}
+              disabled={loading}
+              color="primary"
+            >
+              {loading ? 'Enrolling...' : 'Enroll Touch ID / Face ID'}
+            </Button>
           </Stack>
+
+          {error && (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              {error}
+            </Alert>
+          )}
         </DialogContent>
         <DialogActions>
           <Button
@@ -457,73 +489,7 @@ export const UnifiedAuthFlow: React.FC<UnifiedAuthFlowProps> = ({
                       }}
                     />
 
-                    <Paper
-                      variant="outlined"
-                      sx={{
-                        p: 2,
-                        backgroundColor: alpha(theme.palette.warning.main, 0.1),
-                        borderColor: theme.palette.warning.main,
-                        borderWidth: 2,
-                      }}
-                    >
-                      <Stack direction="row" alignItems="center" spacing={1} mb={1}>
-                        <WarningIcon color="warning" />
-                        <Typography variant="subtitle2" fontWeight={700} color="warning.dark">
-                          IMPORTANT: Your Universal Identity
-                        </Typography>
-                      </Stack>
-
-                      <Box sx={{
-                        p: 1.5,
-                        backgroundColor: theme.palette.background.paper,
-                        borderRadius: 1,
-                        mb: 1
-                      }}>
-                        <Stack direction="row" alignItems="center" justifyContent="space-between">
-                          <Typography variant="h6" fontWeight={600} color="primary">
-                            {generatedFourWords}
-                          </Typography>
-                          <Tooltip title={copiedToClipboard ? "Copied!" : "Copy to clipboard"}>
-                            <IconButton size="small" onClick={copyToClipboard} color="primary">
-                              <ContentCopyIcon />
-                            </IconButton>
-                          </Tooltip>
-                        </Stack>
-                      </Box>
-
-                      <Typography variant="body2" color="text.primary" paragraph>
-                        This is your <strong>permanent login</strong> for ALL devices.
-                        You MUST save it - it cannot be recovered if lost!
-                      </Typography>
-
-                      <Stack direction="row" spacing={1}>
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          startIcon={<SaveAltIcon />}
-                          onClick={downloadIdentity}
-                        >
-                          Download Backup
-                        </Button>
-                      </Stack>
-
-                      <Divider sx={{ my: 1.5 }} />
-
-                      <FormControlLabel
-                        control={
-                          <Checkbox
-                            checked={identitySaved}
-                            onChange={(e) => setIdentitySaved(e.target.checked)}
-                            color="warning"
-                          />
-                        }
-                        label={
-                          <Typography variant="body2">
-                            I have saved my four-word identity securely
-                          </Typography>
-                        }
-                      />
-                    </Paper>
+                    {/* Note: Four-word identity will be shown in success modal after creation */}
 
                     <TextField
                       fullWidth
@@ -670,44 +636,60 @@ export const UnifiedAuthFlow: React.FC<UnifiedAuthFlowProps> = ({
                   </>
                 )}
 
-                {/* Submit Button */}
-                <Button
-                  type="submit"
-                  variant="contained"
-                  size="large"
-                  fullWidth
-                  disabled={loading || success}
-                  endIcon={loading ? null : <ArrowForwardIcon />}
-                  sx={{
-                    py: 1.5,
-                    background: loading ? undefined : `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
-                  }}
-                >
-                  {loading ? (
-                    <CircularProgress size={24} color="inherit" />
-                  ) : (
-                    mode === 'register' ? 'Create Identity' : 'Sign In'
+                {/* Action Buttons */}
+                <Stack direction="row" spacing={2} width="100%">
+                  {onCancel && (
+                    <Button
+                      variant="outlined"
+                      size="large"
+                      fullWidth
+                      onClick={onCancel}
+                      disabled={loading}
+                      sx={{ py: 1.5 }}
+                    >
+                      Cancel
+                    </Button>
                   )}
-                </Button>
+                  <Button
+                    type="submit"
+                    variant="contained"
+                    size="large"
+                    fullWidth
+                    disabled={loading || success}
+                    endIcon={loading ? null : <ArrowForwardIcon />}
+                    sx={{
+                      py: 1.5,
+                      background: loading ? undefined : `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+                    }}
+                  >
+                    {loading ? (
+                      <CircularProgress size={24} color="inherit" />
+                    ) : (
+                      mode === 'register' ? 'Create Identity' : 'Sign In'
+                    )}
+                  </Button>
+                </Stack>
 
-                {/* Passkey Option */}
-                <Divider>
-                  <Chip label="OR" size="small" />
-                </Divider>
+                {/* Passkey Option - Only show in login mode */}
+                {mode === 'login' && (
+                  <>
+                    <Divider>
+                      <Chip label="OR" size="small" />
+                    </Divider>
 
-                <Button
-                  variant="outlined"
-                  size="large"
-                  fullWidth
-                  onClick={handlePasskeyAuth}
-                  disabled={loading || success}
-                  startIcon={<FingerprintIcon />}
-                  sx={{ py: 1.5 }}
-                >
-                  {mode === 'register' && authState.isAuthenticated
-                    ? 'Add Passkey'
-                    : 'Sign in with Passkey'}
-                </Button>
+                    <Button
+                      variant="outlined"
+                      size="large"
+                      fullWidth
+                      onClick={handlePasskeyAuth}
+                      disabled={loading || success}
+                      startIcon={<FingerprintIcon />}
+                      sx={{ py: 1.5 }}
+                    >
+                      Sign in with Passkey
+                    </Button>
+                  </>
+                )}
 
                 {/* Mode Switch */}
                 <Box textAlign="center" mt={2}>

@@ -218,19 +218,24 @@ export const EncryptionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         const encryptionContext = await cryptoManager.createUserEncryptionContext(user);
         masterKey = encryptionContext.masterKey;
         userKeyPair = encryptionContext.keyPair;
-        
-        // Store keys securely
-        await invoke('store_encryption_keys', {
-          userId: user.id,
-          masterKey: JSON.stringify(await cryptoManager.exportKey(masterKey, 'raw')),
-          keyPair: JSON.stringify({
-            publicKey: await cryptoManager.exportKey(userKeyPair.publicKey, 'spki'),
-            privateKey: await cryptoManager.exportKey(userKeyPair.privateKey, 'pkcs8'),
-            keyId: userKeyPair.keyId,
-            createdAt: userKeyPair.createdAt,
-            purpose: userKeyPair.purpose,
-          }),
-        });
+
+        // Store keys securely (optional - keys can remain in-memory)
+        // Note: With saorsa-core, vault encryption is handled by CoreContext
+        try {
+          await invoke('store_encryption_keys', {
+            userId: user.id,
+            masterKey: JSON.stringify(await cryptoManager.exportKey(masterKey, 'raw')),
+            keyPair: JSON.stringify({
+              publicKey: await cryptoManager.exportKey(userKeyPair.publicKey, 'spki'),
+              privateKey: await cryptoManager.exportKey(userKeyPair.privateKey, 'pkcs8'),
+              keyId: userKeyPair.keyId,
+              createdAt: userKeyPair.createdAt,
+              purpose: userKeyPair.purpose,
+            }),
+          });
+        } catch (err) {
+          console.warn('⚠️ Could not store encryption keys in backend (continuing with in-memory keys):', err);
+        }
       }
       
       dispatch({ 

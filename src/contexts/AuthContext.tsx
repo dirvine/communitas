@@ -99,12 +99,17 @@ export interface AuthContextType {
 
   // Vault management
   listVaults: () => Promise<VaultInfo[]>;
+  isFirstLaunch: () => Promise<boolean>;
 
   // Configuration management
   getConfig: () => Promise<any>;
   setAutoLogin: (enabled: boolean) => Promise<void>;
   setKeyringEnabled: (enabled: boolean) => Promise<void>;
   getRecentIdentities: () => Promise<any[]>;
+
+  // OS integration
+  getOsUsername: () => Promise<string>;
+  enableAutoLogin: (fourWords: string, password: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -156,6 +161,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
         console.log('✅ Auto-login successful:', identity.fourWordAddress);
 
+        // Initialize CoreContext with P2P networking (non-blocking)
+        try {
+          console.log('🌐 Initializing CoreContext with networking...');
+          await invoke('core_initialize', {
+            fourWords: identity.fourWordAddress,
+            displayName: identity.name,
+            deviceName: navigator.platform || 'Desktop',
+            deviceType: 'Desktop'
+          });
+          console.log('✅ CoreContext initialized with P2P networking');
+        } catch (err) {
+          console.warn('⚠️ CoreContext initialization failed (app will work in local mode):', err);
+        }
+
         // Try to connect to network (non-blocking)
         connectToNetwork().catch(err =>
           console.warn('Network connection failed (non-fatal):', err)
@@ -186,6 +205,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           loading: false,
           error: null,
         });
+
+        console.log('✅ Session restored:', identity.fourWordAddress);
+
+        // Initialize CoreContext with P2P networking (non-blocking)
+        try {
+          console.log('🌐 Initializing CoreContext with networking...');
+          await invoke('core_initialize', {
+            fourWords: identity.fourWordAddress,
+            displayName: identity.name,
+            deviceName: navigator.platform || 'Desktop',
+            deviceType: 'Desktop'
+          });
+          console.log('✅ CoreContext initialized with P2P networking');
+        } catch (err) {
+          console.warn('⚠️ CoreContext initialization failed (app will work in local mode):', err);
+        }
       } else {
         setAuthState({
           isAuthenticated: false,
@@ -247,6 +282,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       });
 
       console.log('✅ Login successful:', identity.fourWordAddress);
+
+      // Initialize CoreContext with P2P networking (non-blocking)
+      try {
+        console.log('🌐 Initializing CoreContext with networking...');
+        await invoke('core_initialize', {
+          fourWords: identity.fourWordAddress,
+          displayName: identity.name,
+          deviceName: navigator.platform || 'Desktop',
+          deviceType: 'Desktop'
+        });
+        console.log('✅ CoreContext initialized with P2P networking');
+      } catch (err) {
+        console.warn('⚠️ CoreContext initialization failed (app will work in local mode):', err);
+      }
 
       // Try to connect to network (non-blocking)
       connectToNetwork().catch(err =>
@@ -333,6 +382,21 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       });
 
       console.log('✅ Identity created:', newIdentity.fourWordAddress);
+
+      // Initialize CoreContext with P2P networking (non-blocking)
+      try {
+        console.log('🌐 Initializing CoreContext with networking...');
+        await invoke('core_initialize', {
+          fourWords: newIdentity.fourWordAddress,
+          displayName: name,
+          deviceName: navigator.platform || 'Desktop',
+          deviceType: 'Desktop'
+        });
+        console.log('✅ CoreContext initialized with P2P networking');
+      } catch (err) {
+        console.warn('⚠️ CoreContext initialization failed (app will work in local mode):', err);
+      }
+
       return newIdentity;
     } catch (error) {
       console.error('Identity creation failed:', error);
@@ -354,24 +418,40 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  // Passkey registration (WebAuthn via browser API)
+  // Passkey registration (WebAuthn via browser API + backend storage)
   const registerPasskey = async (): Promise<boolean> => {
     try {
-      if (typeof window === 'undefined' || !(window as any).PublicKeyCredential) {
-        return false;
+      // Check if running in Tauri
+      const isTauri = !!(window as any).__TAURI__;
+
+      if (isTauri) {
+        throw new Error('Touch ID / Face ID is not supported in the desktop app. It will be available in the web version.');
       }
+
+      if (typeof window === 'undefined' || !(window as any).PublicKeyCredential) {
+        console.error('WebAuthn not supported');
+        throw new Error('Touch ID / Face ID not supported on this device');
+      }
+
+      if (!authState.user?.fourWordAddress) {
+        console.error('No authenticated user');
+        throw new Error('Please log in first');
+      }
+
+      console.log('🔐 Starting passkey registration...');
 
       const challenge = crypto.getRandomValues(new Uint8Array(32));
       const userId = crypto.getRandomValues(new Uint8Array(16));
 
+      // Step 1: Create WebAuthn credential (Touch ID/Face ID prompt)
       const credential = await (navigator.credentials as any).create({
         publicKey: {
           challenge,
           rp: { name: 'Communitas' },
           user: {
             id: userId,
-            name: authState.user?.fourWordAddress || 'user',
-            displayName: authState.user?.name || 'Communitas User'
+            name: authState.user.fourWordAddress,
+            displayName: authState.user.name
           },
           pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
           timeout: 60000,
@@ -379,10 +459,24 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         },
       });
 
-      return !!credential;
+      if (!credential) {
+        throw new Error('Failed to create passkey');
+      }
+
+      console.log('✅ WebAuthn credential created');
+
+      // Step 2: Save passkey to backend
+      const deviceName = `${navigator.platform} - ${new Date().toLocaleDateString()}`;
+      await invoke('auth_passkey_register', {
+        fourWords: authState.user.fourWordAddress,
+        deviceName
+      });
+
+      console.log('✅ Passkey saved to backend');
+      return true;
     } catch (e) {
-      console.warn('Passkey registration failed', e);
-      return false;
+      console.error('Passkey registration failed:', e);
+      throw e;
     }
   };
 
@@ -524,6 +618,49 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
+  // Check if this is first launch (no vaults exist)
+  const isFirstLaunch = async (): Promise<boolean> => {
+    try {
+      const vaults = await listVaults();
+      return vaults.length === 0;
+    } catch (error) {
+      console.error('Failed to check first launch:', error);
+      return false;
+    }
+  };
+
+  // Get OS username for default display name
+  const getOsUsername = async (): Promise<string> => {
+    try {
+      const username = await invoke('get_os_username') as string;
+      console.log('Got OS username:', username);
+      return username;
+    } catch (error) {
+      console.error('Failed to get OS username:', error);
+      return 'User';
+    }
+  };
+
+  // Enable auto-login by storing password in keyring
+  const enableAutoLogin = async (fourWords: string, password: string): Promise<void> => {
+    try {
+      // Register passkey stores password in keyring
+      await invoke('auth_passkey_register', {
+        fourWords,
+        deviceName: `${navigator.platform} - Auto-login`,
+      });
+
+      // Enable auto-login in config
+      await setAutoLogin(true);
+      await setKeyringEnabled(true);
+
+      console.log('✅ Auto-login enabled for:', fourWords);
+    } catch (error) {
+      console.error('Failed to enable auto-login:', error);
+      throw error;
+    }
+  };
+
   const contextValue: AuthContextType = {
     authState,
     login,
@@ -539,10 +676,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     isOwner,
     canAccess,
     listVaults,
+    isFirstLaunch,
     getConfig,
     setAutoLogin,
     setKeyringEnabled,
     getRecentIdentities,
+    getOsUsername,
+    enableAutoLogin,
   };
 
   return (

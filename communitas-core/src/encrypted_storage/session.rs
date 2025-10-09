@@ -242,7 +242,6 @@ fn generate_session_id() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::time::sleep;
 
     #[test]
     fn test_session_creation() {
@@ -283,7 +282,7 @@ mod tests {
 
         let id1 = manager.add_session(session1).await.unwrap();
         let id2 = manager.add_session(session2).await.unwrap();
-        let id3 = manager.add_session(session3).await.unwrap();
+        let _id3 = manager.add_session(session3).await.unwrap();
 
         // Get active sessions
         let active = manager.get_active_sessions().await;

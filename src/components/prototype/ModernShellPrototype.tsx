@@ -86,8 +86,15 @@ import { MessageReactionPicker, MessageReactionsDisplay } from './MessageReactio
 import { Star, StarBorder as StarOutlineIcon } from '@mui/icons-material'
 import { ConnectionStatus } from '../ConnectionStatus'
 import { useEntityDirectory } from '../../contexts/EntityDirectoryContext'
+import { EntityDocumentWorkspace } from '../documents/EntityDocumentWorkspace'
 import { useSnackbar } from 'notistack'
 import { AnimatePresence, motion } from 'framer-motion'
+import { useAuth } from '../../contexts/AuthContext'
+import { IdentityPicker } from '../auth/IdentityPicker'
+import { UnifiedAuthFlow } from '../auth/UnifiedAuthFlow'
+import { FirstLaunchWelcome } from '../auth/FirstLaunchWelcome'
+import { Dialog, DialogTitle, DialogContent, DialogActions, TextField, InputAdornment, Alert } from '@mui/material'
+import { LockOutlined as LockIcon, Visibility as VisibilityIcon, VisibilityOff as VisibilityOffIcon } from '@mui/icons-material'
 
 const TOKENS = {
   bgBase: '#101518',
@@ -485,6 +492,19 @@ export const ModernShellPrototypeScreen: React.FC = () => {
     createContact,
   } = useEntityDirectory()
   const { enqueueSnackbar } = useSnackbar()
+
+  // Authentication state
+  const { authState, login, logout, signInWithPasskey, isFirstLaunch, getRecentIdentities } = useAuth()
+  const [showIdentityPicker, setShowIdentityPicker] = useState(false)
+  const [showFirstLaunchWelcome, setShowFirstLaunchWelcome] = useState(false)
+  const [showUnifiedAuthFlow, setShowUnifiedAuthFlow] = useState(false)
+  const [showPasswordDialog, setShowPasswordDialog] = useState(false)
+  const [selectedIdentity, setSelectedIdentity] = useState<string>('')
+  const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [authError, setAuthError] = useState<string | null>(null)
+  const [isAuthenticating, setIsAuthenticating] = useState(false)
+
   const [scopeFilter, setScopeFilter] = useState<'all' | 'organization' | 'personal'>('all')
   const [typeFilter, setTypeFilter] = useState<'all' | 'channels' | 'projects' | 'groups' | 'people'>('all')
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -685,6 +705,110 @@ export const ModernShellPrototypeScreen: React.FC = () => {
 
   const [selectedConversationId, setSelectedConversationId] = useState(() => conversations[0]?.id ?? '')
 
+  // Check authentication status on mount and when auth state changes
+  useEffect(() => {
+    const checkAuthStatus = async () => {
+      if (!authState.loading && !authState.isAuthenticated) {
+        // Check if this is first launch (no vaults exist)
+        const firstLaunch = await isFirstLaunch()
+        if (firstLaunch) {
+          console.log('🎉 First launch detected - showing welcome screen')
+          setShowFirstLaunchWelcome(true)
+        } else {
+          console.log('📝 Existing identities found - showing identity picker')
+          setShowIdentityPicker(true)
+        }
+      }
+    }
+    checkAuthStatus()
+  }, [authState.isAuthenticated, authState.loading, isFirstLaunch])
+
+  // Authentication handlers
+  const handleSelectIdentity = useCallback(async (fourWords: string, usePasskey: boolean) => {
+    try {
+      setIsAuthenticating(true)
+      setAuthError(null)
+
+      if (usePasskey) {
+        // Use passkey authentication
+        const success = await signInWithPasskey()
+        if (success) {
+          setShowIdentityPicker(false)
+          enqueueSnackbar('Signed in successfully', { variant: 'success' })
+        } else {
+          setAuthError('Passkey authentication failed')
+        }
+      } else {
+        // Show password dialog
+        setSelectedIdentity(fourWords)
+        setShowPasswordDialog(true)
+      }
+    } catch (err) {
+      setAuthError(err instanceof Error ? err.message : 'Authentication failed')
+      enqueueSnackbar('Authentication failed', { variant: 'error' })
+    } finally {
+      setIsAuthenticating(false)
+    }
+  }, [signInWithPasskey, enqueueSnackbar])
+
+  const handlePasswordLogin = useCallback(async () => {
+    try {
+      setIsAuthenticating(true)
+      setAuthError(null)
+
+      const success = await login(selectedIdentity, password)
+      if (success) {
+        setShowPasswordDialog(false)
+        setShowIdentityPicker(false)
+        setPassword('')
+        enqueueSnackbar('Signed in successfully', { variant: 'success' })
+      } else {
+        setAuthError('Invalid password')
+      }
+    } catch (err) {
+      setAuthError(err instanceof Error ? err.message : 'Login failed')
+      enqueueSnackbar('Login failed', { variant: 'error' })
+    } finally {
+      setIsAuthenticating(false)
+    }
+  }, [selectedIdentity, password, login, enqueueSnackbar])
+
+  // Handle identity switching
+  const handleSwitchIdentity = useCallback(async (fourWords: string) => {
+    try {
+      console.log('🔄 Switching to identity:', fourWords)
+      setConnectionMenuAnchor(null)
+
+      // Logout current identity
+      await logout()
+      console.log('✅ Logged out current identity')
+
+      // Login with selected identity using passkey (auto-login)
+      const success = await signInWithPasskey()
+      if (success) {
+        enqueueSnackbar(`Switched to ${fourWords}`, { variant: 'success' })
+        console.log('✅ Switched to new identity successfully')
+      } else {
+        // If passkey fails, show identity picker for manual login
+        setShowIdentityPicker(true)
+        enqueueSnackbar('Auto-login failed, please sign in manually', { variant: 'warning' })
+      }
+    } catch (error) {
+      console.error('Failed to switch identity:', error)
+      enqueueSnackbar('Failed to switch identity', { variant: 'error' })
+      setShowIdentityPicker(true)
+    }
+  }, [logout, signInWithPasskey, enqueueSnackbar])
+
+  // Handle creating new identity from switcher menu
+  const handleCreateNewIdentity = useCallback(() => {
+    setConnectionMenuAnchor(null)
+    logout().then(() => {
+      setShowFirstLaunchWelcome(true)
+      console.log('🎉 Creating new identity')
+    })
+  }, [logout])
+
   useEffect(() => {
     if (conversations.length === 0) {
       return
@@ -731,6 +855,7 @@ export const ModernShellPrototypeScreen: React.FC = () => {
   const [ourPeerId, setOurPeerId] = useState<string>('')
   const [ourDisplayName, setOurDisplayName] = useState<string>('')
   const [connectionMenuAnchor, setConnectionMenuAnchor] = useState<null | HTMLElement>(null)
+  const [recentIdentities, setRecentIdentities] = useState<any[]>([])
   const [addConnectionDialogOpen, setAddConnectionDialogOpen] = useState(false)
   const [connectionWordsInput, setConnectionWordsInput] = useState('')
   const [editDisplayNameDialogOpen, setEditDisplayNameDialogOpen] = useState(false)
@@ -740,6 +865,22 @@ export const ModernShellPrototypeScreen: React.FC = () => {
 
   // Compute storage key after ourPeerId state is declared
   const preferenceStorageKey = `modern-shell-preferences-${ourPeerId || 'default'}`
+
+  // Load recent identities when connection menu opens
+  useEffect(() => {
+    const loadRecentIdentities = async () => {
+      if (connectionMenuAnchor && authState.isAuthenticated) {
+        try {
+          const identities = await getRecentIdentities()
+          console.log('📋 Loaded recent identities:', identities)
+          setRecentIdentities(identities)
+        } catch (error) {
+          console.error('Failed to load recent identities:', error)
+        }
+      }
+    }
+    loadRecentIdentities()
+  }, [connectionMenuAnchor, authState.isAuthenticated, getRecentIdentities])
 
   useEffect(() => {
     if (preferencesLoaded) {
@@ -875,13 +1016,13 @@ export const ModernShellPrototypeScreen: React.FC = () => {
       let testDisplayName = '' // default empty
 
       // Check if running in Tauri - try to get user info from backend with retry
-      if (window.__TAURI__?.tauri?.invoke) {
+      if ((window as any).__TAURI__?.tauri?.invoke) {
         let retries = 5
         let userInfoRetrieved = false
 
         while (retries > 0 && !userInfoRetrieved) {
           try {
-            const userInfo = await window.__TAURI__.tauri.invoke<{ peerId: string; displayName: string }>('core_get_user_info')
+            const userInfo = await (window as any).__TAURI__.tauri.invoke('core_get_user_info') as { peerId: string; displayName: string }
             if (userInfo && userInfo.peerId) {
               testPeerId = userInfo.peerId
               testDisplayName = userInfo.displayName || ''
@@ -1038,9 +1179,9 @@ export const ModernShellPrototypeScreen: React.FC = () => {
       return
     }
 
-    if (window.__TAURI__?.tauri?.invoke) {
+    if ((window as any).__TAURI__?.tauri?.invoke) {
       try {
-        await window.__TAURI__.tauri.invoke('core_add_bootstrap_node', {
+        await (window as any).__TAURI__.tauri.invoke('core_add_bootstrap_node', {
           node: connectionWordsInput.trim()
         })
         console.log('✅ Added bootstrap node:', connectionWordsInput.trim())
@@ -1062,9 +1203,9 @@ export const ModernShellPrototypeScreen: React.FC = () => {
       return
     }
 
-    if (window.__TAURI__?.tauri?.invoke) {
+    if ((window as any).__TAURI__?.tauri?.invoke) {
       try {
-        await window.__TAURI__.tauri.invoke('core_set_display_name', {
+        await (window as any).__TAURI__.tauri.invoke('core_set_display_name', {
           displayName: displayNameInput.trim()
         })
         console.log('✅ Display name updated:', displayNameInput.trim())
@@ -2085,9 +2226,12 @@ export const ModernShellPrototypeScreen: React.FC = () => {
           </Typography>
         )}
         {groupViewMode === 'files' && (
-          <Typography variant="body2" sx={{ color: TOKENS.textSecondary }}>
-            Files view for groups - Coming soon
-          </Typography>
+          <EntityDocumentWorkspace
+            entityId={selectedConversationId}
+            entityName={selectedConversation.name}
+            storageMode="files"
+            permissions={['read', 'write']}
+          />
         )}
         {groupViewMode === 'website' && (
           <Typography variant="body2" sx={{ color: TOKENS.textSecondary }}>
@@ -2112,9 +2256,12 @@ export const ModernShellPrototypeScreen: React.FC = () => {
           </Typography>
         )}
         {personViewMode === 'files' && (
-          <Typography variant="body2" sx={{ color: TOKENS.textSecondary }}>
-            Files view for people - Coming soon
-          </Typography>
+          <EntityDocumentWorkspace
+            entityId={selectedConversationId}
+            entityName={selectedConversation.name}
+            storageMode="files"
+            permissions={['read', 'write']}
+          />
         )}
         {personViewMode === 'website' && (
           <Typography variant="body2" sx={{ color: TOKENS.textSecondary }}>
@@ -2271,6 +2418,137 @@ export const ModernShellPrototypeScreen: React.FC = () => {
   )
 
   // Main component render
+  // Show first launch welcome if this is the first time
+  if (showFirstLaunchWelcome && !authState.isAuthenticated) {
+    return (
+      <FirstLaunchWelcome
+        open={showFirstLaunchWelcome}
+        onClose={() => {
+          setShowFirstLaunchWelcome(false)
+          // After first launch setup, user is auto-logged in
+          console.log('🎉 First launch complete!')
+        }}
+      />
+    )
+  }
+
+  // Show authentication UI if not authenticated
+  if (showIdentityPicker && !authState.isAuthenticated) {
+    return (
+      <>
+        <IdentityPicker
+          onSelectIdentity={handleSelectIdentity}
+          onCreateNew={() => {
+            setShowIdentityPicker(false)
+            setShowUnifiedAuthFlow(true)
+          }}
+          onManualEntry={(fourWords) => {
+            // Handle manual entry - prompt for password
+            setSelectedIdentity(fourWords)
+            setShowPasswordDialog(true)
+          }}
+        />
+
+        {/* Password Dialog for non-passkey auth */}
+        <Dialog
+          open={showPasswordDialog}
+          onClose={() => !isAuthenticating && setShowPasswordDialog(false)}
+          maxWidth="xs"
+          fullWidth
+        >
+          <DialogTitle>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <LockIcon color="primary" />
+              <Typography variant="h6" fontWeight={600}>
+                Enter Password
+              </Typography>
+            </Box>
+          </DialogTitle>
+          <DialogContent>
+            <Stack spacing={2} sx={{ mt: 1 }}>
+              {authError && (
+                <Alert severity="error" onClose={() => setAuthError(null)}>
+                  {authError}
+                </Alert>
+              )}
+              <Typography variant="body2" color="text.secondary">
+                Enter your password for <strong>{selectedIdentity}</strong>
+              </Typography>
+              <TextField
+                fullWidth
+                label="Password"
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter' && password) {
+                    handlePasswordLogin()
+                  }
+                }}
+                disabled={isAuthenticating}
+                autoFocus
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <LockIcon fontSize="small" />
+                    </InputAdornment>
+                  ),
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton
+                        onClick={() => setShowPassword(!showPassword)}
+                        edge="end"
+                        size="small"
+                      >
+                        {showPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                }}
+              />
+            </Stack>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 3 }}>
+            <Button
+              onClick={() => {
+                setShowPasswordDialog(false)
+                setPassword('')
+                setAuthError(null)
+              }}
+              disabled={isAuthenticating}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="contained"
+              onClick={handlePasswordLogin}
+              disabled={!password || isAuthenticating}
+            >
+              {isAuthenticating ? 'Signing in...' : 'Sign In'}
+            </Button>
+          </DialogActions>
+        </Dialog>
+      </>
+    )
+  }
+
+  // Show UnifiedAuthFlow for creating new identity
+  if (showUnifiedAuthFlow) {
+    return (
+      <UnifiedAuthFlow
+        initialMode="register"
+        onSuccess={() => {
+          setShowUnifiedAuthFlow(false)
+          enqueueSnackbar('Identity created successfully', { variant: 'success' })
+        }}
+        onCancel={() => {
+          setShowUnifiedAuthFlow(false)
+          setShowIdentityPicker(true)
+        }}
+      />
+    )
+  }
+
   return (
     <Box sx={{ display: 'flex', height: '100vh', bgcolor: TOKENS.bgBase, color: TOKENS.textPrimary }}>
       {/* A. System Rail (52px) */}
@@ -2430,6 +2708,64 @@ export const ModernShellPrototypeScreen: React.FC = () => {
                     </Typography>
                   </Box>
                 </Box>
+
+                {/* Recent Identities Section */}
+                {recentIdentities.length > 1 && (
+                  <>
+                    <Box sx={{ px: 2, py: 1.5, borderBottom: `1px solid ${TOKENS.borderSubtle}` }}>
+                      <Typography variant="caption" sx={{ color: TOKENS.textSecondary, textTransform: 'uppercase', fontWeight: 600, mb: 1, display: 'block' }}>
+                        Switch Identity
+                      </Typography>
+                      <Stack spacing={0.5}>
+                        {recentIdentities
+                          .filter(identity => identity.four_words !== ourPeerId)
+                          .slice(0, 4)
+                          .map((identity) => (
+                            <Box
+                              key={identity.four_words}
+                              onClick={() => handleSwitchIdentity(identity.four_words)}
+                              sx={{
+                                p: 1,
+                                borderRadius: 1,
+                                cursor: 'pointer',
+                                bgcolor: alpha(TOKENS.textSecondary, 0.03),
+                                border: `1px solid ${TOKENS.borderSubtle}`,
+                                '&:hover': {
+                                  bgcolor: alpha(TOKENS.accent, 0.08),
+                                  borderColor: alpha(TOKENS.accent, 0.3),
+                                }
+                              }}
+                            >
+                              <Stack direction="row" spacing={1} alignItems="center">
+                                <Avatar sx={{ width: 24, height: 24, fontSize: 11, bgcolor: alpha(TOKENS.accent, 0.2) }}>
+                                  {identity.display_name.substring(0, 2).toUpperCase()}
+                                </Avatar>
+                                <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                                  <Typography variant="body2" sx={{ color: TOKENS.textPrimary, fontSize: 13, fontWeight: 500 }}>
+                                    {identity.display_name}
+                                  </Typography>
+                                  <Typography variant="caption" sx={{ color: TOKENS.textSecondary, fontSize: 10, fontFamily: 'monospace' }}>
+                                    {identity.four_words}
+                                  </Typography>
+                                </Box>
+                                {identity.has_passkey && (
+                                  <CheckCircle sx={{ fontSize: 14, color: TOKENS.accent }} />
+                                )}
+                              </Stack>
+                            </Box>
+                          ))}
+                      </Stack>
+                    </Box>
+                    <MenuItem onClick={handleCreateNewIdentity} sx={{ color: TOKENS.textPrimary, '&:hover': { bgcolor: TOKENS.surfaceActive } }}>
+                      <ListItemIcon>
+                        <PersonOutline fontSize="small" sx={{ color: TOKENS.accent }} />
+                      </ListItemIcon>
+                      <ListItemText>Create New Identity</ListItemText>
+                    </MenuItem>
+                    <Divider sx={{ my: 0.5, borderColor: TOKENS.borderSubtle }} />
+                  </>
+                )}
+
                 <MenuItem onClick={handleCopyConnectionWords} sx={{ color: TOKENS.textPrimary, '&:hover': { bgcolor: TOKENS.surfaceActive } }}>
                   <ListItemIcon>
                     <ContentCopyOutlined fontSize="small" sx={{ color: TOKENS.textSecondary }} />

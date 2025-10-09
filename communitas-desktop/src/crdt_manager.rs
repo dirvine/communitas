@@ -89,7 +89,7 @@ impl CrdtManager {
     }
 
     /// Check if a document exists
-    pub async fn document_exists(&self, doc_id: &str) -> Result<bool> {
+    pub async fn _document_exists(&self, doc_id: &str) -> Result<bool> {
         let conn = self.db.connect()?;
         let mut rows = conn
             .query(
@@ -128,7 +128,7 @@ impl CrdtManager {
     }
 
     /// Get the state vector for a document (for sync)
-    pub async fn get_state_vector(&self, doc_id: &str) -> Result<yrs::StateVector> {
+    pub async fn _get_state_vector(&self, doc_id: &str) -> Result<yrs::StateVector> {
         let doc = self.load_document(doc_id).await?;
         let sv = {
             let txn = doc.transact();
@@ -138,7 +138,7 @@ impl CrdtManager {
     }
 
     /// Get the difference between two state vectors (for sync)
-    pub async fn get_diff(&self, doc_id: &str, remote_sv: &yrs::StateVector) -> Result<Vec<u8>> {
+    pub async fn _get_diff(&self, doc_id: &str, remote_sv: &yrs::StateVector) -> Result<Vec<u8>> {
         let doc = self.load_document(doc_id).await?;
         let update = {
             let txn = doc.transact();
@@ -148,7 +148,7 @@ impl CrdtManager {
     }
 
     /// List all documents of a specific entity type
-    pub async fn list_documents_by_type(&self, entity_type: &str) -> Result<Vec<String>> {
+    pub async fn _list_documents_by_type(&self, entity_type: &str) -> Result<Vec<String>> {
         let conn = self.db.connect()?;
         let mut rows = conn
             .query(
@@ -168,7 +168,7 @@ impl CrdtManager {
     }
 
     /// Delete a document
-    pub async fn delete_document(&self, doc_id: &str) -> Result<()> {
+    pub async fn _delete_document(&self, doc_id: &str) -> Result<()> {
         let conn = self.db.connect()?;
         conn.execute("DELETE FROM crdt_documents WHERE id = ?", params![doc_id])
             .await
@@ -258,7 +258,7 @@ mod tests {
         let db_path = dir.path().join("test.db");
         let manager = CrdtManager::new(&db_path).await.unwrap();
 
-        assert!(!manager.document_exists("nonexistent").await.unwrap());
+        assert!(!manager._document_exists("nonexistent").await.unwrap());
 
         let doc = Doc::new();
         manager
@@ -266,6 +266,6 @@ mod tests {
             .await
             .unwrap();
 
-        assert!(manager.document_exists("exists").await.unwrap());
+        assert!(manager._document_exists("exists").await.unwrap());
     }
 }

@@ -74,7 +74,7 @@ pub async fn sync_clear_quic_pinned_spki(
     Ok(true)
 }
 
-pub fn parse_env_pinned_spki() -> Option<[u8; 32]> {
+pub fn _parse_env_pinned_spki() -> Option<[u8; 32]> {
     if let Ok(val) = std::env::var("COMMUNITAS_QUIC_PINNED_SPKI") {
         parse_spki_or_key_bytes(&val).ok()
     } else {
@@ -83,7 +83,7 @@ pub fn parse_env_pinned_spki() -> Option<[u8; 32]> {
 }
 
 impl RawSpkiState {
-    pub fn get(&self) -> Option<[u8; 32]> {
+    pub fn _get(&self) -> Option<[u8; 32]> {
         self.pinned_key
     }
 }

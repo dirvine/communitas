@@ -319,9 +319,9 @@ const clonePersonalUserEntity = (user: PersonalUser): PersonalUser & EntityMetad
 });
 
 const createInitialState = (): EntityDirectoryState => ({
-  organizations: [],
-  personalGroups: [],
-  personalUsers: [],
+  organizations: mockOrganizations.map(cloneOrganizationGraph),
+  personalGroups: mockPersonalGroups.map(clonePersonalGroupEntity),
+  personalUsers: mockPersonalUsers.map(clonePersonalUserEntity),
   operations: [],
 });
 

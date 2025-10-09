@@ -34,6 +34,8 @@ pub const MAX_FOUR_WORDS_LENGTH: usize = 100;
 #[derive(Debug, Clone)]
 pub struct InputValidator {
     /// Regex for validating four-word addresses
+    /// Regex for validating four-word addresses (reserved for future validation)
+    #[allow(dead_code)]
     four_words_pattern: Option<Regex>,
     /// Regex for validating usernames
     username_pattern: Option<Regex>,
@@ -88,21 +90,12 @@ impl InputValidator {
         // Accept common separators but canonicalize to dash-separated
         let candidate = sanitized.replace([' ', '_'], "-");
 
-        // Use saorsa-core for proper four-word validation with dictionary
-        let parsed = saorsa_core::identity::FourWordAddress::parse_str(&candidate)
-            .map_err(|_| ValidationError::InvalidFormat)?;
-
-        let words_vec = parsed.words();
-        let words: [String; 4] = words_vec
-            .try_into()
-            .map_err(|_| ValidationError::InvalidFormat)?;
-
-        // Validate words are in the dictionary
-        if !saorsa_core::fwid::fw_check(words) {
+        // Validate four-word format using our identity helpers
+        if !crate::identity::validate_identity_format(&candidate) {
             return Err(ValidationError::InvalidFormat);
         }
 
-        Ok(parsed.as_str().to_string())
+        Ok(candidate)
     }
 
     /// Validate four-word address format

@@ -144,7 +144,10 @@ impl PeerCache {
 
     /// Update peer on successful connection
     pub async fn update_success(&mut self, peer_id: PeerId, addr: SocketAddr) -> Result<()> {
-        let conn = self.conn.lock().expect("peer cache mutex poisoned");
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Peer cache mutex poisoned: {}", e))?;
 
         let peer_id_str = hex::encode(peer_id.as_bytes());
         let now = SystemTime::now()
@@ -195,7 +198,10 @@ impl PeerCache {
 
     /// Update peer on connection failure
     pub async fn update_failure(&mut self, peer_id: PeerId) -> Result<()> {
-        let conn = self.conn.lock().expect("peer cache mutex poisoned");
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Peer cache mutex poisoned: {}", e))?;
 
         let peer_id_str = hex::encode(peer_id.as_bytes());
 
@@ -210,7 +216,13 @@ impl PeerCache {
 
     /// Get top N peers sorted by score
     pub fn get_top_peers(&self, limit: usize) -> Vec<PeerCacheEntry> {
-        let conn = self.conn.lock().expect("peer cache mutex poisoned");
+        let conn = match self.conn.lock() {
+            Ok(c) => c,
+            Err(e) => {
+                warn!("Peer cache mutex poisoned: {}", e);
+                return Vec::new();
+            }
+        };
 
         let mut stmt = conn
             .prepare("SELECT peer_id, addr_hints, nat_class, roles, last_success, success_count, failure_count FROM peers")
@@ -274,7 +286,10 @@ impl PeerCache {
 
     /// Prune peers with high failure rates
     pub async fn prune_failed(&mut self, threshold_ratio: f64) -> Result<()> {
-        let conn = self.conn.lock().expect("peer cache mutex poisoned");
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Peer cache mutex poisoned: {}", e))?;
 
         // Remove peers where failure_count / (success_count + failure_count) > threshold
         let count = conn.execute(
@@ -293,7 +308,13 @@ impl PeerCache {
 
     /// Get count of cached peers
     pub fn len(&self) -> usize {
-        let conn = self.conn.lock().expect("peer cache mutex poisoned");
+        let conn = match self.conn.lock() {
+            Ok(c) => c,
+            Err(e) => {
+                warn!("Peer cache mutex poisoned: {}", e);
+                return 0;
+            }
+        };
 
         conn.query_row("SELECT COUNT(*) FROM peers", [], |row| row.get(0))
             .unwrap_or(0)

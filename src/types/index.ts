@@ -62,3 +62,9 @@ export interface IdentityGenerationParams {
 
 // Organization hierarchy types
 export * from './organization'
+
+// CRDT types
+export * from './crdt'
+
+// Document CRDT types
+export * from './documents'

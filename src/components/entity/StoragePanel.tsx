@@ -87,6 +87,7 @@ import { ModernButton } from '../ui/ModernButton';
 import { designTokens } from '../../styles/theme';
 import { motion } from 'framer-motion';
 import { alpha, styled, useTheme } from '@mui/material/styles';
+import { EntityDocumentWorkspace } from '../documents/EntityDocumentWorkspace';
 
 interface StorageItem {
   name: string;
@@ -224,7 +225,10 @@ const StoragePanel: React.FC<StoragePanelProps> = ({
   const [newFolderName, setNewFolderName] = useState('');
   const [newItemName, setNewItemName] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
+
+  // Document workspace mode (true = show document workspace, false = show file browser)
+  const [useDocumentWorkspace, setUseDocumentWorkspace] = useState(true);
+
   // Get current items based on active area
   const items = currentArea === 'website' ? websiteItems : dataItems;
   const stats = currentArea === 'website' ? websiteStats : dataStats;
@@ -989,6 +993,16 @@ const StoragePanel: React.FC<StoragePanelProps> = ({
               {viewMode === 'list' ? <GridViewIcon /> : <ListViewIcon />}
             </IconButton>
 
+            {/* Workspace/File Browser Toggle */}
+            <Tooltip title={useDocumentWorkspace ? 'Switch to File Browser' : 'Switch to Document Workspace'}>
+              <IconButton
+                onClick={() => setUseDocumentWorkspace(!useDocumentWorkspace)}
+                color={useDocumentWorkspace ? 'primary' : 'default'}
+              >
+                {useDocumentWorkspace ? <DocumentIcon /> : <FolderIcon />}
+              </IconButton>
+            </Tooltip>
+
             {/* Refresh */}
             <IconButton onClick={() => { void loadItems(); }}>
               <RefreshIcon />
@@ -1023,16 +1037,26 @@ const StoragePanel: React.FC<StoragePanelProps> = ({
       </Paper>
 
       {/* Storage Content */}
-      <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
-        {error && (
-          <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 2 }}>
-            {error}
-          </Alert>
-        )}
+      <Box sx={{ flex: 1, overflow: 'auto' }}>
+        {/* Conditional rendering: Document Workspace or File Browser */}
+        {useDocumentWorkspace ? (
+          <EntityDocumentWorkspace
+            entityId={entityId}
+            entityName={entityName}
+            storageMode={currentArea === 'website' ? 'web' : 'files'}
+            permissions={permissions}
+          />
+        ) : (
+          <Box sx={{ p: 2 }}>
+            {error && (
+              <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 2 }}>
+                {error}
+              </Alert>
+            )}
 
-        {uploading && (
-          <LinearProgress sx={{ mb: 2 }} />
-        )}
+            {uploading && (
+              <LinearProgress sx={{ mb: 2 }} />
+            )}
 
         {viewMode === 'list' ? (
           <List>
@@ -1168,6 +1192,8 @@ const StoragePanel: React.FC<StoragePanelProps> = ({
               </Grid>
             ))}
           </Grid>
+        )}
+          </Box>
         )}
       </Box>
 

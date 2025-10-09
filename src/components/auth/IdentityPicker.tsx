@@ -14,6 +14,12 @@ import {
   Alert,
   Divider,
   alpha,
+  TextField,
+  InputAdornment,
+  Menu,
+  MenuItem,
+  ListItemIcon,
+  ListItemText,
 } from '@mui/material';
 import {
   Fingerprint as FingerprintIcon,
@@ -21,8 +27,15 @@ import {
   ArrowForward as ArrowForwardIcon,
   AccessTime as AccessTimeIcon,
   Security as SecurityIcon,
+  QrCode as QrCodeIcon,
+  QrCodeScanner as QrCodeScannerIcon,
+  Search as SearchIcon,
+  MoreVert as MoreVertIcon,
+  Delete as DeleteIcon,
 } from '@mui/icons-material';
 import { invoke } from '@tauri-apps/api/core';
+import { QRCodeExportDialog } from './QRCodeExportDialog';
+import { QRCodeImportDialog } from './QRCodeImportDialog';
 
 // Recent identity from backend
 interface RecentIdentity {
@@ -43,16 +56,34 @@ interface PasskeyInfo {
 interface IdentityPickerProps {
   onSelectIdentity: (fourWords: string, usePasskey: boolean) => Promise<void>;
   onCreateNew: () => void;
+  onManualEntry?: (fourWords: string) => void;
 }
 
 export const IdentityPicker: React.FC<IdentityPickerProps> = ({
   onSelectIdentity,
   onCreateNew,
+  onManualEntry,
 }) => {
   const [identities, setIdentities] = useState<RecentIdentity[]>([]);
   const [loading, setLoading] = useState(true);
   const [authenticating, setAuthenticating] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [manualFourWords, setManualFourWords] = useState<string>('');
+  const [showQRExport, setShowQRExport] = useState(false);
+  const [showQRImport, setShowQRImport] = useState(false);
+  const [selectedQRIdentity, setSelectedQRIdentity] = useState<RecentIdentity | null>(null);
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [menuAnchor, setMenuAnchor] = useState<{ element: HTMLElement; identity: RecentIdentity } | null>(null);
+
+  // Filter identities based on search query
+  const filteredIdentities = identities.filter((identity) => {
+    if (!searchQuery) return true;
+    const query = searchQuery.toLowerCase();
+    return (
+      identity.display_name.toLowerCase().includes(query) ||
+      identity.four_words.toLowerCase().includes(query)
+    );
+  });
 
   // Load recent identities on mount
   useEffect(() => {
@@ -112,6 +143,27 @@ export const IdentityPicker: React.FC<IdentityPickerProps> = ({
     return `hsl(${hue}, 65%, 55%)`;
   };
 
+  const handleQRImport = async (qrData: string) => {
+    try {
+      const data = JSON.parse(qrData);
+
+      // Validate QR code format
+      if (data.type !== 'communitas-identity' || !data.fourWords || !data.displayName) {
+        throw new Error('Invalid QR code format');
+      }
+
+      // Use manual entry handler to prompt for password
+      if (onManualEntry) {
+        onManualEntry(data.fourWords);
+      }
+
+      setShowQRImport(false);
+    } catch (err) {
+      console.error('Failed to import from QR code:', err);
+      throw new Error('Invalid identity QR code');
+    }
+  };
+
   if (loading) {
     return (
       <Box
@@ -151,6 +203,47 @@ export const IdentityPicker: React.FC<IdentityPickerProps> = ({
         </Typography>
       </Box>
 
+      {/* Import from QR Code Button */}
+      <Button
+        fullWidth
+        variant="outlined"
+        startIcon={<QrCodeScannerIcon />}
+        onClick={() => setShowQRImport(true)}
+        disabled={authenticating !== null}
+        sx={{
+          mb: 3,
+          py: 1.5,
+          borderStyle: 'dashed',
+          borderWidth: 2,
+          '&:hover': {
+            borderStyle: 'dashed',
+            borderWidth: 2,
+            bgcolor: (theme) => alpha(theme.palette.primary.main, 0.05),
+          },
+        }}
+      >
+        Import Identity from QR Code
+      </Button>
+
+      {/* Search Field */}
+      {identities.length > 3 && (
+        <TextField
+          fullWidth
+          placeholder="Search identities..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          disabled={authenticating !== null}
+          sx={{ mb: 3 }}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon />
+              </InputAdornment>
+            ),
+          }}
+        />
+      )}
+
       {/* Error Alert */}
       {error && (
         <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
@@ -160,7 +253,12 @@ export const IdentityPicker: React.FC<IdentityPickerProps> = ({
 
       {/* Identity Cards */}
       <Stack spacing={2}>
-        {identities.map((identity) => (
+        {filteredIdentities.length === 0 && searchQuery && (
+          <Alert severity="info">
+            No identities found matching "{searchQuery}"
+          </Alert>
+        )}
+        {filteredIdentities.map((identity) => (
           <Card
             key={identity.four_words}
             elevation={authenticating === identity.four_words ? 8 : 2}
@@ -227,6 +325,24 @@ export const IdentityPicker: React.FC<IdentityPickerProps> = ({
 
                 {/* Action Buttons */}
                 <Stack direction="row" spacing={1}>
+                  <Tooltip title="More options">
+                    <IconButton
+                      size="small"
+                      disabled={authenticating !== null}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setMenuAnchor({ element: e.currentTarget, identity });
+                      }}
+                      sx={{
+                        color: 'text.secondary',
+                        '&:hover': {
+                          bgcolor: (theme) => alpha(theme.palette.text.secondary, 0.1),
+                        },
+                      }}
+                    >
+                      <MoreVertIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
                   {identity.has_passkey && (
                     <Tooltip title="Sign in with biometric">
                       <IconButton
@@ -263,10 +379,60 @@ export const IdentityPicker: React.FC<IdentityPickerProps> = ({
         ))}
       </Stack>
 
+      {/* Manual Four-Word Entry */}
+      {onManualEntry && (
+        <>
+          <Divider sx={{ my: 3 }}>
+            <Typography variant="body2" color="text.secondary">
+              or
+            </Typography>
+          </Divider>
+
+          <Box
+            component="form"
+            onSubmit={(e: React.FormEvent) => {
+              e.preventDefault()
+              if (manualFourWords.trim() && onManualEntry) {
+                onManualEntry(manualFourWords.trim())
+              }
+            }}
+          >
+            <Stack spacing={2}>
+              <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center' }}>
+                Enter your four-word identity to sign in from a new device
+              </Typography>
+              <TextField
+                fullWidth
+                label="Four-Word Identity"
+                placeholder="ocean-forest-moon-star"
+                value={manualFourWords}
+                onChange={(e) => setManualFourWords(e.target.value)}
+                disabled={authenticating !== null}
+                helperText="Enter your four-word address from another device"
+                InputProps={{
+                  sx: {
+                    fontFamily: 'monospace',
+                  },
+                }}
+              />
+              <Button
+                type="submit"
+                fullWidth
+                variant="contained"
+                disabled={!manualFourWords.trim() || authenticating !== null}
+                sx={{ py: 1.5 }}
+              >
+                Sign In with Four Words
+              </Button>
+            </Stack>
+          </Box>
+        </>
+      )}
+
       {/* Create New Identity */}
       <Divider sx={{ my: 3 }}>
         <Typography variant="body2" color="text.secondary">
-          or
+          {onManualEntry ? 'or' : 'or'}
         </Typography>
       </Divider>
 
@@ -298,6 +464,66 @@ export const IdentityPicker: React.FC<IdentityPickerProps> = ({
       >
         Your identities are stored securely with end-to-end encryption
       </Typography>
+
+      {/* Context Menu for Identity Options */}
+      <Menu
+        anchorEl={menuAnchor?.element}
+        open={Boolean(menuAnchor)}
+        onClose={() => setMenuAnchor(null)}
+        transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+        anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+      >
+        <MenuItem
+          onClick={() => {
+            if (menuAnchor) {
+              setSelectedQRIdentity(menuAnchor.identity);
+              setShowQRExport(true);
+              setMenuAnchor(null);
+            }
+          }}
+        >
+          <ListItemIcon>
+            <QrCodeIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Export as QR Code</ListItemText>
+        </MenuItem>
+        <Divider />
+        <MenuItem
+          onClick={() => {
+            if (menuAnchor && window.confirm(`Remove "${menuAnchor.identity.display_name}" from this device?`)) {
+              // TODO: Implement vault removal
+              console.log('Remove identity:', menuAnchor.identity.four_words);
+              setMenuAnchor(null);
+            }
+          }}
+          sx={{ color: 'error.main' }}
+        >
+          <ListItemIcon>
+            <DeleteIcon fontSize="small" color="error" />
+          </ListItemIcon>
+          <ListItemText>Remove from Device</ListItemText>
+        </MenuItem>
+      </Menu>
+
+      {/* QR Code Export Dialog */}
+      {selectedQRIdentity && (
+        <QRCodeExportDialog
+          open={showQRExport}
+          onClose={() => {
+            setShowQRExport(false);
+            setSelectedQRIdentity(null);
+          }}
+          fourWords={selectedQRIdentity.four_words}
+          displayName={selectedQRIdentity.display_name}
+        />
+      )}
+
+      {/* QR Code Import Dialog */}
+      <QRCodeImportDialog
+        open={showQRImport}
+        onClose={() => setShowQRImport(false)}
+        onImport={handleQRImport}
+      />
     </Box>
   );
 };

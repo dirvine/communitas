@@ -399,6 +399,116 @@ export const mockPersonalGroups: Group[] = [
     },
     createdAt: new Date('2024-01-12'),
     updatedAt: new Date('2024-01-19')
+  },
+  {
+    id: 'personal-group-4',
+    type: 'group',
+    name: 'Study Group',
+    members: ['user-1', 'user-12', 'user-13', 'user-14'],
+    admins: ['user-1'],
+    isPersonal: true,
+    networkIdentity: {
+      fourWords: 'mountain bright bear cloud',
+      publicKey: 'pk_studygroup',
+      dhtAddress: 'dht://studygroup'
+    },
+    capabilities: {
+      videoCall: true,
+      audioCall: true,
+      screenShare: true,
+      fileShare: true,
+      websitePublish: true
+    },
+    createdAt: new Date('2024-01-08'),
+    updatedAt: new Date('2024-01-20')
+  },
+  {
+    id: 'personal-group-5',
+    type: 'group',
+    name: 'Gaming Squad',
+    members: ['user-1', 'user-15', 'user-16', 'user-17', 'user-18'],
+    admins: ['user-1', 'user-15'],
+    isPersonal: true,
+    networkIdentity: {
+      fourWords: 'valley shadow fox storm',
+      publicKey: 'pk_gamingsquad',
+      dhtAddress: 'dht://gamingsquad'
+    },
+    capabilities: {
+      videoCall: true,
+      audioCall: true,
+      screenShare: true,
+      fileShare: true,
+      websitePublish: true
+    },
+    createdAt: new Date('2024-01-14'),
+    updatedAt: new Date('2024-01-21')
+  },
+  {
+    id: 'personal-group-6',
+    type: 'group',
+    name: 'Hiking Club',
+    members: ['user-1', 'user-19', 'user-20'],
+    admins: ['user-1'],
+    isPersonal: true,
+    networkIdentity: {
+      fourWords: 'desert golden lion wind',
+      publicKey: 'pk_hikingclub',
+      dhtAddress: 'dht://hikingclub'
+    },
+    capabilities: {
+      videoCall: true,
+      audioCall: true,
+      screenShare: true,
+      fileShare: true,
+      websitePublish: true
+    },
+    createdAt: new Date('2024-01-06'),
+    updatedAt: new Date('2024-01-19')
+  },
+  {
+    id: 'personal-group-7',
+    type: 'group',
+    name: 'Photography Group',
+    members: ['user-1', 'user-21', 'user-22', 'user-23'],
+    admins: ['user-1', 'user-21'],
+    isPersonal: true,
+    networkIdentity: {
+      fourWords: 'island crystal tiger fire',
+      publicKey: 'pk_photogroup',
+      dhtAddress: 'dht://photogroup'
+    },
+    capabilities: {
+      videoCall: true,
+      audioCall: true,
+      screenShare: true,
+      fileShare: true,
+      websitePublish: true
+    },
+    createdAt: new Date('2024-01-10'),
+    updatedAt: new Date('2024-01-18')
+  },
+  {
+    id: 'personal-group-8',
+    type: 'group',
+    name: 'Cooking Circle',
+    members: ['user-1', 'user-24', 'user-25'],
+    admins: ['user-1'],
+    isPersonal: true,
+    networkIdentity: {
+      fourWords: 'prairie blue owl moon',
+      publicKey: 'pk_cookingcircle',
+      dhtAddress: 'dht://cookingcircle'
+    },
+    capabilities: {
+      videoCall: true,
+      audioCall: true,
+      screenShare: true,
+      fileShare: true,
+      websitePublish: true
+    },
+    createdAt: new Date('2024-01-16'),
+    updatedAt: new Date('2024-01-22')
   }
 ];
 

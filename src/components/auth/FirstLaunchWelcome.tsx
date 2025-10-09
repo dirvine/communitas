@@ -16,6 +16,7 @@ import {
 import { CheckCircle as CheckCircleIcon, Settings as SettingsIcon } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
 import { invoke } from '@tauri-apps/api/core';
+import { fourWordsToDisplay } from '../../utils/identity';
 
 interface FirstLaunchWelcomeProps {
   open: boolean;
@@ -159,7 +160,7 @@ export const FirstLaunchWelcome: React.FC<FirstLaunchWelcomeProps> = ({ open, on
                     my: 2,
                   }}
                 >
-                  {fourWords}
+                  {fourWordsToDisplay(fourWords)}
                 </Typography>
                 <Box sx={{ display: 'flex', justifyContent: 'center', gap: 1, flexWrap: 'wrap' }}>
                   <Chip label={displayName} color="default" size="small" />

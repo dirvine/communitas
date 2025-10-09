@@ -5,7 +5,7 @@ use libsql::params;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;
-use yrs::{Map, Transact};
+use yrs::Transact;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Channel {

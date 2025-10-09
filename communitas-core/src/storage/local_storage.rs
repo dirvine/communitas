@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info};
 
-use super::reed_solomon_manager::Shard;
+// use super::reed_solomon_manager::Shard; // Removed: FEC not used in RC1b
 
 /// Local storage directory structure
 #[derive(Debug, Clone)]
@@ -310,113 +310,115 @@ impl LocalStorageManager {
         Ok(data)
     }
 
-    /// Store group shard locally
-    pub async fn store_group_shard(&self, group_id: &str, shard: &Shard) -> Result<()> {
-        let item_id = format!("shard:{}:{}", group_id, shard.index);
-        let file_path = self
-            .structure
-            .group_shards
-            .join(group_id)
-            .join(format!("shard_{}.data", shard.index));
+    // REMOVED: FEC not used in RC1b
+    // /// Store group shard locally
+    // pub async fn store_group_shard(&self, group_id: &str, shard: &Shard) -> Result<()> {
+    //     let item_id = format!("shard:{}:{}", group_id, shard.index);
+    //     let file_path = self
+    //         .structure
+    //         .group_shards
+    //         .join(group_id)
+    //         .join(format!("shard_{}.data", shard.index));
+    //
+    //     // Create group directory if needed
+    //     if let Some(parent) = file_path.parent() {
+    //         tokio::fs::create_dir_all(parent).await?;
+    //     }
+    //
+    //     // Serialize shard for storage (includes metadata)
+    //     let shard_data = bincode::serialize(shard).context("Failed to serialize shard")?;
+    //
+    //     // Write to file
+    //     tokio::fs::write(&file_path, &shard_data)
+    //         .await
+    //         .context("Failed to write shard to file")?;
+    //
+    //     // Create metadata
+    //     let metadata = StorageMetadata {
+    //         item_id: item_id.clone(),
+    //         item_type: StorageItemType::GroupShard {
+    //             group_id: group_id.to_string(),
+    //             shard_index: shard.index,
+    //         },
+    //         file_path: file_path.clone(),
+    //         size: shard_data.len(),
+    //         hash: blake3::hash(&shard_data).to_string(),
+    //         created_at: chrono::Utc::now(),
+    //         last_accessed: chrono::Utc::now(),
+    //         encryption_info: None,
+    //         compression_info: None,
+    //     };
+    //
+    //     // Update index
+    //     {
+    //         let mut index = self.metadata_index.write().await;
+    //         index.insert(item_id, metadata.clone());
+    //     }
+    //
+    //     // Update stats
+    //     {
+    //         let mut stats = self.usage_stats.write().await;
+    //         stats.group_shards_size += shard_data.len();
+    //         stats.total_files += 1;
+    //     }
+    //
+    //     self.save_metadata_index().await?;
+    //
+    //     debug!(
+    //         "Stored group shard {} for group {}: {} bytes",
+    //         shard.index,
+    //         group_id,
+    //         shard_data.len()
+    //     );
+    //     Ok(())
+    // }
 
-        // Create group directory if needed
-        if let Some(parent) = file_path.parent() {
-            tokio::fs::create_dir_all(parent).await?;
-        }
-
-        // Serialize shard for storage (includes metadata)
-        let shard_data = bincode::serialize(shard).context("Failed to serialize shard")?;
-
-        // Write to file
-        tokio::fs::write(&file_path, &shard_data)
-            .await
-            .context("Failed to write shard to file")?;
-
-        // Create metadata
-        let metadata = StorageMetadata {
-            item_id: item_id.clone(),
-            item_type: StorageItemType::GroupShard {
-                group_id: group_id.to_string(),
-                shard_index: shard.index,
-            },
-            file_path: file_path.clone(),
-            size: shard_data.len(),
-            hash: blake3::hash(&shard_data).to_string(),
-            created_at: chrono::Utc::now(),
-            last_accessed: chrono::Utc::now(),
-            encryption_info: None,
-            compression_info: None,
-        };
-
-        // Update index
-        {
-            let mut index = self.metadata_index.write().await;
-            index.insert(item_id, metadata.clone());
-        }
-
-        // Update stats
-        {
-            let mut stats = self.usage_stats.write().await;
-            stats.group_shards_size += shard_data.len();
-            stats.total_files += 1;
-        }
-
-        self.save_metadata_index().await?;
-
-        debug!(
-            "Stored group shard {} for group {}: {} bytes",
-            shard.index,
-            group_id,
-            shard_data.len()
-        );
-        Ok(())
-    }
-
-    /// Retrieve group shard
-    pub async fn retrieve_group_shard(&self, group_id: &str, shard_index: usize) -> Result<Shard> {
-        let item_id = format!("shard:{}:{}", group_id, shard_index);
-
-        // Get metadata
-        let metadata = {
-            let index = self.metadata_index.read().await;
-            index
-                .get(&item_id)
-                .cloned()
-                .ok_or_else(|| anyhow::anyhow!("Group shard not found: {}", item_id))?
-        };
-
-        // Read file
-        let shard_data = tokio::fs::read(&metadata.file_path)
-            .await
-            .context("Failed to read shard file")?;
-
-        // Verify integrity
-        let current_hash = blake3::hash(&shard_data).to_string();
-        if current_hash != metadata.hash {
-            error!("Shard integrity check failed for {}", item_id);
-            bail!("Shard integrity check failed");
-        }
-
-        // Deserialize shard
-        let shard: Shard =
-            bincode::deserialize(&shard_data).context("Failed to deserialize shard")?;
-
-        // Update access time
-        {
-            let mut index = self.metadata_index.write().await;
-            if let Some(meta) = index.get_mut(&item_id) {
-                meta.last_accessed = chrono::Utc::now();
-            }
-        }
-
-        debug!(
-            "Retrieved group shard {} for group {}: {} bytes",
-            shard_index,
-            group_id,
-            shard_data.len()
-        );
-        Ok(shard)
-    }
+    // REMOVED: FEC not used in RC1b
+    // /// Retrieve group shard
+    // pub async fn retrieve_group_shard(&self, group_id: &str, shard_index: usize) -> Result<Shard> {
+    //     let item_id = format!("shard:{}:{}", group_id, shard_index);
+    //
+    //     // Get metadata
+    //     let metadata = {
+    //         let index = self.metadata_index.read().await;
+    //         index
+    //             .get(&item_id)
+    //             .cloned()
+    //             .ok_or_else(|| anyhow::anyhow!("Group shard not found: {}", item_id))?
+    //     };
+    //
+    //     // Read file
+    //     let shard_data = tokio::fs::read(&metadata.file_path)
+    //         .await
+    //         .context("Failed to read shard file")?;
+    //
+    //     // Verify integrity
+    //     let current_hash = blake3::hash(&shard_data).to_string();
+    //     if current_hash != metadata.hash {
+    //         error!("Shard integrity check failed for {}", item_id);
+    //         bail!("Shard integrity check failed");
+    //     }
+    //
+    //     // Deserialize shard
+    //     let shard: Shard =
+    //         bincode::deserialize(&shard_data).context("Failed to deserialize shard")?;
+    //
+    //     // Update access time
+    //     {
+    //         let mut index = self.metadata_index.write().await;
+    //         if let Some(meta) = index.get_mut(&item_id) {
+    //             meta.last_accessed = chrono::Utc::now();
+    //         }
+    //     }
+    //
+    //     debug!(
+    //         "Retrieved group shard {} for group {}: {} bytes",
+    //         shard_index,
+    //         group_id,
+    //         shard_data.len()
+    //     );
+    //     Ok(shard)
+    // }
 
     /// Store DHT data (from other nodes)
     pub async fn store_dht_data(&self, key: &str, data: &[u8]) -> Result<()> {
@@ -513,42 +515,43 @@ impl LocalStorageManager {
         Ok(data)
     }
 
-    /// Get all shards for a group
-    pub async fn get_group_shards(&self, group_id: &str) -> Result<Vec<Shard>> {
-        let mut shards = Vec::new();
-
-        // Collect shard indices first to avoid holding lock during async operations
-        let shard_indices = {
-            let index = self.metadata_index.read().await;
-            index
-                .values()
-                .filter_map(|metadata| {
-                    if let StorageItemType::GroupShard {
-                        group_id: meta_group_id,
-                        shard_index,
-                    } = &metadata.item_type
-                    {
-                        if meta_group_id == group_id {
-                            Some(*shard_index)
-                        } else {
-                            None
-                        }
-                    } else {
-                        None
-                    }
-                })
-                .collect::<Vec<_>>()
-        };
-
-        // Now fetch each shard
-        for shard_index in shard_indices {
-            let shard = self.retrieve_group_shard(group_id, shard_index).await?;
-            shards.push(shard);
-        }
-
-        debug!("Found {} shards for group {}", shards.len(), group_id);
-        Ok(shards)
-    }
+    // REMOVED: FEC not used in RC1b
+    // /// Get all shards for a group
+    // pub async fn get_group_shards(&self, group_id: &str) -> Result<Vec<Shard>> {
+    //     let mut shards = Vec::new();
+    //
+    //     // Collect shard indices first to avoid holding lock during async operations
+    //     let shard_indices = {
+    //         let index = self.metadata_index.read().await;
+    //         index
+    //             .values()
+    //             .filter_map(|metadata| {
+    //                 if let StorageItemType::GroupShard {
+    //                     group_id: meta_group_id,
+    //                     shard_index,
+    //                 } = &metadata.item_type
+    //                 {
+    //                     if meta_group_id == group_id {
+    //                         Some(*shard_index)
+    //                     } else {
+    //                         None
+    //                     }
+    //                 } else {
+    //                     None
+    //                 }
+    //             })
+    //             .collect::<Vec<_>>()
+    //     };
+    //
+    //     // Now fetch each shard
+    //     for shard_index in shard_indices {
+    //         let shard = self.retrieve_group_shard(group_id, shard_index).await?;
+    //         shards.push(shard);
+    //     }
+    //
+    //     debug!("Found {} shards for group {}", shards.len(), group_id);
+    //     Ok(shards)
+    // }
 
     // Wrapper methods to match test interface
     pub async fn store_personal_data(&self, data_id: &str, data: &[u8]) -> Result<()> {
@@ -559,35 +562,37 @@ impl LocalStorageManager {
         self.retrieve_personal("default_user", data_id).await
     }
 
-    pub async fn store_group_shard_test(
-        &self,
-        group_id: &str,
-        shard_id: &str,
-        data: &[u8],
-    ) -> Result<()> {
-        // Create a dummy shard for testing
-        let shard = Shard {
-            index: shard_id.parse().unwrap_or(0),
-            shard_type: super::reed_solomon_manager::ShardType::Data,
-            data: data.to_vec(),
-            group_id: group_id.to_string(),
-            data_id: "test".to_string(),
-            integrity_hash: blake3::hash(data).to_string(),
-            created_at: chrono::Utc::now(),
-            size: data.len(),
-        };
-        self.store_group_shard(group_id, &shard).await
-    }
+    // REMOVED: FEC not used in RC1b
+    // pub async fn store_group_shard_test(
+    //     &self,
+    //     group_id: &str,
+    //     shard_id: &str,
+    //     data: &[u8],
+    // ) -> Result<()> {
+    //     // Create a dummy shard for testing
+    //     let shard = Shard {
+    //         index: shard_id.parse().unwrap_or(0),
+    //         shard_type: super::reed_solomon_manager::ShardType::Data,
+    //         data: data.to_vec(),
+    //         group_id: group_id.to_string(),
+    //         data_id: "test".to_string(),
+    //         integrity_hash: blake3::hash(data).to_string(),
+    //         created_at: chrono::Utc::now(),
+    //         size: data.len(),
+    //     };
+    //     self.store_group_shard(group_id, &shard).await
+    // }
 
-    pub async fn retrieve_group_shard_test(
-        &self,
-        group_id: &str,
-        shard_id: &str,
-    ) -> Result<Vec<u8>> {
-        let shard_index = shard_id.parse().unwrap_or(0);
-        let shard = self.retrieve_group_shard(group_id, shard_index).await?;
-        Ok(shard.data)
-    }
+    // REMOVED: FEC not used in RC1b
+    // pub async fn retrieve_group_shard_test(
+    //     &self,
+    //     group_id: &str,
+    //     shard_id: &str,
+    // ) -> Result<Vec<u8>> {
+    //     let shard_index = shard_id.parse().unwrap_or(0);
+    //     let shard = self.retrieve_group_shard(group_id, shard_index).await?;
+    //     Ok(shard.data)
+    // }
 
     pub async fn store_dht_data_by_hash(&self, key: &blake3::Hash, data: &[u8]) -> Result<()> {
         self.store_dht_data(&key.to_string(), data).await

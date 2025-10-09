@@ -27,22 +27,37 @@
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
 pub mod auth_service;
-pub mod bootstrap_integration;
+// pub mod bootstrap_integration; // TODO: Reimplement in Sprint 2 with gossip-based bootstrap
 pub mod core_context;
-pub mod dht_identity;
-pub mod dht_schemas;
+pub mod crdt;
+// pub mod dht_identity; // Removed: DHT not used in RC1b (gossip-based architecture)
+// pub mod dht_schemas; // Removed: DHT not used in RC1b (gossip-based architecture)
+pub mod doc_replicator;
 pub mod encrypted_storage;
 pub mod error;
+pub mod identity;
 pub mod keystore;
-pub mod messaging;
+pub mod message_sync;
+// pub mod messaging; // TODO: Refactor in Sprint 3 for gossip pubsub
+pub mod presence_service;
 pub mod security;
 pub mod storage;
 pub mod test_harness;
+pub mod types;
+
+// Gossip overlay system (now default, no longer feature-gated)
+pub mod gossip;
 
 // Re-export commonly used types
 pub use auth_service::{AuthService, SessionInfo};
 pub use core_context::CoreContext;
 pub use error::{AppError, AppResult as Result};
 
-// Re-export saorsa-core for convenience
-pub use saorsa_core;
+// Re-export gossip context (now default, no longer feature-gated)
+pub use gossip::GossipContext;
+
+// Re-export identity helpers for convenience
+pub use identity::{
+    conn_from_words, conn_words, generate_id_words, identity_to_seed, validate_id_words,
+    IdentityError, IdentityResult,
+};

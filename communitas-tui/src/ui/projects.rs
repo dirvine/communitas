@@ -179,7 +179,7 @@ pub fn render_kanban_board(f: &mut Frame, area: Rect, state: &AppState, project_
     // Find the project
     let project = state.entities.projects.iter().find(|p| p.id == project_id);
 
-    let title = if let Some(proj) = project {
+    let _title = if let Some(proj) = project {
         format!("🎯 {} - Kanban Board", proj.name)
     } else {
         "Kanban Board".to_string()

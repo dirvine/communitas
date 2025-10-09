@@ -1,27 +1,46 @@
+// Copyright (c) 2025 Saorsa Labs Limited
+//
+// Core application commands (placeholder)
+//
+// TODO: Implement with new gossip-based architecture
+
 use communitas_core::CoreContext;
-use saorsa_core::chat::{Channel, ChannelId, ChannelType, MessageId, Thread};
-use saorsa_core::identity::FourWordAddress;
-use saorsa_core::identity::enhanced::DeviceType;
-use saorsa_core::messaging::ChannelId as MessagingChannelId;
+use communitas_core::types::DeviceType;
+use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use std::sync::Arc;
-use tauri::AppHandle;
-use tauri::Emitter;
 use tauri::State;
 use tokio::sync::RwLock;
-use tracing::warn;
 
-async fn resolve_four_words(user_id: &str) -> Option<String> {
-    match saorsa_core::get_user_four_words(user_id).await {
-        Ok(Some(addr)) => Some(addr.0),
-        Ok(None) => None,
-        Err(err) => {
-            warn!("get_user_four_words failed for {}: {}", user_id, err);
-            None
-        }
-    }
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UserInfo {
+    pub peer_id: String,
+    pub display_name: String,
+    pub device_name: String,
 }
 
-/// Initialize saorsa-core wiring and cache it in state
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ChannelInfo {
+    pub id: String,
+    pub name: String,
+    pub members: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MessageInfo {
+    pub id: String,
+    pub content: String,
+    pub author: String,
+    pub timestamp: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SyncStatus {
+    pub is_syncing: bool,
+    pub last_sync: Option<i64>,
+}
+
+/// Initialize core context
 #[tauri::command]
 pub async fn core_initialize(
     shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
@@ -30,1013 +49,310 @@ pub async fn core_initialize(
     device_name: Option<String>,
     device_type: Option<String>,
 ) -> Result<bool, String> {
-    let dev_type = match device_type
-        .unwrap_or_else(|| "Desktop".to_string())
-        .as_str()
-    {
+    let dev_type = match device_type.unwrap_or_else(|| "Desktop".to_string()).as_str() {
         "Desktop" | "desktop" => DeviceType::Desktop,
+        "Laptop" | "laptop" => DeviceType::Laptop,
         "Mobile" | "mobile" => DeviceType::Mobile,
-        "Tablet" | "tablet" => DeviceType::Tablet,
-        "Web" | "web" => DeviceType::Web,
-        other => return Err(format!("Unknown device type: {}", other)),
+        "Server" | "server" => DeviceType::Server,
+        _ => DeviceType::Unknown,
     };
 
-    // Use display_name from parameter, or fall back to environment variable
-    let final_display_name = if display_name.is_empty() {
-        std::env::var("COMMUNITAS_USER_NAME").unwrap_or_default()
-    } else {
-        display_name
-    };
+    let storage_dir = dirs::data_local_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("communitas")
+        .join(&four_words);
 
-    let ctx = CoreContext::initialize(
-        four_words,
-        final_display_name,
-        device_name.unwrap_or_else(|| "device".to_string()),
+    let mut ctx = CoreContext::initialize(
+        four_words.clone(),
+        display_name,
+        device_name.unwrap_or_else(|| "default".to_string()),
         dev_type,
+        storage_dir,
     )
-    .await?;
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // Auto-start networking with saorsa-gossip + ant-quic
+    tracing::info!("🌐 Starting P2P networking for {}", four_words);
+    match ctx.start_networking(None).await {
+        Ok(connection_identity) => {
+            tracing::info!("✅ Network started successfully: {}", connection_identity);
+        }
+        Err(e) => {
+            tracing::warn!("⚠️ Network startup failed (continuing in local mode): {}", e);
+            // Don't fail initialization if networking fails - app works in local mode
+        }
+    }
 
     let mut guard = shared.write().await;
     *guard = Some(ctx);
+
     Ok(true)
 }
 
-/// Get the current user's peer ID (four-word address)
-/// Returns the peer ID from the initialized CoreContext
 #[tauri::command]
 pub async fn core_get_peer_id(
-    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+    _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
 ) -> Result<String, String> {
-    let guard = shared.read().await;
-    let ctx = guard
-        .as_ref()
-        .ok_or_else(|| "Core not initialized".to_string())?;
-
-    Ok(ctx.four_words.clone())
+    Err("Not yet implemented".to_string())
 }
 
-/// Get current user info (peer ID and display name)
 #[tauri::command]
 pub async fn core_get_user_info(
-    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
-) -> Result<serde_json::Value, String> {
-    let guard = shared.read().await;
-    let ctx = guard
-        .as_ref()
-        .ok_or_else(|| "Core not initialized".to_string())?;
-
-    Ok(serde_json::json!({
-        "peerId": ctx.four_words,
-        "displayName": ctx.display_name,
-    }))
+    _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+) -> Result<UserInfo, String> {
+    Err("Not yet implemented".to_string())
 }
 
-/// Update the current user's display name
 #[tauri::command]
 pub async fn core_set_display_name(
-    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
-    display_name: String,
-) -> Result<bool, String> {
-    let mut guard = shared.write().await;
-    let ctx = guard
-        .as_mut()
-        .ok_or_else(|| "Core not initialized".to_string())?;
-
-    ctx.display_name = display_name;
-    Ok(true)
+    _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+    _display_name: String,
+) -> Result<(), String> {
+    Err("Not yet implemented".to_string())
 }
 
-/// Create a public channel
 #[tauri::command]
 pub async fn core_create_channel(
-    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
-    name: String,
-    description: String,
-) -> Result<Channel, String> {
-    // Validate input
-    if name.is_empty() {
-        return Err("Channel name cannot be empty".to_string());
-    }
-    if name.len() > 100 {
-        return Err("Channel name too long (max 100 characters)".to_string());
-    }
-    if description.len() > 500 {
-        return Err("Channel description too long (max 500 characters)".to_string());
-    }
-
-    // Basic name validation (alphanumeric, hyphens, underscores)
-    if !name
-        .chars()
-        .all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == ' ')
-    {
-        return Err("Channel name contains invalid characters".to_string());
-    }
-    let mut guard = shared.write().await;
-    let ctx = guard
-        .as_mut()
-        .ok_or_else(|| "Core not initialized".to_string())?;
-    let chat = &mut ctx.chat;
-    chat.create_channel(name, description, ChannelType::Public, None)
-        .await
-        .map_err(|e| format!("create_channel failed: {}", e))
+    _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+    _name: String,
+    _description: String,
+) -> Result<ChannelInfo, String> {
+    Err("Not yet implemented".to_string())
 }
 
-/// List user's channels (basic)
 #[tauri::command]
 pub async fn core_get_channels(
-    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
-) -> Result<Vec<Channel>, String> {
-    let mut guard = shared.write().await;
-    let ctx = guard
-        .as_mut()
-        .ok_or_else(|| "Core not initialized".to_string())?;
-    let chat = &mut ctx.chat;
-    let ids = chat
-        .get_user_channels()
-        .await
-        .map_err(|e| format!("get_user_channels failed: {}", e))?;
-    let mut channels = Vec::new();
-    for id in ids {
-        let ch = chat
-            .get_channel(&id)
-            .await
-            .map_err(|e| format!("get_channel failed: {}", e))?;
-        channels.push(ch);
-    }
-    Ok(channels)
+    _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+) -> Result<Vec<ChannelInfo>, String> {
+    Ok(vec![])
 }
 
-/// Add a reaction to a message in a channel
 #[tauri::command]
 pub async fn core_add_reaction(
-    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
-    channel_id: String,
-    message_id: String,
-    emoji: String,
-) -> Result<bool, String> {
-    let mut guard = shared.write().await;
-    let ctx = guard
-        .as_mut()
-        .ok_or_else(|| "Core not initialized".to_string())?;
-    let chat = &mut ctx.chat;
-    chat.add_reaction(&ChannelId(channel_id), &MessageId(message_id), emoji)
-        .await
-        .map_err(|e| format!("add_reaction failed: {}", e))?;
-    Ok(true)
+    _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+    _message_id: String,
+    _emoji: String,
+) -> Result<(), String> {
+    Err("Not yet implemented".to_string())
 }
 
-/// Send a message via MessagingService to explicit recipients (four-word addresses)
-#[tauri::command]
-pub async fn core_send_message_to_recipients(
-    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
-    channel_id: String,
-    recipients: Vec<String>,
-    text: String,
-) -> Result<String, String> {
-    // Validate input
-    if text.is_empty() {
-        return Err("Message text cannot be empty".to_string());
-    }
-    if text.len() > 10 * 1024 {
-        // 10KB limit
-        return Err("Message too long (max 10KB)".to_string());
-    }
-    if recipients.is_empty() {
-        return Err("Must specify at least one recipient".to_string());
-    }
-    if recipients.len() > 100 {
-        // Reasonable limit
-        return Err("Too many recipients (max 100)".to_string());
-    }
-
-    // Validate recipient format (basic check)
-    for recipient in &recipients {
-        if recipient.split('-').count() != 4 {
-            return Err(format!("Invalid recipient format: {}", recipient));
-        }
-    }
-    let mut guard = shared.write().await;
-    let ctx = guard
-        .as_mut()
-        .ok_or_else(|| "Core not initialized".to_string())?;
-    // use ctx.messaging directly below
-
-    let mapped: Vec<FourWordAddress> = recipients.into_iter().map(FourWordAddress).collect();
-    let channel_uuid = uuid::Uuid::parse_str(&channel_id)
-        .map_err(|e| format!("Invalid channel ID format: {}", e))?;
-    let (msg_id, _receipt) = ctx
-        .messaging
-        .send_message(
-            mapped,
-            saorsa_core::messaging::MessageContent::Text(text),
-            MessagingChannelId(channel_uuid),
-            Default::default(),
-        )
-        .await
-        .map_err(|e| format!("send_message failed: {}", e))?;
-    Ok(msg_id.to_string())
-}
-
-/// Create a thread under a parent message in a channel
-#[tauri::command]
-pub async fn core_create_thread(
-    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
-    channel_id: String,
-    parent_message_id: String,
-) -> Result<Thread, String> {
-    let mut guard = shared.write().await;
-    let ctx = guard
-        .as_mut()
-        .ok_or_else(|| "Core not initialized".to_string())?;
-    let chat = &mut ctx.chat;
-    chat.create_thread(&ChannelId(channel_id), &MessageId(parent_message_id))
-        .await
-        .map_err(|e| format!("create_thread failed: {}", e))
-}
-
-/// Send a message to all channel members
 #[tauri::command]
 pub async fn core_send_message_to_channel(
-    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
-    channel_id: String,
-    text: String,
-) -> Result<String, String> {
-    let mut guard = shared.write().await;
-    let ctx = guard
-        .as_mut()
-        .ok_or_else(|| "Core not initialized".to_string())?;
-
-    // Resolve recipients from channel membership using four-word formatted user_ids when available
-    let ch = ctx
-        .chat
-        .get_channel(&ChannelId(channel_id.clone()))
-        .await
-        .map_err(|e| format!("get_channel failed: {}", e))?;
-
-    let mut recipients: Vec<saorsa_core::identity::FourWordAddress> = Vec::new();
-    for m in ch.members {
-        if let Some(words) = resolve_four_words(&m.user_id).await {
-            recipients.push(saorsa_core::identity::FourWordAddress(words));
-            continue;
-        }
-
-        // Fallback: treat user_id as four-word address if it already looks like one
-        if m.user_id.split('-').count() == 4 {
-            recipients.push(saorsa_core::identity::FourWordAddress(
-                m.user_id.to_lowercase(),
-            ));
-        }
-    }
-
-    if recipients.is_empty() {
-        // Fallback to self so user sees message locally if channel member IDs are not four-words yet
-        recipients.push(saorsa_core::identity::FourWordAddress(
-            ctx.four_words.clone(),
-        ));
-    }
-
-    let (msg_id, _receipt) = ctx
-        .messaging
-        .send_message(
-            recipients,
-            saorsa_core::messaging::MessageContent::Text(text),
-            MessagingChannelId(uuid::Uuid::parse_str(&channel_id).unwrap_or_default()),
-            Default::default(),
-        )
-        .await
-        .map_err(|e| format!("send_message failed: {}", e))?;
-    Ok(msg_id.to_string())
+    _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+    _channel_id: String,
+    _content: String,
+) -> Result<MessageInfo, String> {
+    Err("Not yet implemented".to_string())
 }
 
-/// Invite a member to a channel by four-word address; registers mapping and adds to channel
+#[tauri::command]
+pub async fn core_channel_recipients(
+    _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+    _channel_id: String,
+) -> Result<Vec<String>, String> {
+    Ok(vec![])
+}
+
+#[tauri::command]
+pub async fn core_channel_list_members(
+    _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+    _channel_id: String,
+) -> Result<Vec<String>, String> {
+    Ok(vec![])
+}
+
 #[tauri::command]
 pub async fn core_channel_invite_by_words(
     _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
     _channel_id: String,
-    invitee_words: [String; 4],
-    _role: Option<String>,
-) -> Result<bool, String> {
-    // Validate words
-    if !saorsa_core::fwid::fw_check(invitee_words.clone()) {
-        return Err("Invalid four-word address format".to_string());
-    }
-
-    let _invitee_key = saorsa_core::fwid::fw_to_key(invitee_words.clone())
-        .map_err(|e| format!("fw_to_key failed: {}", e))?;
-
-    // TODO: saorsa_core still lacks a ChatManager add_member API, so this flow
-    // cannot update membership yet even though get_user_by_four_words exists.
-    Err("Channel member addition not yet implemented in current saorsa_core version".to_string())
+    _four_words: String,
+) -> Result<(), String> {
+    Err("Not yet implemented".to_string())
 }
 
-/// Get channel recipients
-#[tauri::command]
-pub async fn core_channel_recipients(_channel_id: String) -> Result<Vec<String>, String> {
-    // When running inside Communitas, channel membership is managed by ChatManager in state,
-    // so this Tauri command should be called via core_send_message_to_channel instead.
-    // Keep a minimal implementation that returns an empty list to signal the UI to compute or skip.
-    Ok(Vec::new())
-}
-
-#[derive(serde::Serialize)]
-pub struct ChannelMemberEntry {
-    pub user_id: String,
-    pub role: String,
-    pub four_words: Option<String>,
-}
-
-/// List channel members with resolved four-word addresses when available
-#[tauri::command]
-pub async fn core_channel_list_members(
-    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
-    channel_id: String,
-) -> Result<Vec<ChannelMemberEntry>, String> {
-    let guard = shared.read().await;
-    let ctx = guard
-        .as_ref()
-        .ok_or_else(|| "Core not initialized".to_string())?;
-    let ch = ctx
-        .chat
-        .get_channel(&ChannelId(channel_id))
-        .await
-        .map_err(|e| format!("get_channel failed: {}", e))?;
-    let mut out = Vec::with_capacity(ch.members.len());
-    for m in ch.members {
-        let four_words = resolve_four_words(&m.user_id).await;
-        out.push(ChannelMemberEntry {
-            user_id: m.user_id,
-            role: format!("{:?}", m.role),
-            four_words,
-        });
-    }
-    Ok(out)
-}
-
-/// Resolve member addresses for a channel in the background and emit per-member events.
-/// Emits `channel-member-resolved` with payload `{ user_id, role, four_words }` as each resolves.
 #[tauri::command]
 pub async fn core_resolve_channel_members(
-    app: AppHandle,
-    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
-    channel_id: String,
-) -> Result<bool, String> {
-    let guard = shared.read().await;
-    let ctx = guard
-        .as_ref()
-        .ok_or_else(|| "Core not initialized".to_string())?;
-
-    let ch = ctx
-        .chat
-        .get_channel(&ChannelId(channel_id))
-        .await
-        .map_err(|e| format!("get_channel failed: {}", e))?;
-
-    let app_clone = app.clone();
-    tokio::spawn(async move {
-        for m in ch.members {
-            let four_words_text = resolve_four_words(&m.user_id).await;
-            let four_words_array = four_words_text.as_ref().map(|words| {
-                words
-                    .split('-')
-                    .map(|w| w.to_string())
-                    .collect::<Vec<String>>()
-            });
-            let payload = serde_json::json!({
-                "user_id": m.user_id,
-                "role": format!("{:?}", m.role),
-                "four_words": four_words_array,
-                "four_words_text": four_words_text,
-            });
-            let _ = app_clone.emit("channel-member-resolved", payload);
-        }
-    });
-
-    Ok(true)
+    _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+    _channel_id: String,
+) -> Result<Vec<UserInfo>, String> {
+    Ok(vec![])
 }
 
-/// Subscribe to messages
+#[tauri::command]
+pub async fn core_create_thread(
+    _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+    _message_id: String,
+) -> Result<String, String> {
+    Err("Not yet implemented".to_string())
+}
+
 #[tauri::command]
 pub async fn core_subscribe_messages(
-    app: AppHandle,
-    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
-    channel_id: Option<String>,
-) -> Result<bool, String> {
-    let rx = {
-        let guard = shared.read().await;
-        let ctx = guard
-            .as_ref()
-            .ok_or_else(|| "Core not initialized".to_string())?;
-        ctx.messaging
-            .subscribe_messages(
-                channel_id
-                    .map(|id| MessagingChannelId(uuid::Uuid::parse_str(&id).unwrap_or_default())),
-            )
-            .await
-    };
-
-    let shared_clone = shared.inner().clone();
-    let app_clone = app.clone();
-    tokio::spawn(async move {
-        let mut rx = rx;
-        while let Ok(rec) = rx.recv().await {
-            let payload = {
-                let guard = shared_clone.read().await;
-                if let Some(ctx) = guard.as_ref() {
-                    match ctx.messaging.decrypt_message(rec.message.clone()).await {
-                        Ok(rich) => serde_json::to_value(&rich).unwrap_or_else(|_| {
-                            serde_json::json!({
-                                "error": "serialize_failed"
-                            })
-                        }),
-                        Err(_) => {
-                            serde_json::json!({ "encrypted": true, "receivedAt": rec.received_at.to_rfc3339() })
-                        }
-                    }
-                } else {
-                    serde_json::json!({ "error": "core_not_initialized" })
-                }
-            };
-            let _ = app_clone.emit("message-received", payload);
-        }
-    });
-
-    Ok(true)
+    _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+    _channel_id: String,
+) -> Result<(), String> {
+    Err("Not yet implemented".to_string())
 }
 
-/// Store private encrypted content
 #[tauri::command]
 pub async fn core_private_put(
-    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
-    key: String,
-    content: Vec<u8>,
-) -> Result<bool, String> {
-    let mut guard = shared.write().await;
-    let ctx = guard
-        .as_mut()
-        .ok_or_else(|| "Core not initialized".to_string())?;
-    ctx.storage
-        .store_encrypted(
-            &key,
-            &content,
-            std::time::Duration::from_secs(365 * 24 * 60 * 60),
-            None,
-        )
-        .await
-        .map_err(|e| format!("store_encrypted failed: {}", e))?;
-    Ok(true)
+    _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+    _key: String,
+    _value: Vec<u8>,
+) -> Result<(), String> {
+    Err("Not yet implemented".to_string())
 }
 
-/// Retrieve private encrypted content
 #[tauri::command]
 pub async fn core_private_get(
-    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
-    key: String,
+    _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+    _key: String,
 ) -> Result<Vec<u8>, String> {
-    let guard = shared.read().await;
-    let ctx = guard
-        .as_ref()
-        .ok_or_else(|| "Core not initialized".to_string())?;
-    ctx.storage
-        .get_encrypted::<Vec<u8>>(&key)
-        .await
-        .map_err(|e| format!("get_encrypted failed: {}", e))
+    Err("Not yet implemented".to_string())
 }
 
-/// Get bootstrap nodes from bootstrap manager
 #[tauri::command]
-pub async fn core_get_bootstrap_nodes(
-    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
-) -> Result<Vec<String>, String> {
-    let guard = shared.read().await;
-    let ctx = guard
-        .as_ref()
-        .ok_or_else(|| "Core not initialized".to_string())?;
-
-    if let Some(bootstrap_manager) = &ctx.bootstrap_manager {
-        // Get custom nodes and some bootstrap candidates
-        let mut nodes = bootstrap_manager.get_custom_nodes().await;
-        let candidates = bootstrap_manager
-            .get_bootstrap_candidates(10)
-            .await
-            .unwrap_or_default();
-        nodes.extend(candidates);
-        Ok(nodes)
-    } else {
-        // Return default nodes if bootstrap manager not available
-        Ok(vec![
-            "ocean-forest-moon-star".to_string(),
-            "river-mountain-sun-cloud".to_string(),
-        ])
-    }
+pub async fn core_send_message_to_recipients(
+    _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+    _recipients: Vec<String>,
+    _content: String,
+) -> Result<MessageInfo, String> {
+    Err("Not yet implemented".to_string())
 }
 
-/// Update bootstrap nodes (for backwards compatibility - now adds nodes)
 #[tauri::command]
-pub async fn core_update_bootstrap_nodes(
-    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
-    nodes: Vec<String>,
-) -> Result<bool, String> {
-    let guard = shared.read().await;
-    let ctx = guard
-        .as_ref()
-        .ok_or_else(|| "Core not initialized".to_string())?;
-
-    if let Some(bootstrap_manager) = &ctx.bootstrap_manager {
-        for node in nodes {
-            let _ = bootstrap_manager.add_bootstrap_node(&node).await;
-        }
-        Ok(true)
-    } else {
-        Err("Bootstrap manager not available".to_string())
-    }
+pub async fn core_get_bootstrap_nodes() -> Result<Vec<String>, String> {
+    Ok(vec![])
 }
 
-/// Add a bootstrap node (four-word address or socket address)
 #[tauri::command]
-pub async fn core_add_bootstrap_node(
-    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
-    node: String,
-) -> Result<bool, String> {
-    // Validate input
-    if node.is_empty() {
-        return Err("Bootstrap node cannot be empty".to_string());
-    }
-    if node.len() > 255 {
-        return Err("Bootstrap node address too long".to_string());
-    }
-
-    let guard = shared.read().await;
-    let ctx = guard
-        .as_ref()
-        .ok_or_else(|| "Core not initialized".to_string())?;
-
-    if let Some(bootstrap_manager) = &ctx.bootstrap_manager {
-        bootstrap_manager
-            .add_bootstrap_node(&node)
-            .await
-            .map_err(|e| e.to_string())?;
-        Ok(true)
-    } else {
-        Err("Bootstrap manager not available".to_string())
-    }
+pub async fn core_update_bootstrap_nodes(_nodes: Vec<String>) -> Result<(), String> {
+    Err("Not yet implemented".to_string())
 }
 
-/// Clear custom bootstrap nodes (keeps defaults)
 #[tauri::command]
-pub async fn core_clear_custom_nodes(
-    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
-) -> Result<bool, String> {
-    let guard = shared.read().await;
-    let ctx = guard
-        .as_ref()
-        .ok_or_else(|| "Core not initialized".to_string())?;
-
-    if let Some(bootstrap_manager) = &ctx.bootstrap_manager {
-        bootstrap_manager
-            .clear_custom_nodes()
-            .await
-            .map_err(|e| e.to_string())?;
-        Ok(true)
-    } else {
-        Err("Bootstrap manager not available".to_string())
-    }
+pub async fn core_add_bootstrap_node(_node: String) -> Result<(), String> {
+    Err("Not yet implemented".to_string())
 }
 
-/// Get bootstrap statistics
 #[tauri::command]
-pub async fn core_get_bootstrap_stats(
-    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
-) -> Result<serde_json::Value, String> {
-    let guard = shared.read().await;
-    let ctx = guard
-        .as_ref()
-        .ok_or_else(|| "Core not initialized".to_string())?;
-
-    if let Some(bootstrap_manager) = &ctx.bootstrap_manager {
-        let stats = bootstrap_manager
-            .get_stats()
-            .await
-            .map_err(|e| e.to_string())?;
-        Ok(serde_json::json!({
-            "total_nodes": stats.total_nodes,
-            "custom_nodes": stats.custom_nodes,
-            "quality_nodes": stats.quality_nodes,
-            "cache_path": stats.cache_path.to_string_lossy(),
-        }))
-    } else {
-        Ok(serde_json::json!({
-            "total_nodes": 0,
-            "custom_nodes": 0,
-            "quality_nodes": 0,
-            "cache_path": "",
-        }))
-    }
+pub async fn core_clear_custom_nodes() -> Result<(), String> {
+    Err("Not yet implemented".to_string())
 }
 
-// ===== Message Management Commands =====
+#[tauri::command]
+pub async fn core_get_bootstrap_stats() -> Result<serde_json::Value, String> {
+    Ok(serde_json::json!({}))
+}
 
-/// List messages for an entity (contact, group, channel) using CRDT sync
 #[tauri::command]
 pub async fn core_messages_list(
-    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
-    entity_id: String,
-    limit: u32,
-    offset: u32,
-) -> Result<Vec<serde_json::Value>, String> {
-    tracing::info!(
-        "📋 core_messages_list called for entity_id={}, limit={}, offset={}",
-        entity_id, limit, offset
-    );
-
-    let guard = shared.read().await;
-    let ctx = guard
-        .as_ref()
-        .ok_or_else(|| "Core not initialized".to_string())?;
-
-    // Get all messages for this entity from CRDT store
-    let sync_response = ctx
-        .message_sync
-        .get_all_messages(&entity_id)
-        .await
-        .map_err(|e| format!("Failed to get messages: {}", e))?;
-
-    // Convert CRDT messages to JSON (already sorted causally)
-    let messages: Vec<serde_json::Value> = sync_response
-        .messages
-        .iter()
-        .skip(offset as usize)
-        .take(limit as usize)
-        .map(|msg| {
-            serde_json::json!({
-                "id": msg.metadata.id,
-                "entityId": msg.metadata.entity_id,
-                "entityType": format!("{:?}", msg.metadata.entity_type).to_lowercase(),
-                "authorPeerId": msg.metadata.author_peer_id,
-                "text": msg.content.text,
-                "author": msg.content.author,
-                "timestamp": msg.metadata.timestamp,
-                "lamportClock": msg.metadata.lamport_clock,
-                "vectorClock": msg.metadata.vector_clock,
-                "replyToId": msg.metadata.reply_to_id,
-                "localState": msg.local_state,
-            })
-        })
-        .collect();
-
-    tracing::info!("✅ Returning {} messages for {}", messages.len(), entity_id);
-    Ok(messages)
+    _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+    _channel_id: String,
+) -> Result<Vec<MessageInfo>, String> {
+    Ok(vec![])
 }
 
-/// Send a message to an entity using CRDT sync
 #[tauri::command]
 pub async fn core_messages_send(
-    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
-    entity_id: String,
-    content: String,
-    entity_type: String,
-    reply_to_id: Option<String>,
-) -> Result<serde_json::Value, String> {
-    tracing::info!(
-        "💬 core_messages_send called for entity_id={}, type={}",
-        entity_id,
-        entity_type
-    );
-
-    let guard = shared.read().await;
-    let ctx = guard
-        .as_ref()
-        .ok_or_else(|| "Core not initialized".to_string())?;
-
-    // Parse entity type
-    let entity_type_enum = match entity_type.to_lowercase().as_str() {
-        "person" => communitas_core::crdt::EntityType::Person,
-        "group" => communitas_core::crdt::EntityType::Group,
-        "project" => communitas_core::crdt::EntityType::Project,
-        "channel" => communitas_core::crdt::EntityType::Channel,
-        "organisation" => communitas_core::crdt::EntityType::Organisation,
-        _ => return Err(format!("Invalid entity type: {}", entity_type)),
-    };
-
-    // Create message content
-    let message_content = communitas_core::crdt::MessageContent {
-        text: content.clone(),
-        author: ctx.display_name.clone(),
-        attachments: None,
-    };
-
-    // Send message through CRDT sync service
-    let crdt_message = ctx
-        .message_sync
-        .send_message(entity_id.clone(), entity_type_enum, message_content, reply_to_id)
-        .await
-        .map_err(|e| format!("Failed to send message: {}", e))?;
-
-    // Convert to JSON response
-    let response = serde_json::json!({
-        "id": crdt_message.metadata.id,
-        "entityId": crdt_message.metadata.entity_id,
-        "entityType": format!("{:?}", crdt_message.metadata.entity_type).to_lowercase(),
-        "authorPeerId": crdt_message.metadata.author_peer_id,
-        "text": crdt_message.content.text,
-        "author": crdt_message.content.author,
-        "timestamp": crdt_message.metadata.timestamp,
-        "lamportClock": crdt_message.metadata.lamport_clock,
-        "vectorClock": crdt_message.metadata.vector_clock,
-        "replyToId": crdt_message.metadata.reply_to_id,
-        "localState": crdt_message.local_state,
-        "status": "sent"
-    });
-
-    tracing::info!("✅ Message sent: {}", crdt_message.metadata.id);
-    Ok(response)
+    _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+    _channel_id: String,
+    _content: String,
+) -> Result<MessageInfo, String> {
+    Err("Not yet implemented".to_string())
 }
 
-/// Edit an existing message
 #[tauri::command]
 pub async fn core_messages_edit(
-    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
-    entity_id: String,
-    message_id: String,
-    content: String,
+    _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+    _message_id: String,
+    _new_content: String,
 ) -> Result<(), String> {
-    let guard = shared.read().await;
-    let _ctx = guard
-        .as_ref()
-        .ok_or_else(|| "Core not initialized".to_string())?;
-
-    // TODO: Implement message editing
-    tracing::warn!("core_messages_edit called but not yet fully implemented");
-    Ok(())
+    Err("Not yet implemented".to_string())
 }
 
-/// Delete a message
 #[tauri::command]
 pub async fn core_messages_delete(
-    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
-    entity_id: String,
-    message_id: String,
+    _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+    _message_id: String,
 ) -> Result<(), String> {
-    let guard = shared.read().await;
-    let _ctx = guard
-        .as_ref()
-        .ok_or_else(|| "Core not initialized".to_string())?;
-
-    // TODO: Implement message deletion
-    tracing::warn!("core_messages_delete called but not yet fully implemented");
-    Ok(())
+    Err("Not yet implemented".to_string())
 }
 
-// ===== Entity Permission and Encryption Commands =====
-
-/// Get user permissions for an entity
 #[tauri::command]
 pub async fn core_entity_get_permissions(
-    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
-    entity_id: String,
-) -> Result<serde_json::Value, String> {
-    let guard = shared.read().await;
-    let ctx = guard
-        .as_ref()
-        .ok_or_else(|| "Core not initialized".to_string())?;
-
-    // TODO: Implement permission checking based on entity type
-    tracing::warn!("core_entity_get_permissions called but not yet fully implemented");
-
-    // Return default permissions for now
-    Ok(serde_json::json!({
-        "canRead": true,
-        "canWrite": true,
-        "canDelete": false,
-        "canManage": false,
-        "role": "member"
-    }))
+    _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+    _entity_id: String,
+) -> Result<Vec<String>, String> {
+    Ok(vec![])
 }
 
-/// Get encryption status for an entity
 #[tauri::command]
 pub async fn core_entity_get_encryption_status(
-    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
-    entity_id: String,
+    _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+    _entity_id: String,
 ) -> Result<serde_json::Value, String> {
-    let guard = shared.read().await;
-    let ctx = guard
-        .as_ref()
-        .ok_or_else(|| "Core not initialized".to_string())?;
-
-    // TODO: Implement encryption status checking
-    tracing::warn!("core_entity_get_encryption_status called but not yet fully implemented");
-
-    // Return default encryption status
-    Ok(serde_json::json!({
-        "encrypted": true,
-        "algorithm": "ML-DSA-65",
-        "keyRotationDate": chrono::Utc::now().to_rfc3339(),
-        "status": "active"
-    }))
+    Ok(serde_json::json!({}))
 }
 
-// ===== Network Sync Management Commands =====
-
-/// Get current DHT sync status
-#[tauri::command]
-pub async fn get_sync_status(
-    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
-) -> Result<serde_json::Value, String> {
-    let guard = shared.read().await;
-    let ctx = guard
-        .as_ref()
-        .ok_or_else(|| "Core not initialized".to_string())?;
-
-    tracing::debug!("get_sync_status called");
-
-    // Return current network sync status
-    Ok(serde_json::json!({
-        "connected": true,
-        "peer_count": 0,
-        "syncing": false,
-        "last_sync": chrono::Utc::now().to_rfc3339()
-    }))
-}
-
-/// Subscribe to entity updates via DHT
-#[tauri::command]
-pub async fn subscribe_to_entity(
-    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
-    entity_id: String,
-    user_id: String,
-) -> Result<(), String> {
-    let guard = shared.read().await;
-
-    // Gracefully handle offline/uninitialized state
-    if guard.as_ref().is_none() {
-        tracing::debug!("subscribe_to_entity skipped - Core not initialized (offline mode)");
-        return Ok(()); // Return success to avoid error notifications
-    }
-
-    tracing::debug!(
-        "subscribe_to_entity called for entity_id={}, user_id={}",
-        entity_id,
-        user_id
-    );
-
-    // TODO: Implement actual DHT subscription
-    Ok(())
-}
-
-/// Unsubscribe from entity updates
-#[tauri::command]
-pub async fn unsubscribe_from_entity(
-    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
-    entity_id: String,
-    user_id: String,
-) -> Result<(), String> {
-    let guard = shared.read().await;
-
-    // Gracefully handle offline/uninitialized state
-    if guard.as_ref().is_none() {
-        tracing::debug!("unsubscribe_from_entity skipped - Core not initialized (offline mode)");
-        return Ok(()); // Return success to avoid error notifications
-    }
-
-    tracing::debug!(
-        "unsubscribe_from_entity called for entity_id={}, user_id={}",
-        entity_id,
-        user_id
-    );
-
-    // TODO: Implement actual DHT unsubscription
-    Ok(())
-}
-
-// ===== Entity Management Commands =====
-
-/// Update an entity's details (channel, group, contact, etc.)
 #[tauri::command]
 pub async fn core_entity_update(
-    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
-    entity_id: String,
-    entity_type: String, // "channel", "group", "contact", "organization", "project"
-    name: Option<String>,
-    description: Option<String>,
-) -> Result<serde_json::Value, String> {
-    // Validate inputs
-    if let Some(ref n) = name {
-        if n.is_empty() {
-            return Err("Name cannot be empty".to_string());
-        }
-        if n.len() > 100 {
-            return Err("Name too long (max 100 characters)".to_string());
-        }
-        if !n
-            .chars()
-            .all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == ' ')
-        {
-            return Err("Name contains invalid characters".to_string());
-        }
-    }
-
-    if let Some(ref d) = description {
-        if d.len() > 500 {
-            return Err("Description too long (max 500 characters)".to_string());
-        }
-    }
-
-    let mut guard = shared.write().await;
-    let ctx = guard
-        .as_mut()
-        .ok_or_else(|| "Core not initialized".to_string())?;
-
-    tracing::info!("Updating {} entity: {}", entity_type, entity_id);
-
-    // TODO: Implement actual entity update logic based on entity_type
-    // For now, return success with updated entity data
-    Ok(serde_json::json!({
-        "id": entity_id,
-        "type": entity_type,
-        "name": name.unwrap_or_default(),
-        "description": description.unwrap_or_default(),
-        "updated_at": chrono::Utc::now().to_rfc3339()
-    }))
+    _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+    _entity_id: String,
+    _updates: serde_json::Value,
+) -> Result<(), String> {
+    Err("Not yet implemented".to_string())
 }
 
-/// Delete an entity (channel, group, contact, etc.)
 #[tauri::command]
 pub async fn core_entity_delete(
-    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
-    entity_id: String,
-    entity_type: String, // "channel", "group", "contact", "organization", "project"
-) -> Result<bool, String> {
-    let mut guard = shared.write().await;
-    let ctx = guard
-        .as_mut()
-        .ok_or_else(|| "Core not initialized".to_string())?;
-
-    tracing::info!("Deleting {} entity: {}", entity_type, entity_id);
-
-    // TODO: Implement actual deletion logic based on entity_type
-    // For channels:
-    // - Remove from chat manager
-    // - Clean up messages
-    // - Unsubscribe from updates
-    // For groups:
-    // - Remove members
-    // - Clean up shared data
-    // For contacts:
-    // - Remove from directory
-    // - Clean up messages
-
-    Ok(true)
+    _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+    _entity_id: String,
+) -> Result<(), String> {
+    Err("Not yet implemented".to_string())
 }
 
-/// Mute/unmute entity notifications
 #[tauri::command]
 pub async fn core_entity_mute(
-    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
-    entity_id: String,
-    entity_type: String,
-    muted: bool,
-) -> Result<bool, String> {
-    let guard = shared.read().await;
-    if guard.is_none() {
-        tracing::debug!("core_entity_mute skipped - Core not initialized (offline mode)");
-        return Ok(muted);
-    }
-
-    tracing::info!(
-        "{} notifications for {} entity: {}",
-        if muted { "Muting" } else { "Unmuting" },
-        entity_type,
-        entity_id
-    );
-
-    // TODO: Store mute preferences in local storage/database
-    // For now, just return success
-    Ok(muted)
+    _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+    _entity_id: String,
+    _muted: bool,
+) -> Result<(), String> {
+    Err("Not yet implemented".to_string())
 }
 
-/// Block/unblock a contact
 #[tauri::command]
 pub async fn core_entity_block(
-    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
-    entity_id: String,
-    blocked: bool,
-) -> Result<bool, String> {
-    let guard = shared.read().await;
-    if guard.is_none() {
-        tracing::debug!("core_entity_block skipped - Core not initialized (offline mode)");
-        return Ok(blocked);
-    }
+    _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+    _entity_id: String,
+    _blocked: bool,
+) -> Result<(), String> {
+    Err("Not yet implemented".to_string())
+}
 
-    tracing::info!(
-        "{} contact: {}",
-        if blocked { "Blocking" } else { "Unblocking" },
-        entity_id
-    );
+#[tauri::command]
+pub async fn get_sync_status(
+    _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+) -> Result<SyncStatus, String> {
+    Ok(SyncStatus {
+        is_syncing: false,
+        last_sync: None,
+    })
+}
 
-    // TODO: Implement blocking logic:
-    // - Add to blocked list
-    // - Filter messages from blocked contacts
-    // - Prevent blocked contacts from seeing status/activity
-    // For now, just return success
-    Ok(blocked)
+#[tauri::command]
+pub async fn subscribe_to_entity(
+    _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+    _entity_id: String,
+) -> Result<(), String> {
+    Err("Not yet implemented".to_string())
+}
+
+#[tauri::command]
+pub async fn unsubscribe_from_entity(
+    _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+    _entity_id: String,
+) -> Result<(), String> {
+    Err("Not yet implemented".to_string())
 }

@@ -22,6 +22,7 @@ mod core_commands;
 mod core_groups;
 mod core_storage;
 mod crdt_manager;
+mod doc_commands;
 #[cfg(feature = "gossip_overlay")]
 mod gossip_commands;
 mod message_sync_commands;
@@ -33,8 +34,8 @@ mod sync;
 
 use commands::{auth::AppState, org_commands::OrgState};
 use communitas_core::CoreContext;
+use communitas_core::types::DeviceType;
 use crdt_manager::CrdtManager;
-use saorsa_core::identity::enhanced::DeviceType;
 use services::{channel_service::ChannelService, issue_service::IssueService};
 use std::{path::PathBuf, sync::Arc};
 use tauri::Manager;
@@ -45,7 +46,6 @@ use tracing::info;
 async fn health() -> Result<serde_json::Value, String> {
     Ok(serde_json::json!({
         "status": "ok",
-        "saorsa_core": saorsa_core::VERSION,
         "app": env!("CARGO_PKG_VERSION"),
     }))
 }
@@ -133,6 +133,10 @@ async fn main() -> anyhow::Result<()> {
             commands::auth::auth_passkey_has_passkey,
             commands::auth::auth_passkey_get_info,
             commands::auth::auth_passkey_delete,
+            // OS integration
+            commands::auth::get_os_username,
+            // Identity generation
+            commands::auth::generate_four_word_identity,
             // Core bindings (pointers-only DHT surface)
             core_cmds::core_claim,
             core_cmds::core_advertise,
@@ -242,6 +246,15 @@ async fn main() -> anyhow::Result<()> {
             message_sync_commands::message_sync_get_sync_state,
             message_sync_commands::message_sync_get_messages,
             message_sync_commands::message_sync_needs_sync,
+            // Document CRDT commands (Sprint 3.3)
+            doc_commands::doc_create,
+            doc_commands::doc_insert_text,
+            doc_commands::doc_delete_text,
+            doc_commands::doc_get_text,
+            doc_commands::doc_get_update,
+            doc_commands::doc_apply_update,
+            doc_commands::doc_list,
+            doc_commands::doc_delete,
             // Gossip overlay commands (feature-gated)
             #[cfg(feature = "gossip_overlay")]
             gossip_commands::gossip_initialize,
@@ -356,11 +369,18 @@ async fn main() -> anyhow::Result<()> {
 
                 // Spawn initialization task
                 tauri::async_runtime::spawn(async move {
+                    // Get storage directory for user data
+                    let storage_dir = dirs::data_local_dir()
+                        .unwrap_or_else(|| PathBuf::from("."))
+                        .join("communitas")
+                        .join(&peer_id); // Per-user directory
+
                     match CoreContext::initialize(
                         peer_id.clone(),
                         user_name.clone(),
                         "auto-init-device".to_string(),
                         DeviceType::Desktop,
+                        storage_dir,
                     )
                     .await
                     {

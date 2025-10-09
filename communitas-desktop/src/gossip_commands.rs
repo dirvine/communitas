@@ -126,7 +126,7 @@ pub async fn gossip_find_contact(
 #[tauri::command]
 pub async fn gossip_add_contact(
     state: tauri::State<'_, GossipState>,
-    four_words: String,
+    _four_words: String,
     four_words_to_add: String,
 ) -> Result<(), String> {
     let guard = state.read().await;
@@ -428,19 +428,22 @@ pub async fn gossip_site_publish(
         .as_ref()
         .ok_or("SitePublisher not initialized")?;
 
-    // Add all assets
+    // Add all assets and collect their hashes
+    let mut asset_paths = Vec::new();
     for asset in assets {
         let content = base64::engine::general_purpose::STANDARD
             .decode(&asset.content_base64)
             .map_err(|e| format!("Failed to decode asset: {}", e))?;
 
-        publisher.add_asset(asset.path, content)
+        let hash = publisher.add_asset(asset.path.clone(), content)
             .await
             .map_err(|e| format!("Failed to add asset: {}", e))?;
+
+        asset_paths.push((asset.path, hash));
     }
 
-    // Build manifest
-    let manifest = publisher.build_manifest()
+    // Build manifest with version 1 and collected asset paths
+    let manifest = publisher.build_manifest(1, asset_paths)
         .await
         .map_err(|e| format!("Failed to build manifest: {}", e))?;
 
@@ -476,24 +479,23 @@ pub async fn gossip_site_fetch(
         .map_err(|e| format!("Discovery failed: {}", e))?;
 
     // Get providers
-    let providers = fetcher.get_providers(&site_id)
-        .await
-        .map_err(|e| format!("Failed to get providers: {}", e))?;
+    let providers = fetcher.get_providers(&site_id).await;
 
     if providers.is_empty() {
         return Err("No providers found for site".to_string());
     }
 
     // Fetch manifest from first provider
-    let provider = providers[0];
-    let manifest = fetcher.fetch_manifest(&site_id, provider)
+    let provider_summary = &providers[0];
+    let provider_peer_id = provider_summary.provider;
+    let manifest = fetcher.fetch_manifest(&site_id, provider_peer_id)
         .await
         .map_err(|e| format!("Failed to fetch manifest: {}", e))?;
 
     // Fetch all blocks
     let mut assets = Vec::new();
-    for (path, hash) in &manifest.files {
-        let block = fetcher.fetch_block(hash, provider)
+    for (path, hash) in &manifest.blocks {
+        let block = fetcher.fetch_block(hash, provider_peer_id)
             .await
             .map_err(|e| format!("Failed to fetch block: {}", e))?;
 
@@ -522,8 +524,12 @@ pub async fn gossip_site_list(
         .as_ref()
         .ok_or("SitePublisher not initialized")?;
 
-    // Get site_id
-    let site_id = hex::encode(publisher.site_id().as_bytes());
+    // Get site_id from manifest
+    let manifest = publisher.get_manifest()
+        .await
+        .ok_or("No manifest available - publish a site first")?;
+
+    let site_id = hex::encode(manifest.site_id.as_bytes());
 
     // For now, just return our own published site
     // In future, this could return a list of discovered sites
@@ -553,13 +559,11 @@ pub async fn gossip_site_providers(
     let site_id = communitas_core::gossip::SiteId::new(site_id_array);
 
     // Get providers
-    let providers = fetcher.get_providers(&site_id)
-        .await
-        .map_err(|e| format!("Failed to get providers: {}", e))?;
+    let providers = fetcher.get_providers(&site_id).await;
 
     // Convert PeerIds to hex strings
     let provider_hexes = providers.into_iter()
-        .map(|p| hex::encode(p.as_bytes()))
+        .map(|p| hex::encode(p.provider.as_bytes()))
         .collect();
 
     Ok(provider_hexes)
@@ -647,10 +651,10 @@ pub async fn gossip_get_cached_peers(
         .await
         .map_err(|e| format!("Failed to get contacts: {}", e))?;
 
-    Ok(contacts.into_iter().map(|(four_words, peer_id_str)| {
+    Ok(contacts.into_iter().map(|(four_words, peer_id)| {
         BootstrapPeer {
             four_words,
-            peer_id: peer_id_str,
+            peer_id: peer_id.to_string(),
             last_seen: 0, // TODO: Track last seen timestamp
             success_rate: 1.0, // Assume success for known contacts
         }

@@ -10,6 +10,8 @@ use tokio::fs;
 /// FEC storage manager for resilient data storage
 pub struct FecStorage {
     base_path: PathBuf,
+    /// Default redundancy level for FEC encoding (reserved for future FEC operations)
+    #[allow(dead_code)]
     default_redundancy: f32,
 }
 

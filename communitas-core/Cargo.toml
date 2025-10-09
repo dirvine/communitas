@@ -9,13 +9,25 @@ homepage.workspace = true
 description = "Core business logic for Communitas - PQC collaboration with virtual disks"
 
 [dependencies]
-# Saorsa Labs - use published crate with wildcard address fix
-saorsa-core = "0.5.7"
-saorsa-fec = "0.4.11"
-saorsa-mls = "0.1.5"
-saorsa-rsps = "0.2.0"
+# Saorsa Gossip - P2P networking layer (required, no longer optional)
+saorsa-gossip-types = "0.1.5"
+saorsa-gossip-identity = "0.1.5"
+saorsa-gossip-crdt-sync = "0.1.5"
+saorsa-gossip-groups = "0.1.5"
+saorsa-gossip-presence = "0.1.4"  # 0.1.5 not yet published
+saorsa-gossip-transport = "0.1.5"
+saorsa-gossip-membership = "0.1.5"
+saorsa-gossip-pubsub = "0.1.5"
+saorsa-gossip-coordinator = "0.1.5"
+saorsa-gossip-rendezvous = "0.1.5"
+
+# Keep PQC for encryption (not tied to saorsa-core)
 saorsa-pqc = "0.3.12"
-saorsa-seal = "0.1.2"
+fips204 = "0.4"  # Direct dependency for ML-DSA traits and methods
+
+# CRDT for document collaboration (Sprint 3.2)
+# sync feature enables Send + Sync traits for multithreaded environments
+yrs = { version = "0.19", features = ["sync"] }
 
 # Async runtime
 tokio = { version = "1.39", features = ["full"] }
@@ -29,6 +41,7 @@ serde_cbor = "0.11"
 serde_bytes = "0.11"
 bincode = "1.3"
 toml = "0.8"
+bytes = "1.5"
 
 # Error handling
 anyhow = "1.0"
@@ -42,7 +55,8 @@ log = "0.4"
 blake3 = "1.0"
 hex = "0.4"
 rand = "0.8"
-ed25519-dalek = "2"
+rand_chacha = "0.3"  # For deterministic key generation from identity seed
+# ed25519-dalek = "2"  # REMOVED: Using post-quantum ML-DSA from saorsa-pqc instead
 argon2 = "0.5"
 zeroize = "1.7"
 secrecy = "0.8"
@@ -50,9 +64,6 @@ chacha20poly1305 = "0.10"
 pbkdf2 = "0.12"
 sha2 = "0.10"
 url = "2.5"
-
-# QUIC transport
-ant-quic = "^0.8.17"
 
 # Database and storage
 rusqlite = { version = "0.37", features = ["chrono", "serde_json", "uuid", "bundled"] }

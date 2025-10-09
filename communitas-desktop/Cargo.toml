@@ -16,17 +16,21 @@ path = "src/main.rs"
 [build-dependencies]
 tauri-build = { version = "2.4.1", features = [] }
 
+[features]
+gossip_overlay = []
+
+
 [dependencies]
 # Core business logic
 communitas-core = { path = "../communitas-core" }
 communitas-container = { path = "../crates/communitas-container" }
 
-# Saorsa Core - use published crate with wildcard address fix
-saorsa-core = "0.5.7"
-saorsa-fec = "0.4.11"
-
-# Networking
-ant-quic = "^0.8.17"
+# Saorsa Gossip - P2P networking layer (required, no longer optional)
+saorsa-gossip-types = { workspace = true }
+saorsa-gossip-identity = { workspace = true }
+saorsa-gossip-transport = { workspace = true }
+saorsa-gossip-membership = { workspace = true }
+saorsa-gossip-pubsub = { workspace = true }
 
 # CRDT and Database
 yrs = "0.18"

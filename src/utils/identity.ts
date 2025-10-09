@@ -9,34 +9,44 @@ export type IdentityPacket = {
   packet_version: number
 }
 
+/**
+ * Generate a valid four-word identity using the four-word-networking dictionary
+ *
+ * Returns identity with dashes internally, but UX should display/accept spaces.
+ * Backend returns format: "word-word-word-word"
+ *
+ * @param seed - Optional seed for deterministic generation (not currently used)
+ * @returns Four-word identity with dashes (e.g., "ocean-forest-moon-star")
+ */
 export const generateFourWordIdentity = async (seed?: string): Promise<string> => {
   const words = await safeInvoke<string>('generate_four_word_identity', seed ? { seed } : undefined)
-  if (words) return words
-  // Test/browser fallback: deterministic from seed or random
-  const rand = (n: number) => Math.floor(Math.random() * n)
-  const wordList = [
-    'ocean','forest','mountain','river','desert','valley','meadow','storm','cloud','wind',
-    'moon','star','sun','comet','nova','ember','shadow','flame','stone','metal',
-    'wolf','eagle','lion','tiger','bear','hawk','otter','whale','dolphin','fox'
-  ]
-  const pick = (i: number) => wordList[i % wordList.length]
-  const s = seed ?? `${Date.now()}-${Math.random()}`
-  // simple hash to indices
-  let h = 0
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0
-  const parts = [h, h >>> 8, h >>> 16, h >>> 24].map((v, idx) => pick((v + idx * 7 + rand(1000)) % wordList.length))
-  return parts.join(' ')
+  if (words) {
+    // Backend returns with dashes - keep it that way internally
+    return words
+  }
+  // Fallback for browser testing (should not be used in production)
+  console.warn('⚠️ Using fallback identity generation - backend command not available')
+  return 'test-identity-not-valid'
 }
 
+/**
+ * Validate a four-word identity format
+ *
+ * Accepts both space and dash separators for UX flexibility.
+ * Internally converts to dash format before validation.
+ *
+ * @param four_words - Four-word identity (spaces or dashes)
+ * @returns true if valid format
+ */
 export const validateFourWordIdentity = async (four_words: string): Promise<boolean> => {
-  const ok = await safeInvoke<boolean>('validate_four_word_identity', { four_words })
+  // Normalize: trim, lowercase, convert spaces to dashes for backend
+  const normalized = four_words.trim().toLowerCase().replace(/\s+/g, '-')
+
+  const ok = await safeInvoke<boolean>('validate_four_word_identity', { four_words: normalized })
   if (ok != null) return !!ok
-  
-  // Normalize input: trim, lowercase, handle both spaces and dashes
-  const normalized = four_words.trim().toLowerCase()
-  
-  // Accept both space-separated and dash-separated formats
-  return /^[a-z]+[\s-][a-z]+[\s-][a-z]+[\s-][a-z]+$/.test(normalized)
+
+  // Fallback validation: check format only (4 words)
+  return /^[a-z]+-[a-z]+-[a-z]+-[a-z]+$/.test(normalized)
 }
 
 export const claimFourWordIdentity = async (four_words: string): Promise<boolean> => {
@@ -72,4 +82,26 @@ export async function ensureIdentity(storageKey = 'communitas-four-words'): Prom
   await claimFourWordIdentity(four)
   localStorage.setItem(storageKey, four)
   return four
+}
+
+/**
+ * Convert four-word address from storage format (dashes) to display format (spaces)
+ *
+ * @param fourWords - Four-word address with dashes (e.g., "ocean-forest-moon-star")
+ * @returns Four-word address with spaces (e.g., "ocean forest moon star")
+ */
+export function fourWordsToDisplay(fourWords: string): string {
+  if (!fourWords) return fourWords
+  return fourWords.replace(/-/g, ' ')
+}
+
+/**
+ * Convert four-word address from display format (spaces) to storage format (dashes)
+ *
+ * @param fourWords - Four-word address with spaces (e.g., "ocean forest moon star")
+ * @returns Four-word address with dashes (e.g., "ocean-forest-moon-star")
+ */
+export function fourWordsToStorage(fourWords: string): string {
+  if (!fourWords) return fourWords
+  return fourWords.trim().toLowerCase().replace(/\s+/g, '-')
 }

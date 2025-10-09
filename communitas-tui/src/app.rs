@@ -81,7 +81,7 @@ impl App {
     pub async fn initialize_identity(
         &mut self,
         four_words: String,
-        display_name: String,
+        _display_name: String,
         _device_name: String,
     ) -> Result<()> {
         self.state.set_status("Initializing identity...");

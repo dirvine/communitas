@@ -25,7 +25,7 @@
 //! | Presence | MLS-encrypted rotating beacons |
 //! | Backup | Favourite contacts hold encrypted replicas |
 
-#![cfg(feature = "gossip_overlay")]
+// Gossip is now the default networking layer (no longer feature-gated)
 
 pub mod backup;
 pub mod boot;
@@ -33,6 +33,7 @@ pub mod context;
 pub mod coordinator;
 pub mod discovery;
 pub mod peer_cache;
+pub mod port_manager;
 pub mod presence;
 pub mod rendezvous;
 pub mod sites;
@@ -45,6 +46,7 @@ pub use context::GossipContext;
 pub use coordinator::CoordinatorClient;
 pub use discovery::{FoafDiscovery, IntroducerConfig, cold_start_discovery};
 pub use peer_cache::{NatClass, PeerCache, PeerCacheEntry};
+pub use port_manager::PortManager;
 pub use presence::PresenceWrapper;
 pub use rendezvous::RendezvousClient;
 pub use saorsa_gossip_coordinator::{CoordinatorRoles, NatClass as CoordinatorNatClass};

@@ -379,7 +379,7 @@ pub struct DisconnectFromPeerRequest {
 
 pub async fn disconnect_from_peer(
     State(state): State<Arc<BridgeState>>,
-    Json(req): Json<DisconnectFromPeerRequest>,
+    Json(_req): Json<DisconnectFromPeerRequest>,
 ) -> BridgeResult<Json<Value>> {
     let _core_guard = state.core.read().await;
     let _core = _core_guard

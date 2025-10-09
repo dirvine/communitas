@@ -21,6 +21,9 @@ pub struct PlatformStorage {
     platform_type: PlatformType,
 }
 
+/// Platform type detection for OS-specific storage backends
+/// Windows and Linux variants reserved for future cross-platform implementation
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy)]
 enum PlatformType {
     MacOS,
@@ -342,6 +345,8 @@ impl PlatformStorage {
     }
 
     #[cfg(windows)]
+    /// Windows-specific file security (reserved for future Windows DPAPI integration)
+    #[allow(dead_code)]
     async fn windows_secure_file(&self, _path: &PathBuf) -> Result<()> {
         // Windows-specific file security
         // Would use SetFileSecurity API here
@@ -349,6 +354,7 @@ impl PlatformStorage {
     }
 
     #[cfg(not(windows))]
+    #[allow(dead_code)]
     async fn windows_secure_file(&self, _path: &PathBuf) -> Result<()> {
         Ok(())
     }

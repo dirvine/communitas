@@ -493,6 +493,97 @@ pub async fn auth_passkey_delete(
     Ok(())
 }
 
+/// Generate a valid four-word identity using the four-word-networking dictionary
+///
+/// Returns a random four-word identity with valid dictionary words
+/// (e.g., "ocean-forest-moon-star")
+#[tauri::command]
+pub fn generate_four_word_identity() -> Result<String, String> {
+    tracing::info!("Generating four-word identity");
+
+    communitas_core::identity::generate_id_words()
+        .map_err(|e| format!("Failed to generate identity: {}", e))
+}
+
+/// Get OS username for default display name
+///
+/// Returns the current OS user's display name to use as default
+/// when creating new identities, avoiding the need to prompt the user.
+#[tauri::command]
+pub fn get_os_username() -> Result<String, String> {
+    tracing::info!("Getting OS username");
+
+    #[cfg(target_os = "macos")]
+    {
+        // Try to get full name from macOS system
+        use std::process::Command;
+
+        // Try 'id -F' first (full name)
+        if let Ok(output) = Command::new("id").arg("-F").output() {
+            let username = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !username.is_empty() && username != "unknown" {
+                tracing::info!("Got macOS full name: {}", username);
+                return Ok(username);
+            }
+        }
+
+        // Fallback to USER environment variable
+        if let Ok(user) = std::env::var("USER") {
+            tracing::info!("Using USER env var: {}", user);
+            return Ok(user);
+        }
+
+        // Last resort
+        Ok("User".to_string())
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        // Windows: Try USERNAME environment variable
+        if let Ok(username) = std::env::var("USERNAME") {
+            tracing::info!("Got Windows username: {}", username);
+            return Ok(username);
+        }
+
+        Ok("User".to_string())
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        // Linux: Try multiple sources
+        // 1. Try GECOS field (full name)
+        use std::process::Command;
+        if let Ok(output) = Command::new("getent")
+            .arg("passwd")
+            .arg(std::env::var("USER").unwrap_or_default())
+            .output()
+        {
+            let output_str = String::from_utf8_lossy(&output.stdout);
+            // GECOS field is the 5th field (0-indexed: 4)
+            if let Some(gecos) = output_str.split(':').nth(4) {
+                let full_name = gecos.split(',').next().unwrap_or("").trim();
+                if !full_name.is_empty() {
+                    tracing::info!("Got Linux GECOS name: {}", full_name);
+                    return Ok(full_name.to_string());
+                }
+            }
+        }
+
+        // 2. Fallback to USER environment variable
+        if let Ok(user) = std::env::var("USER") {
+            tracing::info!("Using USER env var: {}", user);
+            return Ok(user);
+        }
+
+        Ok("User".to_string())
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    {
+        Ok("User".to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

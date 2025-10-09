@@ -135,8 +135,6 @@ async fn main() -> anyhow::Result<()> {
             commands::auth::auth_passkey_delete,
             // OS integration
             commands::auth::get_os_username,
-            // Identity generation
-            commands::auth::generate_four_word_identity,
             // Core bindings (pointers-only DHT surface)
             core_cmds::core_claim,
             core_cmds::core_advertise,

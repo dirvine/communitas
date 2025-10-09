@@ -21,9 +21,16 @@ pub async fn core_claim(_words: [String; 4]) -> Result<String, String> {
     Err("Core claim not yet implemented with new architecture".to_string())
 }
 
+/// Generate a valid four-word identity using the four-word-networking dictionary
+///
+/// Returns a random four-word identity with valid dictionary words
+/// (e.g., "ocean-forest-moon-star")
 #[tauri::command]
 pub async fn generate_four_word_identity() -> Result<String, String> {
-    Err("Four-word generation not yet implemented with new architecture".to_string())
+    tracing::info!("Generating four-word identity");
+
+    communitas_core::identity::generate_id_words()
+        .map_err(|e| format!("Failed to generate identity: {}", e))
 }
 
 #[tauri::command]

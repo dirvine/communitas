@@ -493,18 +493,6 @@ pub async fn auth_passkey_delete(
     Ok(())
 }
 
-/// Generate a valid four-word identity using the four-word-networking dictionary
-///
-/// Returns a random four-word identity with valid dictionary words
-/// (e.g., "ocean-forest-moon-star")
-#[tauri::command]
-pub fn generate_four_word_identity() -> Result<String, String> {
-    tracing::info!("Generating four-word identity");
-
-    communitas_core::identity::generate_id_words()
-        .map_err(|e| format!("Failed to generate identity: {}", e))
-}
-
 /// Get OS username for default display name
 ///
 /// Returns the current OS user's display name to use as default

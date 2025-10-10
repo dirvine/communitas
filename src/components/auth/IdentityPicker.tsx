@@ -364,14 +364,16 @@ export const IdentityPicker: React.FC<IdentityPickerProps> = ({
                       </IconButton>
                     </Tooltip>
                   )}
-                  <Tooltip title="Sign in with password">
-                    <IconButton
-                      disabled={authenticating !== null}
-                      onClick={() => handleSelectIdentity(identity.four_words, false)}
-                    >
-                      <ArrowForwardIcon />
-                    </IconButton>
-                  </Tooltip>
+                  {!identity.has_passkey && (
+                    <Tooltip title="Sign in with password">
+                      <IconButton
+                        disabled={authenticating !== null}
+                        onClick={() => handleSelectIdentity(identity.four_words, false)}
+                      >
+                        <ArrowForwardIcon />
+                      </IconButton>
+                    </Tooltip>
+                  )}
                 </Stack>
               </Box>
             </CardContent>

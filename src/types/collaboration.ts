@@ -95,6 +95,8 @@ export interface PersonalUser extends BaseEntity {
   type: 'personal_user';
   userId: string;
   relationship: 'contact' | 'friend' | 'colleague' | 'family' | 'acquaintance' | 'blocked';
+  email?: string;
+  tags?: string[];
   lastContact?: Date;
 }
 

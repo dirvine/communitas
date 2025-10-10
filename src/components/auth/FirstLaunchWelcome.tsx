@@ -15,8 +15,7 @@ import {
 } from '@mui/material';
 import { CheckCircle as CheckCircleIcon, Settings as SettingsIcon } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
-import { invoke } from '@tauri-apps/api/core';
-import { fourWordsToDisplay } from '../../utils/identity';
+import { fourWordsToDisplay, generateFourWordIdentity } from '../../utils/identity';
 
 interface FirstLaunchWelcomeProps {
   open: boolean;
@@ -45,7 +44,7 @@ export const FirstLaunchWelcome: React.FC<FirstLaunchWelcomeProps> = ({ open, on
 
       // Step 1: Generate four-word identity
       console.log('🎲 Generating four-word identity...');
-      const generatedFourWords = await invoke('generate_four_word_identity') as string;
+      const generatedFourWords = await generateFourWordIdentity();
       setFourWords(generatedFourWords);
       console.log('✅ Generated:', generatedFourWords);
 

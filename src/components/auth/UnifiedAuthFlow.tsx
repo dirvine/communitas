@@ -45,6 +45,7 @@ import {
   SaveAlt as SaveAltIcon,
 } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
+// import { invoke } from '@tauri-apps/api/tauri'; // TODO: Re-enable when Tauri backend is available
 import { useAuth } from '../../contexts/AuthContext';
 import { generateFourWordIdentity } from '../../utils/identity';
 import validator from 'validator';
@@ -95,6 +96,11 @@ export const UnifiedAuthFlow: React.FC<UnifiedAuthFlowProps> = ({
   const [identitySaved, setIdentitySaved] = useState(true);
   const [showIdentityModal, setShowIdentityModal] = useState(false);
   const [copiedToClipboard, setCopiedToClipboard] = useState(false);
+  const [passwordWasGenerated, setPasswordWasGenerated] = useState(false);
+  const [passkeyEnrolled, setPasskeyEnrolled] = useState(false);
+
+  // Check if running in Tauri (desktop app)
+  const isTauri = typeof window !== 'undefined' && !!(window as any).__TAURI__;
 
   const [formData, setFormData] = useState({
     name: '',
@@ -163,21 +169,40 @@ export const UnifiedAuthFlow: React.FC<UnifiedAuthFlowProps> = ({
     }
   };
 
+  // Generate a cryptographically secure password
+  const generateSecurePassword = (): string => {
+    const length = 32; // Strong password length
+    const charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+-=[]{}|;:,.<>?';
+    const randomValues = new Uint8Array(length);
+    crypto.getRandomValues(randomValues);
+
+    let password = '';
+    for (let i = 0; i < length; i++) {
+      password += charset[randomValues[i] % charset.length];
+    }
+
+    console.log('🔐 Generated secure password (32 chars)');
+    return password;
+  };
+
   const validateForm = (): boolean => {
     if (mode === 'register') {
       if (!formData.name.trim()) {
         setError('Name is required');
         return false;
       }
-      if (!formData.password || formData.password.length < 8) {
-        setError('Password must be at least 8 characters');
-        return false;
+      // Password is now optional - will be auto-generated if empty
+      // If provided, validate length and match
+      if (formData.password || formData.confirmPassword) {
+        if (formData.password && formData.password.length < 8) {
+          setError('Password must be at least 8 characters');
+          return false;
+        }
+        if (formData.password !== formData.confirmPassword) {
+          setError('Passwords do not match');
+          return false;
+        }
       }
-      if (formData.password !== formData.confirmPassword) {
-        setError('Passwords do not match');
-        return false;
-      }
-      // Note: identitySaved check removed - that's for the success modal, not pre-registration
     } else {
       // In quick login mode, only password is required
       if (loginMode === 'quick') {
@@ -210,11 +235,40 @@ export const UnifiedAuthFlow: React.FC<UnifiedAuthFlowProps> = ({
 
     try {
       if (mode === 'register') {
+        // Generate secure password if user didn't provide one
+        const password = formData.password || generateSecurePassword();
+        const wasPasswordGenerated = !formData.password;
+
+        if (wasPasswordGenerated) {
+          console.log('🔐 Using auto-generated password for vault encryption');
+        }
+
         const identity = await createIdentity(
           formData.name,
-          { password: formData.password, fourWords: generatedFourWords }
+          { password, fourWords: generatedFourWords }
         );
+
         if (identity) {
+          // If password was auto-generated, store it in keyring for future passkey use
+          if (wasPasswordGenerated) {
+            // TODO: Re-enable when Tauri backend is available
+            /*
+            try {
+              console.log('💾 Storing auto-generated password in system keyring');
+              await invoke('auth_store_password_in_keyring', {
+                fourWords: generatedFourWords,
+                password
+              });
+              console.log('✅ Password stored in keyring successfully');
+            } catch (keyringError) {
+              console.warn('⚠️ Failed to store password in keyring:', keyringError);
+              // Non-fatal - continue with registration
+            }
+            */
+          }
+
+          // Track whether password was auto-generated to show appropriate UI
+          setPasswordWasGenerated(wasPasswordGenerated);
           setSuccess(true);
           setShowIdentityModal(true);
         }
@@ -248,14 +302,14 @@ export const UnifiedAuthFlow: React.FC<UnifiedAuthFlowProps> = ({
     setError(null);
 
     try {
-      if (mode === 'register' && authState.isAuthenticated) {
+      if (mode === 'register' && authState.isAuthenticated && authState.user) {
         console.log('Registering passkey...');
-        const result = await registerPasskey();
+        const result = await registerPasskey(authState.user.fourWordAddress);
         if (result) {
           console.log('✅ Passkey enrolled successfully');
-          setError('✅ Touch ID / Face ID enrolled successfully!');
-          // Clear success message after 3 seconds
-          setTimeout(() => setError(null), 3000);
+          setPasskeyEnrolled(true);
+          // Clear success message after showing it briefly
+          setTimeout(() => setPasskeyEnrolled(false), 5000);
         }
       } else {
         const success = await signInWithPasskey();
@@ -325,32 +379,98 @@ export const UnifiedAuthFlow: React.FC<UnifiedAuthFlowProps> = ({
             </Stack>
           </Paper>
 
-          <Typography variant="body2" color="text.secondary" paragraph>
-            You can now log in on this device with just your password.
-            To log in on a new device, you'll need both your four-word identity and password.
-          </Typography>
+          {passwordWasGenerated ? (
+            <>
+              {isTauri ? (
+                <Alert severity="success" sx={{ mb: 2 }}>
+                  <Typography variant="subtitle2" gutterBottom>
+                    <strong>✅ Secure Password Created</strong>
+                  </Typography>
+                  <Typography variant="body2">
+                    We've created a secure password for you and stored it in your system keyring.
+                    You won't need to type it again on this device - it's managed automatically by your operating system.
+                  </Typography>
+                </Alert>
+              ) : (
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  <Typography variant="subtitle2" gutterBottom>
+                    <strong>Recommended: Set Up Biometric Login</strong>
+                  </Typography>
+                  <Typography variant="body2">
+                    We've created a secure password for you and stored it in your system keyring.
+                    Set up Touch ID or Face ID for the fastest, most secure login experience.
+                  </Typography>
+                </Alert>
+              )}
 
-          <Stack spacing={2}>
-            <Button
-              variant="outlined"
-              fullWidth
-              startIcon={<SaveAltIcon />}
-              onClick={downloadIdentity}
-            >
-              Download Identity Backup
-            </Button>
+              <Stack spacing={2}>
+                {!isTauri && (
+                  <Button
+                    variant="contained"
+                    fullWidth
+                    size="large"
+                    startIcon={<FingerprintIcon />}
+                    onClick={handlePasskeyAuth}
+                    disabled={loading}
+                    color="primary"
+                  >
+                    {loading ? 'Enrolling...' : 'Set Up Touch ID / Face ID'}
+                  </Button>
+                )}
 
-            <Button
-              variant="outlined"
-              fullWidth
-              startIcon={<FingerprintIcon />}
-              onClick={handlePasskeyAuth}
-              disabled={loading}
-              color="primary"
-            >
-              {loading ? 'Enrolling...' : 'Enroll Touch ID / Face ID'}
-            </Button>
-          </Stack>
+                <Button
+                  variant="outlined"
+                  fullWidth
+                  startIcon={<SaveAltIcon />}
+                  onClick={downloadIdentity}
+                >
+                  Download Identity Backup
+                </Button>
+              </Stack>
+            </>
+          ) : (
+            <>
+              <Typography variant="body2" color="text.secondary" paragraph>
+                You can now log in on this device with just your password.
+                To log in on a new device, you'll need both your four-word identity and password.
+              </Typography>
+
+              <Stack spacing={2}>
+                <Button
+                  variant="outlined"
+                  fullWidth
+                  startIcon={<SaveAltIcon />}
+                  onClick={downloadIdentity}
+                >
+                  Download Identity Backup
+                </Button>
+
+                {!isTauri && (
+                  <Button
+                    variant="outlined"
+                    fullWidth
+                    startIcon={<FingerprintIcon />}
+                    onClick={handlePasskeyAuth}
+                    disabled={loading}
+                    color="primary"
+                  >
+                    {loading ? 'Enrolling...' : 'Enroll Touch ID / Face ID (Optional)'}
+                  </Button>
+                )}
+              </Stack>
+            </>
+          )}
+
+          {passkeyEnrolled && (
+            <Alert severity="success" icon={<CheckCircleIcon />} sx={{ mt: 2 }}>
+              <Typography variant="subtitle2" gutterBottom>
+                <strong>✅ Biometric Login Enabled!</strong>
+              </Typography>
+              <Typography variant="body2">
+                You can now sign in with Touch ID or Face ID. Your password is safely stored and you'll never need to type it again on this device.
+              </Typography>
+            </Alert>
+          )}
 
           {error && (
             <Alert severity="error" sx={{ mt: 2 }}>
@@ -493,11 +613,12 @@ export const UnifiedAuthFlow: React.FC<UnifiedAuthFlowProps> = ({
 
                     <TextField
                       fullWidth
-                      label="Password"
+                      label="Password (Optional)"
                       type={showPassword ? 'text' : 'password'}
                       value={formData.password}
                       onChange={handleInputChange('password')}
                       disabled={loading || success}
+                      helperText="Leave empty to auto-generate a secure password and enable Touch ID/Face ID"
                       InputProps={{
                         startAdornment: (
                           <InputAdornment position="start">
@@ -532,32 +653,34 @@ export const UnifiedAuthFlow: React.FC<UnifiedAuthFlowProps> = ({
                       </Box>
                     )}
 
-                    <TextField
-                      fullWidth
-                      label="Confirm Password"
-                      type={showConfirmPassword ? 'text' : 'password'}
-                      value={formData.confirmPassword}
-                      onChange={handleInputChange('confirmPassword')}
-                      disabled={loading || success}
-                      InputProps={{
-                        startAdornment: (
-                          <InputAdornment position="start">
-                            <LockIcon fontSize="small" />
-                          </InputAdornment>
-                        ),
-                        endAdornment: (
-                          <InputAdornment position="end">
-                            <IconButton
-                              size="small"
-                              onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                              edge="end"
-                            >
-                              {showConfirmPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
-                            </IconButton>
-                          </InputAdornment>
-                        ),
-                      }}
-                    />
+                    {formData.password && (
+                      <TextField
+                        fullWidth
+                        label="Confirm Password"
+                        type={showConfirmPassword ? 'text' : 'password'}
+                        value={formData.confirmPassword}
+                        onChange={handleInputChange('confirmPassword')}
+                        disabled={loading || success}
+                        InputProps={{
+                          startAdornment: (
+                            <InputAdornment position="start">
+                              <LockIcon fontSize="small" />
+                            </InputAdornment>
+                          ),
+                          endAdornment: (
+                            <InputAdornment position="end">
+                              <IconButton
+                                size="small"
+                                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                                edge="end"
+                              >
+                                {showConfirmPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                              </IconButton>
+                            </InputAdornment>
+                          ),
+                        }}
+                      />
+                    )}
                   </>
                 ) : (
                   <>

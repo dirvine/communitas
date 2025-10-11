@@ -424,10 +424,10 @@ communitas/
 │   │   └── entity_storage.rs    # Entity storage interface
 │   └── tauri.conf.json          # Tauri configuration
 │
-├── crates/communitas-container/  # FEC storage & content addressing
+├── crates/communitas-container/  # Content addressing & storage
 │   └── src/
 │       ├── lib.rs               # Container abstraction
-│       └── seal.rs              # Erasure coding
+│       └── seal.rs              # Content sealing
 │
 ├── src/                          # React frontend (TypeScript)
 │   ├── components/

@@ -22,7 +22,7 @@ Communitas is a local-first, PQC-ready collaboration platform that merges WhatsA
 - **Runtime**: Tauri v2 with Rust 2024 edition for desktop app framework
 - **Core Library**: Saorsa Core v0.3.17 (crates.io) for DHT, QUIC, identities, groups, messaging
 - **Cryptography**: Post-quantum (ML-DSA/ML-KEM) with ChaCha20-Poly1305
-- **Storage**: Virtual disks with FEC, content addressing via BLAKE3
+- **Storage**: Virtual disks with content addressing via BLAKE3
 - **Security**: Keyring integration for secure credential storage
 - **Networking**: QUIC via ant-quic, IPv4-first with Happy Eyeballs fallback
 

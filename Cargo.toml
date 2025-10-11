@@ -6,7 +6,7 @@ members = [
     # Temporarily excluded due to API mismatches - will fix in separate commit
     # "communitas-headless",
     # "communitas-bridge",
-    # "communitas-tui",
+    "communitas-tui",
     "crates/communitas-container",
 ]
 

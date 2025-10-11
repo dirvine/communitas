@@ -3,8 +3,9 @@ use communitas_core::{
     AuthService, CoreContext, SessionInfo,
     encrypted_storage::{EncryptedStorageManager, RecentIdentity, StorageConfig},
 };
-use saorsa_core::identity::enhanced::DeviceType;
+use communitas_core::types::DeviceType;
 use std::path::PathBuf;
+use super::channels::EntityManager;
 
 /// Backend wrapper around CoreContext and AuthService
 pub struct Backend {
@@ -12,6 +13,8 @@ pub struct Backend {
     auth_service: AuthService,
     /// Core context (None if not authenticated)
     ctx: Option<CoreContext>,
+    /// Entity manager for tracking contacts, groups, channels
+    pub(crate) entity_manager: EntityManager,
     /// Data directory
     data_dir: PathBuf,
     /// Offline mode
@@ -34,9 +37,13 @@ impl Backend {
         // Create auth service
         let auth_service = AuthService::new(storage_manager);
 
+        // Load entity manager from storage
+        let entity_manager = EntityManager::load(&data_dir).await?;
+
         Ok(Self {
             auth_service,
             ctx: None,
+            entity_manager,
             data_dir,
             offline,
         })
@@ -63,9 +70,13 @@ impl Backend {
         // Create auth service
         let auth_service = AuthService::new(storage_manager);
 
+        // Load entity manager from storage
+        let entity_manager = EntityManager::load(&data_dir).await?;
+
         Ok(Self {
             auth_service,
             ctx: None,
+            entity_manager,
             data_dir,
             offline,
         })
@@ -202,11 +213,18 @@ impl Backend {
 
         tracing::info!("Initializing CoreContext for: {}", session.four_words);
 
+        // Create storage directory for this user
+        let storage_dir = self
+            .data_dir
+            .join("core_data")
+            .join(&session.four_words);
+
         let ctx = CoreContext::initialize(
             session.four_words.clone(),
             session.display_name.clone(),
             "TUI".to_string(),
             DeviceType::Desktop,
+            storage_dir,
         )
         .await
         .map_err(|e| anyhow::anyhow!("CoreContext initialization failed: {}", e))?;
@@ -255,31 +273,15 @@ impl Backend {
         Ok(self.ctx.is_some())
     }
 
-    /// Get bootstrap nodes
+    /// Get bootstrap nodes (placeholder - gossip overlay handles this)
     pub async fn get_bootstrap_nodes(&self) -> Result<Vec<String>> {
-        let ctx = self.context()?;
-
-        if let Some(bootstrap_manager) = &ctx.bootstrap_manager {
-            let mut nodes = bootstrap_manager.get_custom_nodes().await;
-            let candidates = bootstrap_manager
-                .get_bootstrap_candidates(10)
-                .await
-                .unwrap_or_default();
-            nodes.extend(candidates);
-            Ok(nodes)
-        } else {
-            Ok(vec![])
-        }
+        // Gossip overlay handles peer discovery automatically
+        Ok(vec![])
     }
 
-    /// Add bootstrap node
-    pub async fn add_bootstrap_node(&self, node: String) -> Result<()> {
-        let ctx = self.context()?;
-
-        if let Some(bootstrap_manager) = &ctx.bootstrap_manager {
-            bootstrap_manager.add_bootstrap_node(&node).await?;
-        }
-
+    /// Add bootstrap node (placeholder - gossip overlay handles this)
+    pub async fn add_bootstrap_node(&self, _node: String) -> Result<()> {
+        // Gossip overlay handles peer connections
         Ok(())
     }
 

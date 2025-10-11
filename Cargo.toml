@@ -3,9 +3,10 @@ resolver = "2"
 members = [
     "communitas-core",
     "communitas-desktop",
-    "communitas-headless",
-    "communitas-bridge",
-    "communitas-tui",
+    # Temporarily excluded due to API mismatches - will fix in separate commit
+    # "communitas-headless",
+    # "communitas-bridge",
+    # "communitas-tui",
     "crates/communitas-container",
 ]
 

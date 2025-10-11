@@ -1,0 +1,76 @@
+[package]
+name = "communitas-desktop"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Communitas desktop app (Tauri) — local-first PQC collaboration"
+default-run = "communitas-desktop"
+
+[[bin]]
+name = "communitas-desktop"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2.4.1", features = [] }
+
+[features]
+gossip_overlay = []
+
+
+[dependencies]
+# Core business logic
+communitas-core = { path = "../communitas-core" }
+communitas-container = { path = "../crates/communitas-container" }
+
+# Saorsa Gossip - P2P networking layer (required, no longer optional)
+saorsa-gossip-types = { workspace = true }
+saorsa-gossip-identity = { workspace = true }
+saorsa-gossip-transport = { workspace = true }
+saorsa-gossip-membership = { workspace = true }
+saorsa-gossip-pubsub = { workspace = true }
+
+# CRDT and Database
+yrs = "0.18"
+libsql = "0.3"
+
+# Utils
+uuid = { version = "1", features = ["v4", "v7", "serde"] }
+four-word-networking = "2.6"
+blake3 = "1.0"
+base64 = "0.22"
+rand = "0.8"
+dirs = "5.0"
+
+# TLS/Security
+rustls = "0.23"
+rustls-pemfile = "2.0"
+
+# Tauri framework
+tauri = { version = "2", features = ["custom-protocol"] }
+tauri-plugin-log = { version = "2" }
+tauri-plugin-updater = { version = "2" }
+
+# Async runtime (re-export from workspace)
+tokio = { version = "1.39", features = ["full"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+hex = "0.4"
+chrono = { version = "0.4", features = ["serde"] }
+mime_guess = "2.0"
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dev-dependencies]
+tempfile = "3.0"

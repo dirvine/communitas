@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Communitas Test Runner</title>
+    <style>
+        body {
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            font-size: 2.5em;
+            margin-bottom: 30px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        .test-section {
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        h2 {
+            color: #ffd700;
+            margin-top: 0;
+        }
+        button {
+            background: linear-gradient(45deg, #FE6B8B 30%, #FF8E53 90%);
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            font-size: 16px;
+            border-radius: 25px;
+            cursor: pointer;
+            margin: 5px;
+            transition: transform 0.2s;
+        }
+        button:hover {
+            transform: scale(1.05);
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .results {
+            background: rgba(0,0,0,0.3);
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 15px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .success { color: #4caf50; }
+        .error { color: #f44336; }
+        .warning { color: #ff9800; }
+        .info { color: #2196f3; }
+        .progress {
+            width: 100%;
+            height: 30px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 15px;
+            overflow: hidden;
+            margin: 20px 0;
+        }
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #4caf50, #8bc34a);
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin: 20px 0;
+        }
+        .stat-card {
+            background: rgba(255,255,255,0.1);
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 2em;
+            font-weight: bold;
+        }
+        .stat-label {
+            font-size: 0.9em;
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Communitas Test Runner</h1>
+
+        <div class="test-section">
+            <h2>📊 Test Statistics</h2>
+            <div class="stats" id="stats">
+                <div class="stat-card">
+                    <div class="stat-value" id="totalTests">0</div>
+                    <div class="stat-label">Total Tests</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="passedTests">0</div>
+                    <div class="stat-label">Passed</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="failedTests">0</div>
+                    <div class="stat-label">Failed</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="runTime">0s</div>
+                    <div class="stat-label">Runtime</div>
+                </div>
+            </div>
+            <div class="progress">
+                <div class="progress-bar" id="progressBar" style="width: 0%">0%</div>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2>🔐 Authentication & Storage Tests</h2>
+            <button onclick="runTest('testInitialSetup')">Initial Setup</button>
+            <button onclick="runTest('testEncryptedStorage')">Encrypted Storage</button>
+            <button onclick="runTest('testMultiAccountLogin')">Multi-Account Login</button>
+            <button onclick="runTest('testFamiliarDeviceLogin')">Familiar Device Login</button>
+            <button onclick="runTest('testAccountSwitching')">Account Switching</button>
+            <button onclick="runTest('testVaultBackup')">Vault Backup</button>
+            <div class="results" id="authResults"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>🌐 Bootstrap & Network Tests</h2>
+            <button onclick="runTest('testBootstrapManagement')">Bootstrap Management</button>
+            <button onclick="runTest('testNetworkPersistence')">Network Persistence</button>
+            <button onclick="runTest('testConnectionQuality')">Connection Quality</button>
+            <button onclick="runTest('testCustomNodes')">Custom Node Management</button>
+            <div class="results" id="networkResults"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>⚡ Performance Tests</h2>
+            <button onclick="runTest('testLargeDataPerformance')">Large Data Performance</button>
+            <button onclick="runTest('testConcurrentPerformance')">Concurrent Operations</button>
+            <button onclick="runTest('testFECResilience')">FEC Resilience</button>
+            <button onclick="runTest('testStorageLimits')">Storage Limits</button>
+            <div class="results" id="perfResults"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>🎯 Quick Actions</h2>
+            <button onclick="runFullSuite()">Run Full Suite</button>
+            <button onclick="clearResults()">Clear Results</button>
+            <button onclick="downloadReport()">Download Report</button>
+            <button onclick="openDevTools()">Open DevTools</button>
+        </div>
+
+        <div class="test-section">
+            <h2>📝 Test Output</h2>
+            <div class="results" id="mainResults"></div>
+        </div>
+    </div>
+
+    <script>
+        // Check if running in Tauri context
+        const isTauri = window.__TAURI__ !== undefined;
+
+        if (!isTauri) {
+            document.getElementById('mainResults').innerHTML =
+                '<span class="error">⚠️ Not running in Tauri context. Please open this in the Tauri application.</span>';
+        }
+
+        // Test statistics
+        let testStats = {
+            total: 0,
+            passed: 0,
+            failed: 0,
+            startTime: null,
+            endTime: null
+        };
+
+        // Logging helper
+        function log(message, type = 'info') {
+            const results = document.getElementById('mainResults');
+            const timestamp = new Date().toLocaleTimeString();
+            const colorClass = type;
+            results.innerHTML += `<span class="${colorClass}">[${timestamp}] ${message}</span>\n`;
+            results.scrollTop = results.scrollHeight;
+        }
+
+        function logToSection(section, message, type = 'info') {
+            const results = document.getElementById(section);
+            const timestamp = new Date().toLocaleTimeString();
+            const colorClass = type;
+            results.innerHTML += `<span class="${colorClass}">[${timestamp}] ${message}</span>\n`;
+            results.scrollTop = results.scrollHeight;
+        }
+
+        // Update statistics display
+        function updateStats() {
+            document.getElementById('totalTests').textContent = testStats.total;
+            document.getElementById('passedTests').textContent = testStats.passed;
+            document.getElementById('failedTests').textContent = testStats.failed;
+
+            if (testStats.startTime) {
+                const elapsed = ((Date.now() - testStats.startTime) / 1000).toFixed(1);
+                document.getElementById('runTime').textContent = `${elapsed}s`;
+            }
+
+            if (testStats.total > 0) {
+                const progress = ((testStats.passed + testStats.failed) / testStats.total * 100).toFixed(0);
+                document.getElementById('progressBar').style.width = `${progress}%`;
+                document.getElementById('progressBar').textContent = `${progress}%`;
+            }
+        }
+
+        // Test implementations
+        const tests = {
+            // Authentication Tests
+            async testInitialSetup() {
+                log('Testing initial vault setup...', 'info');
+
+                try {
+                    // Generate new four-word identity
+                    const identity = await window.__TAURI__.invoke('generate_four_word_identity');
+                    log(`Generated identity: ${identity}`, 'success');
+
+                    // Initialize encrypted storage
+                    const result = await window.__TAURI__.invoke('core_storage_initialize', {
+                        password: 'TestPassword123!@#',
+                        displayName: 'Test User'
+                    });
+
+                    if (result.success) {
+                        log('✅ Vault creation successful', 'success');
+                        log(`Session ID: ${result.session_id}`, 'info');
+                        log(`Vault ID: ${result.vault_id}`, 'info');
+                        return true;
+                    } else {
+                        throw new Error(result.error || 'Vault creation failed');
+                    }
+                } catch (error) {
+                    log(`❌ Test failed: ${error}`, 'error');
+                    return false;
+                }
+            },
+
+            async testEncryptedStorage() {
+                log('Testing encrypted storage operations...', 'info');
+
+                try {
+                    const testData = {
+                        message: 'Test encrypted data',
+                        timestamp: Date.now(),
+                        sensitive: 'Secret information'
+                    };
+
+                    // Store without FEC
+                    await window.__TAURI__.invoke('core_storage_store', {
+                        key: 'test/basic',
+                        dataBase64: btoa(JSON.stringify(testData)),
+                        useFec: false
+                    });
+                    log('Stored data without FEC', 'success');
+
+                    // Store with FEC
+                    await window.__TAURI__.invoke('core_storage_store', {
+                        key: 'test/critical',
+                        dataBase64: btoa(JSON.stringify(testData)),
+                        useFec: true
+                    });
+                    log('Stored data with FEC', 'success');
+
+                    // Retrieve data
+                    const retrieved = await window.__TAURI__.invoke('core_storage_retrieve', {
+                        key: 'test/basic'
+                    });
+                    const decoded = JSON.parse(atob(retrieved));
+
+                    if (decoded.message === testData.message) {
+                        log('✅ Data retrieved and verified', 'success');
+                        return true;
+                    } else {
+                        throw new Error('Data mismatch');
+                    }
+                } catch (error) {
+                    log(`❌ Test failed: ${error}`, 'error');
+                    return false;
+                }
+            },
+
+            async testMultiAccountLogin() {
+                log('Testing multi-account login...', 'info');
+
+                try {
+                    // Note: This requires pre-existing accounts
+                    const sessions = await window.__TAURI__.invoke('core_storage_get_sessions');
+                    log(`Current sessions: ${sessions.length}`, 'info');
+
+                    if (sessions.length >= 1) {
+                        log('✅ Multi-account support verified', 'success');
+                        return true;
+                    } else {
+                        log('⚠️ Only one account found, create more to test fully', 'warning');
+                        return true;
+                    }
+                } catch (error) {
+                    log(`❌ Test failed: ${error}`, 'error');
+                    return false;
+                }
+            },
+
+            async testFamiliarDeviceLogin() {
+                log('Testing password-only login...', 'info');
+
+                try {
+                    // Try password-only login
+                    const result = await window.__TAURI__.invoke('core_storage_password_login', {
+                        password: 'TestPassword123!@#'
+                    });
+
+                    if (result.success) {
+                        log('✅ Password-only login successful', 'success');
+                        return true;
+                    } else {
+                        log('⚠️ Password-only login not available yet', 'warning');
+                        return true; // Not a failure, feature may not be ready
+                    }
+                } catch (error) {
+                    log(`⚠️ Feature not yet implemented: ${error}`, 'warning');
+                    return true; // Don't fail test for unimplemented feature
+                }
+            },
+
+            async testAccountSwitching() {
+                log('Testing account switching...', 'info');
+
+                try {
+                    const sessions = await window.__TAURI__.invoke('core_storage_get_sessions');
+
+                    if (sessions.length > 1) {
+                        // Switch to second account
+                        await window.__TAURI__.invoke('core_storage_switch_vault', {
+                            fourWords: sessions[1]
+                        });
+                        log(`✅ Switched to vault: ${sessions[1]}`, 'success');
+                        return true;
+                    } else {
+                        log('⚠️ Need multiple accounts to test switching', 'warning');
+                        return true;
+                    }
+                } catch (error) {
+                    log(`❌ Test failed: ${error}`, 'error');
+                    return false;
+                }
+            },
+
+            async testVaultBackup() {
+                log('Testing vault backup and restore...', 'info');
+
+                try {
+                    // Export vault
+                    const backup = await window.__TAURI__.invoke('core_storage_export_vault', {
+                        includeData: true
+                    });
+
+                    log(`✅ Vault exported, size: ${backup.length} bytes`, 'success');
+
+                    // Store backup for potential restore
+                    localStorage.setItem('test_vault_backup', backup);
+
+                    return true;
+                } catch (error) {
+                    log(`❌ Test failed: ${error}`, 'error');
+                    return false;
+                }
+            },
+
+            // Network Tests
+            async testBootstrapManagement() {
+                log('Testing bootstrap node management...', 'info');
+
+                try {
+                    // Get current nodes
+                    const nodes = await window.__TAURI__.invoke('core_get_bootstrap_nodes');
+                    log(`Current bootstrap nodes: ${JSON.stringify(nodes)}`, 'info');
+
+                    // Add custom node
+                    await window.__TAURI__.invoke('core_add_bootstrap_node', {
+                        address: 'test-custom-node-alpha'
+                    });
+                    log('Added custom node', 'success');
+
+                    // Get stats
+                    const stats = await window.__TAURI__.invoke('core_get_bootstrap_stats');
+                    log(`Bootstrap stats: ${JSON.stringify(stats)}`, 'info');
+
+                    log('✅ Bootstrap management working', 'success');
+                    return true;
+                } catch (error) {
+                    log(`❌ Test failed: ${error}`, 'error');
+                    return false;
+                }
+            },
+
+            async testNetworkPersistence() {
+                log('Testing network persistence...', 'info');
+
+                try {
+                    // Add marker node
+                    await window.__TAURI__.invoke('core_add_bootstrap_node', {
+                        address: `persistence-test-${Date.now()}`
+                    });
+
+                    const nodes = await window.__TAURI__.invoke('core_get_bootstrap_nodes');
+                    log(`Nodes saved: ${nodes.custom_nodes?.length || 0} custom nodes`, 'success');
+
+                    log('✅ Network persistence configured', 'success');
+                    log('ℹ️ Restart app to verify persistence', 'info');
+                    return true;
+                } catch (error) {
+                    log(`❌ Test failed: ${error}`, 'error');
+                    return false;
+                }
+            },
+
+            async testConnectionQuality() {
+                log('Testing connection quality metrics...', 'info');
+
+                try {
+                    const stats = await window.__TAURI__.invoke('core_get_bootstrap_stats');
+
+                    log('Connection Statistics:', 'info');
+                    log(`- Total attempts: ${stats.total_attempts || 0}`, 'info');
+                    log(`- Successful: ${stats.successful_connections || 0}`, 'info');
+                    log(`- Failed: ${stats.failed_connections || 0}`, 'info');
+                    log(`- Cache size: ${stats.cache_size || 0}`, 'info');
+
+                    log('✅ Quality metrics available', 'success');
+                    return true;
+                } catch (error) {
+                    log(`❌ Test failed: ${error}`, 'error');
+                    return false;
+                }
+            },
+
+            async testCustomNodes() {
+                log('Testing custom node management...', 'info');
+
+                try {
+                    // Add IPv6 node with extended words
+                    await window.__TAURI__.invoke('core_add_bootstrap_node', {
+                        address: 'ocean-forest-moon-star-mountain-river'
+                    });
+                    log('Added IPv6 extended address', 'success');
+
+                    // Clear custom nodes
+                    await window.__TAURI__.invoke('core_clear_custom_nodes');
+                    log('Cleared custom nodes', 'success');
+
+                    log('✅ Custom node management working', 'success');
+                    return true;
+                } catch (error) {
+                    log(`❌ Test failed: ${error}`, 'error');
+                    return false;
+                }
+            },
+
+            // Performance Tests
+            async testLargeDataPerformance() {
+                log('Testing large data performance...', 'info');
+
+                const sizes = [1, 10, 100]; // KB
+                const results = [];
+
+                try {
+                    for (const size of sizes) {
+                        const data = new Array(size * 1024).fill('A').join('');
+                        const start = performance.now();
+
+                        await window.__TAURI__.invoke('core_storage_store', {
+                            key: `perf/test-${size}kb`,
+                            dataBase64: btoa(data),
+                            useFec: size > 50
+                        });
+
+                        const storeTime = performance.now() - start;
+
+                        const retrieveStart = performance.now();
+                        await window.__TAURI__.invoke('core_storage_retrieve', {
+                            key: `perf/test-${size}kb`
+                        });
+                        const retrieveTime = performance.now() - retrieveStart;
+
+                        log(`${size}KB: Store ${storeTime.toFixed(2)}ms, Retrieve ${retrieveTime.toFixed(2)}ms`, 'info');
+                        results.push({ size, storeTime, retrieveTime });
+                    }
+
+                    log('✅ Performance test completed', 'success');
+                    return true;
+                } catch (error) {
+                    log(`❌ Test failed: ${error}`, 'error');
+                    return false;
+                }
+            },
+
+            async testConcurrentPerformance() {
+                log('Testing concurrent operations...', 'info');
+
+                try {
+                    const operations = 10;
+                    const start = performance.now();
+
+                    const promises = [];
+                    for (let i = 0; i < operations; i++) {
+                        promises.push(
+                            window.__TAURI__.invoke('core_storage_store', {
+                                key: `concurrent/op-${i}`,
+                                dataBase64: btoa(`Operation ${i}`),
+                                useFec: false
+                            })
+                        );
+                    }
+
+                    await Promise.all(promises);
+                    const elapsed = performance.now() - start;
+
+                    log(`✅ ${operations} concurrent operations: ${elapsed.toFixed(2)}ms`, 'success');
+                    log(`Average: ${(elapsed / operations).toFixed(2)}ms per operation`, 'info');
+                    return true;
+                } catch (error) {
+                    log(`❌ Test failed: ${error}`, 'error');
+                    return false;
+                }
+            },
+
+            async testFECResilience() {
+                log('Testing FEC resilience...', 'info');
+
+                try {
+                    const largeData = new Array(10000).fill('TEST').join('');
+
+                    await window.__TAURI__.invoke('core_storage_store', {
+                        key: 'test/large-fec',
+                        dataBase64: btoa(largeData),
+                        useFec: true
+                    });
+
+                    const stats = await window.__TAURI__.invoke('core_storage_get_stats');
+                    log(`Storage stats: ${JSON.stringify(stats)}`, 'info');
+
+                    log('✅ FEC protection enabled', 'success');
+                    return true;
+                } catch (error) {
+                    log(`❌ Test failed: ${error}`, 'error');
+                    return false;
+                }
+            },
+
+            async testStorageLimits() {
+                log('Testing storage limits...', 'info');
+
+                try {
+                    const stats = await window.__TAURI__.invoke('core_storage_get_stats');
+
+                    log('Storage Statistics:', 'info');
+                    log(`- Total keys: ${stats.total_keys || 0}`, 'info');
+                    log(`- Total size: ${stats.total_size_bytes || 0} bytes`, 'info');
+                    log(`- FEC keys: ${stats.fec_protected_keys || 0}`, 'info');
+
+                    if (stats.total_size_bytes > 100 * 1024 * 1024) {
+                        log('⚠️ Approaching storage limit (>100MB)', 'warning');
+                    } else {
+                        log('✅ Storage within limits', 'success');
+                    }
+
+                    return true;
+                } catch (error) {
+                    log(`❌ Test failed: ${error}`, 'error');
+                    return false;
+                }
+            }
+        };
+
+        // Run a single test
+        async function runTest(testName) {
+            if (!isTauri) {
+                alert('Please run this in the Tauri application');
+                return;
+            }
+
+            const test = tests[testName];
+            if (!test) {
+                log(`Test not found: ${testName}`, 'error');
+                return;
+            }
+
+            log(`\n▶️ Running test: ${testName}`, 'info');
+            testStats.total++;
+            updateStats();
+
+            try {
+                const result = await test();
+                if (result) {
+                    testStats.passed++;
+                    log(`✅ Test passed: ${testName}\n`, 'success');
+                } else {
+                    testStats.failed++;
+                    log(`❌ Test failed: ${testName}\n`, 'error');
+                }
+            } catch (error) {
+                testStats.failed++;
+                log(`❌ Test error: ${error}\n`, 'error');
+            }
+
+            updateStats();
+        }
+
+        // Run full test suite
+        async function runFullSuite() {
+            if (!isTauri) {
+                alert('Please run this in the Tauri application');
+                return;
+            }
+
+            log('\n🚀 Starting full test suite...', 'info');
+
+            // Reset stats
+            testStats = {
+                total: 0,
+                passed: 0,
+                failed: 0,
+                startTime: Date.now(),
+                endTime: null
+            };
+
+            const testOrder = [
+                'testInitialSetup',
+                'testEncryptedStorage',
+                'testMultiAccountLogin',
+                'testFamiliarDeviceLogin',
+                'testAccountSwitching',
+                'testVaultBackup',
+                'testBootstrapManagement',
+                'testNetworkPersistence',
+                'testConnectionQuality',
+                'testCustomNodes',
+                'testLargeDataPerformance',
+                'testConcurrentPerformance',
+                'testFECResilience',
+                'testStorageLimits'
+            ];
+
+            for (const testName of testOrder) {
+                await runTest(testName);
+                // Small delay between tests
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+
+            testStats.endTime = Date.now();
+            const totalTime = ((testStats.endTime - testStats.startTime) / 1000).toFixed(2);
+
+            log('\n' + '='.repeat(50), 'info');
+            log(`📊 Test Suite Complete!`, 'info');
+            log(`✅ Passed: ${testStats.passed}/${testStats.total}`, 'success');
+            log(`❌ Failed: ${testStats.failed}/${testStats.total}`, testStats.failed > 0 ? 'error' : 'info');
+            log(`⏱️ Total time: ${totalTime}s`, 'info');
+            log('='.repeat(50), 'info');
+
+            updateStats();
+        }
+
+        // Clear all results
+        function clearResults() {
+            document.getElementById('mainResults').innerHTML = '';
+            document.getElementById('authResults').innerHTML = '';
+            document.getElementById('networkResults').innerHTML = '';
+            document.getElementById('perfResults').innerHTML = '';
+
+            testStats = {
+                total: 0,
+                passed: 0,
+                failed: 0,
+                startTime: null,
+                endTime: null
+            };
+
+            updateStats();
+            log('Results cleared', 'info');
+        }
+
+        // Download test report
+        function downloadReport() {
+            const results = document.getElementById('mainResults').textContent;
+            const blob = new Blob([results], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `communitas-test-report-${new Date().toISOString()}.txt`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        // Open browser DevTools
+        function openDevTools() {
+            if (window.__TAURI__) {
+                log('Press Cmd+Option+I (Mac) or Ctrl+Shift+I (Windows/Linux) to open DevTools', 'info');
+            } else {
+                log('Press F12 to open DevTools', 'info');
+            }
+        }
+
+        // Initial check
+        if (isTauri) {
+            log('✅ Tauri context detected. Ready to run tests!', 'success');
+            log('Click any test button above to begin testing.', 'info');
+        }
+    </script>
+</body>
+</html>

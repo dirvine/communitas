@@ -409,6 +409,16 @@ export const LoginDialog: React.FC<LoginDialogProps> = ({
                       Your four words will be generated automatically. Your password is used to encrypt your local info and to locate your encrypted backup on the network. You can add passkey later for easy sign-in.
                     </Typography>
                   </Alert>
+                  {('PublicKeyCredential' in window) && (
+                    <Button
+                      variant="outlined"
+                      startIcon={<FingerprintIcon />}
+                      onClick={async () => { setLoading(true); const ok = await registerPasskey(); setLoading(false); if (!ok) setError('Passkey registration failed'); }}
+                      disabled={loading}
+                    >
+                      Register Passkey on this device
+                    </Button>
+                  )}
                 </>
               )}
             </Stack>

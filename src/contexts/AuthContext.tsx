@@ -1,54 +1,24 @@
-import React, {
-  createContext,
-  useContext,
-  useMemo,
-  useState,
-  useEffect,
-  ReactNode,
-} from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
-import { fourWordsToStorage, fourWordsToDisplay } from '../utils/identity';
+// Dynamic import of Tauri API with fallback
+let invoke: any = async (cmd: string, args?: any) => {
+  // Try to get Tauri from window first
+  if (typeof window !== 'undefined' && (window as any).__TAURI__?.core?.invoke) {
+    return (window as any).__TAURI__.core.invoke(cmd, args);
+  }
 
-const STORAGE_KEYS = {
-  identities: 'communitas.auth.identities.v1',
-  session: 'communitas.auth.session.v1',
-  config: 'communitas.auth.config.v1',
+  // Try dynamic import
+  try {
+    const { invoke: tauriInvoke } = await import('@tauri-apps/api/core');
+    return tauriInvoke(cmd, args);
+  } catch (error) {
+    console.warn(`Tauri not available, using mock mode for ${cmd}`);
+    // Minimal mock for browser dev
+    throw new Error(`Command ${cmd} not available in browser mode`);
+  }
 };
 
-type StoredIdentity = {
-  id: string;
-  fourWords: string;
-  displayName: string;
-  password: string;
-  createdAt: number;
-  lastUsed: number;
-  hasPasskey: boolean;
-  passkeyDeviceName?: string;
-};
-
-type StoredSession = {
-  sessionId: string;
-  fourWords: string;
-  displayName: string;
-  startedAt: number;
-};
-
-type AuthConfig = {
-  autoLoginEnabled: boolean;
-  keyringEnabled: boolean;
-};
-
-type NetworkStatus = {
-  connected: boolean;
-  peers: number;
-};
-
-export interface Permission {
-  resource: string;
-  actions: string[];
-  scope?: string;
-}
-
+// User identity interface
 export interface UserIdentity {
   id: string;
   publicKey: string;
@@ -71,6 +41,14 @@ export interface UserIdentity {
   lastActive: string;
 }
 
+// Permission system
+export interface Permission {
+  resource: string;
+  actions: string[];
+  scope?: string;
+}
+
+// Authentication state
 export interface AuthState {
   isAuthenticated: boolean;
   user: UserIdentity | null;
@@ -78,6 +56,14 @@ export interface AuthState {
   error: string | null;
 }
 
+// Session info from Rust backend
+interface SessionInfo {
+  session_id: string;
+  four_words: string;
+  display_name: string;
+}
+
+// Vault info from Rust backend
 interface VaultInfo {
   four_words: string;
   display_name: string;
@@ -86,129 +72,53 @@ interface VaultInfo {
   size_bytes: number;
 }
 
+// Authentication context
 export interface AuthContextType {
+  // State
   authState: AuthState;
+
+  // Authentication methods
   login: (fourWordAddress: string, password?: string) => Promise<boolean>;
   logout: () => Promise<void>;
   createIdentity: (name: string, options?: { fourWords?: string; password?: string }) => Promise<UserIdentity>;
-  registerPasskey: (fourWords: string, deviceName?: string) => Promise<boolean>;
-  signInWithPasskey: (fourWords?: string) => Promise<boolean>;
+  registerPasskey: () => Promise<boolean>;
+  signInWithPasskey: () => Promise<boolean>;
+
+  // Identity management
   updateProfile: (updates: Partial<UserIdentity['profile']>) => Promise<void>;
+
+  // Network identity
   connectToNetwork: () => Promise<boolean>;
   disconnectFromNetwork: () => Promise<void>;
   getNetworkStatus: () => Promise<{ connected: boolean; peers: number }>;
+
+  // Utility methods
   hasPermission: (resource: string, action: string) => boolean;
   isOwner: (resourceOwnerId: string) => boolean;
   canAccess: (resource: string, requiredPermissions: string[]) => boolean;
+
+  // Vault management
   listVaults: () => Promise<VaultInfo[]>;
   isFirstLaunch: () => Promise<boolean>;
-  getConfig: () => Promise<AuthConfig>;
+
+  // Configuration management
+  getConfig: () => Promise<any>;
   setAutoLogin: (enabled: boolean) => Promise<void>;
   setKeyringEnabled: (enabled: boolean) => Promise<void>;
-  getRecentIdentities: () => Promise<Array<{ four_words: string; display_name: string; last_used: number; has_passkey: boolean }>>;
+  getRecentIdentities: () => Promise<any[]>;
+
+  // OS integration
   getOsUsername: () => Promise<string>;
   enableAutoLogin: (fourWords: string, password: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const WORD_BANK = [
-  ['ocean', 'forest', 'mountain', 'desert', 'river', 'valley', 'island', 'prairie'],
-  ['bright', 'shadow', 'crystal', 'silver', 'golden', 'misty', 'ember', 'aurora'],
-  ['lion', 'hawk', 'wolf', 'otter', 'sparrow', 'falcon', 'lynx', 'otter'],
-  ['star', 'moon', 'sun', 'cloud', 'storm', 'wind', 'fire', 'ice'],
-];
-
-const generateRandomFourWords = (): string => {
-  const words = WORD_BANK.map(group => group[Math.floor(Math.random() * group.length)]);
-  return words.join('-');
-};
-
-const loadIdentities = (): StoredIdentity[] => {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEYS.identities);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as StoredIdentity[];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-};
-
-const saveIdentities = (identities: StoredIdentity[]) => {
-  localStorage.setItem(STORAGE_KEYS.identities, JSON.stringify(identities));
-};
-
-const loadConfig = (): AuthConfig => {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEYS.config);
-    if (!raw) {
-      return { autoLoginEnabled: true, keyringEnabled: true };
-    }
-    const parsed = JSON.parse(raw) as AuthConfig;
-    return {
-      autoLoginEnabled: parsed.autoLoginEnabled ?? true,
-      keyringEnabled: parsed.keyringEnabled ?? true,
-    };
-  } catch {
-    return { autoLoginEnabled: true, keyringEnabled: true };
-  }
-};
-
-const saveConfig = (config: AuthConfig) => {
-  localStorage.setItem(STORAGE_KEYS.config, JSON.stringify(config));
-};
-
-const loadSession = (): StoredSession | null => {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEYS.session);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as StoredSession;
-    if (parsed && parsed.fourWords) {
-      return parsed;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-};
-
-const saveSession = (session: StoredSession | null) => {
-  if (session) {
-    localStorage.setItem(STORAGE_KEYS.session, JSON.stringify(session));
-  } else {
-    localStorage.removeItem(STORAGE_KEYS.session);
-  }
-};
-
-const createSession = (identity: StoredIdentity): StoredSession => ({
-  sessionId: `session-${Date.now().toString(36)}-${Math.random().toString(16).slice(2)}`,
-  fourWords: identity.fourWords,
-  displayName: identity.displayName,
-  startedAt: Date.now(),
-});
-
-const buildUserIdentity = (identity: StoredIdentity, sessionId: string): UserIdentity => ({
-  id: sessionId,
-  name: identity.displayName,
-  fourWordAddress: identity.fourWords,
-  publicKey: `pk_${identity.id}`,
-  profile: {},
-  permissions: [{ resource: '*', actions: ['*'] }],
-  createdAt: new Date(identity.createdAt).toISOString(),
-  lastActive: new Date(identity.lastUsed).toISOString(),
-});
-
-export interface ProtectedRouteProps {
+interface AuthProviderProps {
   children: ReactNode;
-  requiredPermissions?: { resource: string; actions: string[] };
-  fallback?: ReactNode;
 }
 
-export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [identities, setIdentities] = useState<StoredIdentity[]>(() => loadIdentities());
-  const [config, setConfig] = useState<AuthConfig>(() => loadConfig());
-  const [networkStatus, setNetworkStatus] = useState<NetworkStatus>({ connected: false, peers: 0 });
+export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [authState, setAuthState] = useState<AuthState>({
     isAuthenticated: false,
     user: null,
@@ -216,246 +126,542 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     error: null,
   });
 
+  // Initialize authentication state
   useEffect(() => {
-    const session = loadSession();
-    if (session) {
-      const identity = identities.find(item => item.fourWords === session.fourWords);
-      if (identity) {
+    initializeAuth();
+  }, []);
+
+  const initializeAuth = async () => {
+    try {
+      // Initialize encrypted storage backend
+      await invoke('auth_initialize');
+
+      // Try auto-login first (uses keyring if enabled)
+      const autoLoginSession = await invoke('auth_try_auto_login') as SessionInfo | null;
+
+      if (autoLoginSession) {
+        // Auto-login successful
+        const identity: UserIdentity = {
+          id: autoLoginSession.session_id,
+          name: autoLoginSession.display_name,
+          fourWordAddress: autoLoginSession.four_words,
+          publicKey: 'from-vault',
+          profile: {},
+          permissions: [],
+          createdAt: new Date().toISOString(),
+          lastActive: new Date().toISOString(),
+        };
+
         setAuthState({
           isAuthenticated: true,
-          user: buildUserIdentity(identity, session.sessionId),
+          user: identity,
           loading: false,
           error: null,
         });
+
+        console.log('✅ Auto-login successful:', identity.fourWordAddress);
+
+        // Initialize CoreContext with P2P networking (non-blocking)
+        try {
+          console.log('🌐 Initializing CoreContext with networking...');
+          await invoke('core_initialize', {
+            fourWords: identity.fourWordAddress,
+            displayName: identity.name,
+            deviceName: navigator.platform || 'Desktop',
+            deviceType: 'Desktop'
+          });
+          console.log('✅ CoreContext initialized with P2P networking');
+        } catch (err) {
+          console.warn('⚠️ CoreContext initialization failed (app will work in local mode):', err);
+        }
+
+        // Try to connect to network (non-blocking)
+        connectToNetwork().catch(err =>
+          console.warn('Network connection failed (non-fatal):', err)
+        );
+
         return;
       }
-      saveSession(null);
+
+      // No auto-login, check if there's an active session
+      const session = await invoke('auth_get_session') as SessionInfo | null;
+
+      if (session) {
+        // Restore session
+        const identity: UserIdentity = {
+          id: session.session_id,
+          name: session.display_name,
+          fourWordAddress: session.four_words,
+          publicKey: 'from-vault',
+          profile: {},
+          permissions: [],
+          createdAt: new Date().toISOString(),
+          lastActive: new Date().toISOString(),
+        };
+
+        setAuthState({
+          isAuthenticated: true,
+          user: identity,
+          loading: false,
+          error: null,
+        });
+
+        console.log('✅ Session restored:', identity.fourWordAddress);
+
+        // Initialize CoreContext with P2P networking (non-blocking)
+        try {
+          console.log('🌐 Initializing CoreContext with networking...');
+          await invoke('core_initialize', {
+            fourWords: identity.fourWordAddress,
+            displayName: identity.name,
+            deviceName: navigator.platform || 'Desktop',
+            deviceType: 'Desktop'
+          });
+          console.log('✅ CoreContext initialized with P2P networking');
+        } catch (err) {
+          console.warn('⚠️ CoreContext initialization failed (app will work in local mode):', err);
+        }
+      } else {
+        setAuthState({
+          isAuthenticated: false,
+          user: null,
+          loading: false,
+          error: null,
+        });
+      }
+    } catch (error) {
+      console.error('Failed to initialize authentication:', error);
+      setAuthState({
+        isAuthenticated: false,
+        user: null,
+        loading: false,
+        error: error instanceof Error ? error.message : 'Authentication initialization failed',
+      });
     }
-    setAuthState(prev => ({ ...prev, loading: false }));
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    saveIdentities(identities);
-  }, [identities]);
-
-  useEffect(() => {
-    saveConfig(config);
-  }, [config]);
-
-  const setActiveIdentity = (identity: StoredIdentity): StoredSession => {
-    const session = createSession(identity);
-    saveSession(session);
-    setIdentities(prev =>
-      prev.map(item => (item.id === identity.id ? { ...item, lastUsed: Date.now() } : item)),
-    );
-    setAuthState({
-      isAuthenticated: true,
-      user: buildUserIdentity(identity, session.sessionId),
-      loading: false,
-      error: null,
-    });
-    return session;
   };
 
   const login = async (fourWordAddress: string, password?: string): Promise<boolean> => {
-    const normalized = fourWordsToStorage(fourWordAddress);
-    const identity = identities.find(item => item.fourWords === normalized);
-    if (!identity) {
+    try {
+      setAuthState(prev => ({ ...prev, loading: true, error: null }));
+
+      let session: SessionInfo;
+
+      // If no four-word address provided, try password-only login
+      if (!fourWordAddress && password) {
+        console.log('🔍 Attempting password-only login...');
+        session = await invoke('auth_login_password_only', { password });
+      } else {
+        // Standard login with four-word address
+        if (!fourWordAddress || !fourWordAddress.includes('-')) {
+          throw new Error('Invalid four-word address format');
+        }
+
+        session = await invoke('auth_login', {
+          fourWords: fourWordAddress,
+          password: password || fourWordAddress
+        });
+      }
+
+      // Create identity from session
+      const identity: UserIdentity = {
+        id: session.session_id,
+        name: session.display_name,
+        fourWordAddress: session.four_words,
+        publicKey: 'from-vault',
+        profile: {},
+        permissions: [],
+        createdAt: new Date().toISOString(),
+        lastActive: new Date().toISOString(),
+      };
+
+      setAuthState({
+        isAuthenticated: true,
+        user: identity,
+        loading: false,
+        error: null,
+      });
+
+      console.log('✅ Login successful:', identity.fourWordAddress);
+
+      // Initialize CoreContext with P2P networking (non-blocking)
+      try {
+        console.log('🌐 Initializing CoreContext with networking...');
+        await invoke('core_initialize', {
+          fourWords: identity.fourWordAddress,
+          displayName: identity.name,
+          deviceName: navigator.platform || 'Desktop',
+          deviceType: 'Desktop'
+        });
+        console.log('✅ CoreContext initialized with P2P networking');
+      } catch (err) {
+        console.warn('⚠️ CoreContext initialization failed (app will work in local mode):', err);
+      }
+
+      // Try to connect to network (non-blocking)
+      connectToNetwork().catch(err =>
+        console.warn('Network connection failed (non-fatal):', err)
+      );
+
+      return true;
+    } catch (error) {
+      console.error('Login failed:', error);
       setAuthState(prev => ({
         ...prev,
         loading: false,
-        error: 'Identity not found',
+        error: error instanceof Error ? error.message : 'Login failed',
       }));
       return false;
     }
-
-    const secret = password ?? identity.password;
-    if (identity.password !== secret) {
-      setAuthState(prev => ({
-        ...prev,
-        loading: false,
-        error: 'Invalid password',
-      }));
-      return false;
-    }
-
-    setActiveIdentity(identity);
-    return true;
   };
 
   const logout = async (): Promise<void> => {
-    saveSession(null);
-    setAuthState({
-      isAuthenticated: false,
-      user: null,
-      loading: false,
-      error: null,
-    });
-    setNetworkStatus({ connected: false, peers: 0 });
-  };
+    try {
+      // Call Rust logout command
+      await invoke('auth_logout');
 
-  const createIdentity = async (
-    name: string,
-    options?: { fourWords?: string; password?: string },
-  ): Promise<UserIdentity> => {
-    const normalized = fourWordsToStorage(options?.fourWords ?? generateRandomFourWords());
-    const password = options?.password ?? normalized;
+      setAuthState({
+        isAuthenticated: false,
+        user: null,
+        loading: false,
+        error: null,
+      });
 
-    if (identities.some(identity => identity.fourWords === normalized)) {
-      throw new Error('Identity already exists on this device');
+      console.log('✅ Logout successful');
+    } catch (error) {
+      console.error('Logout failed:', error);
+      // Force logout even if cleanup fails
+      setAuthState({
+        isAuthenticated: false,
+        user: null,
+        loading: false,
+        error: null,
+      });
     }
-
-    const stored: StoredIdentity = {
-      id: `id-${Date.now().toString(36)}-${Math.random().toString(16).slice(2)}`,
-      fourWords: normalized,
-      displayName: name || fourWordsToDisplay(normalized),
-      password,
-      createdAt: Date.now(),
-      lastUsed: Date.now(),
-      hasPasskey: false,
-    };
-
-    setIdentities(prev => [...prev, stored]);
-    const session = setActiveIdentity(stored);
-    return buildUserIdentity(stored, session.sessionId);
   };
 
-  const registerPasskey = async (fourWords: string, deviceName?: string): Promise<boolean> => {
-    const normalized = fourWordsToStorage(fourWords);
-    const identity = identities.find(item => item.fourWords === normalized);
-    if (!identity) {
+  const createIdentity = async (name: string, options?: { fourWords?: string; password?: string }): Promise<UserIdentity> => {
+    try {
+      setAuthState(prev => ({ ...prev, loading: true, error: null }));
+
+      // Generate four words if not provided
+      let fourWordAddress = options?.fourWords || '';
+      if (!fourWordAddress) {
+        fourWordAddress = await invoke('generate_four_word_identity');
+      }
+
+      // Create vault in Rust backend
+      const password = options?.password || fourWordAddress;
+      await invoke('auth_create_vault', {
+        fourWords: fourWordAddress,
+        password,
+        displayName: name,
+      });
+
+      // Auto-login with new vault
+      const session = await invoke('auth_login', {
+        fourWords: fourWordAddress,
+        password
+      }) as SessionInfo;
+
+      const newIdentity: UserIdentity = {
+        id: session.session_id,
+        name,
+        fourWordAddress,
+        publicKey: 'from-vault',
+        profile: {},
+        permissions: [],
+        createdAt: new Date().toISOString(),
+        lastActive: new Date().toISOString(),
+      };
+
+      setAuthState({
+        isAuthenticated: true,
+        user: newIdentity,
+        loading: false,
+        error: null,
+      });
+
+      console.log('✅ Identity created:', newIdentity.fourWordAddress);
+
+      // Initialize CoreContext with P2P networking (non-blocking)
+      try {
+        console.log('🌐 Initializing CoreContext with networking...');
+        await invoke('core_initialize', {
+          fourWords: newIdentity.fourWordAddress,
+          displayName: name,
+          deviceName: navigator.platform || 'Desktop',
+          deviceType: 'Desktop'
+        });
+        console.log('✅ CoreContext initialized with P2P networking');
+      } catch (err) {
+        console.warn('⚠️ CoreContext initialization failed (app will work in local mode):', err);
+      }
+
+      return newIdentity;
+    } catch (error) {
+      console.error('Identity creation failed:', error);
+      setAuthState(prev => ({
+        ...prev,
+        loading: false,
+        error: error instanceof Error ? error.message : 'Identity creation failed',
+      }));
+      throw error;
+    }
+  };
+
+  const listVaults = async (): Promise<VaultInfo[]> => {
+    try {
+      return await invoke('auth_list_vaults');
+    } catch (error) {
+      console.error('Failed to list vaults:', error);
+      return [];
+    }
+  };
+
+  // Passkey registration (WebAuthn via browser API + backend storage)
+  const registerPasskey = async (): Promise<boolean> => {
+    try {
+      // Check if running in Tauri
+      const isTauri = !!(window as any).__TAURI__;
+
+      if (isTauri) {
+        throw new Error('Touch ID / Face ID is not supported in the desktop app. It will be available in the web version.');
+      }
+
+      if (typeof window === 'undefined' || !(window as any).PublicKeyCredential) {
+        console.error('WebAuthn not supported');
+        throw new Error('Touch ID / Face ID not supported on this device');
+      }
+
+      if (!authState.user?.fourWordAddress) {
+        console.error('No authenticated user');
+        throw new Error('Please log in first');
+      }
+
+      console.log('🔐 Starting passkey registration...');
+
+      const challenge = crypto.getRandomValues(new Uint8Array(32));
+      const userId = crypto.getRandomValues(new Uint8Array(16));
+
+      // Step 1: Create WebAuthn credential (Touch ID/Face ID prompt)
+      const credential = await (navigator.credentials as any).create({
+        publicKey: {
+          challenge,
+          rp: { name: 'Communitas' },
+          user: {
+            id: userId,
+            name: authState.user.fourWordAddress,
+            displayName: authState.user.name
+          },
+          pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
+          timeout: 60000,
+          authenticatorSelection: { userVerification: 'preferred' },
+        },
+      });
+
+      if (!credential) {
+        throw new Error('Failed to create passkey');
+      }
+
+      console.log('✅ WebAuthn credential created');
+
+      // Step 2: Save passkey to backend
+      const deviceName = `${navigator.platform} - ${new Date().toLocaleDateString()}`;
+      await invoke('auth_passkey_register', {
+        fourWords: authState.user.fourWordAddress,
+        deviceName
+      });
+
+      console.log('✅ Passkey saved to backend');
+      return true;
+    } catch (e) {
+      console.error('Passkey registration failed:', e);
+      throw e;
+    }
+  };
+
+  const signInWithPasskey = async (): Promise<boolean> => {
+    try {
+      if (typeof window === 'undefined' || !(window as any).PublicKeyCredential) {
+        return false;
+      }
+
+      const challenge = crypto.getRandomValues(new Uint8Array(32));
+
+      const credential = await (navigator.credentials as any).get({
+        publicKey: {
+          challenge,
+          timeout: 60000,
+          userVerification: 'preferred'
+        }
+      });
+
+      if (credential) {
+        // After passkey verification, still need to call our login
+        // This is a simplified version - in production you'd verify the credential first
+        console.log('Passkey verified, but still need vault password');
+        return false;
+      }
+
+      return false;
+    } catch (e) {
+      console.warn('Passkey sign-in failed', e);
       return false;
     }
-
-    const updated: StoredIdentity = {
-      ...identity,
-      hasPasskey: true,
-      passkeyDeviceName: deviceName || navigator.platform || 'Current Device',
-    };
-
-    setIdentities(prev => prev.map(item => (item.id === identity.id ? updated : item)));
-
-    if (authState.user && authState.user.fourWordAddress === normalized) {
-      setAuthState(prev => prev.user
-        ? {
-            ...prev,
-            user: { ...prev.user, name: updated.displayName },
-          }
-        : prev);
-    }
-
-    return true;
   };
 
-  const signInWithPasskey = async (fourWords?: string): Promise<boolean> => {
-    const normalized = fourWords ? fourWordsToStorage(fourWords) : authState.user?.fourWordAddress;
-    if (!normalized) return false;
+  const updateProfile = async (updates: Partial<UserIdentity['profile']>): Promise<void> => {
+    if (!authState.user) throw new Error('Not authenticated');
 
-    const identity = identities.find(item => item.fourWords === normalized);
-    if (!identity || !identity.hasPasskey) return false;
+    // Update local state immediately (optimistic)
+    setAuthState(prev => ({
+      ...prev,
+      user: prev.user ? {
+        ...prev.user,
+        profile: { ...prev.user.profile, ...updates }
+      } : null,
+    }));
 
-    setActiveIdentity(identity);
-    return true;
-  };
-
-  const updateProfile = async (updates: Partial<UserIdentity['profile']>) => {
-    setAuthState(prev => {
-      if (!prev.user) return prev;
-      return {
-        ...prev,
-        user: {
-          ...prev.user,
-          profile: { ...prev.user.profile, ...updates },
-        },
-      };
-    });
+    console.log('✅ Profile updated (local)');
   };
 
   const connectToNetwork = async (): Promise<boolean> => {
-    if (!authState.user) return false;
-    const peers = 3 + Math.floor(Math.random() * 5);
-    setNetworkStatus({ connected: true, peers });
-    return true;
+    try {
+      // Use Tauri network commands
+      await invoke('connect_to_network');
+      console.log('✅ Connected to network');
+      return true;
+    } catch (error) {
+      console.error('Network connection failed:', error);
+      return false;
+    }
   };
 
   const disconnectFromNetwork = async (): Promise<void> => {
-    setNetworkStatus({ connected: false, peers: 0 });
+    try {
+      await invoke('disconnect_from_network');
+      console.log('📵 Disconnected from network');
+    } catch (error) {
+      console.error('Network disconnection failed:', error);
+    }
   };
 
-  const getNetworkStatus = async (): Promise<{ connected: boolean; peers: number }> => networkStatus;
+  const getNetworkStatus = async (): Promise<{ connected: boolean; peers: number }> => {
+    try {
+      const status = await invoke('get_network_status') as { connected: boolean; peers: number };
+      return status;
+    } catch (error) {
+      console.error('Failed to get network status:', error);
+      return { connected: false, peers: 0 };
+    }
+  };
 
+  // Permission utilities
   const hasPermission = (resource: string, action: string): boolean => {
     if (!authState.user) return false;
-    if (authState.user.permissions.some(perm => perm.resource === '*' || perm.resource === resource)) {
-      return true;
-    }
-    return false;
+
+    return authState.user.permissions.some(
+      permission =>
+        permission.resource === resource &&
+        permission.actions.includes(action)
+    );
   };
 
   const isOwner = (resourceOwnerId: string): boolean => {
-    if (!authState.user) return false;
-    return (
-      authState.user.id === resourceOwnerId ||
-      authState.user.fourWordAddress === resourceOwnerId
-    );
+    return authState.user?.id === resourceOwnerId;
   };
 
   const canAccess = (resource: string, requiredPermissions: string[]): boolean => {
     if (!authState.user) return false;
-    return requiredPermissions.every(action => hasPermission(resource, action));
+
+    return requiredPermissions.every(permission =>
+      hasPermission(resource, permission)
+    );
   };
 
-  const listVaults = async (): Promise<VaultInfo[]> =>
-    identities.map(identity => ({
-      four_words: identity.fourWords,
-      display_name: identity.displayName,
-      created_at: identity.createdAt,
-      last_accessed: identity.lastUsed,
-      size_bytes: 1024 * 12,
-    }));
-
-  const isFirstLaunch = async (): Promise<boolean> => identities.length === 0;
-
-  const getConfig = async (): Promise<AuthConfig> => config;
-
-  const setAutoLogin = async (enabled: boolean) => {
-    setConfig(prev => ({ ...prev, autoLoginEnabled: enabled }));
-  };
-
-  const setKeyringEnabled = async (enabled: boolean) => {
-    setConfig(prev => ({ ...prev, keyringEnabled: enabled }));
-  };
-
-  const getRecentIdentities = async () =>
-    identities
-      .slice()
-      .sort((a, b) => b.lastUsed - a.lastUsed)
-      .map(identity => ({
-        four_words: identity.fourWords,
-        display_name: identity.displayName,
-        last_used: Math.floor(identity.lastUsed / 1000),
-        has_passkey: identity.hasPasskey,
-      }));
-
-  const getOsUsername = async (): Promise<string> => {
-    const platform = navigator.platform || 'Guest';
-    const parts = platform.split(' ');
-    return parts.length ? parts[0] : 'Guest';
-  };
-
-  const enableAutoLogin = async (fourWords: string, password: string) => {
-    const normalized = fourWordsToStorage(fourWords);
-    const identity = identities.find(item => item.fourWords === normalized);
-    if (!identity) {
-      await createIdentity(fourWordsToDisplay(normalized), { fourWords: normalized, password });
-    } else {
-      await login(normalized, password);
+  // Configuration management
+  const getConfig = async (): Promise<any> => {
+    try {
+      return await invoke('auth_get_config');
+    } catch (error) {
+      console.error('Failed to get config:', error);
+      return null;
     }
-    await setAutoLogin(true);
-    await setKeyringEnabled(true);
   };
 
-  const contextValue: AuthContextType = useMemo(() => ({
+  const setAutoLogin = async (enabled: boolean): Promise<void> => {
+    try {
+      await invoke('auth_set_auto_login', { enabled });
+      console.log(`Auto-login ${enabled ? 'enabled' : 'disabled'}`);
+    } catch (error) {
+      console.error('Failed to set auto-login:', error);
+      throw error;
+    }
+  };
+
+  const setKeyringEnabled = async (enabled: boolean): Promise<void> => {
+    try {
+      await invoke('auth_set_keyring_enabled', { enabled });
+      console.log(`Keyring ${enabled ? 'enabled' : 'disabled'}`);
+    } catch (error) {
+      console.error('Failed to set keyring:', error);
+      throw error;
+    }
+  };
+
+  const getRecentIdentities = async (): Promise<any[]> => {
+    try {
+      return await invoke('auth_get_recent_identities');
+    } catch (error) {
+      console.error('Failed to get recent identities:', error);
+      return [];
+    }
+  };
+
+  // Check if this is first launch (no vaults exist)
+  const isFirstLaunch = async (): Promise<boolean> => {
+    try {
+      const vaults = await listVaults();
+      return vaults.length === 0;
+    } catch (error) {
+      console.error('Failed to check first launch:', error);
+      return false;
+    }
+  };
+
+  // Get OS username for default display name
+  const getOsUsername = async (): Promise<string> => {
+    try {
+      const username = await invoke('get_os_username') as string;
+      console.log('Got OS username:', username);
+      return username;
+    } catch (error) {
+      console.error('Failed to get OS username:', error);
+      return 'User';
+    }
+  };
+
+  // Enable auto-login by storing password in keyring
+  const enableAutoLogin = async (fourWords: string, password: string): Promise<void> => {
+    try {
+      // Register passkey stores password in keyring
+      await invoke('auth_passkey_register', {
+        fourWords,
+        deviceName: `${navigator.platform} - Auto-login`,
+      });
+
+      // Enable auto-login in config
+      await setAutoLogin(true);
+      await setKeyringEnabled(true);
+
+      console.log('✅ Auto-login enabled for:', fourWords);
+    } catch (error) {
+      console.error('Failed to enable auto-login:', error);
+      throw error;
+    }
+  };
+
+  const contextValue: AuthContextType = {
     authState,
     login,
     logout,
@@ -477,7 +683,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     getRecentIdentities,
     getOsUsername,
     enableAutoLogin,
-  }), [authState, identities, config, networkStatus]);
+  };
 
   return (
     <AuthContext.Provider value={contextValue}>
@@ -486,13 +692,21 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   );
 };
 
+// Custom hook for using auth context
 export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext);
-  if (!context) {
+  if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
 };
+
+// HOC for protecting routes
+export interface ProtectedRouteProps {
+  children: ReactNode;
+  requiredPermissions?: { resource: string; actions: string[] };
+  fallback?: ReactNode;
+}
 
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   children,

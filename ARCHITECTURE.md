@@ -58,10 +58,9 @@ graph TB
     subgraph "Saorsa Foundation"
         SCore[saorsa-core]
         SMLS[saorsa-mls]
-        SFEC[saorsa-fec]
         SSeal[saorsa-seal]
     end
-    
+
     React --> Contexts
     Contexts --> Components
     Components --> IPC
@@ -70,7 +69,6 @@ graph TB
     Desktop --> Container
     Core --> SCore
     Core --> SMLS
-    Container --> SFEC
     Container --> SSeal
 ```
 
@@ -112,7 +110,7 @@ Auto-Complete       Real-time Valid     Deterministic   Distributed     Local Ca
 pub struct VirtualDisk {
     entity_id: EntityKey,        // Derived from four-words
     disk_type: DiskType,         // Private, Public, Shared
-    content_store: ContentStore, // FEC-protected content
+    content_store: ContentStore, // Content-addressed storage
     metadata: DiskMetadata,      // Access controls, policies
 }
 
@@ -125,10 +123,10 @@ pub enum DiskType {
 
 ### **Content Distribution**
 ```
-Content → Chunking → FEC Encoding → Sealing → DHT Storage → Replication
-   ↓         ↓          ↓            ↓           ↓            ↓
-File/Data  Fixed Size  Reed-Solomon  Encrypt   Distribute   Redundancy
-User Data  Chunks      Error Correct ML-KEM    P2P Network  Availability
+Content → Chunking → Sealing → DHT Storage → Replication
+   ↓         ↓          ↓          ↓            ↓
+File/Data  Fixed Size  Encrypt   Distribute   Redundancy
+User Data  Chunks      ML-KEM    P2P Network  Availability
 ```
 
 ---

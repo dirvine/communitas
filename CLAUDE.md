@@ -8,6 +8,8 @@ Communitas is a local-first, PQC-ready collaboration platform that merges WhatsA
 
 ## Core Architecture
 
+> **Recent Update (2025-10-11)**: Rust backend with P2P networking, mesh capabilities, and desktop functionality has been restored. The previous web-only refactor (commit c383ce0a) was reverted to align with product requirements for desktop/mobile apps with essential P2P and offline mesh networking features.
+
 ### Frontend (React + TypeScript)
 - **Framework**: React 18 with TypeScript, Material-UI components
 - **Build Tool**: Vite with Hot Module Replacement for development

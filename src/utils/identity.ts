@@ -21,9 +21,12 @@ export type IdentityPacket = {
 export const generateFourWordIdentity = async (seed?: string): Promise<string> => {
   const words = await safeInvoke<string>('generate_four_word_identity', seed ? { seed } : undefined)
   if (words) {
+    // Backend returns with dashes - keep it that way internally
     return words
   }
-  return generateFallbackFourWords()
+  // Fallback for browser testing (should not be used in production)
+  console.warn('⚠️ Using fallback identity generation - backend command not available')
+  return 'test-identity-not-valid'
 }
 
 /**
@@ -101,16 +104,4 @@ export function fourWordsToDisplay(fourWords: string): string {
 export function fourWordsToStorage(fourWords: string): string {
   if (!fourWords) return fourWords
   return fourWords.trim().toLowerCase().replace(/\s+/g, '-')
-}
-
-const FALLBACK_WORDS: string[][] = [
-  ['ocean', 'forest', 'prairie', 'valley', 'desert', 'island', 'sunset', 'harbor'],
-  ['bright', 'golden', 'silver', 'crystal', 'ember', 'shadow', 'morning', 'midnight'],
-  ['hawk', 'otter', 'lynx', 'sparrow', 'storm', 'firefly', 'orca', 'aurora'],
-  ['star', 'moon', 'nova', 'cloud', 'rain', 'wind', 'flame', 'glow'],
-]
-
-const generateFallbackFourWords = (): string => {
-  const words = FALLBACK_WORDS.map(group => group[Math.floor(Math.random() * group.length)])
-  return words.join('-')
 }

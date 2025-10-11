@@ -485,7 +485,7 @@ export const EntityChatView: React.FC<EntityChatViewProps> = ({
       queueMessage({
         id: optimisticId,
         entityId,
-        entityType: entityType === 'organization' ? 'group' : entityType === 'user' ? 'contact' : entityType,
+        entityType: entityType === 'organization' ? 'group' : entityType,
         content: message.content,
         timestamp,
       });
@@ -541,7 +541,7 @@ export const EntityChatView: React.FC<EntityChatViewProps> = ({
       queueMessage({
         id: optimisticId,
         entityId: entityId, // Use parent entity ID
-        entityType: entityType === 'organization' ? 'group' : entityType === 'user' ? 'contact' : entityType, // Convert org to group, user to contact
+        entityType: entityType === 'organization' ? 'group' : entityType, // Convert org to group
         content: threadMessage.content,
         timestamp,
       });

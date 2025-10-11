@@ -163,3 +163,4 @@ geckodriver
 
 # Debug files
 debug_app.html
+.worktrees/

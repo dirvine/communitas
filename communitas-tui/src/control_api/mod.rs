@@ -20,7 +20,6 @@
 ///   -H "Content-Type: application/json" \
 ///   -d '{"entity_id": "...", "entity_type": "Channel", "text": "Hello!"}'
 /// ```
-
 pub mod handlers;
 pub mod routes;
 pub mod server;

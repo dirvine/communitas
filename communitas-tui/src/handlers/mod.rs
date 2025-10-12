@@ -76,7 +76,10 @@ pub async fn handle_open_organizations(state: &mut AppState, _backend: &mut Back
 /// Handle network check - TODO: Implement with new types
 pub async fn handle_check_network(state: &mut AppState, backend: &mut Backend) -> Result<()> {
     let connected = backend.check_dht_connection().await.unwrap_or(false);
-    state.set_status(&format!("Network: {}", if connected { "Connected" } else { "Offline" }));
+    state.set_status(&format!(
+        "Network: {}",
+        if connected { "Connected" } else { "Offline" }
+    ));
     Ok(())
 }
 

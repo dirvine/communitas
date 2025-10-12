@@ -139,7 +139,9 @@ impl PeerCache {
         )?;
 
         info!("Loaded peer cache from {:?}", path);
-        Ok(Self { conn: Arc::new(Mutex::new(conn)) })
+        Ok(Self {
+            conn: Arc::new(Mutex::new(conn)),
+        })
     }
 
     /// Update peer on successful connection

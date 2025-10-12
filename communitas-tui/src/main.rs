@@ -115,7 +115,10 @@ async fn main() -> Result<()> {
             }
         });
 
-        tracing::info!("HTTP control API started on http://localhost:{}", control_port);
+        tracing::info!(
+            "HTTP control API started on http://localhost:{}",
+            control_port
+        );
 
         // If API-only mode, just wait forever
         if args.api_only {

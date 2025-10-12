@@ -1,6 +1,6 @@
 use super::types::*;
 use crate::backend::Backend;
-use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
+use axum::{Json, extract::State, http::StatusCode, response::IntoResponse};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -57,7 +57,10 @@ pub async fn send_message(
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
     let mut backend = backend.lock().await;
 
-    match backend.send_message(req.entity_id, req.entity_type, req.text).await {
+    match backend
+        .send_message(req.entity_id, req.entity_type, req.text)
+        .await
+    {
         Ok(message_id) => {
             let response = SendMessageResponse { message_id };
             Ok((StatusCode::OK, Json(response)))
@@ -167,7 +170,9 @@ pub async fn create_vault(
     let mut backend = backend.lock().await;
 
     // Generate four-word identity if not provided
-    let four_words = req.four_words.unwrap_or_else(|| Backend::generate_four_words());
+    let four_words = req
+        .four_words
+        .unwrap_or_else(|| Backend::generate_four_words());
 
     tracing::info!("Creating vault for: {}", four_words);
 
@@ -217,7 +222,10 @@ pub async fn login(
             if let Err(e) = backend.initialize_core_context().await {
                 tracing::error!("Failed to initialize CoreContext: {}", e);
                 let error = ErrorResponse {
-                    error: format!("Login successful but CoreContext initialization failed: {}", e),
+                    error: format!(
+                        "Login successful but CoreContext initialization failed: {}",
+                        e
+                    ),
                 };
                 return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error)));
             }

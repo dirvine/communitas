@@ -528,7 +528,8 @@ impl IssueService {
         let doc_id = format!("issue:{}", issue_id);
         self.crdt
             .merge_update(&doc_id, "issue", issue_id, update)
-            .await
+            .await?;
+        Ok(())
     }
 }
 

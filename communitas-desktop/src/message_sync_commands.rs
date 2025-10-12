@@ -4,8 +4,8 @@
 //! Supports get_all_messages(), out-of-order detection, and missing message sync.
 
 use communitas_core::crdt::{
-    CRDTMessage, EntitySyncState, EntityType, MessageContent, MissingRange,
-    SyncRequest, SyncResponse, VectorClock,
+    CRDTMessage, EntitySyncState, EntityType, MessageContent, MissingRange, SyncRequest,
+    SyncResponse, VectorClock,
 };
 use communitas_core::message_sync::MessageSyncService;
 use serde::{Deserialize, Serialize};

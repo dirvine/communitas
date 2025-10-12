@@ -21,7 +21,6 @@ mod core_cmds;
 mod core_commands;
 mod core_groups;
 mod core_storage;
-mod crdt_error;
 mod crdt_manager;
 mod doc_commands;
 #[cfg(feature = "gossip_overlay")]

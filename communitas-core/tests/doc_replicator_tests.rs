@@ -40,7 +40,11 @@ async fn create_replicator_with_config(
         web_storage_enabled: web_enabled,
     };
 
-    Arc::new(DocReplicator::new(config).await.expect("replicator creation"))
+    Arc::new(
+        DocReplicator::new(config)
+            .await
+            .expect("replicator creation"),
+    )
 }
 
 // =============================================================================
@@ -209,10 +213,7 @@ async fn test_delete_text() {
         .expect("insert");
 
     // Delete "World"
-    replicator
-        .delete_text(&doc_id, 7, 5)
-        .await
-        .expect("delete");
+    replicator.delete_text(&doc_id, 7, 5).await.expect("delete");
 
     let text = replicator.get_text(&doc_id).await.expect("get text");
     assert_eq!(text, "Hello, !");
@@ -337,9 +338,9 @@ async fn test_files_storage_is_encrypted() {
     // Encrypted blob should NOT contain plaintext
     let plaintext = "Secret data";
     assert!(
-        !encrypted_blob.windows(plaintext.len()).any(|window| {
-            window == plaintext.as_bytes()
-        }),
+        !encrypted_blob
+            .windows(plaintext.len())
+            .any(|window| { window == plaintext.as_bytes() }),
         "Encrypted blob should not contain plaintext"
     );
 }
@@ -453,10 +454,7 @@ async fn test_web_storage_accessible_without_key() {
         .expect("insert");
 
     // Should be able to get web blob without any key
-    let web_blob = replicator
-        .get_web_blob(&doc_id)
-        .await
-        .expect("get blob");
+    let web_blob = replicator.get_web_blob(&doc_id).await.expect("get blob");
 
     assert!(web_blob.is_some());
 }
@@ -631,14 +629,8 @@ async fn test_crdt_convergence() {
         .expect("insert 2");
 
     // Exchange updates
-    let update1 = replicator1
-        .get_crdt_update(doc_id)
-        .await
-        .expect("update 1");
-    let update2 = replicator2
-        .get_crdt_update(doc_id)
-        .await
-        .expect("update 2");
+    let update1 = replicator1.get_crdt_update(doc_id).await.expect("update 1");
+    let update2 = replicator2.get_crdt_update(doc_id).await.expect("update 2");
 
     replicator1
         .apply_crdt_update(doc_id, &update2)

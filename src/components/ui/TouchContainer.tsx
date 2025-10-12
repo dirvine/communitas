@@ -23,6 +23,9 @@ import {
   Group as GroupIcon,
 } from '@mui/icons-material';
 
+// Auth context
+import { useAuth } from '../../contexts/AuthContext';
+
 // Enhanced responsive hooks
 import { useTouchDevice, useTouchFriendlySizing } from '../../hooks/useResponsive';
 
@@ -167,11 +170,15 @@ export const TouchContainer: React.FC<TouchContainerProps> = ({
    const theme = useTheme();
    const isTouch = useTouchDevice();
    const touchSizing = useTouchFriendlySizing();
+   const { authState } = useAuth();
    const containerRef = useRef<HTMLDivElement>(null);
    const [isPulling, setIsPulling] = useState(false);
    const [pullDistance, setPullDistance] = useState(0);
    const [isRefreshing, setIsRefreshing] = useState(false);
    const [scrollTop, setScrollTop] = useState(0);
+
+   // Get current user ID (prefer prop, fallback to auth)
+   const currentUserId = userId || authState.user?.id;
 
    // Saorsa-Core integration state
    const [contentCache, setContentCache] = useState<Map<string, any>>(new Map());
@@ -331,53 +338,64 @@ export const TouchContainer: React.FC<TouchContainerProps> = ({
      if (!enableCollaboration || !userId) return;
 
      try {
-       // Use saorsa-core messaging to broadcast updates
-      await invoke('core_send_message_to_channel', {
-        channel_id: 'touch-collaboration',
-        text: JSON.stringify(update),
-        user_id: userId,
+       // Use working send_message command from org_commands.rs
+      await invoke('send_message', {
+        request: {
+          channel_id: 'touch-collaboration',
+          author_id: currentUserId!,
+          content: JSON.stringify(update),
+          thread_id: null,
+        },
       });
      } catch (error) {
        console.error('Failed to broadcast collaborative update:', error);
      }
-   }, [enableCollaboration, userId]);
+   }, [enableCollaboration, currentUserId]);
 
    const sendCollaborativeMessage = useCallback(async (message: string, recipientIds?: string[]) => {
-     if (!enableCollaboration || !userId) return;
+     if (!enableCollaboration || !currentUserId) return;
 
      try {
        if (recipientIds && recipientIds.length > 0) {
-         // Send to specific recipients
-         await invoke('core_send_message_to_recipients', {
-           recipient_ids: recipientIds,
-           message,
-           user_id: userId,
-         });
+         // Send to specific recipients using gossip_send_direct_message
+         // Note: gossip commands expect four-word addresses, not IDs
+         // TODO: Convert recipientIds to four-word addresses if needed
+         for (const recipientFourWords of recipientIds) {
+           await invoke('gossip_send_direct_message', {
+             recipient_four_words: recipientFourWords,
+             content: message,
+             encrypted: true,
+           });
+         }
        } else {
-         // Send to collaboration channel
-        await invoke('core_send_message_to_channel', {
-          channel_id: 'touch-collaboration',
-          text: message,
-          user_id: userId,
-        });
+         // Send to collaboration channel using working send_message command
+         await invoke('send_message', {
+           request: {
+             channel_id: 'touch-collaboration',
+             author_id: currentUserId!,
+             content: message,
+             thread_id: null,
+           },
+         });
        }
      } catch (error) {
        console.error('Failed to send collaborative message:', error);
      }
-   }, [enableCollaboration, userId]);
+   }, [enableCollaboration, currentUserId]);
 
    const subscribeToCollaborativeMessages = useCallback(async () => {
-     if (!enableCollaboration || !userId) return;
+     if (!enableCollaboration || !currentUserId) return;
 
      try {
-       await invoke('core_subscribe_messages', {
-         channel_ids: ['touch-collaboration'],
-         user_id: userId,
+       // Use working gossip_subscribe_to_entity command
+       await invoke('gossip_subscribe_to_entity', {
+         entity_id: 'touch-collaboration',
+         entity_type: 'channel',
        });
      } catch (error) {
        console.error('Failed to subscribe to collaborative messages:', error);
      }
-   }, [enableCollaboration, userId]);
+   }, [enableCollaboration, currentUserId]);
 
    // Networking functions
    const establishQuicConnection = useCallback(async (peerId: string, address: string) => {

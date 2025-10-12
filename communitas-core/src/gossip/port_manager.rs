@@ -95,7 +95,9 @@ impl PortManager {
         let ipv4_addr: SocketAddr = format!("0.0.0.0:{}", port)
             .parse()
             .expect("valid ipv4 address");
-        let ipv6_addr: SocketAddr = format!("[::]:{}", port).parse().expect("valid ipv6 address");
+        let ipv6_addr: SocketAddr = format!("[::]:{}", port)
+            .parse()
+            .expect("valid ipv6 address");
 
         // Try IPv4 first
         match UdpSocket::bind(ipv4_addr) {

@@ -1,11 +1,11 @@
+use super::channels::EntityManager;
 use anyhow::Result;
+use communitas_core::types::DeviceType;
 use communitas_core::{
     AuthService, CoreContext, SessionInfo,
     encrypted_storage::{EncryptedStorageManager, RecentIdentity, StorageConfig},
 };
-use communitas_core::types::DeviceType;
 use std::path::PathBuf;
-use super::channels::EntityManager;
 
 /// Backend wrapper around CoreContext and AuthService
 pub struct Backend {
@@ -214,10 +214,7 @@ impl Backend {
         tracing::info!("Initializing CoreContext for: {}", session.four_words);
 
         // Create storage directory for this user
-        let storage_dir = self
-            .data_dir
-            .join("core_data")
-            .join(&session.four_words);
+        let storage_dir = self.data_dir.join("core_data").join(&session.four_words);
 
         let ctx = CoreContext::initialize(
             session.four_words.clone(),

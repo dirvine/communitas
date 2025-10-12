@@ -53,7 +53,10 @@ async fn test_doc_create_web_storage() {
 
     // Verify no encryption key (Web is public)
     let key_result = ctx.doc_replicator.get_encryption_key(&doc_id).await;
-    assert!(key_result.is_err(), "Web documents should not have encryption keys");
+    assert!(
+        key_result.is_err(),
+        "Web documents should not have encryption keys"
+    );
 }
 
 #[tokio::test]
@@ -144,7 +147,11 @@ async fn test_doc_delete_text() {
         .await
         .expect("delete text");
 
-    let text = ctx.doc_replicator.get_text(&doc_id).await.expect("get text");
+    let text = ctx
+        .doc_replicator
+        .get_text(&doc_id)
+        .await
+        .expect("get text");
     assert_eq!(text, "Hello, !", "Text should have 'World' removed");
 }
 
@@ -224,8 +231,15 @@ async fn test_doc_apply_crdt_update() {
         .expect("apply update");
 
     // Verify peer2 has synced content
-    let text = ctx2.doc_replicator.get_text(doc_id).await.expect("get text");
-    assert_eq!(text, "Peer1 content", "Peer2 should have synced content from Peer1");
+    let text = ctx2
+        .doc_replicator
+        .get_text(doc_id)
+        .await
+        .expect("get text");
+    assert_eq!(
+        text, "Peer1 content",
+        "Peer2 should have synced content from Peer1"
+    );
 }
 
 // =============================================================================
@@ -257,7 +271,10 @@ async fn test_doc_both_storage_modes() {
         .get_files_blob(&doc_id)
         .await
         .expect("get files blob");
-    assert!(files_blob.is_some(), "Document should exist in Files storage");
+    assert!(
+        files_blob.is_some(),
+        "Document should exist in Files storage"
+    );
 
     // Verify in Web storage (public)
     let web_blob = ctx
@@ -271,7 +288,9 @@ async fn test_doc_both_storage_modes() {
     let files_bytes = files_blob.expect("files blob");
     let text_bytes = "Dual storage content".as_bytes();
     assert!(
-        !files_bytes.windows(text_bytes.len()).any(|window| window == text_bytes),
+        !files_bytes
+            .windows(text_bytes.len())
+            .any(|window| window == text_bytes),
         "Files storage should be encrypted"
     );
 
@@ -300,6 +319,9 @@ async fn test_doc_nonexistent_document_error() {
     assert!(result.is_err(), "Should error on nonexistent document");
 
     // Try to insert into nonexistent document
-    let result = ctx.doc_replicator.insert_text("nonexistent-doc", 0, "text").await;
+    let result = ctx
+        .doc_replicator
+        .insert_text("nonexistent-doc", 0, "text")
+        .await;
     assert!(result.is_err(), "Should error on nonexistent document");
 }

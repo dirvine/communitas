@@ -3,9 +3,9 @@
 //! Provides GossipContext-based APIs to replace DHT functionality.
 //! Supports FOAF discovery, presence beacons, Plumtree pub/sub, and CRDT storage.
 
+use base64::Engine;
 #[cfg(feature = "gossip_overlay")]
 use communitas_core::gossip::GossipContext;
-use base64::Engine;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -424,7 +424,8 @@ pub async fn gossip_site_publish(
     let guard = state.read().await;
     let ctx = guard.as_ref().ok_or("GossipContext not initialized")?;
 
-    let publisher = ctx.site_publisher
+    let publisher = ctx
+        .site_publisher
         .as_ref()
         .ok_or("SitePublisher not initialized")?;
 
@@ -435,7 +436,8 @@ pub async fn gossip_site_publish(
             .decode(&asset.content_base64)
             .map_err(|e| format!("Failed to decode asset: {}", e))?;
 
-        let hash = publisher.add_asset(asset.path.clone(), content)
+        let hash = publisher
+            .add_asset(asset.path.clone(), content)
             .await
             .map_err(|e| format!("Failed to add asset: {}", e))?;
 
@@ -443,7 +445,8 @@ pub async fn gossip_site_publish(
     }
 
     // Build manifest with version 1 and collected asset paths
-    let manifest = publisher.build_manifest(1, asset_paths)
+    let manifest = publisher
+        .build_manifest(1, asset_paths)
         .await
         .map_err(|e| format!("Failed to build manifest: {}", e))?;
 
@@ -461,20 +464,22 @@ pub async fn gossip_site_fetch(
     let guard = state.read().await;
     let ctx = guard.as_ref().ok_or("GossipContext not initialized")?;
 
-    let fetcher = ctx.site_fetcher
+    let fetcher = ctx
+        .site_fetcher
         .as_ref()
         .ok_or("SiteFetcher not initialized")?;
 
     // Parse site_id
-    let site_id_bytes = hex::decode(&site_id_hex)
-        .map_err(|e| format!("Invalid site_id hex: {}", e))?;
+    let site_id_bytes =
+        hex::decode(&site_id_hex).map_err(|e| format!("Invalid site_id hex: {}", e))?;
     let site_id_array: [u8; 32] = site_id_bytes
         .try_into()
         .map_err(|_| "site_id must be 32 bytes".to_string())?;
     let site_id = communitas_core::gossip::SiteId::new(site_id_array);
 
     // Start discovery
-    fetcher.start_discovery(&site_id)
+    fetcher
+        .start_discovery(&site_id)
         .await
         .map_err(|e| format!("Discovery failed: {}", e))?;
 
@@ -488,14 +493,16 @@ pub async fn gossip_site_fetch(
     // Fetch manifest from first provider
     let provider_summary = &providers[0];
     let provider_peer_id = provider_summary.provider;
-    let manifest = fetcher.fetch_manifest(&site_id, provider_peer_id)
+    let manifest = fetcher
+        .fetch_manifest(&site_id, provider_peer_id)
         .await
         .map_err(|e| format!("Failed to fetch manifest: {}", e))?;
 
     // Fetch all blocks
     let mut assets = Vec::new();
     for (path, hash) in &manifest.blocks {
-        let block = fetcher.fetch_block(hash, provider_peer_id)
+        let block = fetcher
+            .fetch_block(hash, provider_peer_id)
             .await
             .map_err(|e| format!("Failed to fetch block: {}", e))?;
 
@@ -514,18 +521,18 @@ pub async fn gossip_site_fetch(
 /// List published sites
 #[cfg(feature = "gossip_overlay")]
 #[tauri::command]
-pub async fn gossip_site_list(
-    state: tauri::State<'_, GossipState>,
-) -> Result<Vec<String>, String> {
+pub async fn gossip_site_list(state: tauri::State<'_, GossipState>) -> Result<Vec<String>, String> {
     let guard = state.read().await;
     let ctx = guard.as_ref().ok_or("GossipContext not initialized")?;
 
-    let publisher = ctx.site_publisher
+    let publisher = ctx
+        .site_publisher
         .as_ref()
         .ok_or("SitePublisher not initialized")?;
 
     // Get site_id from manifest
-    let manifest = publisher.get_manifest()
+    let manifest = publisher
+        .get_manifest()
         .await
         .ok_or("No manifest available - publish a site first")?;
 
@@ -546,13 +553,14 @@ pub async fn gossip_site_providers(
     let guard = state.read().await;
     let ctx = guard.as_ref().ok_or("GossipContext not initialized")?;
 
-    let fetcher = ctx.site_fetcher
+    let fetcher = ctx
+        .site_fetcher
         .as_ref()
         .ok_or("SiteFetcher not initialized")?;
 
     // Parse site_id
-    let site_id_bytes = hex::decode(&site_id_hex)
-        .map_err(|e| format!("Invalid site_id hex: {}", e))?;
+    let site_id_bytes =
+        hex::decode(&site_id_hex).map_err(|e| format!("Invalid site_id hex: {}", e))?;
     let site_id_array: [u8; 32] = site_id_bytes
         .try_into()
         .map_err(|_| "site_id must be 32 bytes".to_string())?;
@@ -562,7 +570,8 @@ pub async fn gossip_site_providers(
     let providers = fetcher.get_providers(&site_id).await;
 
     // Convert PeerIds to hex strings
-    let provider_hexes = providers.into_iter()
+    let provider_hexes = providers
+        .into_iter()
         .map(|p| hex::encode(p.provider.as_bytes()))
         .collect();
 
@@ -594,7 +603,8 @@ pub async fn gossip_get_connection_status(
     let ctx = guard.as_ref().ok_or("GossipContext not initialized")?;
 
     // Get peer count from contacts as proxy for connection status
-    let contacts = ctx.get_contacts()
+    let contacts = ctx
+        .get_contacts()
         .await
         .map_err(|e| format!("Failed to get contacts: {}", e))?;
 
@@ -632,7 +642,10 @@ pub async fn gossip_add_bootstrap_peer(
         }
         Err(e) => {
             // Not found yet - that's OK, they'll be discovered later
-            Err(format!("Peer not found (will retry on next connection): {}", e))
+            Err(format!(
+                "Peer not found (will retry on next connection): {}",
+                e
+            ))
         }
     }
 }
@@ -647,18 +660,22 @@ pub async fn gossip_get_cached_peers(
     let ctx = guard.as_ref().ok_or("GossipContext not initialized")?;
 
     // Get contacts from context
-    let contacts = ctx.get_contacts()
+    let contacts = ctx
+        .get_contacts()
         .await
         .map_err(|e| format!("Failed to get contacts: {}", e))?;
 
-    Ok(contacts.into_iter().map(|(four_words, peer_id)| {
-        BootstrapPeer {
-            four_words,
-            peer_id: peer_id.to_string(),
-            last_seen: 0, // TODO: Track last seen timestamp
-            success_rate: 1.0, // Assume success for known contacts
-        }
-    }).collect())
+    Ok(contacts
+        .into_iter()
+        .map(|(four_words, peer_id)| {
+            BootstrapPeer {
+                four_words,
+                peer_id: peer_id.to_string(),
+                last_seen: 0,      // TODO: Track last seen timestamp
+                success_rate: 1.0, // Assume success for known contacts
+            }
+        })
+        .collect())
 }
 
 // ===== DTOs for Serialization =====

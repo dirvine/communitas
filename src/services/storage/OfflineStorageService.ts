@@ -178,9 +178,10 @@ export class OfflineStorageService {
     // If encrypted storage requested, also store in Tauri backend
     if (options?.encrypt) {
       try {
-        await invoke('core_private_put', {
+        // Use working gossip_store_message command
+        await invoke('gossip_store_message', {
           key,
-          content: new TextEncoder().encode(JSON.stringify(data))
+          value: Array.from(new TextEncoder().encode(JSON.stringify(data)))
         });
       } catch (error) {
         console.warn('Failed to store encrypted, using local only:', error);
@@ -230,9 +231,10 @@ export class OfflineStorageService {
         // If encrypted storage requested, add to batch promises
         if (item.options?.encrypt) {
           batchPromises.push(
-            invoke('core_private_put', {
+            // Use working gossip_store_message command
+            invoke('gossip_store_message', {
               key: item.key,
-              content: new TextEncoder().encode(JSON.stringify(item.data))
+              value: Array.from(new TextEncoder().encode(JSON.stringify(item.data)))
             }).catch(error => {
               console.warn(`Failed to store encrypted ${item.key}:`, error);
             })
@@ -397,7 +399,10 @@ export class OfflineStorageService {
     // Try to get from encrypted storage if online
     if (this.isOnline) {
       try {
-        const encrypted = await invoke('core_private_get', { key }) as number[] | null;
+        // Use working gossip_get_all_messages command and filter for our key
+        const allMessages = await invoke('gossip_get_all_messages') as Array<{ key: string; value: number[] }>;
+        const messageEntry = allMessages.find(m => m.key === key);
+        const encrypted = messageEntry?.value ?? null;
         if (!encrypted) {
           return null;
         }
@@ -561,9 +566,10 @@ export class OfflineStorageService {
         switch (item.operation) {
           case 'create':
           case 'update':
-            await invoke('core_private_put', {
+            // Use working gossip_store_message command
+            await invoke('gossip_store_message', {
               key: item.resource,
-              content: new TextEncoder().encode(JSON.stringify(item.data))
+              value: Array.from(new TextEncoder().encode(JSON.stringify(item.data)))
             });
             break;
           case 'delete':

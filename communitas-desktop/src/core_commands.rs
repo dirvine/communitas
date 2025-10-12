@@ -49,7 +49,10 @@ pub async fn core_initialize(
     device_name: Option<String>,
     device_type: Option<String>,
 ) -> Result<bool, String> {
-    let dev_type = match device_type.unwrap_or_else(|| "Desktop".to_string()).as_str() {
+    let dev_type = match device_type
+        .unwrap_or_else(|| "Desktop".to_string())
+        .as_str()
+    {
         "Desktop" | "desktop" => DeviceType::Desktop,
         "Laptop" | "laptop" => DeviceType::Laptop,
         "Mobile" | "mobile" => DeviceType::Mobile,
@@ -79,7 +82,10 @@ pub async fn core_initialize(
             tracing::info!("✅ Network started successfully: {}", connection_identity);
         }
         Err(e) => {
-            tracing::warn!("⚠️ Network startup failed (continuing in local mode): {}", e);
+            tracing::warn!(
+                "⚠️ Network startup failed (continuing in local mode): {}",
+                e
+            );
             // Don't fail initialization if networking fails - app works in local mode
         }
     }

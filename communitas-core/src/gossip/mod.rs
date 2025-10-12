@@ -51,4 +51,7 @@ pub use presence::PresenceWrapper;
 pub use rendezvous::RendezvousClient;
 pub use saorsa_gossip_coordinator::{CoordinatorRoles, NatClass as CoordinatorNatClass};
 pub use saorsa_gossip_rendezvous::{Capability, ProviderSummary};
-pub use sites::{Block, SiteId, SiteManifest, SitePublisher, SiteFetcher, SiteRequest, SiteResponse, chunk_content, MAX_BLOCK_SIZE};
+pub use sites::{
+    Block, MAX_BLOCK_SIZE, SiteFetcher, SiteId, SiteManifest, SitePublisher, SiteRequest,
+    SiteResponse, chunk_content,
+};

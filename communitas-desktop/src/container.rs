@@ -4,10 +4,10 @@
 //
 // TODO: Implement container functionality with new architecture
 
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tauri::State;
 use tokio::sync::RwLock;
-use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EngineState {
@@ -16,9 +16,7 @@ pub struct EngineState {
 
 impl Default for EngineState {
     fn default() -> Self {
-        Self {
-            initialized: false,
-        }
+        Self { initialized: false }
     }
 }
 

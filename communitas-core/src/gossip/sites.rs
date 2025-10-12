@@ -20,16 +20,16 @@
 //! 2. **Fetch Site**: Subscribe to SITE_ADVERT shard, fetch manifest/blocks
 //! 3. **Private Site**: MLS group encryption with ChaCha20Poly1305
 
-use serde::{Deserialize, Serialize};
-use blake3;
+use crate::gossip::rendezvous::RendezvousClient;
 use anyhow::Result;
+use blake3;
+use bytes::Bytes;
+use saorsa_gossip_transport::{GossipTransport, StreamType};
+use saorsa_gossip_types::PeerId;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use crate::gossip::rendezvous::RendezvousClient;
-use saorsa_gossip_transport::{GossipTransport, StreamType};
-use saorsa_gossip_types::PeerId;
-use bytes::Bytes;
 
 /// Maximum block size (512KB per SPEC2.md §5.3)
 pub const MAX_BLOCK_SIZE: usize = 512 * 1024;
@@ -224,7 +224,11 @@ impl SitePublisher {
     }
 
     /// Build manifest from added assets
-    pub async fn build_manifest(&self, version: u64, asset_paths: Vec<(String, [u8; 32])>) -> Result<SiteManifest> {
+    pub async fn build_manifest(
+        &self,
+        version: u64,
+        asset_paths: Vec<(String, [u8; 32])>,
+    ) -> Result<SiteManifest> {
         let manifest = SiteManifest::new(self.site_id.clone(), version, asset_paths);
 
         // Store manifest
@@ -266,7 +270,10 @@ impl SitePublisher {
                 // Verify site ID matches
                 if site_id != self.site_id {
                     return Ok(Bytes::from(bincode::serialize(&SiteResponse::Error(
-                        format!("Site ID mismatch: expected {:?}, got {:?}", self.site_id, site_id)
+                        format!(
+                            "Site ID mismatch: expected {:?}, got {:?}",
+                            self.site_id, site_id
+                        ),
                     ))?));
                 }
 
@@ -321,16 +328,19 @@ impl SiteFetcher {
         self.rendezvous.subscribe_to_shard(&site_id.key).await?;
 
         // Start collecting provider summaries
-        self.rendezvous.start_collecting_for_target(site_id.key).await?;
+        self.rendezvous
+            .start_collecting_for_target(site_id.key)
+            .await?;
 
         Ok(())
     }
 
     /// Get providers for a site (from rendezvous)
-    pub async fn get_providers(&self, site_id: &SiteId) -> Vec<saorsa_gossip_rendezvous::ProviderSummary> {
-        self.rendezvous
-            .get_providers_for_target(&site_id.key)
-            .await
+    pub async fn get_providers(
+        &self,
+        site_id: &SiteId,
+    ) -> Vec<saorsa_gossip_rendezvous::ProviderSummary> {
+        self.rendezvous.get_providers_for_target(&site_id.key).await
     }
 
     /// Fetch a block from network via QUIC
@@ -349,19 +359,27 @@ impl SiteFetcher {
             .map_err(|e| anyhow::anyhow!("Failed to serialize request: {}", e))?;
 
         // Send request on Bulk stream
-        self.transport.read().await
+        self.transport
+            .read()
+            .await
             .send_to_peer(provider, StreamType::Bulk, Bytes::from(request_bytes))
             .await
             .map_err(|e| anyhow::anyhow!("Failed to send request: {}", e))?;
 
         // Receive response on Bulk stream
-        let (_peer, stream_type, response_bytes) = self.transport.read().await
+        let (_peer, stream_type, response_bytes) = self
+            .transport
+            .read()
+            .await
             .receive_message()
             .await
             .map_err(|e| anyhow::anyhow!("Failed to receive response: {}", e))?;
 
         if stream_type != StreamType::Bulk {
-            return Err(anyhow::anyhow!("Wrong stream type: expected Bulk, got {:?}", stream_type));
+            return Err(anyhow::anyhow!(
+                "Wrong stream type: expected Bulk, got {:?}",
+                stream_type
+            ));
         }
 
         // Deserialize response
@@ -398,24 +416,34 @@ impl SiteFetcher {
         }
 
         // Create request
-        let request = SiteRequest::GetManifest { site_id: site_id.clone() };
+        let request = SiteRequest::GetManifest {
+            site_id: site_id.clone(),
+        };
         let request_bytes = bincode::serialize(&request)
             .map_err(|e| anyhow::anyhow!("Failed to serialize request: {}", e))?;
 
         // Send request on Bulk stream
-        self.transport.read().await
+        self.transport
+            .read()
+            .await
             .send_to_peer(provider, StreamType::Bulk, Bytes::from(request_bytes))
             .await
             .map_err(|e| anyhow::anyhow!("Failed to send request: {}", e))?;
 
         // Receive response on Bulk stream
-        let (_peer, stream_type, response_bytes) = self.transport.read().await
+        let (_peer, stream_type, response_bytes) = self
+            .transport
+            .read()
+            .await
             .receive_message()
             .await
             .map_err(|e| anyhow::anyhow!("Failed to receive response: {}", e))?;
 
         if stream_type != StreamType::Bulk {
-            return Err(anyhow::anyhow!("Wrong stream type: expected Bulk, got {:?}", stream_type));
+            return Err(anyhow::anyhow!(
+                "Wrong stream type: expected Bulk, got {:?}",
+                stream_type
+            ));
         }
 
         // Deserialize response
@@ -457,9 +485,9 @@ impl SiteFetcher {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use saorsa_gossip_types::PeerId;
-    use saorsa_gossip_transport::{QuicTransport, TransportConfig, GossipTransport};
     use saorsa_gossip_pubsub::PubSub as PubSubTrait;
+    use saorsa_gossip_transport::{GossipTransport, QuicTransport, TransportConfig};
+    use saorsa_gossip_types::PeerId;
 
     fn create_test_peer_id(seed: u8) -> PeerId {
         let mut bytes = [0u8; 32];
@@ -484,7 +512,8 @@ mod tests {
         // Create test pubsub (needs separate transport instance)
         let pubsub_impl =
             saorsa_gossip_pubsub::PlumtreePubSub::new(peer_id.clone(), Arc::new(qt2), signing_key);
-        let pubsub: Arc<RwLock<Box<dyn PubSubTrait>>> = Arc::new(RwLock::new(Box::new(pubsub_impl)));
+        let pubsub: Arc<RwLock<Box<dyn PubSubTrait>>> =
+            Arc::new(RwLock::new(Box::new(pubsub_impl)));
 
         RendezvousClient::new(peer_id, transport, pubsub)
     }
@@ -624,7 +653,10 @@ mod tests {
         let publisher = SitePublisher::new(site_id);
 
         let content = b"Hello, World!".to_vec();
-        let hash = publisher.add_asset("index.html".to_string(), content.clone()).await.unwrap();
+        let hash = publisher
+            .add_asset("index.html".to_string(), content.clone())
+            .await
+            .unwrap();
 
         // Should be able to retrieve the block
         let block = publisher.get_block(&hash).await.unwrap();
@@ -638,15 +670,24 @@ mod tests {
         let publisher = SitePublisher::new(site_id.clone());
 
         // Add assets
-        let index_hash = publisher.add_asset("index.html".to_string(), b"<html>".to_vec()).await.unwrap();
-        let style_hash = publisher.add_asset("style.css".to_string(), b"body{}".to_vec()).await.unwrap();
+        let index_hash = publisher
+            .add_asset("index.html".to_string(), b"<html>".to_vec())
+            .await
+            .unwrap();
+        let style_hash = publisher
+            .add_asset("style.css".to_string(), b"body{}".to_vec())
+            .await
+            .unwrap();
 
         // Build manifest
         let asset_paths = vec![
             ("index.html".to_string(), index_hash),
             ("style.css".to_string(), style_hash),
         ];
-        let manifest = publisher.build_manifest(1, asset_paths.clone()).await.unwrap();
+        let manifest = publisher
+            .build_manifest(1, asset_paths.clone())
+            .await
+            .unwrap();
 
         // Verify manifest
         assert_eq!(manifest.site_id, site_id);
@@ -699,7 +740,10 @@ mod tests {
 
         // Create content larger than MAX_BLOCK_SIZE
         let large_content: Vec<u8> = vec![42u8; MAX_BLOCK_SIZE + 100];
-        let hash = publisher.add_asset("large.bin".to_string(), large_content.clone()).await.unwrap();
+        let hash = publisher
+            .add_asset("large.bin".to_string(), large_content.clone())
+            .await
+            .unwrap();
 
         // Should have stored multiple blocks
         let first_block = publisher.get_block(&hash).await.unwrap();
@@ -780,14 +824,20 @@ mod tests {
 
         // Add a block
         let content = b"Test block content".to_vec();
-        let hash = publisher.add_asset("test.txt".to_string(), content.clone()).await.unwrap();
+        let hash = publisher
+            .add_asset("test.txt".to_string(), content.clone())
+            .await
+            .unwrap();
 
         // Create a request
         let request = SiteRequest::GetBlock { hash };
         let request_bytes = bincode::serialize(&request).unwrap();
 
         // Process request (this will fail until we implement it)
-        let response_bytes = publisher.handle_request(Bytes::from(request_bytes)).await.unwrap();
+        let response_bytes = publisher
+            .handle_request(Bytes::from(request_bytes))
+            .await
+            .unwrap();
         let response: SiteResponse = bincode::deserialize(&response_bytes).unwrap();
 
         // Verify response
@@ -807,15 +857,26 @@ mod tests {
         let publisher = SitePublisher::new(site_id.clone());
 
         // Add assets and build manifest
-        let hash = publisher.add_asset("index.html".to_string(), b"<html>".to_vec()).await.unwrap();
-        let manifest = publisher.build_manifest(1, vec![("index.html".to_string(), hash)]).await.unwrap();
+        let hash = publisher
+            .add_asset("index.html".to_string(), b"<html>".to_vec())
+            .await
+            .unwrap();
+        let manifest = publisher
+            .build_manifest(1, vec![("index.html".to_string(), hash)])
+            .await
+            .unwrap();
 
         // Create a request
-        let request = SiteRequest::GetManifest { site_id: site_id.clone() };
+        let request = SiteRequest::GetManifest {
+            site_id: site_id.clone(),
+        };
         let request_bytes = bincode::serialize(&request).unwrap();
 
         // Process request
-        let response_bytes = publisher.handle_request(Bytes::from(request_bytes)).await.unwrap();
+        let response_bytes = publisher
+            .handle_request(Bytes::from(request_bytes))
+            .await
+            .unwrap();
         let response: SiteResponse = bincode::deserialize(&response_bytes).unwrap();
 
         // Verify response

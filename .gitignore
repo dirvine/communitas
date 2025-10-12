@@ -164,3 +164,4 @@ geckodriver
 # Debug files
 debug_app.html
 .worktrees/
+communitas-desktop/keystore/*.identity

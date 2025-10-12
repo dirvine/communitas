@@ -68,10 +68,16 @@ export const FirstLaunchWelcome: React.FC<FirstLaunchWelcomeProps> = ({ open, on
 
   // Passkey state
   const [passkeyRegistering, setPasskeyRegistering] = useState(false);
+  const [isTauri, setIsTauri] = useState(false);
 
   // UI state
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Detect if running in Tauri desktop app
+  useEffect(() => {
+    setIsTauri(!!(window as any).__TAURI__);
+  }, []);
 
   // Initialize display name from OS username
   useEffect(() => {
@@ -414,34 +420,37 @@ export const FirstLaunchWelcome: React.FC<FirstLaunchWelcomeProps> = ({ open, on
                   </CardContent>
                 </Card>
 
-                <Card
-                  sx={{
-                    cursor: 'pointer',
-                    border: 2,
-                    borderColor: 'transparent',
-                    '&:hover': { borderColor: 'primary.main' },
-                  }}
-                  onClick={() => handleSecurityChoice('passkey')}
-                >
-                  <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                    <FormControlLabel
-                      value="passkey"
-                      control={<Radio />}
-                      label=""
-                      sx={{ m: 0 }}
-                    />
-                    <FingerprintIcon color="action" />
-                    <Box sx={{ textAlign: 'left', flex: 1 }}>
-                      <Typography variant="subtitle1" fontWeight={600}>
-                        Passkey (recommended) 🔐
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        Use biometrics or security key
-                      </Typography>
-                    </Box>
-                    <Chip label="Requires compatible device" size="small" />
-                  </CardContent>
-                </Card>
+                {/* Only show passkey option in web version (not Tauri desktop) */}
+                {!isTauri && (
+                  <Card
+                    sx={{
+                      cursor: 'pointer',
+                      border: 2,
+                      borderColor: 'transparent',
+                      '&:hover': { borderColor: 'primary.main' },
+                    }}
+                    onClick={() => handleSecurityChoice('passkey')}
+                  >
+                    <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                      <FormControlLabel
+                        value="passkey"
+                        control={<Radio />}
+                        label=""
+                        sx={{ m: 0 }}
+                      />
+                      <FingerprintIcon color="action" />
+                      <Box sx={{ textAlign: 'left', flex: 1 }}>
+                        <Typography variant="subtitle1" fontWeight={600}>
+                          Passkey (recommended) 🔐
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Use biometrics or security key
+                        </Typography>
+                      </Box>
+                      <Chip label="Requires compatible device" size="small" />
+                    </CardContent>
+                  </Card>
+                )}
               </RadioGroup>
             </FormControl>
           </Box>

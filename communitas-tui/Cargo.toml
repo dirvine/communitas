@@ -54,6 +54,9 @@ dirs = "5.0"
 four-word-networking = { workspace = true }
 rand.workspace = true
 
+# Self-update functionality
+self_update = "0.41"
+
 [dev-dependencies]
 tempfile = "3.0"
 criterion = { version = "0.5", features = ["html_reports", "async_tokio"] }

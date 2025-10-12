@@ -348,6 +348,10 @@ async fn main() -> anyhow::Result<()> {
             commands::org_commands::apply_channel_sync_update,
             commands::org_commands::get_issue_sync_update,
             commands::org_commands::apply_issue_sync_update,
+            // Phase 3: Efficient channel sync (state vector protocol)
+            commands::org_commands::get_channel_state_vector,
+            commands::org_commands::get_channel_diff,
+            commands::org_commands::apply_channel_diff,
         ]);
 
     // Conditionally add gossip state management

@@ -49,6 +49,19 @@ async function bootstrap() {
 
   if (typeof window !== 'undefined' && (window as any).__TAURI__) {
     console.info('[Communitas] Tauri detected')
+
+    // Check for updates on startup (non-blocking)
+    import('./services/UpdateService').then(({ updateService }) => {
+      updateService.checkOnStartup(false).then((updateAvailable) => {
+        if (updateAvailable) {
+          console.info('[Communitas] Update available - check settings to install')
+        }
+      }).catch((error) => {
+        console.warn('[Communitas] Failed to check for updates:', error)
+      })
+    }).catch((error) => {
+      console.warn('[Communitas] Failed to load UpdateService:', error)
+    })
   }
 
   // Test harnesses disabled for production stability

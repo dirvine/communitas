@@ -51,8 +51,12 @@
       ]
     },
     "updater": {
-      "active": false,
-      "endpoints": []
+      "active": true,
+      "endpoints": [
+        "https://github.com/dirvine/communitas/releases/latest/download/latest.json"
+      ],
+      "dialog": true,
+      "pubkey": ""
     }
   }
 }

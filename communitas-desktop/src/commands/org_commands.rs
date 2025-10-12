@@ -1,5 +1,5 @@
 use crate::services::{
-    channel_service::{Channel, ChannelService, Message, Thread},
+    channel_service::{AppliedDiffResult, Channel, ChannelService, Message, Thread},
     issue_service::{Issue, IssueComment, IssuePriority, IssueService, IssueStatus, Project},
 };
 use serde::{Deserialize, Serialize};
@@ -434,6 +434,46 @@ pub async fn apply_issue_sync_update(
     state
         .issue_service
         .apply_issue_update(&issue_id, &update)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+// === Phase 3: Efficient Channel Sync Commands (State Vector Protocol) ===
+
+#[tauri::command]
+pub async fn get_channel_state_vector(
+    channel_id: String,
+    state: State<'_, OrgState>,
+) -> Result<Vec<u8>, String> {
+    state
+        .channel_service
+        .get_channel_state_vector(&channel_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_channel_diff(
+    channel_id: String,
+    remote_state_vector: Vec<u8>,
+    state: State<'_, OrgState>,
+) -> Result<Vec<u8>, String> {
+    state
+        .channel_service
+        .get_channel_diff(&channel_id, &remote_state_vector)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn apply_channel_diff(
+    channel_id: String,
+    diff: Vec<u8>,
+    state: State<'_, OrgState>,
+) -> Result<AppliedDiffResult, String> {
+    state
+        .channel_service
+        .apply_channel_diff(&channel_id, &diff)
         .await
         .map_err(|e| e.to_string())
 }

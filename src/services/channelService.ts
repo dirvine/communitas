@@ -6,6 +6,7 @@ import type {
   CreateChannelRequest,
   SendMessageRequest,
   ChannelMember,
+  AppliedDiffResult,
 } from '../types/channels';
 
 /**
@@ -75,12 +76,58 @@ export class ChannelService {
 
   // === Sync Operations ===
 
+  /**
+   * Get full CRDT update (old sync protocol)
+   * @deprecated Use Phase 3 state vector methods for efficiency
+   */
   async getSyncUpdate(channelId: string): Promise<Uint8Array> {
     return invoke<Uint8Array>('get_channel_sync_update', { channelId });
   }
 
+  /**
+   * Apply full CRDT update (old sync protocol)
+   * @deprecated Use Phase 3 diff-based sync for efficiency
+   */
   async applySyncUpdate(channelId: string, update: Uint8Array): Promise<void> {
     return invoke<void>('apply_channel_sync_update', { channelId, update });
+  }
+
+  // === Phase 3: Efficient Sync (State Vector Protocol) ===
+
+  /**
+   * Get current CRDT state vector for a channel
+   * Peers exchange state vectors to determine what updates are missing
+   */
+  async getChannelStateVector(channelId: string): Promise<Uint8Array> {
+    return invoke<Uint8Array>('get_channel_state_vector', { channelId });
+  }
+
+  /**
+   * Get CRDT diff containing only updates missing from remote state vector
+   * This is the core of efficient sync - only transmit what's needed
+   */
+  async getChannelDiff(
+    channelId: string,
+    remoteStateVector: Uint8Array
+  ): Promise<Uint8Array> {
+    return invoke<Uint8Array>('get_channel_diff', {
+      channelId,
+      remoteStateVector,
+    });
+  }
+
+  /**
+   * Apply CRDT diff from another peer
+   * Returns count of messages updated/materialized
+   */
+  async applyChannelDiff(
+    channelId: string,
+    diff: Uint8Array
+  ): Promise<AppliedDiffResult> {
+    return invoke<AppliedDiffResult>('apply_channel_diff', {
+      channelId,
+      diff,
+    });
   }
 }
 

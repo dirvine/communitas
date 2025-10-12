@@ -48,11 +48,12 @@ jobs:
             const version = '${{ steps.get-version.outputs.version }}'
             const releaseBody = '## Headless Binaries Release\n\n' +
               '### Available Downloads\n' +
-              '- **Linux x86_64**: communitas-headless-x86_64-unknown-linux-gnu.tar.gz\n' +
-              '- **macOS Universal**: communitas-headless-macos-universal.tar.gz\n' +
-              '- **Windows x86_64**: communitas-headless-windows-x86_64.zip\n\n' +
+              '- **Linux x86_64**: communitas-headless-x86_64-unknown-linux-gnu.tar.gz, communitas-tui-x86_64-unknown-linux-gnu.tar.gz\n' +
+              '- **macOS Universal**: communitas-headless-macos-universal.tar.gz, communitas-tui-macos-universal.tar.gz\n' +
+              '- **Windows x86_64**: communitas-headless-windows-x86_64.zip, communitas-tui-windows-x86_64.zip\n\n' +
               '### Binaries Included\n' +
-              '- communitas-headless (headless P2P node with built-in auto-update)\n\n' +
+              '- communitas-headless (headless P2P node with built-in auto-update)\n' +
+              '- communitas-tui (Terminal UI for testing backend features)\n\n' +
               '### Installation\n' +
               'Extract the archive and run the binaries directly. No additional dependencies required.'
 
@@ -95,25 +96,30 @@ jobs:
             target
           key: linux-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Build binaries (headless only)
+      - name: Build binaries (headless and TUI)
         run: |
-          COMMUNITAS_SKIP_TAURI_BUILD=1 cargo build --release --no-default-features --bin communitas-headless
+          COMMUNITAS_SKIP_TAURI_BUILD=1 cargo build --release --no-default-features --bin communitas-headless --bin communitas-tui
 
       - name: Strip binaries
         run: |
           strip target/release/communitas-headless || true
+          strip target/release/communitas-tui || true
 
-      - name: Create archive (Linux target triple)
+      - name: Create archives (Linux target triple)
         run: |
           cd target/release
           tar -czf communitas-headless-x86_64-unknown-linux-gnu.tar.gz \
             communitas-headless
+          tar -czf communitas-tui-x86_64-unknown-linux-gnu.tar.gz \
+            communitas-tui
 
       - name: Upload to release (Linux)
         if: env.ACT != 'true'
         uses: softprops/action-gh-release@v1
         with:
-          files: target/release/communitas-headless-x86_64-unknown-linux-gnu.tar.gz
+          files: |
+            target/release/communitas-headless-x86_64-unknown-linux-gnu.tar.gz
+            target/release/communitas-tui-x86_64-unknown-linux-gnu.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GH_RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
 
@@ -131,31 +137,36 @@ jobs:
         with:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
 
-      - name: Build x86_64 binaries (headless only)
+      - name: Build x86_64 binaries (headless and TUI)
         run: |
-          COMMUNITAS_SKIP_TAURI_BUILD=1 cargo build --release --no-default-features --target x86_64-apple-darwin --bin communitas-headless
+          COMMUNITAS_SKIP_TAURI_BUILD=1 cargo build --release --no-default-features --target x86_64-apple-darwin --bin communitas-headless --bin communitas-tui
 
-      - name: Build aarch64 binaries (headless only)
+      - name: Build aarch64 binaries (headless and TUI)
         run: |
-          COMMUNITAS_SKIP_TAURI_BUILD=1 cargo build --release --no-default-features --target aarch64-apple-darwin --bin communitas-headless
+          COMMUNITAS_SKIP_TAURI_BUILD=1 cargo build --release --no-default-features --target aarch64-apple-darwin --bin communitas-headless --bin communitas-tui
 
       - name: Create universal binaries
         run: |
           cd target
           mkdir -p universal-apple-darwin
           lipo x86_64-apple-darwin/release/communitas-headless aarch64-apple-darwin/release/communitas-headless -create -output universal-apple-darwin/communitas-headless
+          lipo x86_64-apple-darwin/release/communitas-tui aarch64-apple-darwin/release/communitas-tui -create -output universal-apple-darwin/communitas-tui
 
-      - name: Create archive
+      - name: Create archives
         run: |
           cd target/universal-apple-darwin
           tar -czf communitas-headless-macos-universal.tar.gz \
             communitas-headless
+          tar -czf communitas-tui-macos-universal.tar.gz \
+            communitas-tui
 
       - name: Upload to release
         if: env.ACT != 'true'
         uses: softprops/action-gh-release@v1
         with:
-          files: target/universal-apple-darwin/communitas-headless-macos-universal.tar.gz
+          files: |
+            target/universal-apple-darwin/communitas-headless-macos-universal.tar.gz
+            target/universal-apple-darwin/communitas-tui-macos-universal.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GH_RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
 
@@ -171,22 +182,25 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Build binaries (headless only)
+      - name: Build binaries (headless and TUI)
         shell: pwsh
         run: |
           $env:COMMUNITAS_SKIP_TAURI_BUILD = '1'
-          cargo build --release --no-default-features --bin communitas-headless
+          cargo build --release --no-default-features --bin communitas-headless --bin communitas-tui
 
-      - name: Create archive
+      - name: Create archives
         run: |
           cd target/release
           Compress-Archive -Path communitas-headless.exe -DestinationPath communitas-headless-windows-x86_64.zip
+          Compress-Archive -Path communitas-tui.exe -DestinationPath communitas-tui-windows-x86_64.zip
 
       - name: Upload to release
         if: env.ACT != 'true'
         uses: softprops/action-gh-release@v1
         with:
-          files: target/release/communitas-headless-windows-x86_64.zip
+          files: |
+            target/release/communitas-headless-windows-x86_64.zip
+            target/release/communitas-tui-windows-x86_64.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GH_RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
 

@@ -664,6 +664,8 @@ impl ChannelService {
 
     /// Get the current state vector for a channel's CRDT document
     /// Used by peers to request only missing updates
+    /// TODO: Wire up to Tauri command in message_sync_commands.rs
+    #[allow(dead_code)]
     pub async fn get_channel_state_vector(&self, channel_id: &str) -> Result<Vec<u8>> {
         use yrs::updates::encoder::Encode;
 
@@ -674,6 +676,8 @@ impl ChannelService {
 
     /// Generate a diff (update) containing only changes not in the remote state vector
     /// This is the core of efficient CRDT synchronization - only send what's missing
+    /// TODO: Wire up to Tauri command in message_sync_commands.rs
+    #[allow(dead_code)]
     pub async fn get_channel_diff(
         &self,
         channel_id: &str,
@@ -694,6 +698,8 @@ impl ChannelService {
 
     /// Apply an incoming diff (update) from another peer
     /// Merges remote changes into our local CRDT, then re-materializes to SQL
+    /// TODO: Wire up to Tauri command in message_sync_commands.rs
+    #[allow(dead_code)]
     pub async fn apply_channel_diff(
         &self,
         channel_id: &str,

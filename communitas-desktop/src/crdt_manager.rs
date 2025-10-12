@@ -267,6 +267,7 @@ impl CrdtManager {
     }
 
     /// Get a Map from a document, creating it if it doesn't exist
+    #[allow(dead_code)]
     pub fn get_or_create_map<'a>(doc: &'a Doc, name: &str) -> MapRef {
         doc.get_or_insert_map(name)
     }
@@ -289,21 +290,25 @@ impl CrdtManager {
     }
 
     /// Check if a Map contains a key
+    #[allow(dead_code)]
     pub fn map_contains_key(map: &MapRef, txn: &impl ReadTxn, key: &str) -> bool {
         map.contains_key(txn, key)
     }
 
     /// Get all keys from a Map
+    #[allow(dead_code)]
     pub fn get_map_keys(map: &MapRef, txn: &impl ReadTxn) -> Vec<String> {
         map.keys(txn).map(|k| k.to_string()).collect()
     }
 
     /// Remove a key from a Map (for tombstone deletion, prefer marking deleted=true)
+    #[allow(dead_code)]
     pub fn remove_map_key(map: &MapRef, txn: &mut yrs::TransactionMut, key: &str) {
         map.remove(txn, key);
     }
 
     /// Materialize a Map to SQL (template method, to be implemented per entity type)
+    #[allow(dead_code)]
     pub async fn materialize_to_sql(
         &self,
         _doc: &Doc,

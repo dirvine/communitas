@@ -1,6 +1,8 @@
 use thiserror::Error;
 
 /// Errors that can occur during CRDT operations
+/// Some variants are infrastructure for future use
+#[allow(dead_code)]
 #[derive(Error, Debug)]
 pub enum CrdtError {
     /// Database connection or query failed
@@ -65,11 +67,13 @@ pub type CrdtResult<T> = Result<T, CrdtError>;
 
 impl CrdtError {
     /// Create a new encoding error
+    #[allow(dead_code)]
     pub fn encoding_error(msg: impl Into<String>) -> Self {
         Self::Encoding(msg.into())
     }
 
     /// Create a new materialization error
+    #[allow(dead_code)]
     pub fn materialization_failed(
         entity_type: impl Into<String>,
         entity_id: impl Into<String>,
@@ -83,6 +87,7 @@ impl CrdtError {
     }
 
     /// Create a new map operation error
+    #[allow(dead_code)]
     pub fn map_operation(key: impl Into<String>, reason: impl Into<String>) -> Self {
         Self::MapOperation {
             key: key.into(),
@@ -91,6 +96,7 @@ impl CrdtError {
     }
 
     /// Create a new type mismatch error
+    #[allow(dead_code)]
     pub fn type_mismatch(
         key: impl Into<String>,
         expected: impl Into<String>,

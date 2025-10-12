@@ -256,8 +256,10 @@ pub struct IntroducerConfig {
 impl Default for IntroducerConfig {
     fn default() -> Self {
         Self {
-            // TODO: Replace with actual production introducers
-            addresses: vec![],
+            // Production bootstrap node
+            addresses: vec![
+                "138.197.29.195:8080".to_string(), // NYC bootstrap node
+            ],
             timeout_secs: 10,
         }
     }

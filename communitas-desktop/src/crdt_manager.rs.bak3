@@ -2,7 +2,7 @@ use crate::crdt_error::{CrdtError, CrdtResult};
 use chrono::Utc;
 use libsql::{Builder, Connection, Database, params};
 use std::path::Path;
-use yrs::{Any, Doc, Map, MapRef, ReadTxn, Transact};
+use yrs::{Doc, Map, MapRef, ReadTxn, Transact, Any};
 
 /// Manages CRDT documents with Turso (libSQL) persistence
 pub struct CrdtManager {
@@ -20,18 +20,6 @@ impl CrdtManager {
         // Initialize schema - execute each statement separately
         let schema = include_str!("schema.sql");
         let conn = db.connect().map_err(CrdtError::Database)?;
-
-        // Enable WAL mode for better concurrency (must use query, not execute, as it returns rows)
-        let _ = conn
-            .query("PRAGMA journal_mode=WAL", ())
-            .await
-            .map_err(|e| CrdtError::SchemaInit(format!("WAL mode failed: {}", e)))?;
-
-        // Set busy timeout for better handling of locked databases in tests
-        let _ = conn
-            .query("PRAGMA busy_timeout=5000", ())
-            .await
-            .map_err(|e| CrdtError::SchemaInit(format!("busy_timeout failed: {}", e)))?;
 
         // Split schema by semicolons and execute each statement
         for statement in schema.split(';').filter(|s| !s.trim().is_empty()) {
@@ -66,7 +54,7 @@ impl CrdtManager {
                 params![doc_id, entity_type, entity_id, state, version, now],
             )
             .await
-            .map_err(CrdtError::Database)?;
+            .context("Failed to save CRDT document")?;
 
         Ok(())
     }
@@ -80,7 +68,7 @@ impl CrdtManager {
                 params![doc_id],
             )
             .await
-            .map_err(CrdtError::Database)?;
+            .context("Failed to query CRDT document")?;
 
         if let Some(row) = rows.next().await? {
             let state: Vec<u8> = row.get(0)?;
@@ -89,8 +77,8 @@ impl CrdtManager {
                 let mut txn = doc.transact_mut();
                 // Decode and apply update using correct API
                 use yrs::updates::decoder::Decode;
-                let update = yrs::Update::decode_v1(&state)
-                    .map_err(|e| CrdtError::encoding_error(e.to_string()))?;
+                let update =
+                    yrs::Update::decode_v1(&state).context("Failed to decode Yrs state")?;
                 txn.apply_update(update);
             }
             Ok(doc)
@@ -109,7 +97,7 @@ impl CrdtManager {
                 params![doc_id],
             )
             .await
-            .map_err(CrdtError::Database)?;
+            .context("Failed to check document existence")?;
 
         if let Some(row) = rows.next().await? {
             let count: i64 = row.get(0)?;
@@ -131,8 +119,8 @@ impl CrdtManager {
         {
             let mut txn = doc.transact_mut();
             use yrs::updates::decoder::Decode;
-            let decoded_update = yrs::Update::decode_v1(update)
-                .map_err(|e| CrdtError::encoding_error(e.to_string()))?;
+            let decoded_update =
+                yrs::Update::decode_v1(update).context("Failed to decode update")?;
             txn.apply_update(decoded_update);
         }
         self.save_document(doc_id, entity_type, entity_id, &doc)
@@ -150,11 +138,7 @@ impl CrdtManager {
     }
 
     /// Get the difference between two state vectors (for sync)
-    pub async fn _get_diff(
-        &self,
-        doc_id: &str,
-        remote_sv: &yrs::StateVector,
-    ) -> CrdtResult<Vec<u8>> {
+    pub async fn _get_diff(&self, doc_id: &str, remote_sv: &yrs::StateVector) -> CrdtResult<Vec<u8>> {
         let doc = self.load_document(doc_id).await?;
         let update = {
             let txn = doc.transact();
@@ -172,7 +156,7 @@ impl CrdtManager {
                 params![entity_type],
             )
             .await
-            .map_err(CrdtError::Database)?;
+            .context("Failed to list documents")?;
 
         let mut ids = Vec::new();
         while let Some(row) = rows.next().await? {
@@ -188,13 +172,15 @@ impl CrdtManager {
         let conn = self.db.connect()?;
         conn.execute("DELETE FROM crdt_documents WHERE id = ?", params![doc_id])
             .await
-            .map_err(CrdtError::Database)?;
+            .context("Failed to delete CRDT document")?;
         Ok(())
     }
 
     /// Get database connection for custom queries
     pub fn connection(&self) -> CrdtResult<Connection> {
-        self.db.connect().map_err(CrdtError::Database)
+        self.db
+            .connect()
+            .context("Failed to get database connection")
     }
 
     // =========================================================================
@@ -213,8 +199,6 @@ impl CrdtManager {
     pub fn get_map_i64(map: &MapRef, txn: &impl ReadTxn, key: &str) -> Option<i64> {
         map.get(txn, key).and_then(|v| match v {
             yrs::types::Value::Any(Any::BigInt(n)) => Some(n),
-            // Handle Number type that gets stored when inserting i64 without explicit wrapper
-            yrs::types::Value::Any(Any::Number(n)) => Some(n as i64),
             _ => None,
         })
     }
@@ -228,7 +212,11 @@ impl CrdtManager {
     }
 
     /// Get a nested Map from a Map
-    pub fn get_nested_map<'a>(map: &'a MapRef, txn: &impl ReadTxn, key: &str) -> Option<MapRef> {
+    pub fn get_nested_map<'a>(
+        map: &'a MapRef,
+        txn: &impl ReadTxn,
+        key: &str,
+    ) -> Option<MapRef> {
         map.get(txn, key).and_then(|v| match v {
             yrs::types::Value::YMap(m) => Some(m),
             _ => None,
@@ -252,8 +240,7 @@ impl CrdtManager {
         key: impl Into<String>,
         value: i64,
     ) {
-        // Explicitly wrap in BigInt to avoid automatic conversion to Number (float)
-        map.insert(txn, key.into(), Any::BigInt(value));
+        map.insert(txn, key.into(), value);
     }
 
     /// Insert or update a bool field in a Map
@@ -404,77 +391,5 @@ mod tests {
             .unwrap();
 
         assert!(manager._document_exists("exists").await.unwrap());
-    }
-
-    #[tokio::test]
-    async fn test_map_of_maps_write_and_read() {
-        // Test that we can write to nested Maps and read the data back
-        let dir = tempdir().unwrap();
-        let db_path = dir.path().join("test.db");
-        let manager = CrdtManager::new(&db_path).await.unwrap();
-
-        // Create a document with nested Maps structure
-        let doc = Doc::new();
-
-        // Get top-level Map
-        let messages = doc.get_or_insert_map("messages");
-
-        // Create nested Map and add fields
-        {
-            let mut txn = doc.transact_mut();
-            let msg_map = CrdtManager::get_or_create_nested_map(&messages, &mut txn, "msg-1");
-
-            CrdtManager::set_map_string(&msg_map, &mut txn, "id", "msg-1");
-            CrdtManager::set_map_string(&msg_map, &mut txn, "content", "Hello");
-            CrdtManager::set_map_i64(&msg_map, &mut txn, "created_at", 123456);
-            CrdtManager::set_map_bool(&msg_map, &mut txn, "deleted", false);
-        } // Transaction commits here
-
-        // Save document
-        manager
-            .save_document("test-doc", "test", "1", &doc)
-            .await
-            .unwrap();
-
-        // Read back from the SAME document (in memory)
-        let messages = doc.get_or_insert_map("messages");
-        {
-            let txn = doc.transact();
-            let msg_map =
-                CrdtManager::get_nested_map(&messages, &txn, "msg-1").expect("Should find msg-1");
-
-            let id = CrdtManager::get_map_string(&msg_map, &txn, "id").expect("Should have id");
-            let content = CrdtManager::get_map_string(&msg_map, &txn, "content")
-                .expect("Should have content");
-            let created_at = CrdtManager::get_map_i64(&msg_map, &txn, "created_at")
-                .expect("Should have created_at");
-            let deleted =
-                CrdtManager::get_map_bool(&msg_map, &txn, "deleted").expect("Should have deleted");
-
-            assert_eq!(id, "msg-1");
-            assert_eq!(content, "Hello");
-            assert_eq!(created_at, 123456);
-            assert_eq!(deleted, false);
-        }
-
-        // Load from database and read again
-        let loaded_doc = manager.load_document("test-doc").await.unwrap();
-        let loaded_messages = loaded_doc.get_or_insert_map("messages");
-        {
-            let txn = loaded_doc.transact();
-            let msg_map = CrdtManager::get_nested_map(&loaded_messages, &txn, "msg-1")
-                .expect("Should find msg-1 after reload");
-
-            let id = CrdtManager::get_map_string(&msg_map, &txn, "id")
-                .expect("Should have id after reload");
-            let content = CrdtManager::get_map_string(&msg_map, &txn, "content")
-                .expect("Should have content after reload");
-            let created_at = CrdtManager::get_map_i64(&msg_map, &txn, "created_at")
-                .expect("Should have created_at after reload");
-
-            assert_eq!(id, "msg-1");
-            assert_eq!(content, "Hello");
-            assert_eq!(created_at, 123456);
-        }
     }
 }

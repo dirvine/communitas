@@ -22,9 +22,9 @@ use crate::identity_to_seed;
 use crate::message_sync::MessageSyncService;
 use crate::types::{DeviceType, UserProfile};
 use fips204::traits::{SerDes, Signer, Verifier};
-use rand_chacha::rand_core::SeedableRng;
 use rand_chacha::ChaCha8Rng;
-use saorsa_pqc::ml_dsa_87::{try_keygen_with_rng, PrivateKey, PublicKey};
+use rand_chacha::rand_core::SeedableRng;
+use saorsa_pqc::ml_dsa_87::{PrivateKey, PublicKey, try_keygen_with_rng};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -241,7 +241,10 @@ impl CoreContext {
     ///
     /// # Returns
     /// Connection identity (four-word encoded address)
-    pub async fn start_networking(&mut self, preferred_port: Option<u16>) -> Result<String, String> {
+    pub async fn start_networking(
+        &mut self,
+        preferred_port: Option<u16>,
+    ) -> Result<String, String> {
         info!("Starting gossip networking for {}", self.four_words);
 
         // Allocate UDP port using PortManager
@@ -267,8 +270,8 @@ impl CoreContext {
         .map_err(|e| format!("Failed to initialize gossip: {}", e))?;
 
         // Build listen address
-        let local_ip = local_ip_address::local_ip()
-            .map_err(|e| format!("Failed to get local IP: {}", e))?;
+        let local_ip =
+            local_ip_address::local_ip().map_err(|e| format!("Failed to get local IP: {}", e))?;
 
         let listen_addr = std::net::SocketAddr::new(local_ip, listen_port);
 
@@ -367,7 +370,7 @@ impl CoreContext {
     /// Returns error if signing fails
     pub fn sign(&self, message: &[u8]) -> Result<[u8; 4627], String> {
         self.signing_key
-            .try_sign(message, &[])  // Empty context
+            .try_sign(message, &[]) // Empty context
             .map_err(|e| format!("ML-DSA-87 signing failed: {}", e))
     }
 
@@ -380,7 +383,7 @@ impl CoreContext {
     /// # Returns
     /// true if signature is valid, false otherwise
     pub fn verify(&self, message: &[u8], signature: &[u8; 4627]) -> bool {
-        self.public_key.verify(message, signature, &[])  // Empty context, returns bool directly
+        self.public_key.verify(message, signature, &[]) // Empty context, returns bool directly
     }
 
     /// Get the storage directory for this profile
@@ -459,9 +462,7 @@ mod tests {
         .await;
 
         assert!(context.is_err());
-        assert!(context
-            .unwrap_err()
-            .contains("Invalid four-word format"));
+        assert!(context.unwrap_err().contains("Invalid four-word format"));
     }
 
     #[tokio::test]

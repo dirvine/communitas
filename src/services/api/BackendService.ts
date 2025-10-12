@@ -192,10 +192,18 @@ class BackendService {
     if (isTauri()) {
       try {
         if (entityType === 'channel') {
-          return await invoke('core_send_message_to_channel', {
-            channel_id: entityId,
-            text: content,
-            reply_to_id: replyToId,
+          // Get current user identity for author_id
+          const identity = await invoke('gossip_get_own_identity') as { four_words: string; public_key: string };
+          const authorId = identity.public_key; // Use public key as author_id
+
+          // Use working send_message command from org_commands.rs
+          return await invoke('send_message', {
+            request: {
+              channel_id: entityId,
+              author_id: authorId,
+              content: content,
+              thread_id: replyToId || null, // reply_to_id becomes thread_id
+            },
           });
         }
 

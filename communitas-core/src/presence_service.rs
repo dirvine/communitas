@@ -10,8 +10,8 @@
 use anyhow::{Context, Result};
 use bytes::Bytes;
 use chacha20poly1305::{
-    aead::{Aead, KeyInit},
     ChaCha20Poly1305, Nonce,
+    aead::{Aead, KeyInit},
 };
 use chrono::{DateTime, Utc};
 use saorsa_gossip_pubsub::PubSub;
@@ -86,8 +86,7 @@ impl PresenceBeacon {
         let cipher = ChaCha20Poly1305::new(key.into());
 
         // Serialize beacon
-        let plaintext = bincode::serialize(self)
-            .context("Failed to serialize beacon")?;
+        let plaintext = bincode::serialize(self).context("Failed to serialize beacon")?;
 
         // Encrypt with nonce
         let nonce = Nonce::from_slice(&self.nonce);
@@ -109,8 +108,8 @@ impl PresenceBeacon {
             .map_err(|e| anyhow::anyhow!("Decryption failed: {}", e))?;
 
         // Deserialize
-        let beacon: PresenceBeacon = bincode::deserialize(&plaintext)
-            .context("Failed to deserialize beacon")?;
+        let beacon: PresenceBeacon =
+            bincode::deserialize(&plaintext).context("Failed to deserialize beacon")?;
 
         Ok(beacon)
     }
@@ -500,7 +499,9 @@ mod tests {
         let pubsub: Arc<RwLock<Box<dyn PubSub>>> = Arc::new(RwLock::new(Box::new(
             saorsa_gossip_pubsub::PlumtreePubSub::new(
                 peer_id,
-                Arc::new(saorsa_gossip_transport::QuicTransport::new(Default::default())),
+                Arc::new(saorsa_gossip_transport::QuicTransport::new(
+                    Default::default(),
+                )),
                 keypair,
             ),
         )));
@@ -524,7 +525,9 @@ mod tests {
         let pubsub: Arc<RwLock<Box<dyn PubSub>>> = Arc::new(RwLock::new(Box::new(
             saorsa_gossip_pubsub::PlumtreePubSub::new(
                 peer_id,
-                Arc::new(saorsa_gossip_transport::QuicTransport::new(Default::default())),
+                Arc::new(saorsa_gossip_transport::QuicTransport::new(
+                    Default::default(),
+                )),
                 keypair,
             ),
         )));
@@ -568,7 +571,9 @@ mod tests {
         let pubsub: Arc<RwLock<Box<dyn PubSub>>> = Arc::new(RwLock::new(Box::new(
             saorsa_gossip_pubsub::PlumtreePubSub::new(
                 peer_id,
-                Arc::new(saorsa_gossip_transport::QuicTransport::new(Default::default())),
+                Arc::new(saorsa_gossip_transport::QuicTransport::new(
+                    Default::default(),
+                )),
                 keypair,
             ),
         )));
@@ -621,7 +626,9 @@ mod tests {
         let pubsub: Arc<RwLock<Box<dyn PubSub>>> = Arc::new(RwLock::new(Box::new(
             saorsa_gossip_pubsub::PlumtreePubSub::new(
                 peer_id,
-                Arc::new(saorsa_gossip_transport::QuicTransport::new(Default::default())),
+                Arc::new(saorsa_gossip_transport::QuicTransport::new(
+                    Default::default(),
+                )),
                 keypair,
             ),
         )));

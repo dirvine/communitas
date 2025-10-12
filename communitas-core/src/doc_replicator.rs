@@ -19,17 +19,21 @@
 //!
 //! Uses Yrs (Rust implementation of Yjs) for conflict-free collaborative editing.
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use chacha20poly1305::{
-    aead::{Aead, KeyInit},
     ChaCha20Poly1305, Nonce,
+    aead::{Aead, KeyInit},
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tokio::sync::RwLock;
 use tracing::{debug, info};
-use yrs::{updates::decoder::Decode, updates::encoder::{Encoder, EncoderV1}, Doc, GetString, ReadTxn, StateVector, Text, Transact, Update};
+use yrs::{
+    Doc, GetString, ReadTxn, StateVector, Text, Transact, Update,
+    updates::decoder::Decode,
+    updates::encoder::{Encoder, EncoderV1},
+};
 
 /// Document identifier (unique ID for each document)
 pub type DocumentId = String;
@@ -142,7 +146,10 @@ impl DocReplicator {
 
         let now = chrono::Utc::now();
 
-        debug!("Creating document '{}' with ID {} and mode {:?}", name, doc_id, storage_mode);
+        debug!(
+            "Creating document '{}' with ID {} and mode {:?}",
+            name, doc_id, storage_mode
+        );
 
         debug!("Step 1: Creating Yrs Doc");
         // Create Yrs document
@@ -215,7 +222,9 @@ impl DocReplicator {
 
         // Wrap blocking Yrs operation in spawn_blocking
         tokio::task::spawn_blocking(move || {
-            let doc = doc_clone.lock().map_err(|e| anyhow!("Mutex lock failed: {}", e))?;
+            let doc = doc_clone
+                .lock()
+                .map_err(|e| anyhow!("Mutex lock failed: {}", e))?;
 
             // Get or create text object from Doc
             let ytext = doc.get_or_insert_text("content");
@@ -249,7 +258,9 @@ impl DocReplicator {
 
         // Wrap blocking Yrs operation in spawn_blocking
         let actual_len = tokio::task::spawn_blocking(move || {
-            let doc = doc_clone.lock().map_err(|e| anyhow!("Mutex lock failed: {}", e))?;
+            let doc = doc_clone
+                .lock()
+                .map_err(|e| anyhow!("Mutex lock failed: {}", e))?;
 
             // Get or create text object from Doc
             let ytext = doc.get_or_insert_text("content");
@@ -279,7 +290,10 @@ impl DocReplicator {
         // Update storage
         self.update_storage(doc_id).await?;
 
-        debug!("Deleted {} chars at position {} in {}", actual_len, index, doc_id);
+        debug!(
+            "Deleted {} chars at position {} in {}",
+            actual_len, index, doc_id
+        );
 
         Ok(())
     }
@@ -296,7 +310,9 @@ impl DocReplicator {
 
         // Wrap blocking Yrs operation in spawn_blocking
         let text = tokio::task::spawn_blocking(move || {
-            let doc = doc_clone.lock().map_err(|e| anyhow!("Mutex lock failed: {}", e))?;
+            let doc = doc_clone
+                .lock()
+                .map_err(|e| anyhow!("Mutex lock failed: {}", e))?;
 
             // Get or create text object from Doc
             let ytext = doc.get_or_insert_text("content");
@@ -326,7 +342,9 @@ impl DocReplicator {
 
         // Wrap blocking Yrs operation in spawn_blocking
         let update = tokio::task::spawn_blocking(move || {
-            let doc = doc_clone.lock().map_err(|e| anyhow!("Mutex lock failed: {}", e))?;
+            let doc = doc_clone
+                .lock()
+                .map_err(|e| anyhow!("Mutex lock failed: {}", e))?;
             let txn = doc.transact();
 
             // Use empty state vector to encode ALL changes from the beginning
@@ -364,7 +382,9 @@ impl DocReplicator {
 
         // Wrap blocking Yrs operation in spawn_blocking
         tokio::task::spawn_blocking(move || {
-            let doc = doc_clone.lock().map_err(|e| anyhow!("Mutex lock failed: {}", e))?;
+            let doc = doc_clone
+                .lock()
+                .map_err(|e| anyhow!("Mutex lock failed: {}", e))?;
             let mut txn = doc.transact_mut();
 
             let update_obj = Update::decode_v1(&update_owned)
@@ -387,11 +407,7 @@ impl DocReplicator {
     }
 
     /// Internal: Create document with specific ID (for CRDT sync)
-    async fn create_document_with_id(
-        &self,
-        doc_id: &str,
-        storage_mode: StorageMode,
-    ) -> Result<()> {
+    async fn create_document_with_id(&self, doc_id: &str, storage_mode: StorageMode) -> Result<()> {
         let now = chrono::Utc::now();
 
         // Generate default encryption key if needed
@@ -399,17 +415,17 @@ impl DocReplicator {
         getrandom::getrandom(&mut default_key)
             .map_err(|e| anyhow!("Failed to generate key: {}", e))?;
 
-        debug!("Creating document with ID '{}' and mode {:?}", doc_id, storage_mode);
+        debug!(
+            "Creating document with ID '{}' and mode {:?}",
+            doc_id, storage_mode
+        );
 
         // Create Yrs document
         let doc = Doc::new();
         let doc = Arc::new(Mutex::new(doc));
 
         // Store document
-        self.documents
-            .write()
-            .await
-            .insert(doc_id.to_string(), doc);
+        self.documents.write().await.insert(doc_id.to_string(), doc);
 
         // Store metadata
         let meta = DocumentMetadata {
@@ -419,10 +435,7 @@ impl DocReplicator {
             created_at: now,
             updated_at: now,
         };
-        self.metadata
-            .write()
-            .await
-            .insert(doc_id.to_string(), meta);
+        self.metadata.write().await.insert(doc_id.to_string(), meta);
 
         // Store encryption key if Files storage
         if storage_mode == StorageMode::Files || storage_mode == StorageMode::Both {
@@ -460,8 +473,8 @@ impl DocReplicator {
             None => return Ok(None),
         };
 
-        let blob = bincode::serialize(encrypted)
-            .map_err(|e| anyhow!("Serialization failed: {}", e))?;
+        let blob =
+            bincode::serialize(encrypted).map_err(|e| anyhow!("Serialization failed: {}", e))?;
 
         Ok(Some(blob))
     }
@@ -592,9 +605,13 @@ impl DocReplicator {
         }
 
         // Update timestamp
-        self.metadata.write().await.entry(doc_id.to_string()).and_modify(|m| {
-            m.updated_at = chrono::Utc::now();
-        });
+        self.metadata
+            .write()
+            .await
+            .entry(doc_id.to_string())
+            .and_modify(|m| {
+                m.updated_at = chrono::Utc::now();
+            });
 
         Ok(())
     }
@@ -603,7 +620,10 @@ impl DocReplicator {
     pub async fn list_documents(&self) -> Result<Vec<String>> {
         debug!("list_documents: About to acquire read lock");
         let documents = self.documents.read().await;
-        debug!("list_documents: Acquired read lock, found {} documents", documents.len());
+        debug!(
+            "list_documents: Acquired read lock, found {} documents",
+            documents.len()
+        );
         let keys: Vec<String> = documents.keys().cloned().collect();
         debug!("list_documents: Collected keys");
         Ok(keys)
@@ -656,10 +676,7 @@ mod tests {
             .await
             .expect("create doc");
 
-        let doc = replicator
-            .get_document(&doc_id)
-            .await
-            .expect("get doc");
+        let doc = replicator.get_document(&doc_id).await.expect("get doc");
 
         assert!(doc.is_some());
     }

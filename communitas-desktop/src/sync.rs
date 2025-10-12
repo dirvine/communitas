@@ -12,9 +12,9 @@ use tokio::sync::RwLock;
 
 #[derive(Default, Serialize, Deserialize)]
 pub struct TipWatcherState {
-    handle: Option<String>, // Placeholder - was JoinHandle
+    handle: Option<String>,    // Placeholder - was JoinHandle
     cancel_tx: Option<String>, // Placeholder - was oneshot::Sender
-    last_tip: Option<String>, // Placeholder - was Tip
+    last_tip: Option<String>,  // Placeholder - was Tip
 }
 
 #[tauri::command]

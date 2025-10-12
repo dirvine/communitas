@@ -106,9 +106,11 @@ export const useDHTSync = ({
     }
 
     try {
-      await invoke('subscribe_to_entity', {
+      // Use working gossip_subscribe_to_entity command
+      // Note: entity_type should be derived from context (channel/project/group)
+      await invoke('gossip_subscribe_to_entity', {
         entity_id: entityId,
-        user_id: userId,
+        entity_type: 'channel', // Default to 'channel' - may need dynamic type detection
       });
 
       subscribedEntitiesRef.current.add(entityId);
@@ -137,9 +139,9 @@ export const useDHTSync = ({
     }
 
     try {
-      await invoke('unsubscribe_from_entity', {
+      // Use working gossip_leave_entity command
+      await invoke('gossip_leave_entity', {
         entity_id: entityId,
-        user_id: userId,
       });
 
       subscribedEntitiesRef.current.delete(entityId);

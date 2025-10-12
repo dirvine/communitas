@@ -741,7 +741,13 @@ mod tests {
         .expect("init");
 
         // Verify site_publisher and site_fetcher are initialized
-        assert!(ctx.site_publisher.is_some(), "SitePublisher should be initialized");
-        assert!(ctx.site_fetcher.is_some(), "SiteFetcher should be initialized");
+        assert!(
+            ctx.site_publisher.is_some(),
+            "SitePublisher should be initialized"
+        );
+        assert!(
+            ctx.site_fetcher.is_some(),
+            "SiteFetcher should be initialized"
+        );
     }
 }

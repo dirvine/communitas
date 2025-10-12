@@ -109,7 +109,8 @@ impl Backend {
         channel_id: String,
         text: String,
     ) -> Result<String> {
-        self.send_message(channel_id, EntityType::Channel, text).await
+        self.send_message(channel_id, EntityType::Channel, text)
+            .await
     }
 
     /// Send thread reply (compatibility method)
@@ -119,6 +120,7 @@ impl Backend {
         thread_id: String,
         text: String,
     ) -> Result<String> {
-        self.send_reply(channel_id, EntityType::Channel, thread_id, text).await
+        self.send_reply(channel_id, EntityType::Channel, thread_id, text)
+            .await
     }
 }

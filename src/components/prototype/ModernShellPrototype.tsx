@@ -1022,11 +1022,12 @@ export const ModernShellPrototypeScreen: React.FC = () => {
 
         while (retries > 0 && !userInfoRetrieved) {
           try {
-            const userInfo = await (window as any).__TAURI__.tauri.invoke('core_get_user_info') as { peerId: string; displayName: string }
-            if (userInfo && userInfo.peerId) {
-              testPeerId = userInfo.peerId
-              testDisplayName = userInfo.displayName || ''
-              console.log('✅ Got user info from Tauri backend:', { peerId: testPeerId, displayName: testDisplayName })
+            // Use working gossip_get_own_identity command
+            const identity = await (window as any).__TAURI__.tauri.invoke('gossip_get_own_identity') as { four_words: string; display_name: string; public_key: string }
+            if (identity && identity.four_words) {
+              testPeerId = identity.four_words // Use four-word address as peer ID
+              testDisplayName = identity.display_name || ''
+              console.log('✅ Got user identity from Tauri backend:', { fourWords: testPeerId, displayName: testDisplayName })
               userInfoRetrieved = true
             }
           } catch (err) {
@@ -1181,14 +1182,15 @@ export const ModernShellPrototypeScreen: React.FC = () => {
 
     if ((window as any).__TAURI__?.tauri?.invoke) {
       try {
-        await (window as any).__TAURI__.tauri.invoke('core_add_bootstrap_node', {
-          node: connectionWordsInput.trim()
+        // Use working gossip_add_bootstrap_peer command
+        await (window as any).__TAURI__.tauri.invoke('gossip_add_bootstrap_peer', {
+          multiaddr: connectionWordsInput.trim() // Expects multiaddr format
         })
-        console.log('✅ Added bootstrap node:', connectionWordsInput.trim())
+        console.log('✅ Added bootstrap peer:', connectionWordsInput.trim())
         setConnectionWordsInput('')
         setAddConnectionDialogOpen(false)
       } catch (err) {
-        console.error('❌ Failed to add bootstrap node:', err)
+        console.error('❌ Failed to add bootstrap peer:', err)
       }
     } else {
       console.log('📝 Would add connection:', connectionWordsInput.trim())
@@ -1204,6 +1206,10 @@ export const ModernShellPrototypeScreen: React.FC = () => {
     }
 
     if ((window as any).__TAURI__?.tauri?.invoke) {
+      // TODO: Implement update_profile command in org_commands.rs backend
+      console.warn('⚠️  Display name update not yet implemented in backend')
+      alert('Display name update not yet available - backend implementation pending')
+      /* DISABLED - Waiting for backend implementation
       try {
         await (window as any).__TAURI__.tauri.invoke('core_set_display_name', {
           displayName: displayNameInput.trim()
@@ -1216,6 +1222,9 @@ export const ModernShellPrototypeScreen: React.FC = () => {
       } catch (err) {
         console.error('❌ Failed to update display name:', err)
       }
+      */
+      setDisplayNameInput('')
+      setEditDisplayNameDialogOpen(false)
     } else {
       console.log('📝 Would update display name:', displayNameInput.trim())
       setOurDisplayName(displayNameInput.trim())
@@ -1897,6 +1906,10 @@ export const ModernShellPrototypeScreen: React.FC = () => {
   const handleSaveEntityEdit = async (id: string, updates: Partial<Conversation>) => {
     try {
       if (typeof window !== 'undefined' && '__TAURI__' in window) {
+        // TODO: Implement update_channel/update_project commands in org_commands.rs backend
+        console.warn('⚠️  Entity update not yet implemented in backend')
+        alert('Entity update not yet available - backend implementation pending')
+        /* DISABLED - Waiting for backend implementation
         const { invoke } = await import('@tauri-apps/api/core')
 
         // Find the entity type from the conversation
@@ -1910,6 +1923,7 @@ export const ModernShellPrototypeScreen: React.FC = () => {
         })
 
         console.log(`✅ Updated ${entityType}: ${updates.name}`)
+        */
       } else {
         console.log(`🔶 Browser mode: Would update entity ${id}`, updates)
       }
@@ -1925,6 +1939,10 @@ export const ModernShellPrototypeScreen: React.FC = () => {
   const handleConfirmEntityDelete = async (id: string) => {
     try {
       if (typeof window !== 'undefined' && '__TAURI__' in window) {
+        // TODO: Implement delete_channel/delete_project commands in org_commands.rs backend
+        console.warn('⚠️  Entity deletion not yet implemented in backend')
+        alert('Entity deletion not yet available - backend implementation pending')
+        /* DISABLED - Waiting for backend implementation
         const { invoke } = await import('@tauri-apps/api/core')
 
         // Find the entity type from the conversation
@@ -1936,6 +1954,7 @@ export const ModernShellPrototypeScreen: React.FC = () => {
         })
 
         console.log(`✅ Deleted ${entityType}: ${id}`)
+        */
       } else {
         console.log(`🔶 Browser mode: Would delete entity ${id}`)
       }

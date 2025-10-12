@@ -18,6 +18,7 @@ import {
   NetworkIdentity,
 } from '../types/collaboration';
 import { mockOrganizations, mockPersonalGroups, mockPersonalUsers } from '../data/mockCollaborationData';
+import { useAuth } from './AuthContext';
 import {
   CreateNewOrganizationInput,
   CreateNewGroupInput,
@@ -331,6 +332,7 @@ interface EntityDirectoryProviderProps {
 }
 
 export const EntityDirectoryProvider: React.FC<EntityDirectoryProviderProps> = ({ children }) => {
+  const { authState } = useAuth();
   const [state, setState] = useState<EntityDirectoryState>(() => {
     if (typeof window === 'undefined') {
       return createInitialState();
@@ -1717,11 +1719,23 @@ export const EntityDirectoryProvider: React.FC<EntityDirectoryProviderProps> = (
         case 'message': {
           // Send message via saorsa messaging
           const payload = entity as MessageOperationPayload;
+
+          // Get current user for author_id
+          if (!authState.user?.id) {
+            console.error('Cannot send message: No authenticated user');
+            return null;
+          }
+
           switch (payload.entityType) {
             case 'channel': {
-              await invoke('core_send_message_to_channel', {
-                channel_id: payload.entityId,
-                text: payload.content,
+              // Use working send_message command from org_commands.rs
+              await invoke('send_message', {
+                request: {
+                  channel_id: payload.entityId,
+                  author_id: authState.user.id,
+                  content: payload.content,
+                  thread_id: null, // null for main channel messages
+                },
               });
               return payload.id;
             }
@@ -1740,7 +1754,7 @@ export const EntityDirectoryProvider: React.FC<EntityDirectoryProviderProps> = (
       console.error(`Failed to sync ${entityType} to backend:`, error);
       throw error;
     }
-  }, []);
+  }, [authState]);
 
   // Conflict resolution strategies
   type ConflictResolution = 'local' | 'remote' | 'merge' | 'manual';

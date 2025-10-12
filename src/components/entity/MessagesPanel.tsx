@@ -44,6 +44,7 @@ import {
 } from '@mui/icons-material';
 import { invoke } from '@tauri-apps/api/core';
 import { format, isToday, isYesterday } from 'date-fns';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface Message {
   id: string;
@@ -89,6 +90,7 @@ const MessagesPanel: React.FC<MessagesPanelProps> = ({
   fourWords,
   permissions,
 }) => {
+  const { authState } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
@@ -131,14 +133,18 @@ const MessagesPanel: React.FC<MessagesPanelProps> = ({
 
   // Send message
   const sendMessage = async () => {
-    if (!newMessage.trim() || !canSend || sending) return;
+    if (!newMessage.trim() || !canSend || sending || !authState.user) return;
 
     setSending(true);
     try {
-      const message = await invoke('core_messages_send', {
-        entity_id: entityId,
-        content: newMessage.trim(),
-        encrypted: true,
+      // Use working send_message command from org_commands.rs
+      const message = await invoke('send_message', {
+        request: {
+          channel_id: entityId,
+          author_id: authState.user.id,
+          content: newMessage.trim(),
+          thread_id: null, // null for main channel messages
+        },
       });
 
       setMessages(prev => [...prev, message as Message]);
@@ -157,12 +163,15 @@ const MessagesPanel: React.FC<MessagesPanelProps> = ({
     if (!editingMessage || !editContent.trim()) return;
 
     try {
-      await invoke('core_messages_edit', {
-        entity_id: entityId,
-        message_id: editingMessage,
-        content: editContent.trim(),
+      // Use working edit_message command from org_commands.rs
+      await invoke('edit_message', {
+        request: {
+          message_id: editingMessage,
+          new_content: editContent.trim(),
+        },
       });
 
+      // Update local state
       setMessages(prev => prev.map(msg =>
         msg.id === editingMessage
           ? { ...msg, content: editContent.trim(), edited: true }
@@ -171,6 +180,7 @@ const MessagesPanel: React.FC<MessagesPanelProps> = ({
 
       setEditingMessage(null);
       setEditContent('');
+      setError(null);
     } catch (err) {
       console.error('Failed to edit message:', err);
       setError('Failed to edit message');
@@ -182,12 +192,14 @@ const MessagesPanel: React.FC<MessagesPanelProps> = ({
     if (!canDelete) return;
 
     try {
-      await invoke('core_messages_delete', {
-        entity_id: entityId,
+      // Use working delete_message command from org_commands.rs
+      await invoke('delete_message', {
         message_id: messageId,
       });
 
+      // Remove from local state
       setMessages(prev => prev.filter(msg => msg.id !== messageId));
+      setError(null);
     } catch (err) {
       console.error('Failed to delete message:', err);
       setError('Failed to delete message');

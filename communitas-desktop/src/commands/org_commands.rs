@@ -88,6 +88,33 @@ pub async fn send_message(
         .map_err(|e| e.to_string())
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct EditMessageRequest {
+    pub message_id: String,
+    pub new_content: String,
+}
+
+#[tauri::command]
+pub async fn edit_message(
+    request: EditMessageRequest,
+    state: State<'_, OrgState>,
+) -> Result<Message, String> {
+    state
+        .channel_service
+        .edit_message(&request.message_id, &request.new_content)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn delete_message(message_id: String, state: State<'_, OrgState>) -> Result<(), String> {
+    state
+        .channel_service
+        .delete_message(&message_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub async fn get_messages(
     channel_id: String,

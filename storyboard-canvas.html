@@ -1,0 +1,1062 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Communitas UX Storyboard - Interactive Canvas</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 20px;
+            box-shadow: 0 2px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .header h1 {
+            color: #333;
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+
+        .flow-selector {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 10px;
+        }
+
+        .flow-btn {
+            padding: 8px 16px;
+            background: #00BFA5;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 14px;
+        }
+
+        .flow-btn:hover {
+            background: #00A693;
+            transform: translateY(-2px);
+        }
+
+        .flow-btn.active {
+            background: #1E88E5;
+        }
+
+        .canvas-container {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .screen-flow {
+            display: none;
+            gap: 30px;
+            padding: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .screen-flow.active {
+            display: flex;
+        }
+
+        .screen {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            width: 320px;
+            min-height: 480px;
+            position: relative;
+            overflow: hidden;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .screen:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 50px rgba(0, 0, 0, 0.3);
+        }
+
+        .screen-header {
+            background: linear-gradient(135deg, #00BFA5, #1E88E5);
+            color: white;
+            padding: 15px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .screen-content {
+            padding: 20px;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .input-field {
+            border: 2px solid #E0E0E0;
+            border-radius: 8px;
+            padding: 12px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        .input-field:focus {
+            outline: none;
+            border-color: #00BFA5;
+        }
+
+        .four-words {
+            background: #F5F5F5;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            font-family: 'Monaco', monospace;
+            font-size: 16px;
+            color: #00BFA5;
+            font-weight: bold;
+        }
+
+        .btn {
+            background: #00BFA5;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .btn:hover {
+            background: #00A693;
+        }
+
+        .btn-secondary {
+            background: #F5F5F5;
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            background: #E0E0E0;
+        }
+
+        .entity-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .entity-item {
+            padding: 15px;
+            background: #F8F8F8;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .entity-item:hover {
+            background: #E8E8E8;
+            transform: translateX(5px);
+        }
+
+        .chat-message {
+            background: #F5F5F5;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+
+        .chat-message.own {
+            background: #E3F2FD;
+            margin-left: 40px;
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            background: #4CAF50;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .navigation-hint {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+
+        .flow-arrow {
+            position: absolute;
+            right: -40px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 24px;
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        .tab-bar {
+            display: flex;
+            gap: 10px;
+            border-bottom: 2px solid #E0E0E0;
+            margin-bottom: 15px;
+        }
+
+        .tab {
+            padding: 10px 15px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-weight: 500;
+            color: #666;
+            transition: all 0.3s;
+        }
+
+        .tab.active {
+            color: #00BFA5;
+            border-bottom: 3px solid #00BFA5;
+        }
+
+        .network-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background: #E8F5E9;
+            border-radius: 8px;
+            font-size: 13px;
+        }
+
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #E0E0E0;
+            border-top: 4px solid #00BFA5;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .feature-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .feature-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            background: #F8F8F8;
+            border-radius: 6px;
+        }
+
+        .icon {
+            font-size: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .screen {
+                width: 280px;
+                min-height: 400px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🎨 Communitas UX Storyboard - Interactive Canvas</h1>
+        <p style="color: #666; margin-bottom: 10px;">Click on screens to see interaction details • Navigate through different flows below</p>
+        <div class="flow-selector">
+            <button class="flow-btn active" onclick="showFlow('onboarding')">🚀 Onboarding</button>
+            <button class="flow-btn" onclick="showFlow('dashboard')">📊 Dashboard</button>
+            <button class="flow-btn" onclick="showFlow('entities')">👥 Entities</button>
+            <button class="flow-btn" onclick="showFlow('communication')">💬 Communication</button>
+            <button class="flow-btn" onclick="showFlow('storage')">📁 Storage</button>
+            <button class="flow-btn" onclick="showFlow('settings')">⚙️ Settings</button>
+        </div>
+    </div>
+
+    <div class="canvas-container">
+        <!-- Onboarding Flow -->
+        <div class="screen-flow active" id="onboarding-flow">
+            <div class="screen" onclick="showDetails('splash')">
+                <div class="screen-header">
+                    <span class="icon">🚀</span>
+                    Splash Screen
+                </div>
+                <div class="screen-content" style="justify-content: center; align-items: center;">
+                    <div style="font-size: 48px;">🔒</div>
+                    <h2 style="text-align: center;">Communitas</h2>
+                    <p style="text-align: center; color: #666;">Secure Collaboration Beyond The Internet</p>
+                    <div class="loading-spinner"></div>
+                </div>
+                <div class="navigation-hint">Click to explore →</div>
+                <div class="flow-arrow">→</div>
+            </div>
+
+            <div class="screen" onclick="showDetails('welcome')">
+                <div class="screen-header">
+                    <span class="icon">👋</span>
+                    Welcome
+                </div>
+                <div class="screen-content">
+                    <h3>Welcome to Communitas</h3>
+                    <div class="feature-list">
+                        <div class="feature-item">
+                            <span class="icon">🔒</span>
+                            <span>Post-Quantum Security</span>
+                        </div>
+                        <div class="feature-item">
+                            <span class="icon">🌐</span>
+                            <span>Works Without Internet</span>
+                        </div>
+                        <div class="feature-item">
+                            <span class="icon">💬</span>
+                            <span>Encrypted Everything</span>
+                        </div>
+                        <div class="feature-item">
+                            <span class="icon">🔗</span>
+                            <span>Four-Word Addresses</span>
+                        </div>
+                    </div>
+                    <button class="btn" style="margin-top: auto;">Get Started</button>
+                    <button class="btn btn-secondary">Import Identity</button>
+                </div>
+                <div class="flow-arrow">→</div>
+            </div>
+
+            <div class="screen" onclick="showDetails('identity')">
+                <div class="screen-header">
+                    <span class="icon">🆔</span>
+                    Create Identity
+                </div>
+                <div class="screen-content">
+                    <label style="font-weight: 600;">Your Four-Word Address:</label>
+                    <div class="four-words">ocean-forest-moon-star</div>
+                    <button class="btn btn-secondary">↻ Regenerate</button>
+                    
+                    <label style="font-weight: 600;">Display Name:</label>
+                    <input type="text" class="input-field" value="David" />
+                    
+                    <label style="font-weight: 600;">Device Name:</label>
+                    <input type="text" class="input-field" value="David's MacBook" />
+                    
+                    <button class="btn" style="margin-top: auto;">Continue →</button>
+                </div>
+                <div class="flow-arrow">→</div>
+            </div>
+
+            <div class="screen" onclick="showDetails('network')">
+                <div class="screen-header">
+                    <span class="icon">🌐</span>
+                    Network Setup
+                </div>
+                <div class="screen-content">
+                    <h3>Connecting to Network</h3>
+                    <div style="display: flex; flex-direction: column; gap: 10px;">
+                        <div class="entity-item">
+                            <span class="status-indicator"></span>
+                            <span>Checking local network... ✓</span>
+                        </div>
+                        <div class="entity-item">
+                            <div class="loading-spinner" style="width: 20px; height: 20px; margin: 0;"></div>
+                            <span>Connecting to bootstrap...</span>
+                        </div>
+                        <div class="entity-item">
+                            <span class="status-indicator" style="background: #ccc;"></span>
+                            <span>Joining gossip overlay...</span>
+                        </div>
+                    </div>
+                    <div class="network-status">
+                        <span class="status-indicator"></span>
+                        <span>Found 3 peers on network</span>
+                    </div>
+                    <button class="btn" style="margin-top: auto;">Enter Dashboard →</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Dashboard Flow -->
+        <div class="screen-flow" id="dashboard-flow">
+            <div class="screen" onclick="showDetails('main-dashboard')">
+                <div class="screen-header">
+                    <span class="icon">📊</span>
+                    Dashboard
+                </div>
+                <div class="screen-content">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <h3>Good morning, David!</h3>
+                            <p style="color: #00BFA5; font-family: monospace; font-size: 12px;">ocean-forest-moon-star</p>
+                        </div>
+                        <div class="network-status">
+                            <span class="status-indicator"></span>
+                            <span>12 peers</span>
+                        </div>
+                    </div>
+                    
+                    <div style="display: flex; gap: 10px;">
+                        <button class="btn btn-secondary" style="flex: 1;">+ Group</button>
+                        <button class="btn btn-secondary" style="flex: 1;">+ Org</button>
+                        <button class="btn btn-secondary" style="flex: 1;">📹 Call</button>
+                    </div>
+                    
+                    <h4>Recent Activity</h4>
+                    <div class="entity-list">
+                        <div class="entity-item">
+                            <span class="icon">💬</span>
+                            <span>MaidSafe Team: Alice: Hi!</span>
+                        </div>
+                        <div class="entity-item">
+                            <span class="icon">📄</span>
+                            <span>design-doc.md edited 2m ago</span>
+                        </div>
+                    </div>
+                    
+                    <h4>Your Entities</h4>
+                    <div class="entity-list">
+                        <div class="entity-item">
+                            <span class="icon">👥</span>
+                            <span>Family Group</span>
+                            <span class="status-indicator"></span>
+                        </div>
+                        <div class="entity-item">
+                            <span class="icon">🏢</span>
+                            <span>MaidSafe</span>
+                            <span class="status-indicator"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="screen" onclick="showDetails('entity-switcher')">
+                <div class="screen-header">
+                    <span class="icon">🔄</span>
+                    Entity Switcher
+                </div>
+                <div class="screen-content">
+                    <input type="text" class="input-field" placeholder="🔍 Search entities..." />
+                    
+                    <h4 style="color: #666; font-size: 12px; text-transform: uppercase;">Organizations</h4>
+                    <div class="entity-item" style="background: #E3F2FD;">
+                        <span>▼</span>
+                        <span class="icon">🏢</span>
+                        <span>MaidSafe</span>
+                        <span style="margin-left: auto; color: #666; font-size: 12px;">45 members</span>
+                    </div>
+                    <div class="entity-item" style="margin-left: 20px; background: #F8F8F8;">
+                        <span>#</span>
+                        <span>general</span>
+                        <span class="status-indicator"></span>
+                        <span style="margin-left: auto; color: #999; font-size: 11px;">152 msgs</span>
+                    </div>
+                    <div class="entity-item" style="margin-left: 20px; background: #F8F8F8;">
+                        <span>#</span>
+                        <span>engineering</span>
+                        <span class="status-indicator"></span>
+                        <span style="margin-left: auto; color: #999; font-size: 11px;">23 msgs</span>
+                    </div>
+                    <div class="entity-item" style="margin-left: 20px; background: #F8F8F8;">
+                        <span class="icon">📁</span>
+                        <span>Communitas v2</span>
+                        <span style="margin-left: auto; color: #999; font-size: 11px;">8 members</span>
+                    </div>
+                    <div class="entity-item" style="margin-left: 20px; background: #F8F8F8;">
+                        <span class="icon">👥</span>
+                        <span>Dev Team</span>
+                        <span style="margin-left: auto; color: #999; font-size: 11px;">12 members</span>
+                    </div>
+                    
+                    <div class="entity-item">
+                        <span>▶</span>
+                        <span class="icon">🏢</span>
+                        <span>Open Source</span>
+                        <span style="margin-left: auto; color: #666; font-size: 12px;">89 members</span>
+                    </div>
+                    
+                    <h4 style="color: #666; font-size: 12px; text-transform: uppercase;">Personal Groups</h4>
+                    <div class="entity-item">
+                        <span class="icon">👥</span>
+                        <span>Family</span>
+                        <span style="margin-left: auto; color: #666; font-size: 12px;">3 online</span>
+                    </div>
+                    <div class="entity-item">
+                        <span class="icon">👥</span>
+                        <span>Friends</span>
+                        <span style="margin-left: auto; color: #666; font-size: 12px;">5 online</span>
+                    </div>
+                    
+                    <h4 style="color: #666; font-size: 12px; text-transform: uppercase;">My Identity</h4>
+                    <div class="entity-item">
+                        <span class="icon">👤</span>
+                        <span>ocean-forest-moon-star</span>
+                        <span class="status-indicator"></span>
+                    </div>
+                    
+                    <button class="btn" style="margin-top: auto;">+ Add Entity</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Entities Flow -->
+        <div class="screen-flow" id="entities-flow">
+            <div class="screen" onclick="showDetails('create-entity')">
+                <div class="screen-header">
+                    <span class="icon">➕</span>
+                    Create Entity
+                </div>
+                <div class="screen-content">
+                    <h3>Create New Entity</h3>
+                    
+                    <label style="font-weight: 600;">Choose Type:</label>
+                    <div style="display: flex; gap: 10px;">
+                        <button class="btn" style="flex: 1;">👥 Group</button>
+                        <button class="btn btn-secondary" style="flex: 1;">🏢 Org</button>
+                        <button class="btn btn-secondary" style="flex: 1;">📁 Project</button>
+                    </div>
+                    
+                    <label style="font-weight: 600;">Display Name:</label>
+                    <input type="text" class="input-field" placeholder="Engineering Team" />
+                    
+                    <label style="font-weight: 600;">Description (optional):</label>
+                    <textarea class="input-field" rows="3" placeholder="Core development team..."></textarea>
+                    
+                    <button class="btn" style="margin-top: auto;">Create Entity</button>
+                </div>
+            </div>
+
+            <div class="screen" onclick="showDetails('entity-view')">
+                <div class="screen-header">
+                    <span class="icon">👥</span>
+                    Engineering Team
+                </div>
+                <div class="screen-content">
+                    <div class="four-words" style="font-size: 12px;">tech-build-future-code</div>
+                    
+                    <div class="tab-bar">
+                        <button class="tab active">💬 Chat</button>
+                        <button class="tab">📁 Files</button>
+                        <button class="tab">📹 Call</button>
+                        <button class="tab">🌐 Web</button>
+                    </div>
+                    
+                    <h4>Members (8 online)</h4>
+                    <div class="entity-list">
+                        <div class="entity-item">
+                            <span class="icon">👤</span>
+                            <span>David (Owner)</span>
+                            <span class="status-indicator"></span>
+                        </div>
+                        <div class="entity-item">
+                            <span class="icon">👤</span>
+                            <span>Alice (Admin)</span>
+                            <span class="status-indicator"></span>
+                        </div>
+                        <div class="entity-item">
+                            <span class="icon">👤</span>
+                            <span>Bob</span>
+                            <span class="status-indicator"></span>
+                        </div>
+                    </div>
+                    
+                    <button class="btn btn-secondary">+ Invite Member</button>
+                </div>
+            </div>
+
+            <div class="screen" onclick="showDetails('org-view')">
+                <div class="screen-header">
+                    <span class="icon">🏢</span>
+                    MaidSafe
+                </div>
+                <div class="screen-content">
+                    <div class="four-words" style="font-size: 12px;">maidsafe-build-safe-net</div>
+                    
+                    <h4>Channels</h4>
+                    <div class="entity-list">
+                        <div class="entity-item">
+                            <span>#</span>
+                            <span>general</span>
+                            <span style="margin-left: auto; color: #666; font-size: 12px;">152 msgs</span>
+                        </div>
+                        <div class="entity-item">
+                            <span>#</span>
+                            <span>engineering</span>
+                            <span style="margin-left: auto; color: #666; font-size: 12px;">89 msgs</span>
+                        </div>
+                        <div class="entity-item">
+                            <span>#</span>
+                            <span>design</span>
+                            <span style="margin-left: auto; color: #666; font-size: 12px;">34 msgs</span>
+                        </div>
+                    </div>
+                    
+                    <h4>Projects</h4>
+                    <div class="entity-list">
+                        <div class="entity-item">
+                            <span class="icon">📁</span>
+                            <span>Communitas v2</span>
+                        </div>
+                        <div class="entity-item">
+                            <span class="icon">📁</span>
+                            <span>Saorsa Core</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Communication Flow -->
+        <div class="screen-flow" id="communication-flow">
+            <div class="screen" onclick="showDetails('chat')">
+                <div class="screen-header">
+                    <span class="icon">💬</span>
+                    Team Chat
+                </div>
+                <div class="screen-content">
+                    <div style="flex: 1; display: flex; flex-direction: column; gap: 10px;">
+                        <div class="chat-message">
+                            <strong>Alice</strong> <span style="color: #999; font-size: 12px;">2:30 PM</span>
+                            <p>Hey team, design docs updated</p>
+                            <div style="background: #E8E8E8; padding: 8px; border-radius: 4px; margin-top: 5px;">
+                                📄 design-v2.md
+                            </div>
+                        </div>
+                        <div class="chat-message">
+                            <strong>Bob</strong> <span style="color: #999; font-size: 12px;">2:45 PM</span>
+                            <p>Looking good! Few comments:</p>
+                            <ul style="margin: 5px 0; padding-left: 20px;">
+                                <li>Consider offline-first</li>
+                                <li>Need CRDT strategy</li>
+                            </ul>
+                            <div style="display: flex; gap: 10px; margin-top: 5px;">
+                                <span>👍 2</span>
+                                <span>💭 1</span>
+                            </div>
+                        </div>
+                        <div class="chat-message own">
+                            <strong>You</strong> <span style="color: #999; font-size: 12px;">2:50 PM</span>
+                            <p>I'll review the CRDT implementation</p>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 10px;">
+                        <input type="text" class="input-field" placeholder="Type a message..." style="flex: 1;" />
+                        <button class="btn">Send</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="screen" onclick="showDetails('video-call')">
+                <div class="screen-header">
+                    <span class="icon">📹</span>
+                    Video Call
+                </div>
+                <div class="screen-content" style="padding: 0;">
+                    <div style="background: #000; height: 200px; display: flex; align-items: center; justify-content: center;">
+                        <span style="color: white; font-size: 48px;">👤</span>
+                    </div>
+                    <div style="display: flex; gap: 10px; padding: 10px; background: #F5F5F5;">
+                        <div style="background: #333; width: 60px; height: 60px; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+                            <span style="color: white;">Alice</span>
+                        </div>
+                        <div style="background: #333; width: 60px; height: 60px; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+                            <span style="color: white;">Bob</span>
+                        </div>
+                        <div style="background: #333; width: 60px; height: 60px; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+                            <span style="color: white;">You</span>
+                        </div>
+                    </div>
+                    <div style="display: flex; justify-content: center; gap: 20px; padding: 20px;">
+                        <button class="btn btn-secondary">🎤</button>
+                        <button class="btn btn-secondary">📹</button>
+                        <button class="btn btn-secondary">💻</button>
+                        <button class="btn" style="background: #F44336;">End Call</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="screen" onclick="showDetails('collab-doc')">
+                <div class="screen-header">
+                    <span class="icon">📝</span>
+                    Collaborative Doc
+                </div>
+                <div class="screen-content">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <strong>architecture.md</strong>
+                        <span style="color: #999; font-size: 12px;">Alice editing...</span>
+                    </div>
+                    
+                    <div style="background: #F8F8F8; padding: 15px; border-radius: 8px; font-family: monospace; font-size: 13px; flex: 1;">
+                        <h3 style="margin-bottom: 10px;"># System Architecture</h3>
+                        <p style="margin-bottom: 10px;">## Overview</p>
+                        <p style="margin-bottom: 5px;">Communitas uses a gossip-based P2P</p>
+                        <p style="margin-bottom: 5px;">overlay network for...</p>
+                        <div style="display: inline-block; width: 2px; height: 16px; background: #00BFA5; animation: blink 1s infinite;"></div>
+                        <span style="color: #00BFA5; font-size: 10px;"> Alice's cursor</span>
+                        
+                        <p style="margin-top: 15px;">## Components</p>
+                        <p>- Saorsa Gossip Layer</p>
+                        <p>- QUIC Transport</p>
+                        <p>- Post-Quantum Crypto</p>
+                        <div style="display: inline-block; width: 2px; height: 16px; background: #1E88E5; animation: blink 1s infinite;"></div>
+                        <span style="color: #1E88E5; font-size: 10px;"> Bob's cursor</span>
+                    </div>
+                    
+                    <div style="display: flex; gap: 10px; margin-top: 10px;">
+                        <span style="font-size: 12px;">Active: Alice, Bob, You</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Storage Flow -->
+        <div class="screen-flow" id="storage-flow">
+            <div class="screen" onclick="showDetails('file-browser')">
+                <div class="screen-header">
+                    <span class="icon">📁</span>
+                    Shared Storage
+                </div>
+                <div class="screen-content">
+                    <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                        <button class="btn btn-secondary" style="flex: 1;">Upload</button>
+                        <button class="btn btn-secondary" style="flex: 1;">New Folder</button>
+                    </div>
+                    
+                    <div style="background: #F8F8F8; padding: 10px; border-radius: 8px; margin-bottom: 10px;">
+                        <span style="color: #666; font-size: 12px;">Path: /shared/projects/</span>
+                    </div>
+                    
+                    <div class="entity-list">
+                        <div class="entity-item">
+                            <span class="icon">📁</span>
+                            <span>communitas/</span>
+                            <span style="margin-left: auto; color: #999; font-size: 12px;">2 hrs</span>
+                        </div>
+                        <div class="entity-item">
+                            <span class="icon">📁</span>
+                            <span>documentation/</span>
+                            <span style="margin-left: auto; color: #999; font-size: 12px;">1 day</span>
+                        </div>
+                        <div class="entity-item">
+                            <span class="icon">📄</span>
+                            <span>README.md</span>
+                            <span style="margin-left: auto; color: #999; font-size: 12px;">2KB</span>
+                        </div>
+                        <div class="entity-item">
+                            <span class="icon">📄</span>
+                            <span>roadmap.md</span>
+                            <span style="margin-left: auto; color: #999; font-size: 12px;">5KB</span>
+                        </div>
+                    </div>
+                    
+                    <div style="margin-top: auto; padding: 10px; background: #F5F5F5; border-radius: 8px;">
+                        <span style="font-size: 12px;">Storage: 1.2 GB / 10 GB used</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="screen" onclick="showDetails('website-publisher')">
+                <div class="screen-header">
+                    <span class="icon">🌐</span>
+                    Website Publisher
+                </div>
+                <div class="screen-content">
+                    <h3>Publish Website</h3>
+                    
+                    <div style="background: #F5F5F5; padding: 10px; border-radius: 8px;">
+                        <strong>Entity:</strong> Engineering Team<br>
+                        <strong>Address:</strong> tech-build-future-code.site
+                    </div>
+                    
+                    <h4>Website Files:</h4>
+                    <div class="entity-list">
+                        <div class="entity-item">
+                            <input type="checkbox" checked />
+                            <span>index.md (Homepage)</span>
+                        </div>
+                        <div class="entity-item">
+                            <input type="checkbox" checked />
+                            <span>about.md</span>
+                        </div>
+                        <div class="entity-item">
+                            <input type="checkbox" checked />
+                            <span>projects.md</span>
+                        </div>
+                    </div>
+                    
+                    <label style="font-weight: 600;">Theme:</label>
+                    <select class="input-field">
+                        <option>Default</option>
+                        <option>Dark</option>
+                        <option>Professional</option>
+                    </select>
+                    
+                    <div style="display: flex; gap: 10px; margin-top: auto;">
+                        <button class="btn btn-secondary" style="flex: 1;">Preview</button>
+                        <button class="btn" style="flex: 1;">Publish →</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Settings Flow -->
+        <div class="screen-flow" id="settings-flow">
+            <div class="screen" onclick="showDetails('settings-profile')">
+                <div class="screen-header">
+                    <span class="icon">⚙️</span>
+                    Settings
+                </div>
+                <div class="screen-content">
+                    <div class="tab-bar">
+                        <button class="tab active">Profile</button>
+                        <button class="tab">Network</button>
+                        <button class="tab">Storage</button>
+                        <button class="tab">Privacy</button>
+                    </div>
+                    
+                    <label style="font-weight: 600;">Display Name:</label>
+                    <input type="text" class="input-field" value="David" />
+                    
+                    <label style="font-weight: 600;">Four-Word Identity:</label>
+                    <div class="four-words" style="font-size: 14px;">ocean-forest-moon-star</div>
+                    
+                    <label style="font-weight: 600;">Status:</label>
+                    <select class="input-field">
+                        <option>🟢 Available</option>
+                        <option>🟡 Away</option>
+                        <option>🔴 Busy</option>
+                    </select>
+                    
+                    <label style="font-weight: 600;">Theme:</label>
+                    <div style="display: flex; gap: 10px;">
+                        <button class="btn btn-secondary" style="flex: 1;">Auto</button>
+                        <button class="btn btn-secondary" style="flex: 1;">Light</button>
+                        <button class="btn btn-secondary" style="flex: 1;">Dark</button>
+                    </div>
+                    
+                    <button class="btn" style="margin-top: auto;">Save Changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for details -->
+    <div class="modal-overlay" id="modalOverlay" onclick="closeModal()">
+        <div class="modal" onclick="event.stopPropagation()">
+            <h2 id="modalTitle">Screen Details</h2>
+            <p id="modalContent">Click on any screen to see interaction details and implementation notes.</p>
+            <button class="btn" onclick="closeModal()">Close</button>
+        </div>
+    </div>
+
+    <style>
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+    </style>
+
+    <script>
+        const screenDetails = {
+            'entity-switcher': {
+                title: 'Entity Switcher',
+                content: `
+                    <strong>Purpose:</strong> Primary navigation between organizations, groups, and personal identity<br><br>
+                    <strong>Hierarchy:</strong><br>
+                    • Organizations shown first (primary context)<br>
+                    • Expandable to show channels, projects, and groups within<br>
+                    • Personal groups separate from org groups<br>
+                    • Identity at bottom with private vault access<br><br>
+                    <strong>Visual Design:</strong><br>
+                    • Slight indentation (20px) for org contents<br>
+                    • Expand/collapse triangles for organizations<br>
+                    • Member/message counts for context<br>
+                    • Green dots show online status<br><br>
+                    <strong>Component:</strong> EntitySelector.tsx with hierarchical tree view
+                `
+            },
+            'splash': {
+                title: 'Splash Screen',
+                content: `
+                    <strong>Purpose:</strong> Brand introduction and loading state<br><br>
+                    <strong>Duration:</strong> 1-2 seconds<br><br>
+                    <strong>Components:</strong><br>
+                    • Logo animation<br>
+                    • Loading spinner<br>
+                    • Version info<br><br>
+                    <strong>Implementation:</strong> Use Tauri splash screen API with custom HTML
+                `
+            },
+            'welcome': {
+                title: 'Welcome Screen',
+                content: `
+                    <strong>Purpose:</strong> Introduce key features to new users<br><br>
+                    <strong>Key Features:</strong><br>
+                    • Post-Quantum Security<br>
+                    • Offline-First Design<br>
+                    • Four-Word Addresses<br>
+                    • End-to-End Encryption<br><br>
+                    <strong>Actions:</strong><br>
+                    • Get Started → Create new identity<br>
+                    • Import Identity → QR or file import<br><br>
+                    <strong>Component:</strong> FirstLaunchWelcome.tsx
+                `
+            },
+            'identity': {
+                title: 'Identity Creation',
+                content: `
+                    <strong>Purpose:</strong> Generate unique four-word identity<br><br>
+                    <strong>Process:</strong><br>
+                    1. Generate four-word address using saorsa-core<br>
+                    2. Validate against dictionary<br>
+                    3. Check DHT for uniqueness<br>
+                    4. Generate ML-DSA keypair<br><br>
+                    <strong>User Input:</strong><br>
+                    • Display name (changeable)<br>
+                    • Device name (for multi-device)<br><br>
+                    <strong>Component:</strong> IdentitySetup.tsx
+                `
+            },
+            'main-dashboard': {
+                title: 'Main Dashboard',
+                content: `
+                    <strong>Purpose:</strong> Central hub for all activities<br><br>
+                    <strong>Sections:</strong><br>
+                    • Quick Actions Bar<br>
+                    • Recent Activity Feed<br>
+                    • Entity List<br>
+                    • Network Status<br><br>
+                    <strong>Real-time Updates:</strong><br>
+                    • Live peer count<br>
+                    • Message notifications<br>
+                    • Sync status<br><br>
+                    <strong>Component:</strong> ModernShellPrototype.tsx
+                `
+            },
+            'chat': {
+                title: 'Chat Interface',
+                content: `
+                    <strong>Features:</strong><br>
+                    • Real-time messaging via gossip overlay<br>
+                    • File attachments<br>
+                    • Reactions and threads<br>
+                    • Read receipts<br><br>
+                    <strong>Security:</strong><br>
+                    • End-to-end encryption (MLS)<br>
+                    • Message signing (ML-DSA)<br>
+                    • CRDT-based sync<br><br>
+                    <strong>Component:</strong> ChatInterface.tsx
+                `
+            },
+            'file-browser': {
+                title: 'Virtual Disk Storage',
+                content: `
+                    <strong>Storage Tiers:</strong><br>
+                    • Private: Encrypted, local only<br>
+                    • Public: Content-addressed, distributed<br>
+                    • Shared: Group-encrypted<br><br>
+                    <strong>Features:</strong><br>
+                    • Drag-and-drop upload<br>
+                    • Version history<br>
+                    • Collaborative editing<br>
+                    • Automatic replication<br><br>
+                    <strong>Component:</strong> FileManager.tsx
+                `
+            }
+        };
+
+        function showFlow(flowId) {
+            // Hide all flows
+            document.querySelectorAll('.screen-flow').forEach(flow => {
+                flow.classList.remove('active');
+            });
+            // Show selected flow
+            document.getElementById(flowId + '-flow').classList.add('active');
+            
+            // Update button states
+            document.querySelectorAll('.flow-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+        }
+
+        function showDetails(screenId) {
+            const details = screenDetails[screenId];
+            if (details) {
+                document.getElementById('modalTitle').textContent = details.title;
+                document.getElementById('modalContent').innerHTML = details.content;
+            } else {
+                document.getElementById('modalTitle').textContent = 'Screen Details';
+                document.getElementById('modalContent').innerHTML = 'Implementation details coming soon...';
+            }
+            document.getElementById('modalOverlay').classList.add('active');
+        }
+
+        function closeModal() {
+            document.getElementById('modalOverlay').classList.remove('active');
+        }
+    </script>
+</body>
+</html>

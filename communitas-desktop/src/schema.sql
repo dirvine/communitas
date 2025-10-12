@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS messages (
     crdt_doc_id TEXT REFERENCES crdt_documents(id),
     created_at INTEGER NOT NULL,
     updated_at INTEGER,
+    deleted_at INTEGER,          -- Tombstone for soft delete
     FOREIGN KEY (channel_id) REFERENCES channels(id) ON DELETE CASCADE,
     FOREIGN KEY (thread_id) REFERENCES messages(id) ON DELETE CASCADE
 );
@@ -70,6 +71,9 @@ CREATE TABLE IF NOT EXISTS issues (
     crdt_doc_id TEXT REFERENCES crdt_documents(id),
     created_at INTEGER NOT NULL,
     updated_at INTEGER,
+    status_updated_at INTEGER,                -- LWW timestamp for status changes
+    priority_updated_at INTEGER,              -- LWW timestamp for priority changes
+    assignee_updated_at INTEGER,              -- LWW timestamp for assignee changes
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
 
@@ -82,6 +86,7 @@ CREATE TABLE IF NOT EXISTS issue_comments (
     crdt_doc_id TEXT REFERENCES crdt_documents(id),
     created_at INTEGER NOT NULL,
     updated_at INTEGER,
+    deleted_at INTEGER,          -- Tombstone for soft delete
     FOREIGN KEY (issue_id) REFERENCES issues(id) ON DELETE CASCADE
 );
 

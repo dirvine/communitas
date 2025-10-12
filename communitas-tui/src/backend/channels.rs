@@ -61,7 +61,12 @@ impl EntityManager {
         Ok(())
     }
 
-    pub fn create_entity(&mut self, name: String, entity_type: EntityType, members: Vec<String>) -> Entity {
+    pub fn create_entity(
+        &mut self,
+        name: String,
+        entity_type: EntityType,
+        members: Vec<String>,
+    ) -> Entity {
         let id = uuid::Uuid::new_v4().to_string();
         let entity = Entity {
             id: id.clone(),
@@ -102,7 +107,9 @@ impl Backend {
         entity_type: EntityType,
         members: Vec<String>,
     ) -> Result<Entity> {
-        let entity = self.entity_manager.create_entity(name, entity_type, members);
+        let entity = self
+            .entity_manager
+            .create_entity(name, entity_type, members);
 
         // Save to disk asynchronously (fire and forget for now)
         let manager = self.entity_manager.clone();
@@ -130,7 +137,8 @@ impl Backend {
 
     /// Add member to entity
     pub fn add_entity_member(&mut self, entity_id: &str, member_four_words: String) -> Result<()> {
-        self.entity_manager.add_member(entity_id, member_four_words)?;
+        self.entity_manager
+            .add_member(entity_id, member_four_words)?;
 
         // Save to disk asynchronously
         let manager = self.entity_manager.clone();

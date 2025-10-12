@@ -6,8 +6,8 @@
 // - Files storage (encrypted, group members only)
 // - Web storage (public, unencrypted)
 
-use communitas_core::doc_replicator::StorageMode;
 use communitas_core::CoreContext;
+use communitas_core::doc_replicator::StorageMode;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tauri::State;
@@ -69,7 +69,10 @@ fn parse_storage_mode(mode: &str) -> Result<StorageMode, String> {
         "files" => Ok(StorageMode::Files),
         "web" => Ok(StorageMode::Web),
         "both" => Ok(StorageMode::Both),
-        _ => Err(format!("Invalid storage mode: {}. Must be 'files', 'web', or 'both'", mode)),
+        _ => Err(format!(
+            "Invalid storage mode: {}. Must be 'files', 'web', or 'both'",
+            mode
+        )),
     }
 }
 
@@ -91,7 +94,10 @@ fn create_doc_id(entity_id: &str, doc_name: &str) -> String {
 fn parse_doc_id(doc_id: &str) -> Result<(String, String), String> {
     let parts: Vec<&str> = doc_id.splitn(2, '/').collect();
     if parts.len() != 2 {
-        return Err(format!("Invalid document ID format: {}. Expected format: entity_id/doc_name", doc_id));
+        return Err(format!(
+            "Invalid document ID format: {}. Expected format: entity_id/doc_name",
+            doc_id
+        ));
     }
     Ok((parts[0].to_string(), parts[1].to_string()))
 }
@@ -121,7 +127,10 @@ pub async fn doc_create(
     name: String,
     storage_mode: String,
 ) -> Result<DocResponse, String> {
-    debug!("Creating document '{}' for entity '{}' in '{}' storage", name, entity_id, storage_mode);
+    debug!(
+        "Creating document '{}' for entity '{}' in '{}' storage",
+        name, entity_id, storage_mode
+    );
 
     let mode = parse_storage_mode(&storage_mode)?;
 
@@ -138,7 +147,10 @@ pub async fn doc_create(
         debug!("AFTER: Acquired read lock on CoreContext");
 
         let ctx_option = guard.as_ref();
-        debug!("AFTER: Got Option<CoreContext>, is_some: {}", ctx_option.is_some());
+        debug!(
+            "AFTER: Got Option<CoreContext>, is_some: {}",
+            ctx_option.is_some()
+        );
 
         let ctx = ctx_option.ok_or_else(|| "CoreContext not initialized".to_string())?;
         debug!("AFTER: Got CoreContext reference");
@@ -185,7 +197,10 @@ pub async fn doc_insert_text(
     position: u32,
     text: String,
 ) -> Result<(), String> {
-    debug!("Inserting text '{}' at position {} in document '{}'", text, position, doc_id);
+    debug!(
+        "Inserting text '{}' at position {} in document '{}'",
+        text, position, doc_id
+    );
 
     let guard = shared.read().await;
     let ctx = guard
@@ -219,7 +234,10 @@ pub async fn doc_delete_text(
     position: u32,
     length: u32,
 ) -> Result<(), String> {
-    debug!("Deleting {} characters at position {} in document '{}'", length, position, doc_id);
+    debug!(
+        "Deleting {} characters at position {} in document '{}'",
+        length, position, doc_id
+    );
 
     let guard = shared.read().await;
     let ctx = guard
@@ -317,7 +335,11 @@ pub async fn doc_apply_update(
     doc_id: String,
     update: Vec<u8>,
 ) -> Result<(), String> {
-    debug!("Applying CRDT update ({} bytes) to document '{}'", update.len(), doc_id);
+    debug!(
+        "Applying CRDT update ({} bytes) to document '{}'",
+        update.len(),
+        doc_id
+    );
 
     let guard = shared.read().await;
     let ctx = guard
@@ -349,7 +371,10 @@ pub async fn doc_list(
     entity_id: String,
     storage_mode: String,
 ) -> Result<Vec<DocResponse>, String> {
-    debug!("Listing documents for entity '{}' in '{}' storage", entity_id, storage_mode);
+    debug!(
+        "Listing documents for entity '{}' in '{}' storage",
+        entity_id, storage_mode
+    );
 
     let _mode = parse_storage_mode(&storage_mode)?;
 
@@ -361,7 +386,10 @@ pub async fn doc_list(
         debug!("doc_list: Acquired read lock");
 
         let ctx_option = guard.as_ref();
-        debug!("doc_list: Got Option<CoreContext>, is_some: {}", ctx_option.is_some());
+        debug!(
+            "doc_list: Got Option<CoreContext>, is_some: {}",
+            ctx_option.is_some()
+        );
 
         let ctx = ctx_option.ok_or_else(|| "CoreContext not initialized".to_string())?;
         debug!("doc_list: Got CoreContext");

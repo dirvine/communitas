@@ -19,7 +19,13 @@ export async function subscribeMessages(
   onMessage: (payload: DecryptedMessagePayload) => void,
   opts?: { channelId?: string }
 ): Promise<UnlistenFn> {
-  await invoke('core_subscribe_messages', { channelId: opts?.channelId })
+  // Use working gossip_subscribe_to_entity command
+  if (opts?.channelId) {
+    await invoke('gossip_subscribe_to_entity', {
+      entity_id: opts.channelId,
+      entity_type: 'channel'
+    })
+  }
   const unlisten = await listen<DecryptedMessagePayload>('message-received', (evt) => {
     onMessage(evt.payload)
   })

@@ -1,7 +1,7 @@
 use super::handlers::*;
 use axum::{
-    routing::{get, post},
     Router,
+    routing::{get, post},
 };
 
 /// Build the API router with all endpoints
@@ -22,6 +22,9 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/entities", get(list_entities))
         // Message endpoints
         .route("/api/messages/send", post(send_message))
-        .route("/api/entities/:entity_id/messages", get(get_entity_messages))
+        .route(
+            "/api/entities/:entity_id/messages",
+            get(get_entity_messages),
+        )
         .with_state(state)
 }

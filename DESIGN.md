@@ -4,6 +4,9 @@
 
 **Communitas is a desktop and mobile-first, post-quantum collaboration platform** that enables secure communication, file sharing, and collaboration even during internet disruptions. Using gossip-based P2P networking and mesh capabilities, users can connect to their contacts on any reachable network, making the system highly partition-tolerant and resilient.
 
+> **Implementation Guide**: See `STORYBOARD.md` for complete UI components and `STORYBOARD_V2.md` for day-by-day implementation checklist.
+> **Interactive Prototype**: Open `storyboard-canvas-v2.html` in a browser to see the full UI design.
+
 ---
 
 ## **🎯 Core Principles**
@@ -575,6 +578,72 @@ If Bob is offline:
 - Bob receives on reconnection via CRDT anti-entropy
 - CRDTs automatically resolve any conflicts
 ```
+
+---
+
+## **🎨 UI Implementation**
+
+### **Modern WhatsApp/Slack-Style Interface**
+
+The UI follows a **three-panel layout** inspired by modern collaboration tools:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Entity Sidebar (340px)  │  Main Content (flex)  │  Info  │
+│───────────────────────────┼───────────────────────┼────────┤
+│ [👤 Ocean-Forest-Moon] │ [🏢 ACME CORP]      │ Details│
+│───────────────────────────│  Organisation view    │        │
+│ [All Spaces] [Orgs] [...]  │───────────────────────│        │
+│───────────────────────────│ ┌─Members────┬─Projects┐ │        │
+│ 🔍 Search (Cmd+K)         │ │ DA • Owner│ 📁 Lumos │ │        │
+│───────────────────────────│ │ LM • Admin│ 📁 Boot. │ │        │
+│ ▼ 🏢 ACME CORPORATION     │ ├───────────┴──────────┤ │        │
+│   # general • Updates      │ │ Channels   │ Storage   │ │        │
+│   # engineering • 3 new    │ │ #general   │ 420GB/1TB │ │        │
+│   📁 Website Redesign     │ │ #eng       │ [███░░] 42%│ │        │
+│   👥 Development Team     │ └───────────┴──────────┘ │        │
+│ ▶ 🏢 TECH STARTUP        │                       │        │
+└───────────────────────────┴───────────────────────┴────────┘
+```
+
+### **Component Architecture**
+
+**Left Sidebar (Entity List):**
+- **Identity Selector**: Shows current four-word identity
+- **Filters**: Two-tier filtering (Space type + Entity type)
+- **Search**: Command palette with ⌘K shortcut
+- **Organization Tree**: Expandable hierarchy with channels/projects/teams
+
+**Main Content Area:**
+- **Dynamic Views**: Changes based on selected entity
+- **Organization Dashboard**: 2x2 grid (Members, Projects, Channels, Storage)
+- **Chat Interface**: WhatsApp-style messaging with threads
+- **Storage Management**: Visual meters and file browser
+
+**Design System:**
+```scss
+// Dark Theme Colors
+$background-primary: #161C20;    // Main content
+$background-secondary: #1a1f24;  // Sidebar
+$accent-green: #2EB67D;          // Primary (online, success)
+$accent-blue: #1E88E5;           // Secondary
+$text-primary: #F4F6F8;          // Main text
+$text-secondary: #9AA2AB;        // Muted text
+```
+
+### **Key UI Features**
+
+1. **Organizations First**: Orgs are the primary grouping mechanism
+2. **Visual Storage Meters**: Progress bars show vault usage
+3. **Member Avatars**: Gradient backgrounds with initials
+4. **Status Indicators**: Green/yellow/gray dots for presence
+5. **Filter Chips**: Quick filtering by space and entity type
+6. **Hover States**: Interactive feedback on all elements
+
+**Implementation Files:**
+- `storyboard-canvas-v2.html` - Interactive prototype
+- `STORYBOARD.md` - Complete component specifications
+- `STORYBOARD_V2.md` - Day-by-day implementation guide
 
 ---
 

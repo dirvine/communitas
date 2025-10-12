@@ -6,7 +6,7 @@
 // for collaborative document editing with dual-storage (Files + Web)
 
 use communitas_core::CoreContext;
-use communitas_core::doc_replicator::{DocReplicator, DocReplicatorConfig, StorageMode};
+use communitas_core::doc_replicator::StorageMode;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 

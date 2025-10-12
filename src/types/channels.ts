@@ -47,3 +47,23 @@ export interface ChannelMember {
   user_id: string;
   role: ChannelMemberRole;
 }
+
+/**
+ * Result of applying a CRDT diff to a channel
+ * Returned by apply_channel_diff command
+ */
+export interface AppliedDiffResult {
+  messages_updated: number;
+  total_messages: number;
+}
+
+/**
+ * Channel sync state tracking
+ * Used by ChannelSyncService to manage sync operations
+ */
+export interface ChannelSyncState {
+  channel_id: string;
+  last_sync_at: number;
+  state_vector: Uint8Array | null;
+  sync_in_progress: boolean;
+}

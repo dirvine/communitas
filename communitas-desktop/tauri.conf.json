@@ -25,7 +25,22 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": null,
+      "capabilities": [
+        {
+          "identifier": "main-capability",
+          "description": "Main window capabilities",
+          "windows": ["main"],
+          "permissions": [
+            "core:default",
+            "dialog:allow-ask",
+            "dialog:allow-message",
+            "dialog:allow-confirm",
+            "dialog:allow-open",
+            "dialog:allow-save"
+          ]
+        }
+      ]
     }
   },
   "bundle": {

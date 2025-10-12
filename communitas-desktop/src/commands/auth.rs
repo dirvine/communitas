@@ -308,6 +308,27 @@ pub async fn auth_get_recent_identities(
     Ok(identities)
 }
 
+/// Remove a recent identity from the list (does not delete the vault)
+#[tauri::command]
+pub async fn auth_remove_recent_identity(
+    state: State<'_, AppState>,
+    four_words: String,
+) -> Result<(), String> {
+    tracing::info!("Removing recent identity: {}", four_words);
+
+    let mut service = state.auth_service.write().await;
+    let auth_service = service
+        .as_mut()
+        .ok_or_else(|| "Auth service not initialized".to_string())?;
+
+    auth_service
+        .remove_recent_identity(&four_words)
+        .await
+        .map_err(|e| format!("Failed to remove recent identity: {}", e))?;
+
+    Ok(())
+}
+
 /// Enable or disable auto-login
 #[tauri::command]
 pub async fn auth_set_auto_login(state: State<'_, AppState>, enabled: bool) -> Result<(), String> {

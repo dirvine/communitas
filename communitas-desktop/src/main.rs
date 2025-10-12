@@ -112,6 +112,8 @@ async fn main() -> anyhow::Result<()> {
         .manage(Arc::new(RwLock::new(
             Option::<communitas_core::message_sync::MessageSyncService>::None,
         )))
+        // Register plugins
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             // Auth commands
             commands::auth::auth_initialize,
@@ -126,6 +128,7 @@ async fn main() -> anyhow::Result<()> {
             commands::auth::auth_get_config,
             commands::auth::auth_try_auto_login,
             commands::auth::auth_get_recent_identities,
+            commands::auth::auth_remove_recent_identity,
             commands::auth::auth_set_auto_login,
             commands::auth::auth_set_keyring_enabled,
             // Passkey commands

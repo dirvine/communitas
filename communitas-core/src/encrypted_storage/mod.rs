@@ -431,6 +431,15 @@ impl EncryptedStorageManager {
             .clone()
     }
 
+    /// Remove a recent identity from the list (does not delete the vault)
+    pub async fn remove_recent_identity(&self, four_words: &str) -> Result<()> {
+        self.app_config
+            .write()
+            .await
+            .remove_recent_identity(four_words)
+            .await
+    }
+
     // Passkey (biometric) methods
 
     /// Register passkey/biometric for an identity

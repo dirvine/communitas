@@ -62,12 +62,26 @@ apt-get install -y -qq curl tar jq systemd > /dev/null 2>&1
 echo -e "${GREEN}✓ Dependencies installed${NC}"
 
 echo -e "${YELLOW}[2/7] Creating service user and directories...${NC}"
+# Create group if it doesn't exist
+if ! getent group "${GROUP}" &>/dev/null; then
+    groupadd --system "${GROUP}"
+    echo -e "${GREEN}✓ Created group: ${GROUP}${NC}"
+else
+    echo -e "${GREEN}✓ Group already exists: ${GROUP}${NC}"
+fi
+
 # Create user if it doesn't exist
 if ! id "${USER}" &>/dev/null; then
-    useradd --system --no-create-home --shell /bin/false "${USER}"
+    useradd --system --no-create-home --shell /bin/false --gid "${GROUP}" "${USER}"
     echo -e "${GREEN}✓ Created user: ${USER}${NC}"
 else
-    echo -e "${GREEN}✓ User already exists: ${USER}${NC}"
+    CURRENT_GROUP=$(id -gn "${USER}")
+    if [[ "${CURRENT_GROUP}" != "${GROUP}" ]]; then
+        usermod -g "${GROUP}" "${USER}"
+        echo -e "${GREEN}✓ Updated user primary group to: ${GROUP}${NC}"
+    else
+        echo -e "${GREEN}✓ User already exists: ${USER}${NC}"
+    fi
 fi
 
 # Create directories with proper permissions

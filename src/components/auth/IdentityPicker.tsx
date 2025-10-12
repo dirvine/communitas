@@ -34,6 +34,7 @@ import {
   Delete as DeleteIcon,
 } from '@mui/icons-material';
 import { invoke } from '@tauri-apps/api/core';
+import { ask } from '@tauri-apps/plugin-dialog';
 import { QRCodeExportDialog } from './QRCodeExportDialog';
 import { QRCodeImportDialog } from './QRCodeImportDialog';
 
@@ -489,11 +490,71 @@ export const IdentityPicker: React.FC<IdentityPickerProps> = ({
         </MenuItem>
         <Divider />
         <MenuItem
-          onClick={() => {
-            if (menuAnchor && window.confirm(`Remove "${menuAnchor.identity.display_name}" from this device?`)) {
-              // TODO: Implement vault removal
-              console.log('Remove identity:', menuAnchor.identity.four_words);
-              setMenuAnchor(null);
+          onClick={async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            console.log('🔍 Remove menu item clicked', { menuAnchor });
+
+            if (!menuAnchor) {
+              console.log('⚠️ No menuAnchor found');
+              return;
+            }
+
+            const identity = menuAnchor.identity;
+            console.log('📝 Identity to remove:', identity);
+
+            // Store identity data before closing menu
+            const displayName = identity.display_name;
+            const fourWords = identity.four_words;
+
+            console.log('🔒 Captured identity data:', { displayName, fourWords });
+            setMenuAnchor(null); // Close menu
+
+            // Add a small delay to ensure menu closes before dialog
+            console.log('⏱️ Waiting for menu to close...');
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            console.log('💬 About to show confirmation dialog...');
+
+            try {
+              console.log('💬 Calling ask() function...');
+              const confirmed = await ask(
+                `This will remove "${displayName}" from the recent identities list but will not delete the vault.`,
+                {
+                  title: 'Remove Identity?',
+                  kind: 'warning',
+                  okLabel: 'Remove',
+                  cancelLabel: 'Cancel',
+                }
+              );
+              console.log('💬 User confirmation result:', confirmed);
+
+              if (confirmed) {
+                console.log('🗑️ User confirmed removal, calling backend for:', fourWords);
+
+                invoke('auth_remove_recent_identity', {
+                  fourWords: fourWords
+                })
+                  .then(() => {
+                    console.log('✅ Identity removed successfully');
+                    // Refresh the identities list
+                    loadRecentIdentities();
+                  })
+                  .catch((err) => {
+                    console.error('❌ Failed to remove identity:', err);
+                    setError(err instanceof Error ? err.message : 'Failed to remove identity');
+                  });
+              } else {
+                console.log('🚫 User cancelled removal');
+              }
+            } catch (err) {
+              console.error('❌ Dialog error:', err);
+              console.error('❌ Error details:', {
+                message: err instanceof Error ? err.message : String(err),
+                stack: err instanceof Error ? err.stack : undefined,
+                type: typeof err
+              });
             }
           }}
           sx={{ color: 'error.main' }}

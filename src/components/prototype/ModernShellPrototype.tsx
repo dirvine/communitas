@@ -74,6 +74,7 @@ import {
   Groups,
   WorkOutline,
   Message,
+  AddCircleOutline,
 } from '@mui/icons-material'
 import { styled } from '@mui/material/styles'
 import {
@@ -435,16 +436,7 @@ const projectTimeline = [
   'Sep 27 · Marketing microsite preview published',
 ]
 
-const organisationOverviewData = {
-  members: [
-    { name: 'David Allan', role: 'Owner', status: 'Online' },
-    { name: 'Lauren McFadyen', role: 'Product', status: 'Online' },
-    { name: 'Ben Thomson', role: 'Engineering', status: 'Away' },
-    { name: 'Storage Bot', role: 'Automation', status: 'Reports only' },
-  ],
-  projects: ['Project Lumos', 'Bootstrap Hardening', 'Marketing Microsite'],
-  channels: ['#general', '#storage', '#marketing', '#engineering'],
-}
+// Hardcoded mock data removed - now using real organization data from backend
 
 const storageContainers = [
   {
@@ -529,6 +521,10 @@ export const ModernShellPrototypeScreen: React.FC = () => {
   // Contact management state
   const [contactDialogMode, setContactDialogMode] = useState<'add' | 'edit' | 'delete' | null>(null)
   const [selectedContact, setSelectedContact] = useState<Conversation | null>(null)
+
+  // Organization and group management state
+  const [showOrgManagementDialog, setShowOrgManagementDialog] = useState(false)
+  const [showGroupManagementDialog, setShowGroupManagementDialog] = useState(false)
 
   const conversationToContact = useCallback((conversation: Conversation): Contact => ({
     id: conversation.id,
@@ -731,7 +727,7 @@ export const ModernShellPrototypeScreen: React.FC = () => {
 
       if (usePasskey) {
         // Use passkey authentication
-        const success = await signInWithPasskey()
+        const success = await signInWithPasskey(fourWords)
         if (success) {
           setShowIdentityPicker(false)
           enqueueSnackbar('Signed in successfully', { variant: 'success' })
@@ -784,7 +780,7 @@ export const ModernShellPrototypeScreen: React.FC = () => {
       console.log('✅ Logged out current identity')
 
       // Login with selected identity using passkey (auto-login)
-      const success = await signInWithPasskey()
+      const success = await signInWithPasskey(fourWords)
       if (success) {
         enqueueSnackbar(`Switched to ${fourWords}`, { variant: 'success' })
         console.log('✅ Switched to new identity successfully')
@@ -1022,12 +1018,11 @@ export const ModernShellPrototypeScreen: React.FC = () => {
 
         while (retries > 0 && !userInfoRetrieved) {
           try {
-            // Use working gossip_get_own_identity command
-            const identity = await (window as any).__TAURI__.tauri.invoke('gossip_get_own_identity') as { four_words: string; display_name: string; public_key: string }
-            if (identity && identity.four_words) {
-              testPeerId = identity.four_words // Use four-word address as peer ID
-              testDisplayName = identity.display_name || ''
-              console.log('✅ Got user identity from Tauri backend:', { fourWords: testPeerId, displayName: testDisplayName })
+            const userInfo = await (window as any).__TAURI__.tauri.invoke('core_get_user_info') as { peerId: string; displayName: string }
+            if (userInfo && userInfo.peerId) {
+              testPeerId = userInfo.peerId
+              testDisplayName = userInfo.displayName || ''
+              console.log('✅ Got user info from Tauri backend:', { peerId: testPeerId, displayName: testDisplayName })
               userInfoRetrieved = true
             }
           } catch (err) {
@@ -1182,15 +1177,14 @@ export const ModernShellPrototypeScreen: React.FC = () => {
 
     if ((window as any).__TAURI__?.tauri?.invoke) {
       try {
-        // Use working gossip_add_bootstrap_peer command
-        await (window as any).__TAURI__.tauri.invoke('gossip_add_bootstrap_peer', {
-          multiaddr: connectionWordsInput.trim() // Expects multiaddr format
+        await (window as any).__TAURI__.tauri.invoke('core_add_bootstrap_node', {
+          node: connectionWordsInput.trim()
         })
-        console.log('✅ Added bootstrap peer:', connectionWordsInput.trim())
+        console.log('✅ Added bootstrap node:', connectionWordsInput.trim())
         setConnectionWordsInput('')
         setAddConnectionDialogOpen(false)
       } catch (err) {
-        console.error('❌ Failed to add bootstrap peer:', err)
+        console.error('❌ Failed to add bootstrap node:', err)
       }
     } else {
       console.log('📝 Would add connection:', connectionWordsInput.trim())
@@ -1206,10 +1200,6 @@ export const ModernShellPrototypeScreen: React.FC = () => {
     }
 
     if ((window as any).__TAURI__?.tauri?.invoke) {
-      // TODO: Implement update_profile command in org_commands.rs backend
-      console.warn('⚠️  Display name update not yet implemented in backend')
-      alert('Display name update not yet available - backend implementation pending')
-      /* DISABLED - Waiting for backend implementation
       try {
         await (window as any).__TAURI__.tauri.invoke('core_set_display_name', {
           displayName: displayNameInput.trim()
@@ -1222,9 +1212,6 @@ export const ModernShellPrototypeScreen: React.FC = () => {
       } catch (err) {
         console.error('❌ Failed to update display name:', err)
       }
-      */
-      setDisplayNameInput('')
-      setEditDisplayNameDialogOpen(false)
     } else {
       console.log('📝 Would update display name:', displayNameInput.trim())
       setOurDisplayName(displayNameInput.trim())
@@ -1260,12 +1247,12 @@ export const ModernShellPrototypeScreen: React.FC = () => {
     return organizations[0] ?? null
   }, [organizations, selectedConversation])
 
-  const isOrganisationView = selectedConversation.type === 'organisation'
-  const isGroupView = selectedConversation.type === 'group'
-  const isPersonView = selectedConversation.type === 'person'
-  const isChannelView = selectedConversation.type === 'channel'
-  const isProjectView = selectedConversation.type === 'project'
-  const isGroupConversation = selectedConversation.type !== 'person'
+  const isOrganisationView = selectedConversation?.type === 'organisation'
+  const isGroupView = selectedConversation?.type === 'group'
+  const isPersonView = selectedConversation?.type === 'person'
+  const isChannelView = selectedConversation?.type === 'channel'
+  const isProjectView = selectedConversation?.type === 'project'
+  const isGroupConversation = selectedConversation?.type !== 'person'
 
   const focusConversationById = useCallback((conversationId: string, orgNameToExpand?: string) => {
     setSelectedConversationId(conversationId)
@@ -1520,6 +1507,8 @@ export const ModernShellPrototypeScreen: React.FC = () => {
   }, [selectedConversationId])
 
   const headerSubtitle = useMemo(() => {
+    if (!selectedConversation) return ''
+
     switch (selectedConversation.type) {
       case 'project':
         return selectedConversation.projectMeta
@@ -1823,6 +1812,8 @@ export const ModernShellPrototypeScreen: React.FC = () => {
   }
 
   const handleWebsiteOpen = () => {
+    if (!selectedConversation) return
+
     // Open website storage page for the selected entity
     // This will connect to saorsa-sites using the entity's four-word identity
     const fourWords = selectedConversation.fourWords || selectedConversation.id
@@ -1906,10 +1897,6 @@ export const ModernShellPrototypeScreen: React.FC = () => {
   const handleSaveEntityEdit = async (id: string, updates: Partial<Conversation>) => {
     try {
       if (typeof window !== 'undefined' && '__TAURI__' in window) {
-        // TODO: Implement update_channel/update_project commands in org_commands.rs backend
-        console.warn('⚠️  Entity update not yet implemented in backend')
-        alert('Entity update not yet available - backend implementation pending')
-        /* DISABLED - Waiting for backend implementation
         const { invoke } = await import('@tauri-apps/api/core')
 
         // Find the entity type from the conversation
@@ -1923,7 +1910,6 @@ export const ModernShellPrototypeScreen: React.FC = () => {
         })
 
         console.log(`✅ Updated ${entityType}: ${updates.name}`)
-        */
       } else {
         console.log(`🔶 Browser mode: Would update entity ${id}`, updates)
       }
@@ -1939,10 +1925,6 @@ export const ModernShellPrototypeScreen: React.FC = () => {
   const handleConfirmEntityDelete = async (id: string) => {
     try {
       if (typeof window !== 'undefined' && '__TAURI__' in window) {
-        // TODO: Implement delete_channel/delete_project commands in org_commands.rs backend
-        console.warn('⚠️  Entity deletion not yet implemented in backend')
-        alert('Entity deletion not yet available - backend implementation pending')
-        /* DISABLED - Waiting for backend implementation
         const { invoke } = await import('@tauri-apps/api/core')
 
         // Find the entity type from the conversation
@@ -1954,7 +1936,6 @@ export const ModernShellPrototypeScreen: React.FC = () => {
         })
 
         console.log(`✅ Deleted ${entityType}: ${id}`)
-        */
       } else {
         console.log(`🔶 Browser mode: Would delete entity ${id}`)
       }
@@ -1968,7 +1949,59 @@ export const ModernShellPrototypeScreen: React.FC = () => {
   }
 
   // Render functions for different view modes
-  const renderOrganisationOverview = () => (
+  const renderOrganisationOverview = () => {
+    // Get first organization (or show empty state)
+    const selectedOrg = organizations[0];
+
+    // Show empty state if no organizations
+    if (!selectedOrg) {
+      return (
+        <Box
+          sx={{
+            flexGrow: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            px: 4,
+            py: 8,
+            textAlign: 'center',
+          }}
+        >
+          <Typography variant="h5" fontWeight={600} gutterBottom>
+            Welcome! 👋
+          </Typography>
+          <Typography variant="body1" color="text.secondary" paragraph sx={{ maxWidth: 600 }}>
+            You don't have any organizations yet. Organizations are optional - you can start messaging contacts directly, or create an organization to collaborate with teams.
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 2, mt: 3, flexWrap: 'wrap', justifyContent: 'center' }}>
+            <Button
+              variant="contained"
+              startIcon={<AddCircleOutline />}
+              onClick={() => setShowOrgManagementDialog(true)}
+            >
+              Create Organization
+            </Button>
+            <Button
+              variant="outlined"
+              startIcon={<AddCircleOutline />}
+              onClick={() => setShowGroupManagementDialog(true)}
+            >
+              Create Group
+            </Button>
+            <Button
+              variant="outlined"
+              startIcon={<AddCircleOutline />}
+              onClick={() => setContactDialogMode('add')}
+            >
+              Add Contact
+            </Button>
+          </Box>
+        </Box>
+      );
+    }
+
+    return (
     <Box
       sx={{
         flexGrow: 1,
@@ -1987,22 +2020,26 @@ export const ModernShellPrototypeScreen: React.FC = () => {
         <Typography variant="subtitle1" fontWeight={600}>Members</Typography>
         <Typography variant="body2" sx={{ color: TOKENS.textSecondary }}>Hover to see details or manage participants.</Typography>
         <Stack spacing={1.2} sx={{ mt: 1 }}>
-          {organisationOverviewData.members.map(member => (
-            <Stack key={member.name} direction="row" spacing={1.5} alignItems="center" sx={{
+          {(!selectedOrg?.users || selectedOrg.users.length === 0) ? (
+            <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>No members yet</Typography>
+          ) : selectedOrg.users.map(user => (
+            <Stack key={user.userId} direction="row" spacing={1.5} alignItems="center" sx={{
               p: 1,
               borderRadius: 2,
               bgcolor: alpha('#FFFFFF', 0.02),
               '&:hover': { bgcolor: alpha(TOKENS.accent, 0.12) },
             }}>
               <Avatar sx={{ width: 32, height: 32, bgcolor: alpha(TOKENS.accent, 0.12) }}>
-                {member.name.split(' ').map(n => n[0]).join('')}
+                {user.name.split(' ').map((n: string) => n[0]).join('')}
               </Avatar>
               <Box sx={{ flexGrow: 1 }}>
-                <Typography variant="body2" fontWeight={500}>{member.name}</Typography>
-                <Typography variant="caption" sx={{ color: TOKENS.textSecondary }}>{member.role} · {member.status}</Typography>
+                <Typography variant="body2" fontWeight={500}>{user.name}</Typography>
+                <Typography variant="caption" sx={{ color: TOKENS.textSecondary }}>
+                  {user.role || 'member'}
+                </Typography>
               </Box>
               <Tooltip title="Edit role">
-                <IconButton size="small" sx={{ color: TOKENS.textSecondary }} onClick={() => console.log('Edit member:', member.name)}>
+                <IconButton size="small" sx={{ color: TOKENS.textSecondary }} onClick={() => console.log('Edit member:', user.name)}>
                   <EditOutlined fontSize="inherit" />
                 </IconButton>
               </Tooltip>
@@ -2012,7 +2049,7 @@ export const ModernShellPrototypeScreen: React.FC = () => {
                 </IconButton>
               </Tooltip>
               <Tooltip title="Remove from org">
-                <IconButton size="small" sx={{ color: TOKENS.danger }} onClick={() => console.log('Remove member:', member.name)}>
+                <IconButton size="small" sx={{ color: TOKENS.danger }} onClick={() => console.log('Remove member:', user.name)}>
                   <DeleteOutline fontSize="inherit" />
                 </IconButton>
               </Tooltip>
@@ -2026,9 +2063,11 @@ export const ModernShellPrototypeScreen: React.FC = () => {
         <Typography variant="subtitle1" fontWeight={600}>Projects</Typography>
         <Typography variant="body2" sx={{ color: TOKENS.textSecondary }}>Hover to open project or archive.</Typography>
         <Stack spacing={1.2} sx={{ mt: 1 }}>
-          {organisationOverviewData.projects.map(project => (
+          {(!selectedOrg?.projects || selectedOrg.projects.length === 0) ? (
+            <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>No projects yet</Typography>
+          ) : selectedOrg.projects.map(project => (
             <Box
-              key={project}
+              key={project.id}
               sx={{
                 display: 'flex',
                 alignItems: 'center',
@@ -2040,9 +2079,9 @@ export const ModernShellPrototypeScreen: React.FC = () => {
               }}
             >
               <FolderOutlined sx={{ color: TOKENS.accent }} />
-              <Typography variant="body2" fontWeight={500} sx={{ flexGrow: 1 }}>{project}</Typography>
+              <Typography variant="body2" fontWeight={500} sx={{ flexGrow: 1 }}>{project.name}</Typography>
               <Tooltip title="Archive project">
-                <IconButton size="small" sx={{ color: TOKENS.textSecondary }} onClick={() => console.log('Archive project:', project)}>
+                <IconButton size="small" sx={{ color: TOKENS.textSecondary }} onClick={() => console.log('Archive project:', project.name)}>
                   <ArchiveOutlined fontSize="inherit" />
                 </IconButton>
               </Tooltip>
@@ -2056,9 +2095,11 @@ export const ModernShellPrototypeScreen: React.FC = () => {
         <Typography variant="subtitle1" fontWeight={600}>Channels</Typography>
         <Typography variant="body2" sx={{ color: TOKENS.textSecondary }}>Hover to preview members.</Typography>
         <Stack spacing={1.2} sx={{ mt: 1 }}>
-          {organisationOverviewData.channels.map(channel => (
+          {(!selectedOrg?.channels || selectedOrg.channels.length === 0) ? (
+            <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>No channels yet</Typography>
+          ) : selectedOrg.channels.map(channel => (
             <Box
-              key={channel}
+              key={channel.id}
               sx={{
                 display: 'flex',
                 alignItems: 'center',
@@ -2070,7 +2111,7 @@ export const ModernShellPrototypeScreen: React.FC = () => {
               }}
             >
               <GridView sx={{ color: TOKENS.textSecondary }} />
-              <Typography variant="body2" fontWeight={500}>{channel}</Typography>
+              <Typography variant="body2" fontWeight={500}>{channel.name}</Typography>
             </Box>
           ))}
         </Stack>
@@ -2126,7 +2167,8 @@ export const ModernShellPrototypeScreen: React.FC = () => {
         </Stack>
       </Box>
     </Box>
-  )
+    )
+  }
 
   const renderChannelMode = () => {
     // Only show non-chat modes when channel is selected
@@ -2244,7 +2286,7 @@ export const ModernShellPrototypeScreen: React.FC = () => {
             Threads view for groups - Coming soon
           </Typography>
         )}
-        {groupViewMode === 'files' && (
+        {groupViewMode === 'files' && selectedConversation && (
           <EntityDocumentWorkspace
             entityId={selectedConversationId}
             entityName={selectedConversation.name}
@@ -2274,7 +2316,7 @@ export const ModernShellPrototypeScreen: React.FC = () => {
             Threads view for people - Coming soon
           </Typography>
         )}
-        {personViewMode === 'files' && (
+        {personViewMode === 'files' && selectedConversation && (
           <EntityDocumentWorkspace
             entityId={selectedConversationId}
             entityName={selectedConversation.name}
@@ -2608,7 +2650,7 @@ export const ModernShellPrototypeScreen: React.FC = () => {
               <StorageOutlined />
             </SystemRailButton>
           </Tooltip>
-          {selectedConversation.hasWebsite && (
+          {selectedConversation?.hasWebsite && (
             <Tooltip title="Website" placement="right">
               <SystemRailButton onClick={handleWebsiteOpen} sx={{ color: TOKENS.accent }}>
                 <LanguageOutlined />
@@ -3089,8 +3131,8 @@ export const ModernShellPrototypeScreen: React.FC = () => {
                               }}
                             >
                               <Box sx={{ position: 'relative' }}>
-                                <Avatar sx={{ width: 40, height: 40, ...avatarShapeStyles[child.type] }}>
-                                  {child.name.substring(0, 2).toUpperCase()}
+                                <Avatar sx={{ width: 40, height: 40, ...(child.type ? avatarShapeStyles[child.type] : {}) }}>
+                                  {child.name?.substring(0, 2).toUpperCase() || '??'}
                                 </Avatar>
                                 <Box
                                   sx={{
@@ -3107,7 +3149,7 @@ export const ModernShellPrototypeScreen: React.FC = () => {
                                     border: `2px solid ${TOKENS.bgRaised}`,
                                   }}
                                 >
-                                  {childBadge.icon && React.cloneElement(childBadge.icon, { sx: { fontSize: 14, color: '#FFFFFF' } })}
+                                  {React.isValidElement(childBadge.icon) && React.cloneElement(childBadge.icon, { sx: { fontSize: 14, color: '#FFFFFF' } })}
                                 </Box>
                               </Box>
                               <Box sx={{ flexGrow: 1, minWidth: 0 }}>
@@ -3173,10 +3215,10 @@ export const ModernShellPrototypeScreen: React.FC = () => {
                     }}
                   >
                     <Box sx={{ position: 'relative' }}>
-                      <Avatar sx={{ width: 48, height: 48, ...avatarShapeStyles[conv.type] }}>
-                        {conv.name.substring(0, 2).toUpperCase()}
+                      <Avatar sx={{ width: 48, height: 48, ...(conv.type ? avatarShapeStyles[conv.type] : {}) }}>
+                        {conv.name?.substring(0, 2).toUpperCase() || '??'}
                       </Avatar>
-                      {!entityIcon && badge.icon && (
+                      {!entityIcon && React.isValidElement(badge.icon) && (
                         <Box
                           sx={{
                             position: 'absolute',
@@ -3192,7 +3234,7 @@ export const ModernShellPrototypeScreen: React.FC = () => {
                             border: `2px solid ${TOKENS.bgRaised}`,
                           }}
                         >
-                          {badge.icon && React.cloneElement(badge.icon, { sx: { fontSize: 14, color: '#FFFFFF' } })}
+                          {React.cloneElement(badge.icon, { sx: { fontSize: 14, color: '#FFFFFF' } })}
                         </Box>
                       )}
                     </Box>
@@ -3252,7 +3294,7 @@ export const ModernShellPrototypeScreen: React.FC = () => {
           }}
         >
           <Stack direction="row" spacing={1.5} alignItems="center">
-            <Avatar sx={{ width: 40, height: 40 }}>{selectedConversation.name.substring(0, 2)}</Avatar>
+            <Avatar sx={{ width: 40, height: 40 }}>{selectedConversation?.name?.substring(0, 2) || '??'}</Avatar>
             <Box
               onClick={handleEntityMenuOpen}
               sx={{
@@ -3268,7 +3310,7 @@ export const ModernShellPrototypeScreen: React.FC = () => {
               }}
             >
               <Box>
-                <Typography variant="subtitle1" fontWeight={600}>{selectedConversation.name}</Typography>
+                <Typography variant="subtitle1" fontWeight={600}>{selectedConversation?.name || 'Unknown'}</Typography>
                 <Typography variant="caption" sx={{ color: TOKENS.textSecondary }}>{headerSubtitle}</Typography>
               </Box>
               <KeyboardArrowDown
@@ -3294,7 +3336,7 @@ export const ModernShellPrototypeScreen: React.FC = () => {
               </IconButton>
             </Tooltip>
             <Tooltip title="Files">
-              <IconButton sx={{ color: TOKENS.textSecondary }} onClick={() => console.log('Open files for:', selectedConversation.name)}>
+              <IconButton sx={{ color: TOKENS.textSecondary }} onClick={() => console.log('Open files for:', selectedConversation?.name)}>
                 <FolderOutlined />
               </IconButton>
             </Tooltip>
@@ -3526,7 +3568,7 @@ export const ModernShellPrototypeScreen: React.FC = () => {
           <ListItemIcon>
             <EditOutlined fontSize="small" sx={{ color: TOKENS.textPrimary }} />
           </ListItemIcon>
-          <ListItemText>Edit {selectedConversation.type === 'person' ? 'Contact' : 'Entity'}</ListItemText>
+          <ListItemText>Edit {selectedConversation?.type === 'person' ? 'Contact' : 'Entity'}</ListItemText>
         </MenuItem>
         {selectedConversation?.type === 'organisation' && (
           <MenuItem onClick={() => {
@@ -3546,7 +3588,7 @@ export const ModernShellPrototypeScreen: React.FC = () => {
             <DeleteOutline fontSize="small" sx={{ color: TOKENS.danger }} />
           </ListItemIcon>
           <ListItemText sx={{ color: TOKENS.danger }}>
-            Delete {selectedConversation.type === 'person' ? 'Contact' : 'Entity'}
+            Delete {selectedConversation?.type === 'person' ? 'Contact' : 'Entity'}
           </ListItemText>
         </MenuItem>
       </Menu>
@@ -3678,13 +3720,13 @@ export const ModernShellPrototypeScreen: React.FC = () => {
                     {item.type === 'entity' ? (
                       <>
                         <Stack direction="row" spacing={1.5} alignItems="center" sx={{ minWidth: 0 }}>
-                          <Avatar sx={{ width: 36, height: 36, fontSize: 14, ...avatarShapeStyles[item.conversation.type] }}>
-                            {item.conversation.name.substring(0, 2).toUpperCase()}
+                          <Avatar sx={{ width: 36, height: 36, fontSize: 14, ...(item.conversation.type ? avatarShapeStyles[item.conversation.type] : {}) }}>
+                            {item.conversation.name?.substring(0, 2).toUpperCase() || '??'}
                           </Avatar>
                           <Box sx={{ minWidth: 0 }}>
                             <Typography variant="body2" fontWeight={600} noWrap>{item.conversation.name}</Typography>
                             <Typography variant="caption" sx={{ color: TOKENS.textSecondary }} noWrap>
-                              {item.conversation.org ?? (item.conversation.scope === 'personal' ? 'Personal Space' : 'Organisation')} · {conversationTypeLabel[item.conversation.type]}
+                              {item.conversation.org ?? (item.conversation.scope === 'personal' ? 'Personal Space' : 'Organisation')} · {item.conversation.type ? conversationTypeLabel[item.conversation.type] : 'Unknown'}
                             </Typography>
                           </Box>
                         </Stack>

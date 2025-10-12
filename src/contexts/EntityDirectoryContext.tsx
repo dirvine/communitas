@@ -17,7 +17,7 @@ import {
   CollaborationCapabilities,
   NetworkIdentity,
 } from '../types/collaboration';
-import { mockOrganizations, mockPersonalGroups, mockPersonalUsers } from '../data/mockCollaborationData';
+// Mock data removed - now loading from backend
 import { useAuth } from './AuthContext';
 import {
   CreateNewOrganizationInput,
@@ -320,9 +320,9 @@ const clonePersonalUserEntity = (user: PersonalUser): PersonalUser & EntityMetad
 });
 
 const createInitialState = (): EntityDirectoryState => ({
-  organizations: mockOrganizations.map(cloneOrganizationGraph),
-  personalGroups: mockPersonalGroups.map(clonePersonalGroupEntity),
-  personalUsers: mockPersonalUsers.map(clonePersonalUserEntity),
+  organizations: [], // Start empty - will load from backend
+  personalGroups: [], // Start empty - will load from backend
+  personalUsers: [], // Start empty - will load from backend
   operations: [],
 });
 

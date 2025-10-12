@@ -24,6 +24,27 @@ use anyhow::Result;
 use clap::Parser;
 use std::path::PathBuf;
 
+/// Try to self-update the binary using GitHub releases
+fn try_self_update() -> Result<Option<String>> {
+    use self_update::cargo_crate_version;
+    let owner = std::env::var("COMMUNITAS_UPDATE_REPO_OWNER")
+        .unwrap_or_else(|_| "dirvine".to_string());
+    let name = std::env::var("COMMUNITAS_UPDATE_REPO_NAME")
+        .unwrap_or_else(|_| "communitas".to_string());
+
+    let mut cfg = self_update::backends::github::Update::configure();
+    let builder = cfg
+        .repo_owner(&owner)
+        .repo_name(&name)
+        .bin_name("communitas-tui")
+        .current_version(cargo_crate_version!());
+
+    match builder.build()?.update() {
+        Ok(status) => Ok(Some(status.version().to_string())),
+        Err(e) => Err(e.into()),
+    }
+}
+
 /// Communitas TUI - Terminal interface for testing Communitas backend
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -67,11 +88,37 @@ struct Args {
     /// Run only HTTP control API without TUI (requires --control-port)
     #[arg(long, requires = "control_port")]
     api_only: bool,
+
+    /// Perform self-update from GitHub Releases and exit
+    #[arg(long, default_value_t = false)]
+    self_update: bool,
 }
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 4)]
 async fn main() -> Result<()> {
     let args = Args::parse();
+
+    // Self-update mode: do not start TUI
+    if args.self_update {
+        match tokio::task::spawn_blocking(try_self_update).await {
+            Ok(Ok(Some(ver))) => {
+                println!("✅ Successfully updated to version: {}", ver);
+                println!("Please restart the application to use the new version.");
+            }
+            Ok(Ok(None)) => {
+                println!("Already on latest version");
+            }
+            Ok(Err(e)) => {
+                eprintln!("❌ Self-update error: {:#}", e);
+                std::process::exit(1);
+            }
+            Err(e) => {
+                eprintln!("❌ Spawn error: {:#}", e);
+                std::process::exit(1);
+            }
+        }
+        return Ok(());
+    }
 
     // Initialize logging
     utils::logger::init(args.debug)?;

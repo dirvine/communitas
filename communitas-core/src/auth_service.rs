@@ -140,6 +140,13 @@ impl AuthService {
         Ok(self.storage_manager.get_recent_identities().await)
     }
 
+    /// Remove a recent identity from the list (does not delete the vault)
+    pub async fn remove_recent_identity(&mut self, four_words: &str) -> Result<()> {
+        self.storage_manager
+            .remove_recent_identity(four_words)
+            .await
+    }
+
     /// Check if vault exists for four-word identity
     pub async fn vault_exists(&self, four_words: &str) -> Result<bool> {
         self.storage_manager.vault_exists(four_words).await

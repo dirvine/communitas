@@ -6,14 +6,30 @@ import {
   Box,
   Typography,
   Button,
+  TextField,
   Card,
   CardContent,
-  Chip,
   Alert,
-  CircularProgress,
+  IconButton,
+  InputAdornment,
+  LinearProgress,
+  Radio,
+  RadioGroup,
+  FormControlLabel,
+  FormControl,
   alpha,
+  Chip,
 } from '@mui/material';
-import { CheckCircle as CheckCircleIcon, Settings as SettingsIcon } from '@mui/icons-material';
+import {
+  Visibility,
+  VisibilityOff,
+  Refresh as RefreshIcon,
+  CheckCircle as CheckCircleIcon,
+  Security as SecurityIcon,
+  Fingerprint as FingerprintIcon,
+  Lock as LockIcon,
+  ArrowBack as ArrowBackIcon,
+} from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
 import { invoke } from '@tauri-apps/api/core';
 import { fourWordsToDisplay } from '../../utils/identity';
@@ -23,191 +39,644 @@ interface FirstLaunchWelcomeProps {
   onClose: () => void;
 }
 
+type OnboardingStep = 'welcome' | 'generate' | 'display-name' | 'security-choice' | 'password' | 'passkey' | 'summary';
+type SecurityMethod = 'password' | 'passkey';
+
+interface PasswordStrength {
+  score: number; // 0-100
+  label: string;
+  color: 'error' | 'warning' | 'success';
+}
+
 export const FirstLaunchWelcome: React.FC<FirstLaunchWelcomeProps> = ({ open, onClose }) => {
   const { createIdentity, getOsUsername, enableAutoLogin } = useAuth();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+
+  // Step management
+  const [currentStep, setCurrentStep] = useState<OnboardingStep>('welcome');
+
+  // Identity data
   const [fourWords, setFourWords] = useState<string>('');
   const [displayName, setDisplayName] = useState<string>('');
-  const [step, setStep] = useState<'creating' | 'created' | 'complete'>('creating');
+  const [securityMethod, setSecurityMethod] = useState<SecurityMethod>('password');
 
+  // Password state
+  const [password, setPassword] = useState<string>('');
+  const [passwordConfirm, setPasswordConfirm] = useState<string>('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showPasswordConfirm, setShowPasswordConfirm] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
+
+  // Passkey state
+  const [passkeyRegistering, setPasskeyRegistering] = useState(false);
+
+  // UI state
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Initialize display name from OS username
   useEffect(() => {
-    if (open) {
-      performFirstLaunchSetup();
+    if (open && currentStep === 'welcome') {
+      loadOsUsername();
     }
-  }, [open]);
+  }, [open, currentStep]);
 
-  const performFirstLaunchSetup = async () => {
+  const loadOsUsername = async () => {
     try {
-      setLoading(true);
-      setError(null);
-      setStep('creating');
-
-      // Step 1: Generate four-word identity
-      console.log('🎲 Generating four-word identity...');
-      const generatedFourWords = await invoke('generate_four_word_identity') as string;
-      setFourWords(generatedFourWords);
-      console.log('✅ Generated:', generatedFourWords);
-
-      // Step 2: Get OS username
-      console.log('👤 Getting OS username...');
       const osUsername = await getOsUsername();
       setDisplayName(osUsername);
-      console.log('✅ OS Username:', osUsername);
-
-      // Step 3: Create vault (using four-words as password)
-      console.log('🔐 Creating encrypted vault...');
-      await createIdentity(osUsername, {
-        fourWords: generatedFourWords,
-        password: generatedFourWords, // Use four-words as password
-      });
-      console.log('✅ Vault created');
-      setStep('created');
-
-      // Step 4: Enable auto-login (store in keyring)
-      console.log('🔑 Enabling auto-login...');
-      await enableAutoLogin(generatedFourWords, generatedFourWords);
-      console.log('✅ Auto-login enabled');
-
-      setStep('complete');
-      setLoading(false);
     } catch (err) {
-      console.error('First launch setup failed:', err);
-      setError(err instanceof Error ? err.message : 'Setup failed. Please try again.');
+      console.warn('Failed to get OS username:', err);
+      setDisplayName('');
+    }
+  };
+
+  // Password strength calculation
+  const calculatePasswordStrength = (pwd: string): PasswordStrength => {
+    if (!pwd) return { score: 0, label: 'No password', color: 'error' };
+
+    let score = 0;
+
+    // Length
+    if (pwd.length >= 8) score += 25;
+    if (pwd.length >= 12) score += 25;
+
+    // Complexity
+    if (/[a-z]/.test(pwd)) score += 10;
+    if (/[A-Z]/.test(pwd)) score += 10;
+    if (/[0-9]/.test(pwd)) score += 10;
+    if (/[^a-zA-Z0-9]/.test(pwd)) score += 20;
+
+    if (score < 40) return { score, label: 'Weak', color: 'error' };
+    if (score < 70) return { score, label: 'Medium', color: 'warning' };
+    return { score, label: 'Strong', color: 'success' };
+  };
+
+  const passwordStrength = calculatePasswordStrength(password);
+
+  // Step handlers
+  const handleGenerateIdentity = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const generated = await invoke<string>('generate_four_word_identity');
+      setFourWords(generated);
+      setCurrentStep('generate');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate identity');
+    } finally {
       setLoading(false);
     }
   };
 
-  const handleContinue = () => {
-    console.log('🚀 First launch setup complete, continuing to app');
+  const handleRegenerateIdentity = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const generated = await invoke<string>('generate_four_word_identity');
+      setFourWords(generated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate identity');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleContinueToDisplayName = () => {
+    setCurrentStep('display-name');
+  };
+
+  const handleContinueToSecurity = () => {
+    if (!displayName.trim()) {
+      setError('Please enter a display name');
+      return;
+    }
+    setError(null);
+    setCurrentStep('security-choice');
+  };
+
+  const handleSecurityChoice = (method: SecurityMethod) => {
+    setSecurityMethod(method);
+    setCurrentStep(method);
+  };
+
+  const handlePasswordContinue = () => {
+    // Validate password
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters');
+      return;
+    }
+    if (password !== passwordConfirm) {
+      setError('Passwords do not match');
+      return;
+    }
+    if (passwordStrength.score < 40) {
+      setError('Please choose a stronger password');
+      return;
+    }
+    setError(null);
+    handleCreateIdentity();
+  };
+
+  const handlePasskeyRegister = async () => {
+    setPasskeyRegistering(true);
+    setError(null);
+
+    try {
+      // First create the vault with a strong random password
+      const randomPassword = await generateSecurePassword();
+
+      // Create identity
+      await createIdentity(displayName, {
+        fourWords: fourWords,
+        password: randomPassword,
+      });
+
+      // Register passkey
+      await invoke('auth_passkey_register', {
+        fourWords: fourWords,
+        deviceName: displayName,
+      });
+
+      // Enable auto-login with passkey
+      await enableAutoLogin(fourWords, randomPassword);
+
+      setCurrentStep('summary');
+    } catch (err) {
+      console.error('Passkey registration failed:', err);
+      setError(err instanceof Error ? err.message : 'Passkey registration failed. Please try password method instead.');
+    } finally {
+      setPasskeyRegistering(false);
+    }
+  };
+
+  const handleCreateIdentity = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      // Create vault with user's chosen password
+      await createIdentity(displayName, {
+        fourWords: fourWords,
+        password: password,
+      });
+
+      // Enable auto-login if requested
+      if (rememberMe) {
+        await enableAutoLogin(fourWords, password);
+      }
+
+      setCurrentStep('summary');
+    } catch (err) {
+      console.error('Identity creation failed:', err);
+      setError(err instanceof Error ? err.message : 'Failed to create identity');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const generateSecurePassword = async (): Promise<string> => {
+    // Generate a cryptographically secure random password for passkey users
+    const array = new Uint8Array(32);
+    crypto.getRandomValues(array);
+    return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
+  };
+
+  const handleBack = () => {
+    const stepOrder: OnboardingStep[] = ['welcome', 'generate', 'display-name', 'security-choice', 'password'];
+    const currentIndex = stepOrder.indexOf(currentStep);
+    if (currentIndex > 0) {
+      setCurrentStep(stepOrder[currentIndex - 1]);
+      setError(null);
+    }
+  };
+
+  const handleStart = () => {
+    console.log('✅ Onboarding complete, starting app');
     onClose();
   };
 
-  const handleCancel = () => {
-    console.log('❌ New identity creation cancelled');
-    onClose();
-  };
+  // Render step content
+  const renderStepContent = () => {
+    switch (currentStep) {
+      case 'welcome':
+        return (
+          <Box sx={{ textAlign: 'center', py: 2 }}>
+            <Typography variant="h4" fontWeight={600} gutterBottom>
+              Welcome to Communitas! 🎉
+            </Typography>
+            <Typography variant="body1" color="text.secondary" paragraph sx={{ mt: 3 }}>
+              Let's set up your secure identity
+            </Typography>
 
-  return (
-    <Dialog open={open} maxWidth="md" fullWidth onClose={handleCancel}>
-      <DialogContent sx={{ p: 4 }}>
-        {loading ? (
-          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, py: 4 }}>
-            <CircularProgress size={64} />
-            <Typography variant="h6" color="text.secondary">
-              {step === 'creating' && 'Setting up your identity...'}
-              {step === 'created' && 'Configuring auto-login...'}
-            </Typography>
-            <Typography variant="body2" color="text.secondary" align="center">
-              This will only take a moment
-            </Typography>
+            <Box sx={{ mt: 4, mb: 3, display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'flex-start', maxWidth: 400, mx: 'auto' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <SecurityIcon color="primary" />
+                <Typography variant="body2" textAlign="left">Post-quantum secure encryption</Typography>
+              </Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <CheckCircleIcon color="primary" />
+                <Typography variant="body2" textAlign="left">Peer-to-peer networking</Typography>
+              </Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <CheckCircleIcon color="primary" />
+                <Typography variant="body2" textAlign="left">No central servers</Typography>
+              </Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <CheckCircleIcon color="primary" />
+                <Typography variant="body2" textAlign="left">Human-readable identities</Typography>
+              </Box>
+            </Box>
+
             <Button
-              variant="outlined"
-              onClick={handleCancel}
-              sx={{ mt: 2 }}
+              variant="contained"
+              size="large"
+              onClick={handleGenerateIdentity}
+              disabled={loading}
+              sx={{ mt: 3, minWidth: 200 }}
             >
-              Cancel
+              Get Started
             </Button>
           </Box>
-        ) : error ? (
-          <Box sx={{ textAlign: 'center' }}>
-            <Alert severity="error" sx={{ mb: 3 }}>
-              {error}
-            </Alert>
-            <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2 }}>
-              <Button variant="outlined" onClick={handleCancel}>
-                Cancel
-              </Button>
-              <Button variant="contained" onClick={performFirstLaunchSetup}>
-                Try Again
-              </Button>
-            </Box>
-          </Box>
-        ) : (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            {/* Success Icon */}
-            <Box sx={{ textAlign: 'center' }}>
-              <CheckCircleIcon sx={{ fontSize: 64, color: 'success.main', mb: 2 }} />
-              <Typography variant="h4" fontWeight={600} gutterBottom>
-                Welcome to Communitas! 🎉
-              </Typography>
-              <Typography variant="body1" color="text.secondary">
-                Your secure identity has been created
-              </Typography>
-            </Box>
+        );
 
-            {/* Identity Card */}
+      case 'generate':
+        return (
+          <Box sx={{ textAlign: 'center' }}>
+            <Typography variant="h5" fontWeight={600} gutterBottom>
+              Your Identity
+            </Typography>
+            <Typography variant="body2" color="text.secondary" paragraph sx={{ mt: 2 }}>
+              This is your network address. You can regenerate it if you'd like a different one.
+            </Typography>
+
             <Card
               sx={{
-                bgcolor: (theme) =>
-                  theme.palette.mode === 'dark'
-                    ? alpha(theme.palette.primary.main, 0.1)
-                    : alpha(theme.palette.primary.main, 0.05),
-                border: 1,
+                mt: 3,
+                mb: 3,
+                bgcolor: (theme) => alpha(theme.palette.primary.main, 0.1),
+                border: 2,
                 borderColor: 'primary.main',
               }}
             >
-              <CardContent sx={{ textAlign: 'center', py: 3 }}>
-                <Typography variant="overline" color="text.secondary" gutterBottom>
-                  Your Identity
-                </Typography>
+              <CardContent sx={{ py: 4 }}>
                 <Typography
-                  variant="h5"
+                  variant="h4"
                   fontWeight={600}
                   sx={{
                     fontFamily: 'monospace',
                     color: 'primary.main',
-                    my: 2,
+                    letterSpacing: 2,
                   }}
                 >
                   {fourWordsToDisplay(fourWords)}
                 </Typography>
-                <Box sx={{ display: 'flex', justifyContent: 'center', gap: 1, flexWrap: 'wrap' }}>
-                  <Chip label={displayName} color="default" size="small" />
-                  <Chip label="Auto-login Enabled" color="success" size="small" icon={<CheckCircleIcon />} />
+                <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: 'block' }}>
+                  This is your unique address on the network
+                </Typography>
+              </CardContent>
+            </Card>
+
+            <Button
+              startIcon={<RefreshIcon />}
+              onClick={handleRegenerateIdentity}
+              disabled={loading}
+              sx={{ mb: 2 }}
+            >
+              Generate New Identity
+            </Button>
+          </Box>
+        );
+
+      case 'display-name':
+        return (
+          <Box>
+            <Typography variant="h5" fontWeight={600} gutterBottom textAlign="center">
+              What should we call you?
+            </Typography>
+            <Typography variant="body2" color="text.secondary" paragraph textAlign="center" sx={{ mt: 2, mb: 4 }}>
+              This name will be shown to others when you collaborate
+            </Typography>
+
+            <TextField
+              fullWidth
+              label="Display Name"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              placeholder="Enter your name"
+              autoFocus
+              sx={{ mb: 2 }}
+            />
+
+            <Typography variant="caption" color="text.secondary">
+              You can change this later in settings
+            </Typography>
+          </Box>
+        );
+
+      case 'security-choice':
+        return (
+          <Box sx={{ textAlign: 'center' }}>
+            <Typography variant="h5" fontWeight={600} gutterBottom>
+              Secure Your Identity
+            </Typography>
+            <Typography variant="body2" color="text.secondary" paragraph sx={{ mt: 2, mb: 4 }}>
+              Choose how you'd like to authenticate
+            </Typography>
+
+            <FormControl component="fieldset" fullWidth>
+              <RadioGroup>
+                <Card
+                  sx={{
+                    mb: 2,
+                    cursor: 'pointer',
+                    border: 2,
+                    borderColor: 'transparent',
+                    '&:hover': { borderColor: 'primary.main' },
+                  }}
+                  onClick={() => handleSecurityChoice('password')}
+                >
+                  <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                    <FormControlLabel
+                      value="password"
+                      control={<Radio />}
+                      label=""
+                      sx={{ m: 0 }}
+                    />
+                    <LockIcon color="action" />
+                    <Box sx={{ textAlign: 'left', flex: 1 }}>
+                      <Typography variant="subtitle1" fontWeight={600}>
+                        Password (traditional)
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Set a password to protect your identity
+                      </Typography>
+                    </Box>
+                  </CardContent>
+                </Card>
+
+                <Card
+                  sx={{
+                    cursor: 'pointer',
+                    border: 2,
+                    borderColor: 'transparent',
+                    '&:hover': { borderColor: 'primary.main' },
+                  }}
+                  onClick={() => handleSecurityChoice('passkey')}
+                >
+                  <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                    <FormControlLabel
+                      value="passkey"
+                      control={<Radio />}
+                      label=""
+                      sx={{ m: 0 }}
+                    />
+                    <FingerprintIcon color="action" />
+                    <Box sx={{ textAlign: 'left', flex: 1 }}>
+                      <Typography variant="subtitle1" fontWeight={600}>
+                        Passkey (recommended) 🔐
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Use biometrics or security key
+                      </Typography>
+                    </Box>
+                    <Chip label="Requires compatible device" size="small" />
+                  </CardContent>
+                </Card>
+              </RadioGroup>
+            </FormControl>
+          </Box>
+        );
+
+      case 'password':
+        return (
+          <Box>
+            <Typography variant="h5" fontWeight={600} gutterBottom textAlign="center">
+              Set Password
+            </Typography>
+            <Typography variant="body2" color="text.secondary" paragraph textAlign="center" sx={{ mt: 2, mb: 4 }}>
+              Choose a strong password to protect your identity
+            </Typography>
+
+            <TextField
+              fullWidth
+              type={showPassword ? 'text' : 'password'}
+              label="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoFocus
+              sx={{ mb: 2 }}
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton onClick={() => setShowPassword(!showPassword)} edge="end">
+                      {showPassword ? <VisibilityOff /> : <Visibility />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
+            />
+
+            {password && (
+              <Box sx={{ mb: 2 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                  <Typography variant="caption">Strength:</Typography>
+                  <Typography variant="caption" color={`${passwordStrength.color}.main`} fontWeight={600}>
+                    {passwordStrength.label}
+                  </Typography>
+                </Box>
+                <LinearProgress
+                  variant="determinate"
+                  value={passwordStrength.score}
+                  color={passwordStrength.color}
+                  sx={{ height: 6, borderRadius: 3 }}
+                />
+              </Box>
+            )}
+
+            <TextField
+              fullWidth
+              type={showPasswordConfirm ? 'text' : 'password'}
+              label="Confirm Password"
+              value={passwordConfirm}
+              onChange={(e) => setPasswordConfirm(e.target.value)}
+              sx={{ mb: 2 }}
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton onClick={() => setShowPasswordConfirm(!showPasswordConfirm)} edge="end">
+                      {showPasswordConfirm ? <VisibilityOff /> : <Visibility />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
+            />
+
+            <FormControlLabel
+              control={
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                />
+              }
+              label={
+                <Typography variant="body2">
+                  Remember me (save in system keyring)
+                </Typography>
+              }
+            />
+          </Box>
+        );
+
+      case 'passkey':
+        return (
+          <Box sx={{ textAlign: 'center' }}>
+            <Typography variant="h5" fontWeight={600} gutterBottom>
+              Register Passkey
+            </Typography>
+            <Typography variant="body2" color="text.secondary" paragraph sx={{ mt: 2, mb: 4 }}>
+              Your device will prompt you to use biometric authentication
+            </Typography>
+
+            <Box sx={{ py: 6 }}>
+              <FingerprintIcon sx={{ fontSize: 80, color: 'primary.main', mb: 2 }} />
+              <Typography variant="body1" color="text.secondary">
+                {passkeyRegistering ? 'Waiting for authentication...' : 'Touch your security key or use biometric'}
+              </Typography>
+            </Box>
+
+            {!passkeyRegistering && (
+              <Button
+                variant="contained"
+                size="large"
+                onClick={handlePasskeyRegister}
+                fullWidth
+                sx={{ mb: 2 }}
+              >
+                Register Passkey
+              </Button>
+            )}
+
+            <Button
+              variant="text"
+              size="small"
+              onClick={() => window.open('https://webauthn.guide/', '_blank')}
+            >
+              Learn about passkeys
+            </Button>
+          </Box>
+        );
+
+      case 'summary':
+        return (
+          <Box sx={{ textAlign: 'center' }}>
+            <CheckCircleIcon sx={{ fontSize: 64, color: 'success.main', mb: 2 }} />
+            <Typography variant="h4" fontWeight={600} gutterBottom>
+              ✅ Identity Created!
+            </Typography>
+
+            <Card sx={{ mt: 3, mb: 3, textAlign: 'left' }}>
+              <CardContent>
+                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                  Your Details:
+                </Typography>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mt: 2 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <Typography variant="body2" fontWeight={600}>Name:</Typography>
+                    <Typography variant="body2">{displayName}</Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <Typography variant="body2" fontWeight={600}>Address:</Typography>
+                    <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+                      {fourWordsToDisplay(fourWords)}
+                    </Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <Typography variant="body2" fontWeight={600}>Security:</Typography>
+                    <Typography variant="body2">
+                      {securityMethod === 'passkey' ? 'Passkey 🔐' : 'Password'}
+                    </Typography>
+                  </Box>
                 </Box>
               </CardContent>
             </Card>
 
-            {/* Info Alerts */}
-            <Alert severity="success" icon={<CheckCircleIcon />}>
+            <Alert severity="warning" sx={{ mb: 2 }}>
               <Typography variant="body2" fontWeight={600} gutterBottom>
-                You're all set!
+                ⚠️ Important:
               </Typography>
               <Typography variant="caption">
-                This device will automatically sign you in. You can export a QR code from Settings
-                to link other devices.
+                Write down your four-word address! You'll need it to connect from other devices.
               </Typography>
             </Alert>
 
-            <Alert severity="info" icon={<SettingsIcon />}>
-              <Typography variant="caption">
-                <strong>Pro tip:</strong> Your four-word identity is like your username on the network.
-                You can share it with others, but your vault password stays secure on this device.
-              </Typography>
-            </Alert>
+            <Button
+              variant="contained"
+              size="large"
+              onClick={handleStart}
+              fullWidth
+            >
+              Start Using Communitas
+            </Button>
           </Box>
+        );
+
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <Dialog open={open} maxWidth="sm" fullWidth onClose={() => {}} disableEscapeKeyDown>
+      <DialogContent sx={{ p: 4, minHeight: 400 }}>
+        {error && (
+          <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
+            {error}
+          </Alert>
         )}
+
+        {renderStepContent()}
       </DialogContent>
 
-      {!loading && !error && (
-        <DialogActions sx={{ px: 4, pb: 3, justifyContent: 'center', gap: 2 }}>
+      {currentStep !== 'welcome' && currentStep !== 'summary' && (
+        <DialogActions sx={{ px: 4, pb: 3, justifyContent: 'space-between' }}>
           <Button
-            variant="outlined"
-            size="large"
-            onClick={handleCancel}
-            sx={{ minWidth: 150, py: 1.5 }}
+            startIcon={<ArrowBackIcon />}
+            onClick={handleBack}
+            disabled={loading || passkeyRegistering}
           >
-            Cancel
+            Back
           </Button>
-          <Button
-            variant="contained"
-            size="large"
-            onClick={handleContinue}
-            sx={{ minWidth: 150, py: 1.5 }}
-          >
-            Get Started
-          </Button>
+
+          <Box sx={{ display: 'flex', gap: 2 }}>
+            {currentStep === 'generate' && (
+              <Button
+                variant="contained"
+                onClick={handleContinueToDisplayName}
+                disabled={loading}
+              >
+                Continue
+              </Button>
+            )}
+            {currentStep === 'display-name' && (
+              <Button
+                variant="contained"
+                onClick={handleContinueToSecurity}
+                disabled={!displayName.trim()}
+              >
+                Continue
+              </Button>
+            )}
+            {currentStep === 'password' && (
+              <Button
+                variant="contained"
+                onClick={handlePasswordContinue}
+                disabled={loading || !password || !passwordConfirm}
+              >
+                Create Identity
+              </Button>
+            )}
+          </Box>
         </DialogActions>
       )}
     </Dialog>

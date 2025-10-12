@@ -82,7 +82,7 @@ export interface AuthContextType {
   logout: () => Promise<void>;
   createIdentity: (name: string, options?: { fourWords?: string; password?: string }) => Promise<UserIdentity>;
   registerPasskey: () => Promise<boolean>;
-  signInWithPasskey: () => Promise<boolean>;
+  signInWithPasskey: (fourWords?: string) => Promise<boolean>;
 
   // Identity management
   updateProfile: (updates: Partial<UserIdentity['profile']>) => Promise<void>;
@@ -480,32 +480,60 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  const signInWithPasskey = async (): Promise<boolean> => {
+  const signInWithPasskey = async (fourWords?: string): Promise<boolean> => {
     try {
-      if (typeof window === 'undefined' || !(window as any).PublicKeyCredential) {
+      if (!fourWords) {
+        console.error('fourWords parameter is required for passkey authentication');
         return false;
       }
 
-      const challenge = crypto.getRandomValues(new Uint8Array(32));
+      if (typeof window === 'undefined' || !(window as any).PublicKeyCredential) {
+        console.error('WebAuthn not supported');
+        return false;
+      }
 
-      const credential = await (navigator.credentials as any).get({
-        publicKey: {
-          challenge,
-          timeout: 60000,
-          userVerification: 'preferred'
-        }
+      // Call backend to authenticate with passkey
+      console.log('🔐 Authenticating with passkey for:', fourWords);
+      const sessionInfo = await invoke('auth_passkey_authenticate', { fourWords }) as SessionInfo;
+
+      // Create user identity from session
+      const identity: UserIdentity = {
+        id: sessionInfo.session_id,
+        name: sessionInfo.display_name,
+        fourWordAddress: sessionInfo.four_words,
+        publicKey: 'from-vault',
+        profile: {},
+        permissions: [],
+        createdAt: new Date().toISOString(),
+        lastActive: new Date().toISOString(),
+      };
+
+      // Update auth state
+      setAuthState({
+        isAuthenticated: true,
+        user: identity,
+        loading: false,
+        error: null,
       });
 
-      if (credential) {
-        // After passkey verification, still need to call our login
-        // This is a simplified version - in production you'd verify the credential first
-        console.log('Passkey verified, but still need vault password');
-        return false;
+      console.log('✅ Passkey authentication successful:', identity.fourWordAddress);
+
+      // Initialize CoreContext with P2P networking (non-blocking)
+      try {
+        console.log('🌐 Initializing CoreContext with networking...');
+        await invoke('core_initialize', {
+          fourWords: identity.fourWordAddress,
+          displayName: identity.name,
+          deviceName: 'Desktop',
+        });
+        console.log('✅ CoreContext initialized');
+      } catch (coreError) {
+        console.warn('⚠️ CoreContext initialization failed (continuing without networking):', coreError);
       }
 
-      return false;
-    } catch (e) {
-      console.warn('Passkey sign-in failed', e);
+      return true;
+    } catch (error) {
+      console.error('Passkey authentication failed:', error);
       return false;
     }
   };

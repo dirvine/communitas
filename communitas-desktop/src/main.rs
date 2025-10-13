@@ -26,6 +26,8 @@ mod crdt_manager;
 mod doc_commands;
 #[cfg(feature = "gossip_overlay")]
 mod gossip_commands;
+mod member_commands;
+pub mod member_manager;
 mod message_sync_commands;
 mod network;
 mod security;
@@ -37,6 +39,8 @@ use commands::{auth::AppState, org_commands::OrgState};
 use communitas_core::CoreContext;
 use communitas_core::types::DeviceType;
 use crdt_manager::CrdtManager;
+use member_commands::MemberState;
+use member_manager::MemberManager;
 use services::{channel_service::ChannelService, issue_service::IssueService};
 use std::{path::PathBuf, sync::Arc};
 use tauri::Manager;
@@ -86,6 +90,10 @@ async fn main() -> anyhow::Result<()> {
         issue_service,
     };
 
+    // Initialize member manager
+    let member_manager = Arc::new(MemberManager::new(crdt_manager.clone()));
+    let member_state = MemberState { member_manager };
+
     // Initialize encrypted storage app state
     let app_state = AppState::new();
 
@@ -94,6 +102,8 @@ async fn main() -> anyhow::Result<()> {
         .manage(app_state)
         // Organization services state
         .manage(org_state)
+        // Member management state
+        .manage(member_state)
         // Shared saorsa-core context (initialized via core_initialize)
         .manage(Arc::new(RwLock::new(Option::<CoreContext>::None)))
         // Container engine state
@@ -355,6 +365,12 @@ async fn main() -> anyhow::Result<()> {
             commands::org_commands::get_channel_state_vector,
             commands::org_commands::get_channel_diff,
             commands::org_commands::apply_channel_diff,
+            // Member management commands
+            member_commands::member_add,
+            member_commands::member_list,
+            member_commands::member_remove,
+            member_commands::member_update_role,
+            member_commands::member_prune_tombstones,
         ]);
 
     // Conditionally add gossip state management

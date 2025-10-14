@@ -46,7 +46,7 @@
 
 **Duration**: 1-2 days
 **Goal**: Wire placeholder commands to gossip overlay functionality
-**Status**: 🔄 In Progress (20/40+ commands wired, 50% complete) 🎯 Halfway!
+**Status**: 🔄 In Progress (25/40+ commands wired, 62.5% complete) 🎯 Past halfway!
 
 ### Task Breakdown
 
@@ -149,10 +149,12 @@
 
 **Estimated Work**:
 - Day 1: Wire 10-15 high-priority commands (messaging, channels, bootstrap) - ✅ 15/15 DONE (100%) 🎉
-- Day 2: Wire remaining 20+ commands + tests + implement missing gossip functions - 🔄 5/20+ DONE (25%)
-  - Batch 4 completed: 5 commands wired
-  - Next: Implement 6 missing gossip functions
-  - Then: Wire remaining 15-20 commands
+- Day 2: Wire remaining 20+ commands + tests + implement missing gossip functions - 🔄 10/20+ DONE (50%)
+  - ✅ Batch 3 completed: 5 commands wired (channel/message management, user metadata)
+  - ✅ Batch 4 completed: 5 commands wired (bootstrap management, channel operations, threads)
+  - ✅ Missing gossip functions: 9 functions implemented (entity tracking, metadata storage)
+  - ✅ Batch 5 completed: 5 commands wired (message operations, reactions)
+  - Next: Wire remaining 15 commands (batches 6-8)
 
 **Implementation Guide** (Pattern Established):
 
@@ -211,34 +213,40 @@ pub async fn command_name(
 - `core_private_put` → `gossip_store_message`
 - `core_private_get` → `gossip_get_all_messages`
 
-*Batch 3 (commit 2f194ab8):* ⚠️ Partial implementations
-- `core_get_channels` → *Partial* (returns empty, needs gossip_get_subscribed_entities)
-- `core_channel_list_members` → *Partial* (returns empty, needs gossip_get_entity_subscribers)
-- `core_messages_list` → `gossip_get_all_messages` (not filtered by channel)
-- `core_get_user_info` → `gossip_get_own_identity` (placeholder metadata)
-- `core_set_display_name` → `gossip_store_message` (metadata prefix approach)
+*Batch 3 (commit b25d5949):* ✅ Complete (with implemented gossip functions)
+- `core_get_channels` → `gossip_get_subscribed_entities`
+- `core_channel_list_members` → `gossip_get_entity_subscribers`
+- `core_messages_list` → `gossip_get_entity_messages` (filtered by channel)
+- `core_get_user_info` → `gossip_get_own_identity` + `gossip_get_own_metadata`
+- `core_set_display_name` → `gossip_store_own_metadata`
 
-*Batch 4 (commit 582a3c3e):* ⚠️ Partial implementations
+*Batch 4 (commit b25d5949):* ✅ Complete (with implemented gossip functions)
 - `core_update_bootstrap_nodes` → `gossip_add_bootstrap_peer` (batch iteration)
-- `core_clear_custom_nodes` → *Placeholder* (needs gossip_clear_bootstrap_peers)
-- `core_channel_recipients` → *Partial* (returns empty, needs gossip_get_entity_subscribers)
-- `core_resolve_channel_members` → *Partial* (returns empty, needs subscribers + metadata)
+- `core_clear_custom_nodes` → `gossip_clear_bootstrap_peers`
+- `core_channel_recipients` → `gossip_get_entity_subscribers`
+- `core_resolve_channel_members` → `gossip_get_entity_subscribers` + `gossip_get_peer_metadata`
 - `core_create_thread` → `gossip_join_entity` (creates "thread" type entity)
 
-**Identified Missing Gossip Functions** (Need to be added to gossip_commands.rs):
-- `gossip_get_subscribed_entities()` - Track which entities user has subscribed to
-- `gossip_get_entity_subscribers(entity_id)` - Get list of subscribers for an entity
-- `gossip_get_entity_messages(entity_id)` - Get messages filtered by entity
-- `gossip_clear_bootstrap_peers()` - Clear all bootstrap nodes
-- `gossip_get_peer_metadata(peer_id)` - Get metadata for specific peer
-- Metadata storage/retrieval mechanism for user profile data
+**Implemented Missing Gossip Functions** (commit b25d5949):
+- ✅ `gossip_get_subscribed_entities()` - Track which entities user has subscribed to
+- ✅ `gossip_get_entity_subscribers(entity_id)` - Get list of subscribers for an entity
+- ✅ `gossip_get_entity_messages(entity_id)` - Get messages filtered by entity
+- ✅ `gossip_clear_bootstrap_peers()` - Clear all bootstrap nodes
+- ✅ `gossip_get_peer_metadata(peer_id)` - Get metadata for specific peer
+- ✅ `gossip_store_peer_metadata()` - Store metadata for peers
+- ✅ `gossip_get_own_metadata()` - Get own metadata (display_name, device_name)
+- ✅ `gossip_store_own_metadata()` - Store own metadata
+- ✅ `gossip_store_entity_message()` - Helper to store entity-tagged messages
 
-**Next Priority Commands (Batch 5)**:
-- `core_subscribe_messages` → Subscribe to message updates
-- `core_messages_send` → Send message (may duplicate existing)
-- `core_messages_edit` → Edit existing message
-- `core_messages_delete` → Delete message
-- `core_add_reaction` → Add emoji reaction
+*Batch 5 (commit 56633986):* ✅ Complete
+- `core_subscribe_messages` → `gossip_subscribe_to_entity`
+- `core_messages_send` → `gossip_store_entity_message` + `gossip_publish_to_entity`
+- `core_messages_edit` → `gossip_store_message` (msg_edit prefix)
+- `core_messages_delete` → `gossip_store_message` (msg_delete prefix)
+- `core_add_reaction` → `gossip_store_message` (msg_reaction prefix)
+
+**Next Priority Commands (Batch 6)**:
+- More commands to be identified...
 
 #### 2.2: Update Frontend Command Calls (Priority: MEDIUM)
 
@@ -582,7 +590,7 @@ cargo deny check licenses
 | Phase | Duration | Status | Completion |
 |-------|----------|--------|------------|
 | Phase 1: Quick Fixes | 2 hours | ✅ Complete | 100% |
-| Phase 2: Core Integration | 1-2 days | 🔄 In Progress | 50% (20/40+ commands) 🎯 |
+| Phase 2: Core Integration | 1-2 days | 🔄 In Progress | 62.5% (25/40+ commands) 🎯 |
 | Phase 3: Container & Sync | 2-3 days | ⏳ Blocked | 0% |
 | Phase 4: Verification | 1 day | ⏳ Blocked | 0% |
 | **Total** | **5-7 days** | **In Progress** | **33%** |

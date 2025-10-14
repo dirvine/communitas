@@ -41,7 +41,7 @@ export const BrowserFallback: React.FC = () => {
               variant="contained"
               size="large"
               startIcon={<DownloadIcon />}
-              href="https://github.com/p2pfoundation/communitas/releases"
+              href="https://github.com/dirvine/communitas/releases"
               target="_blank"
             >
               Download for macOS

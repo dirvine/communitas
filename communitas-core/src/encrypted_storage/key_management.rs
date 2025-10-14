@@ -26,7 +26,7 @@ impl KeyManager {
         Ok(Self {
             iterations,
             use_keyring,
-            keyring_service: "com.p2pfoundation.communitas".to_string(),
+            keyring_service: "com.saorsalabs.communitas".to_string(),
         })
     }
 

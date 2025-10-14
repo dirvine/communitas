@@ -255,10 +255,24 @@ impl EncryptedStorageManager {
 
         // Store password in keyring if enabled
         if self.config.use_keyring && app_config.get_config().keyring_enabled {
-            self.key_manager
+            tracing::info!("🔑 LOGIN: Attempting to store password in keyring for '{}'", normalized);
+            match self.key_manager
                 .store_in_keyring(&normalized, password.as_bytes())
                 .await
-                .ok(); // Non-fatal if keyring fails
+            {
+                Ok(()) => {
+                    tracing::info!("✅ LOGIN: Password stored in keyring successfully for '{}'", normalized);
+                }
+                Err(e) => {
+                    tracing::error!("❌ LOGIN: Failed to store password in keyring for '{}': {}", normalized, e);
+                    tracing::error!("⚠️ LOGIN: This means passkey/Touch ID authentication will fail later!");
+                }
+            }
+        } else {
+            tracing::warn!("⚠️ LOGIN: Keyring storage skipped - use_keyring={}, keyring_enabled={}",
+                self.config.use_keyring,
+                app_config.get_config().keyring_enabled
+            );
         }
 
         Ok(session)
@@ -465,16 +479,51 @@ impl EncryptedStorageManager {
         Ok(info)
     }
 
+    /// Register passkey with WebAuthn credential
+    ///
+    /// This stores the WebAuthn credential for true biometric authentication.
+    pub async fn passkey_register_webauthn(
+        &self,
+        four_words: &str,
+        device_name: &str,
+        credential: WebAuthnCredential,
+    ) -> Result<PasskeyInfo> {
+        let normalized = self.normalize_four_words(four_words);
+
+        // Register passkey with WebAuthn credential
+        let info = self
+            .passkey_manager
+            .register_passkey_webauthn(&normalized, device_name, credential)
+            .await?;
+
+        // Update app config to mark passkey as available
+        let mut app_config = self.app_config.write().await;
+        app_config
+            .set_identity_has_passkey(&normalized, true)
+            .await?;
+
+        Ok(info)
+    }
+
     /// Authenticate with passkey/biometric and create session
     ///
     /// This uses the password stored in keyring after biometric verification
     pub async fn passkey_authenticate(&self, four_words: &str) -> Result<Session> {
         let normalized = self.normalize_four_words(four_words);
 
+        tracing::info!(
+            "🔍 RETRIEVAL: Attempting passkey auth for four_words='{}' -> normalized='{}'",
+            four_words,
+            normalized
+        );
+
         // Check passkey is registered
         if !self.passkey_manager.has_passkey(&normalized).await {
+            tracing::error!("❌ RETRIEVAL: No passkey registered for '{}'", normalized);
             anyhow::bail!("No passkey registered for this identity");
         }
+
+        tracing::info!("✅ RETRIEVAL: Passkey IS registered for '{}'", normalized);
 
         // Mark passkey as used
         self.passkey_manager
@@ -483,16 +532,36 @@ impl EncryptedStorageManager {
             .ok();
 
         // Load vault using password from keyring
+        tracing::info!("🔍 RETRIEVAL: Checking keyring config - use_keyring={}", self.config.use_keyring);
+
         if self.config.use_keyring {
-            if let Ok(password_bytes) = self.key_manager.get_from_keyring(&normalized).await {
-                if let Ok(password) = String::from_utf8(password_bytes.to_vec()) {
-                    // Login with stored password
-                    return self.login(&normalized, &password, None).await;
+            tracing::info!("🔍 RETRIEVAL: Attempting to get password from keyring for '{}'", normalized);
+
+            match self.key_manager.get_from_keyring(&normalized).await {
+                Ok(password_bytes) => {
+                    tracing::info!("✅ RETRIEVAL: Password bytes retrieved from keyring for '{}'", normalized);
+
+                    match String::from_utf8(password_bytes.to_vec()) {
+                        Ok(password) => {
+                            tracing::info!("✅ RETRIEVAL: Password successfully decoded, attempting login for '{}'", normalized);
+                            // Login with stored password
+                            return self.login(&normalized, &password, None).await;
+                        }
+                        Err(e) => {
+                            tracing::error!("❌ RETRIEVAL: Failed to decode password bytes for '{}': {}", normalized, e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("❌ RETRIEVAL: Failed to get password from keyring for '{}': {}", normalized, e);
                 }
             }
+        } else {
+            tracing::warn!("⚠️ RETRIEVAL: Keyring is disabled in config");
         }
 
         // If no password in keyring, cannot proceed
+        tracing::error!("❌ RETRIEVAL: No password found in keyring for '{}'", normalized);
         anyhow::bail!(
             "Passkey registered but vault password not found in keyring. Please login with password first."
         )
@@ -559,9 +628,22 @@ impl EncryptedStorageManager {
     /// Store password in platform keyring (for auto-login)
     pub async fn store_password_in_keyring(&self, four_words: &str, password: &str) -> Result<()> {
         let normalized = self.normalize_four_words(four_words);
-        self.key_manager
+        tracing::info!(
+            "🔑 STORAGE: Storing password in keyring for four_words='{}' -> normalized='{}'",
+            four_words,
+            normalized
+        );
+        let result = self.key_manager
             .store_in_keyring(&normalized, password.as_bytes())
-            .await
+            .await;
+
+        if result.is_ok() {
+            tracing::info!("✅ STORAGE: Password successfully stored in keyring for '{}'", normalized);
+        } else {
+            tracing::error!("❌ STORAGE: Failed to store password in keyring for '{}': {:?}", normalized, result);
+        }
+
+        result
     }
 
     /// Remove password from platform keyring
@@ -629,7 +711,7 @@ fn get_vault_directory() -> PathBuf {
             .unwrap_or_else(|| PathBuf::from("/tmp"))
             .join("Library")
             .join("Application Support")
-            .join("com.p2pfoundation.communitas")
+            .join("com.saorsalabs.communitas")
             .join("vaults")
     }
 

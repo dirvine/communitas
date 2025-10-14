@@ -46,7 +46,7 @@
 
 **Duration**: 1-2 days
 **Goal**: Wire placeholder commands to gossip overlay functionality
-**Status**: 🔄 In Progress (10/40+ commands wired, 25% complete)
+**Status**: 🔄 In Progress (15/40+ commands wired, 37.5% complete)
 
 ### Task Breakdown
 
@@ -148,8 +148,8 @@
 5. **Add integration tests** for each wired command
 
 **Estimated Work**:
-- Day 1: Wire 10-15 high-priority commands (messaging, channels, bootstrap) - ✅ 10/15 DONE (67% of Day 1)
-- Day 2: Wire remaining 25+ commands + tests
+- Day 1: Wire 10-15 high-priority commands (messaging, channels, bootstrap) - ✅ 15/15 DONE (100% of Day 1) 🎉
+- Day 2: Wire remaining 25+ commands + tests + implement missing gossip functions
 
 **Implementation Guide** (Pattern Established):
 
@@ -192,7 +192,7 @@ pub async fn command_name(
    - Verify zero compilation errors (warnings from dependencies are OK)
    - Add integration tests in `communitas-desktop/tests/`
 
-**Completed Commands (10)**: ✅
+**Completed Commands (15)**: ✅
 
 *Batch 1 (commit 94a2d7db):*
 - `core_send_message_to_recipients` → `gossip_send_direct_message`
@@ -208,12 +208,25 @@ pub async fn command_name(
 - `core_private_put` → `gossip_store_message`
 - `core_private_get` → `gossip_get_all_messages`
 
-**Next Priority Commands (Batch 3)**:
-- `core_get_channels` → `gossip_get_subscribed_entities` (filter by type)
-- `core_channel_list_members` → `gossip_get_entity_subscribers`
-- `core_messages_list` → `gossip_get_entity_messages`
-- `core_get_user_info` → `gossip_get_own_identity` + metadata
-- `core_set_display_name` → Update identity metadata via gossip
+*Batch 3 (commit 2f194ab8):* ⚠️ Partial implementations
+- `core_get_channels` → *Partial* (returns empty, needs gossip_get_subscribed_entities)
+- `core_channel_list_members` → *Partial* (returns empty, needs gossip_get_entity_subscribers)
+- `core_messages_list` → `gossip_get_all_messages` (not filtered by channel)
+- `core_get_user_info` → `gossip_get_own_identity` (placeholder metadata)
+- `core_set_display_name` → `gossip_store_message` (metadata prefix approach)
+
+**Identified Missing Gossip Functions** (Need to be added to gossip_commands.rs):
+- `gossip_get_subscribed_entities()` - Track which entities user has subscribed to
+- `gossip_get_entity_subscribers(entity_id)` - Get list of subscribers for an entity
+- `gossip_get_entity_messages(entity_id)` - Get messages filtered by entity
+- Metadata storage/retrieval mechanism for user profile data
+
+**Next Priority Commands (Batch 4)**:
+- `core_update_bootstrap_nodes` → Batch update bootstrap peers
+- `core_clear_custom_nodes` → Clear custom bootstrap peers
+- `core_channel_recipients` → Get channel recipient list
+- `core_resolve_channel_members` → Resolve member details
+- `core_create_thread` → Create message thread
 
 #### 2.2: Update Frontend Command Calls (Priority: MEDIUM)
 
@@ -557,10 +570,10 @@ cargo deny check licenses
 | Phase | Duration | Status | Completion |
 |-------|----------|--------|------------|
 | Phase 1: Quick Fixes | 2 hours | ✅ Complete | 100% |
-| Phase 2: Core Integration | 1-2 days | 🔄 In Progress | 25% (10/40+ commands) |
+| Phase 2: Core Integration | 1-2 days | 🔄 In Progress | 37.5% (15/40+ commands) |
 | Phase 3: Container & Sync | 2-3 days | ⏳ Blocked | 0% |
 | Phase 4: Verification | 1 day | ⏳ Blocked | 0% |
-| **Total** | **5-7 days** | **In Progress** | **26%** |
+| **Total** | **5-7 days** | **In Progress** | **29%** |
 
 ---
 

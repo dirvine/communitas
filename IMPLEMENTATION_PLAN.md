@@ -46,7 +46,7 @@
 
 **Duration**: 1-2 days
 **Goal**: Wire placeholder commands to gossip overlay functionality
-**Status**: ⏳ Ready to start
+**Status**: 🔄 In Progress (6/40+ commands wired)
 
 ### Task Breakdown
 
@@ -62,13 +62,13 @@
 
 | core_commands.rs | gossip_commands.rs | Status |
 |------------------|---------------------|--------|
-| `core_send_message_to_recipients` | `gossip_send_direct_message` | ⏳ TODO |
-| `subscribe_to_entity` | `gossip_subscribe_to_entity` | ⏳ TODO |
-| `unsubscribe_from_entity` | `gossip_leave_entity` | ⏳ TODO |
-| `core_get_bootstrap_nodes` | `gossip_get_cached_peers` | ⏳ TODO |
+| `core_send_message_to_recipients` | `gossip_send_direct_message` | ✅ DONE (commit 94a2d7db) |
+| `subscribe_to_entity` | `gossip_subscribe_to_entity` | ✅ DONE (commit 94a2d7db) |
+| `unsubscribe_from_entity` | `gossip_leave_entity` | ✅ DONE (commit 94a2d7db) |
+| `core_get_bootstrap_nodes` | `gossip_get_cached_peers` | ✅ DONE (commit 94a2d7db) |
 | `core_add_bootstrap_node` | `gossip_add_bootstrap_peer` | ⏳ TODO |
-| `core_create_channel` | Implement with gossip entities | ⏳ TODO |
-| `core_send_message_to_channel` | `gossip_publish_to_entity` | ⏳ TODO |
+| `core_create_channel` | Implement with gossip entities | ✅ DONE (commit 94a2d7db) |
+| `core_send_message_to_channel` | `gossip_publish_to_entity` | ✅ DONE (commit 94a2d7db) |
 | `core_channel_invite_by_words` | `gossip_find_contact` + `gossip_join_entity` | ⏳ TODO |
 | `core_private_put` | `gossip_store_message` | ⏳ TODO |
 | `core_private_get` | `gossip_get_all_messages` | ⏳ TODO |
@@ -148,8 +148,63 @@
 5. **Add integration tests** for each wired command
 
 **Estimated Work**:
-- Day 1: Wire 10-15 high-priority commands (messaging, channels, bootstrap)
+- Day 1: Wire 10-15 high-priority commands (messaging, channels, bootstrap) - ✅ 6/10 DONE
 - Day 2: Wire remaining 25+ commands + tests
+
+**Implementation Guide** (Pattern Established):
+
+After completing the first 6 commands, we've established this pattern for wiring:
+
+1. **Split Function Approach** - Tauri macro cannot handle conditional parameters, so create two versions:
+
+```rust
+// Version 1: With gossip_overlay feature enabled
+#[cfg(feature = "gossip_overlay")]
+#[tauri::command]
+pub async fn command_name(
+    gossip_state: State<'_, gossip_commands::GossipState>,
+    // ... other params
+) -> Result<ReturnType, String> {
+    // Call gossip_commands function
+    gossip_commands::gossip_function(gossip_state, params).await
+}
+
+// Version 2: Without gossip_overlay feature
+#[cfg(not(feature = "gossip_overlay"))]
+#[tauri::command]
+pub async fn command_name(
+    _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+    // ... other params (prefixed with _)
+) -> Result<ReturnType, String> {
+    Err("Gossip overlay not enabled".to_string())
+}
+```
+
+2. **Common Patterns**:
+   - **Direct messaging**: Use `gossip_send_direct_message(recipient, message_bytes)`
+   - **Channel operations**: Use `gossip_join_entity` / `gossip_publish_to_entity`
+   - **Subscriptions**: Use `gossip_subscribe_to_entity` / `gossip_leave_entity`
+   - **Discovery**: Use `gossip_find_contact` / `gossip_get_cached_peers`
+   - **Identity**: Use `gossip_get_own_identity` for author fields
+
+3. **Testing**:
+   - Build with `cargo build --package communitas-desktop --all-features`
+   - Verify zero compilation errors (warnings from dependencies are OK)
+   - Add integration tests in `communitas-desktop/tests/`
+
+**Completed Commands (6)**: ✅
+- `core_send_message_to_recipients` → `gossip_send_direct_message`
+- `core_send_message_to_channel` → `gossip_publish_to_entity`
+- `core_create_channel` → `gossip_join_entity`
+- `core_get_bootstrap_nodes` → `gossip_get_cached_peers`
+- `subscribe_to_entity` → `gossip_subscribe_to_entity`
+- `unsubscribe_from_entity` → `gossip_leave_entity`
+
+**Next Priority Commands (4)**:
+- `core_add_bootstrap_node` → `gossip_add_bootstrap_peer`
+- `core_channel_invite_by_words` → `gossip_find_contact` + `gossip_join_entity`
+- `core_private_put` → `gossip_store_message`
+- `core_private_get` → `gossip_get_all_messages`
 
 #### 2.2: Update Frontend Command Calls (Priority: MEDIUM)
 
@@ -493,10 +548,10 @@ cargo deny check licenses
 | Phase | Duration | Status | Completion |
 |-------|----------|--------|------------|
 | Phase 1: Quick Fixes | 2 hours | ✅ Complete | 100% |
-| Phase 2: Core Integration | 1-2 days | ⏳ Ready | 0% |
+| Phase 2: Core Integration | 1-2 days | 🔄 In Progress | 15% (6/40+ commands) |
 | Phase 3: Container & Sync | 2-3 days | ⏳ Blocked | 0% |
 | Phase 4: Verification | 1 day | ⏳ Blocked | 0% |
-| **Total** | **5-7 days** | **In Progress** | **20%** |
+| **Total** | **5-7 days** | **In Progress** | **23%** |
 
 ---
 

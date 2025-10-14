@@ -46,7 +46,7 @@
 
 **Duration**: 1-2 days
 **Goal**: Wire placeholder commands to gossip overlay functionality
-**Status**: 🔄 In Progress (15/40+ commands wired, 37.5% complete)
+**Status**: 🔄 In Progress (20/40+ commands wired, 50% complete) 🎯 Halfway!
 
 ### Task Breakdown
 
@@ -148,8 +148,11 @@
 5. **Add integration tests** for each wired command
 
 **Estimated Work**:
-- Day 1: Wire 10-15 high-priority commands (messaging, channels, bootstrap) - ✅ 15/15 DONE (100% of Day 1) 🎉
-- Day 2: Wire remaining 25+ commands + tests + implement missing gossip functions
+- Day 1: Wire 10-15 high-priority commands (messaging, channels, bootstrap) - ✅ 15/15 DONE (100%) 🎉
+- Day 2: Wire remaining 20+ commands + tests + implement missing gossip functions - 🔄 5/20+ DONE (25%)
+  - Batch 4 completed: 5 commands wired
+  - Next: Implement 6 missing gossip functions
+  - Then: Wire remaining 15-20 commands
 
 **Implementation Guide** (Pattern Established):
 
@@ -215,18 +218,27 @@ pub async fn command_name(
 - `core_get_user_info` → `gossip_get_own_identity` (placeholder metadata)
 - `core_set_display_name` → `gossip_store_message` (metadata prefix approach)
 
+*Batch 4 (commit 582a3c3e):* ⚠️ Partial implementations
+- `core_update_bootstrap_nodes` → `gossip_add_bootstrap_peer` (batch iteration)
+- `core_clear_custom_nodes` → *Placeholder* (needs gossip_clear_bootstrap_peers)
+- `core_channel_recipients` → *Partial* (returns empty, needs gossip_get_entity_subscribers)
+- `core_resolve_channel_members` → *Partial* (returns empty, needs subscribers + metadata)
+- `core_create_thread` → `gossip_join_entity` (creates "thread" type entity)
+
 **Identified Missing Gossip Functions** (Need to be added to gossip_commands.rs):
 - `gossip_get_subscribed_entities()` - Track which entities user has subscribed to
 - `gossip_get_entity_subscribers(entity_id)` - Get list of subscribers for an entity
 - `gossip_get_entity_messages(entity_id)` - Get messages filtered by entity
+- `gossip_clear_bootstrap_peers()` - Clear all bootstrap nodes
+- `gossip_get_peer_metadata(peer_id)` - Get metadata for specific peer
 - Metadata storage/retrieval mechanism for user profile data
 
-**Next Priority Commands (Batch 4)**:
-- `core_update_bootstrap_nodes` → Batch update bootstrap peers
-- `core_clear_custom_nodes` → Clear custom bootstrap peers
-- `core_channel_recipients` → Get channel recipient list
-- `core_resolve_channel_members` → Resolve member details
-- `core_create_thread` → Create message thread
+**Next Priority Commands (Batch 5)**:
+- `core_subscribe_messages` → Subscribe to message updates
+- `core_messages_send` → Send message (may duplicate existing)
+- `core_messages_edit` → Edit existing message
+- `core_messages_delete` → Delete message
+- `core_add_reaction` → Add emoji reaction
 
 #### 2.2: Update Frontend Command Calls (Priority: MEDIUM)
 
@@ -570,10 +582,10 @@ cargo deny check licenses
 | Phase | Duration | Status | Completion |
 |-------|----------|--------|------------|
 | Phase 1: Quick Fixes | 2 hours | ✅ Complete | 100% |
-| Phase 2: Core Integration | 1-2 days | 🔄 In Progress | 37.5% (15/40+ commands) |
+| Phase 2: Core Integration | 1-2 days | 🔄 In Progress | 50% (20/40+ commands) 🎯 |
 | Phase 3: Container & Sync | 2-3 days | ⏳ Blocked | 0% |
 | Phase 4: Verification | 1 day | ⏳ Blocked | 0% |
-| **Total** | **5-7 days** | **In Progress** | **29%** |
+| **Total** | **5-7 days** | **In Progress** | **33%** |
 
 ---
 

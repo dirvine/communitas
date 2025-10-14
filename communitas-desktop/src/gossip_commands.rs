@@ -678,7 +678,266 @@ pub async fn gossip_get_cached_peers(
         .collect())
 }
 
+// ===== Entity Tracking Commands =====
+
+/// Get list of entities the user has subscribed to
+///
+/// Uses CRDT storage with "entity_sub:{entity_id}" prefix to track subscriptions
+#[cfg(feature = "gossip_overlay")]
+#[tauri::command]
+pub async fn gossip_get_subscribed_entities(
+    state: tauri::State<'_, GossipState>,
+) -> Result<Vec<String>, String> {
+    let guard = state.read().await;
+    let ctx = guard.as_ref().ok_or("GossipContext not initialized")?;
+
+    // Get all messages and filter for entity subscription markers
+    let messages = ctx
+        .get_all_messages()
+        .await
+        .map_err(|e| format!("Failed to get messages: {}", e))?;
+
+    let mut entities = Vec::new();
+    for msg in messages {
+        if let Ok(msg_str) = String::from_utf8(msg) {
+            if let Some(entity_id) = msg_str.strip_prefix("entity_sub:") {
+                entities.push(entity_id.to_string());
+            }
+        }
+    }
+
+    Ok(entities)
+}
+
+/// Get list of subscribers for a specific entity
+///
+/// Note: This requires network-wide queries which are not yet implemented.
+/// For now, returns empty list. Future implementation should query the gossip
+/// network for all peers subscribed to the entity topic.
+#[cfg(feature = "gossip_overlay")]
+#[tauri::command]
+pub async fn gossip_get_entity_subscribers(
+    _state: tauri::State<'_, GossipState>,
+    _entity_id: String,
+) -> Result<Vec<String>, String> {
+    // TODO: Implement network-wide query for entity subscribers
+    // This requires extending GossipContext with subscriber tracking
+    // For now, return empty list
+    Ok(vec![])
+}
+
+/// Get messages filtered by entity ID
+///
+/// Uses CRDT storage with "entity_msg:{entity_id}:" prefix for entity-specific messages
+#[cfg(feature = "gossip_overlay")]
+#[tauri::command]
+pub async fn gossip_get_entity_messages(
+    state: tauri::State<'_, GossipState>,
+    entity_id: String,
+) -> Result<Vec<Vec<u8>>, String> {
+    let guard = state.read().await;
+    let ctx = guard.as_ref().ok_or("GossipContext not initialized")?;
+
+    // Get all messages and filter for entity-specific ones
+    let messages = ctx
+        .get_all_messages()
+        .await
+        .map_err(|e| format!("Failed to get messages: {}", e))?;
+
+    let prefix = format!("entity_msg:{}:", entity_id);
+    let mut entity_messages = Vec::new();
+
+    for msg in messages {
+        if let Ok(msg_str) = String::from_utf8(msg.clone()) {
+            if let Some(content) = msg_str.strip_prefix(&prefix) {
+                entity_messages.push(content.as_bytes().to_vec());
+            }
+        }
+    }
+
+    Ok(entity_messages)
+}
+
+/// Store a message tagged with entity ID
+///
+/// Helper function to store messages with entity prefix for filtering
+#[cfg(feature = "gossip_overlay")]
+#[tauri::command]
+pub async fn gossip_store_entity_message(
+    state: tauri::State<'_, GossipState>,
+    entity_id: String,
+    message: Vec<u8>,
+) -> Result<(), String> {
+    let guard = state.read().await;
+    let ctx = guard.as_ref().ok_or("GossipContext not initialized")?;
+
+    // Store with entity prefix
+    let content = String::from_utf8(message)
+        .map_err(|e| format!("Message must be valid UTF-8: {}", e))?;
+    let prefixed_message = format!("entity_msg:{}:{}", entity_id, content);
+
+    ctx.store_message(prefixed_message.as_bytes().to_vec())
+        .await
+        .map_err(|e| format!("Failed to store entity message: {}", e))
+}
+
+// ===== Bootstrap Management Commands =====
+
+/// Clear all bootstrap peers from cache
+///
+/// Removes all contacts which effectively clears bootstrap peer cache
+#[cfg(feature = "gossip_overlay")]
+#[tauri::command]
+pub async fn gossip_clear_bootstrap_peers(
+    state: tauri::State<'_, GossipState>,
+) -> Result<(), String> {
+    let guard = state.read().await;
+    let ctx = guard.as_ref().ok_or("GossipContext not initialized")?;
+
+    // Get all contacts
+    let contacts = ctx
+        .get_contacts()
+        .await
+        .map_err(|e| format!("Failed to get contacts: {}", e))?;
+
+    // Remove each contact
+    for (four_words, _) in contacts {
+        ctx.remove_contact(&four_words)
+            .await
+            .map_err(|e| format!("Failed to remove contact {}: {}", four_words, e))?;
+    }
+
+    Ok(())
+}
+
+// ===== Metadata Storage Commands =====
+
+/// Get metadata for a specific peer
+///
+/// Uses CRDT storage with "peer_meta:{peer_id}:" prefix to store peer metadata
+/// Returns a map of key-value pairs for the peer
+#[cfg(feature = "gossip_overlay")]
+#[tauri::command]
+pub async fn gossip_get_peer_metadata(
+    state: tauri::State<'_, GossipState>,
+    peer_id: String,
+) -> Result<Vec<MetadataEntry>, String> {
+    let guard = state.read().await;
+    let ctx = guard.as_ref().ok_or("GossipContext not initialized")?;
+
+    // Get all messages and filter for peer metadata
+    let messages = ctx
+        .get_all_messages()
+        .await
+        .map_err(|e| format!("Failed to get messages: {}", e))?;
+
+    let prefix = format!("peer_meta:{}:", peer_id);
+    let mut metadata = Vec::new();
+
+    for msg in messages {
+        if let Ok(msg_str) = String::from_utf8(msg) {
+            if let Some(rest) = msg_str.strip_prefix(&prefix) {
+                // Parse "key:value" format
+                if let Some((key, value)) = rest.split_once(':') {
+                    metadata.push(MetadataEntry {
+                        key: key.to_string(),
+                        value: value.to_string(),
+                    });
+                }
+            }
+        }
+    }
+
+    Ok(metadata)
+}
+
+/// Store metadata for a peer
+///
+/// Uses CRDT storage with "peer_meta:{peer_id}:{key}:{value}" format
+#[cfg(feature = "gossip_overlay")]
+#[tauri::command]
+pub async fn gossip_store_peer_metadata(
+    state: tauri::State<'_, GossipState>,
+    peer_id: String,
+    key: String,
+    value: String,
+) -> Result<(), String> {
+    let guard = state.read().await;
+    let ctx = guard.as_ref().ok_or("GossipContext not initialized")?;
+
+    // Store with peer metadata prefix
+    let metadata_message = format!("peer_meta:{}:{}:{}", peer_id, key, value);
+
+    ctx.store_message(metadata_message.as_bytes().to_vec())
+        .await
+        .map_err(|e| format!("Failed to store peer metadata: {}", e))
+}
+
+/// Get own metadata (display name, device name, etc.)
+///
+/// Uses CRDT storage with "self_meta:{key}:{value}" format
+#[cfg(feature = "gossip_overlay")]
+#[tauri::command]
+pub async fn gossip_get_own_metadata(
+    state: tauri::State<'_, GossipState>,
+) -> Result<Vec<MetadataEntry>, String> {
+    let guard = state.read().await;
+    let ctx = guard.as_ref().ok_or("GossipContext not initialized")?;
+
+    // Get all messages and filter for own metadata
+    let messages = ctx
+        .get_all_messages()
+        .await
+        .map_err(|e| format!("Failed to get messages: {}", e))?;
+
+    let prefix = "self_meta:";
+    let mut metadata = Vec::new();
+
+    for msg in messages {
+        if let Ok(msg_str) = String::from_utf8(msg) {
+            if let Some(rest) = msg_str.strip_prefix(prefix) {
+                // Parse "key:value" format
+                if let Some((key, value)) = rest.split_once(':') {
+                    metadata.push(MetadataEntry {
+                        key: key.to_string(),
+                        value: value.to_string(),
+                    });
+                }
+            }
+        }
+    }
+
+    Ok(metadata)
+}
+
+/// Store own metadata (display name, device name, etc.)
+///
+/// Uses CRDT storage with "self_meta:{key}:{value}" format
+#[cfg(feature = "gossip_overlay")]
+#[tauri::command]
+pub async fn gossip_store_own_metadata(
+    state: tauri::State<'_, GossipState>,
+    key: String,
+    value: String,
+) -> Result<(), String> {
+    let guard = state.read().await;
+    let ctx = guard.as_ref().ok_or("GossipContext not initialized")?;
+
+    // Store with self metadata prefix
+    let metadata_message = format!("self_meta:{}:{}", key, value);
+
+    ctx.store_message(metadata_message.as_bytes().to_vec())
+        .await
+        .map_err(|e| format!("Failed to store own metadata: {}", e))
+}
+
 // ===== DTOs for Serialization =====
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MetadataEntry {
+    pub key: String,
+    pub value: String,
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ContactEntry {

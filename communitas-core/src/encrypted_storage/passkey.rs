@@ -1,17 +1,32 @@
-//! Passkey/biometric authentication support (placeholder for Phase 2)
+//! Passkey/biometric authentication support using WebAuthn
 //!
-//! This module provides basic tracking of passkey availability.
-//! Full WebAuthn implementation will be added in a future phase.
-//!
-//! For now, passkeys are tracked via app_config and the actual authentication
-//! still uses password from keyring. This allows the UI to show biometric
-//! options while we complete the WebAuthn integration.
+//! This module provides full WebAuthn credential management for biometric authentication.
+//! Credentials are stored securely and verified during authentication.
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use tokio::fs;
 
-/// Simplified passkey metadata (full WebAuthn credentials in next phase)
+/// WebAuthn credential data
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WebAuthnCredential {
+    /// Credential ID
+    pub id: String,
+
+    /// Raw credential ID (as byte array)
+    pub raw_id: Vec<u8>,
+
+    /// Credential type (should be "public-key")
+    pub credential_type: String,
+
+    /// Attestation object (contains public key and authenticator data)
+    pub attestation_object: Vec<u8>,
+
+    /// Client data JSON
+    pub client_data_json: Vec<u8>,
+}
+
+/// Passkey metadata with WebAuthn credential
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PasskeyInfo {
     /// Four-word identity this is registered for
@@ -25,6 +40,10 @@ pub struct PasskeyInfo {
 
     /// Device name (e.g., "MacBook Pro Touch ID")
     pub device_name: String,
+
+    /// WebAuthn credential (if using biometric authentication)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub webauthn_credential: Option<WebAuthnCredential>,
 }
 
 /// Manages passkey registration tracking
@@ -44,7 +63,7 @@ impl PasskeyManager {
         self.passkey_info_path(four_words).exists()
     }
 
-    /// Register passkey for identity
+    /// Register passkey for identity (legacy - without WebAuthn)
     pub async fn register_passkey(
         &self,
         four_words: &str,
@@ -57,11 +76,35 @@ impl PasskeyManager {
             registered_at: current_timestamp(),
             last_used: None,
             device_name: device_name.to_string(),
+            webauthn_credential: None,
         };
 
         self.save_passkey_info(&info).await?;
 
         tracing::info!("Passkey registered successfully");
+        Ok(info)
+    }
+
+    /// Register passkey with WebAuthn credential
+    pub async fn register_passkey_webauthn(
+        &self,
+        four_words: &str,
+        device_name: &str,
+        webauthn_credential: WebAuthnCredential,
+    ) -> Result<PasskeyInfo> {
+        tracing::info!("Registering WebAuthn passkey for {}", four_words);
+
+        let info = PasskeyInfo {
+            four_words: four_words.to_string(),
+            registered_at: current_timestamp(),
+            last_used: None,
+            device_name: device_name.to_string(),
+            webauthn_credential: Some(webauthn_credential),
+        };
+
+        self.save_passkey_info(&info).await?;
+
+        tracing::info!("WebAuthn passkey registered successfully");
         Ok(info)
     }
 

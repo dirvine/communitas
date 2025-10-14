@@ -48,6 +48,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../../contexts/AuthContext';
 import { generateFourWordIdentity } from '../../utils/identity';
 import validator from 'validator';
+import { PasskeyRegistration } from './PasskeyRegistration';
 
 interface UnifiedAuthFlowProps {
   initialMode?: 'login' | 'register';
@@ -94,6 +95,7 @@ export const UnifiedAuthFlow: React.FC<UnifiedAuthFlowProps> = ({
   const [passwordStrength, setPasswordStrength] = useState<PasswordStrength>({ score: 0, label: '', color: 'error' });
   const [identitySaved, setIdentitySaved] = useState(true);
   const [showIdentityModal, setShowIdentityModal] = useState(false);
+  const [showPasskeyModal, setShowPasskeyModal] = useState(false);
   const [copiedToClipboard, setCopiedToClipboard] = useState(false);
 
   const [formData, setFormData] = useState({
@@ -105,6 +107,52 @@ export const UnifiedAuthFlow: React.FC<UnifiedAuthFlowProps> = ({
   });
 
   const [generatedFourWords, setGeneratedFourWords] = useState('');
+  const [registrationPassword, setRegistrationPassword] = useState(''); // Store password for passkey enrollment
+
+  // Persistent debug logging that survives page reloads
+  const logDebug = (message: string, data?: any) => {
+    const timestamp = new Date().toISOString();
+    const logEntry = `[${timestamp}] ${message} ${data ? JSON.stringify(data) : ''}`;
+    console.log(message, data || '');
+
+    // Persist to localStorage
+    try {
+      const logs = JSON.parse(localStorage.getItem('debug_logs') || '[]');
+      logs.push(logEntry);
+      // Keep last 100 logs
+      if (logs.length > 100) logs.shift();
+      localStorage.setItem('debug_logs', JSON.stringify(logs));
+    } catch (e) {
+      // Ignore storage errors
+    }
+  };
+
+  // Expose debug helper to window for console access
+  useEffect(() => {
+    (window as any).getDebugLogs = () => {
+      const logs = JSON.parse(localStorage.getItem('debug_logs') || '[]');
+      console.log('=== Debug Logs (last 100) ===');
+      logs.forEach((log: string) => console.log(log));
+      return logs;
+    };
+    (window as any).clearDebugLogs = () => {
+      localStorage.removeItem('debug_logs');
+      console.log('Debug logs cleared');
+    };
+  }, []);
+
+  // Component lifecycle tracking for debugging
+  useEffect(() => {
+    logDebug('🟢 UnifiedAuthFlow MOUNTED', { mode, showIdentityModal, showPasskeyModal });
+    return () => {
+      logDebug('🔴 UnifiedAuthFlow UNMOUNTING', { mode, showIdentityModal, showPasskeyModal });
+    };
+  }, []);
+
+  // Track modal state changes
+  useEffect(() => {
+    logDebug('📊 Modal state changed:', { showIdentityModal, showPasskeyModal });
+  }, [showIdentityModal, showPasskeyModal]);
 
   useEffect(() => {
     const generateIdentity = async () => {
@@ -210,6 +258,9 @@ export const UnifiedAuthFlow: React.FC<UnifiedAuthFlowProps> = ({
 
     try {
       if (mode === 'register') {
+        // Store password for passkey enrollment (cleared after modal closes)
+        setRegistrationPassword(formData.password);
+
         const identity = await createIdentity(
           formData.name,
           { password: formData.password, fourWords: generatedFourWords }
@@ -243,22 +294,60 @@ export const UnifiedAuthFlow: React.FC<UnifiedAuthFlowProps> = ({
   };
 
   const handlePasskeyAuth = async () => {
-    console.log('handlePasskeyAuth called', { mode, isAuthenticated: authState.isAuthenticated });
+    logDebug('🔵 handlePasskeyAuth called', {
+      mode,
+      isAuthenticated: authState.isAuthenticated,
+      showIdentityModal,
+      showPasskeyModal,
+      hasRegistrationPassword: !!registrationPassword,
+      hasFormPassword: !!formData.password
+    });
     setLoading(true);
     setError(null);
 
     try {
       if (mode === 'register' && authState.isAuthenticated) {
-        console.log('Registering passkey...');
-        const result = await registerPasskey();
+        logDebug('🔵 Registering passkey...');
+
+        // Use stored registration password (available after successful registration)
+        const passwordToUse = registrationPassword || formData.password;
+        logDebug('🔵 Password to use:', {
+          source: registrationPassword ? 'registrationPassword' : 'formData.password',
+          length: passwordToUse?.length
+        });
+
+        // Validate password is available
+        if (!passwordToUse || passwordToUse.length < 8) {
+          logDebug('❌ Password validation failed:', { length: passwordToUse?.length });
+          setError('Password must be at least 8 characters to register passkey');
+          setLoading(false);
+          return;
+        }
+
+        logDebug('🔵 Calling registerPasskey...');
+        // Register passkey with password (stores in OS keyring)
+        const result = await registerPasskey(passwordToUse);
+        logDebug('🔵 registerPasskey result:', result);
         if (result) {
           console.log('✅ Passkey enrolled successfully');
           setError('✅ Touch ID / Face ID enrolled successfully!');
-          // Clear success message after 3 seconds
-          setTimeout(() => setError(null), 3000);
+          // Clear stored password after successful enrollment
+          setRegistrationPassword('');
+          // Close modal and complete registration after showing success message
+          setTimeout(() => {
+            setShowIdentityModal(false);
+            onSuccess?.();
+          }, 2000); // Give user time to see success message
         }
       } else {
-        const success = await signInWithPasskey();
+        // Login mode - authenticate with Touch ID
+        if (!formData.fourWordAddress.trim()) {
+          setError('Please enter your four-word address first');
+          setLoading(false);
+          return;
+        }
+
+        const success = await signInWithPasskey(formData.fourWordAddress.trim());
         if (success) {
           setSuccess(true);
           setTimeout(() => {
@@ -280,9 +369,13 @@ export const UnifiedAuthFlow: React.FC<UnifiedAuthFlowProps> = ({
       {/* Success Modal for Registration */}
       <Dialog
         open={showIdentityModal}
-        onClose={() => {
+        onClose={(_event, reason) => {
+          logDebug('🔴 Modal onClose triggered!', { reason, showIdentityModal });
+          // Don't call onSuccess here - let user explicitly choose to skip or complete
+          // This prevents premature unmounting when modal closes accidentally
           setShowIdentityModal(false);
-          onSuccess?.();
+          // Don't clear password here - need it for passkey registration
+          // Password will be cleared when passkey modal closes or is skipped
         }}
         maxWidth="sm"
         fullWidth
@@ -358,18 +451,48 @@ export const UnifiedAuthFlow: React.FC<UnifiedAuthFlowProps> = ({
             </Alert>
           )}
         </DialogContent>
-        <DialogActions>
+        <DialogActions sx={{ flexDirection: 'column', gap: 1, alignItems: 'stretch', p: 3 }}>
           <Button
             variant="contained"
+            startIcon={<FingerprintIcon />}
             onClick={() => {
               setShowIdentityModal(false);
+              setShowPasskeyModal(true);
+            }}
+            fullWidth
+          >
+            Set Up Biometric Login
+          </Button>
+          <Button
+            variant="outlined"
+            onClick={() => {
+              setShowIdentityModal(false);
+              setRegistrationPassword(''); // Clear stored password for security
               onSuccess?.();
             }}
+            fullWidth
           >
-            Continue to App
+            Skip for Now
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Passkey Registration Modal */}
+      <PasskeyRegistration
+        open={showPasskeyModal}
+        fourWords={generatedFourWords || authState.user?.fourWordAddress || ''}
+        displayName={formData.name || authState.user?.name || ''}
+        password={registrationPassword} // Pass password for keyring storage
+        onClose={() => {
+          setShowPasskeyModal(false);
+          setRegistrationPassword(''); // Clear password for security
+        }}
+        onSuccess={() => {
+          setShowPasskeyModal(false);
+          setRegistrationPassword(''); // Clear password for security
+          onSuccess?.();
+        }}
+      />
 
       <Box
         sx={{

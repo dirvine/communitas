@@ -176,7 +176,7 @@ impl AuthService {
     // Passkey / Biometric Authentication Methods
     // ========================================================================
 
-    /// Register a passkey for biometric authentication
+    /// Register a passkey for biometric authentication (legacy - without WebAuthn)
     ///
     /// This enables Touch ID, Face ID, or Windows Hello for the identity.
     /// The password is stored in the platform keyring for secure retrieval.
@@ -197,6 +197,30 @@ impl AuthService {
             .await?;
 
         tracing::info!("AuthService: Passkey registered successfully");
+        Ok(info)
+    }
+
+    /// Register a passkey with WebAuthn credential
+    ///
+    /// This stores the WebAuthn credential for true biometric authentication.
+    pub async fn passkey_register_webauthn(
+        &mut self,
+        four_words: &str,
+        device_name: &str,
+        credential: crate::encrypted_storage::passkey::WebAuthnCredential,
+    ) -> Result<PasskeyInfo> {
+        tracing::info!(
+            "AuthService: Registering WebAuthn passkey for {} on {}",
+            four_words,
+            device_name
+        );
+
+        let info = self
+            .storage_manager
+            .passkey_register_webauthn(four_words, device_name, credential)
+            .await?;
+
+        tracing::info!("AuthService: WebAuthn passkey registered successfully");
         Ok(info)
     }
 

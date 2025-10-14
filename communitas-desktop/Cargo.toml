@@ -17,6 +17,7 @@ path = "src/main.rs"
 tauri-build = { version = "2.4.1", features = [] }
 
 [features]
+default = ["gossip_overlay"]
 gossip_overlay = []
 
 
@@ -47,6 +48,10 @@ dirs = "5.0"
 # TLS/Security
 rustls = "0.23"
 rustls-pemfile = "2.0"
+
+# macOS Touch ID / biometric authentication
+[target.'cfg(target_os = "macos")'.dependencies]
+security-framework = "2.11"
 
 # Tauri framework
 tauri = { version = "2", features = ["custom-protocol"] }

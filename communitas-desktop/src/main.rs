@@ -139,23 +139,32 @@ async fn main() -> anyhow::Result<()> {
             commands::auth::auth_try_auto_login,
             commands::auth::auth_get_recent_identities,
             commands::auth::auth_remove_recent_identity,
+            commands::auth::auth_delete_vault,
+            commands::auth::auth_list_old_vaults,
             commands::auth::auth_set_auto_login,
             commands::auth::auth_set_keyring_enabled,
             // Passkey commands
             commands::auth::auth_passkey_register,
+            commands::auth::auth_passkey_register_webauthn,
             commands::auth::auth_passkey_authenticate,
+            commands::auth::auth_passkey_authenticate_webauthn,
             commands::auth::auth_passkey_has_passkey,
             commands::auth::auth_passkey_get_info,
             commands::auth::auth_passkey_delete,
+            // Native Touch ID commands (macOS only)
+            #[cfg(target_os = "macos")]
+            commands::auth::auth_touchid_register,
+            #[cfg(target_os = "macos")]
+            commands::auth::auth_touchid_authenticate,
             // OS integration
             commands::auth::get_os_username,
-            // Core bindings (pointers-only DHT surface)
+            // Core bindings (gossip overlay surface)
             core_cmds::core_claim,
             core_cmds::core_advertise,
             core_cmds::container_put,
             core_cmds::container_get,
             core_cmds::generate_four_word_identity,
-            core_cmds::check_dht_connection,
+            core_cmds::check_gossip_connection,
             core_cmds::find_group_storage_disk,
             core_cmds::store_user_identity,
             core_cmds::find_user_current_address,
@@ -244,7 +253,6 @@ async fn main() -> anyhow::Result<()> {
             // Sync + Repair
             sync::sync_start_tip_watcher,
             sync::sync_stop_tip_watcher,
-            sync::sync_repair_fec,
             sync::sync_fetch_deltas,
             security::raw_spki::sync_set_quic_pinned_spki,
             security::raw_spki::sync_clear_quic_pinned_spki,

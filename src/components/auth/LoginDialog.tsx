@@ -328,14 +328,24 @@ export const LoginDialog: React.FC<LoginDialogProps> = ({
                     )}
                   </AnimatePresence>
 
-                  {('PublicKeyCredential' in window) && (
+                  {('PublicKeyCredential' in window) && formData.fourWordAddress.trim() && (
                     <Button
                       variant="outlined"
                       startIcon={<FingerprintIcon />}
-                      onClick={async () => { setLoading(true); const ok = await signInWithPasskey(); setLoading(false); if (ok) { onSuccess?.(); onClose(); } else { setError('Passkey sign-in failed'); } }}
+                      onClick={async () => {
+                        setLoading(true);
+                        const ok = await signInWithPasskey(formData.fourWordAddress.trim());
+                        setLoading(false);
+                        if (ok) {
+                          onSuccess?.();
+                          onClose();
+                        } else {
+                          setError('Touch ID authentication failed');
+                        }
+                      }}
                       disabled={loading}
                     >
-                      Sign in with Passkey
+                      Sign in with Touch ID
                     </Button>
                   )}
                 </>
@@ -409,14 +419,19 @@ export const LoginDialog: React.FC<LoginDialogProps> = ({
                       Your four words will be generated automatically. Your password is used to encrypt your local info and to locate your encrypted backup on the network. You can add passkey later for easy sign-in.
                     </Typography>
                   </Alert>
-                  {('PublicKeyCredential' in window) && (
+                  {('PublicKeyCredential' in window) && password.length >= 8 && (
                     <Button
                       variant="outlined"
                       startIcon={<FingerprintIcon />}
-                      onClick={async () => { setLoading(true); const ok = await registerPasskey(); setLoading(false); if (!ok) setError('Passkey registration failed'); }}
+                      onClick={async () => {
+                        setLoading(true);
+                        const ok = await registerPasskey(password);
+                        setLoading(false);
+                        if (!ok) setError('Touch ID registration failed');
+                      }}
                       disabled={loading}
                     >
-                      Register Passkey on this device
+                      Register Touch ID on this device
                     </Button>
                   )}
                 </>

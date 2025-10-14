@@ -101,7 +101,8 @@ export class UpdateService {
         if (event.event === 'Started') {
           console.log(`Download started: ${event.data.contentLength || 0} bytes`);
         } else if (event.event === 'Progress') {
-          const { chunkLength, contentLength } = event.data;
+          const { chunkLength } = event.data;
+          const contentLength = (event.data as any).contentLength;
           if (onProgress && contentLength) {
             onProgress(chunkLength, contentLength);
           }

@@ -110,9 +110,17 @@ impl GossipContext {
         info!("Initializing GossipContext for {}", four_words);
 
         // 1. Load or create ML-DSA identity
-        // Note: Using a default keystore path - should be configurable in production
-        let keystore_path = "./keystore";
-        let identity = Identity::load_or_create(&four_words, &display_name, keystore_path)
+        // Use system data directory to avoid triggering file watchers in dev mode
+        let keystore_path = dirs::data_local_dir()
+            .ok_or_else(|| anyhow::anyhow!("Failed to get data directory"))?
+            .join("communitas")
+            .join("keystore");
+
+        // Ensure keystore directory exists
+        std::fs::create_dir_all(&keystore_path)
+            .context("Failed to create keystore directory")?;
+
+        let identity = Identity::load_or_create(&four_words, &display_name, keystore_path.to_str().unwrap())
             .await
             .context("Failed to load/create ML-DSA identity")?;
 

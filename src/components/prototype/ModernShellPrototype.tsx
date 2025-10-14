@@ -75,6 +75,12 @@ import {
   WorkOutline,
   Message,
   AddCircleOutline,
+  PersonAdd,
+  Group,
+  Folder,
+  Business,
+  Logout,
+  Fingerprint,
 } from '@mui/icons-material'
 import { styled } from '@mui/material/styles'
 import {
@@ -83,6 +89,12 @@ import {
   DeleteContactDialog,
   type Contact,
 } from './ContactManagementDialogs'
+import {
+  EntityCreationDialog,
+  type EntityType,
+  type EntityScope,
+  type EntityCreationResult,
+} from './EntityCreationDialog'
 import { MessageReactionPicker, MessageReactionsDisplay } from './MessageReactionPicker'
 import { Star, StarBorder as StarOutlineIcon } from '@mui/icons-material'
 import { ConnectionStatus } from '../ConnectionStatus'
@@ -94,6 +106,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { IdentityPicker } from '../auth/IdentityPicker'
 import { UnifiedAuthFlow } from '../auth/UnifiedAuthFlow'
 import { FirstLaunchWelcome } from '../auth/FirstLaunchWelcome'
+import { PasskeyRegistration } from '../auth/PasskeyRegistration'
 import { Dialog, DialogTitle, DialogContent, DialogActions, TextField, InputAdornment, Alert } from '@mui/material'
 import { LockOutlined as LockIcon, Visibility as VisibilityIcon, VisibilityOff as VisibilityOffIcon } from '@mui/icons-material'
 
@@ -482,6 +495,12 @@ export const ModernShellPrototypeScreen: React.FC = () => {
     createProject,
     createGroup,
     createContact,
+    removeOrganization,
+    removeOrganizationGroup,
+    removeOrganizationChannel,
+    removeProject,
+    removePersonalGroup,
+    removePersonalUser,
   } = useEntityDirectory()
   const { enqueueSnackbar } = useSnackbar()
 
@@ -521,6 +540,13 @@ export const ModernShellPrototypeScreen: React.FC = () => {
   // Contact management state
   const [contactDialogMode, setContactDialogMode] = useState<'add' | 'edit' | 'delete' | null>(null)
   const [selectedContact, setSelectedContact] = useState<Conversation | null>(null)
+
+  // Entity creation dialog state
+  const [entityDialogMode, setEntityDialogMode] = useState<{
+    open: boolean
+    type: EntityType | null
+    scope?: EntityScope
+  }>({ open: false, type: null })
 
   // Organization and group management state
   const [showOrgManagementDialog, setShowOrgManagementDialog] = useState(false)
@@ -856,6 +882,9 @@ export const ModernShellPrototypeScreen: React.FC = () => {
   const [connectionWordsInput, setConnectionWordsInput] = useState('')
   const [editDisplayNameDialogOpen, setEditDisplayNameDialogOpen] = useState(false)
   const [displayNameInput, setDisplayNameInput] = useState('')
+  const [addMenuAnchor, setAddMenuAnchor] = useState<null | HTMLElement>(null)
+  const [userMenuAnchor, setUserMenuAnchor] = useState<null | HTMLElement>(null)
+  const [showPasskeySetup, setShowPasskeySetup] = useState(false)
   const messageSyncService = useRef(getMessageSyncService())
   const syncIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -1924,27 +1953,156 @@ export const ModernShellPrototypeScreen: React.FC = () => {
 
   const handleConfirmEntityDelete = async (id: string) => {
     try {
-      if (typeof window !== 'undefined' && '__TAURI__' in window) {
-        const { invoke } = await import('@tauri-apps/api/core')
+      const entity = selectedContact
+      if (!entity) return
 
-        // Find the entity type from the conversation
-        const entityType = selectedContact?.type || 'contact'
-
-        await invoke('core_entity_delete', {
-          entityId: id,
-          entityType,
-        })
-
-        console.log(`✅ Deleted ${entityType}: ${id}`)
+      // Use the appropriate remove method based on entity type and scope
+      if (entity.type === 'person' && entity.scope === 'personal') {
+        removePersonalUser(id)
+        enqueueSnackbar(`Deleted contact "${entity.name}"`, { variant: 'success' })
+      } else if (entity.type === 'group' && entity.scope === 'personal') {
+        removePersonalGroup(id)
+        enqueueSnackbar(`Deleted group "${entity.name}"`, { variant: 'success' })
+      } else if (entity.type === 'group' && entity.scope === 'organization' && entity.org) {
+        const org = organizations.find(o => o.name === entity.org)
+        if (org) {
+          removeOrganizationGroup(org.id, id)
+          enqueueSnackbar(`Deleted group "${entity.name}"`, { variant: 'success' })
+        }
+      } else if (entity.type === 'channel' && entity.scope === 'organization' && entity.org) {
+        const org = organizations.find(o => o.name === entity.org)
+        if (org) {
+          removeOrganizationChannel(org.id, id)
+          enqueueSnackbar(`Deleted channel "${entity.name}"`, { variant: 'success' })
+        }
+      } else if (entity.type === 'project' && entity.scope === 'organization' && entity.org) {
+        const org = organizations.find(o => o.name === entity.org)
+        if (org) {
+          removeProject(org.id, id)
+          enqueueSnackbar(`Deleted project "${entity.name}"`, { variant: 'success' })
+        }
+      } else if (entity.type === 'organisation') {
+        removeOrganization(id)
+        enqueueSnackbar(`Deleted organization "${entity.name}"`, { variant: 'success' })
       } else {
-        console.log(`🔶 Browser mode: Would delete entity ${id}`)
+        enqueueSnackbar(`Cannot delete ${entity.type} entities yet`, { variant: 'warning' })
       }
 
       setContactDialogMode(null)
       setSelectedContact(null)
     } catch (error) {
       console.error('Failed to delete entity:', error)
-      alert(`Failed to delete: ${error}`)
+      enqueueSnackbar(`Failed to delete: ${error}`, { variant: 'error' })
+    }
+  }
+
+  const handleAddContact = async (contact: Omit<Contact, 'id' | 'lastMessageTime'>) => {
+    try {
+      const result = await createContact({
+        displayName: contact.name,
+        relationship: 'colleague',
+      })
+
+      if (!result.success) {
+        enqueueSnackbar(result.error ?? 'Failed to create contact', { variant: 'error' })
+        return
+      }
+
+      enqueueSnackbar(`Created contact "${contact.name}"`, { variant: 'success' })
+      focusConversationById(result.entityId, 'Personal Space')
+      setContactDialogMode(null)
+    } catch (error) {
+      console.error('Create contact failed', error)
+      enqueueSnackbar('Failed to create contact', { variant: 'error' })
+    }
+  }
+
+  const handleGenerateIdentity = async (): Promise<string> => {
+    try {
+      if (typeof window !== 'undefined' && '__TAURI__' in window) {
+        const { invoke } = await import('@tauri-apps/api/core')
+        const fourWords = await invoke<string>('generate_four_word_identity')
+        return fourWords
+      }
+      // Browser fallback - generate random words
+      const words = ['ocean', 'forest', 'moon', 'star', 'river', 'mountain', 'cloud', 'wind']
+      return Array(4)
+        .fill(0)
+        .map(() => words[Math.floor(Math.random() * words.length)])
+        .join('-')
+    } catch (error) {
+      console.error('Failed to generate identity:', error)
+      throw new Error('Failed to generate identity')
+    }
+  }
+
+  const handleSaveEntity = async (entity: EntityCreationResult) => {
+    const { type, scope } = entityDialogMode
+    if (!type) return
+
+    try {
+      let result: { success: boolean; entityId?: string; error?: string } | undefined
+
+      switch (type) {
+        case 'group':
+          result = await createGroup({
+            displayName: entity.name,
+            description: entity.description,
+            organizationId: scope === 'organization' ? activeOrg?.id : undefined,
+          })
+          break
+
+        case 'organization':
+          result = await createOrganization({
+            displayName: entity.name,
+            description: entity.description,
+          })
+          break
+
+        case 'channel':
+          if (!activeOrg) {
+            enqueueSnackbar('Select an organisation to create a channel', { variant: 'warning' })
+            return
+          }
+          result = await createChannel({
+            displayName: entity.name,
+            description: entity.description,
+            organizationId: activeOrg.id,
+          })
+          break
+
+        case 'project':
+          if (!activeOrg) {
+            enqueueSnackbar('Select an organisation to create a project', { variant: 'warning' })
+            return
+          }
+          result = await createProject({
+            displayName: entity.name,
+            description: entity.description,
+            organizationId: activeOrg.id,
+          })
+          break
+      }
+
+      if (!result?.success) {
+        enqueueSnackbar(result?.error ?? `Failed to create ${type}`, { variant: 'error' })
+        return
+      }
+
+      enqueueSnackbar(`Created ${type} "${entity.name}"`, { variant: 'success' })
+
+      // Focus the new entity
+      if (result.entityId) {
+        const scopeLabel = scope === 'organization'
+          ? (activeOrg?.name || 'Organization')
+          : 'Personal Space'
+        focusConversationById(result.entityId, scopeLabel)
+      }
+
+      setEntityDialogMode({ open: false, type: null })
+    } catch (error) {
+      console.error(`Create ${type} failed`, error)
+      enqueueSnackbar(`Failed to create ${type}`, { variant: 'error' })
     }
   }
 
@@ -2668,7 +2826,12 @@ export const ModernShellPrototypeScreen: React.FC = () => {
             <SettingsOutlined />
           </SystemRailButton>
         </Tooltip>
-        <Avatar sx={{ width: 40, height: 40, cursor: 'pointer', mx: 'auto' }}>DA</Avatar>
+        <Avatar
+          onClick={(e) => setUserMenuAnchor(e.currentTarget)}
+          sx={{ width: 40, height: 40, cursor: 'pointer', mx: 'auto' }}
+        >
+          DA
+        </Avatar>
       </Box>
 
       {/* B. Conversation List (320-360px) */}
@@ -2686,7 +2849,13 @@ export const ModernShellPrototypeScreen: React.FC = () => {
           <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
             <Typography variant="h6" fontWeight={600}>Chats</Typography>
             <Stack direction="row" spacing={0.5}>
-              <IconButton size="small" sx={{ color: TOKENS.textSecondary }}><Add /></IconButton>
+              <IconButton
+                size="small"
+                sx={{ color: TOKENS.textSecondary }}
+                onClick={(e) => setAddMenuAnchor(e.currentTarget)}
+              >
+                <Add />
+              </IconButton>
               <IconButton size="small" sx={{ color: TOKENS.textSecondary }}><MoreHoriz /></IconButton>
             </Stack>
           </Stack>
@@ -3149,7 +3318,7 @@ export const ModernShellPrototypeScreen: React.FC = () => {
                                     border: `2px solid ${TOKENS.bgRaised}`,
                                   }}
                                 >
-                                  {React.isValidElement(childBadge.icon) && React.cloneElement(childBadge.icon, { sx: { fontSize: 14, color: '#FFFFFF' } })}
+                                  {React.isValidElement(childBadge.icon) && React.cloneElement(childBadge.icon as React.ReactElement<any>, { sx: { fontSize: 14, color: '#FFFFFF' } })}
                                 </Box>
                               </Box>
                               <Box sx={{ flexGrow: 1, minWidth: 0 }}>
@@ -3234,7 +3403,7 @@ export const ModernShellPrototypeScreen: React.FC = () => {
                             border: `2px solid ${TOKENS.bgRaised}`,
                           }}
                         >
-                          {React.cloneElement(badge.icon, { sx: { fontSize: 14, color: '#FFFFFF' } })}
+                          {React.cloneElement(badge.icon as React.ReactElement<any>, { sx: { fontSize: 14, color: '#FFFFFF' } })}
                         </Box>
                       )}
                     </Box>
@@ -3767,6 +3936,13 @@ export const ModernShellPrototypeScreen: React.FC = () => {
       </Modal>
 
       {/* Entity Management Dialogs */}
+      <AddContactDialog
+        open={contactDialogMode === 'add'}
+        onClose={() => setContactDialogMode(null)}
+        onSave={handleAddContact}
+        onGenerateIdentity={handleGenerateIdentity}
+      />
+
       <EditContactDialog
         open={contactDialogMode === 'edit'}
         contact={dialogContact}
@@ -3785,6 +3961,194 @@ export const ModernShellPrototypeScreen: React.FC = () => {
           setSelectedContact(null)
         }}
         onConfirm={handleConfirmEntityDelete}
+      />
+
+      <EntityCreationDialog
+        open={entityDialogMode.open}
+        entityType={entityDialogMode.type!}
+        scope={entityDialogMode.scope}
+        onClose={() => setEntityDialogMode({ open: false, type: null })}
+        onSave={handleSaveEntity}
+        onGenerateIdentity={handleGenerateIdentity}
+        availableMembers={
+          entityDialogMode.scope === 'personal'
+            ? filteredConversations
+                .filter(c => c.type === 'person' && c.scope === 'personal')
+                .map(conversationToContact)
+            : entityDialogMode.scope === 'organization'
+              ? filteredConversations
+                  .filter(c => c.type === 'person' && c.org === activeOrg?.name)
+                  .map(conversationToContact)
+              : []
+        }
+      />
+
+      {/* Add Menu - Context-aware based on scope filter */}
+      <Menu
+        anchorEl={addMenuAnchor}
+        open={Boolean(addMenuAnchor)}
+        onClose={() => setAddMenuAnchor(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        {scopeFilter === 'organization' && (
+          <>
+            <MenuItem
+              onClick={() => {
+                setAddMenuAnchor(null)
+                setEntityDialogMode({ open: true, type: 'channel', scope: 'organization' })
+              }}
+            >
+              <ListItemIcon><Tag fontSize="small" /></ListItemIcon>
+              <ListItemText>Create Channel</ListItemText>
+            </MenuItem>
+            <MenuItem
+              onClick={() => {
+                setAddMenuAnchor(null)
+                setEntityDialogMode({ open: true, type: 'project', scope: 'organization' })
+              }}
+            >
+              <ListItemIcon><Folder fontSize="small" /></ListItemIcon>
+              <ListItemText>Create Project</ListItemText>
+            </MenuItem>
+            <MenuItem
+              onClick={() => {
+                setAddMenuAnchor(null)
+                setEntityDialogMode({ open: true, type: 'group', scope: 'organization' })
+              }}
+            >
+              <ListItemIcon><Group fontSize="small" /></ListItemIcon>
+              <ListItemText>Create Group</ListItemText>
+            </MenuItem>
+            <MenuItem
+              onClick={() => {
+                setAddMenuAnchor(null)
+                setContactDialogMode('add')
+              }}
+            >
+              <ListItemIcon><PersonAdd fontSize="small" /></ListItemIcon>
+              <ListItemText>Add Contact</ListItemText>
+            </MenuItem>
+          </>
+        )}
+        {scopeFilter === 'personal' && (
+          <>
+            <MenuItem
+              onClick={() => {
+                setAddMenuAnchor(null)
+                setContactDialogMode('add')
+              }}
+            >
+              <ListItemIcon><PersonAdd fontSize="small" /></ListItemIcon>
+              <ListItemText>Add Contact</ListItemText>
+            </MenuItem>
+            <MenuItem
+              onClick={() => {
+                setAddMenuAnchor(null)
+                setEntityDialogMode({ open: true, type: 'group', scope: 'personal' })
+              }}
+            >
+              <ListItemIcon><Group fontSize="small" /></ListItemIcon>
+              <ListItemText>Create Group</ListItemText>
+            </MenuItem>
+          </>
+        )}
+        {scopeFilter === 'all' && (
+          <>
+            <MenuItem
+              onClick={() => {
+                setAddMenuAnchor(null)
+                setContactDialogMode('add')
+              }}
+            >
+              <ListItemIcon><PersonAdd fontSize="small" /></ListItemIcon>
+              <ListItemText>Add Contact</ListItemText>
+            </MenuItem>
+            <MenuItem
+              onClick={() => {
+                setAddMenuAnchor(null)
+                setEntityDialogMode({ open: true, type: 'group', scope: 'personal' })
+              }}
+            >
+              <ListItemIcon><Group fontSize="small" /></ListItemIcon>
+              <ListItemText>Create Group</ListItemText>
+            </MenuItem>
+            <MenuItem
+              onClick={() => {
+                setAddMenuAnchor(null)
+                setEntityDialogMode({ open: true, type: 'organization' })
+              }}
+            >
+              <ListItemIcon><Business fontSize="small" /></ListItemIcon>
+              <ListItemText>Create Organisation</ListItemText>
+            </MenuItem>
+          </>
+        )}
+      </Menu>
+
+      {/* User Menu - Avatar dropdown */}
+      <Menu
+        anchorEl={userMenuAnchor}
+        open={Boolean(userMenuAnchor)}
+        onClose={() => setUserMenuAnchor(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+        PaperProps={{
+          sx: {
+            bgcolor: TOKENS.bgRaised,
+            border: `1px solid ${TOKENS.borderSubtle}`,
+            borderRadius: 2,
+            minWidth: 240,
+          }
+        }}
+      >
+        {/* User Info Header */}
+        <Box sx={{ px: 2, py: 1.5, borderBottom: `1px solid ${TOKENS.borderSubtle}` }}>
+          <Typography variant="body2" fontWeight={600} sx={{ color: TOKENS.textPrimary }}>
+            {authState.user?.name || 'User'}
+          </Typography>
+          <Typography variant="caption" sx={{ color: TOKENS.textSecondary, fontFamily: 'monospace', fontSize: 11 }}>
+            {ourPeerId || authState.user?.fourWordAddress}
+          </Typography>
+        </Box>
+
+        {/* Menu Items */}
+        <MenuItem
+          onClick={() => {
+            setUserMenuAnchor(null)
+            setShowPasskeySetup(true)
+          }}
+        >
+          <ListItemIcon><Fingerprint fontSize="small" /></ListItemIcon>
+          <ListItemText>Set Up Biometric Login</ListItemText>
+        </MenuItem>
+
+        <Divider sx={{ my: 0.5 }} />
+
+        <MenuItem
+          onClick={async () => {
+            setUserMenuAnchor(null)
+            await logout()
+            console.log('✅ User logged out via avatar menu')
+          }}
+          sx={{ color: TOKENS.danger }}
+        >
+          <ListItemIcon><Logout fontSize="small" sx={{ color: TOKENS.danger }} /></ListItemIcon>
+          <ListItemText>Logout</ListItemText>
+        </MenuItem>
+      </Menu>
+
+      {/* Passkey Registration Modal */}
+      <PasskeyRegistration
+        open={showPasskeySetup}
+        fourWords={ourPeerId || authState.user?.fourWordAddress || ''}
+        displayName={authState.user?.name || ''}
+        password="" // TODO: This flow needs a password prompt dialog for security
+        onClose={() => setShowPasskeySetup(false)}
+        onSuccess={() => {
+          setShowPasskeySetup(false)
+          enqueueSnackbar('Biometric login set up successfully!', { variant: 'success' })
+        }}
       />
     </Box>
   )

@@ -1,6 +1,8 @@
 // Environment-aware API service that works in both browser and Tauri
 import { invoke } from '@tauri-apps/api/core';
 import { logger } from '../LoggingService';
+import { memberManagementService } from '../MemberManagementService';
+import type { MemberEntityType, MemberRole } from '../../types/memberManagement';
 
 // Detect runtime environment
 const isTauri = () => {
@@ -240,17 +242,27 @@ class BackendService {
   async getMembers(entityType: string, entityId: string): Promise<any[]> {
     if (isTauri()) {
       try {
-        switch (entityType) {
-          case 'group':
-            return await invoke('core_group_list_members', { groupId: entityId });
-          case 'channel':
-            return await invoke('core_channel_list_members', { channelId: entityId });
-          case 'project':
-            return await invoke('core_project_list_members', { projectId: entityId });
-          case 'organization':
-            return await invoke('core_organization_list_members', { organizationId: entityId });
-          default:
-            return [];
+        // Use unified CRDT-based member management
+        const result = await memberManagementService.listMembers(
+          entityType as MemberEntityType,
+          entityId
+        );
+
+        if (result.success && result.data) {
+          // Transform MemberInfo to the format expected by UI components
+          return result.data.map(member => ({
+            user_id: member.member_id,
+            display_name: member.member_id, // Could be enhanced with a display name lookup
+            four_words: member.member_id,
+            role: member.role,
+            status: 'online', // Could be enhanced with presence service
+            last_seen: new Date(member.joined_at * 1000).toISOString(),
+            deleted: member.deleted,
+          }));
+        } else {
+          logger.error('Member management list failed', { error: result.error, entityType, entityId });
+          // Fall back to browser API if member management fails
+          return this.browserAPI.getMembers(entityType, entityId);
         }
       } catch (error) {
         logger.warn('Tauri backend call failed, falling back to browser API', { error, entityType, entityId });
@@ -264,30 +276,20 @@ class BackendService {
   async addMember(entityType: string, entityId: string, fourWordAddress: string, role: string): Promise<boolean> {
     if (isTauri()) {
       try {
-        switch (entityType) {
-          case 'group':
-            await invoke('core_group_add_member', { 
-              groupWords: entityId.split('-'), 
-              memberWords: fourWordAddress.split('-') 
-            });
-            return true;
-          case 'channel':
-            await invoke('core_channel_add_member', { 
-              channelId: entityId, fourWordAddress, role 
-            });
-            return true;
-          case 'project':
-            await invoke('core_project_add_member', { 
-              projectId: entityId, fourWordAddress, role 
-            });
-            return true;
-          case 'organization':
-            await invoke('core_organization_add_member', { 
-              organizationId: entityId, fourWordAddress, role 
-            });
-            return true;
-          default:
-            return false;
+        // Use unified CRDT-based member management
+        const result = await memberManagementService.addMember({
+          entity_type: entityType as MemberEntityType,
+          entity_id: entityId,
+          member_id: fourWordAddress,
+          role: role as MemberRole,
+        });
+
+        if (result.success) {
+          return true;
+        } else {
+          logger.error('Member management add failed', { error: result.error, entityType, entityId, fourWordAddress });
+          // Fall back to browser API if member management fails
+          return this.browserAPI.addMember(entityType, entityId, fourWordAddress, role);
         }
       } catch (error) {
         logger.warn('Tauri backend call failed, falling back to browser API', { error, entityType, entityId, fourWordAddress });
@@ -301,27 +303,26 @@ class BackendService {
   async removeMember(entityType: string, entityId: string, memberId: string, memberFourWords?: string): Promise<boolean> {
     if (isTauri()) {
       try {
-        switch (entityType) {
-          case 'group':
-            if (memberFourWords) {
-              await invoke('core_group_remove_member', { 
-                groupWords: entityId.split('-'), 
-                memberWords: memberFourWords.split('-') 
-              });
-              return true;
-            }
-            return false;
-          case 'channel':
-            await invoke('core_channel_remove_member', { channelId: entityId, memberId });
-            return true;
-          case 'project':
-            await invoke('core_project_remove_member', { projectId: entityId, memberId });
-            return true;
-          case 'organization':
-            await invoke('core_organization_remove_member', { organizationId: entityId, memberId });
-            return true;
-          default:
-            return false;
+        // Use unified CRDT-based member management
+        // Use memberFourWords if available, otherwise use memberId
+        const memberToRemove = memberFourWords || memberId;
+
+        // TODO: Get the current user's four-word identity from auth context
+        const currentUserIdentity = 'current-user-identity'; // Placeholder
+
+        const result = await memberManagementService.removeMember({
+          entity_type: entityType as MemberEntityType,
+          entity_id: entityId,
+          member_id: memberToRemove,
+          deleted_by: currentUserIdentity,
+        });
+
+        if (result.success) {
+          return true;
+        } else {
+          logger.error('Member management remove failed', { error: result.error, entityType, entityId, memberId });
+          // Fall back to browser API if member management fails
+          return this.browserAPI.removeMember(entityType, entityId, memberId);
         }
       } catch (error) {
         logger.warn('Tauri backend call failed, falling back to browser API', { error, entityType, entityId, memberId });

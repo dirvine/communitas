@@ -34,16 +34,6 @@ pub async fn sync_stop_tip_watcher(
     Err("Sync tip watcher not yet implemented with new architecture".to_string())
 }
 
-/// Attempt a FEC repair given k/m and provided shares
-#[tauri::command]
-pub async fn sync_repair_fec(
-    _data_shards: u16,
-    _parity_shards: u16,
-    _shares: Vec<Option<Vec<u8>>>,
-) -> Result<Vec<u8>, String> {
-    Err("FEC repair not yet implemented with new architecture".to_string())
-}
-
 /// Delta fetcher over QUIC (IPv4-first)
 #[tauri::command]
 pub async fn sync_fetch_deltas(

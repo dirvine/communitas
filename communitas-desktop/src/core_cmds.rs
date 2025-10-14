@@ -1,6 +1,6 @@
 // Copyright (c) 2025 Saorsa Labs Limited
 //
-// Core DHT commands (placeholder)
+// Core gossip overlay commands (placeholder)
 //
 // TODO: Implement with new gossip-based architecture
 
@@ -11,7 +11,7 @@ use tauri::State;
 use tokio::sync::RwLock;
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct DhtStatus {
+pub struct GossipStatus {
     pub connected: bool,
     pub message: String,
 }
@@ -34,12 +34,12 @@ pub async fn generate_four_word_identity() -> Result<String, String> {
 }
 
 #[tauri::command]
-pub async fn check_dht_connection(
+pub async fn check_gossip_connection(
     _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
-) -> Result<DhtStatus, String> {
-    Ok(DhtStatus {
+) -> Result<GossipStatus, String> {
+    Ok(GossipStatus {
         connected: false,
-        message: "DHT not yet implemented with new architecture".to_string(),
+        message: "Gossip overlay not yet implemented with new architecture".to_string(),
     })
 }
 
@@ -49,7 +49,7 @@ pub async fn core_advertise(
     _key_hex: String,
     _value_hex: String,
 ) -> Result<(), String> {
-    Err("DHT advertising not yet implemented".to_string())
+    Err("Gossip overlay advertising not yet implemented".to_string())
 }
 
 #[tauri::command]

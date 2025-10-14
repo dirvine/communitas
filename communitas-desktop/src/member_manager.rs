@@ -69,7 +69,6 @@ pub struct MemberManager {
 
 /// Tombstone pruning configuration
 const TOMBSTONE_MIN_AGE_SECS: i64 = 86400; // 24 hours
-const TOMBSTONE_MAX_COUNT: usize = 1000; // Max tombstones before forced pruning
 
 impl MemberManager {
     /// Create a new MemberManager

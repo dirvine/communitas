@@ -38,6 +38,7 @@ interface PasskeyRegistrationProps {
   open: boolean;
   fourWords: string;
   displayName: string;
+  password: string;
   onClose: () => void;
   onSuccess: () => void;
 }
@@ -46,6 +47,7 @@ export const PasskeyRegistration: React.FC<PasskeyRegistrationProps> = ({
   open,
   fourWords,
   displayName,
+  password,
   onClose,
   onSuccess,
 }) => {
@@ -100,10 +102,13 @@ export const PasskeyRegistration: React.FC<PasskeyRegistrationProps> = ({
       setStep('registering');
       setError(null);
 
-      // Register passkey with backend
-      const info = await invoke<PasskeyInfo>('auth_passkey_register', {
+      // Use native Touch ID authentication (macOS only)
+      // This will trigger the macOS Touch ID prompt
+      const info = await invoke<PasskeyInfo>('auth_touchid_register', {
         fourWords,
         deviceName,
+        password, // Password is required and passed from parent
+        reason: `Register Touch ID for ${displayName}`,
       });
 
       setPasskeyInfo(info);
@@ -115,8 +120,24 @@ export const PasskeyRegistration: React.FC<PasskeyRegistrationProps> = ({
         handleClose();
       }, 2000);
     } catch (err: any) {
-      console.error('Passkey registration failed:', err);
-      setError(err?.message || 'Failed to register passkey. Please try again.');
+      console.error('Touch ID registration failed:', err);
+
+      // Provide helpful error messages
+      let errorMessage = 'Failed to register Touch ID. Please try again.';
+
+      if (err.includes('cancelled') || err.includes('timeout')) {
+        errorMessage = 'Touch ID authentication was cancelled or timed out.';
+      } else if (err.includes('not supported') || err.includes('not available')) {
+        errorMessage = 'Touch ID is not available on this device.';
+      } else if (err.includes('already exists')) {
+        errorMessage = 'A Touch ID registration already exists for this identity.';
+      } else if (typeof err === 'string') {
+        errorMessage = err;
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+
+      setError(errorMessage);
       setStep('error');
     }
   };
@@ -179,11 +200,11 @@ export const PasskeyRegistration: React.FC<PasskeyRegistrationProps> = ({
         {step === 'intro' && !passkeyInfo && (
           <>
             <Alert severity="info" sx={{ mb: 3 }}>
-              Enable quick sign-in with Touch ID, Face ID, or Windows Hello
+              Enable quick sign-in with Touch ID (macOS only)
             </Alert>
 
             <Typography variant="body2" paragraph>
-              With biometric authentication, you can sign in securely without entering your password
+              With Touch ID authentication, you can sign in securely without entering your password
               every time. Your biometric data never leaves your device.
             </Typography>
 
@@ -270,10 +291,10 @@ export const PasskeyRegistration: React.FC<PasskeyRegistrationProps> = ({
             <CircularProgress size={64} />
             <Box sx={{ textAlign: 'center' }}>
               <Typography variant="h6" fontWeight={600} gutterBottom>
-                Setting up biometric authentication
+                Setting up Touch ID authentication
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Please complete the biometric verification on your device
+                Please authenticate with Touch ID when prompted
               </Typography>
             </Box>
           </Box>

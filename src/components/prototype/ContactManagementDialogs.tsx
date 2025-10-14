@@ -10,8 +10,11 @@ import {
   Typography,
   IconButton,
   Alert,
+  Tabs,
+  Tab,
+  Chip,
 } from '@mui/material'
-import { Close as CloseIcon } from '@mui/icons-material'
+import { Close as CloseIcon, PersonAdd, PersonAddAlt } from '@mui/icons-material'
 
 export interface Contact {
   id: string
@@ -28,31 +31,89 @@ interface AddContactDialogProps {
   open: boolean
   onClose: () => void
   onSave: (contact: Omit<Contact, 'id' | 'lastMessageTime'>) => void
+  onGenerateIdentity?: () => Promise<string> // Callback to generate new four-word identity
 }
 
-export const AddContactDialog: React.FC<AddContactDialogProps> = ({ open, onClose, onSave }) => {
+export const AddContactDialog: React.FC<AddContactDialogProps> = ({ open, onClose, onSave, onGenerateIdentity }) => {
+  const [mode, setMode] = useState<'existing' | 'new'>('existing')
   const [name, setName] = useState('')
   const [fourWords, setFourWords] = useState('')
   const [error, setError] = useState('')
+  const [generatingIdentity, setGeneratingIdentity] = useState(false)
 
-  const validateFourWords = (input: string): boolean => {
-    const pattern = /^[a-z]+-[a-z]+-[a-z]+-[a-z]+$/
-    return pattern.test(input.trim().toLowerCase())
+  // Normalize four words - accept spaces or dashes
+  const normalizeFourWords = (input: string): string => {
+    return input.trim().toLowerCase().replace(/\s+/g, '-')
   }
 
-  const handleSave = () => {
+  // Validate against actual four-word dictionary format
+  const validateFourWords = async (input: string): Promise<boolean> => {
+    const normalized = normalizeFourWords(input)
+    // Accept spaces or dashes between words
+    const pattern = /^[a-z]+[\s-][a-z]+[\s-][a-z]+[\s-][a-z]+$/
+
+    if (!pattern.test(input.trim().toLowerCase())) {
+      return false
+    }
+
+    // Check if each word is valid using Tauri backend
+    try {
+      if (typeof window !== 'undefined' && '__TAURI__' in window) {
+        const { invoke } = await import('@tauri-apps/api/core')
+        const isValid = await invoke<boolean>('validate_four_words', { fourWords: normalized })
+        return isValid
+      }
+      // In browser mode, just check format
+      return true
+    } catch (error) {
+      console.error('Validation error:', error)
+      return false
+    }
+  }
+
+  const handleGenerateIdentity = async () => {
+    if (!onGenerateIdentity) return
+
+    setGeneratingIdentity(true)
+    setError('')
+    try {
+      const newIdentity = await onGenerateIdentity()
+      setFourWords(newIdentity)
+    } catch (err) {
+      setError(`Failed to generate identity: ${err}`)
+    } finally {
+      setGeneratingIdentity(false)
+    }
+  }
+
+  const handleSave = async () => {
     if (!name.trim()) {
       setError('Name is required')
       return
     }
-    if (!validateFourWords(fourWords)) {
-      setError('Invalid four-word address format (e.g., ocean-forest-moon-star)')
-      return
+
+    if (mode === 'existing') {
+      if (!fourWords.trim()) {
+        setError('Four-word address is required')
+        return
+      }
+
+      const isValid = await validateFourWords(fourWords)
+      if (!isValid) {
+        setError('Invalid four-word address. Each word must be from the dictionary.')
+        return
+      }
+    } else {
+      // New contact mode - must have generated identity
+      if (!fourWords.trim()) {
+        setError('Please generate a four-word identity first')
+        return
+      }
     }
 
     onSave({
       name: name.trim(),
-      fourWords: fourWords.trim().toLowerCase(),
+      fourWords: normalizeFourWords(fourWords),
       snippet: 'No messages yet',
       time: 'Never',
       online: false,
@@ -63,6 +124,7 @@ export const AddContactDialog: React.FC<AddContactDialogProps> = ({ open, onClos
     setName('')
     setFourWords('')
     setError('')
+    setMode('existing')
     onClose()
   }
 
@@ -70,7 +132,14 @@ export const AddContactDialog: React.FC<AddContactDialogProps> = ({ open, onClos
     setName('')
     setFourWords('')
     setError('')
+    setMode('existing')
     onClose()
+  }
+
+  const handleModeChange = (_: React.SyntheticEvent, newMode: 'existing' | 'new') => {
+    setMode(newMode)
+    setFourWords('') // Clear four-words when switching modes
+    setError('')
   }
 
   return (
@@ -82,6 +151,20 @@ export const AddContactDialog: React.FC<AddContactDialogProps> = ({ open, onClos
             <CloseIcon />
           </IconButton>
         </Box>
+        <Tabs value={mode} onChange={handleModeChange} sx={{ mt: 1 }}>
+          <Tab
+            icon={<PersonAdd />}
+            iconPosition="start"
+            label="Add Existing"
+            value="existing"
+          />
+          <Tab
+            icon={<PersonAddAlt />}
+            iconPosition="start"
+            label="Create New"
+            value="new"
+          />
+        </Tabs>
       </DialogTitle>
       <DialogContent>
         {error && (
@@ -89,32 +172,85 @@ export const AddContactDialog: React.FC<AddContactDialogProps> = ({ open, onClos
             {error}
           </Alert>
         )}
-        <TextField
-          autoFocus
-          margin="dense"
-          label="Name"
-          type="text"
-          fullWidth
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="John Doe"
-          sx={{ mb: 2 }}
-        />
-        <TextField
-          margin="dense"
-          label="Four-Word Address"
-          type="text"
-          fullWidth
-          value={fourWords}
-          onChange={(e) => setFourWords(e.target.value)}
-          placeholder="ocean-forest-moon-star"
-          helperText="Enter the contact's four-word network identity"
-        />
+
+        {mode === 'existing' ? (
+          <>
+            <Alert severity="info" sx={{ mb: 2 }}>
+              Add someone you already know by entering their four-word network identity
+            </Alert>
+            <TextField
+              autoFocus
+              margin="dense"
+              label="Display Name"
+              type="text"
+              fullWidth
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="John Doe"
+              sx={{ mb: 2 }}
+            />
+            <TextField
+              margin="dense"
+              label="Four-Word Address"
+              type="text"
+              fullWidth
+              value={fourWords}
+              onChange={(e) => setFourWords(e.target.value)}
+              placeholder="ocean forest moon star"
+              helperText="Enter their existing four-word network identity (spaces or dashes)"
+            />
+          </>
+        ) : (
+          <>
+            <Alert severity="info" sx={{ mb: 2 }}>
+              Create a new contact with a generated four-word identity
+            </Alert>
+            <TextField
+              autoFocus
+              margin="dense"
+              label="Display Name"
+              type="text"
+              fullWidth
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="John Doe"
+              sx={{ mb: 2 }}
+            />
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                Four-Word Identity:
+              </Typography>
+              {fourWords ? (
+                <Chip
+                  label={fourWords}
+                  color="primary"
+                  onDelete={() => setFourWords('')}
+                  sx={{ fontFamily: 'monospace' }}
+                />
+              ) : (
+                <Button
+                  variant="outlined"
+                  onClick={handleGenerateIdentity}
+                  disabled={generatingIdentity}
+                  fullWidth
+                >
+                  {generatingIdentity ? 'Generating...' : 'Generate Identity'}
+                </Button>
+              )}
+            </Box>
+            <Alert severity="warning" sx={{ mt: 2 }}>
+              <Typography variant="caption">
+                <strong>Note:</strong> The generated identity will be created when you save.
+                Make sure to share it with the contact so they can accept your invitation.
+              </Typography>
+            </Alert>
+          </>
+        )}
       </DialogContent>
       <DialogActions>
         <Button onClick={handleClose}>Cancel</Button>
-        <Button onClick={handleSave} variant="contained">
-          Add Contact
+        <Button onClick={handleSave} variant="contained" disabled={generatingIdentity}>
+          {mode === 'existing' ? 'Add Contact' : 'Create Contact'}
         </Button>
       </DialogActions>
     </Dialog>

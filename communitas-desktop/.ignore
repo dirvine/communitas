@@ -1,0 +1,28 @@
+# Ignore runtime-generated files from triggering cargo-watch rebuilds
+# Used by Tauri's internal cargo-watch during development
+
+# Identity keystore - files created during user registration
+keystore/
+*.identity
+
+# Database files
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
+# Log files
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+
+# Backup files
+*.bak
+*~
+
+# Editor files
+.DS_Store

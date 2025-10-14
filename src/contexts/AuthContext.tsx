@@ -1,20 +1,32 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
-// Dynamic import of Tauri API with fallback
+// Tauri API wrapper with strict error handling
+// Authentication MUST go through Rust backend for keychain integration
 let invoke: any = async (cmd: string, args?: any) => {
   // Try to get Tauri from window first
   if (typeof window !== 'undefined' && (window as any).__TAURI__?.core?.invoke) {
-    return (window as any).__TAURI__.core.invoke(cmd, args);
+    console.log(`🔧 Calling Tauri command: ${cmd}`, args);
+    try {
+      const result = await (window as any).__TAURI__.core.invoke(cmd, args);
+      console.log(`✅ Tauri command succeeded: ${cmd}`);
+      return result;
+    } catch (error) {
+      console.error(`❌ Tauri command failed: ${cmd}`, error);
+      throw error;
+    }
   }
 
   // Try dynamic import
   try {
     const { invoke: tauriInvoke } = await import('@tauri-apps/api/core');
-    return tauriInvoke(cmd, args);
+    console.log(`🔧 Calling Tauri command (dynamic import): ${cmd}`, args);
+    const result = await tauriInvoke(cmd, args);
+    console.log(`✅ Tauri command succeeded: ${cmd}`);
+    return result;
   } catch (error) {
-    console.warn(`Tauri not available, using mock mode for ${cmd}`);
-    // Minimal mock for browser dev
-    throw new Error(`Command ${cmd} not available in browser mode`);
+    console.error(`❌ CRITICAL: Tauri not available or command failed: ${cmd}`, error);
+    // Authentication cannot proceed without Tauri backend
+    throw new Error(`CRITICAL: Tauri backend required for authentication. Command '${cmd}' failed. This application must run in Tauri mode for secure authentication.`);
   }
 };
 
@@ -81,7 +93,7 @@ export interface AuthContextType {
   login: (fourWordAddress: string, password?: string) => Promise<boolean>;
   logout: () => Promise<void>;
   createIdentity: (name: string, options?: { fourWords?: string; password?: string }) => Promise<UserIdentity>;
-  registerPasskey: () => Promise<boolean>;
+  registerPasskey: (password: string) => Promise<boolean>;
   signInWithPasskey: (fourWords?: string) => Promise<boolean>;
 
   // Identity management
@@ -418,63 +430,35 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  // Passkey registration (WebAuthn via browser API + backend storage)
-  const registerPasskey = async (): Promise<boolean> => {
+  // Passkey registration using platform keyring (Tauri native)
+  const registerPasskey = async (password: string): Promise<boolean> => {
     try {
-      // Check if running in Tauri
-      const isTauri = !!(window as any).__TAURI__;
-
-      if (isTauri) {
-        throw new Error('Touch ID / Face ID is not supported in the desktop app. It will be available in the web version.');
-      }
-
-      if (typeof window === 'undefined' || !(window as any).PublicKeyCredential) {
-        console.error('WebAuthn not supported');
-        throw new Error('Touch ID / Face ID not supported on this device');
-      }
-
       if (!authState.user?.fourWordAddress) {
         console.error('No authenticated user');
         throw new Error('Please log in first');
       }
 
-      console.log('🔐 Starting passkey registration...');
-
-      const challenge = crypto.getRandomValues(new Uint8Array(32));
-      const userId = crypto.getRandomValues(new Uint8Array(16));
-
-      // Step 1: Create WebAuthn credential (Touch ID/Face ID prompt)
-      const credential = await (navigator.credentials as any).create({
-        publicKey: {
-          challenge,
-          rp: { name: 'Communitas' },
-          user: {
-            id: userId,
-            name: authState.user.fourWordAddress,
-            displayName: authState.user.name
-          },
-          pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
-          timeout: 60000,
-          authenticatorSelection: { userVerification: 'preferred' },
-        },
-      });
-
-      if (!credential) {
-        throw new Error('Failed to create passkey');
+      if (!password) {
+        throw new Error('Password is required to register passkey');
       }
 
-      console.log('✅ WebAuthn credential created');
+      console.log('🔐 Registering passkey for:', authState.user.fourWordAddress);
 
-      // Step 2: Save passkey to backend
-      const deviceName = `${navigator.platform} - ${new Date().toLocaleDateString()}`;
+      // Detect platform for device name
+      const platform = (navigator as any).userAgentData?.platform || navigator.platform;
+      const deviceName = `${platform} - ${new Date().toLocaleDateString()}`;
+
+      // Register passkey using native keyring (stores password securely)
+      // This will store the password in OS keyring which triggers Touch ID/Face ID on access
       await invoke('auth_passkey_register', {
         fourWords: authState.user.fourWordAddress,
-        deviceName
+        deviceName,
+        password
       });
 
-      console.log('✅ Passkey saved to backend');
+      console.log('✅ Passkey registered successfully - password stored in OS keyring');
       return true;
-    } catch (e) {
+    } catch (e: any) {
       console.error('Passkey registration failed:', e);
       throw e;
     }
@@ -487,14 +471,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         return false;
       }
 
-      if (typeof window === 'undefined' || !(window as any).PublicKeyCredential) {
-        console.error('WebAuthn not supported');
-        return false;
-      }
-
-      // Call backend to authenticate with passkey
       console.log('🔐 Authenticating with passkey for:', fourWords);
-      const sessionInfo = await invoke('auth_passkey_authenticate', { fourWords }) as SessionInfo;
+
+      // Authenticate using native Touch ID (macOS)
+      // This will trigger macOS Touch ID authentication and retrieve password from keyring
+      const sessionInfo = await invoke('auth_touchid_authenticate', {
+        fourWords,
+        reason: `Sign in as ${fourWords}`
+      }) as SessionInfo;
+
+      console.log('🔍 SessionInfo received from backend:', sessionInfo);
 
       // Create user identity from session
       const identity: UserIdentity = {
@@ -533,7 +519,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       return true;
     } catch (error) {
-      console.error('Passkey authentication failed:', error);
+      console.error('❌ Passkey authentication failed:', error);
+      console.error('❌ Error details:', JSON.stringify(error, null, 2));
       return false;
     }
   };

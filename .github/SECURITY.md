@@ -13,17 +13,18 @@ We actively support and provide security updates for the following versions:
 
 ### Cryptographic Requirements
 
-All encryption operations in Communitas MUST use the **saorsa-fec** crate. This is enforced through:
+All encryption operations in Communitas use approved cryptographic libraries and are enforced through:
 
-- Automated CI checks scanning for direct cryptographic library usage
+- Automated CI checks scanning for insecure cryptographic practices
 - Code review requirements for security-critical modules
 - Runtime validation of encryption implementations
+- Post-quantum cryptography (ML-DSA signatures, ML-KEM key exchange)
 
 ### Critical Security Rules
 
 1. **NO `unwrap()` or `expect()` in production code** - All error conditions must be handled gracefully
 2. **NO `panic!()` in production code** - Use `Result` types and proper error propagation
-3. **ALL encryption via saorsa-fec** - No direct use of ChaCha20Poly1305 or other crypto libraries
+3. **USE approved cryptography** - ChaCha20-Poly1305 AEAD, ML-DSA/ML-KEM for PQC
 4. **NO hardcoded secrets** - All credentials must be externally configured
 5. **Memory safety** - Rust's ownership system prevents many vulnerabilities, but we use additional tools like `zeroize` for sensitive data
 
@@ -87,10 +88,10 @@ Include in your report:
 
 Communitas implements defense-in-depth encryption:
 
-1. **Transport Layer**: WebRTC-over-QUIC with ant-quic NAT traversal
-2. **Application Layer**: saorsa-fec with ChaCha20-Poly1305 AEAD
-3. **Storage Layer**: Reed-Solomon FEC with encrypted shards
-4. **Identity Layer**: Ed25519 cryptographic identities
+1. **Transport Layer**: QUIC with ant-quic NAT traversal
+2. **Application Layer**: ChaCha20-Poly1305 AEAD encryption
+3. **Storage Layer**: Full-file replication with encrypted storage
+4. **Identity Layer**: Post-quantum signatures (ML-DSA) and key exchange (ML-KEM)
 
 ### Key Management
 
@@ -155,11 +156,12 @@ We perform regular security audits of:
 
 Only these cryptographic libraries are approved:
 
-- **saorsa-fec**: Primary encryption library (REQUIRED)
-- **ChaCha20Poly1305**: Only via saorsa-fec wrapper
-- **Ed25519**: For digital signatures in saorsa-core
-- **Blake3**: For cryptographic hashing
-- **rand**: For secure random number generation
+- **ChaCha20-Poly1305**: AEAD encryption for application layer (via chacha20poly1305 crate)
+- **ML-DSA (Dilithium)**: Post-quantum digital signatures
+- **ML-KEM (Kyber)**: Post-quantum key encapsulation
+- **Blake3**: Cryptographic hashing and content addressing
+- **rand**: Secure random number generation
+- **zeroize**: Secure memory clearing for sensitive data
 
 ### Prohibited Practices
 

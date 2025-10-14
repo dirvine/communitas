@@ -82,6 +82,8 @@ Messaging, channels, threads
   - Emits `message-received` (payload decrypted if possible): `{ id?, channel_id?, sender?, content?, receivedAt?, encrypted?: boolean, error?: string }`
 
 Virtual Disk & Website (per entity: org/group/channel/project/individual)
+> **Note**: Virtual disks provide a unified view of markdown-based data storage with CRDT synchronization (Yrs for files, Automerge for entities/chats). Implementation is backend-focused with full file replication across the gossip network.
+
 - Private/public/shared virtual disks
   - `core_disk_write({ entity_hex, disk_type: "Private"|"Public"|"Shared", path, content_base64, mime_type? }) -> WriteReceipt`
   - `core_disk_read(entity_hex: string, disk_type: string, path: string) -> Uint8Array`
@@ -387,9 +389,9 @@ Security validation
 ## 10. Glossary
 
 - FWN (Four‑Word Networking): readable, checksum‑secured addressing for humans
-- DHT: Trust‑weighted Kademlia with quorum and telemetry
-- FEC: Forward Error Correction for resilient storage and transport
-- Virtual Disk: entity‑scoped, encrypted/public disks for files & websites
+- Gossip Overlay: saorsa-gossip for P2P networking with presence and pubsub
+- CRDT Sync: Yrs for file editing, Automerge for entities/chats
+- Virtual Disk: entity‑scoped, markdown-based view of data (backend-focused implementation)
 - Website Root: identity‑bound key for DNS‑free sites
 - MLS/ML‑DSA/ML‑KEM: PQC algorithms used throughout
 

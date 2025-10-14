@@ -21,11 +21,9 @@ homepage = "https://communitas.life"
 [workspace.dependencies]
 # Saorsa Core ecosystem (will be phased out in favor of saorsa-gossip)
 saorsa-core = "0.3"
-saorsa-fec = "0.4.11"
 saorsa-mls = "0.1.5"
 saorsa-rsps = "0.2.0"
 saorsa-pqc = "0.3.12"
-saorsa-seal = "0.1.2"
 
 # Saorsa Gossip ecosystem (published crates from crates.io)
 saorsa-gossip-types = "0.1.6"

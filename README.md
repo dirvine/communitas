@@ -142,7 +142,7 @@ const entity = await findEntity("ocean-blue-eagle-star");
 ### **Zero-Trust Architecture**
 - **Everything Encrypted**: All data encrypted at rest and in transit
 - **Cryptographic Verification**: Every entity verified by signature
-- **No Central Authority**: Fully decentralized with DHT consensus
+- **No Central Authority**: Fully decentralized with gossip overlay consensus
 - **Quantum-Safe**: Post-quantum cryptography throughout
 
 ### **Privacy Features**

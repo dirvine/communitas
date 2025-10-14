@@ -237,25 +237,29 @@ Personal Dashboard
 - **File Attachments**: Share documents in-channel
 
 ### **Virtual Disk System**
-Each entity has its own virtual disk with different access policies:
+Each entity has its own virtual disk providing a unified view of markdown-based data with different access policies:
 
 ```
-Entity Storage Model:
+Entity Storage Model (Backend-Focused):
 
 ocean-forest-moon-star (Your Identity)
-├── 💾 Private Disk (encrypted, local-only)
+├── 💾 Private Disk (encrypted, local-only markdown files)
 │   └── Accessible only by you on authorized devices
+│   └── Synced via Yrs CRDT for collaborative file editing
 │
-├── 📁 Public Disk (content-addressed, distributed)
+├── 📁 Public Disk (replicated markdown files)
 │   └── Readable by anyone with the link
+│   └── Full file replication across gossip network
 │
-└── 🔗 Shared Disk (group-encrypted)
+└── 🔗 Shared Disk (group-encrypted markdown files)
     └── Accessible by group members with permission
+    └── Synchronized via Automerge CRDT for entities/chats
 
 Access Control:
 - Private: ML-DSA key + device authorization required
-- Public: Content ID + optional signature verification
+- Public: Full file replication with signature verification
 - Shared: MLS group membership + derived encryption keys
+- Implementation: Backend-focused with markdown file storage
 ```
 
 ### **Website Publishing**

@@ -20,9 +20,9 @@ Communitas is a local-first, PQC-ready collaboration platform that merges WhatsA
 
 ### Backend (Tauri v2 + Rust)
 - **Runtime**: Tauri v2 with Rust 2024 edition for desktop app framework
-- **Core Library**: Saorsa Core v0.3.17 (crates.io) for DHT, QUIC, identities, groups, messaging
+- **Core Library**: Saorsa Gossip ecosystem for identities, groups, messaging via gossip overlay
 - **Cryptography**: Post-quantum (ML-DSA/ML-KEM) with ChaCha20-Poly1305
-- **Storage**: Virtual disks with content addressing via BLAKE3
+- **Storage**: Virtual disks with full file replication and CRDT synchronization (Yrs for files, Automerge for entities/chats)
 - **Security**: Keyring integration for secure credential storage
 - **Networking**: QUIC via ant-quic, IPv4-first with Happy Eyeballs fallback
 
@@ -224,7 +224,7 @@ See `docs/BRIDGE_TESTING.md` for complete testing scenarios and Chrome DevTools 
 ### Integration Tests
 - Multi-node P2P testing: `src-tauri/tests/integration_*.rs`
 - Storage policies: `src-tauri/tests/storage_policy_tests.rs`
-- DHT operations: `src-tauri/tests/dht_facade_local.rs`
+- Gossip networking: Tests integrated within P2P testing suite
 
 ### Running Specific Tests
 ```bash
@@ -243,11 +243,11 @@ RUST_LOG=debug cargo test
 ## Architecture Insights
 
 ### Core Context System
-The application uses a centralized `CoreContext` (src-tauri/src/core_context.rs) that wires Communitas to saorsa-core components:
+The application uses a centralized `CoreContext` (src-tauri/src/core_context.rs) that wires Communitas to saorsa-gossip components:
 - Identity management with enhanced PQC support
-- Storage management with DHT integration
+- Storage management with CRDT synchronization (Yrs/Automerge)
 - Chat management with persistent storage
-- Messaging service for real-time communication
+- Messaging service for real-time communication via gossip overlay
 - Group key storage for membership updates
 
 ### Tauri Command Structure
@@ -461,10 +461,11 @@ The inspector exposes structured DOM inspection, screenshot capture, and scripte
 ## API Documentation
 
 For detailed API documentation, see:
-- `AGENTS_API.md` - Complete Communitas + Saorsa Core API surface
+- `ARCHITECTURE_CURRENT.md` - Current architecture and technology stack (SINGLE SOURCE OF TRUTH)
+- `docs/CRDT_ARCHITECTURE.md` - CRDT synchronization architecture (Yrs/Automerge)
+- `docs/SAORSA_GOSSIP_ARCHITECTURE.md` - Gossip overlay networking architecture
+- `AGENTS_API.md` - Complete Communitas API surface
 - `AGENTS.md` - Agent automation guide and MCP usage examples
-- `finalise/DEPLOY_TESTNET.md` - Testnet deployment guide
-- Saorsa Core docs: https://docs.rs/saorsa-core
 
 ## Performance Targets
 

@@ -107,6 +107,24 @@ pub async fn core_get_peer_id(
     Err("Not yet implemented".to_string())
 }
 
+#[cfg(feature = "gossip_overlay")]
+#[tauri::command]
+pub async fn core_get_user_info(
+    gossip_state: State<'_, gossip_commands::GossipState>,
+) -> Result<UserInfo, String> {
+    // Get current user's identity from gossip
+    let peer_id = gossip_commands::gossip_get_own_identity(gossip_state).await?;
+
+    // TODO: Retrieve display_name and device_name from gossip metadata
+    // For now, return basic info with peer_id
+    Ok(UserInfo {
+        peer_id: peer_id.clone(),
+        display_name: "User".to_string(), // TODO: Get from metadata
+        device_name: "Device".to_string(), // TODO: Get from metadata
+    })
+}
+
+#[cfg(not(feature = "gossip_overlay"))]
 #[tauri::command]
 pub async fn core_get_user_info(
     _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
@@ -114,6 +132,24 @@ pub async fn core_get_user_info(
     Err("Not yet implemented".to_string())
 }
 
+#[cfg(feature = "gossip_overlay")]
+#[tauri::command]
+pub async fn core_set_display_name(
+    gossip_state: State<'_, gossip_commands::GossipState>,
+    display_name: String,
+) -> Result<(), String> {
+    // Update display name by storing as metadata in gossip
+    // Prefix the display name with "metadata:display_name:" for later retrieval
+    let metadata_value = format!("metadata:display_name:{}", display_name);
+
+    gossip_commands::gossip_store_message(gossip_state, metadata_value.as_bytes().to_vec()).await?;
+
+    // TODO: Implement proper metadata storage mechanism in gossip
+    // For now, we store it as a regular message with "metadata:" prefix
+    Ok(())
+}
+
+#[cfg(not(feature = "gossip_overlay"))]
 #[tauri::command]
 pub async fn core_set_display_name(
     _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
@@ -156,6 +192,18 @@ pub async fn core_create_channel(
     Err("Gossip overlay not enabled".to_string())
 }
 
+#[cfg(feature = "gossip_overlay")]
+#[tauri::command]
+pub async fn core_get_channels(
+    _gossip_state: State<'_, gossip_commands::GossipState>,
+) -> Result<Vec<ChannelInfo>, String> {
+    // TODO: Implement channel tracking in gossip overlay
+    // For now, return empty list until gossip_get_subscribed_entities is available
+    // This will require adding entity subscription tracking to gossip_commands.rs
+    Ok(vec![])
+}
+
+#[cfg(not(feature = "gossip_overlay"))]
 #[tauri::command]
 pub async fn core_get_channels(
     _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
@@ -221,6 +269,19 @@ pub async fn core_channel_recipients(
     Ok(vec![])
 }
 
+#[cfg(feature = "gossip_overlay")]
+#[tauri::command]
+pub async fn core_channel_list_members(
+    _gossip_state: State<'_, gossip_commands::GossipState>,
+    _channel_id: String,
+) -> Result<Vec<String>, String> {
+    // TODO: Implement entity subscriber tracking in gossip overlay
+    // For now, return empty list until gossip_get_entity_subscribers is available
+    // This will require adding subscriber tracking to gossip entity management
+    Ok(vec![])
+}
+
+#[cfg(not(feature = "gossip_overlay"))]
 #[tauri::command]
 pub async fn core_channel_list_members(
     _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
@@ -436,6 +497,35 @@ pub async fn core_get_bootstrap_stats() -> Result<serde_json::Value, String> {
     Ok(serde_json::json!({}))
 }
 
+#[cfg(feature = "gossip_overlay")]
+#[tauri::command]
+pub async fn core_messages_list(
+    gossip_state: State<'_, gossip_commands::GossipState>,
+    _channel_id: String,
+) -> Result<Vec<MessageInfo>, String> {
+    // Get all stored messages (not filtered by channel yet)
+    // TODO: Implement per-entity message retrieval in gossip overlay
+    let messages_bytes = gossip_commands::gossip_get_all_messages(gossip_state).await?;
+
+    // Convert byte messages to MessageInfo
+    let messages = messages_bytes
+        .into_iter()
+        .enumerate()
+        .map(|(idx, msg_bytes)| {
+            let content = String::from_utf8_lossy(&msg_bytes).to_string();
+            MessageInfo {
+                id: format!("msg_{}", idx),
+                content,
+                author: "unknown".to_string(), // TODO: Extract from message metadata
+                timestamp: 0, // TODO: Extract from message metadata
+            }
+        })
+        .collect();
+
+    Ok(messages)
+}
+
+#[cfg(not(feature = "gossip_overlay"))]
 #[tauri::command]
 pub async fn core_messages_list(
     _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,

@@ -101,10 +101,10 @@ Communitas implements defense-in-depth encryption:
 
 ### Network Security
 
-- **P2P Security**: DHT-based routing with cryptographic node IDs
-- **Geographic Routing**: Location-aware peer selection
-- **NAT Traversal**: ant-quic protocol for direct peer connections
-- **Message Authentication**: Digital signatures on all messages
+- **P2P Security**: Gossip-based overlay with cryptographic identities (four-word addresses)
+- **Peer Discovery**: IPv4/IPv6 peer cache with offline bootstrap
+- **NAT Traversal**: QUIC protocol for direct peer connections
+- **Message Authentication**: Digital signatures (ML-DSA) on all messages
 
 ### Memory Safety
 

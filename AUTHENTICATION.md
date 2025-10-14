@@ -486,7 +486,7 @@ cargo test --package communitas-desktop passkey_flow_integration_test
 ### Planned Features
 
 1. **Multi-Device Sync**
-   - Sync encrypted credentials across devices via DHT
+   - Sync encrypted credentials across devices via gossip overlay
    - Secure device pairing with QR codes
    - Backup codes for recovery
 

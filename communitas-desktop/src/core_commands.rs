@@ -261,6 +261,19 @@ pub async fn core_send_message_to_channel(
     Err("Gossip overlay not enabled".to_string())
 }
 
+#[cfg(feature = "gossip_overlay")]
+#[tauri::command]
+pub async fn core_channel_recipients(
+    _gossip_state: State<'_, gossip_commands::GossipState>,
+    _channel_id: String,
+) -> Result<Vec<String>, String> {
+    // TODO: Implement entity recipient tracking in gossip overlay
+    // For now, return empty list until gossip_get_entity_subscribers is available
+    // Recipients are essentially the same as subscribers
+    Ok(vec![])
+}
+
+#[cfg(not(feature = "gossip_overlay"))]
 #[tauri::command]
 pub async fn core_channel_recipients(
     _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
@@ -325,6 +338,21 @@ pub async fn core_channel_invite_by_words(
     Err("Gossip overlay not enabled".to_string())
 }
 
+#[cfg(feature = "gossip_overlay")]
+#[tauri::command]
+pub async fn core_resolve_channel_members(
+    _gossip_state: State<'_, gossip_commands::GossipState>,
+    _channel_id: String,
+) -> Result<Vec<UserInfo>, String> {
+    // TODO: Implement entity subscriber tracking with user metadata
+    // Requires:
+    // 1. gossip_get_entity_subscribers to get member list
+    // 2. gossip_get_peer_metadata to resolve user details
+    // For now, return empty list
+    Ok(vec![])
+}
+
+#[cfg(not(feature = "gossip_overlay"))]
 #[tauri::command]
 pub async fn core_resolve_channel_members(
     _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
@@ -333,12 +361,33 @@ pub async fn core_resolve_channel_members(
     Ok(vec![])
 }
 
+#[cfg(feature = "gossip_overlay")]
+#[tauri::command]
+pub async fn core_create_thread(
+    gossip_state: State<'_, gossip_commands::GossipState>,
+    message_id: String,
+) -> Result<String, String> {
+    // Create a new thread entity based on the message_id
+    let thread_id = format!("thread_{}", message_id);
+
+    // Join the thread entity (creates it if doesn't exist)
+    gossip_commands::gossip_join_entity(
+        gossip_state,
+        thread_id.clone(),
+        "thread".to_string(),
+    )
+    .await?;
+
+    Ok(thread_id)
+}
+
+#[cfg(not(feature = "gossip_overlay"))]
 #[tauri::command]
 pub async fn core_create_thread(
     _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
     _message_id: String,
 ) -> Result<String, String> {
-    Err("Not yet implemented".to_string())
+    Err("Gossip overlay not enabled".to_string())
 }
 
 #[tauri::command]
@@ -467,9 +516,23 @@ pub async fn core_get_bootstrap_nodes(
     }
 }
 
+#[cfg(feature = "gossip_overlay")]
+#[tauri::command]
+pub async fn core_update_bootstrap_nodes(
+    gossip_state: State<'_, gossip_commands::GossipState>,
+    nodes: Vec<String>,
+) -> Result<(), String> {
+    // Add each bootstrap node individually
+    for node in nodes {
+        gossip_commands::gossip_add_bootstrap_peer(gossip_state.clone(), node).await?;
+    }
+    Ok(())
+}
+
+#[cfg(not(feature = "gossip_overlay"))]
 #[tauri::command]
 pub async fn core_update_bootstrap_nodes(_nodes: Vec<String>) -> Result<(), String> {
-    Err("Not yet implemented".to_string())
+    Err("Gossip overlay not enabled".to_string())
 }
 
 #[cfg(feature = "gossip_overlay")]
@@ -487,9 +550,20 @@ pub async fn core_add_bootstrap_node(_node: String) -> Result<(), String> {
     Err("Gossip overlay not enabled".to_string())
 }
 
+#[cfg(feature = "gossip_overlay")]
+#[tauri::command]
+pub async fn core_clear_custom_nodes(
+    _gossip_state: State<'_, gossip_commands::GossipState>,
+) -> Result<(), String> {
+    // TODO: Implement gossip_clear_bootstrap_peers in gossip_commands.rs
+    // For now, return error indicating this needs to be implemented
+    Err("Clear custom nodes not yet implemented in gossip overlay".to_string())
+}
+
+#[cfg(not(feature = "gossip_overlay"))]
 #[tauri::command]
 pub async fn core_clear_custom_nodes() -> Result<(), String> {
-    Err("Not yet implemented".to_string())
+    Err("Gossip overlay not enabled".to_string())
 }
 
 #[tauri::command]

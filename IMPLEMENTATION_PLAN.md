@@ -46,7 +46,7 @@
 
 **Duration**: 1-2 days
 **Goal**: Wire placeholder commands to gossip overlay functionality
-**Status**: 🔄 In Progress (6/40+ commands wired)
+**Status**: 🔄 In Progress (10/40+ commands wired, 25% complete)
 
 ### Task Breakdown
 
@@ -66,12 +66,12 @@
 | `subscribe_to_entity` | `gossip_subscribe_to_entity` | ✅ DONE (commit 94a2d7db) |
 | `unsubscribe_from_entity` | `gossip_leave_entity` | ✅ DONE (commit 94a2d7db) |
 | `core_get_bootstrap_nodes` | `gossip_get_cached_peers` | ✅ DONE (commit 94a2d7db) |
-| `core_add_bootstrap_node` | `gossip_add_bootstrap_peer` | ⏳ TODO |
+| `core_add_bootstrap_node` | `gossip_add_bootstrap_peer` | ✅ DONE (commit 86007c39) |
 | `core_create_channel` | Implement with gossip entities | ✅ DONE (commit 94a2d7db) |
 | `core_send_message_to_channel` | `gossip_publish_to_entity` | ✅ DONE (commit 94a2d7db) |
-| `core_channel_invite_by_words` | `gossip_find_contact` + `gossip_join_entity` | ⏳ TODO |
-| `core_private_put` | `gossip_store_message` | ⏳ TODO |
-| `core_private_get` | `gossip_get_all_messages` | ⏳ TODO |
+| `core_channel_invite_by_words` | `gossip_find_contact` + `gossip_publish_to_entity` | ✅ DONE (commit 86007c39) |
+| `core_private_put` | `gossip_store_message` | ✅ DONE (commit 86007c39) |
+| `core_private_get` | `gossip_get_all_messages` | ✅ DONE (commit 86007c39) |
 
 **Implementation Steps**:
 
@@ -148,7 +148,7 @@
 5. **Add integration tests** for each wired command
 
 **Estimated Work**:
-- Day 1: Wire 10-15 high-priority commands (messaging, channels, bootstrap) - ✅ 6/10 DONE
+- Day 1: Wire 10-15 high-priority commands (messaging, channels, bootstrap) - ✅ 10/15 DONE (67% of Day 1)
 - Day 2: Wire remaining 25+ commands + tests
 
 **Implementation Guide** (Pattern Established):
@@ -192,7 +192,9 @@ pub async fn command_name(
    - Verify zero compilation errors (warnings from dependencies are OK)
    - Add integration tests in `communitas-desktop/tests/`
 
-**Completed Commands (6)**: ✅
+**Completed Commands (10)**: ✅
+
+*Batch 1 (commit 94a2d7db):*
 - `core_send_message_to_recipients` → `gossip_send_direct_message`
 - `core_send_message_to_channel` → `gossip_publish_to_entity`
 - `core_create_channel` → `gossip_join_entity`
@@ -200,11 +202,18 @@ pub async fn command_name(
 - `subscribe_to_entity` → `gossip_subscribe_to_entity`
 - `unsubscribe_from_entity` → `gossip_leave_entity`
 
-**Next Priority Commands (4)**:
+*Batch 2 (commit 86007c39):*
 - `core_add_bootstrap_node` → `gossip_add_bootstrap_peer`
-- `core_channel_invite_by_words` → `gossip_find_contact` + `gossip_join_entity`
+- `core_channel_invite_by_words` → `gossip_find_contact` + `gossip_publish_to_entity`
 - `core_private_put` → `gossip_store_message`
 - `core_private_get` → `gossip_get_all_messages`
+
+**Next Priority Commands (Batch 3)**:
+- `core_get_channels` → `gossip_get_subscribed_entities` (filter by type)
+- `core_channel_list_members` → `gossip_get_entity_subscribers`
+- `core_messages_list` → `gossip_get_entity_messages`
+- `core_get_user_info` → `gossip_get_own_identity` + metadata
+- `core_set_display_name` → Update identity metadata via gossip
 
 #### 2.2: Update Frontend Command Calls (Priority: MEDIUM)
 
@@ -548,10 +557,10 @@ cargo deny check licenses
 | Phase | Duration | Status | Completion |
 |-------|----------|--------|------------|
 | Phase 1: Quick Fixes | 2 hours | ✅ Complete | 100% |
-| Phase 2: Core Integration | 1-2 days | 🔄 In Progress | 15% (6/40+ commands) |
+| Phase 2: Core Integration | 1-2 days | 🔄 In Progress | 25% (10/40+ commands) |
 | Phase 3: Container & Sync | 2-3 days | ⏳ Blocked | 0% |
 | Phase 4: Verification | 1 day | ⏳ Blocked | 0% |
-| **Total** | **5-7 days** | **In Progress** | **23%** |
+| **Total** | **5-7 days** | **In Progress** | **26%** |
 
 ---
 

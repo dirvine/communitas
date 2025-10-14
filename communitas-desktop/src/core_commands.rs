@@ -12,6 +12,10 @@ use std::sync::Arc;
 use tauri::State;
 use tokio::sync::RwLock;
 
+// Gossip overlay integration
+#[cfg(feature = "gossip_overlay")]
+use crate::gossip_commands;
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UserInfo {
     pub peer_id: String,
@@ -118,13 +122,38 @@ pub async fn core_set_display_name(
     Err("Not yet implemented".to_string())
 }
 
+#[cfg(feature = "gossip_overlay")]
+#[tauri::command]
+pub async fn core_create_channel(
+    gossip_state: State<'_, gossip_commands::GossipState>,
+    name: String,
+    _description: String,
+) -> Result<ChannelInfo, String> {
+    let channel_id = uuid::Uuid::new_v4().to_string();
+
+    // Join entity (creates it if doesn't exist)
+    gossip_commands::gossip_join_entity(
+        gossip_state,
+        channel_id.clone(),
+        "channel".to_string(),
+    )
+    .await?;
+
+    Ok(ChannelInfo {
+        id: channel_id,
+        name,
+        members: vec![],
+    })
+}
+
+#[cfg(not(feature = "gossip_overlay"))]
 #[tauri::command]
 pub async fn core_create_channel(
     _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
     _name: String,
     _description: String,
 ) -> Result<ChannelInfo, String> {
-    Err("Not yet implemented".to_string())
+    Err("Gossip overlay not enabled".to_string())
 }
 
 #[tauri::command]
@@ -143,13 +172,45 @@ pub async fn core_add_reaction(
     Err("Not yet implemented".to_string())
 }
 
+#[cfg(feature = "gossip_overlay")]
+#[tauri::command]
+pub async fn core_send_message_to_channel(
+    gossip_state: State<'_, gossip_commands::GossipState>,
+    channel_id: String,
+    content: String,
+) -> Result<MessageInfo, String> {
+    let message_id = uuid::Uuid::new_v4().to_string();
+    let timestamp = chrono::Utc::now().timestamp();
+
+    // Get current user for author field
+    let author = gossip_commands::gossip_get_own_identity(gossip_state.clone())
+        .await
+        .unwrap_or_else(|_| "unknown".to_string());
+
+    // Publish to channel entity
+    gossip_commands::gossip_publish_to_entity(
+        gossip_state,
+        channel_id,
+        content.as_bytes().to_vec(),
+    )
+    .await?;
+
+    Ok(MessageInfo {
+        id: message_id,
+        content,
+        author,
+        timestamp,
+    })
+}
+
+#[cfg(not(feature = "gossip_overlay"))]
 #[tauri::command]
 pub async fn core_send_message_to_channel(
     _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
     _channel_id: String,
     _content: String,
 ) -> Result<MessageInfo, String> {
-    Err("Not yet implemented".to_string())
+    Err("Gossip overlay not enabled".to_string())
 }
 
 #[tauri::command]
@@ -218,18 +279,65 @@ pub async fn core_private_get(
     Err("Not yet implemented".to_string())
 }
 
+#[cfg(feature = "gossip_overlay")]
+#[tauri::command]
+pub async fn core_send_message_to_recipients(
+    gossip_state: State<'_, gossip_commands::GossipState>,
+    recipients: Vec<String>,
+    content: String,
+) -> Result<MessageInfo, String> {
+    let message_id = uuid::Uuid::new_v4().to_string();
+    let timestamp = chrono::Utc::now().timestamp();
+    let message_bytes = content.as_bytes().to_vec();
+
+    // Get current user for author field
+    let author = gossip_commands::gossip_get_own_identity(gossip_state.clone())
+        .await
+        .unwrap_or_else(|_| "unknown".to_string());
+
+    // Send to each recipient via gossip overlay
+    for recipient in recipients {
+        gossip_commands::gossip_send_direct_message(
+            gossip_state.clone(),
+            recipient,
+            message_bytes.clone(),
+        )
+        .await?;
+    }
+
+    Ok(MessageInfo {
+        id: message_id,
+        content,
+        author,
+        timestamp,
+    })
+}
+
+#[cfg(not(feature = "gossip_overlay"))]
 #[tauri::command]
 pub async fn core_send_message_to_recipients(
     _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
     _recipients: Vec<String>,
     _content: String,
 ) -> Result<MessageInfo, String> {
-    Err("Not yet implemented".to_string())
+    Err("Gossip overlay not enabled".to_string())
 }
 
 #[tauri::command]
-pub async fn core_get_bootstrap_nodes() -> Result<Vec<String>, String> {
-    Ok(vec![])
+pub async fn core_get_bootstrap_nodes(
+    #[cfg(feature = "gossip_overlay")]
+    gossip_state: State<'_, gossip_commands::GossipState>,
+) -> Result<Vec<String>, String> {
+    #[cfg(feature = "gossip_overlay")]
+    {
+        let peers = gossip_commands::gossip_get_cached_peers(gossip_state).await?;
+        Ok(peers.into_iter().map(|p| p.four_words).collect())
+    }
+
+    #[cfg(not(feature = "gossip_overlay"))]
+    {
+        Ok(vec![])
+    }
 }
 
 #[tauri::command]
@@ -347,18 +455,38 @@ pub async fn get_sync_status(
     })
 }
 
+#[cfg(feature = "gossip_overlay")]
+#[tauri::command]
+pub async fn subscribe_to_entity(
+    gossip_state: State<'_, gossip_commands::GossipState>,
+    entity_id: String,
+) -> Result<(), String> {
+    gossip_commands::gossip_subscribe_to_entity(gossip_state, entity_id).await
+}
+
+#[cfg(not(feature = "gossip_overlay"))]
 #[tauri::command]
 pub async fn subscribe_to_entity(
     _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
     _entity_id: String,
 ) -> Result<(), String> {
-    Err("Not yet implemented".to_string())
+    Err("Gossip overlay not enabled".to_string())
 }
 
+#[cfg(feature = "gossip_overlay")]
+#[tauri::command]
+pub async fn unsubscribe_from_entity(
+    gossip_state: State<'_, gossip_commands::GossipState>,
+    entity_id: String,
+) -> Result<(), String> {
+    gossip_commands::gossip_leave_entity(gossip_state, entity_id).await
+}
+
+#[cfg(not(feature = "gossip_overlay"))]
 #[tauri::command]
 pub async fn unsubscribe_from_entity(
     _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
     _entity_id: String,
 ) -> Result<(), String> {
-    Err("Not yet implemented".to_string())
+    Err("Gossip overlay not enabled".to_string())
 }

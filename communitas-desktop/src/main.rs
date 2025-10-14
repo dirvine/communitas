@@ -121,7 +121,15 @@ async fn main() -> anyhow::Result<()> {
         // Message sync service state
         .manage(Arc::new(RwLock::new(
             Option::<communitas_core::message_sync::MessageSyncService>::None,
-        )))
+        )));
+
+    // Gossip overlay state (feature-gated)
+    #[cfg(feature = "gossip_overlay")]
+    let builder = builder.manage(Arc::new(RwLock::new(
+        Option::<communitas_core::gossip::GossipContext>::None,
+    )) as gossip_commands::GossipState);
+
+    let builder = builder
         // Register plugins
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![

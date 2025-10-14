@@ -122,7 +122,7 @@ impl PlatformStorage {
                 let mut path = dirs::home_dir().unwrap_or_else(|| PathBuf::from("/tmp"));
                 path.push("Library");
                 path.push("Application Support");
-                path.push("com.p2pfoundation.communitas");
+                path.push("com.saorsalabs.communitas");
                 path.push("secure");
                 path.push(four_words);
                 path
@@ -276,7 +276,7 @@ impl PlatformStorage {
         // Store in macOS Keychain
         use keyring::Entry;
 
-        let service = "com.p2pfoundation.communitas.locator";
+        let service = "com.saorsalabs.communitas.locator";
         let account = hex::encode(password_hash);
 
         let entry = Entry::new(service, &account)?;
@@ -330,7 +330,7 @@ impl PlatformStorage {
     async fn lookup_platform_specific(&self, password_hash: &[u8]) -> Result<String> {
         use keyring::Entry;
 
-        let service = "com.p2pfoundation.communitas.locator";
+        let service = "com.saorsalabs.communitas.locator";
         let account = hex::encode(password_hash);
 
         let entry = Entry::new(service, &account)?;

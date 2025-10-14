@@ -10,7 +10,7 @@ Communitas implements a **multi-identity, single OS user** model where one opera
 
 #### Storage Structure
 ```
-macOS:   ~/Library/Application Support/com.p2pfoundation.communitas/vaults/
+macOS:   ~/Library/Application Support/com.saorsalabs.communitas/vaults/
 Windows: %APPDATA%/communitas/vaults/
 Linux:   ~/.config/communitas/vaults/
 

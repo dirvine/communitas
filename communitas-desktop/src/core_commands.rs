@@ -229,13 +229,39 @@ pub async fn core_channel_list_members(
     Ok(vec![])
 }
 
+#[cfg(feature = "gossip_overlay")]
+#[tauri::command]
+pub async fn core_channel_invite_by_words(
+    gossip_state: State<'_, gossip_commands::GossipState>,
+    channel_id: String,
+    four_words: String,
+) -> Result<(), String> {
+    // First, find the contact by four-word address
+    let _contact = gossip_commands::gossip_find_contact(gossip_state.clone(), four_words.clone())
+        .await?;
+
+    // Then invite them by joining them to the channel entity
+    // Note: The actual invitation mechanism may require additional gossip operations
+    // For now, we publish an invite message to the channel
+    let invite_msg = format!("invite:{}", four_words);
+    gossip_commands::gossip_publish_to_entity(
+        gossip_state,
+        channel_id,
+        invite_msg.as_bytes().to_vec(),
+    )
+    .await?;
+
+    Ok(())
+}
+
+#[cfg(not(feature = "gossip_overlay"))]
 #[tauri::command]
 pub async fn core_channel_invite_by_words(
     _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
     _channel_id: String,
     _four_words: String,
 ) -> Result<(), String> {
-    Err("Not yet implemented".to_string())
+    Err("Gossip overlay not enabled".to_string())
 }
 
 #[tauri::command]
@@ -262,21 +288,61 @@ pub async fn core_subscribe_messages(
     Err("Not yet implemented".to_string())
 }
 
+#[cfg(feature = "gossip_overlay")]
+#[tauri::command]
+pub async fn core_private_put(
+    gossip_state: State<'_, gossip_commands::GossipState>,
+    key: String,
+    value: Vec<u8>,
+) -> Result<(), String> {
+    // Store the key-value pair as a message in gossip storage
+    // Prepend the key to the value for later retrieval
+    let mut data = key.as_bytes().to_vec();
+    data.push(b':');
+    data.extend_from_slice(&value);
+
+    gossip_commands::gossip_store_message(gossip_state, data).await
+}
+
+#[cfg(not(feature = "gossip_overlay"))]
 #[tauri::command]
 pub async fn core_private_put(
     _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
     _key: String,
     _value: Vec<u8>,
 ) -> Result<(), String> {
-    Err("Not yet implemented".to_string())
+    Err("Gossip overlay not enabled".to_string())
 }
 
+#[cfg(feature = "gossip_overlay")]
+#[tauri::command]
+pub async fn core_private_get(
+    gossip_state: State<'_, gossip_commands::GossipState>,
+    key: String,
+) -> Result<Vec<u8>, String> {
+    // Retrieve all stored messages and find the one matching our key
+    let messages = gossip_commands::gossip_get_all_messages(gossip_state).await?;
+
+    let key_prefix = format!("{}:", key);
+    let key_prefix_bytes = key_prefix.as_bytes();
+
+    for msg in messages {
+        if msg.starts_with(key_prefix_bytes) {
+            // Found the key, return the value (everything after "key:")
+            return Ok(msg[key_prefix_bytes.len()..].to_vec());
+        }
+    }
+
+    Err(format!("Key '{}' not found in private storage", key))
+}
+
+#[cfg(not(feature = "gossip_overlay"))]
 #[tauri::command]
 pub async fn core_private_get(
     _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
     _key: String,
 ) -> Result<Vec<u8>, String> {
-    Err("Not yet implemented".to_string())
+    Err("Gossip overlay not enabled".to_string())
 }
 
 #[cfg(feature = "gossip_overlay")]
@@ -345,9 +411,19 @@ pub async fn core_update_bootstrap_nodes(_nodes: Vec<String>) -> Result<(), Stri
     Err("Not yet implemented".to_string())
 }
 
+#[cfg(feature = "gossip_overlay")]
+#[tauri::command]
+pub async fn core_add_bootstrap_node(
+    gossip_state: State<'_, gossip_commands::GossipState>,
+    node: String,
+) -> Result<(), String> {
+    gossip_commands::gossip_add_bootstrap_peer(gossip_state, node).await
+}
+
+#[cfg(not(feature = "gossip_overlay"))]
 #[tauri::command]
 pub async fn core_add_bootstrap_node(_node: String) -> Result<(), String> {
-    Err("Not yet implemented".to_string())
+    Err("Gossip overlay not enabled".to_string())
 }
 
 #[tauri::command]

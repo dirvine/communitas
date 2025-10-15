@@ -228,8 +228,8 @@ impl SessionStorage {
 fn current_timestamp() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs()
+        .map(|d| d.as_secs())
+        .unwrap_or(0) // Fallback to epoch if clock is before 1970 (extremely rare)
 }
 
 fn generate_session_id() -> String {

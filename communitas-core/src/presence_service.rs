@@ -59,19 +59,19 @@ impl PresenceBeacon {
         four_words: String,
         display_name: String,
         topic_id: TopicId,
-    ) -> Self {
+    ) -> Result<Self, getrandom::Error> {
         // Generate random nonce for this beacon
         let mut nonce = [0u8; 12];
-        getrandom::getrandom(&mut nonce).expect("failed to generate random nonce");
+        getrandom::getrandom(&mut nonce)?;
 
-        Self {
+        Ok(Self {
             peer_id,
             four_words,
             display_name,
             timestamp: Utc::now(),
             topic_id,
             nonce,
-        }
+        })
     }
 
     /// Check if beacon is still valid (within TTL)
@@ -226,7 +226,7 @@ impl PresenceService {
             self.four_words.clone(),
             self.display_name.clone(),
             topic_id,
-        );
+        )?;
 
         // Encrypt beacon
         let encrypted = beacon.encrypt(&key)?;
@@ -434,7 +434,8 @@ mod tests {
             "test-peer-one-two".to_string(),
             "Test Peer".to_string(),
             topic_id,
-        );
+        )
+        .unwrap(); // OK in tests
 
         assert_eq!(beacon.peer_id, peer_id);
         assert_eq!(beacon.four_words, "test-peer-one-two");
@@ -452,7 +453,8 @@ mod tests {
             "test-peer-one-two".to_string(),
             "Test Peer".to_string(),
             topic_id,
-        );
+        )
+        .unwrap(); // OK in tests
 
         // Generate encryption key
         let key = [42u8; 32];
@@ -480,7 +482,8 @@ mod tests {
             "test-peer-one-two".to_string(),
             "Test Peer".to_string(),
             topic_id,
-        );
+        )
+        .unwrap(); // OK in tests
 
         let key1 = [42u8; 32];
         let key2 = [43u8; 32];
@@ -550,7 +553,8 @@ mod tests {
             "test-peer-one-two".to_string(),
             "Test Peer".to_string(),
             topic_id,
-        );
+        )
+        .unwrap(); // OK in tests
 
         service.update_presence(beacon).await;
 
@@ -595,7 +599,8 @@ mod tests {
             "peer-one-alpha-beta".to_string(),
             "Peer 1".to_string(),
             topic1,
-        );
+        )
+        .unwrap(); // OK in tests
         service.update_presence(beacon1).await;
 
         // Add peer2 to topic2
@@ -605,7 +610,8 @@ mod tests {
             "peer-two-gamma-delta".to_string(),
             "Peer 2".to_string(),
             topic2,
-        );
+        )
+        .unwrap(); // OK in tests
         service.update_presence(beacon2).await;
 
         // Check topic1 has only peer1
@@ -648,7 +654,8 @@ mod tests {
             "alice-bob-carol-dave".to_string(),
             "Alice".to_string(),
             topic_id,
-        );
+        )
+        .unwrap(); // OK in tests
 
         service.update_presence(beacon).await;
 

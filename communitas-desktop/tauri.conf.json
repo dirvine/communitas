@@ -80,7 +80,7 @@
     "updater": {
     "active": true,
     "endpoints": [
-    "https://github.com/dirvine/communitas/releases/latest/download/latest.json"
+    "https://github.com/saorsalabs/communitas/releases/latest/download/latest.json"
     ],
     "dialog": true,
     "pubkey": "$TAURI_UPDATER_PUBKEY"

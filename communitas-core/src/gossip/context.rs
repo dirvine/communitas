@@ -120,7 +120,10 @@ impl GossipContext {
         std::fs::create_dir_all(&keystore_path)
             .context("Failed to create keystore directory")?;
 
-        let identity = Identity::load_or_create(&four_words, &display_name, keystore_path.to_str().unwrap())
+        let keystore_str = keystore_path
+            .to_str()
+            .ok_or_else(|| anyhow::anyhow!("Keystore path contains invalid UTF-8"))?;
+        let identity = Identity::load_or_create(&four_words, &display_name, keystore_str)
             .await
             .context("Failed to load/create ML-DSA identity")?;
 
@@ -411,8 +414,8 @@ impl GossipContext {
     fn generate_unique_tag(&self) -> (PeerId, u64) {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .expect("Time went backwards")
-            .as_millis() as u64;
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0); // Fallback to epoch if clock is before 1970 (extremely rare)
         (self.peer_id, timestamp)
     }
 

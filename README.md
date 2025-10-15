@@ -70,47 +70,145 @@ cargo test
 
 ## **📚 Documentation**
 
-### **Core Documentation**
+### **Getting Started**
+- **[Getting Started Guide](docs/guides/getting-started.md)**: Complete setup and first steps *(coming soon)*
+- **[Authentication Guide](docs/guides/authentication.md)**: Login, passkeys, and security *(coming soon)*
+- **[Four-Word Addresses](docs/guides/four-word-addresses.md)**: Understanding identity system *(coming soon)*
+
+### **Architecture & Design**
 - **[DESIGN.md](DESIGN.md)**: System architecture and technical design
-- **[UX_FLOWS.md](UX_FLOWS.md)**: User experience patterns and interface design
-- **[ARCHITECTURE.md](ARCHITECTURE.md)**: Technical implementation details
+- **[Architecture Overview](docs/architecture/)**: Detailed architecture documentation
+- **[CRDT System](docs/CRDT_ARCHITECTURE.md)**: Conflict-free replicated data types
+- **[Gossip Protocol](docs/GOSSIP_OVERLAY.md)**: P2P communication layer
 
-### **Development Resources**
-- **[docs/development/AGENTS.md](docs/development/AGENTS.md)**: Agent automation guide
-- **[docs/AGENTS_API.md](docs/AGENTS_API.md)**: API reference for automation
-- **[CLAUDE.md](CLAUDE.md)**: LLM helper documentation
+### **API Reference**
+- **[Tauri Commands API](docs/AGENTS_API.md)**: Complete Tauri command reference
+- **[Core API](docs/api/)**: Rust core library API *(coming soon)*
+- **[Frontend API](docs/api/)**: React/TypeScript interface *(coming soon)*
 
-### **Deployment**
-- **[finalise/DEPLOY_TESTNET.md](finalise/DEPLOY_TESTNET.md)**: Network deployment guide
+### **Deployment Guides**
+- **[Container Deployment](crates/communitas-container/README.md)**: Docker, Kubernetes, Helm
+- **[Headless Service](communitas-headless/README.md)**: systemd, launchd, JSON-RPC API
+- **[Bootstrap Node](bootstrap-node/README.md)**: Network bootstrap deployment
+- **[Testnet Deployment](finalise/DEPLOY_TESTNET.md)**: Complete network deployment
+
+### **Development**
+- **[Contributing Guide](docs/development/)**: How to contribute *(coming soon)*
+- **[Coding Standards](docs/development/)**: Code style and quality *(coming soon)*
+- **[Testing Guide](docs/guides/testing.md)**: Test strategy and examples *(coming soon)*
+- **[Troubleshooting](docs/development/)**: Common issues and solutions *(coming soon)*
+
+### **Operations**
+- **[Monitoring](docs/operations/)**: Prometheus, Grafana, metrics *(coming soon)*
+- **[Security Policy](docs/operations/)**: Security guidelines *(coming soon)*
+- **[Incident Response](docs/operations/)**: Emergency procedures *(coming soon)*
+
+### **For AI Assistants**
+- **[CLAUDE.md](CLAUDE.md)**: Project context for LLM helpers
+- **[Agent Automation](docs/development/AGENTS.md)**: Automated development workflows
 
 ---
 
 ## **🏗️ Project Structure**
 
-```
-communitas/
-├── src/                     # Legacy React SPA (maintained for regression)
-├── apps/communitas/         # Next-gen React console (future migration)
-├── communitas-core/         # Shared Rust business logic
-├── communitas-desktop/      # Tauri v2 desktop application
-├── communitas-headless/     # Bootstrap/seed node binary
-├── crates/                  # Additional Rust crates
-├── dist/                    # Built frontend assets (Tauri serves from here)
-├── docs/                    # Core documentation
-└── tools/                   # Development utilities
-```
+### **Applications**
+- **[communitas-desktop/](communitas-desktop/)**: Tauri v2 desktop application with React frontend
+- **[communitas-headless/](communitas-headless/)**: Headless daemon for system services ([README](communitas-headless/README.md))
+- **[communitas-bridge/](communitas-bridge/)**: HTTP/REST bridge for browser testing ([README](communitas-bridge/README.md))
+
+### **Core Libraries**
+- **[communitas-core/](communitas-core/)**: Shared Rust business logic and P2P networking
+- **[bootstrap-node/](bootstrap-node/)**: Network bootstrap and discovery service ([README](bootstrap-node/README.md))
+
+### **Container & Deployment**
+- **[crates/communitas-container/](crates/communitas-container/)**: Docker/Kubernetes deployment utilities ([README](crates/communitas-container/README.md))
+
+### **Frontend**
+- **[src/](src/)**: React frontend with TypeScript
+- **[dist/](dist/)**: Built frontend assets (served by Tauri)
+
+### **Documentation**
+- **[docs/](docs/)**: Comprehensive project documentation
+  - **[guides/](docs/guides/)**: User and developer guides
+  - **[architecture/](docs/architecture/)**: System architecture documentation
+  - **[api/](docs/api/)**: API reference documentation
+  - **[development/](docs/development/)**: Development setup and standards
+  - **[operations/](docs/operations/)**: Deployment and operations guides
+  - **[archive/](docs/archive/)**: Historical documentation
 
 ### **Key Commands**
 ```bash
 # Development
 npm run build && npm run tauri dev
 
-# Production Build  
+# Production Build
 npm run build && npm run tauri build
 
 # Quality Checks
 npm run typecheck && cargo clippy --all-features
+
+# Run as system service (see communitas-headless/README.md)
+communitas-headless --config /etc/communitas/headless.toml
+
+# Container deployment (see crates/communitas-container/README.md)
+docker-compose up -d
+kubectl apply -f deployment.yaml
 ```
+
+---
+
+## **🚢 Deployment Options**
+
+Communitas supports multiple deployment scenarios for different use cases:
+
+### **Desktop Application** (End Users)
+Full-featured native application with UI for Windows, macOS, and Linux.
+```bash
+npm run build && npm run tauri build
+```
+See [communitas-desktop/](communitas-desktop/) for details.
+
+### **Headless Daemon** (Servers & Bots)
+Run as a system service for automated operations, bots, or server infrastructure.
+```bash
+# Install and run as systemd service
+sudo systemctl enable communitas
+sudo systemctl start communitas
+```
+Complete guide: [communitas-headless/README.md](communitas-headless/README.md)
+
+### **Docker Containers** (Cloud Deployment)
+Containerized deployments with Docker Compose or standalone containers.
+```bash
+docker-compose up -d
+# OR
+docker run -p 8080:8080 -p 9090:9090 communitas/node:latest
+```
+Complete guide: [crates/communitas-container/README.md](crates/communitas-container/README.md)
+
+### **Kubernetes** (Enterprise Scale)
+Production-grade Kubernetes deployments with Helm charts, auto-scaling, and monitoring.
+```bash
+helm install my-communitas communitas/communitas
+# OR
+kubectl apply -f deployment.yaml
+```
+Includes: HPA, Prometheus metrics, Grafana dashboards, network policies.
+Complete guide: [crates/communitas-container/README.md](crates/communitas-container/README.md)
+
+### **Bootstrap Nodes** (Network Infrastructure)
+DHT bootstrap and discovery nodes for network infrastructure.
+```bash
+cargo run -p bootstrap-node -- --config config.toml
+```
+Complete guide: [bootstrap-node/README.md](bootstrap-node/README.md)
+
+### **Testing Bridge** (Development)
+HTTP/REST bridge for browser-based testing with Chrome DevTools MCP.
+```bash
+cargo run -p communitas-bridge
+```
+Complete guide: [communitas-bridge/README.md](communitas-bridge/README.md)
 
 ---
 

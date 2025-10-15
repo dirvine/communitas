@@ -318,8 +318,13 @@ When adding features:
 Dual-licensed under AGPL-3.0-or-later and commercial license.
 See LICENSE-AGPL-3.0 and LICENSE-COMMERCIAL.md for details.
 
-## Links
+## See Also
 
-- [Communitas Project](https://communitas.life)
-- [Saorsa Core](https://crates.io/crates/saorsa-core)
-- [DESIGN.md](../DESIGN.md) - Full architecture documentation
+- [Communitas Core](../communitas-core/README.md) - Core library documentation
+- [Communitas Desktop](../communitas-desktop/README.md) - Desktop application
+- [Communitas Headless](../communitas-headless/README.md) - Headless daemon
+- [Architecture Documentation](../docs/architecture/) - System architecture
+- [DESIGN.md](../DESIGN.md) - Complete system design
+- [Development Guide](../docs/development/) - Development resources
+- [API Reference](../docs/AGENTS_API.md) - Complete API documentation
+- [Communitas Project](https://communitas.life) - Official website

@@ -37,17 +37,17 @@ import {
   Notifications,
   Hub,
   Storage,
-
   Videocam,
-
-
   Info,
   Warning,
   CheckCircle,
   ImportExport,
   Backup,
   Restore,
+  UpdateOutlined,
 } from '@mui/icons-material'
+import { UpdateSettings } from '../update/UpdateSettings'
+import { invoke } from '@tauri-apps/api/core'
 
 interface SettingsData {
   profile: {
@@ -98,6 +98,12 @@ interface SettingsData {
     microphoneGain: number
     cameraQuality: string
     echoCancellation: boolean
+  }
+  updates: {
+    autoUpdateEnabled: boolean
+    checkFrequency: number
+    updateChannel: 'stable' | 'beta'
+    lastChecked?: Date
   }
 }
 
@@ -151,6 +157,12 @@ const defaultSettings: SettingsData = {
     cameraQuality: 'HD',
     echoCancellation: true,
   },
+  updates: {
+    autoUpdateEnabled: true,
+    checkFrequency: 24,
+    updateChannel: 'stable',
+    lastChecked: undefined,
+  },
 }
 
 const settingsCategories = [
@@ -161,6 +173,7 @@ const settingsCategories = [
   { id: 'network', label: 'Network', icon: <Hub /> },
   { id: 'storage', label: 'Storage', icon: <Storage /> },
   { id: 'media', label: 'Audio & Video', icon: <Videocam /> },
+  { id: 'updates', label: 'Software Updates', icon: <UpdateOutlined /> },
 ]
 
 export default function SettingsInterface() {
@@ -169,6 +182,11 @@ export default function SettingsInterface() {
   const [importDialogOpen, setImportDialogOpen] = useState(false)
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+
+  // Update-specific state
+  const [isCheckingForUpdates, setIsCheckingForUpdates] = useState(false)
+  const [latestVersion, setLatestVersion] = useState<string>()
+  const [updateAvailable, setUpdateAvailable] = useState(false)
 
   const updateSettings = <T extends keyof SettingsData>(
     category: T,
@@ -450,7 +468,7 @@ export default function SettingsInterface() {
         <Typography variant="h6" gutterBottom>
           Audio & Video Settings
         </Typography>
-        
+
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
           <FormControl fullWidth>
             <InputLabel>Microphone</InputLabel>
@@ -462,7 +480,7 @@ export default function SettingsInterface() {
               <MenuItem value="built-in">Built-in Microphone</MenuItem>
             </Select>
           </FormControl>
-          
+
           <Box>
             <Typography gutterBottom>Microphone Gain</Typography>
             <Slider
@@ -473,7 +491,7 @@ export default function SettingsInterface() {
               valueLabelDisplay="auto"
             />
           </Box>
-          
+
           <FormControl fullWidth>
             <InputLabel>Camera</InputLabel>
             <Select
@@ -484,7 +502,7 @@ export default function SettingsInterface() {
               <MenuItem value="built-in">Built-in Camera</MenuItem>
             </Select>
           </FormControl>
-          
+
           <FormControl fullWidth>
             <InputLabel>Camera Quality</InputLabel>
             <Select
@@ -496,7 +514,7 @@ export default function SettingsInterface() {
               <MenuItem value="4K">4K (2160p)</MenuItem>
             </Select>
           </FormControl>
-          
+
           <FormControlLabel
             control={
               <Switch
@@ -511,6 +529,59 @@ export default function SettingsInterface() {
     </Card>
   )
 
+  // Update handlers
+  const handleCheckForUpdates = async () => {
+    setIsCheckingForUpdates(true)
+    try {
+      const status = await invoke<{
+        available: boolean
+        current_version: string
+        latest_version?: string
+      }>('check_for_updates')
+
+      if (status.available && status.latest_version) {
+        setUpdateAvailable(true)
+        setLatestVersion(status.latest_version)
+      } else {
+        setUpdateAvailable(false)
+        setLatestVersion(undefined)
+      }
+
+      // Update last checked timestamp
+      updateSettings('updates', 'lastChecked', new Date())
+    } catch (error) {
+      console.error('Failed to check for updates:', error)
+    } finally {
+      setIsCheckingForUpdates(false)
+    }
+  }
+
+  const handleInstallUpdate = async () => {
+    try {
+      await invoke('install_update')
+      // The app will restart after installation
+    } catch (error) {
+      console.error('Failed to install update:', error)
+    }
+  }
+
+  const renderUpdateSettings = () => (
+    <UpdateSettings
+      autoUpdateEnabled={settings.updates.autoUpdateEnabled}
+      checkFrequency={settings.updates.checkFrequency}
+      updateChannel={settings.updates.updateChannel}
+      lastChecked={settings.updates.lastChecked}
+      isChecking={isCheckingForUpdates}
+      latestVersion={latestVersion}
+      updateAvailable={updateAvailable}
+      onAutoUpdateChange={(enabled) => updateSettings('updates', 'autoUpdateEnabled', enabled)}
+      onCheckFrequencyChange={(hours) => updateSettings('updates', 'checkFrequency', hours)}
+      onUpdateChannelChange={(channel) => updateSettings('updates', 'updateChannel', channel)}
+      onCheckNow={handleCheckForUpdates}
+      onInstallUpdate={handleInstallUpdate}
+    />
+  )
+
   const renderContent = () => {
     switch (selectedCategory) {
       case 'profile': return renderProfileSettings()
@@ -518,6 +589,7 @@ export default function SettingsInterface() {
       case 'privacy': return renderPrivacySettings()
       case 'notifications': return renderNotificationSettings()
       case 'media': return renderMediaSettings()
+      case 'updates': return renderUpdateSettings()
       default: return renderProfileSettings()
     }
   }

@@ -112,6 +112,8 @@ data/identity/
 *.pfx
 secrets/
 keys/
+.keys/
+updater-keys.json
 
 # Test artifacts
 test-results/

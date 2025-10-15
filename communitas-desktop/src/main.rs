@@ -34,6 +34,7 @@ mod security;
 mod services;
 mod storage_fs;
 mod sync;
+mod update_manager;
 
 use commands::{auth::AppState, org_commands::OrgState};
 use communitas_core::CoreContext;
@@ -97,6 +98,9 @@ async fn main() -> anyhow::Result<()> {
     // Initialize encrypted storage app state
     let app_state = AppState::new();
 
+    // Initialize update state
+    let update_state = Arc::new(RwLock::new(update_manager::UpdateStatus::default()));
+
     let builder = tauri::Builder::default()
         // Auth and encrypted storage state
         .manage(app_state)
@@ -104,6 +108,8 @@ async fn main() -> anyhow::Result<()> {
         .manage(org_state)
         // Member management state
         .manage(member_state)
+        // Update manager state
+        .manage(update_state.clone())
         // Shared saorsa-core context (initialized via core_initialize)
         .manage(Arc::new(RwLock::new(Option::<CoreContext>::None)))
         // Container engine state
@@ -387,6 +393,10 @@ async fn main() -> anyhow::Result<()> {
             member_commands::member_remove,
             member_commands::member_update_role,
             member_commands::member_prune_tombstones,
+            // Update manager commands
+            update_manager::check_for_updates,
+            update_manager::install_update,
+            update_manager::get_update_status,
         ]);
 
     // Conditionally add gossip state management
@@ -396,7 +406,11 @@ async fn main() -> anyhow::Result<()> {
     )));
 
     builder
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
+            // Schedule automatic update checks
+            update_manager::schedule_update_checks(app.handle().clone(), update_state);
+
             // Auto-initialize core if environment variables are set (for testing)
             if let (Ok(peer_id), Ok(user_name)) = (
                 std::env::var("COMMUNITAS_PEER_ID"),

@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::State;
 use tokio::sync::RwLock;
-use tracing::{error, info, warn};
+use tracing::{info, warn};
 
 // Gossip overlay integration
 #[cfg(feature = "gossip_overlay")]

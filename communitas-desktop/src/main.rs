@@ -24,6 +24,7 @@ mod member_commands;
 pub mod member_manager;
 mod message_sync_commands;
 mod network;
+mod network_config;
 mod security;
 mod services;
 mod storage_fs;
@@ -376,6 +377,16 @@ async fn main() -> anyhow::Result<()> {
             update_manager::set_auto_update,
             update_manager::set_check_frequency,
             update_manager::set_update_channel,
+            // Monitoring commands
+            services::monitoring::monitoring_get_metrics,
+            services::monitoring::monitoring_get_errors,
+            services::monitoring::monitoring_get_stats,
+            services::monitoring::monitoring_export_prometheus,
+            // Network configuration commands
+            network_config::network_config_get_bootstrap_nodes,
+            network_config::network_config_is_network_enabled,
+            network_config::network_config_get_stun_servers,
+            network_config::network_config_validate,
             
         ]);
 

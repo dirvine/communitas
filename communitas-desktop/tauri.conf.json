@@ -21,7 +21,7 @@
         "resizable": true,
         "fullscreen": false,
         "center": true,
-        "devtools": true
+        "devtools": false
       }
     ],
     "security": {
@@ -55,11 +55,11 @@
       "icons/icon.ico"
     ],
     "macOS": {
-    "entitlements": "Communitas.entitlements",
-    "exceptionDomain": null,
-    "frameworks": [],
-    "providerShortName": null,
-    "signingIdentity": "$TAURI_MACOS_SIGNING_IDENTITY"
+      "entitlements": "Communitas.entitlements",
+      "exceptionDomain": null,
+      "frameworks": [],
+      "providerShortName": null,
+      "signingIdentity": "$TAURI_MACOS_SIGNING_IDENTITY"
     },
     "windows": {
       "certificateThumbprint": "$TAURI_WINDOWS_CERTIFICATE_THUMBPRINT",
@@ -78,12 +78,12 @@
       ]
     },
     "updater": {
-    "active": true,
-    "endpoints": [
-    "https://github.com/saorsalabs/communitas/releases/latest/download/latest.json"
-    ],
-    "dialog": true,
-    "pubkey": "$TAURI_UPDATER_PUBKEY"
+      "active": true,
+      "endpoints": [
+        "https://github.com/dirvine/communitas/releases/latest/download/latest.json"
+      ],
+      "dialog": true,
+      "pubkey": "$TAURI_UPDATER_PUBKEY"
     }
   }
 }

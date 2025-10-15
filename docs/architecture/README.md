@@ -1,0 +1,395 @@
+# Communitas Architecture
+
+Comprehensive technical architecture documentation for the Communitas local-first collaboration platform.
+
+## Overview
+
+Communitas is a **local-first, post-quantum secure collaboration platform** that combines messaging, file sharing, voice/video calling, and web publishing into a single decentralized application. Built with Rust and Tauri v2, it provides offline-capable functionality with real-time synchronization when connected.
+
+### Core Principles
+
+1. **Local-First**: All data stored locally, operations work offline, sync when connected
+2. **Post-Quantum Secure**: ML-DSA signatures and ML-KEM key exchange
+3. **Human-Verifiable**: Four-word addressing system for all entities
+4. **Decentralized**: P2P gossip networking with no central servers
+5. **Entity-Centric**: Everything is an entity (users, groups, channels, projects)
+
+### Architecture Layers
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│              FRONTEND (React + TypeScript)                  │
+│  - Modern UI with Material-UI components                   │
+│  - Vite build with HMR development                         │
+│  - React Context for state management                      │
+└─────────────────────────────────────────────────────────────┘
+                           ↓ Tauri IPC
+┌─────────────────────────────────────────────────────────────┐
+│           DESKTOP APPLICATION (Tauri v2)                    │
+│  - Cross-platform: Windows, macOS, Linux                   │
+│  - System integration: keyring, notifications              │
+│  - WebAuthn/Passkey support                                │
+└─────────────────────────────────────────────────────────────┘
+                           ↓ Core API
+┌─────────────────────────────────────────────────────────────┐
+│              CORE LIBRARY (Rust)                            │
+│                                                             │
+│  ┌──────────────────┐  ┌──────────────────┐               │
+│  │ Identity         │  │ Authentication   │               │
+│  │ - Four-words     │  │ - Passkeys       │               │
+│  │ - ML-DSA sigs    │  │ - Sessions       │               │
+│  └──────────────────┘  └──────────────────┘               │
+│                                                             │
+│  ┌──────────────────┐  ┌──────────────────┐               │
+│  │ Storage          │  │ CRDT Sync        │               │
+│  │ - Virtual disks  │  │ - Yrs documents  │               │
+│  │ - SQL cache      │  │ - State vectors  │               │
+│  └──────────────────┘  └──────────────────┘               │
+│                                                             │
+│  ┌──────────────────┐  ┌──────────────────┐               │
+│  │ Messaging        │  │ Groups           │               │
+│  │ - Channels       │  │ - Membership     │               │
+│  │ - Threads        │  │ - Permissions    │               │
+│  └──────────────────┘  └──────────────────┘               │
+└─────────────────────────────────────────────────────────────┘
+                           ↓ Gossip API
+┌─────────────────────────────────────────────────────────────┐
+│           P2P NETWORKING (saorsa-gossip)                    │
+│                                                             │
+│  ┌──────────────────┐  ┌──────────────────┐               │
+│  │ Membership       │  │ PubSub           │               │
+│  │ - HyParView      │  │ - Plumtree       │               │
+│  │ - SWIM beacons   │  │ - Topics         │               │
+│  └──────────────────┘  └──────────────────┘               │
+│                                                             │
+│  ┌──────────────────┐  ┌──────────────────┐               │
+│  │ Presence         │  │ Rendezvous       │               │
+│  │ - Online status  │  │ - 65k shards     │               │
+│  │ - Heartbeats     │  │ - DHT-free       │               │
+│  └──────────────────┘  └──────────────────┘               │
+└─────────────────────────────────────────────────────────────┘
+                           ↓ QUIC Transport
+┌─────────────────────────────────────────────────────────────┐
+│              NETWORK LAYER (ant-quic)                       │
+│  - QUIC connections with multiplexing                      │
+│  - NAT traversal and connection migration                  │
+│  - IPv4-first with Happy Eyeballs fallback                 │
+└─────────────────────────────────────────────────────────────┘
+                           ↓
+┌─────────────────────────────────────────────────────────────┐
+│           CRYPTOGRAPHY (saorsa-pqc)                         │
+│  - ML-KEM-768 (post-quantum key exchange)                  │
+│  - ML-DSA-65 (post-quantum signatures)                     │
+│  - ChaCha20-Poly1305 (symmetric encryption)                │
+│  - BLAKE3 (content addressing)                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## Architecture Documents
+
+This architecture documentation is organized into the following sections:
+
+### Core Components
+- **[Core Components](core-components.md)** - Detailed overview of all system components
+  - Frontend architecture (React, Vite, Context)
+  - Backend architecture (Tauri, Rust core)
+  - Core library modules (identity, storage, messaging)
+  - Platform integrations (keyring, notifications)
+
+### Data & Storage
+- **[CRDT System](crdt-system.md)** - Conflict-free replicated data types
+  - Document taxonomy and organization
+  - Virtual disk architecture (Private, Public, Shared)
+  - SQL cache and materialization
+  - Sync protocol and state vectors
+  - Offline-first operation
+
+### Networking
+- **[Gossip Protocol](gossip-protocol.md)** - P2P communication layer
+  - Saorsa Gossip architecture
+  - Membership management (HyParView)
+  - Message dissemination (Plumtree)
+  - Peer discovery (Rendezvous)
+  - Failure detection (SWIM)
+  - Bootstrap nodes and network formation
+
+- **[Networking](networking.md)** - Network protocols and connectivity
+  - QUIC transport layer
+  - Connection management
+  - NAT traversal strategies
+  - IPv4/IPv6 Happy Eyeballs
+  - Network status and resilience
+
+### Storage & Content
+- **[Storage](storage.md)** - Data persistence and retrieval
+  - libSQL database architecture
+  - Virtual disk implementation
+  - Content addressing with BLAKE3
+  - Access control policies
+  - Replication strategies
+
+### Security
+- **[Security](security.md)** - Cryptography and security model
+  - Post-quantum cryptography (ML-DSA, ML-KEM)
+  - Four-word address security
+  - Authentication methods (passwords, passkeys)
+  - Session management
+  - Encryption policies
+  - Threat model and mitigations
+
+## Key Concepts
+
+### Four-Word Addresses
+
+Every entity in Communitas has a four-word address (e.g., "ocean-forest-moon-star"):
+- **Human-Readable**: Easy to remember and share
+- **Verifiable**: Dictionary validation prevents typos and phishing
+- **Universal**: Works for users, groups, channels, projects, organizations
+- **Cryptographically Bound**: Derived from ML-DSA public keys
+- **Decentralized**: No central registry or DNS required
+
+See [Four-Word Addresses Guide](../guides/four-word-addresses.md) for details.
+
+### Entities
+
+Communitas is built around the concept of **entities**:
+
+- **👤 Users**: Personal identities with four-word addresses
+- **👥 Groups**: Collaborative spaces with shared resources
+- **🏢 Organizations**: Multi-channel communication hubs
+- **📁 Projects**: Structured workspaces with task management
+- **📢 Channels**: Topic-focused discussion spaces
+
+Each entity has:
+- Unique four-word address
+- Three virtual disks (Private, Public, Shared)
+- CRDT documents for real-time collaboration
+- Optional website root for DNS-free publishing
+
+### Virtual Disks
+
+Each entity has three virtual disks for file storage:
+
+1. **Private Disk**: Encrypted, local-only storage
+   - Personal files and notes
+   - Credentials (auto-encrypted)
+   - Draft documents
+
+2. **Public Disk**: Content-addressed, distributed storage
+   - Public documents
+   - Website content
+   - Shared files
+
+3. **Shared Disk**: Group-accessible with shared encryption
+   - Team documents
+   - Collaborative files
+   - Project resources
+
+See [Storage Architecture](storage.md) for implementation details.
+
+### CRDT Documents
+
+Real-time collaboration powered by Yrs CRDTs:
+- **Modular**: Each concern (members, chat, kanban) is a separate document
+- **Bounded**: Size limits trigger SQL materialization
+- **Offline-First**: All operations work without network
+- **Eventually Consistent**: Automatic conflict resolution
+- **Event-Driven**: Tombstone pruning on materialization
+
+See [CRDT System](crdt-system.md) for complete architecture.
+
+### Gossip Networking
+
+Decentralized P2P communication with no central servers:
+- **HyParView**: Maintains 8-12 active peers, 64-128 passive peers
+- **Plumtree**: Efficient message dissemination with tree-based broadcast
+- **SWIM**: Fast failure detection (<5s)
+- **Rendezvous**: DHT-free peer discovery with 65k shards
+- **Bootstrap Nodes**: Network entry points for new peers
+
+See [Gossip Protocol](gossip-protocol.md) for details.
+
+## Technology Stack
+
+### Frontend
+- **Framework**: React 18 with TypeScript
+- **Build Tool**: Vite with Hot Module Replacement
+- **UI Components**: Material-UI (MUI)
+- **State Management**: React Context + hooks
+- **Routing**: React Router
+- **Testing**: Vitest + jsdom
+
+### Backend
+- **Desktop Framework**: Tauri v2
+- **Core Language**: Rust 2024 edition
+- **Storage**: libSQL (Turso) with embedded mode
+- **CRDT**: Yrs (Yjs Rust port)
+- **Networking**: ant-quic (QUIC transport)
+- **Crypto**: saorsa-pqc (post-quantum)
+
+### Infrastructure
+- **Containers**: Docker, Kubernetes, Helm
+- **Service Management**: systemd, launchd
+- **Monitoring**: Prometheus, Grafana
+- **CI/CD**: GitHub Actions
+- **Package Manager**: Cargo (Rust), npm (JavaScript)
+
+## Development Environment
+
+### Prerequisites
+- Rust 1.85+
+- Node.js 20+
+- Platform-specific dependencies for Tauri v2
+
+### Quick Start
+```bash
+# Clone repository
+git clone https://github.com/dirvine/communitas.git
+cd communitas
+
+# Install dependencies
+npm install
+
+# Build and run development mode
+npm run build
+npm run tauri dev
+```
+
+See [Getting Started Guide](../guides/getting-started.md) for complete setup instructions.
+
+## Deployment Options
+
+### Desktop Application
+Native application for Windows, macOS, and Linux:
+- Binary distribution via GitHub Releases
+- DMG (macOS), MSI (Windows), AppImage/DEB (Linux)
+- Auto-updater for seamless updates
+
+See [communitas-desktop/README.md](../../communitas-desktop/README.md)
+
+### Headless Daemon
+Server deployment for bots and background services:
+- systemd/launchd service integration
+- JSON-RPC API for remote control
+- Webhook system for events
+
+See [communitas-headless/README.md](../../communitas-headless/README.md)
+
+### Container Deployment
+Docker and Kubernetes for cloud deployment:
+- Multi-architecture support (amd64, arm64)
+- Horizontal Pod Autoscaling (HPA)
+- Prometheus metrics and health checks
+
+See [Operations Guide - Kubernetes Deployment](../operations/README.md#kubernetes-deployment)
+
+### Bootstrap Nodes
+Network infrastructure for peer discovery:
+- DHT-based bootstrap service
+- Geographic routing optimization
+- High availability deployment
+
+See [bootstrap-node/README.md](../../bootstrap-node/README.md)
+
+## Performance Characteristics
+
+### Message Latency
+- **Local Operations**: <10ms (offline-first)
+- **LAN Peers**: <50ms (direct QUIC)
+- **WAN Peers**: <500ms (geographic routing)
+- **Gossip Propagation**: <2s (99th percentile)
+
+### Storage Performance
+- **Virtual Disk Write**: <100ms (local)
+- **CRDT Update**: <50ms (Yrs state vector)
+- **SQL Materialization**: <1s (10k messages)
+- **Sync Bandwidth**: <10KB/s per peer (steady state)
+
+### Network Scalability
+- **Peers per Node**: 8-12 active, 64-128 passive
+- **Messages per Second**: 1000+ (per node)
+- **Network Size**: Tested to 10,000 nodes
+- **Partition Recovery**: <30s (via periodic shuffle)
+
+## Security Considerations
+
+### Post-Quantum Readiness
+- **ML-DSA-65**: Quantum-resistant signatures
+- **ML-KEM-768**: Quantum-resistant key exchange
+- **Migration Path**: Hybrid classical+PQ for transition period
+
+### Threat Model
+- **Network Adversary**: Cannot decrypt messages or forge signatures
+- **Compromised Peer**: Isolated via reputation system
+- **Malicious Bootstrap**: Redundant bootstrap nodes prevent poisoning
+- **Four-Word Collision**: Dictionary validation prevents spoofing
+
+See [Security Architecture](security.md) for complete analysis.
+
+## Testing Strategy
+
+### Unit Tests
+- Frontend: Vitest for React components
+- Backend: Cargo tests for Rust modules
+- Coverage target: >85%
+
+### Integration Tests
+- Multi-node P2P testing
+- CRDT synchronization tests
+- Storage policy verification
+
+### Browser Testing
+- communitas-bridge HTTP/REST interface
+- Chrome DevTools MCP integration
+- End-to-end scenarios
+
+See [Testing Guide](../guides/testing.md) for complete strategy.
+
+## Future Roadmap
+
+### Near-Term (v1.0)
+- Voice/video calling (WebRTC)
+- Mobile apps (iOS, Android)
+- Plugin system for extensions
+- Advanced search and filtering
+
+### Mid-Term (v2.0)
+- Multi-device sync (same identity, multiple devices)
+- Threshold signatures for groups
+- Cross-platform clipboard sync
+- AI-powered features (summarization, translation)
+
+### Long-Term (v3.0)
+- Mesh networking for offline operation
+- Federated identity bridges (email, phone)
+- Enterprise features (LDAP, SAML)
+- IoT device integration
+
+## Contributing
+
+See [Contributing Guide](../development/contributing.md) for how to contribute to Communitas.
+
+## Resources
+
+### Documentation
+- [Getting Started](../guides/getting-started.md) - Setup and first steps
+- [Authentication](../guides/authentication.md) - Login and security
+- [Four-Word Addresses](../guides/four-word-addresses.md) - Identity system
+- [Testing Guide](../guides/testing.md) - Test strategy
+- [API Reference](../api/) - Complete API documentation
+
+### External Resources
+- [saorsa-core on crates.io](https://crates.io/crates/saorsa-core)
+- [Tauri v2 Documentation](https://v2.tauri.app/)
+- [Yrs CRDT Documentation](https://docs.rs/yrs/)
+- [ant-quic Transport](https://github.com/maidsafe/ant-quic)
+
+### Community
+- [GitHub Repository](https://github.com/dirvine/communitas)
+- [GitHub Discussions](https://github.com/dirvine/communitas/discussions)
+- [Issue Tracker](https://github.com/dirvine/communitas/issues)
+- [Website](https://communitas.life)
+
+---
+
+**Communitas**: Local-first collaboration with post-quantum security. 🚀🔒

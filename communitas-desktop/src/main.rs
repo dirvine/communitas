@@ -106,6 +106,9 @@ async fn main() -> anyhow::Result<()> {
     // Initialize update state
     let update_state = Arc::new(RwLock::new(update_manager::UpdateStatus::default()));
 
+    // Initialize update settings state (will be loaded in setup)
+    let settings_state = Arc::new(RwLock::new(update_manager::UpdateSettings::default()));
+
     let builder = tauri::Builder::default()
         // Auth and encrypted storage state
         .manage(app_state)
@@ -115,6 +118,8 @@ async fn main() -> anyhow::Result<()> {
         .manage(member_state)
         // Update manager state
         .manage(update_state.clone())
+        // Update settings state
+        .manage(settings_state.clone())
         // Shared saorsa-core context (initialized via core_initialize)
         .manage(Arc::new(RwLock::new(Option::<CoreContext>::None)))
         // Container engine state
@@ -403,6 +408,11 @@ async fn main() -> anyhow::Result<()> {
             update_manager::check_for_updates,
             update_manager::install_update,
             update_manager::get_update_status,
+            update_manager::get_update_settings,
+            update_manager::set_update_settings,
+            update_manager::set_auto_update,
+            update_manager::set_check_frequency,
+            update_manager::set_update_channel,
         ]);
 
     // Conditionally add gossip state management
@@ -414,6 +424,15 @@ async fn main() -> anyhow::Result<()> {
     builder
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
+            // Load update settings and schedule automatic checks
+            let app_handle = app.handle().clone();
+            let settings_state_clone = settings_state.clone();
+            tauri::async_runtime::spawn(async move {
+                let loaded_settings = update_manager::UpdateSettings::load(&app_handle).await;
+                *settings_state_clone.write().await = loaded_settings;
+                info!("✅ Update settings loaded");
+            });
+
             // Schedule automatic update checks
             update_manager::schedule_update_checks(app.handle().clone(), update_state);
 

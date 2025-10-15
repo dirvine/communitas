@@ -87,7 +87,7 @@ Key test areas for Communitas:
 - **Bridge Server (communitas-bridge)**: HTTP/REST bridge for browser-based testing via Chrome DevTools MCP
   - Real P2P integration with saorsa-core
   - Endpoints: health, initialize, channels, messages, threads
-  - See `docs/BRIDGE_TESTING.md` for comprehensive testing guide
+  - See `docs/api/bridge-api.md` for comprehensive testing guide
 - **Thread Reply Composer**: Automerge-integrated reply system for threads
   - Optimistic updates with offline-first persistence
   - Syncs to backend when network available
@@ -155,7 +155,7 @@ cargo run -p communitas-bridge
 npm run dev
 
 # Bridge server provides HTTP/REST endpoints at http://localhost:3030
-# See docs/BRIDGE_TESTING.md for complete testing guide
+# See docs/api/bridge-api.md for complete testing guide
 ```
 
 ## Testing Strategy
@@ -215,7 +215,7 @@ await fetch(`http://localhost:3030/api/channels/${channel.id}/messages`, {
 })
 ```
 
-See `docs/BRIDGE_TESTING.md` for complete testing scenarios and Chrome DevTools MCP integration examples.
+See `docs/api/bridge-api.md` for complete testing scenarios and Chrome DevTools MCP integration examples.
 
 ### Unit Tests
 - Frontend: Vitest for React components in `src/**/*.test.tsx`
@@ -461,11 +461,14 @@ The inspector exposes structured DOM inspection, screenshot capture, and scripte
 ## API Documentation
 
 For detailed API documentation, see:
-- `ARCHITECTURE_CURRENT.md` - Current architecture and technology stack (SINGLE SOURCE OF TRUTH)
-- `docs/CRDT_ARCHITECTURE.md` - CRDT synchronization architecture (Yrs/Automerge)
-- `docs/SAORSA_GOSSIP_ARCHITECTURE.md` - Gossip overlay networking architecture
-- `AGENTS_API.md` - Complete Communitas API surface
-- `AGENTS.md` - Agent automation guide and MCP usage examples
+- `docs/api/README.md` - Complete API overview and quick start
+- `docs/api/tauri-commands.md` - All 90+ Tauri IPC commands
+- `docs/api/core-api.md` - Rust library API (communitas-core)
+- `docs/api/frontend-api.md` - TypeScript/React APIs
+- `docs/api/bridge-api.md` - HTTP/REST bridge API for testing
+- `docs/architecture/README.md` - System architecture overview
+- `docs/architecture/crdt-system.md` - CRDT synchronization (Yrs/Automerge)
+- `docs/architecture/gossip-protocol.md` - Saorsa Gossip networking
 
 ## Performance Targets
 

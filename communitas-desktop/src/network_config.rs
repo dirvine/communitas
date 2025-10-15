@@ -48,15 +48,42 @@ pub struct BootstrapVerification {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NatTraversalConfig {
     pub enabled: bool,
-    pub stun_servers: Vec<String>,
-    pub turn_servers: Vec<TurnServer>,
+    #[serde(default)]
+    pub hole_punching: HolePunchingConfig,
+    #[serde(default)]
+    pub relay: RelayConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TurnServer {
-    pub urls: Vec<String>,
-    pub username: String,
-    pub credential: String,
+pub struct HolePunchingConfig {
+    pub enabled: bool,
+    pub max_retries: usize,
+    pub timeout_seconds: u64,
+}
+
+impl Default for HolePunchingConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            max_retries: 5,
+            timeout_seconds: 10,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RelayConfig {
+    pub enabled: bool,
+    pub max_relay_peers: usize,
+}
+
+impl Default for RelayConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            max_relay_peers: 3,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -182,19 +209,6 @@ pub struct EnvironmentBootstrap {
 }
 
 impl NetworkConfig {
-    /// Expand environment variables in a string (e.g., "$VAR_NAME" -> actual value)
-    fn expand_env_vars(input: &str) -> String {
-        if input.starts_with('$') {
-            let var_name = &input[1..];
-            std::env::var(var_name).unwrap_or_else(|_| {
-                warn!("Environment variable '{}' not set, using empty string", var_name);
-                String::new()
-            })
-        } else {
-            input.to_string()
-        }
-    }
-
     /// Load network configuration from a TOML file
     pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self, NetworkConfigError> {
         let path = path.as_ref();
@@ -205,12 +219,6 @@ impl NetworkConfig {
 
         let mut config: NetworkConfig = toml::from_str(&contents)
             .map_err(NetworkConfigError::Toml)?;
-
-        // Expand environment variables in TURN server credentials
-        for turn_server in &mut config.nat_traversal.turn_servers {
-            turn_server.username = Self::expand_env_vars(&turn_server.username);
-            turn_server.credential = Self::expand_env_vars(&turn_server.credential);
-        }
 
         // Apply environment-specific overrides
         if let Ok(env) = std::env::var("COMMUNITAS_ENV") {
@@ -274,14 +282,9 @@ impl NetworkConfig {
         self.network.enabled
     }
 
-    /// Get STUN servers
-    pub fn get_stun_servers(&self) -> &[String] {
-        &self.nat_traversal.stun_servers
-    }
-
-    /// Get TURN servers
-    pub fn get_turn_servers(&self) -> &[TurnServer] {
-        &self.nat_traversal.turn_servers
+    /// Get NAT traversal configuration
+    pub fn get_nat_traversal(&self) -> &NatTraversalConfig {
+        &self.nat_traversal
     }
 }
 
@@ -340,14 +343,6 @@ pub fn network_config_is_network_enabled() -> Result<bool, String> {
         .map_err(|e| format!("Failed to load network config: {}", e))?;
 
     Ok(config.is_network_enabled())
-}
-
-#[tauri::command]
-pub fn network_config_get_stun_servers() -> Result<Vec<String>, String> {
-    let config = get_network_config()
-        .map_err(|e| format!("Failed to load network config: {}", e))?;
-
-    Ok(config.get_stun_servers().to_vec())
 }
 
 #[tauri::command]

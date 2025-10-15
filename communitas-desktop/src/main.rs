@@ -385,7 +385,6 @@ async fn main() -> anyhow::Result<()> {
             // Network configuration commands
             network_config::network_config_get_bootstrap_nodes,
             network_config::network_config_is_network_enabled,
-            network_config::network_config_get_stun_servers,
             network_config::network_config_validate,
             
         ]);

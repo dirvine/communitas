@@ -33,25 +33,25 @@ certificate_fingerprints = [
 ]
 
 [nat_traversal]
-# Enable STUN/TURN servers for NAT traversal
+# Native QUIC NAT traversal (built into ant-quic)
+# Uses hole punching and connection migration - no STUN/TURN needed
 enabled = true
 
-# STUN servers for public IP discovery
-stun_servers = [
-  "stun.l.google.com:19302",
-  "stun1.l.google.com:19302",
-  "stun2.l.google.com:19302",
-]
+# NAT traversal configuration
+[nat_traversal.hole_punching]
+# Enable simultaneous open for NAT hole punching
+enabled = true
+# Maximum retry attempts for hole punching
+max_retries = 5
+# Timeout for hole punching attempts (seconds)
+timeout_seconds = 10
 
-# TURN servers for relay when direct connection fails
-# NOTE: Set TURN_USERNAME and TURN_CREDENTIAL environment variables before running
-turn_servers = [
-  {
-    urls = ["turn:turn.saorsalabs.com:3478"],
-    username = "$TURN_USERNAME",
-    credential = "$TURN_CREDENTIAL",
-  }
-]
+[nat_traversal.relay]
+# Built-in QUIC relay for symmetric NAT scenarios
+# Uses trusted peers as relays when direct connection fails
+enabled = true
+# Maximum relay peers to attempt
+max_relay_peers = 3
 
 [transport]
 # QUIC transport configuration

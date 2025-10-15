@@ -56,6 +56,11 @@ async fn health() -> Result<serde_json::Value, String> {
     }))
 }
 
+#[tauri::command]
+async fn get_app_version() -> Result<String, String> {
+    Ok(env!("CARGO_PKG_VERSION").to_string())
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Initialize PQC crypto provider
@@ -351,6 +356,7 @@ async fn main() -> anyhow::Result<()> {
             #[cfg(feature = "gossip_overlay")]
             gossip_commands::gossip_get_cached_peers,
             health,
+            get_app_version,
             // Organization commands - Channels
             commands::org_commands::create_channel,
             commands::org_commands::get_channel,

@@ -98,6 +98,7 @@ import {
 import { MessageReactionPicker, MessageReactionsDisplay } from './MessageReactionPicker'
 import { Star, StarBorder as StarOutlineIcon } from '@mui/icons-material'
 import { ConnectionStatus } from '../ConnectionStatus'
+import { VersionDisplay } from '../VersionDisplay'
 import { useEntityDirectory } from '../../contexts/EntityDirectoryContext'
 import { EntityDocumentWorkspace } from '../documents/EntityDocumentWorkspace'
 import { useSnackbar } from 'notistack'
@@ -4110,6 +4111,9 @@ export const ModernShellPrototypeScreen: React.FC = () => {
           <Typography variant="caption" sx={{ color: TOKENS.textSecondary, fontFamily: 'monospace', fontSize: 11 }}>
             {ourPeerId || authState.user?.fourWordAddress}
           </Typography>
+          <Box sx={{ mt: 0.5 }}>
+            <VersionDisplay variant="caption" color={TOKENS.textSecondary} />
+          </Box>
         </Box>
 
         {/* Menu Items */}

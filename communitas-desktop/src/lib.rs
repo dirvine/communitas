@@ -21,3 +21,4 @@ pub mod crdt_manager;
 pub mod gossip_commands;
 pub mod member_commands;
 pub mod member_manager;
+pub mod update_manager;

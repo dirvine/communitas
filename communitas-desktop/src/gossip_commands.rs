@@ -4,20 +4,17 @@
 //! Supports FOAF discovery, presence beacons, Plumtree pub/sub, and CRDT storage.
 
 use base64::Engine;
-#[cfg(feature = "gossip_overlay")]
 use communitas_core::gossip::GossipContext;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
 /// Global gossip context (one per app instance)
-#[cfg(feature = "gossip_overlay")]
 pub type GossipState = Arc<RwLock<Option<GossipContext>>>;
 
 // ===== Initialization Commands =====
 
 /// Initialize GossipContext with four-word identity
-#[cfg(feature = "gossip_overlay")]
 #[tauri::command]
 pub async fn gossip_initialize(
     state: tauri::State<'_, GossipState>,
@@ -37,7 +34,7 @@ pub async fn gossip_initialize(
 // ===== Storage Commands (CRDT-based) =====
 
 /// Store a message in local CRDT set
-#[cfg(feature = "gossip_overlay")]
+
 #[tauri::command]
 pub async fn gossip_store_message(
     state: tauri::State<'_, GossipState>,
@@ -52,7 +49,7 @@ pub async fn gossip_store_message(
 }
 
 /// Retrieve all messages from local CRDT
-#[cfg(feature = "gossip_overlay")]
+
 #[tauri::command]
 pub async fn gossip_get_all_messages(
     state: tauri::State<'_, GossipState>,
@@ -66,7 +63,7 @@ pub async fn gossip_get_all_messages(
 }
 
 /// Check if a message exists in local CRDT
-#[cfg(feature = "gossip_overlay")]
+
 #[tauri::command]
 pub async fn gossip_contains_message(
     state: tauri::State<'_, GossipState>,
@@ -81,7 +78,7 @@ pub async fn gossip_contains_message(
 }
 
 /// Remove a message from local CRDT
-#[cfg(feature = "gossip_overlay")]
+
 #[tauri::command]
 pub async fn gossip_remove_message(
     state: tauri::State<'_, GossipState>,
@@ -99,7 +96,7 @@ pub async fn gossip_remove_message(
 
 /// Find contact via FOAF discovery + presence
 /// Returns peer_id as hex-encoded bytes for use in other commands
-#[cfg(feature = "gossip_overlay")]
+
 #[tauri::command]
 pub async fn gossip_find_contact(
     state: tauri::State<'_, GossipState>,
@@ -122,7 +119,7 @@ pub async fn gossip_find_contact(
 
 /// Add known contact to local cache
 /// For internal use - typically contacts are added automatically via find_contact
-#[cfg(feature = "gossip_overlay")]
+
 #[tauri::command]
 pub async fn gossip_add_contact(
     state: tauri::State<'_, GossipState>,
@@ -145,7 +142,7 @@ pub async fn gossip_add_contact(
 }
 
 /// Get all cached contacts
-#[cfg(feature = "gossip_overlay")]
+
 #[tauri::command]
 pub async fn gossip_get_contacts(
     state: tauri::State<'_, GossipState>,
@@ -168,7 +165,7 @@ pub async fn gossip_get_contacts(
 }
 
 /// Remove contact from cache
-#[cfg(feature = "gossip_overlay")]
+
 #[tauri::command]
 pub async fn gossip_remove_contact(
     state: tauri::State<'_, GossipState>,
@@ -186,7 +183,7 @@ pub async fn gossip_remove_contact(
 
 /// Send direct message to peer by their four-word address
 /// This will look up the peer via FOAF/presence first
-#[cfg(feature = "gossip_overlay")]
+
 #[tauri::command]
 pub async fn gossip_send_direct_message(
     state: tauri::State<'_, GossipState>,
@@ -208,7 +205,7 @@ pub async fn gossip_send_direct_message(
 }
 
 /// Subscribe to entity's topic
-#[cfg(feature = "gossip_overlay")]
+
 #[tauri::command]
 pub async fn gossip_subscribe_to_entity(
     state: tauri::State<'_, GossipState>,
@@ -234,7 +231,7 @@ pub async fn gossip_subscribe_to_entity(
 }
 
 /// Publish message to entity's topic
-#[cfg(feature = "gossip_overlay")]
+
 #[tauri::command]
 pub async fn gossip_publish_to_entity(
     state: tauri::State<'_, GossipState>,
@@ -252,7 +249,7 @@ pub async fn gossip_publish_to_entity(
 // ===== Group Management Commands =====
 
 /// Join entity (creates MLS group + subscribes to topic)
-#[cfg(feature = "gossip_overlay")]
+
 #[tauri::command]
 pub async fn gossip_join_entity(
     state: tauri::State<'_, GossipState>,
@@ -268,7 +265,7 @@ pub async fn gossip_join_entity(
 }
 
 /// Leave entity (unsubscribe + leave MLS group)
-#[cfg(feature = "gossip_overlay")]
+
 #[tauri::command]
 pub async fn gossip_leave_entity(
     state: tauri::State<'_, GossipState>,
@@ -285,7 +282,7 @@ pub async fn gossip_leave_entity(
 // ===== Presence Commands =====
 
 /// Start sending presence beacons (5min interval)
-#[cfg(feature = "gossip_overlay")]
+
 #[tauri::command]
 pub async fn gossip_start_presence_beacons(
     state: tauri::State<'_, GossipState>,
@@ -299,7 +296,7 @@ pub async fn gossip_start_presence_beacons(
 }
 
 /// Stop presence beacons
-#[cfg(feature = "gossip_overlay")]
+
 #[tauri::command]
 pub async fn gossip_stop_presence_beacons(
     state: tauri::State<'_, GossipState>,
@@ -313,7 +310,7 @@ pub async fn gossip_stop_presence_beacons(
 }
 
 /// Check if peer is online in any shared group by their four-word address
-#[cfg(feature = "gossip_overlay")]
+
 #[tauri::command]
 pub async fn gossip_is_peer_online(
     state: tauri::State<'_, GossipState>,
@@ -334,7 +331,7 @@ pub async fn gossip_is_peer_online(
 }
 
 /// Get online peers in entity
-#[cfg(feature = "gossip_overlay")]
+
 #[tauri::command]
 pub async fn gossip_get_online_peers(
     state: tauri::State<'_, GossipState>,
@@ -354,7 +351,7 @@ pub async fn gossip_get_online_peers(
 // ===== Backup & Recovery Commands =====
 
 /// Add favourite contact for encrypted backups
-#[cfg(feature = "gossip_overlay")]
+
 #[tauri::command]
 pub async fn gossip_add_favourite_contact(
     state: tauri::State<'_, GossipState>,
@@ -369,7 +366,7 @@ pub async fn gossip_add_favourite_contact(
 }
 
 /// Get list of favourite contacts
-#[cfg(feature = "gossip_overlay")]
+
 #[tauri::command]
 pub async fn gossip_get_favourite_contacts(
     state: tauri::State<'_, GossipState>,
@@ -381,7 +378,7 @@ pub async fn gossip_get_favourite_contacts(
 }
 
 /// Replicate state to all favourite contacts
-#[cfg(feature = "gossip_overlay")]
+
 #[tauri::command]
 pub async fn gossip_replicate_to_favourites(
     state: tauri::State<'_, GossipState>,
@@ -397,7 +394,7 @@ pub async fn gossip_replicate_to_favourites(
 /// Recover state from a favourite contact
 ///
 /// Decrypts backup using ChaCha20Poly1305 and merges into local CRDT
-#[cfg(feature = "gossip_overlay")]
+
 #[tauri::command]
 pub async fn gossip_recover_from_favourite(
     state: tauri::State<'_, GossipState>,
@@ -415,7 +412,7 @@ pub async fn gossip_recover_from_favourite(
 // ===== Saorsa Sites Commands (SPEC2.md §5 - Rendezvous Protocol) =====
 
 /// Publish a site with assets
-#[cfg(feature = "gossip_overlay")]
+
 #[tauri::command]
 pub async fn gossip_site_publish(
     state: tauri::State<'_, GossipState>,
@@ -455,7 +452,7 @@ pub async fn gossip_site_publish(
 }
 
 /// Fetch a site by ID
-#[cfg(feature = "gossip_overlay")]
+
 #[tauri::command]
 pub async fn gossip_site_fetch(
     state: tauri::State<'_, GossipState>,
@@ -519,7 +516,7 @@ pub async fn gossip_site_fetch(
 }
 
 /// List published sites
-#[cfg(feature = "gossip_overlay")]
+
 #[tauri::command]
 pub async fn gossip_site_list(state: tauri::State<'_, GossipState>) -> Result<Vec<String>, String> {
     let guard = state.read().await;
@@ -544,7 +541,7 @@ pub async fn gossip_site_list(state: tauri::State<'_, GossipState>) -> Result<Ve
 }
 
 /// Get providers for a site
-#[cfg(feature = "gossip_overlay")]
+
 #[tauri::command]
 pub async fn gossip_site_providers(
     state: tauri::State<'_, GossipState>,
@@ -581,7 +578,7 @@ pub async fn gossip_site_providers(
 // ===== Connection Status Commands =====
 
 /// Get own four-word identity
-#[cfg(feature = "gossip_overlay")]
+
 #[tauri::command]
 pub async fn gossip_get_own_identity(
     state: tauri::State<'_, GossipState>,
@@ -594,7 +591,7 @@ pub async fn gossip_get_own_identity(
 }
 
 /// Get connection status (online/offline, peer count, etc.)
-#[cfg(feature = "gossip_overlay")]
+
 #[tauri::command]
 pub async fn gossip_get_connection_status(
     state: tauri::State<'_, GossipState>,
@@ -621,7 +618,7 @@ pub async fn gossip_get_connection_status(
 
 /// Add bootstrap peer via four-word address
 /// This peer will be used to bootstrap into the network
-#[cfg(feature = "gossip_overlay")]
+
 #[tauri::command]
 pub async fn gossip_add_bootstrap_peer(
     state: tauri::State<'_, GossipState>,
@@ -651,7 +648,7 @@ pub async fn gossip_add_bootstrap_peer(
 }
 
 /// Get known contacts (for bootstrap/connection info)
-#[cfg(feature = "gossip_overlay")]
+
 #[tauri::command]
 pub async fn gossip_get_cached_peers(
     state: tauri::State<'_, GossipState>,
@@ -683,7 +680,7 @@ pub async fn gossip_get_cached_peers(
 /// Get list of entities the user has subscribed to
 ///
 /// Uses CRDT storage with "entity_sub:{entity_id}" prefix to track subscriptions
-#[cfg(feature = "gossip_overlay")]
+
 #[tauri::command]
 pub async fn gossip_get_subscribed_entities(
     state: tauri::State<'_, GossipState>,
@@ -714,7 +711,7 @@ pub async fn gossip_get_subscribed_entities(
 /// Note: This requires network-wide queries which are not yet implemented.
 /// For now, returns empty list. Future implementation should query the gossip
 /// network for all peers subscribed to the entity topic.
-#[cfg(feature = "gossip_overlay")]
+
 #[tauri::command]
 pub async fn gossip_get_entity_subscribers(
     _state: tauri::State<'_, GossipState>,
@@ -729,7 +726,7 @@ pub async fn gossip_get_entity_subscribers(
 /// Get messages filtered by entity ID
 ///
 /// Uses CRDT storage with "entity_msg:{entity_id}:" prefix for entity-specific messages
-#[cfg(feature = "gossip_overlay")]
+
 #[tauri::command]
 pub async fn gossip_get_entity_messages(
     state: tauri::State<'_, GossipState>,
@@ -761,7 +758,7 @@ pub async fn gossip_get_entity_messages(
 /// Store a message tagged with entity ID
 ///
 /// Helper function to store messages with entity prefix for filtering
-#[cfg(feature = "gossip_overlay")]
+
 #[tauri::command]
 pub async fn gossip_store_entity_message(
     state: tauri::State<'_, GossipState>,
@@ -786,7 +783,7 @@ pub async fn gossip_store_entity_message(
 /// Clear all bootstrap peers from cache
 ///
 /// Removes all contacts which effectively clears bootstrap peer cache
-#[cfg(feature = "gossip_overlay")]
+
 #[tauri::command]
 pub async fn gossip_clear_bootstrap_peers(
     state: tauri::State<'_, GossipState>,
@@ -816,7 +813,7 @@ pub async fn gossip_clear_bootstrap_peers(
 ///
 /// Uses CRDT storage with "peer_meta:{peer_id}:" prefix to store peer metadata
 /// Returns a map of key-value pairs for the peer
-#[cfg(feature = "gossip_overlay")]
+
 #[tauri::command]
 pub async fn gossip_get_peer_metadata(
     state: tauri::State<'_, GossipState>,
@@ -854,7 +851,7 @@ pub async fn gossip_get_peer_metadata(
 /// Store metadata for a peer
 ///
 /// Uses CRDT storage with "peer_meta:{peer_id}:{key}:{value}" format
-#[cfg(feature = "gossip_overlay")]
+
 #[tauri::command]
 pub async fn gossip_store_peer_metadata(
     state: tauri::State<'_, GossipState>,
@@ -876,7 +873,7 @@ pub async fn gossip_store_peer_metadata(
 /// Get own metadata (display name, device name, etc.)
 ///
 /// Uses CRDT storage with "self_meta:{key}:{value}" format
-#[cfg(feature = "gossip_overlay")]
+
 #[tauri::command]
 pub async fn gossip_get_own_metadata(
     state: tauri::State<'_, GossipState>,
@@ -913,7 +910,7 @@ pub async fn gossip_get_own_metadata(
 /// Store own metadata (display name, device name, etc.)
 ///
 /// Uses CRDT storage with "self_meta:{key}:{value}" format
-#[cfg(feature = "gossip_overlay")]
+
 #[tauri::command]
 pub async fn gossip_store_own_metadata(
     state: tauri::State<'_, GossipState>,

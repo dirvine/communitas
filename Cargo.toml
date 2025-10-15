@@ -7,7 +7,6 @@ members = [
     # "communitas-headless",
     # "communitas-bridge",
     "communitas-tui",
-    "crates/communitas-container",
 ]
 
 [workspace.package]

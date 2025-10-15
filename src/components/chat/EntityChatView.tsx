@@ -525,7 +525,7 @@ export const EntityChatView: React.FC<EntityChatViewProps> = ({
         threadId: activeThread.id,
       };
 
-      // Optimistically update thread messages via Automerge
+      // Optimistically update thread messages via Yjs CRDT
       setActiveThread(prev => prev ? {
         ...prev,
         messages: [...prev.messages, threadMessage],
@@ -534,7 +534,7 @@ export const EntityChatView: React.FC<EntityChatViewProps> = ({
 
       setThreadReply('');
 
-      // Persist to Automerge storage
+      // Persist to Yjs CRDT storage
       await upsertCachedMessage('thread', activeThread.id, threadMessage);
 
       // Queue for backend sync (thread messages sync under parent channel/entity)

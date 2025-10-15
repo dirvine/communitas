@@ -253,7 +253,7 @@ ocean-forest-moon-star (Your Identity)
 │
 └── 🔗 Shared Disk (group-encrypted markdown files)
     └── Accessible by group members with permission
-    └── Synchronized via Automerge CRDT for entities/chats
+    └── Synchronized via Yrs CRDT for collaborative editing
 
 Access Control:
 - Private: ML-DSA key + device authorization required
@@ -431,7 +431,7 @@ communitas/
 │   │   └── entity_storage.rs    # Entity storage interface
 │   └── tauri.conf.json          # Tauri configuration
 │
-├── crates/communitas-container/  # Content addressing & storage
+
 │   └── src/
 │       ├── lib.rs               # Container abstraction
 │       └── seal.rs              # Content sealing

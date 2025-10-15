@@ -15,7 +15,7 @@ path = "src/main.rs"
 [dependencies]
 # Core business logic
 communitas-core = { path = "../communitas-core" }
-communitas-container = { path = "../crates/communitas-container" }
+
 
 # Networking - use published crate with wildcard address fix
 ant-quic = "^0.8.17"

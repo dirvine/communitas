@@ -101,6 +101,7 @@ import { ConnectionStatus } from '../ConnectionStatus'
 import { VersionDisplay } from '../VersionDisplay'
 import { useEntityDirectory } from '../../contexts/EntityDirectoryContext'
 import { EntityDocumentWorkspace } from '../documents/EntityDocumentWorkspace'
+import { ContainerManager } from '../container/ContainerManager'
 import { useSnackbar } from 'notistack'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useAuth } from '../../contexts/AuthContext'
@@ -723,8 +724,25 @@ export const ModernShellPrototypeScreen: React.FC = () => {
       })
     })
 
+    // Add storage containers
+    storageContainers.forEach((container) => {
+      result.push({
+        id: container.id,
+        name: container.name,
+        type: 'storage',
+        snippet: container.description,
+        time: 'Now',
+        status: 'read',
+        org: 'Personal',
+        orgId: undefined,
+        scope: 'personal',
+        online: true,
+        fourWords: 'ocean-forest-moon-star',
+      })
+    })
+
     return result
-  }, [organizations, personalGroups, personalUsers])
+  }, [organizations, personalGroups, personalUsers, storageContainers])
 
   const [selectedConversationId, setSelectedConversationId] = useState(() => conversations[0]?.id ?? '')
 
@@ -1282,6 +1300,7 @@ export const ModernShellPrototypeScreen: React.FC = () => {
   const isPersonView = selectedConversation?.type === 'person'
   const isChannelView = selectedConversation?.type === 'channel'
   const isProjectView = selectedConversation?.type === 'project'
+  const isStorageView = selectedConversation?.type === 'storage'
   const isGroupConversation = selectedConversation?.type !== 'person'
 
   const focusConversationById = useCallback((conversationId: string, orgNameToExpand?: string) => {
@@ -3593,15 +3612,16 @@ export const ModernShellPrototypeScreen: React.FC = () => {
          isProjectView && projectViewMode !== 'chat' ? renderProjectMode() :
          isGroupView && groupViewMode !== 'chat' ? renderGroupMode() :
          isPersonView && personViewMode !== 'chat' ? renderPersonMode() :
+         isStorageView ? <ContainerManager /> :
          renderChatTimeline()}
 
-        {/* C3. Composer (only show for chat modes) */}
-        {!isOrganisationView &&
+{/* C3. Composer (only show for chat modes) */}
+        {!isOrganisationView && !isStorageView &&
          ((!isChannelView && !isProjectView && !isGroupView && !isPersonView) ||
-          (isChannelView && channelViewMode === 'chat') ||
-          (isProjectView && projectViewMode === 'chat') ||
-          (isGroupView && groupViewMode === 'chat') ||
-          (isPersonView && personViewMode === 'chat')) && (
+           (isChannelView && channelViewMode === 'chat') ||
+           (isProjectView && projectViewMode === 'chat') ||
+           (isGroupView && groupViewMode === 'chat') ||
+           (isPersonView && personViewMode === 'chat')) && (
           <Box
             sx={{
               p: 2,

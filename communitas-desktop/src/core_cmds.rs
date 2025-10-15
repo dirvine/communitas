@@ -88,70 +88,7 @@ pub async fn core_advertise(
     Err("Gossip overlay advertising not yet implemented".to_string())
 }
 
-#[cfg(feature = "gossip_overlay")]
-#[tauri::command]
-pub async fn container_put(
-    gossip_state: State<'_, gossip_commands::GossipState>,
-    data: Vec<u8>,
-) -> Result<String, String> {
-    // Store container in gossip mesh with content-addressed OID
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
 
-    let mut hasher = DefaultHasher::new();
-    data.hash(&mut hasher);
-    let oid = format!("{:x}", hasher.finish());
-
-    let container_message = format!("container:{}:", oid);
-    let mut full_message = container_message.as_bytes().to_vec();
-    full_message.extend_from_slice(&data);
-
-    gossip_commands::gossip_store_message(gossip_state, full_message).await?;
-
-    Ok(oid)
-}
-
-#[cfg(not(feature = "gossip_overlay"))]
-#[tauri::command]
-pub async fn container_put(
-    _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
-    _data: Vec<u8>,
-) -> Result<String, String> {
-    Err("Container put not yet implemented".to_string())
-}
-
-#[cfg(feature = "gossip_overlay")]
-#[tauri::command]
-pub async fn container_get(
-    gossip_state: State<'_, gossip_commands::GossipState>,
-    oid_hex: String,
-) -> Result<Vec<u8>, String> {
-    // Retrieve container from gossip mesh by content-addressed OID
-    let messages = gossip_commands::gossip_get_all_messages(gossip_state).await?;
-    let prefix = format!("container:{}:", oid_hex);
-
-    for msg in messages {
-        if let Ok(msg_str) = String::from_utf8(msg.clone()) {
-            if let Some(data_start) = msg_str.find(&prefix) {
-                let data_offset = data_start + prefix.len();
-                if data_offset < msg.len() {
-                    return Ok(msg[data_offset..].to_vec());
-                }
-            }
-        }
-    }
-
-    Err(format!("Container not found: {}", oid_hex))
-}
-
-#[cfg(not(feature = "gossip_overlay"))]
-#[tauri::command]
-pub async fn container_get(
-    _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
-    _oid_hex: String,
-) -> Result<Vec<u8>, String> {
-    Err("Container get not yet implemented".to_string())
-}
 
 #[cfg(feature = "gossip_overlay")]
 #[tauri::command]

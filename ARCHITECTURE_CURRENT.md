@@ -12,8 +12,7 @@
 
 ### Key Technologies (Confirmed Active):
 - ✅ **Gossip Overlay** - saorsa-gossip (0.1.6+) for P2P networking
-- ✅ **Yrs (Y.js Rust)** - Collaborative file editing with CRDT
-- ✅ **Automerge** - Entity/chat/thread/channel/project CRDT sync
+- ✅ **Yrs (Y.js Rust)** - Collaborative editing and CRDT synchronization (0.18-0.19)
 - ✅ **Four-Word-Networking** - Human-readable addressing (2.6)
 - ✅ **Full File Replication** - Complete file copies, no content-addressing
 - ✅ **Offline-First** - All operations work without network, sync on connect
@@ -90,10 +89,10 @@ Virtual Disk Layout:
 
 ---
 
-### 2. CRDT Documents (Automerge)
+### 2. CRDT Documents (Yrs)
 
 **Purpose:** Entity metadata, chat, threads, channels, projects
-**Technology:** Automerge CRDT
+**Technology:** Yrs CRDT (collaborative editing and synchronization)
 **Implementation:** Backend-managed, frontend synchronized
 
 **Document Types:**
@@ -174,7 +173,7 @@ Virtual Disk Layout:
 }
 ```
 
-**Conflict Resolution:** Automatic via Automerge CRDT semantics (Last-Write-Wins for scalars, eventual consistency for collections)
+**Conflict Resolution:** Automatic via Yrs CRDT semantics (eventual consistency with operational transformation)
 
 ---
 
@@ -191,8 +190,7 @@ CREATE TABLE crdt_documents (
   entity_type TEXT NOT NULL,      -- "group", "channel", "project", etc.
   entity_id TEXT NOT NULL,        -- Four-word entity identifier
   concern TEXT NOT NULL,          -- "core", "chat", "kanban", "issues"
-  automerge_state BLOB NOT NULL,  -- Automerge binary state
-  yrs_state BLOB,                 -- Yrs binary state (for files)
+  yrs_state BLOB NOT NULL,        -- Yrs binary state for all documents
   updated_at INTEGER NOT NULL,    -- Unix timestamp
   created_at INTEGER NOT NULL
 );
@@ -245,8 +243,8 @@ CREATE TABLE sync_queue (
 
 #### 5. CRDT Sync (saorsa-gossip-crdt-sync v0.1.6)
 - **State Vector Sync:** Efficient delta synchronization
-- **Automerge Integration:** Direct integration with Automerge
-- **Yrs Integration:** Sync Yrs documents for file editing
+- **Yrs Integration:** Sync Yrs documents for collaborative editing
+- **Delta Encoding:** Efficient binary update protocol
 
 ---
 
@@ -332,8 +330,8 @@ Operations are queued while offline and replayed on reconnection.
 - **State Management:** React Context + hooks
 - **Routing:** React Router (SPA)
 - **CRDT Frontend:**
-  - Yjs (JavaScript) for collaborative file editing
-  - Automerge integration via Tauri IPC
+  - Yjs (JavaScript) for collaborative editing
+  - CRDT sync via Tauri IPC
 
 **Storage:**
 - **IndexedDB:** Offline cache for UI state
@@ -342,7 +340,7 @@ Operations are queued while offline and replayed on reconnection.
 ### Backend (Rust + Tauri v2)
 
 **Core Modules:**
-- **Member Manager** - CRDT-based membership with Automerge
+- **Member Manager** - CRDT-based membership with Yrs
 - **Virtual Disk Manager** - File storage and Yrs sync
 - **Gossip Context** - Network coordination
 - **Auth Service** - PQC-based authentication
@@ -399,8 +397,7 @@ saorsa-gossip-rendezvous = "0.1.6"
 ```toml
 four-word-networking = "2.6"
 ant-quic = "0.8.17"
-# Note: Automerge used in Rust backend (version TBD)
-# Note: Yrs integration for file editing (version TBD)
+yrs = { version = "0.18-0.19", features = ["sync"] }  # CRDT collaborative editing
 ```
 
 **Cryptography:**
@@ -417,8 +414,7 @@ argon2 = "0.5"  # For password hashing
 {
   "yjs": "^13.6.21",              // Collaborative editing (Yrs counterpart)
   "y-indexeddb": "^9.0.12",       // Yjs persistence
-  "y-webrtc": "^10.3.0",          // Yjs P2P sync
-  "@automerge/automerge": "^2.0.3" // Entity/chat CRDT
+  "y-webrtc": "^10.3.0"           // Yjs P2P sync
 }
 ```
 
@@ -464,7 +460,7 @@ These were part of previous architecture iterations but are **NO LONGER USED**:
 - **Large file (1MB):** ~20ms load, ~200ms full sync
 - **Collaborative editing:** Real-time (<100ms latency)
 
-### Chat Operations (Automerge CRDT):
+### Chat Operations (Yrs CRDT):
 - **Send message:** <10ms local, ~100ms network propagation
 - **Load conversation (100 msgs):** ~50ms from libSQL
 - **Thread sync:** Incremental via state vectors
@@ -486,7 +482,7 @@ These were part of previous architecture iterations but are **NO LONGER USED**:
 1. **Offline-First:** Every operation works offline, syncs when connected
 2. **Backend-Focused:** Heavy lifting in Rust backend, frontend is thin client
 3. **Full Replication:** No content-addressing, no chunking, simple full-file sync
-4. **CRDT Everywhere:** Automatic conflict resolution via Yrs + Automerge
+4. **CRDT Everywhere:** Automatic conflict resolution via Yrs CRDT
 5. **Gossip-Based:** No central servers, no DHT, pure peer-to-peer
 6. **Post-Quantum Safe:** Future-proof cryptography throughout
 7. **Human-Readable:** Four-word addresses for all identities
@@ -525,7 +521,7 @@ These were part of previous architecture iterations but are **NO LONGER USED**:
 └─────────────────────────────────────────────────────────────┘
 ```
 
-**Same flow for Automerge-based entities (chat, metadata, etc.)**
+**Same flow applies for all Yrs-based documents (files, chat, metadata, etc.)**
 
 ---
 
@@ -533,8 +529,8 @@ These were part of previous architecture iterations but are **NO LONGER USED**:
 
 ### Current Status: ✅ Core Architecture Complete
 - ✅ Gossip overlay fully operational
-- ✅ Yrs file editing integrated
-- ✅ Automerge entity/chat working
+- ✅ Yrs CRDT collaborative editing integrated
+- ✅ Entity/chat/file synchronization working
 - ✅ Offline-first operation confirmed
 - ✅ PQC authentication active
 
@@ -580,8 +576,7 @@ Use this to verify documentation accuracy:
 - [ ] No references to SEAL sealing
 - [ ] No references to BLAKE3 content-addressing
 - [ ] Gossip overlay clearly described
-- [ ] Yrs used for file editing
-- [ ] Automerge used for entity/chat/metadata
+- [ ] Yrs CRDT used for all collaborative editing and synchronization
 - [ ] Four-word-networking for addressing
 - [ ] Full file replication (not chunked/addressed)
 - [ ] Offline-first operation emphasized

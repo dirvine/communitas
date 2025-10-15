@@ -106,7 +106,8 @@ impl CoordinatorClient {
         self.cached_adverts.write().await.push(advert.clone());
 
         // Serialize advert for network transmission
-        let advert_bytes = serde_cbor::to_vec(&advert)
+        let mut advert_bytes = Vec::new();
+ciborium::ser::into_writer(&advert, &mut advert_bytes).map_err(|e| anyhow::anyhow!("CBOR encoding failed: {:?}", e))?;
             .map_err(|e| anyhow::anyhow!("Failed to serialize advert: {}", e))?;
 
         // Get active peers from membership layer
@@ -205,7 +206,8 @@ impl CoordinatorClient {
 
         // Create and serialize FIND_COORDINATOR query
         let query = FindCoordinatorQuery::new(self.peer_id.clone());
-        let query_bytes = serde_cbor::to_vec(&query)
+        let mut query_bytes = Vec::new();
+ciborium::ser::into_writer(&query, &mut query_bytes).map_err(|e| anyhow::anyhow!("CBOR encoding failed: {:?}", e))?;
             .map_err(|e| anyhow::anyhow!("Failed to serialize query: {}", e))?;
 
         // Send query to selected peers
@@ -376,7 +378,7 @@ impl CoordinatorClient {
                         }
 
                         // Try to deserialize as coordinator advert
-                        match serde_cbor::from_slice::<CoordinatorAdvert>(&data) {
+                        match ciborium::de::from_reader(&data[..]) {
                             Ok(advert) => {
                                 // Deduplicate by coordinator peer
                                 let coord_peer = advert.peer.clone();

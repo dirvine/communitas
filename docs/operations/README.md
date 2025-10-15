@@ -49,7 +49,7 @@ npm run tauri build
 npm run tauri build -- --features "passkey,touchid"
 
 # Output location
-ls src-tauri/target/release/bundle/
+ls communitas-desktop/target/release/bundle/
 ```
 
 **System Requirements**:

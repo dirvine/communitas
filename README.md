@@ -87,7 +87,7 @@ cargo test
 - **[Frontend API](docs/api/)**: React/TypeScript interface *(coming soon)*
 
 ### **Deployment Guides**
-- **[Container Deployment](crates/communitas-container/README.md)**: Docker, Kubernetes, Helm
+
 - **[Headless Service](communitas-headless/README.md)**: systemd, launchd, JSON-RPC API
 - **[Bootstrap Node](bootstrap-node/README.md)**: Network bootstrap deployment
 - **[Testnet Deployment](finalise/DEPLOY_TESTNET.md)**: Complete network deployment
@@ -121,7 +121,7 @@ cargo test
 - **[bootstrap-node/](bootstrap-node/)**: Network bootstrap and discovery service ([README](bootstrap-node/README.md))
 
 ### **Container & Deployment**
-- **[crates/communitas-container/](crates/communitas-container/)**: Docker/Kubernetes deployment utilities ([README](crates/communitas-container/README.md))
+
 
 ### **Frontend**
 - **[src/](src/)**: React frontend with TypeScript
@@ -150,9 +150,7 @@ npm run typecheck && cargo clippy --all-features
 # Run as system service (see communitas-headless/README.md)
 communitas-headless --config /etc/communitas/headless.toml
 
-# Container deployment (see crates/communitas-container/README.md)
-docker-compose up -d
-kubectl apply -f deployment.yaml
+
 ```
 
 ---
@@ -177,24 +175,7 @@ sudo systemctl start communitas
 ```
 Complete guide: [communitas-headless/README.md](communitas-headless/README.md)
 
-### **Docker Containers** (Cloud Deployment)
-Containerized deployments with Docker Compose or standalone containers.
-```bash
-docker-compose up -d
-# OR
-docker run -p 8080:8080 -p 9090:9090 communitas/node:latest
-```
-Complete guide: [crates/communitas-container/README.md](crates/communitas-container/README.md)
 
-### **Kubernetes** (Enterprise Scale)
-Production-grade Kubernetes deployments with Helm charts, auto-scaling, and monitoring.
-```bash
-helm install my-communitas communitas/communitas
-# OR
-kubectl apply -f deployment.yaml
-```
-Includes: HPA, Prometheus metrics, Grafana dashboards, network policies.
-Complete guide: [crates/communitas-container/README.md](crates/communitas-container/README.md)
 
 ### **Bootstrap Nodes** (Network Infrastructure)
 DHT bootstrap and discovery nodes for network infrastructure.

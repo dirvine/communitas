@@ -22,6 +22,7 @@
 
 use anyhow::Result;
 use bytes::Bytes;
+use ciborium::{value::Reader, value::Writer};
 use saorsa_gossip_pubsub::PubSub;
 use saorsa_gossip_rendezvous::{ProviderSummary, calculate_shard};
 use saorsa_gossip_transport::GossipTransport;
@@ -151,7 +152,8 @@ impl RendezvousClient {
         let topic_id = TopicId::new(*hash.as_bytes());
 
         // Serialize summary with serde_cbor
-        let summary_bytes = serde_cbor::to_vec(&summary)
+        let mut summary_bytes = Vec::new();
+ciborium::ser::into_writer(&summary, &mut summary_bytes).map_err(|e| anyhow::anyhow!("CBOR encoding failed: {:?}", e))?;
             .map_err(|e| anyhow::anyhow!("Failed to serialize ProviderSummary: {}", e))?;
 
         // Publish via pubsub
@@ -219,8 +221,12 @@ impl RendezvousClient {
         message_bytes: Bytes,
     ) -> Result<()> {
         // Deserialize the ProviderSummary
-        let summary: ProviderSummary = serde_cbor::from_slice(&message_bytes)
-            .map_err(|e| anyhow::anyhow!("Failed to deserialize ProviderSummary: {}", e))?;
+        let summary: ProviderSummary = {
+    match ciborium::de::from_reader(&message_bytes[..]) {
+        Ok(summary) => summary,
+        Err(_) => return Ok(false), // Invalid CBOR, not a ProviderSummary
+    }
+};
 
         // Verify the summary is for the expected target
         if &summary.target != target_id {
@@ -541,7 +547,8 @@ mod tests {
         );
 
         // Serialize it (simulating what we'd receive from pubsub)
-        let summary_bytes = serde_cbor::to_vec(&summary).unwrap();
+        let mut summary_bytes = Vec::new();
+ciborium::ser::into_writer(&summary, &mut summary_bytes).map_err(|e| anyhow::anyhow!("CBOR encoding failed: {:?}", e))?;
 
         // Process the incoming message
         let result = client

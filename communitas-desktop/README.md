@@ -342,7 +342,7 @@ const unlisten = await listen('update:downloaded', (event) => {
 ```json
 {
   "productName": "Communitas",
-  "version": "0.1.1",
+  "version": "0.1.17",
   "identifier": "com.saorsalabs.communitas",
   "build": {
     "beforeDevCommand": "npm run build && npm run dev:frontend",

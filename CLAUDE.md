@@ -22,7 +22,7 @@ Communitas is a local-first, PQC-ready collaboration platform that merges WhatsA
 - **Runtime**: Tauri v2 with Rust 2024 edition for desktop app framework
 - **Core Library**: Saorsa Gossip ecosystem for identities, groups, messaging via gossip overlay
 - **Cryptography**: Post-quantum (ML-DSA/ML-KEM) with ChaCha20-Poly1305
-- **Storage**: Virtual disks with full file replication and CRDT synchronization (Yrs for files, Automerge for entities/chats)
+- **Storage**: Virtual disks with full file replication and CRDT synchronization (Yrs CRDT)
 - **Security**: Keyring integration for secure credential storage
 - **Networking**: QUIC via ant-quic, IPv4-first with Happy Eyeballs fallback
 
@@ -88,9 +88,9 @@ Key test areas for Communitas:
   - Real P2P integration with saorsa-core
   - Endpoints: health, initialize, channels, messages, threads
   - See `docs/api/bridge-api.md` for comprehensive testing guide
-- **Thread Reply Composer**: Automerge-integrated reply system for threads
+- **Thread Reply Composer**: CRDT-integrated reply system for threads
   - Optimistic updates with offline-first persistence
-  - Syncs to backend when network available
+  - Syncs to backend when network available via Yrs
 - **TypeScript Error Resolution**: Fixed all 14 type errors
   - `npm run typecheck` now passes cleanly
   - Auth components, navigation, GlassCard, theme types all corrected
@@ -133,7 +133,7 @@ npm run test:ui            # Interactive test UI
 
 ### Backend Development
 ```bash
-cd src-tauri
+cd communitas-desktop
 cargo build                # Build debug
 cargo build --release      # Build release
 cargo test                 # Run all tests
@@ -219,11 +219,11 @@ See `docs/api/bridge-api.md` for complete testing scenarios and Chrome DevTools 
 
 ### Unit Tests
 - Frontend: Vitest for React components in `src/**/*.test.tsx`
-- Backend: Cargo tests in `src-tauri/src/**/*.rs` and `src-tauri/tests/`
+- Backend: Cargo tests in `communitas-core/src/**/*.rs` and `communitas-desktop/src/**/*.rs`
 
 ### Integration Tests
-- Multi-node P2P testing: `src-tauri/tests/integration_*.rs`
-- Storage policies: `src-tauri/tests/storage_policy_tests.rs`
+- Multi-node P2P testing: Integration tests in workspace crates
+- Storage policies: `communitas-core/tests/` and `communitas-desktop/tests/`
 - Gossip networking: Tests integrated within P2P testing suite
 
 ### Running Specific Tests
@@ -243,17 +243,17 @@ RUST_LOG=debug cargo test
 ## Architecture Insights
 
 ### Core Context System
-The application uses a centralized `CoreContext` (src-tauri/src/core_context.rs) that wires Communitas to saorsa-gossip components:
+The application uses a centralized `CoreContext` (communitas-core/src/core_context.rs) that wires Communitas to saorsa-gossip components:
 - Identity management with enhanced PQC support
-- Storage management with CRDT synchronization (Yrs/Automerge)
+- Storage management with CRDT synchronization (Yrs)
 - Chat management with persistent storage
 - Messaging service for real-time communication via gossip overlay
 - Group key storage for membership updates
 
 ### Tauri Command Structure
-Commands are organized by domain in `src-tauri/src/`:
-- `core_commands.rs` - Main application commands
-- `core_groups.rs` - Group management commands
+Commands are organized by domain in `communitas-desktop/src/`:
+- Command modules expose Tauri IPC endpoints
+- Core business logic in `communitas-core/`
 - Storage, security, and other domains in respective modules
 
 ### Virtual Disk System
@@ -317,8 +317,8 @@ await offlineStorage.queueForSync({
 ```
 
 ### Adding New Tauri Commands
-1. Define command in appropriate module (e.g., `core_commands.rs`)
-2. Add to `generate_handler!` in `lib.rs`
+1. Define command in appropriate module in `communitas-desktop/src/`
+2. Add to Tauri builder in `main.rs`
 3. Add TypeScript types in `src/types/`
 4. Call from frontend using `invoke()` from `@tauri-apps/api/tauri`
 
@@ -467,7 +467,7 @@ For detailed API documentation, see:
 - `docs/api/frontend-api.md` - TypeScript/React APIs
 - `docs/api/bridge-api.md` - HTTP/REST bridge API for testing
 - `docs/architecture/README.md` - System architecture overview
-- `docs/architecture/crdt-system.md` - CRDT synchronization (Yrs/Automerge)
+- `docs/architecture/crdt-system.md` - CRDT synchronization (Yrs)
 - `docs/architecture/gossip-protocol.md` - Saorsa Gossip networking
 
 ## Performance Targets

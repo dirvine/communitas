@@ -9,7 +9,7 @@ This playbook is for anyone (human or AI) automating Communitas. It captures the
 - `communitas-desktop/` – Tauri v2 desktop crate. The only place we expose IPC commands (see `src/core_commands.rs`, `core_groups.rs`, `core_cmds.rs`, `container.rs`, `sync.rs`, `security/raw_spki.rs`).
  - `communitas-core/` – Shared Rust library. `CoreContext` wires saorsa-core (v0.3.23) managers together (including the exported `get_user_four_words` helpers), persists PQC identities to the platform keyring, and caches group signing keys.
 - `communitas-headless/` – Headless QUIC node with self-update, bootstrap, and metrics support. Ideal for CI smoke checks and autonomous seeders. Pass `--instance-id`, `--config`, and `--storage` (or set the matching `COMMUNITAS_*` env vars) when running more than one node so each instance keeps its own config and data roots.
-- `crates/communitas-container/` – Pointer-only container/CRDT engine that produces signed tips and optional FEC metadata. Desktop and headless both depend on it.
+
 - `src/` – Legacy React SPA still compiled for regression coverage. Tests under `src/**/__tests__` remain part of CI; do not delete until the migration completes.
 
 ## 2. Core Agent Flow
@@ -23,9 +23,8 @@ This playbook is for anyone (human or AI) automating Communitas. It captures the
 8. **Bootstrap maintenance** – `core_get_bootstrap_nodes` / `core_update_bootstrap_nodes` read/write `bootstrap.toml` so automations can configure seeds.
 
 ## 3. Storage & Container Notes
-- Container engine lives in `crates/communitas-container`. It encrypts payloads with AEAD (default on) and can emit FEC shards (k=4, m=2) for higher-layer distribution.
-- Desktop persists opaque blobs to `COMMUNITAS_DATA_DIR` (defaults to `src-tauri/.communitas-data`) so offline reads never block.
-- Pointer-only DHT policy: the app never writes large blobs directly to the DHT. Publish signed tips or manifests and store payloads locally or via delegated providers.
+- Desktop persists data to `COMMUNITAS_DATA_DIR` (defaults to `communitas-desktop/.communitas-data`) so offline reads never block.
+- Document storage uses Yrs CRDT for collaborative editing with entity-scoped storage in both encrypted (Files) and public (Web) modes.
 
 ## 4. Messaging, Channels, and Events
 - `message-received` (App side) delivers decrypted payloads when `MessagingService::decrypt_message` succeeds; otherwise payloads are tagged `encrypted: true`.

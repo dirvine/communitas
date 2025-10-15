@@ -78,7 +78,7 @@
         "https://github.com/dirvine/communitas/releases/latest/download/latest.json"
       ],
       "dialog": true,
-      "pubkey": ""
+      "pubkey": "REPLACE_WITH_PUBLIC_KEY_FROM_KEYGEN"
     }
   }
 }

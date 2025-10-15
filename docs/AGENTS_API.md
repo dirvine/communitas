@@ -82,7 +82,7 @@ Messaging, channels, threads
   - Emits `message-received` (payload decrypted if possible): `{ id?, channel_id?, sender?, content?, receivedAt?, encrypted?: boolean, error?: string }`
 
 Virtual Disk & Website (per entity: org/group/channel/project/individual)
-> **Note**: Virtual disks provide a unified view of markdown-based data storage with CRDT synchronization (Yrs for files, Automerge for entities/chats). Implementation is backend-focused with full file replication across the gossip network.
+> **Note**: Virtual disks provide a unified view of markdown-based data storage with CRDT synchronization (Yrs CRDT). Implementation is backend-focused with full file replication across the gossip network.
 
 - Private/public/shared virtual disks
   - `core_disk_write({ entity_hex, disk_type: "Private"|"Public"|"Shared", path, content_base64, mime_type? }) -> WriteReceipt`
@@ -390,7 +390,7 @@ Security validation
 
 - FWN (Four‑Word Networking): readable, checksum‑secured addressing for humans
 - Gossip Overlay: saorsa-gossip for P2P networking with presence and pubsub
-- CRDT Sync: Yrs for file editing, Automerge for entities/chats
+- CRDT Sync: Yrs CRDT for collaborative editing and synchronization
 - Virtual Disk: entity‑scoped, markdown-based view of data (backend-focused implementation)
 - Website Root: identity‑bound key for DNS‑free sites
 - MLS/ML‑DSA/ML‑KEM: PQC algorithms used throughout
@@ -406,4 +406,4 @@ Security validation
 
 ---
 
-This document is maintained with the code. If an API here differs from the code in `src-tauri/src`, the code is the source of truth. Please open issues/PRs with proposed changes to keep agents in sync.
+This document is maintained with the code. If an API here differs from the code in `communitas-desktop/src` or `communitas-core/src`, the code is the source of truth. Please open issues/PRs with proposed changes to keep agents in sync.

@@ -4,6 +4,7 @@ export class WebRTCService {
   private localStream: MediaStream | null = null;
   private peerConnections: Map<string, RTCPeerConnection> = new Map();
   private isInitialized = false;
+  private listeners: Map<string, Function[]> = new Map();
 
   constructor() {
     this.initializeWebSocket();
@@ -184,8 +185,8 @@ export class WebRTCService {
 
     peerConnection.ontrack = (event) => {
       console.log('📡 Received remote stream');
-      // TODO: Display remote stream in UI
-      this.displayRemoteStream(event.streams[0], entityId);
+      // Display remote stream via UI event emitter
+      this.emit('remoteStream', { entityId, stream: event.streams[0] });
     };
 
     peerConnection.onconnectionstatechange = () => {
@@ -360,8 +361,60 @@ export class WebRTCService {
     });
   }
 
+  // Event emitter methods for UI integration
+  on(event: string, callback: Function): void {
+    if (!this.listeners.has(event)) {
+      this.listeners.set(event, []);
+    }
+    this.listeners.get(event)!.push(callback);
+  }
+
+  off(event: string, callback: Function): void {
+    const callbacks = this.listeners.get(event);
+    if (callbacks) {
+      const index = callbacks.indexOf(callback);
+      if (index > -1) {
+        callbacks.splice(index, 1);
+      }
+    }
+  }
+
+  private emit(event: string, data?: any): void {
+    const callbacks = this.listeners.get(event) || [];
+    callbacks.forEach(callback => {
+      try {
+        callback(data);
+      } catch (error) {
+        console.error(`Error in WebRTC event callback for ${event}:`, error);
+      }
+    });
+  }
+
   isConnected(): boolean {
     return this.isInitialized && this.websocket?.readyState === WebSocket.OPEN;
+  }
+
+  // Destroy service and cleanup resources
+  destroy(): void {
+    // Close all peer connections
+    this.peerConnections.forEach(pc => pc.close());
+    this.peerConnections.clear();
+
+    // Close WebSocket
+    if (this.websocket) {
+      this.websocket.close();
+      this.websocket = null;
+    }
+
+    // Stop local stream
+    if (this.localStream) {
+      this.localStream.getTracks().forEach(track => track.stop());
+      this.localStream = null;
+    }
+
+    // Clear listeners
+    this.listeners.clear();
+    this.isInitialized = false;
   }
 }
 

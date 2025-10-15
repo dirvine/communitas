@@ -38,7 +38,6 @@
     "playwright:open:chrome": "playwright open http://localhost:1420 --channel=chrome"
   },
   "dependencies": {
-    "@automerge/automerge": "^2.0.3",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
     "@hello-pangea/dnd": "^18.0.1",

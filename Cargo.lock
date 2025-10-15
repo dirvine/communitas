@@ -1270,27 +1270,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "communitas-container"
-version = "0.1.0"
-dependencies = [
- "blake3",
- "chrono",
- "hex",
- "parking_lot",
- "rand 0.8.5",
- "rayon",
- "saorsa-core 0.5.7",
- "saorsa-fec",
- "saorsa-seal",
- "serde",
- "serde_cbor",
- "serde_json",
- "thiserror 1.0.69",
- "tokio",
- "uuid",
-]
-
-[[package]]
 name = "communitas-core"
 version = "0.1.17"
 dependencies = [
@@ -1303,7 +1282,7 @@ dependencies = [
  "bytes",
  "chacha20poly1305",
  "chrono",
- "communitas-container",
+ "ciborium",
  "deadpool-sqlite",
  "dirs 5.0.1",
  "fips204",
@@ -1339,7 +1318,6 @@ dependencies = [
  "secrecy",
  "serde",
  "serde_bytes",
- "serde_cbor",
  "serde_json",
  "sha2",
  "tempfile",
@@ -1364,7 +1342,6 @@ dependencies = [
  "base64 0.22.1",
  "blake3",
  "chrono",
- "communitas-container",
  "communitas-core",
  "dirs 5.0.1",
  "four-word-networking",
@@ -1374,6 +1351,7 @@ dependencies = [
  "rand 0.8.5",
  "rustls 0.23.32",
  "rustls-pemfile",
+ "saorsa-core 0.3.28",
  "saorsa-gossip-identity",
  "saorsa-gossip-membership",
  "saorsa-gossip-pubsub",
@@ -6971,26 +6949,6 @@ dependencies = [
  "tokio",
  "tracing",
  "vrf-r255",
- "zeroize",
-]
-
-[[package]]
-name = "saorsa-seal"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "22ba6bb12b63f6ddcac995050691d139fc9b0750a7b4f548016799b2494c16b5"
-dependencies = [
- "anyhow",
- "blake3",
- "hex",
- "rand 0.8.5",
- "saorsa-core 0.3.28",
- "saorsa-fec",
- "saorsa-pqc",
- "serde",
- "serde_cbor",
- "thiserror 2.0.17",
- "tracing",
  "zeroize",
 ]
 

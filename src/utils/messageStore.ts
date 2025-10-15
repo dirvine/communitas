@@ -1,4 +1,4 @@
-import * as Automerge from '@automerge/automerge'
+import * as Y from 'yjs'
 import { Mutex } from 'async-mutex'
 import { offlineStorage } from '../services/storage/OfflineStorageService'
 import { logger } from '../services/LoggingService'
@@ -15,12 +15,12 @@ interface MessageDoc {
 }
 
 interface MessageState {
-  doc: Automerge.Doc<MessageDoc>
+  doc: Y.Doc
   cachedMessages: Message[] | null
   cachedVersion: number
 }
 
-const STORAGE_PREFIX = 'automerge:messages:'
+const STORAGE_PREFIX = 'yjs:messages:'
 const stateCache = new Map<string, MessageState>()
 const loadCache = new Map<string, Promise<MessageState>>()
 const mutexCache = new Map<string, Mutex>()
@@ -32,19 +32,19 @@ const clone = <T>(value: T): T => {
   return JSON.parse(JSON.stringify(value)) as T
 }
 
-const ensureDocShape = (doc: Automerge.Doc<MessageDoc>): Automerge.Doc<MessageDoc> => {
-  if ((doc as any).messages && (doc as any).order) {
-    return doc
+const ensureDocShape = (doc: Y.Doc): void => {
+  if (!doc.getMap('root').has('messages')) {
+    doc.getMap('root').set('messages', new Y.Map())
   }
-
-  return Automerge.change(doc, { time: Date.now() }, draft => {
-    draft.messages = {}
-    draft.order = []
-    draft.metadata = {
-      updatedAt: Date.now(),
-      version: 1,
-    }
-  })
+  if (!doc.getMap('root').has('order')) {
+    doc.getMap('root').set('order', new Y.Array())
+  }
+  if (!doc.getMap('root').has('metadata')) {
+    const metadata = new Y.Map()
+    metadata.set('updatedAt', Date.now())
+    metadata.set('version', 1)
+    doc.getMap('root').set('metadata', metadata)
+  }
 }
 
 const storageKey = (entityType: string, entityId: string) => `${STORAGE_PREFIX}${entityType}:${entityId}`
@@ -60,7 +60,7 @@ const toUint8Array = (data: unknown): Uint8Array | null => {
         return new Uint8Array(parsed)
       }
     } catch (error) {
-      logger.warn('Failed to decode string-backed automerge payload', { error })
+      logger.warn('Failed to decode string-backed Yjs payload', { error })
       return null
     }
   }
@@ -68,7 +68,9 @@ const toUint8Array = (data: unknown): Uint8Array | null => {
 }
 
 const materializeMessages = (state: MessageState): Message[] => {
-  const currentVersion = state.doc.metadata?.version ?? 0
+  const root = state.doc.getMap('root')
+  const metadata = root.get('metadata') as Y.Map<any> | undefined
+  const currentVersion = metadata?.get('version') ?? 0
 
   // Return cached if version unchanged (fast path)
   if (state.cachedMessages && state.cachedVersion === currentVersion) {
@@ -76,9 +78,15 @@ const materializeMessages = (state: MessageState): Message[] => {
   }
 
   // Expensive operation - only when document changes
-  const snapshot = Automerge.toJS(state.doc) as MessageDoc
-  const order = snapshot.order ?? []
-  const messages = snapshot.messages ?? {}
+  const messagesMap = root.get('messages') as Y.Map<any>
+  const orderArray = root.get('order') as Y.Array<string>
+
+  const messages: Record<string, Message> = {}
+  messagesMap?.forEach((value, key) => {
+    messages[key] = clone(value)
+  })
+
+  const order = orderArray?.toArray() ?? []
   const seen = new Set<string>()
   const ordered: Message[] = []
 
@@ -106,7 +114,7 @@ const materializeMessages = (state: MessageState): Message[] => {
 }
 
 const persistState = async (key: string, state: MessageState) => {
-  const binary = Automerge.save(state.doc)
+  const binary = Y.encodeStateAsUpdate(state.doc)
   await offlineStorage.store(key, Array.from(binary))
 }
 
@@ -121,13 +129,14 @@ const getState = async (entityType: string, entityId: string): Promise<MessageSt
 
   const promise = (async () => {
     const stored = await offlineStorage.get<number[] | Uint8Array | null>(key)
-    let doc: Automerge.Doc<MessageDoc>
+    const doc = new Y.Doc()
 
     if (stored) {
       const binary = toUint8Array(stored)
       if (binary && binary.length > 0) {
         try {
-          doc = ensureDocShape(Automerge.load<MessageDoc>(binary))
+          Y.applyUpdate(doc, binary)
+          ensureDocShape(doc)
         } catch (error) {
           // CRITICAL: Backup corrupted document before reset
           const backupKey = `${key}:corrupted:${Date.now()}`
@@ -135,7 +144,7 @@ const getState = async (entityType: string, entityId: string): Promise<MessageSt
             // Silently fail backup if storage unavailable
           })
 
-          logger.error('Automerge document corrupted, backed up', {
+          logger.error('Yjs document corrupted, backed up', {
             error,
             entityType,
             entityId,
@@ -151,21 +160,21 @@ const getState = async (entityType: string, entityId: string): Promise<MessageSt
             )
           }
 
-          // Attempt DHT recovery
-          const recovered = await recoverFromDHT(entityType, entityId)
+          // Attempt backend recovery
+          const recovered = await recoverFromBackend(entityType, entityId)
           if (recovered) {
-            logger.info('Successfully recovered from DHT', { entityType, entityId })
-            doc = recovered
+            logger.info('Successfully recovered from backend', { entityType, entityId })
+            Y.applyUpdate(doc, Y.encodeStateAsUpdate(recovered))
           } else {
-            logger.warn('DHT recovery failed, starting fresh', { entityType, entityId })
-            doc = ensureDocShape(Automerge.init<MessageDoc>())
+            logger.warn('Backend recovery failed, starting fresh', { entityType, entityId })
+            ensureDocShape(doc)
           }
         }
       } else {
-        doc = ensureDocShape(Automerge.init<MessageDoc>())
+        ensureDocShape(doc)
       }
     } else {
-      doc = ensureDocShape(Automerge.init<MessageDoc>())
+      ensureDocShape(doc)
     }
 
     const state: MessageState = {
@@ -183,32 +192,38 @@ const getState = async (entityType: string, entityId: string): Promise<MessageSt
 }
 
 /**
- * Attempt to recover messages from DHT when local Automerge document is corrupted
+ * Attempt to recover messages from backend when local Yjs document is corrupted
  */
-async function recoverFromDHT(
+async function recoverFromBackend(
   entityType: string,
   entityId: string,
-): Promise<Automerge.Doc<MessageDoc> | null> {
+): Promise<Y.Doc | null> {
   try {
-    logger.info('Attempting DHT recovery', { entityType, entityId })
+    logger.info('Attempting backend recovery', { entityType, entityId })
 
     const messages = await backendService.getMessages(entityType, entityId)
     if (messages.length === 0) {
-      logger.warn('No messages found in DHT for recovery', { entityType, entityId })
+      logger.warn('No messages found in backend for recovery', { entityType, entityId })
       return null
     }
 
-    // Create fresh Automerge document with recovered messages
-    let doc = ensureDocShape(Automerge.init<MessageDoc>())
-    doc = Automerge.change(doc, { time: Date.now() }, draft => {
+    // Create fresh Yjs document with recovered messages
+    const doc = new Y.Doc()
+    ensureDocShape(doc)
+
+    const root = doc.getMap('root')
+    const messagesMap = root.get('messages') as Y.Map<any>
+    const metadata = root.get('metadata') as Y.Map<any>
+
+    doc.transact(() => {
       messages.forEach(msg => {
-        draft.messages[msg.id] = clone(msg)
+        messagesMap.set(msg.id, clone(msg))
       })
-      draft.metadata.updatedAt = Date.now()
-      draft.metadata.version = 1
+      metadata.set('updatedAt', Date.now())
+      metadata.set('version', 1)
     })
 
-    logger.info('Successfully recovered messages from DHT', {
+    logger.info('Successfully recovered messages from backend', {
       entityType,
       entityId,
       messageCount: messages.length,
@@ -216,7 +231,7 @@ async function recoverFromDHT(
 
     return doc
   } catch (error) {
-    logger.error('DHT recovery failed', { error, entityType, entityId })
+    logger.error('Backend recovery failed', { error, entityType, entityId })
     return null
   }
 }
@@ -233,32 +248,40 @@ const getMutex = (key: string): Mutex => {
   return mutex
 }
 
-const applyMessages = async (entityType: string, entityId: string, updater: (draft: MessageDoc) => void): Promise<Message[]> => {
+const applyMessages = async (entityType: string, entityId: string, updater: (root: Y.Map<any>) => void): Promise<Message[]> => {
   const key = storageKey(entityType, entityId)
   const mutex = getMutex(key)
 
   return mutex.runExclusive(async () => {
     const state = await getState(entityType, entityId)
+    const root = state.doc.getMap('root')
 
-    state.doc = Automerge.change(state.doc, draft => {
-      if (!draft.metadata) {
-        draft.metadata = {
-          updatedAt: Date.now(),
-          version: 0,
-        }
+    state.doc.transact(() => {
+      const metadata = root.get('metadata') as Y.Map<any>
+      if (!metadata) {
+        const newMetadata = new Y.Map()
+        newMetadata.set('updatedAt', Date.now())
+        newMetadata.set('version', 0)
+        root.set('metadata', newMetadata)
       }
 
-      updater(draft)
-      draft.metadata.updatedAt = Date.now()
-      draft.metadata.version = (draft.metadata.version ?? 0) + 1
+      updater(root)
 
-      const sortedIds = Object.values(draft.messages)
-        .map(message => ({ id: message.id, timestamp: new Date(message.timestamp).getTime() }))
-        .sort((a, b) => a.timestamp - b.timestamp)
-        .map(entry => entry.id)
+      const metadataMap = root.get('metadata') as Y.Map<any>
+      metadataMap.set('updatedAt', Date.now())
+      metadataMap.set('version', (metadataMap.get('version') ?? 0) + 1)
 
-      draft.order.length = 0
-      sortedIds.forEach(id => draft.order.push(id))
+      // Update order array based on timestamp sorting
+      const messagesMap = root.get('messages') as Y.Map<any>
+      const sortedIds: string[] = []
+      messagesMap.forEach((message, id) => {
+        sortedIds.push({ id, timestamp: new Date(message.timestamp).getTime() } as any)
+      })
+      sortedIds.sort((a: any, b: any) => a.timestamp - b.timestamp)
+
+      const orderArray = root.get('order') as Y.Array<string>
+      orderArray.delete(0, orderArray.length)
+      sortedIds.forEach((entry: any) => orderArray.push([entry.id]))
     })
 
     await persistState(key, state)
@@ -276,9 +299,10 @@ export const mergeRemoteMessages = async (
   entityId: string,
   remoteMessages: Message[],
 ): Promise<Message[]> => {
-  return applyMessages(entityType, entityId, draft => {
+  return applyMessages(entityType, entityId, root => {
+    const messagesMap = root.get('messages') as Y.Map<any>
     for (const message of remoteMessages) {
-      draft.messages[message.id] = structuredClone(message)
+      messagesMap.set(message.id, structuredClone(message))
     }
   })
 }
@@ -288,8 +312,9 @@ export const upsertMessage = async (
   entityId: string,
   message: Message,
 ): Promise<void> => {
-  await applyMessages(entityType, entityId, draft => {
-    draft.messages[message.id] = clone(message)
+  await applyMessages(entityType, entityId, root => {
+    const messagesMap = root.get('messages') as Y.Map<any>
+    messagesMap.set(message.id, clone(message))
   })
 }
 
@@ -299,13 +324,14 @@ export const markMessageStatus = async (
   messageId: string,
   status: Message['status'],
 ): Promise<void> => {
-  await applyMessages(entityType, entityId, draft => {
-    const existing = draft.messages[messageId]
+  await applyMessages(entityType, entityId, root => {
+    const messagesMap = root.get('messages') as Y.Map<any>
+    const existing = messagesMap.get(messageId)
     if (existing) {
-      draft.messages[messageId] = {
+      messagesMap.set(messageId, {
         ...clone(existing),
         status,
-      }
+      })
     }
   })
 }
@@ -315,11 +341,16 @@ export const removeMessage = async (
   entityId: string,
   messageId: string,
 ): Promise<void> => {
-  await applyMessages(entityType, entityId, draft => {
-    delete draft.messages[messageId]
-    const index = draft.order.findIndex(id => id === messageId)
+  await applyMessages(entityType, entityId, root => {
+    const messagesMap = root.get('messages') as Y.Map<any>
+    const orderArray = root.get('order') as Y.Array<string>
+
+    messagesMap.delete(messageId)
+
+    const orderArr = orderArray.toArray()
+    const index = orderArr.findIndex(id => id === messageId)
     if (index >= 0) {
-      draft.order.splice(index, 1)
+      orderArray.delete(index, 1)
     }
   })
 }

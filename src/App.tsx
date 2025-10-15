@@ -1,5 +1,4 @@
-import React from 'react'
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Box } from '@mui/material'
 import { SnackbarProvider } from 'notistack'
 
@@ -27,7 +26,6 @@ import { isTauriApp } from './utils/tauri'
 
 // Inner component that has access to useLocation() from BrowserRouter
 function AppContent() {
-  const location = useLocation();
 
   // Check if running in Tauri or browser
   // Show full UI in development mode or when in Tauri

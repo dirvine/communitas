@@ -1,4 +1,4 @@
-import React from 'react'
+
 import { Box, Typography, Button } from '@mui/material'
 
 export default function AppSimple() {

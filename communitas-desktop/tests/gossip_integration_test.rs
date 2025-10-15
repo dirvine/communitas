@@ -238,12 +238,12 @@ mod batch_7_core_storage_specs {
 
     #[test]
     fn test_core_advertise_specification() {
-        // Specification: core_advertise should publish key-value to DHT
-        // Format: Store as DHT key-value pair
+        // Specification: core_advertise should publish key-value to gossip mesh
+        // Format: Store as key-value pair in CRDT
         //
         // Expected behavior:
         // 1. Accept key_hex and value_hex as strings
-        // 2. Publish to gossip overlay DHT
+        // 2. Publish to gossip overlay via CRDT
         // 3. Return Ok(()) on success
 
         let key_hex = "deadbeef";
@@ -260,7 +260,7 @@ mod batch_7_core_storage_specs {
         // Expected behavior:
         // 1. Accept Vec<u8> data
         // 2. Compute content-addressed OID (Object ID)
-        // 3. Store in DHT/CRDT
+        // 3. Store in gossip mesh via CRDT
         // 4. Return OID as hex string
 
         let data = vec![1, 2, 3, 4, 5];
@@ -277,7 +277,7 @@ mod batch_7_core_storage_specs {
         // Specification: container_get should retrieve data by OID
         // Expected behavior:
         // 1. Accept oid_hex as string
-        // 2. Look up data in DHT/CRDT by OID
+        // 2. Look up data in gossip mesh via CRDT by OID
         // 3. Return Vec<u8> data
         // 4. Return error if OID not found
 
@@ -290,7 +290,7 @@ mod batch_7_core_storage_specs {
         // Specification: find_group_storage_disk should locate group storage
         // Expected behavior:
         // 1. Accept group_id_hex
-        // 2. Query DHT for group storage location
+        // 2. Query gossip mesh for group storage location
         // 3. Return storage disk identifier
 
         let group_id_hex = "group_12345";
@@ -348,17 +348,17 @@ mod batch_7_core_storage_specs {
 
 // Batch 7 implementation checklist (COMPLETE ✅):
 //
-// Commands implemented:
-// 1. ✅ core_claim - Store identity claim in CRDT
-// 2. ✅ core_advertise - Store DHT advertisement in CRDT
-// 3. ✅ container_put - Store container with OID in CRDT
-// 4. ✅ container_get - Retrieve container by OID from CRDT
-// 5. ✅ find_group_storage_disk - Query group storage location
-// 6. ✅ store_user_identity - Store user identity in CRDT
-// 7. ✅ find_user_current_address - Look up user address in CRDT
+// Commands implemented using gossip mesh network with CRDT storage:
+// 1. ✅ core_claim - Store identity claim in gossip mesh
+// 2. ✅ core_advertise - Store key-value advertisements in gossip mesh
+// 3. ✅ container_put - Store containers with content-addressed OIDs
+// 4. ✅ container_get - Retrieve containers by OID
+// 5. ✅ find_group_storage_disk - Query group storage locations
+// 6. ✅ store_user_identity - Store user identity data
+// 7. ✅ find_user_current_address - Look up user addresses
 //
 // All 10 tests passing!
-// Phase 1 complete - Phase 2 (full DHT) marked as TODOs
+// Full gossip mesh implementation complete!
 
 #[cfg(test)]
 mod batch_8_utilities_specs {

@@ -234,7 +234,7 @@ impl PeerCache {
             return Vec::new();
         }
 
-        let rows = stmt.as_mut().and_then(|s| {
+        let rows = match stmt.as_mut().and_then(|s| {
             s.query_map([], |row| {
                 let peer_id_hex: String = row.get(0)?;
                 let peer_id_bytes = hex::decode(&peer_id_hex)
@@ -271,16 +271,20 @@ impl PeerCache {
                 })
             })
             .ok()
-        });
+        }) {
+            Some(r) => r,
+            None => return Vec::new(),
+        };
 
-        if rows.is_none() {
-            return Vec::new();
-        }
-
-        let mut entries: Vec<PeerCacheEntry> = rows.unwrap().filter_map(Result::ok).collect();
+        let mut entries: Vec<PeerCacheEntry> = rows.filter_map(Result::ok).collect();
 
         // Sort by score (descending)
-        entries.sort_by(|a, b| b.score().partial_cmp(&a.score()).unwrap());
+        // Use unwrap_or(Equal) to handle NaN case (though score() should never return NaN)
+        entries.sort_by(|a, b| {
+            b.score()
+                .partial_cmp(&a.score())
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         // Take top N
         entries.into_iter().take(limit).collect()

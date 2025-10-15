@@ -137,7 +137,9 @@ pub async fn core_group_add_member(
             }
             
             // Get the latest metadata message (parse after the prefix)
-            let latest_message = group_messages.last().unwrap();
+            let latest_message = group_messages
+                .last()
+                .ok_or_else(|| "Group has no messages".to_string())?;
             let msg_str = String::from_utf8(latest_message.to_vec())
                 .map_err(|e| format!("Failed to parse group message: {}", e))?;
             
@@ -243,7 +245,9 @@ pub async fn core_group_remove_member(
             }
             
             // Get the latest metadata message (parse after the prefix)
-            let latest_message = group_messages.last().unwrap();
+            let latest_message = group_messages
+                .last()
+                .ok_or_else(|| "Group has no messages".to_string())?;
             let msg_str = String::from_utf8(latest_message.to_vec())
                 .map_err(|e| format!("Failed to parse group message: {}", e))?;
             

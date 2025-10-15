@@ -107,8 +107,8 @@ impl CoordinatorClient {
 
         // Serialize advert for network transmission
         let mut advert_bytes = Vec::new();
-ciborium::ser::into_writer(&advert, &mut advert_bytes).map_err(|e| anyhow::anyhow!("CBOR encoding failed: {:?}", e))?;
-            .map_err(|e| anyhow::anyhow!("Failed to serialize advert: {}", e))?;
+        ciborium::ser::into_writer(&advert, &mut advert_bytes)
+            .map_err(|e| anyhow::anyhow!("CBOR encoding failed: {:?}", e))?;
 
         // Get active peers from membership layer
         let membership = self.membership.read().await;
@@ -207,8 +207,8 @@ ciborium::ser::into_writer(&advert, &mut advert_bytes).map_err(|e| anyhow::anyho
         // Create and serialize FIND_COORDINATOR query
         let query = FindCoordinatorQuery::new(self.peer_id.clone());
         let mut query_bytes = Vec::new();
-ciborium::ser::into_writer(&query, &mut query_bytes).map_err(|e| anyhow::anyhow!("CBOR encoding failed: {:?}", e))?;
-            .map_err(|e| anyhow::anyhow!("Failed to serialize query: {}", e))?;
+        ciborium::ser::into_writer(&query, &mut query_bytes)
+            .map_err(|e| anyhow::anyhow!("CBOR encoding failed: {:?}", e))?;
 
         // Send query to selected peers
         let transport = self.transport.read().await;
@@ -378,7 +378,7 @@ ciborium::ser::into_writer(&query, &mut query_bytes).map_err(|e| anyhow::anyhow!
                         }
 
                         // Try to deserialize as coordinator advert
-                        match ciborium::de::from_reader(&data[..]) {
+                        match ciborium::de::from_reader::<CoordinatorAdvert, _>(&data[..]) {
                             Ok(advert) => {
                                 // Deduplicate by coordinator peer
                                 let coord_peer = advert.peer.clone();

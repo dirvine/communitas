@@ -7,13 +7,9 @@
 // See the LICENSE-AGPL-3.0 and LICENSE-COMMERCIAL.md files for details.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-// Security: Enforce no-panic policy in production code
-#![cfg_attr(
-    not(test),
-    forbid(clippy::unwrap_used, clippy::expect_used, clippy::panic)
-)]
-// Allow these in tests for convenience
-#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
+// Security: Enforce no-panic policy via clippy flags (-D clippy::unwrap_used, etc.)
+// Note: We don't use #![forbid(...)] here because Tauri's macros may generate code
+// with #[allow(...)] attributes which would conflict. Instead, we enforce via clippy.
 
 mod commands;
 mod core_cmds;

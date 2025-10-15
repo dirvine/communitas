@@ -92,12 +92,15 @@ impl PortManager {
     /// true if port can be bound, false otherwise
     fn is_port_available(&self, port: u16) -> bool {
         // Try binding to IPv4 and IPv6
-        let ipv4_addr: SocketAddr = format!("0.0.0.0:{}", port)
-            .parse()
-            .expect("valid ipv4 address");
-        let ipv6_addr: SocketAddr = format!("[::]:{}", port)
-            .parse()
-            .expect("valid ipv6 address");
+        // Construct SocketAddr directly to avoid parsing and potential panics
+        let ipv4_addr = SocketAddr::new(
+            std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED),
+            port,
+        );
+        let ipv6_addr = SocketAddr::new(
+            std::net::IpAddr::V6(std::net::Ipv6Addr::UNSPECIFIED),
+            port,
+        );
 
         // Try IPv4 first
         match UdpSocket::bind(ipv4_addr) {

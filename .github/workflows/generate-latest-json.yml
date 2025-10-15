@@ -1,0 +1,108 @@
+name: Generate Latest JSON for Updater
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to generate latest.json for'
+        required: false
+
+jobs:
+  generate-latest-json:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Get version
+        id: get_version
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            VERSION=${GITHUB_REF#refs/tags/v}
+          elif [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION=${{ github.event.inputs.version }}
+          else
+            echo "No version specified"
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Generate latest.json
+        id: generate
+        env:
+          # Set signatures from secrets (will be empty string if not set)
+          DARWIN_X64_SIG: ${{ secrets.TAURI_UPDATER_SIGNATURE_MACOS_X64 }}
+          DARWIN_ARM64_SIG: ${{ secrets.TAURI_UPDATER_SIGNATURE_MACOS_ARM64 }}
+          LINUX_X64_SIG: ${{ secrets.TAURI_UPDATER_SIGNATURE_LINUX_X64 }}
+          WINDOWS_X64_SIG: ${{ secrets.TAURI_UPDATER_SIGNATURE_WINDOWS_X64 }}
+        run: |
+          # Create the latest.json file for Tauri updater
+          # Use bash parameter expansion to provide empty string defaults
+          cat > latest.json << EOF
+          {
+            "version": "${{ steps.get_version.outputs.VERSION }}",
+            "notes": "Auto-generated release notes for Communitas v${{ steps.get_version.outputs.VERSION }}",
+            "pub_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "platforms": {
+              "darwin-x86_64": {
+                "signature": "${DARWIN_X64_SIG:-}",
+                "url": "https://github.com/dirvine/communitas/releases/download/v${{ steps.get_version.outputs.VERSION }}/communitas_${{ steps.get_version.outputs.VERSION }}_x64.dmg"
+              },
+              "darwin-aarch64": {
+                "signature": "${DARWIN_ARM64_SIG:-}",
+                "url": "https://github.com/dirvine/communitas/releases/download/v${{ steps.get_version.outputs.VERSION }}/communitas_${{ steps.get_version.outputs.VERSION }}_aarch64.dmg"
+              },
+              "linux-x86_64": {
+                "signature": "${LINUX_X64_SIG:-}",
+                "url": "https://github.com/dirvine/communitas/releases/download/v${{ steps.get_version.outputs.VERSION }}/communitas_${{ steps.get_version.outputs.VERSION }}_amd64.AppImage"
+              },
+              "windows-x86_64": {
+                "signature": "${WINDOWS_X64_SIG:-}",
+                "url": "https://github.com/dirvine/communitas/releases/download/v${{ steps.get_version.outputs.VERSION }}/communitas_${{ steps.get_version.outputs.VERSION }}_x64_en-US.msi"
+              }
+            }
+          }
+          EOF
+
+          echo "Generated latest.json for version ${{ steps.get_version.outputs.VERSION }}"
+
+      - name: Upload latest.json to release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ./latest.json
+          asset_name: latest.json
+          asset_content_type: application/json
+
+      - name: Deploy latest.json to GitHub Pages
+        if: github.event_name == 'release'
+        run: |
+          mkdir -p public
+          cp latest.json public/
+          echo "Latest.json deployed to GitHub Pages (manual deployment required)"
+
+      - name: Create pull request for latest.json update
+        if: github.event_name == 'release'
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: update latest.json for v${{ steps.get_version.outputs.VERSION }}"
+          title: "Update latest.json for release v${{ steps.get_version.outputs.VERSION }}"
+          body: |
+            Auto-generated PR to update latest.json for Communitas release v${{ steps.get_version.outputs.VERSION }}
+
+            This PR updates the latest.json file used by the Tauri updater to point to the latest release artifacts.
+          branch: update-latest-json-${{ steps.get_version.outputs.VERSION }}
+          base: main
+          add-paths: |
+            latest.json
+          delete-branch: true

@@ -1,0 +1,235 @@
+# Communitas Production Network Configuration
+# This file contains production-ready network settings for real-world deployment
+
+[network]
+# Enable production networking
+enabled = true
+# Network identifier for this deployment
+network_id = "communitas-mainnet"
+# Protocol version for compatibility
+protocol_version = "1.0"
+
+[bootstrap]
+# Production bootstrap nodes for initial peer discovery
+# These should be stable, publicly accessible nodes
+nodes = [
+  # Primary bootstrap nodes (saorsa-operated)
+  "bootstrap-01.saorsalabs.com:8443",
+  "bootstrap-02.saorsalabs.com:8443",
+
+  # Community-operated bootstrap nodes
+  "bootstrap.community-01.communitas.network:8443",
+  "bootstrap.community-02.communitas.network:8443",
+]
+
+# Bootstrap node verification
+[bootstrap.verification]
+# Require TLS certificate validation
+require_tls = true
+# Expected certificate fingerprints (SHA-256)
+certificate_fingerprints = [
+  "sha256:primary_bootstrap_fingerprint_here",
+  "sha256:secondary_bootstrap_fingerprint_here",
+]
+
+[nat_traversal]
+# Enable STUN/TURN servers for NAT traversal
+enabled = true
+
+# STUN servers for public IP discovery
+stun_servers = [
+  "stun.l.google.com:19302",
+  "stun1.l.google.com:19302",
+  "stun2.l.google.com:19302",
+]
+
+# TURN servers for relay when direct connection fails
+# NOTE: Set TURN_USERNAME and TURN_CREDENTIAL environment variables before running
+turn_servers = [
+  {
+    urls = ["turn:turn.saorsalabs.com:3478"],
+    username = "$TURN_USERNAME",
+    credential = "$TURN_CREDENTIAL",
+  }
+]
+
+[transport]
+# QUIC transport configuration
+[transport.quic]
+# Enable 0-RTT for faster connections
+enable_0rtt = true
+# Connection timeout
+connection_timeout_seconds = 30
+# Keep-alive interval
+keep_alive_interval_seconds = 60
+# Maximum concurrent connections
+max_concurrent_connections = 50
+
+# TLS configuration
+[transport.tls]
+# Certificate validation level
+certificate_validation = "strict"
+# Enable TLS 1.3
+tls_version = "1.3"
+# Cipher suites (in preference order)
+cipher_suites = [
+  "TLS_AES_256_GCM_SHA384",
+  "TLS_AES_128_GCM_SHA256",
+  "TLS_CHACHA20_POLY1305_SHA256",
+]
+
+[discovery]
+# Peer discovery configuration
+[discovery.foaf]
+# Enable friend-of-a-friend discovery
+enabled = true
+# Maximum discovery depth
+max_depth = 3
+# Discovery timeout
+timeout_seconds = 10
+
+[discovery.dns]
+# DNS-based discovery (future feature)
+enabled = false
+# DNS domain for peer discovery
+domain = "peers.communitas.network"
+
+[gossip]
+# Gossip protocol configuration
+[gossip.hyparview]
+# Active view size (direct connections)
+active_view_size = 6
+# Passive view size (backup connections)
+passive_view_size = 30
+# Shuffle interval
+shuffle_interval_seconds = 60
+# Connection retry attempts
+max_retry_attempts = 3
+
+[gossip.plumtree]
+# Broadcast tree maintenance
+eager_push_peers = 3
+# Lazy push peers
+lazy_push_peers = 6
+# Message time-to-live
+message_ttl = 10
+# Duplicate message cache size
+duplicate_cache_size = 1000
+
+[presence]
+# Presence beacon configuration
+[presence.beacons]
+# Beacon broadcast interval
+broadcast_interval_seconds = 30
+# Presence timeout (when considered offline)
+timeout_seconds = 120
+# Include location data (optional)
+include_location = false
+
+[security]
+# Network security configuration
+[security.post_quantum]
+# Enable post-quantum key exchange
+enabled = true
+# Key rotation interval
+key_rotation_hours = 24
+
+[security.encryption]
+# End-to-end encryption requirements
+require_e2e_encryption = true
+# Minimum key strength
+min_key_strength_bits = 256
+
+[monitoring]
+# Network monitoring configuration
+[monitoring.metrics]
+# Enable network metrics collection
+enabled = true
+# Metrics reporting interval
+report_interval_seconds = 60
+# Export format
+export_format = "prometheus"
+
+[monitoring.health_checks]
+# Enable health checks
+enabled = true
+# Health check interval
+check_interval_seconds = 30
+# Peer health timeout
+peer_timeout_seconds = 10
+
+# Environment-specific overrides
+[environments.production]
+# Production-specific settings
+bootstrap.nodes = [
+  "bootstrap-prod-01.saorsalabs.com:8443",
+  "bootstrap-prod-02.saorsalabs.com:8443",
+]
+
+[environments.staging]
+# Staging environment settings
+bootstrap.nodes = [
+  "bootstrap-staging-01.saorsalabs.com:8443",
+]
+
+[environments.development]
+# Development environment settings
+bootstrap.nodes = [
+  "localhost:8443",
+]
+
+# Load balancing configuration
+[load_balancing]
+# Enable load balancing across bootstrap nodes
+enabled = true
+# Load balancing strategy
+strategy = "round_robin"  # round_robin, least_connections, geographic
+
+# Geographic regions for load balancing
+[load_balancing.regions]
+north_america = ["us-east", "us-west", "ca-central"]
+europe = ["eu-west", "eu-central"]
+asia = ["ap-southeast", "ap-northeast"]
+
+# Quality of Service settings
+[qos]
+# Enable QoS for different message types
+enabled = true
+
+[qos.priorities]
+# Message priority levels (higher = more important)
+presence_beacons = 1
+chat_messages = 5
+file_transfers = 3
+system_messages = 10
+
+# Rate limiting
+[rate_limiting]
+# Enable rate limiting
+enabled = true
+
+[rate_limiting.message_rates]
+# Messages per second per peer
+chat_messages_per_second = 10
+presence_updates_per_second = 2
+file_chunks_per_second = 50
+
+# Fault tolerance
+[fault_tolerance]
+# Enable automatic failover
+failover_enabled = true
+# Maximum consecutive failures before marking node as down
+max_consecutive_failures = 5
+# Recovery interval
+recovery_interval_seconds = 300
+
+# Logging configuration
+[logging]
+# Network logging level
+level = "info"
+# Enable structured logging
+structured = true
+# Log file rotation
+rotation = "daily"
+# Maximum log files to keep
+max_log_files = 30

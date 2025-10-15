@@ -100,6 +100,18 @@ pub async fn core_initialize(
     Ok(true)
 }
 
+// Batch 8: Utility commands
+
+#[cfg(feature = "gossip_overlay")]
+#[tauri::command]
+pub async fn core_get_peer_id(
+    gossip_state: State<'_, gossip_commands::GossipState>,
+) -> Result<String, String> {
+    // Get own identity from gossip overlay
+    gossip_commands::gossip_get_own_identity(gossip_state).await
+}
+
+#[cfg(not(feature = "gossip_overlay"))]
 #[tauri::command]
 pub async fn core_get_peer_id(
     _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
@@ -792,6 +804,21 @@ pub async fn core_entity_get_encryption_status(
     Ok(serde_json::json!({}))
 }
 
+// Entity management commands - Batch 6
+
+#[cfg(feature = "gossip_overlay")]
+#[tauri::command]
+pub async fn core_entity_update(
+    gossip_state: State<'_, gossip_commands::GossipState>,
+    entity_id: String,
+    updates: serde_json::Value,
+) -> Result<(), String> {
+    // Store entity update in CRDT with "entity_update:{id}:{json}" format
+    let update_message = format!("entity_update:{}:{}", entity_id, updates.to_string());
+    gossip_commands::gossip_store_message(gossip_state, update_message.as_bytes().to_vec()).await
+}
+
+#[cfg(not(feature = "gossip_overlay"))]
 #[tauri::command]
 pub async fn core_entity_update(
     _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
@@ -801,6 +828,18 @@ pub async fn core_entity_update(
     Err("Not yet implemented".to_string())
 }
 
+#[cfg(feature = "gossip_overlay")]
+#[tauri::command]
+pub async fn core_entity_delete(
+    gossip_state: State<'_, gossip_commands::GossipState>,
+    entity_id: String,
+) -> Result<(), String> {
+    // Store entity delete marker in CRDT with "entity_delete:{id}" format
+    let delete_marker = format!("entity_delete:{}", entity_id);
+    gossip_commands::gossip_store_message(gossip_state, delete_marker.as_bytes().to_vec()).await
+}
+
+#[cfg(not(feature = "gossip_overlay"))]
 #[tauri::command]
 pub async fn core_entity_delete(
     _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
@@ -809,6 +848,19 @@ pub async fn core_entity_delete(
     Err("Not yet implemented".to_string())
 }
 
+#[cfg(feature = "gossip_overlay")]
+#[tauri::command]
+pub async fn core_entity_mute(
+    gossip_state: State<'_, gossip_commands::GossipState>,
+    entity_id: String,
+    muted: bool,
+) -> Result<(), String> {
+    // Store entity mute state in CRDT with "entity_mute:{id}:{bool}" format
+    let mute_message = format!("entity_mute:{}:{}", entity_id, muted);
+    gossip_commands::gossip_store_message(gossip_state, mute_message.as_bytes().to_vec()).await
+}
+
+#[cfg(not(feature = "gossip_overlay"))]
 #[tauri::command]
 pub async fn core_entity_mute(
     _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
@@ -818,6 +870,19 @@ pub async fn core_entity_mute(
     Err("Not yet implemented".to_string())
 }
 
+#[cfg(feature = "gossip_overlay")]
+#[tauri::command]
+pub async fn core_entity_block(
+    gossip_state: State<'_, gossip_commands::GossipState>,
+    entity_id: String,
+    blocked: bool,
+) -> Result<(), String> {
+    // Store entity block state in CRDT with "entity_block:{id}:{bool}" format
+    let block_message = format!("entity_block:{}:{}", entity_id, blocked);
+    gossip_commands::gossip_store_message(gossip_state, block_message.as_bytes().to_vec()).await
+}
+
+#[cfg(not(feature = "gossip_overlay"))]
 #[tauri::command]
 pub async fn core_entity_block(
     _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,

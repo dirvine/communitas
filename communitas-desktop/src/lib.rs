@@ -15,7 +15,9 @@
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
 // Re-export modules that need to be accessible from integration tests
+pub mod core_commands;
 pub mod crdt_error;
 pub mod crdt_manager;
+pub mod gossip_commands;
 pub mod member_commands;
 pub mod member_manager;

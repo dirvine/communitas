@@ -200,8 +200,11 @@ fn default_config_with_storage(base_dir: PathBuf) -> Config {
     Config {
         identity: None,
         bootstrap_nodes: vec![
-            "ocean-forest-moon-star:443".to_string(),
-            "river-mountain-sun-cloud:443".to_string(),
+            // Digital Ocean NYC3 Bootstrap Nodes (v0.1.18 dual-stack)
+            // Droplet: 2064413, IPv4: 167.71.188.131, IPv6: 2604:a880:800:14:0:1:db7c:c000
+            "bless-lava-jeffrey-parking:443".to_string(),
+            // Droplet: communitas-bootstrap-1, IPv4: 138.197.29.195, IPv6: 2604:a880:800:14:0:1:db7c:b000
+            "bless-route-evaporate-lunch:443".to_string(),
         ],
         storage: StorageConfig {
             base_dir,
@@ -1618,5 +1621,34 @@ mod tests {
                 input, result, expected
             );
         }
+    }
+
+    #[test]
+    fn print_digital_ocean_bootstrap_addresses() {
+        use four_word_networking::FourWordAdaptiveEncoder;
+
+        // Convert Digital Ocean droplet IPs to four-word addresses
+        let bootstrap_nodes = vec![
+            ("167.71.188.131", 443),  // Droplet: 2064413
+            ("138.197.29.195", 443),  // Droplet: communitas-bootstrap-1
+        ];
+
+        println!("\n╔══════════════════════════════════════════════════════════╗");
+        println!("║  Digital Ocean Bootstrap Nodes (Four-Word Addresses)    ║");
+        println!("╠══════════════════════════════════════════════════════════╣");
+
+        let encoder = FourWordAdaptiveEncoder::new().expect("Failed to create encoder");
+
+        for (ip, port) in &bootstrap_nodes {
+            let address = format!("{}:{}", ip, port);
+            match encoder.encode(&address) {
+                Ok(four_word_addr) => {
+                    println!("║ {}:{} → {}", ip, port, four_word_addr);
+                }
+                Err(e) => eprintln!("║ ERROR encoding {}: {}", address, e),
+            }
+        }
+
+        println!("╚══════════════════════════════════════════════════════════╝\n");
     }
 }

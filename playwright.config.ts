@@ -1,65 +1,97 @@
 import { defineConfig, devices } from '@playwright/test';
 
 /**
- * Playwright configuration for Communitas UX testing
+ * Playwright configuration for Communitas Tauri App E2E testing
+ *
+ * Supports both web mode testing and native Tauri app testing:
+ * - Web mode: Test the React app in browsers (existing setup)
+ * - Tauri mode: Test the packaged native application
  */
 export default defineConfig({
-  testDir: './tests',
-  fullyParallel: true,
+  testDir: './tests/e2e',
+  fullyParallel: false, // Sequential for Tauri testing
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
-  reporter: 'html',
-  
+  retries: process.env.CI ? 2 : 1,
+  workers: process.env.CI ? 1 : 1, // Single worker for stability
+  reporter: process.env.CI ? 'github' : 'html',
+
   use: {
-    // Base URL for the dev server
-    baseURL: 'http://localhost:1420',
-    
+    // Base URL for web mode testing
+    baseURL: process.env.TAURI_MODE ? undefined : 'http://localhost:1420',
+
     // Collect trace when retrying the failed test
     trace: 'on-first-retry',
-    
+
     // Take screenshot on failure
     screenshot: 'only-on-failure',
-    
+
     // Video on failure
     video: 'retain-on-failure',
+
+    // Timeout settings for Tauri app
+    actionTimeout: 10000,
+    navigationTimeout: 30000,
   },
 
-  // Configure projects for different browsers
+  // Configure projects for different testing modes
   projects: [
+    // Web Mode Testing (existing React app in browsers)
     {
-      name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      name: 'web-chromium',
+      use: {
+        ...devices['Desktop Chrome'],
+        baseURL: 'http://localhost:1420'
+      },
+      testMatch: '**/web-mode/**/*.spec.ts',
     },
     {
-      name: 'firefox',
-      use: { ...devices['Desktop Firefox'] },
+      name: 'web-firefox',
+      use: {
+        ...devices['Desktop Firefox'],
+        baseURL: 'http://localhost:1420'
+      },
+      testMatch: '**/web-mode/**/*.spec.ts',
     },
     {
-      name: 'webkit',
-      use: { ...devices['Desktop Safari'] },
+      name: 'web-webkit',
+      use: {
+        ...devices['Desktop Safari'],
+        baseURL: 'http://localhost:1420'
+      },
+      testMatch: '**/web-mode/**/*.spec.ts',
     },
-    // Mobile viewports
+
+    // Native Tauri App Testing
     {
-      name: 'Mobile Chrome',
-      use: { ...devices['Pixel 5'] },
+      name: 'tauri-native',
+      use: {
+        // Custom Tauri configuration will be handled in test fixtures
+      },
+      testMatch: '**/tauri-mode/**/*.spec.ts',
     },
+
+    // Mobile web testing
     {
-      name: 'Mobile Safari',
-      use: { ...devices['iPhone 12'] },
-    },
-    // Tablet viewports
-    {
-      name: 'iPad',
-      use: { ...devices['iPad (gen 7)'] },
+      name: 'mobile-chrome',
+      use: {
+        ...devices['Pixel 5'],
+        baseURL: 'http://localhost:1420'
+      },
+      testMatch: '**/web-mode/**/*.spec.ts',
     },
   ],
 
-  // Run your local dev server before starting the tests
-  webServer: {
+  // Web server for web mode testing
+  webServer: process.env.TAURI_MODE ? undefined : {
     command: 'npm run dev:browser',
     url: 'http://localhost:1420',
     reuseExistingServer: !process.env.CI,
     timeout: 120 * 1000,
   },
+
+  // Global setup for Tauri testing
+  globalSetup: process.env.TAURI_MODE ? './tests/utils/tauri-setup.ts' : undefined,
+
+  // Test timeout for Tauri operations
+  timeout: 60000, // 60 seconds for Tauri app startup
 });

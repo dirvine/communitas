@@ -36,6 +36,9 @@ saorsa-gossip-pubsub = "0.1.6"
 saorsa-gossip-coordinator = "0.1.6"
 saorsa-gossip-rendezvous = "0.1.6"
 
+# Real-time multimedia (WebRTC over QUIC)
+saorsa-webrtc = "0.1.2"
+
 # Networking
 ant-quic = "0.8.17"
 four-word-networking = "2.6"

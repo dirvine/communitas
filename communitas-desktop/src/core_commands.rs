@@ -68,6 +68,7 @@ pub async fn core_recover_state(
 #[tauri::command]
 pub async fn core_initialize(
     shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+    webrtc_state: State<'_, super::webrtc_commands::WebRtcState>,
     four_words: String,
     display_name: String,
     device_name: Option<String>,
@@ -116,6 +117,22 @@ pub async fn core_initialize(
 
     let mut guard = shared.write().await;
     *guard = Some(ctx);
+
+    // Initialize WebRTC service with the gossip context
+    if let Some(core_ctx) = guard.as_ref() {
+        if let Some(gossip) = &core_ctx.gossip {
+            let webrtc_service = communitas_core::webrtc::service::CommunitasWebRtcService::new(gossip.clone())
+                .map_err(|e| format!("Failed to initialize WebRTC service: {}", e))?;
+
+            // Start the WebRTC service
+            webrtc_service.start().await
+                .map_err(|e| format!("Failed to start WebRTC service: {}", e))?;
+
+            // Store the WebRTC service in the state
+            webrtc_state.initialize(webrtc_service).await
+                .map_err(|e| format!("Failed to store WebRTC service: {}", e))?;
+        }
+    }
 
     Ok(true)
 }

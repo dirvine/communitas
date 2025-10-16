@@ -3,14 +3,13 @@ resolver = "2"
 members = [
     "communitas-core",
     "communitas-desktop",
-    # Temporarily excluded due to API mismatches - will fix in separate commit
-    # "communitas-headless",
-    # "communitas-bridge",
+    "communitas-headless",  # Re-enabled for dual-stack IPv4/IPv6 support
+    # "communitas-bridge",  # Still excluded
     "communitas-tui",
 ]
 
 [workspace.package]
-version = "0.1.17"
+version = "0.1.18"
 edition = "2024"
 authors = ["David Irvine <david.irvine@maidsafe.net>", "Saorsa Labs"]
 license = "GPL-3.0"

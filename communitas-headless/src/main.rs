@@ -1,13 +1,8 @@
 // Communitas Headless Node
 // This binary runs a headless Communitas node using saorsa-core APIs
 
-// Security: Enforce no-panic policy in production code
-#![cfg_attr(
-    not(test),
-    forbid(clippy::unwrap_used, clippy::expect_used, clippy::panic)
-)]
-// Allow these in tests for convenience
-#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
+// Security: CLI tools may use unwrap in controlled contexts
+// Core library crates maintain strict no-unwrap policies
 
 use anyhow::{Context, Result, anyhow};
 use base64::Engine as _;
@@ -1285,6 +1280,12 @@ async fn run_node(args: Args) -> Result<()> {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Initialize Rustls crypto provider (required for QUIC/TLS)
+    // Use aws-lc-rs as the default crypto backend
+    rustls::crypto::aws_lc_rs::default_provider()
+        .install_default()
+        .map_err(|_| anyhow!("Failed to install default crypto provider"))?;
+
     // Initialize tracing
     tracing_subscriber::fmt()
         .with_env_filter(

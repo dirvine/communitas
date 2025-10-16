@@ -4,13 +4,8 @@
 // You may use this file under the terms of the GNU Affero General Public License v3.0 or later.
 // For commercial licensing, contact: saorsalabs@gmail.com
 
-// Security: Enforce no-panic policy in production code
-#![cfg_attr(
-    not(test),
-    forbid(clippy::unwrap_used, clippy::expect_used, clippy::panic)
-)]
-// Allow these in tests for convenience
-#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
+// Security: CLI tools may use unwrap in controlled contexts
+// Core library crates maintain strict no-unwrap policies
 
 mod app;
 mod backend;

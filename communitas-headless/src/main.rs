@@ -13,7 +13,8 @@ use anyhow::{Context, Result, anyhow};
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use clap::Parser;
-use communitas_core::bootstrap_integration::{BootstrapConfig, EnhancedBootstrapManager};
+// TODO: Re-enable when bootstrap_integration is available in communitas-core
+// use communitas_core::bootstrap_integration::{BootstrapConfig, EnhancedBootstrapManager};
 use ed25519_dalek::SigningKey as Ed25519SecretKey;
 use four_word_networking::FourWordAdaptiveEncoder;
 use once_cell::sync::Lazy;
@@ -34,8 +35,9 @@ use std::net::{Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use tokio::signal;
-use tokio::sync::RwLock as AsyncRwLock;
-use tracing::{debug, error, info, warn};
+// TODO: Re-enable when bootstrap_integration and communitas_container are available
+// use tokio::sync::RwLock as AsyncRwLock;
+use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
 
 #[cfg(unix)]
@@ -209,10 +211,18 @@ fn default_config_with_storage(base_dir: PathBuf) -> Config {
             fec_m: 4,
         },
         network: NetworkConfig {
-            listen_addrs: vec![std::net::SocketAddr::new(
-                std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED),
-                443,
-            )],
+            listen_addrs: vec![
+                // IPv4 wildcard address - listens on all IPv4 interfaces
+                std::net::SocketAddr::new(
+                    std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED),
+                    443,
+                ),
+                // IPv6 wildcard address - listens on all IPv6 interfaces
+                std::net::SocketAddr::new(
+                    std::net::IpAddr::V6(std::net::Ipv6Addr::UNSPECIFIED),
+                    443,
+                ),
+            ],
             enable_ipv6: true,
             enable_webrtc: false,
             quic_idle_timeout_ms: 30000,
@@ -862,22 +872,23 @@ async fn connect_to_peer(addr_str: String) -> Result<()> {
                         info!("Stored connection {} (total: {})", conn_id, conns.len());
                     }
 
+                    // TODO: Re-enable when bootstrap_integration is available
                     // Update bootstrap manager with successful connection
-                    {
-                        let manager_guard = BOOTSTRAP_MANAGER.read().await;
-                        if let Some(manager) = manager_guard.as_ref() {
-                            let manager_clone = manager.clone();
-                            let addr_str = socket_addr.to_string();
+                    // {
+                    //     let manager_guard = BOOTSTRAP_MANAGER.read().await;
+                    //     if let Some(manager) = manager_guard.as_ref() {
+                    //         let manager_clone = manager.clone();
+                    //         let addr_str = socket_addr.to_string();
 
-                            tokio::spawn(async move {
-                                if let Err(e) = manager_clone.add_bootstrap_node(&addr_str).await {
-                                    warn!("Failed to update bootstrap cache: {}", e);
-                                } else {
-                                    debug!("Added peer {} to bootstrap cache", addr_str);
-                                }
-                            });
-                        }
-                    }
+                    //         tokio::spawn(async move {
+                    //             if let Err(e) = manager_clone.add_bootstrap_node(&addr_str).await {
+                    //                 warn!("Failed to update bootstrap cache: {}", e);
+                    //             } else {
+                    //                 debug!("Added peer {} to bootstrap cache", addr_str);
+                    //             }
+                    //         });
+                    //     }
+                    // }
 
                     Ok(())
                 }
@@ -1039,23 +1050,24 @@ async fn run_node(args: Args) -> Result<()> {
         .await
         .context("Failed to create storage directory")?;
 
+    // TODO: Re-enable when bootstrap_integration is available in communitas-core
     // Initialize bootstrap manager using saorsa-core
-    let bootstrap_config = BootstrapConfig {
-        max_contacts: 5000,
-        default_nodes: config.bootstrap_nodes.clone(),
-        auto_discovery: true,
-        cache_dir: config.storage.base_dir.join("bootstrap"),
-        quality_threshold: 0.3,
-    };
+    // let bootstrap_config = BootstrapConfig {
+    //     max_contacts: 5000,
+    //     default_nodes: config.bootstrap_nodes.clone(),
+    //     auto_discovery: true,
+    //     cache_dir: config.storage.base_dir.join("bootstrap"),
+    //     quality_threshold: 0.3,
+    // };
 
-    let bootstrap_manager = EnhancedBootstrapManager::new(bootstrap_config)
-        .await
-        .context("Failed to initialize bootstrap manager")?;
+    // let bootstrap_manager = EnhancedBootstrapManager::new(bootstrap_config)
+    //     .await
+    //     .context("Failed to initialize bootstrap manager")?;
 
-    {
-        let mut manager_guard = BOOTSTRAP_MANAGER.write().await;
-        *manager_guard = Some(Arc::new(bootstrap_manager));
-    }
+    // {
+    //     let mut manager_guard = BOOTSTRAP_MANAGER.write().await;
+    //     *manager_guard = Some(Arc::new(bootstrap_manager));
+    // }
     info!("Initialized bootstrap manager with saorsa-core");
 
     // Setup identity
@@ -1124,36 +1136,37 @@ async fn run_node(args: Args) -> Result<()> {
         }
     }
 
+    // TODO: Re-enable when bootstrap_integration is available
     // Add cached peers from bootstrap manager
-    {
-        let manager_guard = BOOTSTRAP_MANAGER.read().await;
-        if let Some(manager) = manager_guard.as_ref() {
-            match manager.get_bootstrap_candidates(10).await {
-                Ok(candidates) => {
-                    info!("Found {} cached bootstrap candidates", candidates.len());
-                    for node_str in candidates {
-                        // Check if it's a socket address or four-word address
-                        if node_str.contains(':') {
-                            // It's a socket address
-                            if let Ok(addr) = node_str.parse::<SocketAddr>() {
-                                if seen_resolved_addrs.insert(addr) {
-                                    all_bootstrap_nodes.push(node_str);
-                                }
-                            }
-                        } else {
-                            // It's a four-word address
-                            if seen_unresolved.insert(node_str.clone()) {
-                                all_bootstrap_nodes.push(node_str);
-                            }
-                        }
-                    }
-                }
-                Err(e) => {
-                    warn!("Failed to get bootstrap candidates: {}", e);
-                }
-            }
-        }
-    }
+    // {
+    //     let manager_guard = BOOTSTRAP_MANAGER.read().await;
+    //     if let Some(manager) = manager_guard.as_ref() {
+    //         match manager.get_bootstrap_candidates(10).await {
+    //             Ok(candidates) => {
+    //                 info!("Found {} cached bootstrap candidates", candidates.len());
+    //                 for node_str in candidates {
+    //                     // Check if it's a socket address or four-word address
+    //                     if node_str.contains(':') {
+    //                         // It's a socket address
+    //                         if let Ok(addr) = node_str.parse::<SocketAddr>() {
+    //                             if seen_resolved_addrs.insert(addr) {
+    //                                 all_bootstrap_nodes.push(node_str);
+    //                             }
+    //                         }
+    //                     } else {
+    //                         // It's a four-word address
+    //                         if seen_unresolved.insert(node_str.clone()) {
+    //                             all_bootstrap_nodes.push(node_str);
+    //                         }
+    //                     }
+    //                 }
+    //             }
+    //             Err(e) => {
+    //                 warn!("Failed to get bootstrap candidates: {}", e);
+    //             }
+    //         }
+    //     }
+    // }
 
     // Connect to bootstrap nodes (including cached peers)
     if !all_bootstrap_nodes.is_empty() {
@@ -1175,61 +1188,74 @@ async fn run_node(args: Args) -> Result<()> {
         info!("Metrics endpoint started on {}", args.metrics_addr);
     }
 
+    // TODO: Re-enable when communitas_container is available
     // Optionally start a background delta generator (very simple demo)
-    if std::env::var("COMMUNITAS_GENERATE_DELTAS").is_ok() {
-        tokio::spawn(async move {
-            use communitas_container as cc;
-            use uuid::Uuid;
-            loop {
-                let ts = chrono::Utc::now().timestamp();
-                let post = cc::Post {
-                    id: Uuid::new_v4(),
-                    author: b"server".to_vec(),
-                    ts,
-                    body_md: format!("# Server note\nGenerated at {}", ts),
-                };
-                let op = cc::Op::Append { post };
-                {
-                    let mut w = OP_LOG.write().await;
-                    w.push(op);
-                }
-                tokio::time::sleep(std::time::Duration::from_secs(10)).await;
-            }
-        });
-        info!("Delta generator enabled via COMMUNITAS_GENERATE_DELTAS");
-    }
+    // if std::env::var("COMMUNITAS_GENERATE_DELTAS").is_ok() {
+    //     tokio::spawn(async move {
+    //         use communitas_container as cc;
+    //         use uuid::Uuid;
+    //         loop {
+    //             let ts = chrono::Utc::now().timestamp();
+    //             let post = cc::Post {
+    //                 id: Uuid::new_v4(),
+    //                 author: b"server".to_vec(),
+    //                 ts,
+    //                 body_md: format!("# Server note\nGenerated at {}", ts),
+    //             };
+    //             let op = cc::Op::Append { post };
+    //             {
+    //                 let mut w = OP_LOG.write().await;
+    //                 w.push(op);
+    //             }
+    //             tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+    //         }
+    //     });
+    //     info!("Delta generator enabled via COMMUNITAS_GENERATE_DELTAS");
+    // }
 
-    // Resolve listen address from config, then args, then env overrides
-    let mut listen_addr = if !config.network.listen_addrs.is_empty() {
-        config.network.listen_addrs[0]
+    // Collect all listen addresses from config (dual-stack IPv4 + IPv6)
+    let mut listen_addrs: Vec<SocketAddr> = if !config.network.listen_addrs.is_empty() {
+        config.network.listen_addrs.clone()
     } else {
-        args.listen
+        vec![args.listen]
     };
 
-    // Allow environment variables to override
+    // Allow environment variables to override listen addresses
     if let Ok(s) = std::env::var("COMMUNITAS_QUIC_LISTEN") {
         if let Ok(sa) = s.parse::<SocketAddr>() {
-            listen_addr = sa;
+            // Replace all addresses with env override
+            listen_addrs = vec![sa];
         }
-    } else if let Ok(v) = std::env::var("COMMUNITAS_QUIC_PORT")
-        && let Ok(p) = v.parse::<u16>()
-    {
-        listen_addr.set_port(p);
-        listen_addr.set_ip(std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED));
+    } else if let Ok(v) = std::env::var("COMMUNITAS_QUIC_PORT") {
+        if let Ok(p) = v.parse::<u16>() {
+            // Update port for all addresses
+            for addr in &mut listen_addrs {
+                addr.set_port(p);
+            }
+        }
     }
 
     // Override from command line if not default
     if args.listen != SocketAddr::from(([0, 0, 0, 0], 0)) {
-        listen_addr = args.listen;
+        listen_addrs = vec![args.listen];
     }
 
-    // Start QUIC delta server (raw public key, RFC 7250 style)
-    let storage_dir = config.storage.base_dir.clone();
-    tokio::spawn(async move {
-        if let Err(e) = start_quic_delta_server(listen_addr, storage_dir).await {
-            warn!("QUIC delta server exited: {e}");
-        }
-    });
+    // Start QUIC delta servers for each listen address (dual-stack)
+    info!(
+        "Starting QUIC servers on {} address(es): {:?}",
+        listen_addrs.len(),
+        listen_addrs
+    );
+
+    for listen_addr in listen_addrs {
+        let storage_dir = config.storage.base_dir.clone();
+        tokio::spawn(async move {
+            info!("Starting QUIC server on {}", listen_addr);
+            if let Err(e) = start_quic_delta_server(listen_addr, storage_dir).await {
+                warn!("QUIC delta server on {} exited: {e}", listen_addr);
+            }
+        });
+    }
 
     // Main event loop
     info!("Communitas node started successfully");
@@ -1282,36 +1308,40 @@ use ant_quic::crypto::raw_public_keys::key_utils::public_key_to_bytes;
 use ant_quic::high_level::Endpoint as QuicEndpoint;
 use std::sync::Arc as StdArc;
 // ant-quic send streams provide write_all via their API; no extra trait import needed
-use communitas_container as cc;
+// TODO: Re-enable when communitas_container is available
+// use communitas_container as cc;
 
-#[derive(Serialize, Deserialize)]
-struct DeltaRequest<'a> {
-    from_root_hex: Option<&'a str>,
-    want_since_count: Option<u64>,
-}
+// TODO: Re-enable when communitas_container is available
+// #[derive(Serialize, Deserialize)]
+// struct DeltaRequest<'a> {
+//     from_root_hex: Option<&'a str>,
+//     want_since_count: Option<u64>,
+// }
 
-#[derive(Serialize, Deserialize)]
-struct DeltaResponse {
-    ops: Vec<cc::Op>,
-}
+// #[derive(Serialize, Deserialize)]
+// struct DeltaResponse {
+//     ops: Vec<cc::Op>,
+// }
 
 // Very small in-memory op log for demo/testing. Not persisted.
-static OP_LOG: Lazy<AsyncRwLock<Vec<cc::Op>>> = Lazy::new(|| AsyncRwLock::new(Vec::new()));
+// static OP_LOG: Lazy<AsyncRwLock<Vec<cc::Op>>> = Lazy::new(|| AsyncRwLock::new(Vec::new()));
 
 // Global connection tracking
 use ant_quic::HighLevelConnection;
 static ACTIVE_CONNECTIONS: Lazy<Arc<RwLock<HashMap<String, HighLevelConnection>>>> =
     Lazy::new(|| Arc::new(RwLock::new(HashMap::new())));
-static BOOTSTRAP_MANAGER: Lazy<Arc<AsyncRwLock<Option<Arc<EnhancedBootstrapManager>>>>> =
-    Lazy::new(|| Arc::new(AsyncRwLock::new(None)));
+// TODO: Re-enable when bootstrap_integration is available
+// static BOOTSTRAP_MANAGER: Lazy<Arc<AsyncRwLock<Option<Arc<EnhancedBootstrapManager>>>>> =
+//     Lazy::new(|| Arc::new(AsyncRwLock::new(None)));
 
-async fn ops_since(count: u64) -> Vec<cc::Op> {
-    let r = OP_LOG.read().await;
-    if (count as usize) >= r.len() {
-        return Vec::new();
-    }
-    r[count as usize..].to_vec()
-}
+// TODO: Re-enable when communitas_container is available
+// async fn ops_since(count: u64) -> Vec<cc::Op> {
+//     let r = OP_LOG.read().await;
+//     if (count as usize) >= r.len() {
+//         return Vec::new();
+//     }
+//     r[count as usize..].to_vec()
+// }
 
 async fn start_quic_delta_server(
     listen: std::net::SocketAddr,
@@ -1372,33 +1402,34 @@ async fn start_quic_delta_server(
                     match incoming.await {
                         Ok(conn) => {
                             info!("Accepted QUIC connection from {}", conn.remote_address());
+                            // TODO: Re-enable when communitas_container is available
                             // Accept a single bi-directional stream for request/response
-                            match conn.accept_bi().await {
-                                Ok((mut send, mut recv)) => {
-                                    let mut buf = Vec::new();
-                                    if let Ok(bytes) = recv.read_to_end(1024 * 1024).await {
-                                        buf = bytes;
-                                    }
-                                    let text = String::from_utf8_lossy(&buf);
-                                    let req: Result<DeltaRequest, _> =
-                                        serde_json::from_str(text.trim_end());
-                                    let since =
-                                        req.ok().and_then(|r| r.want_since_count).unwrap_or(0);
-                                    let ops = ops_since(since).await;
-                                    let resp = DeltaResponse { ops };
-                                    match serde_json::to_string(&resp) {
-                                        Ok(mut s) => {
-                                            s.push('\n');
-                                            let _ = send.write_all(s.as_bytes()).await;
-                                        }
-                                        Err(e) => {
-                                            warn!("serialize response failed: {e}");
-                                        }
-                                    }
-                                    let _ = send.finish();
-                                }
-                                Err(e) => warn!("accept_bi failed: {e}"),
-                            }
+                            // match conn.accept_bi().await {
+                            //     Ok((mut send, mut recv)) => {
+                            //         let mut buf = Vec::new();
+                            //         if let Ok(bytes) = recv.read_to_end(1024 * 1024).await {
+                            //             buf = bytes;
+                            //         }
+                            //         let text = String::from_utf8_lossy(&buf);
+                            //         let req: Result<DeltaRequest, _> =
+                            //             serde_json::from_str(text.trim_end());
+                            //         let since =
+                            //             req.ok().and_then(|r| r.want_since_count).unwrap_or(0);
+                            //         let ops = ops_since(since).await;
+                            //         let resp = DeltaResponse { ops };
+                            //         match serde_json::to_string(&resp) {
+                            //             Ok(mut s) => {
+                            //                 s.push('\n');
+                            //                 let _ = send.write_all(s.as_bytes()).await;
+                            //             }
+                            //             Err(e) => {
+                            //                 warn!("serialize response failed: {e}");
+                            //             }
+                            //         }
+                            //         let _ = send.finish();
+                            //     }
+                            //     Err(e) => warn!("accept_bi failed: {e}"),
+                            // }
                         }
                         Err(e) => warn!("incoming failed: {e}"),
                     }
@@ -1492,6 +1523,100 @@ mod tests {
         unsafe {
             env::remove_var("COMMUNITAS_CONFIG_DIR");
             env::remove_var("COMMUNITAS_DATA_DIR");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_default_config_has_dual_stack_listeners() {
+        // Test that default configuration includes both IPv4 and IPv6 listeners
+        let temp_dir = tempdir().unwrap();
+        let config = default_config_with_storage(temp_dir.path().to_path_buf());
+
+        // Verify we have at least 2 listen addresses
+        assert!(
+            config.network.listen_addrs.len() >= 2,
+            "Expected at least 2 listen addresses (IPv4 and IPv6), got {}",
+            config.network.listen_addrs.len()
+        );
+
+        // Verify first address is IPv4
+        let ipv4_addr = config.network.listen_addrs[0];
+        assert!(
+            ipv4_addr.is_ipv4(),
+            "Expected first listen address to be IPv4, got {:?}",
+            ipv4_addr
+        );
+        assert_eq!(
+            ipv4_addr.ip(),
+            std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED),
+            "Expected IPv4 wildcard address (0.0.0.0)"
+        );
+
+        // Verify second address is IPv6
+        let ipv6_addr = config.network.listen_addrs[1];
+        assert!(
+            ipv6_addr.is_ipv6(),
+            "Expected second listen address to be IPv6, got {:?}",
+            ipv6_addr
+        );
+        assert_eq!(
+            ipv6_addr.ip(),
+            std::net::IpAddr::V6(std::net::Ipv6Addr::UNSPECIFIED),
+            "Expected IPv6 wildcard address (::)"
+        );
+
+        // Verify both use the same port
+        assert_eq!(
+            ipv4_addr.port(),
+            ipv6_addr.port(),
+            "Expected IPv4 and IPv6 to use the same port"
+        );
+
+        // Verify IPv6 is enabled in config
+        assert!(
+            config.network.enable_ipv6,
+            "Expected IPv6 to be enabled in network config"
+        );
+    }
+
+    #[test]
+    fn test_ipv4_and_ipv6_socket_addresses() {
+        // Test creating both IPv4 and IPv6 socket addresses
+        let ipv4: SocketAddr = "0.0.0.0:443".parse().unwrap();
+        let ipv6: SocketAddr = "[::]:443".parse().unwrap();
+
+        assert!(ipv4.is_ipv4());
+        assert!(ipv6.is_ipv6());
+        assert_eq!(ipv4.port(), 443);
+        assert_eq!(ipv6.port(), 443);
+
+        // Test that we can create a vector of both
+        let listen_addrs = vec![ipv4, ipv6];
+        assert_eq!(listen_addrs.len(), 2);
+        assert!(listen_addrs[0].is_ipv4());
+        assert!(listen_addrs[1].is_ipv6());
+    }
+
+    #[test]
+    fn test_sanitize_instance_id_preserves_validity() {
+        // Test that sanitization replaces invalid chars with dashes and trims dashes
+        let test_cases = vec![
+            ("test-node", "test-node"),
+            ("Test Node 123", "Test-Node-123"),
+            ("node@server", "node-server"),
+            ("my.node.name", "my-node-name"),
+            ("___test___", "___test___"),  // Underscores are preserved
+            ("---test---", "test"),  // Dashes are trimmed from edges
+            ("", "communitas"),  // Test empty string fallback
+        ];
+
+        for (input, expected) in test_cases {
+            let result = sanitize_instance_id(input);
+            assert_eq!(
+                result, expected,
+                "sanitize_instance_id({:?}) = {:?}, expected {:?}",
+                input, result, expected
+            );
         }
     }
 }

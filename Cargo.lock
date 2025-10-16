@@ -1315,6 +1315,7 @@ dependencies = [
  "saorsa-gossip-transport",
  "saorsa-gossip-types",
  "saorsa-pqc",
+ "saorsa-webrtc",
  "secrecy",
  "serde",
  "serde_bytes",
@@ -6951,6 +6952,48 @@ dependencies = [
  "tokio",
  "tracing",
  "vrf-r255",
+ "zeroize",
+]
+
+[[package]]
+name = "saorsa-webrtc"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "46eb1db7fde1bfef176f1fcc5e284a75f9b05b6332600637c1578285169ea3e5"
+dependencies = [
+ "ant-quic 0.10.3",
+ "anyhow",
+ "async-trait",
+ "base64 0.21.7",
+ "bincode 1.3.3",
+ "blake3",
+ "bytes",
+ "chacha20poly1305",
+ "chrono",
+ "four-word-networking",
+ "futures",
+ "interceptor",
+ "once_cell",
+ "parking_lot",
+ "rand 0.8.5",
+ "rtcp",
+ "rtp",
+ "saorsa-pqc",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-stream",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+ "webrtc",
+ "webrtc-data",
+ "webrtc-dtls",
+ "webrtc-ice",
+ "webrtc-media",
+ "webrtc-sctp",
+ "webrtc-srtp",
  "zeroize",
 ]
 

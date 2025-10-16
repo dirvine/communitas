@@ -15,6 +15,8 @@ export default defineConfig({
   resolve: {
     alias: {
       '@tauri-apps/api/core': '/src/test-mocks/tauri_core_mock.ts',
+      '@tauri-apps/api/tauri': '/src/test-mocks/tauri_api_tauri.ts',
+      '@tauri-apps/api/event': '/src/test-mocks/tauri_api_event.ts',
       'monaco-editor': '/src/test-mocks/monaco.ts',
     },
   },

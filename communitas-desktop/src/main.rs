@@ -30,6 +30,7 @@ mod services;
 mod storage_fs;
 mod sync;
 mod update_manager;
+mod webrtc_commands;
 
 use commands::{auth::AppState, org_commands::OrgState};
 use communitas_core::CoreContext;
@@ -104,6 +105,9 @@ async fn main() -> anyhow::Result<()> {
     // Initialize update settings state (will be loaded in setup)
     let settings_state = Arc::new(RwLock::new(update_manager::UpdateSettings::default()));
 
+    // Initialize WebRTC state
+    let webrtc_state = webrtc_commands::WebRtcState::new();
+
     let builder = tauri::Builder::default()
         // Auth and encrypted storage state
         .manage(app_state)
@@ -115,6 +119,8 @@ async fn main() -> anyhow::Result<()> {
         .manage(update_state.clone())
         // Update settings state
         .manage(settings_state.clone())
+        // WebRTC state
+        .manage(webrtc_state)
         // Shared saorsa-core context (initialized via core_initialize)
         .manage(Arc::new(RwLock::new(Option::<CoreContext>::None)))
 
@@ -324,6 +330,17 @@ async fn main() -> anyhow::Result<()> {
             gossip_commands::gossip_store_peer_metadata,
             gossip_commands::gossip_get_own_metadata,
             gossip_commands::gossip_store_own_metadata,
+            // WebRTC commands
+            webrtc_commands::webrtc_initiate_call,
+            webrtc_commands::webrtc_accept_call,
+            webrtc_commands::webrtc_reject_call,
+            webrtc_commands::webrtc_end_call,
+            webrtc_commands::webrtc_set_video_enabled,
+            webrtc_commands::webrtc_set_audio_enabled,
+            webrtc_commands::webrtc_start_screen_share,
+            webrtc_commands::webrtc_stop_screen_share,
+            webrtc_commands::webrtc_get_media_devices,
+            webrtc_commands::webrtc_subscribe_events,
             health,
             get_app_version,
             // Organization commands - Channels

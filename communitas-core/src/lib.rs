@@ -48,6 +48,9 @@ pub mod types;
 // Gossip overlay system (now default, no longer feature-gated)
 pub mod gossip;
 
+// WebRTC real-time multimedia (voice, video, screen sharing)
+pub mod webrtc;
+
 // Re-export commonly used types
 pub use auth_service::{AuthService, SessionInfo};
 pub use core_context::CoreContext;

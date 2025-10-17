@@ -1515,9 +1515,12 @@ async fn start_quic_delta_server(
     info!("QUIC server raw key (hex): {}", hex::encode(pk_bytes));
 
     // Build rustls server config with raw public key resolver
+    // IMPORTANT: For bootstrap nodes, accept connections from any client (trust-on-first-use)
+    // This allows bootstrap nodes to be publicly accessible without pre-shared keys
     let rustls_srv = RawPublicKeyConfigBuilder::new()
         .with_server_key(sk)
         .enable_certificate_type_extensions()
+        .allow_any_key()  // Accept connections from any client
         .build_server_config()
         .map_err(|e| anyhow::anyhow!("raw pk server config: {e}"))?;
 

@@ -13,13 +13,9 @@ protocol_version = "1.0"
 # Production bootstrap nodes for initial peer discovery
 # These should be stable, publicly accessible nodes
 nodes = [
-  # Primary bootstrap nodes (saorsa-operated)
-  "bootstrap-01.saorsalabs.com:8443",
-  "bootstrap-02.saorsalabs.com:8443",
-
-  # Community-operated bootstrap nodes
-  "bootstrap.community-01.communitas.network:8443",
-  "bootstrap.community-02.communitas.network:8443",
+  # Primary bootstrap nodes (DigitalOcean droplets - dual-stack IPv4/IPv6)
+  "bless-lava-jeffrey-parking:443",      # 167.71.188.131 - Droplet 1
+  "bless-route-evaporate-lunch:443",     # 138.197.29.195 - Droplet 2
 ]
 
 # Bootstrap node verification
@@ -162,8 +158,8 @@ peer_timeout_seconds = 10
 [environments.production]
 # Production-specific settings
 bootstrap.nodes = [
-  "bootstrap-prod-01.saorsalabs.com:8443",
-  "bootstrap-prod-02.saorsalabs.com:8443",
+  "bless-lava-jeffrey-parking:443",      # 167.71.188.131 - Droplet 1
+  "bless-route-evaporate-lunch:443",     # 138.197.29.195 - Droplet 2
 ]
 
 [environments.staging]

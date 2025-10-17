@@ -50,16 +50,26 @@ export COMMUNITAS_ENV="production"  # or "staging", "development"
 
 **Security Model**: Bootstrap nodes use trust-on-first-use (TOFU) authentication, which is secure because the nodes are effectively authenticated by being included in the signed application's peer cache. See [Bootstrap Node Authentication](../docs/architecture/security.md#bootstrap-node-authentication) for details.
 
+**Port Selection**: Bootstrap nodes use random high ports (>1024) for security and to avoid requiring admin privileges. The OS assigns a random available port, and the four-word address includes the actual port. This makes it harder to filter or block by port range.
+
 Production bootstrap nodes are configured in `config/production-network.toml`:
 
 ```toml
 [bootstrap]
 # Four-word addresses of production bootstrap nodes
 # These are authenticated via application code signing
+# Ports are randomly assigned by the OS (shown in node logs)
 nodes = [
-    "bless-lava-jeffrey-parking:443",    # 167.71.188.131:443
-    "bless-route-evaporate-lunch:443",   # 138.197.29.195:443
+    "bless-lava-jeffrey-parking:54321",    # 167.71.188.131 (example random port)
+    "bless-route-evaporate-lunch:43210",   # 138.197.29.195 (example random port)
 ]
+```
+
+**Important**: The actual port numbers will be different each time the nodes restart. Check the node logs for the actual four-word address:
+```bash
+# Example log output:
+# INFO QUIC delta server listening on 0.0.0.0:0 (actual bound address: 0.0.0.0:54321)
+# INFO Four-word address: bless-lava-jeffrey-parking:54321
 ```
 
 **Important**: After bootstrapping, all peer-to-peer connections use full ML-DSA cryptographic authentication. Bootstrap nodes only facilitate initial peer discovery and cannot:

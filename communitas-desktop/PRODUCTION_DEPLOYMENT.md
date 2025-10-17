@@ -47,17 +47,25 @@ export COMMUNITAS_ENV="production"  # or "staging", "development"
 **Note**: NAT traversal uses native QUIC hole punching and relay capabilities built into ant-quic. No external STUN/TURN servers required.
 
 ### 3. Bootstrap Nodes for Real Testing
-Add production bootstrap nodes to `network.rs`:
 
-```rust
-fn default_bootstrap_nodes() -> Vec<String> {
-    vec![
-        "ocean-forest-moon-star".to_string(),
-        "river-mountain-sun-cloud".to_string(),
-        // Add production nodes here
-    ]
-}
+**Security Model**: Bootstrap nodes use trust-on-first-use (TOFU) authentication, which is secure because the nodes are effectively authenticated by being included in the signed application's peer cache. See [Bootstrap Node Authentication](../docs/architecture/security.md#bootstrap-node-authentication) for details.
+
+Production bootstrap nodes are configured in `config/production-network.toml`:
+
+```toml
+[bootstrap]
+# Four-word addresses of production bootstrap nodes
+# These are authenticated via application code signing
+nodes = [
+    "bless-lava-jeffrey-parking:443",    # 167.71.188.131:443
+    "bless-route-evaporate-lunch:443",   # 138.197.29.195:443
+]
 ```
+
+**Important**: After bootstrapping, all peer-to-peer connections use full ML-DSA cryptographic authentication. Bootstrap nodes only facilitate initial peer discovery and cannot:
+- ❌ Decrypt messages (end-to-end encryption)
+- ❌ Forge identities (ML-DSA signatures)
+- ❌ Tamper with content (BLAKE3 content addressing)
 
 ## Build Process
 

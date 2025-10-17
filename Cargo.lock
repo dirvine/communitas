@@ -1362,6 +1362,7 @@ dependencies = [
  "ed25519-dalek",
  "four-word-networking",
  "hex",
+ "local-ip-address",
  "once_cell",
  "rand 0.8.5",
  "reqwest",

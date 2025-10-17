@@ -10,11 +10,15 @@ use yrs::{Map, Transact};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Project {
     pub id: String,
+    pub four_word_identity: String,
     pub org_id: String,
     pub name: String,
     pub description: Option<String>,
     pub icon: Option<String>,
     pub color: Option<String>,
+    pub private_disk_id: String,
+    pub public_disk_id: String,
+    pub website_root: Option<String>,
     pub created_at: i64,
     pub created_by: String,
 }
@@ -128,22 +132,33 @@ impl IssueService {
         let id = Uuid::new_v4().to_string();
         let now = Utc::now().timestamp();
 
+        // Generate four-word identity for this project
+        let four_word_identity = Self::generate_four_word_identity()?;
+
+        // Generate disk IDs
+        let private_disk_id = format!("disk:private:{}", Uuid::new_v4());
+        let public_disk_id = format!("disk:public:{}", Uuid::new_v4());
+
         let db = self.crdt.connection()?;
         db.execute(
-            "INSERT INTO projects (id, org_id, name, description, icon, color, created_at, created_by)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            params![id.clone(), org_id, name, description.clone(), icon.clone(), color.clone(), now, created_by],
+            "INSERT INTO projects (id, four_word_identity, org_id, name, description, icon, color, private_disk_id, public_disk_id, created_at, created_by)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            params![id.clone(), four_word_identity.clone(), org_id, name, description.clone(), icon.clone(), color.clone(), private_disk_id.clone(), public_disk_id.clone(), now, created_by],
         )
         .await
         .context("Failed to create project")?;
 
         Ok(Project {
             id,
+            four_word_identity,
             org_id: org_id.to_string(),
             name: name.to_string(),
             description,
             icon,
             color,
+            private_disk_id,
+            public_disk_id,
+            website_root: None,
             created_at: now,
             created_by: created_by.to_string(),
         })
@@ -154,7 +169,7 @@ impl IssueService {
         let db = self.crdt.connection()?;
         let mut rows = db
             .query(
-                "SELECT id, org_id, name, description, icon, color, created_at, created_by
+                "SELECT id, four_word_identity, org_id, name, description, icon, color, private_disk_id, public_disk_id, website_root, created_at, created_by
                  FROM projects WHERE id = ?",
                 params![project_id],
             )
@@ -163,13 +178,17 @@ impl IssueService {
         if let Some(row) = rows.next().await? {
             Ok(Some(Project {
                 id: row.get(0)?,
-                org_id: row.get(1)?,
-                name: row.get(2)?,
-                description: row.get(3)?,
-                icon: row.get(4)?,
-                color: row.get(5)?,
-                created_at: row.get(6)?,
-                created_by: row.get(7)?,
+                four_word_identity: row.get(1)?,
+                org_id: row.get(2)?,
+                name: row.get(3)?,
+                description: row.get(4)?,
+                icon: row.get(5)?,
+                color: row.get(6)?,
+                private_disk_id: row.get(7)?,
+                public_disk_id: row.get(8)?,
+                website_root: row.get(9)?,
+                created_at: row.get(10)?,
+                created_by: row.get(11)?,
             }))
         } else {
             Ok(None)
@@ -181,7 +200,7 @@ impl IssueService {
         let db = self.crdt.connection()?;
         let mut rows = db
             .query(
-                "SELECT id, org_id, name, description, icon, color, created_at, created_by
+                "SELECT id, four_word_identity, org_id, name, description, icon, color, private_disk_id, public_disk_id, website_root, created_at, created_by
                  FROM projects WHERE org_id = ? ORDER BY created_at DESC",
                 params![org_id],
             )
@@ -191,13 +210,17 @@ impl IssueService {
         while let Some(row) = rows.next().await? {
             projects.push(Project {
                 id: row.get(0)?,
-                org_id: row.get(1)?,
-                name: row.get(2)?,
-                description: row.get(3)?,
-                icon: row.get(4)?,
-                color: row.get(5)?,
-                created_at: row.get(6)?,
-                created_by: row.get(7)?,
+                four_word_identity: row.get(1)?,
+                org_id: row.get(2)?,
+                name: row.get(3)?,
+                description: row.get(4)?,
+                icon: row.get(5)?,
+                color: row.get(6)?,
+                private_disk_id: row.get(7)?,
+                public_disk_id: row.get(8)?,
+                website_root: row.get(9)?,
+                created_at: row.get(10)?,
+                created_by: row.get(11)?,
             });
         }
 
@@ -530,6 +553,31 @@ impl IssueService {
             .merge_update(&doc_id, "issue", issue_id, update)
             .await?;
         Ok(())
+    }
+
+    /// Set website root for DNS-free publishing
+    pub async fn set_project_website_root(&self, project_id: &str, website_root: &str) -> Result<()> {
+        let db = self.crdt.connection()?;
+        db.execute(
+            "UPDATE projects SET website_root = ? WHERE id = ?",
+            params![website_root, project_id],
+        )
+        .await
+        .context("Failed to set project website root")?;
+        Ok(())
+    }
+
+    /// Generate a four-word identity from UUID
+    fn generate_four_word_identity() -> Result<String> {
+        // TODO: Integrate with four-word-networking crate properly
+        // For now, generate a placeholder four-word identifier from UUID
+        let uuid = Uuid::new_v4();
+        let uuid_str = uuid.to_string().replace('-', "");
+        let word1 = &uuid_str[0..8];
+        let word2 = &uuid_str[8..16];
+        let word3 = &uuid_str[16..24];
+        let word4 = &uuid_str[24..32];
+        Ok(format!("{}-{}-{}-{}", word1, word2, word3, word4))
     }
 }
 

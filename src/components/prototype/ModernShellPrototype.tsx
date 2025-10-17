@@ -76,7 +76,7 @@ import {
   Message,
   AddCircleOutline,
   PersonAdd,
-  Group,
+  Group as GroupIcon,
   Folder,
   Business,
   Logout,
@@ -86,8 +86,10 @@ import { styled } from '@mui/material/styles'
 import {
   AddContactDialog,
   EditContactDialog,
+  EditGroupDialog,
   DeleteContactDialog,
   type Contact,
+  type Group,
 } from './ContactManagementDialogs'
 import {
   EntityCreationDialog,
@@ -160,6 +162,9 @@ type Conversation = {
     integrations?: string[]
   }
   scope?: 'organization' | 'personal'
+  // Group-specific fields
+  members?: string[] // User IDs of group members
+  admins?: string[] // User IDs of group admins
 }
 
 type CommandPaletteEntityItem = {
@@ -504,6 +509,8 @@ export const ModernShellPrototypeScreen: React.FC = () => {
     removeProject,
     removePersonalGroup,
     removePersonalUser,
+    addGroupMember,
+    removeGroupMember,
   } = useEntityDirectory()
   const { enqueueSnackbar } = useSnackbar()
 
@@ -544,6 +551,10 @@ export const ModernShellPrototypeScreen: React.FC = () => {
   const [contactDialogMode, setContactDialogMode] = useState<'add' | 'edit' | 'delete' | null>(null)
   const [selectedContact, setSelectedContact] = useState<Conversation | null>(null)
 
+  // Group management state
+  const [groupDialogMode, setGroupDialogMode] = useState<'edit' | null>(null)
+  const [selectedGroup, setSelectedGroup] = useState<Conversation | null>(null)
+
   // Entity creation dialog state
   const [entityDialogMode, setEntityDialogMode] = useState<{
     open: boolean
@@ -569,6 +580,21 @@ export const ModernShellPrototypeScreen: React.FC = () => {
   const dialogContact = useMemo(() => (
     selectedContact ? conversationToContact(selectedContact) : null
   ), [conversationToContact, selectedContact])
+
+  // Convert Conversation to Group for dialog
+  const conversationToGroup = useCallback((conversation: Conversation): Group => ({
+    id: conversation.id,
+    name: conversation.name,
+    fourWords: conversation.fourWords || '',
+    members: conversation.members || [],
+    admins: conversation.admins || [],
+    isPersonal: conversation.orgId === undefined,
+    organizationId: conversation.orgId,
+  }), [])
+
+  const dialogGroup = useMemo(() => (
+    selectedGroup ? conversationToGroup(selectedGroup) : null
+  ), [conversationToGroup, selectedGroup])
 
   // Entity menu state
   const [entityMenuAnchor, setEntityMenuAnchor] = useState<HTMLElement | null>(null)
@@ -1896,8 +1922,14 @@ export const ModernShellPrototypeScreen: React.FC = () => {
 
   const handleEntityEdit = () => {
     setEntityMenuAnchor(null)
-    setSelectedContact(selectedConversation)
-    setContactDialogMode('edit')
+    // Check entity type and open appropriate dialog
+    if (selectedConversation?.type === 'group') {
+      setSelectedGroup(selectedConversation)
+      setGroupDialogMode('edit')
+    } else {
+      setSelectedContact(selectedConversation)
+      setContactDialogMode('edit')
+    }
   }
 
   const handleEntityDelete = () => {
@@ -3767,6 +3799,46 @@ export const ModernShellPrototypeScreen: React.FC = () => {
           setSelectedContact(null)
         }}
         onConfirm={handleConfirmEntityDelete}
+      />
+
+      <EditGroupDialog
+        open={groupDialogMode === 'edit'}
+        group={dialogGroup}
+        onClose={() => {
+          setGroupDialogMode(null)
+          setSelectedGroup(null)
+        }}
+        onSave={async (id, updates) => {
+          // Group updates are handled by EntityDirectoryContext
+          // The conversations memo will automatically update when backend state changes
+        }}
+        onAddMember={async (groupId, userId, role) => {
+          await addGroupMember(groupId, userId, role)
+          // Refresh the group data
+          const updatedConvo = conversations.find(c => c.id === groupId)
+          if (updatedConvo) {
+            setSelectedGroup({ ...updatedConvo, members: [...(updatedConvo.members || []), userId] })
+          }
+        }}
+        onRemoveMember={async (groupId, userId) => {
+          await removeGroupMember(groupId, userId)
+          // Refresh the group data
+          const updatedConvo = conversations.find(c => c.id === groupId)
+          if (updatedConvo) {
+            setSelectedGroup({
+              ...updatedConvo,
+              members: (updatedConvo.members || []).filter(id => id !== userId)
+            })
+          }
+        }}
+        availableUsers={conversations
+          .filter(c => c.type === 'person')
+          .map(c => ({
+            id: c.id,
+            name: c.name,
+            fourWords: c.fourWords || ''
+          }))
+        }
       />
 
       <EntityCreationDialog

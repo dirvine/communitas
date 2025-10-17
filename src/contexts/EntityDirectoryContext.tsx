@@ -121,6 +121,10 @@ interface EntityDirectoryContextValue extends Omit<EntityDirectoryState, 'operat
   addExistingChannel: (input: AddExistingChannelInput) => Promise<EntityOperationResult>;
   addExistingProject: (input: AddExistingProjectInput) => Promise<EntityOperationResult>;
   addExistingContact: (input: AddExistingContactInput) => Promise<EntityOperationResult>;
+  // Group member management
+  addGroupMember: (groupId: string, userId: string, role?: string) => Promise<void>;
+  removeGroupMember: (groupId: string, userId: string) => Promise<void>;
+  getGroupMembers: (groupId: string) => Promise<Array<{ userId: string; role: string }>>;
   // Validation
   validateFourWords: (fourWords: string) => Promise<FourWordsValidationResult>;
   // Legacy methods (will refactor later)
@@ -479,12 +483,12 @@ export const EntityDirectoryProvider: React.FC<EntityDirectoryProviderProps> = (
     });
   }, [enqueueOperation]);
 
-  const queueDeleteOperation = useCallback((entityType: EntitySyncEntityType, entityId: string) => {
+  const queueDeleteOperation = useCallback((entityType: EntitySyncEntityType, payload: any) => {
     enqueueOperation({
       id: `op-${nanoid(8)}`,
       entityType,
       operation: 'delete',
-      payload: { id: entityId },
+      payload,
       timestamp: new Date().toISOString(),
       attempts: 0,
       status: 'pending',
@@ -1154,20 +1158,35 @@ export const EntityDirectoryProvider: React.FC<EntityDirectoryProviderProps> = (
   }, [queueCreateOperation, withMetadata]);
 
   const removeOrganization = useCallback((organizationId: string) => {
-    setState(prev => ({
-      ...prev,
-      organizations: prev.organizations
-        .map(org =>
-          org.id === organizationId
-            ? org.syncStatus === 'new'
-              ? null
-              : { ...org, syncStatus: 'deleted' }
-            : org
-        )
-        .filter(Boolean) as Array<Organization & EntityMetadata>,
-    }));
+    let entityToDelete: Organization | null = null;
 
-    queueDeleteOperation('organization', organizationId);
+    setState(prev => {
+      // Find the organization to delete
+      const org = prev.organizations.find(o => o.id === organizationId);
+      if (org) {
+        entityToDelete = org;
+      }
+
+      return {
+        ...prev,
+        organizations: prev.organizations
+          .map(org =>
+            org.id === organizationId
+              ? org.syncStatus === 'new'
+                ? null
+                : { ...org, syncStatus: 'deleted' }
+              : org
+          )
+          .filter(Boolean) as Array<Organization & EntityMetadata>,
+      };
+    });
+
+    if (entityToDelete) {
+      queueDeleteOperation('organization', {
+        id: organizationId,
+        networkIdentity: entityToDelete.networkIdentity
+      });
+    }
   }, [queueDeleteOperation]);
 
   const addOrganizationGroup = useCallback((input: CreateGroupInput & { organizationId: string }): Group => {
@@ -1204,28 +1223,46 @@ export const EntityDirectoryProvider: React.FC<EntityDirectoryProviderProps> = (
   }, [queueCreateOperation]);
 
   const removeOrganizationGroup = useCallback((organizationId: string, groupId: string) => {
-    setState(prev => ({
-      ...prev,
-      organizations: prev.organizations.map(org =>
-        org.id === organizationId
-          ? {
-              ...org,
-              groups: org.groups
-                .map(group =>
-                  group.id === groupId
-                    ? group.syncStatus === 'new'
-                      ? null
-                      : { ...group, syncStatus: 'deleted' }
-                    : group
-                )
-                .filter(Boolean) as Array<Group & EntityMetadata>,
-              updatedAt: new Date(),
-            }
-          : org
-      ),
-    }));
+    let entityToDelete: Group | null = null;
 
-    queueDeleteOperation('group', groupId);
+    setState(prev => {
+      // Find the group to delete
+      const org = prev.organizations.find(o => o.id === organizationId);
+      if (org) {
+        const group = org.groups.find(g => g.id === groupId);
+        if (group) {
+          entityToDelete = group;
+        }
+      }
+
+      return {
+        ...prev,
+        organizations: prev.organizations.map(org =>
+          org.id === organizationId
+            ? {
+                ...org,
+                groups: org.groups
+                  .map(group =>
+                    group.id === groupId
+                      ? group.syncStatus === 'new'
+                        ? null
+                        : { ...group, syncStatus: 'deleted' }
+                      : group
+                  )
+                  .filter(Boolean) as Array<Group & EntityMetadata>,
+                updatedAt: new Date(),
+              }
+            : org
+        ),
+      };
+    });
+
+    if (entityToDelete) {
+      queueDeleteOperation('group', {
+        id: groupId,
+        networkIdentity: entityToDelete.networkIdentity
+      });
+    }
   }, [queueDeleteOperation]);
 
   const addOrganizationChannel = useCallback((input: CreateChannelInput): Channel => {
@@ -1631,6 +1668,106 @@ export const EntityDirectoryProvider: React.FC<EntityDirectoryProviderProps> = (
     queueDeleteOperation('contact', userId);
   }, [queueDeleteOperation]);
 
+  // ============= Group Member Management =============
+
+  const addGroupMember = useCallback(async (groupId: string, userId: string, role: string = 'member'): Promise<void> => {
+    try {
+      // Call backend Tauri command
+      await invoke('add_group_member', {
+        groupId,
+        userId,
+        role
+      });
+
+      // Update local state to reflect the new member
+      setState(prev => ({
+        ...prev,
+        organizations: prev.organizations.map(org => ({
+          ...org,
+          groups: org.groups.map(group =>
+            group.id === groupId
+              ? {
+                  ...group,
+                  members: [...group.members, userId],
+                  syncStatus: 'synced' as SyncStatus,
+                  updatedAt: new Date(),
+                }
+              : group
+          ),
+        })),
+        personalGroups: prev.personalGroups.map(group =>
+          group.id === groupId
+            ? {
+                ...group,
+                members: [...group.members, userId],
+                syncStatus: 'synced' as SyncStatus,
+                updatedAt: new Date(),
+              }
+            : group
+        ),
+      }));
+    } catch (error) {
+      console.error('Failed to add group member:', error);
+      throw error;
+    }
+  }, []);
+
+  const removeGroupMember = useCallback(async (groupId: string, userId: string): Promise<void> => {
+    try {
+      // Call backend Tauri command
+      await invoke('remove_group_member', {
+        groupId,
+        userId
+      });
+
+      // Update local state to remove the member
+      setState(prev => ({
+        ...prev,
+        organizations: prev.organizations.map(org => ({
+          ...org,
+          groups: org.groups.map(group =>
+            group.id === groupId
+              ? {
+                  ...group,
+                  members: group.members.filter(id => id !== userId),
+                  syncStatus: 'synced' as SyncStatus,
+                  updatedAt: new Date(),
+                }
+              : group
+          ),
+        })),
+        personalGroups: prev.personalGroups.map(group =>
+          group.id === groupId
+            ? {
+                ...group,
+                members: group.members.filter(id => id !== userId),
+                syncStatus: 'synced' as SyncStatus,
+                updatedAt: new Date(),
+              }
+            : group
+        ),
+      }));
+    } catch (error) {
+      console.error('Failed to remove group member:', error);
+      throw error;
+    }
+  }, []);
+
+  const getGroupMembers = useCallback(async (groupId: string): Promise<Array<{ userId: string; role: string }>> => {
+    try {
+      // Call backend Tauri command
+      const members = await invoke<Array<[string, string]>>('get_group_members', {
+        groupId
+      });
+
+      // Convert tuple array to object array
+      return members.map(([userId, role]) => ({ userId, role }));
+    } catch (error) {
+      console.error('Failed to get group members:', error);
+      throw error;
+    }
+  }, []);
+
   // Backend sync operations using saorsa-core
   const syncEntityToBackend = useCallback(async (entityType: EntitySyncEntityType, entity: any): Promise<string | null> => {
     try {
@@ -1960,10 +2097,8 @@ export const EntityDirectoryProvider: React.FC<EntityDirectoryProviderProps> = (
             const payload = operation.payload as MessageOperationPayload;
             await removeCachedMessage(payload.entityType, payload.entityId, payload.id);
           } else {
-            // Remove from DHT
-            await invoke('core_dht_delete', {
-              key: operation.payload.networkIdentity?.fourWords || operation.payload.id
-            });
+            // Local-first deletion: purge from local storage
+            // CRDT sync will propagate deletion to peers via gossip networking
             purgeEntity(operation.entityType, operation.payload.id);
           }
           markOperationComplete(operation.id);
@@ -1975,7 +2110,7 @@ export const EntityDirectoryProvider: React.FC<EntityDirectoryProviderProps> = (
 
       case 'update': {
         try {
-          // Update in DHT
+          // Sync update to backend (local storage + CRDT)
           await syncEntityToBackend(operation.entityType, operation.payload);
           setEntityStatus(operation.entityType, operation.payload.id, 'synced');
           markOperationComplete(operation.id);
@@ -2057,9 +2192,16 @@ export const EntityDirectoryProvider: React.FC<EntityDirectoryProviderProps> = (
   }, [state.operations, handleOperation, markOperationFailed, startOperationProcessing]);
 
   const value = useMemo<EntityDirectoryContextValue>(() => ({
-    organizations: state.organizations,
-    personalGroups: state.personalGroups,
-    personalUsers: state.personalUsers,
+    organizations: state.organizations
+      .filter(org => org.syncStatus !== 'deleted')
+      .map(org => ({
+        ...org,
+        groups: org.groups.filter(g => g.syncStatus !== 'deleted'),
+        channels: org.channels.filter(c => c.syncStatus !== 'deleted'),
+        projects: org.projects.filter(p => p.syncStatus !== 'deleted'),
+      })),
+    personalGroups: state.personalGroups.filter(group => group.syncStatus !== 'deleted'),
+    personalUsers: state.personalUsers.filter(user => user.syncStatus !== 'deleted'),
     operations: state.operations,
     // New create/add methods
     createOrganization,
@@ -2073,6 +2215,10 @@ export const EntityDirectoryProvider: React.FC<EntityDirectoryProviderProps> = (
     addExistingProject,
     addExistingContact,
     validateFourWords,
+    // Group member management
+    addGroupMember,
+    removeGroupMember,
+    getGroupMembers,
     // Legacy methods
     addOrganization,
     removeOrganization,
@@ -2108,6 +2254,9 @@ export const EntityDirectoryProvider: React.FC<EntityDirectoryProviderProps> = (
     addExistingProject,
     addExistingContact,
     validateFourWords,
+    addGroupMember,
+    removeGroupMember,
+    getGroupMembers,
     addOrganization,
     removeOrganization,
     addOrganizationGroup,

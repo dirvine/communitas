@@ -1166,18 +1166,89 @@ async fn run_node(args: Args) -> Result<()> {
     //     }
     // }
 
-    // Connect to bootstrap nodes (including cached peers)
-    if !all_bootstrap_nodes.is_empty() {
+    // Collect all listen addresses from config (dual-stack IPv4 + IPv6)
+    let mut listen_addrs: Vec<SocketAddr> = if !config.network.listen_addrs.is_empty() {
+        config.network.listen_addrs.clone()
+    } else {
+        vec![args.listen]
+    };
+
+    // Allow environment variables to override listen addresses
+    if let Ok(s) = std::env::var("COMMUNITAS_QUIC_LISTEN") {
+        if let Ok(sa) = s.parse::<SocketAddr>() {
+            // Replace all addresses with env override
+            listen_addrs = vec![sa];
+        }
+    } else if let Ok(v) = std::env::var("COMMUNITAS_QUIC_PORT") {
+        if let Ok(p) = v.parse::<u16>() {
+            // Update port for all addresses
+            for addr in &mut listen_addrs {
+                addr.set_port(p);
+            }
+        }
+    }
+
+    // Override from command line if not default
+    if args.listen != SocketAddr::from(([0, 0, 0, 0], 0)) {
+        listen_addrs = vec![args.listen];
+    }
+
+    // CRITICAL FIX: Start QUIC delta servers FIRST (before trying to connect)
+    // This ensures listeners are ready when other nodes try to connect
+    info!(
+        "Starting QUIC servers on {} address(es): {:?}",
+        listen_addrs.len(),
+        listen_addrs
+    );
+
+    for listen_addr in listen_addrs.clone() {
+        let storage_dir = config.storage.base_dir.clone();
+        tokio::spawn(async move {
+            info!("QUIC delta server listening on {}", listen_addr);
+            if let Err(e) = start_quic_delta_server(listen_addr, storage_dir).await {
+                warn!("QUIC delta server on {} exited: {e}", listen_addr);
+            }
+        });
+    }
+
+    // Give listeners time to start (important for bootstrap nodes to see each other)
+    info!("Waiting 2 seconds for QUIC listeners to initialize...");
+    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+    info!("QUIC listeners ready");
+
+    // Build set of self addresses to filter from bootstrap connections
+    let self_addrs: HashSet<SocketAddr> = listen_addrs.iter().copied().collect();
+
+    // Filter bootstrap nodes to exclude self-addresses
+    let filtered_bootstrap_nodes: Vec<String> = all_bootstrap_nodes
+        .iter()
+        .filter(|addr_str| {
+            // Try to resolve to SocketAddr and check if it matches our listen addresses
+            if let Ok(Some(socket_addr)) = canonical_seed_addr(addr_str) {
+                !self_addrs.contains(&socket_addr)
+            } else {
+                // If we can't resolve it, keep it (might be a DNS name or four-word that resolves differently)
+                true
+            }
+        })
+        .cloned()
+        .collect();
+
+    // Connect to bootstrap nodes (excluding self, after listeners are ready)
+    if !filtered_bootstrap_nodes.is_empty() {
         info!(
-            "Connecting to {} bootstrap/cached nodes...",
-            all_bootstrap_nodes.len()
+            "Connecting to {} bootstrap/cached nodes (filtered {} self-addresses)...",
+            filtered_bootstrap_nodes.len(),
+            all_bootstrap_nodes.len() - filtered_bootstrap_nodes.len()
         );
-        for bootstrap_addr in &all_bootstrap_nodes {
+        for bootstrap_addr in &filtered_bootstrap_nodes {
             match connect_to_peer(bootstrap_addr.clone()).await {
-                Ok(_) => info!("Connected to node: {}", bootstrap_addr),
+                Ok(_) => info!("✓ Connected to peer: {}", bootstrap_addr),
                 Err(e) => warn!("Failed to connect to {}: {}", bootstrap_addr, e),
             }
         }
+    } else {
+        info!("No external bootstrap nodes to connect to (all addresses are self)");
     }
 
     // Start health/metrics endpoint if enabled
@@ -1210,50 +1281,6 @@ async fn run_node(args: Args) -> Result<()> {
     //     });
     //     info!("Delta generator enabled via COMMUNITAS_GENERATE_DELTAS");
     // }
-
-    // Collect all listen addresses from config (dual-stack IPv4 + IPv6)
-    let mut listen_addrs: Vec<SocketAddr> = if !config.network.listen_addrs.is_empty() {
-        config.network.listen_addrs.clone()
-    } else {
-        vec![args.listen]
-    };
-
-    // Allow environment variables to override listen addresses
-    if let Ok(s) = std::env::var("COMMUNITAS_QUIC_LISTEN") {
-        if let Ok(sa) = s.parse::<SocketAddr>() {
-            // Replace all addresses with env override
-            listen_addrs = vec![sa];
-        }
-    } else if let Ok(v) = std::env::var("COMMUNITAS_QUIC_PORT") {
-        if let Ok(p) = v.parse::<u16>() {
-            // Update port for all addresses
-            for addr in &mut listen_addrs {
-                addr.set_port(p);
-            }
-        }
-    }
-
-    // Override from command line if not default
-    if args.listen != SocketAddr::from(([0, 0, 0, 0], 0)) {
-        listen_addrs = vec![args.listen];
-    }
-
-    // Start QUIC delta servers for each listen address (dual-stack)
-    info!(
-        "Starting QUIC servers on {} address(es): {:?}",
-        listen_addrs.len(),
-        listen_addrs
-    );
-
-    for listen_addr in listen_addrs {
-        let storage_dir = config.storage.base_dir.clone();
-        tokio::spawn(async move {
-            info!("Starting QUIC server on {}", listen_addr);
-            if let Err(e) = start_quic_delta_server(listen_addr, storage_dir).await {
-                warn!("QUIC delta server on {} exited: {e}", listen_addr);
-            }
-        });
-    }
 
     // Main event loop
     info!("Communitas node started successfully");

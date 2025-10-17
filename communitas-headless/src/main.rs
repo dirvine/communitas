@@ -1535,7 +1535,20 @@ async fn start_quic_delta_server(
     // Bind endpoint
     let endpoint = QuicEndpoint::server(server_cfg, listen)
         .map_err(|e| anyhow::anyhow!("endpoint server bind: {e}"))?;
-    info!("QUIC delta server listening on {}", listen);
+
+    // Get the actual bound address (important when binding to port 0 for random assignment)
+    let actual_addr = endpoint.local_addr()
+        .map_err(|e| anyhow::anyhow!("get local addr: {e}"))?;
+    info!("QUIC delta server listening on {} (actual bound address: {})", listen, actual_addr);
+
+    // Convert to four-word address for easy sharing
+    match four_word_networking::FourWordAdaptiveEncoder::new() {
+        Ok(encoder) => match encoder.encode(&actual_addr.to_string()) {
+            Ok(four_words) => info!("Four-word address: {}", four_words),
+            Err(e) => warn!("Failed to encode four-word address: {}", e),
+        },
+        Err(e) => warn!("Failed to create encoder: {}", e),
+    }
 
     loop {
         match endpoint.accept().await {

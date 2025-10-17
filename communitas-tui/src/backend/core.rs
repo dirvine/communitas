@@ -290,8 +290,9 @@ impl Backend {
     pub fn generate_four_words() -> String {
         use rand::RngCore;
         use rand::rngs::OsRng;
-        use saorsa_core::address::NetworkAddress;
-        use saorsa_core::fwid::fw_check;
+        // Removed: saorsa-core imports - replaced with communitas-core
+        // use saorsa_core::address::NetworkAddress;
+        // use saorsa_core::fwid::fw_check;
         use std::net::Ipv4Addr;
 
         let mut rng = OsRng;
@@ -302,20 +303,12 @@ impl Backend {
         for _ in 0..GENERATION_ATTEMPTS {
             let ipv4 = Ipv4Addr::from(rng.next_u32());
             let port = (rng.next_u32() % PORT_SPAN) as u16 + MIN_PORT;
-            let candidate = NetworkAddress::from_ipv4(ipv4, port);
+            let addr = std::net::SocketAddr::from((ipv4, port));
 
-            if let Some(words) = candidate.four_words() {
-                // Parse to ensure it's valid
-                if let Ok(parsed) = saorsa_core::identity::FourWordAddress::parse_str(words) {
-                    let words_vec = parsed.words();
-                    // Try to convert to array of exactly 4 strings
-                    let words_result: Result<[String; 4], _> = words_vec.try_into();
-                    if let Ok(words_array) = words_result {
-                        // Validate with saorsa-core
-                        if fw_check(words_array.clone()) {
-                            return words.to_string();
-                        }
-                    }
+            if let Ok(words) = communitas_core::identity::conn_words(&addr) {
+                // Validate the words are correct
+                if communitas_core::identity::validate_id_words(&words) {
+                    return words;
                 }
             }
         }

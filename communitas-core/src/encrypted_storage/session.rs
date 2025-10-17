@@ -163,11 +163,11 @@ impl SessionManager {
     /// Switch to a different account session
     pub async fn switch_session(&self, session_id: &str) -> Option<Session> {
         let mut sessions = self.sessions.write().await;
-        if let Some(session) = sessions.iter_mut().find(|s| s.id == session_id) {
-            if !session.is_expired() {
-                session.touch();
-                return Some(session.clone());
-            }
+        if let Some(session) = sessions.iter_mut().find(|s| s.id == session_id)
+            && !session.is_expired()
+        {
+            session.touch();
+            return Some(session.clone());
         }
         None
     }

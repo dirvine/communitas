@@ -515,10 +515,13 @@ impl DocReplicator {
             .ok_or_else(|| anyhow!("Document not in Files storage"))?;
 
         let cipher = ChaCha20Poly1305::new(key.into());
-        let nonce = Nonce::from_slice(&encrypted.nonce);
+        let nonce = Nonce::from(
+            *<&[u8; 12]>::try_from(encrypted.nonce.as_slice())
+                .map_err(|_| anyhow!("Invalid nonce length"))?,
+        );
 
         let plaintext = cipher
-            .decrypt(nonce, encrypted.ciphertext.as_ref())
+            .decrypt(&nonce, encrypted.ciphertext.as_ref())
             .map_err(|e| anyhow!("Decryption failed: {}", e))?;
 
         Ok(plaintext)
@@ -546,10 +549,10 @@ impl DocReplicator {
             .map_err(|e| anyhow!("Nonce generation failed: {}", e))?;
 
         let cipher = ChaCha20Poly1305::new(&key.into());
-        let nonce = Nonce::from_slice(&nonce_bytes);
+        let nonce = Nonce::from(nonce_bytes);
 
         let ciphertext = cipher
-            .encrypt(nonce, update.as_ref())
+            .encrypt(&nonce, update.as_ref())
             .map_err(|e| anyhow!("Encryption failed: {}", e))?;
 
         let encrypted = EncryptedDocument {

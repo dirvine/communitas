@@ -5,7 +5,6 @@
 /// - Event-driven tombstone pruning
 /// - Offline-first operations with automatic sync
 /// - LWW (Last-Write-Wins) conflict resolution
-
 use crate::crdt_manager::CrdtManager;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -120,8 +119,8 @@ impl MemberManager {
                     CrdtManager::get_nested_map(&members_map, &txn, member_id)
                 {
                     // Check if member is deleted
-                    let is_deleted = CrdtManager::get_map_bool(&member_data, &txn, "deleted")
-                        .unwrap_or(false);
+                    let is_deleted =
+                        CrdtManager::get_map_bool(&member_data, &txn, "deleted").unwrap_or(false);
 
                     if !is_deleted {
                         return Err(MemberError::AlreadyExists);
@@ -203,8 +202,8 @@ impl MemberManager {
                     if let Some(member_data) =
                         CrdtManager::get_nested_map(&members_map, &txn, &member_id_string)
                     {
-                        let deleted =
-                            CrdtManager::get_map_bool(&member_data, &txn, "deleted").unwrap_or(false);
+                        let deleted = CrdtManager::get_map_bool(&member_data, &txn, "deleted")
+                            .unwrap_or(false);
 
                         // Include all members (test expects to see deleted flag)
                         let member_id_str =
@@ -338,8 +337,8 @@ impl MemberManager {
                     None => return Err(MemberError::NotFound),
                     Some(member_data) => {
                         // Check if member is deleted
-                        let is_deleted =
-                            CrdtManager::get_map_bool(&member_data, &txn, "deleted").unwrap_or(false);
+                        let is_deleted = CrdtManager::get_map_bool(&member_data, &txn, "deleted")
+                            .unwrap_or(false);
                         if is_deleted {
                             return Err(MemberError::NotFound);
                         }

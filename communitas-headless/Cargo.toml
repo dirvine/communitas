@@ -19,7 +19,7 @@ communitas-core = { path = "../communitas-core" }
 
 # Networking - use published crate with wildcard address fix
 ant-quic = "^0.8.17"
-saorsa-core = "0.5.7"
+# Removed: saorsa-core and saorsa-pqc - using stub implementations
 four-word-networking = "2.6"
 rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs"] }
 

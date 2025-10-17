@@ -6,7 +6,7 @@ use communitas_desktop::auth_service::AuthService;
 use communitas_desktop::container::Container;
 use std::path::PathBuf;
 use tempfile::TempDir;
-use tracing_subscriber::{fmt, EnvFilter};
+use tracing_subscriber::{EnvFilter, fmt};
 
 /// Helper to setup test environment with logging enabled
 fn setup_test_env() -> Result<(TempDir, Container)> {

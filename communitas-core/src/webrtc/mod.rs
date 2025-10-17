@@ -62,7 +62,6 @@ pub use saorsa_webrtc::{
     service::WebRtcService,
     signaling::SignalingMessage,
     types::{
-        CallEvent, CallId, CallState, IceCandidate, MediaConstraints, MediaType,
-        CallQualityMetrics,
+        CallEvent, CallId, CallQualityMetrics, CallState, IceCandidate, MediaConstraints, MediaType,
     },
 };

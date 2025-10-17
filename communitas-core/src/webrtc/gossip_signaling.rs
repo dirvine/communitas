@@ -104,7 +104,7 @@ impl GossipSignalingTransport {
         let pubsub = self.gossip.pubsub.read().await;
 
         // Subscribe returns a receiver (not async)
-        let _rx = pubsub.subscribe(topic.clone());
+        let _rx = pubsub.subscribe(topic);
 
         debug!("Subscribed to topic: {:?}", topic);
 
@@ -163,9 +163,7 @@ impl SignalingTransport for GossipSignalingTransport {
         Ok(())
     }
 
-    async fn receive_message(
-        &self,
-    ) -> Result<(Self::PeerId, SignalingMessage), Self::Error> {
+    async fn receive_message(&self) -> Result<(Self::PeerId, SignalingMessage), Self::Error> {
         // First, process any incoming messages from PubSub
         self.process_incoming_messages().await?;
 
@@ -209,7 +207,10 @@ impl SignalingTransport for GossipSignalingTransport {
 
         // Subscribe to the peer's rendezvous shard
         if let Err(e) = rendezvous.subscribe_to_shard(&target_id).await {
-            warn!("Failed to subscribe to rendezvous shard for {}: {}", peer, e);
+            warn!(
+                "Failed to subscribe to rendezvous shard for {}: {}",
+                peer, e
+            );
             return Ok(None);
         }
 
@@ -221,7 +222,11 @@ impl SignalingTransport for GossipSignalingTransport {
             return Ok(None);
         }
 
-        debug!("Peer {} is discoverable (found {} providers)", peer, providers.len());
+        debug!(
+            "Peer {} is discoverable (found {} providers)",
+            peer,
+            providers.len()
+        );
 
         // Return None since we don't have direct SocketAddr mapping
         // The transport layer will handle connection establishment
@@ -244,8 +249,8 @@ mod tests {
     #[test]
     fn test_peer_topic_generation() {
         // Test the topic generation logic
-        let identity = CommunitasIdentity::new("ocean-forest-moon-star".to_string())
-            .expect("valid identity");
+        let identity =
+            CommunitasIdentity::new("ocean-forest-moon-star".to_string()).expect("valid identity");
 
         let topic_str = format!("{}.{}", WEBRTC_TOPIC_PREFIX, identity.four_words());
         let hash = blake3::hash(topic_str.as_bytes());
@@ -262,8 +267,8 @@ mod tests {
 
     #[test]
     fn test_identity_from_str() {
-        let identity = CommunitasIdentity::from_str("ocean-forest-moon-star")
-            .expect("valid identity");
+        let identity =
+            CommunitasIdentity::from_str("ocean-forest-moon-star").expect("valid identity");
         assert_eq!(identity.four_words(), "ocean-forest-moon-star");
     }
 }

@@ -6,9 +6,9 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::Path;
 use std::fs;
-use tracing::{info, warn, error};
+use std::path::Path;
+use tracing::{error, info, warn};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NetworkConfig {
@@ -217,15 +217,18 @@ impl NetworkConfig {
         let contents = fs::read_to_string(path)
             .map_err(|e| NetworkConfigError::Io(e.to_string(), path.to_path_buf()))?;
 
-        let mut config: NetworkConfig = toml::from_str(&contents)
-            .map_err(NetworkConfigError::Toml)?;
+        let mut config: NetworkConfig =
+            toml::from_str(&contents).map_err(NetworkConfigError::Toml)?;
 
         // Apply environment-specific overrides
         if let Ok(env) = std::env::var("COMMUNITAS_ENV") {
             if let Some(env_config) = config.environments.get(&env) {
                 if let Some(bootstrap) = &env_config.bootstrap {
                     config.bootstrap.nodes = bootstrap.nodes.clone();
-                    info!("Applied {} environment bootstrap nodes: {:?}", env, bootstrap.nodes);
+                    info!(
+                        "Applied {} environment bootstrap nodes: {:?}",
+                        env, bootstrap.nodes
+                    );
                 }
             }
         }
@@ -237,16 +240,13 @@ impl NetworkConfig {
         Ok(config)
     }
 
-    /// Load default production configuration
-    pub fn load_default_production() -> Result<Self, NetworkConfigError> {
-        Self::load_from_file("config/production-network.toml")
-    }
-
     /// Validate the configuration
     pub fn validate(&self) -> Result<(), NetworkConfigError> {
         // Validate network settings
         if self.network.network_id.is_empty() {
-            return Err(NetworkConfigError::Validation("network_id cannot be empty".to_string()));
+            return Err(NetworkConfigError::Validation(
+                "network_id cannot be empty".to_string(),
+            ));
         }
 
         // Validate bootstrap nodes
@@ -256,16 +256,17 @@ impl NetworkConfig {
 
         for node in &self.bootstrap.nodes {
             if !node.contains(':') {
-                return Err(NetworkConfigError::Validation(
-                    format!("Invalid bootstrap node format (expected host:port): {}", node)
-                ));
+                return Err(NetworkConfigError::Validation(format!(
+                    "Invalid bootstrap node format (expected host:port): {}",
+                    node
+                )));
             }
         }
 
         // Validate QUIC settings
         if self.transport.quic.max_concurrent_connections == 0 {
             return Err(NetworkConfigError::Validation(
-                "max_concurrent_connections must be greater than 0".to_string()
+                "max_concurrent_connections must be greater than 0".to_string(),
             ));
         }
 
@@ -280,11 +281,6 @@ impl NetworkConfig {
     /// Check if network is enabled
     pub fn is_network_enabled(&self) -> bool {
         self.network.enabled
-    }
-
-    /// Get NAT traversal configuration
-    pub fn get_nat_traversal(&self) -> &NatTraversalConfig {
-        &self.nat_traversal
     }
 }
 
@@ -304,16 +300,17 @@ pub enum NetworkConfigError {
 }
 
 // Global network configuration instance
-use std::sync::{Arc, Mutex};
 use once_cell::sync::Lazy;
+use std::sync::{Arc, Mutex};
 
-static NETWORK_CONFIG: Lazy<Arc<Mutex<Option<NetworkConfig>>>> = Lazy::new(|| {
-    Arc::new(Mutex::new(None))
-});
+static NETWORK_CONFIG: Lazy<Arc<Mutex<Option<NetworkConfig>>>> =
+    Lazy::new(|| Arc::new(Mutex::new(None)));
 
 /// Get the global network configuration
 pub fn get_network_config() -> Result<NetworkConfig, NetworkConfigError> {
-    let mut config_guard = NETWORK_CONFIG.lock().map_err(|e| NetworkConfigError::Mutex(e.to_string()))?;
+    let mut config_guard = NETWORK_CONFIG
+        .lock()
+        .map_err(|e| NetworkConfigError::Mutex(e.to_string()))?;
 
     if let Some(ref config) = *config_guard {
         return Ok(config.clone());
@@ -331,16 +328,16 @@ pub fn get_network_config() -> Result<NetworkConfig, NetworkConfigError> {
 // Tauri commands for network configuration
 #[tauri::command]
 pub fn network_config_get_bootstrap_nodes() -> Result<Vec<String>, String> {
-    let config = get_network_config()
-        .map_err(|e| format!("Failed to load network config: {}", e))?;
+    let config =
+        get_network_config().map_err(|e| format!("Failed to load network config: {}", e))?;
 
     Ok(config.get_bootstrap_nodes().to_vec())
 }
 
 #[tauri::command]
 pub fn network_config_is_network_enabled() -> Result<bool, String> {
-    let config = get_network_config()
-        .map_err(|e| format!("Failed to load network config: {}", e))?;
+    let config =
+        get_network_config().map_err(|e| format!("Failed to load network config: {}", e))?;
 
     Ok(config.is_network_enabled())
 }

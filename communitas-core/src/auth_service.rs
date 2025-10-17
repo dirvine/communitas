@@ -162,10 +162,10 @@ impl AuthService {
         self.storage_manager.delete_vault(four_words).await?;
 
         // Logout if this was the active session
-        if let Some(session) = &self.active_session {
-            if session.four_words == four_words {
-                self.active_session = None;
-            }
+        if let Some(session) = &self.active_session
+            && session.four_words == four_words
+        {
+            self.active_session = None;
         }
 
         tracing::warn!("AuthService: Vault deleted for {}", four_words);

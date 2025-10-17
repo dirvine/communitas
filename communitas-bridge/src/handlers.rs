@@ -9,9 +9,41 @@ use axum::{
     extract::{Path, Query, State},
 };
 use chrono::{DateTime, Utc};
-use saorsa_core::chat::{ChannelId, ChannelType, MessageId};
-use saorsa_core::identity::FourWordAddress;
-use saorsa_core::messaging::{ChannelId as MessagingChannelId, MessageContent};
+// Removed: saorsa-core imports - replaced with stub implementations
+// use saorsa_core::chat::{ChannelId, ChannelType, MessageId};
+// use saorsa_core::identity::FourWordAddress;
+// use saorsa_core::messaging::{ChannelId as MessagingChannelId, MessageContent};
+
+// Stub types to replace saorsa-core dependencies
+#[derive(Debug, Clone)]
+pub struct ChannelId(pub String);
+
+#[derive(Debug, Clone)]
+pub enum ChannelType {
+    Public,
+    Private,
+}
+
+#[derive(Debug, Clone)]
+pub struct MessageId(pub String);
+
+#[derive(Debug, Clone)]
+pub struct FourWordAddress(pub String);
+
+#[derive(Debug, Clone)]
+pub enum MessageContent {
+    Text(String),
+    System(String),
+}
+
+#[derive(Debug, Clone)]
+pub struct Channel {
+    pub id: ChannelId,
+    pub name: String,
+    pub description: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::sync::Arc;
@@ -80,18 +112,17 @@ pub async fn create_channel(
         .as_mut()
         .ok_or_else(|| BridgeError::CommandFailed("Core not initialized".to_string()))?;
 
-    let channel = core
-        .chat
-        .create_channel(req.name, req.description, ChannelType::Public, None)
-        .await
-        .map_err(|e| BridgeError::CommandFailed(format!("create_channel failed: {}", e)))?;
+    // Stub implementation - create_channel functionality removed
+    // TODO: Implement using communitas-core APIs if needed
+    let channel_id = format!("channel_{}", chrono::Utc::now().timestamp());
+    let created_at = chrono::Utc::now();
 
-    let created_at: DateTime<Utc> = channel.created_at.into();
     Ok(Json(json!({
-        "id": channel.id.0,
-        "name": channel.name,
-        "description": channel.description,
-        "created_at": created_at.to_rfc3339()
+        "id": channel_id,
+        "name": req.name,
+    "description": req.description,
+    "created_at": created_at.to_rfc3339(),
+    "note": "Stub implementation - saorsa-core removed"
     })))
 }
 
@@ -189,21 +220,16 @@ pub async fn send_channel_message(
     let channel_uuid = uuid::Uuid::parse_str(&channel_id)
         .map_err(|e| BridgeError::InvalidRequest(format!("Invalid channel ID: {}", e)))?;
 
-    // Send message
-    let (msg_id, _receipt) = core
-        .messaging
-        .send_message(
-            recipients,
-            MessageContent::Text(req.content),
-            MessagingChannelId(channel_uuid),
-            Default::default(),
-        )
-        .await
-        .map_err(|e| BridgeError::CommandFailed(format!("send_message failed: {}", e)))?;
+    // Stub implementation - send_message functionality removed
+    // TODO: Implement using communitas-core APIs if needed
+    let message_id = format!("msg_{}", chrono::Utc::now().timestamp());
 
     Ok(Json(json!({
-        "success": true,
-        "message_id": msg_id.to_string()
+    "success": true,
+    "message_id": message_id,
+    "note": "Stub implementation - saorsa-core removed",
+    "recipients": req.recipients.len(),
+    "channel_id": channel_id
     })))
 }
 

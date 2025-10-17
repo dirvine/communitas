@@ -79,8 +79,8 @@ mod tests {
 
     #[test]
     fn test_peer_identity_trait() {
-        let identity = CommunitasIdentity::new("ocean-forest-moon-star".to_string())
-            .expect("valid identity");
+        let identity =
+            CommunitasIdentity::new("ocean-forest-moon-star".to_string()).expect("valid identity");
 
         // Test to_string_repr
         assert_eq!(identity.to_string_repr(), "ocean-forest-moon-star");
@@ -96,8 +96,8 @@ mod tests {
 
     #[test]
     fn test_serialization() {
-        let identity = CommunitasIdentity::new("ocean-forest-moon-star".to_string())
-            .expect("valid identity");
+        let identity =
+            CommunitasIdentity::new("ocean-forest-moon-star".to_string()).expect("valid identity");
 
         // Test JSON serialization
         let json = serde_json::to_string(&identity).expect("serialize");

@@ -11,9 +11,7 @@
 
 mod fixtures;
 
-use fixtures::webrtc_fixtures::{
-    constraints, test_identity, DeviceKind, WebRtcTestFixture,
-};
+use fixtures::webrtc_fixtures::{DeviceKind, WebRtcTestFixture, constraints, test_identity};
 
 /// Test: set_video_enabled - Enable Video
 ///
@@ -28,20 +26,26 @@ async fn test_set_video_enabled_on() {
 
     // Create an active call with video
     let target = test_identity();
-    let call_id = fixture.webrtc_service.initiate_call(
-        target.to_string(),
-        constraints::video_call(),
-    ).expect("call ID");
+    let call_id = fixture
+        .webrtc_service
+        .initiate_call(target.to_string(), constraints::video_call())
+        .expect("call ID");
 
-    fixture.webrtc_service.accept_call(call_id.clone())
+    fixture
+        .webrtc_service
+        .accept_call(call_id.clone())
         .expect("accept call");
 
     // Disable video first
-    fixture.webrtc_service.set_video_enabled(call_id.clone(), false)
+    fixture
+        .webrtc_service
+        .set_video_enabled(call_id.clone(), false)
         .expect("disable video");
 
     // Re-enable video
-    let result = fixture.webrtc_service.set_video_enabled(call_id.clone(), true);
+    let result = fixture
+        .webrtc_service
+        .set_video_enabled(call_id.clone(), true);
 
     assert!(result.is_ok(), "set_video_enabled should succeed");
 
@@ -64,16 +68,20 @@ async fn test_set_video_enabled_off() {
     fixture.initialize().expect("fixture init");
 
     let target = test_identity();
-    let call_id = fixture.webrtc_service.initiate_call(
-        target.to_string(),
-        constraints::video_call(),
-    ).expect("call ID");
+    let call_id = fixture
+        .webrtc_service
+        .initiate_call(target.to_string(), constraints::video_call())
+        .expect("call ID");
 
-    fixture.webrtc_service.accept_call(call_id.clone())
+    fixture
+        .webrtc_service
+        .accept_call(call_id.clone())
         .expect("accept call");
 
     // Disable video
-    let result = fixture.webrtc_service.set_video_enabled(call_id.clone(), false);
+    let result = fixture
+        .webrtc_service
+        .set_video_enabled(call_id.clone(), false);
 
     assert!(result.is_ok(), "set_video_enabled should succeed");
 
@@ -96,10 +104,9 @@ async fn test_set_video_enabled_invalid_call() {
 
     let invalid_id = "call_nonexistent";
 
-    let result = fixture.webrtc_service.set_video_enabled(
-        invalid_id.to_string(),
-        true,
-    );
+    let result = fixture
+        .webrtc_service
+        .set_video_enabled(invalid_id.to_string(), true);
 
     assert!(result.is_err(), "should fail with invalid call ID");
     let error = result.expect_err("error");
@@ -123,20 +130,26 @@ async fn test_set_audio_enabled_on() {
     fixture.initialize().expect("fixture init");
 
     let target = test_identity();
-    let call_id = fixture.webrtc_service.initiate_call(
-        target.to_string(),
-        constraints::audio_only(),
-    ).expect("call ID");
+    let call_id = fixture
+        .webrtc_service
+        .initiate_call(target.to_string(), constraints::audio_only())
+        .expect("call ID");
 
-    fixture.webrtc_service.accept_call(call_id.clone())
+    fixture
+        .webrtc_service
+        .accept_call(call_id.clone())
         .expect("accept call");
 
     // Disable audio first
-    fixture.webrtc_service.set_audio_enabled(call_id.clone(), false)
+    fixture
+        .webrtc_service
+        .set_audio_enabled(call_id.clone(), false)
         .expect("disable audio");
 
     // Re-enable audio
-    let result = fixture.webrtc_service.set_audio_enabled(call_id.clone(), true);
+    let result = fixture
+        .webrtc_service
+        .set_audio_enabled(call_id.clone(), true);
 
     assert!(result.is_ok(), "set_audio_enabled should succeed");
 
@@ -159,16 +172,20 @@ async fn test_set_audio_enabled_off() {
     fixture.initialize().expect("fixture init");
 
     let target = test_identity();
-    let call_id = fixture.webrtc_service.initiate_call(
-        target.to_string(),
-        constraints::audio_only(),
-    ).expect("call ID");
+    let call_id = fixture
+        .webrtc_service
+        .initiate_call(target.to_string(), constraints::audio_only())
+        .expect("call ID");
 
-    fixture.webrtc_service.accept_call(call_id.clone())
+    fixture
+        .webrtc_service
+        .accept_call(call_id.clone())
         .expect("accept call");
 
     // Disable (mute) audio
-    let result = fixture.webrtc_service.set_audio_enabled(call_id.clone(), false);
+    let result = fixture
+        .webrtc_service
+        .set_audio_enabled(call_id.clone(), false);
 
     assert!(result.is_ok(), "set_audio_enabled should succeed");
 
@@ -191,10 +208,9 @@ async fn test_set_audio_enabled_invalid_call() {
 
     let invalid_id = "call_nonexistent";
 
-    let result = fixture.webrtc_service.set_audio_enabled(
-        invalid_id.to_string(),
-        true,
-    );
+    let result = fixture
+        .webrtc_service
+        .set_audio_enabled(invalid_id.to_string(), true);
 
     assert!(result.is_err(), "should fail with invalid call ID");
     let error = result.expect_err("error");
@@ -218,12 +234,14 @@ async fn test_start_screen_share_success() {
     fixture.initialize().expect("fixture init");
 
     let target = test_identity();
-    let call_id = fixture.webrtc_service.initiate_call(
-        target.to_string(),
-        constraints::video_call(),
-    ).expect("call ID");
+    let call_id = fixture
+        .webrtc_service
+        .initiate_call(target.to_string(), constraints::video_call())
+        .expect("call ID");
 
-    fixture.webrtc_service.accept_call(call_id.clone())
+    fixture
+        .webrtc_service
+        .accept_call(call_id.clone())
         .expect("accept call");
 
     // Start screen sharing
@@ -250,7 +268,9 @@ async fn test_start_screen_share_invalid_call() {
 
     let invalid_id = "call_nonexistent";
 
-    let result = fixture.webrtc_service.start_screen_share(invalid_id.to_string());
+    let result = fixture
+        .webrtc_service
+        .start_screen_share(invalid_id.to_string());
 
     assert!(result.is_err(), "should fail with invalid call ID");
     let error = result.expect_err("error");
@@ -274,16 +294,20 @@ async fn test_stop_screen_share_success() {
     fixture.initialize().expect("fixture init");
 
     let target = test_identity();
-    let call_id = fixture.webrtc_service.initiate_call(
-        target.to_string(),
-        constraints::video_call(),
-    ).expect("call ID");
+    let call_id = fixture
+        .webrtc_service
+        .initiate_call(target.to_string(), constraints::video_call())
+        .expect("call ID");
 
-    fixture.webrtc_service.accept_call(call_id.clone())
+    fixture
+        .webrtc_service
+        .accept_call(call_id.clone())
         .expect("accept call");
 
     // Start screen sharing first
-    fixture.webrtc_service.start_screen_share(call_id.clone())
+    fixture
+        .webrtc_service
+        .start_screen_share(call_id.clone())
         .expect("start screen share");
 
     // Stop screen sharing
@@ -309,7 +333,9 @@ async fn test_stop_screen_share_invalid_call() {
 
     let invalid_id = "call_nonexistent";
 
-    let result = fixture.webrtc_service.stop_screen_share(invalid_id.to_string());
+    let result = fixture
+        .webrtc_service
+        .stop_screen_share(invalid_id.to_string());
 
     assert!(result.is_err(), "should fail with invalid call ID");
     let error = result.expect_err("error");
@@ -370,12 +396,14 @@ async fn test_media_controls_during_active_call() {
     fixture.initialize().expect("fixture init");
 
     let target = test_identity();
-    let call_id = fixture.webrtc_service.initiate_call(
-        target.to_string(),
-        constraints::video_call(),
-    ).expect("call ID");
+    let call_id = fixture
+        .webrtc_service
+        .initiate_call(target.to_string(), constraints::video_call())
+        .expect("call ID");
 
-    fixture.webrtc_service.accept_call(call_id.clone())
+    fixture
+        .webrtc_service
+        .accept_call(call_id.clone())
         .expect("accept call");
 
     // Initial state - video and audio enabled
@@ -385,37 +413,49 @@ async fn test_media_controls_during_active_call() {
     assert!(!call.is_screen_sharing);
 
     // Disable video
-    fixture.webrtc_service.set_video_enabled(call_id.clone(), false)
+    fixture
+        .webrtc_service
+        .set_video_enabled(call_id.clone(), false)
         .expect("disable video");
     let call = fixture.webrtc_service.get_call(&call_id).expect("call");
     assert!(!call.is_video_enabled);
 
     // Disable audio (mute)
-    fixture.webrtc_service.set_audio_enabled(call_id.clone(), false)
+    fixture
+        .webrtc_service
+        .set_audio_enabled(call_id.clone(), false)
         .expect("disable audio");
     let call = fixture.webrtc_service.get_call(&call_id).expect("call");
     assert!(!call.is_audio_enabled);
 
     // Start screen sharing
-    fixture.webrtc_service.start_screen_share(call_id.clone())
+    fixture
+        .webrtc_service
+        .start_screen_share(call_id.clone())
         .expect("start screen share");
     let call = fixture.webrtc_service.get_call(&call_id).expect("call");
     assert!(call.is_screen_sharing);
 
     // Re-enable video
-    fixture.webrtc_service.set_video_enabled(call_id.clone(), true)
+    fixture
+        .webrtc_service
+        .set_video_enabled(call_id.clone(), true)
         .expect("enable video");
     let call = fixture.webrtc_service.get_call(&call_id).expect("call");
     assert!(call.is_video_enabled);
 
     // Re-enable audio (unmute)
-    fixture.webrtc_service.set_audio_enabled(call_id.clone(), true)
+    fixture
+        .webrtc_service
+        .set_audio_enabled(call_id.clone(), true)
         .expect("enable audio");
     let call = fixture.webrtc_service.get_call(&call_id).expect("call");
     assert!(call.is_audio_enabled);
 
     // Stop screen sharing
-    fixture.webrtc_service.stop_screen_share(call_id.clone())
+    fixture
+        .webrtc_service
+        .stop_screen_share(call_id.clone())
         .expect("stop screen share");
     let call = fixture.webrtc_service.get_call(&call_id).expect("call");
     assert!(!call.is_screen_sharing);
@@ -435,12 +475,14 @@ async fn test_audio_only_call_constraints() {
     fixture.initialize().expect("fixture init");
 
     let target = test_identity();
-    let call_id = fixture.webrtc_service.initiate_call(
-        target.to_string(),
-        constraints::audio_only(),
-    ).expect("call ID");
+    let call_id = fixture
+        .webrtc_service
+        .initiate_call(target.to_string(), constraints::audio_only())
+        .expect("call ID");
 
-    fixture.webrtc_service.accept_call(call_id.clone())
+    fixture
+        .webrtc_service
+        .accept_call(call_id.clone())
         .expect("accept call");
 
     // Verify initial state
@@ -449,12 +491,16 @@ async fn test_audio_only_call_constraints() {
     assert!(!call.is_video_enabled);
 
     // Audio control should work
-    fixture.webrtc_service.set_audio_enabled(call_id.clone(), false)
+    fixture
+        .webrtc_service
+        .set_audio_enabled(call_id.clone(), false)
         .expect("disable audio");
     let call = fixture.webrtc_service.get_call(&call_id).expect("call");
     assert!(!call.is_audio_enabled);
 
-    fixture.webrtc_service.set_audio_enabled(call_id.clone(), true)
+    fixture
+        .webrtc_service
+        .set_audio_enabled(call_id.clone(), true)
         .expect("enable audio");
     let call = fixture.webrtc_service.get_call(&call_id).expect("call");
     assert!(call.is_audio_enabled);

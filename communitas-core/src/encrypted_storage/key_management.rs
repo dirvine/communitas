@@ -145,8 +145,10 @@ impl KeyManager {
 
     /// Encrypt data using ChaCha20-Poly1305
     pub fn encrypt(&self, key: &[u8], plaintext: &[u8]) -> Result<Vec<u8>> {
-        let cipher_key = Key::from_slice(key);
-        let cipher = ChaCha20Poly1305::new(cipher_key);
+        let cipher_key = Key::from(
+            *<&[u8; 32]>::try_from(key).map_err(|_| anyhow::anyhow!("Invalid key length"))?,
+        );
+        let cipher = ChaCha20Poly1305::new(&cipher_key);
         let nonce = Self::generate_nonce();
 
         let ciphertext = cipher
@@ -168,13 +170,18 @@ impl KeyManager {
 
         // Extract nonce and ciphertext
         let (nonce_bytes, ciphertext) = ciphertext_with_nonce.split_at(12);
-        let nonce = Nonce::from_slice(nonce_bytes);
+        let nonce = Nonce::from(
+            *<&[u8; 12]>::try_from(nonce_bytes)
+                .map_err(|_| anyhow::anyhow!("Invalid nonce length"))?,
+        );
 
-        let cipher_key = Key::from_slice(key);
-        let cipher = ChaCha20Poly1305::new(cipher_key);
+        let cipher_key = Key::from(
+            *<&[u8; 32]>::try_from(key).map_err(|_| anyhow::anyhow!("Invalid key length"))?,
+        );
+        let cipher = ChaCha20Poly1305::new(&cipher_key);
 
         let plaintext = cipher
-            .decrypt(nonce, ciphertext)
+            .decrypt(&nonce, ciphertext)
             .map_err(|e| anyhow::anyhow!("Decryption failed: {}", e))?;
 
         Ok(Zeroizing::new(plaintext))

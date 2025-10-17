@@ -255,21 +255,35 @@ impl EncryptedStorageManager {
 
         // Store password in keyring if enabled
         if self.config.use_keyring && app_config.get_config().keyring_enabled {
-            tracing::info!("🔑 LOGIN: Attempting to store password in keyring for '{}'", normalized);
-            match self.key_manager
+            tracing::info!(
+                "🔑 LOGIN: Attempting to store password in keyring for '{}'",
+                normalized
+            );
+            match self
+                .key_manager
                 .store_in_keyring(&normalized, password.as_bytes())
                 .await
             {
                 Ok(()) => {
-                    tracing::info!("✅ LOGIN: Password stored in keyring successfully for '{}'", normalized);
+                    tracing::info!(
+                        "✅ LOGIN: Password stored in keyring successfully for '{}'",
+                        normalized
+                    );
                 }
                 Err(e) => {
-                    tracing::error!("❌ LOGIN: Failed to store password in keyring for '{}': {}", normalized, e);
-                    tracing::error!("⚠️ LOGIN: This means passkey/Touch ID authentication will fail later!");
+                    tracing::error!(
+                        "❌ LOGIN: Failed to store password in keyring for '{}': {}",
+                        normalized,
+                        e
+                    );
+                    tracing::error!(
+                        "⚠️ LOGIN: This means passkey/Touch ID authentication will fail later!"
+                    );
                 }
             }
         } else {
-            tracing::warn!("⚠️ LOGIN: Keyring storage skipped - use_keyring={}, keyring_enabled={}",
+            tracing::warn!(
+                "⚠️ LOGIN: Keyring storage skipped - use_keyring={}, keyring_enabled={}",
                 self.config.use_keyring,
                 app_config.get_config().keyring_enabled
             );
@@ -404,18 +418,17 @@ impl EncryptedStorageManager {
         drop(app_config); // Release lock
 
         // Try to get password from keyring
-        if self.config.use_keyring {
-            if let Ok(password_bytes) = self.key_manager.get_from_keyring(&four_words).await {
-                if let Ok(password) = String::from_utf8(password_bytes.to_vec()) {
-                    // Attempt login
-                    match self.login(&four_words, &password, None).await {
-                        Ok(session) => return Ok(Some(session)),
-                        Err(_) => {
-                            // Login failed - possibly password changed
-                            // Remove from keyring
-                            self.key_manager.delete_from_keyring(&four_words).await.ok();
-                        }
-                    }
+        if self.config.use_keyring
+            && let Ok(password_bytes) = self.key_manager.get_from_keyring(&four_words).await
+            && let Ok(password) = String::from_utf8(password_bytes.to_vec())
+        {
+            // Attempt login
+            match self.login(&four_words, &password, None).await {
+                Ok(session) => return Ok(Some(session)),
+                Err(_) => {
+                    // Login failed - possibly password changed
+                    // Remove from keyring
+                    self.key_manager.delete_from_keyring(&four_words).await.ok();
                 }
             }
         }
@@ -532,28 +545,48 @@ impl EncryptedStorageManager {
             .ok();
 
         // Load vault using password from keyring
-        tracing::info!("🔍 RETRIEVAL: Checking keyring config - use_keyring={}", self.config.use_keyring);
+        tracing::info!(
+            "🔍 RETRIEVAL: Checking keyring config - use_keyring={}",
+            self.config.use_keyring
+        );
 
         if self.config.use_keyring {
-            tracing::info!("🔍 RETRIEVAL: Attempting to get password from keyring for '{}'", normalized);
+            tracing::info!(
+                "🔍 RETRIEVAL: Attempting to get password from keyring for '{}'",
+                normalized
+            );
 
             match self.key_manager.get_from_keyring(&normalized).await {
                 Ok(password_bytes) => {
-                    tracing::info!("✅ RETRIEVAL: Password bytes retrieved from keyring for '{}'", normalized);
+                    tracing::info!(
+                        "✅ RETRIEVAL: Password bytes retrieved from keyring for '{}'",
+                        normalized
+                    );
 
                     match String::from_utf8(password_bytes.to_vec()) {
                         Ok(password) => {
-                            tracing::info!("✅ RETRIEVAL: Password successfully decoded, attempting login for '{}'", normalized);
+                            tracing::info!(
+                                "✅ RETRIEVAL: Password successfully decoded, attempting login for '{}'",
+                                normalized
+                            );
                             // Login with stored password
                             return self.login(&normalized, &password, None).await;
                         }
                         Err(e) => {
-                            tracing::error!("❌ RETRIEVAL: Failed to decode password bytes for '{}': {}", normalized, e);
+                            tracing::error!(
+                                "❌ RETRIEVAL: Failed to decode password bytes for '{}': {}",
+                                normalized,
+                                e
+                            );
                         }
                     }
                 }
                 Err(e) => {
-                    tracing::error!("❌ RETRIEVAL: Failed to get password from keyring for '{}': {}", normalized, e);
+                    tracing::error!(
+                        "❌ RETRIEVAL: Failed to get password from keyring for '{}': {}",
+                        normalized,
+                        e
+                    );
                 }
             }
         } else {
@@ -561,7 +594,10 @@ impl EncryptedStorageManager {
         }
 
         // If no password in keyring, cannot proceed
-        tracing::error!("❌ RETRIEVAL: No password found in keyring for '{}'", normalized);
+        tracing::error!(
+            "❌ RETRIEVAL: No password found in keyring for '{}'",
+            normalized
+        );
         anyhow::bail!(
             "Passkey registered but vault password not found in keyring. Please login with password first."
         )
@@ -633,14 +669,22 @@ impl EncryptedStorageManager {
             four_words,
             normalized
         );
-        let result = self.key_manager
+        let result = self
+            .key_manager
             .store_in_keyring(&normalized, password.as_bytes())
             .await;
 
         if result.is_ok() {
-            tracing::info!("✅ STORAGE: Password successfully stored in keyring for '{}'", normalized);
+            tracing::info!(
+                "✅ STORAGE: Password successfully stored in keyring for '{}'",
+                normalized
+            );
         } else {
-            tracing::error!("❌ STORAGE: Failed to store password in keyring for '{}': {:?}", normalized, result);
+            tracing::error!(
+                "❌ STORAGE: Failed to store password in keyring for '{}': {:?}",
+                normalized,
+                result
+            );
         }
 
         result
@@ -655,11 +699,7 @@ impl EncryptedStorageManager {
     // Helper methods
 
     fn normalize_four_words(&self, four_words: &str) -> String {
-        four_words
-            .trim()
-            .to_lowercase()
-            .replace(' ', "-")
-            .replace('_', "-")
+        four_words.trim().to_lowercase().replace([' ', '_'], "-")
     }
 
     pub async fn vault_exists(&self, four_words: &str) -> Result<bool> {

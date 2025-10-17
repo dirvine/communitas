@@ -89,9 +89,9 @@ impl PresenceBeacon {
         let plaintext = bincode::serialize(self).context("Failed to serialize beacon")?;
 
         // Encrypt with nonce
-        let nonce = Nonce::from_slice(&self.nonce);
+        let nonce = Nonce::from(self.nonce);
         let ciphertext = cipher
-            .encrypt(nonce, plaintext.as_ref())
+            .encrypt(&nonce, plaintext.as_ref())
             .map_err(|e| anyhow::anyhow!("Encryption failed: {}", e))?;
 
         Ok(ciphertext)
@@ -102,9 +102,9 @@ impl PresenceBeacon {
         let cipher = ChaCha20Poly1305::new(key.into());
 
         // Decrypt
-        let nonce_obj = Nonce::from_slice(nonce);
+        let nonce_obj = Nonce::from(*nonce);
         let plaintext = cipher
-            .decrypt(nonce_obj, ciphertext)
+            .decrypt(&nonce_obj, ciphertext)
             .map_err(|e| anyhow::anyhow!("Decryption failed: {}", e))?;
 
         // Deserialize

@@ -2,7 +2,7 @@
 
 > **Post-quantum collaboration: messaging, virtual disks, DNS-free websites with Four-Word identities.**
 
-Communitas is a local-first, PQC-ready collaboration platform that unifies messaging, file sharing, voice/video calling, and web publishing using human-verifiable Four-Word addressing. Built on saorsa-core v0.3.26 with Tauri v2.
+Communitas is a local-first, PQC-ready collaboration platform that unifies messaging, file sharing, voice/video calling, and web publishing using human-verifiable Four-Word addressing. Built on saorsa-gossip networking with Tauri v2.
 
 ---
 

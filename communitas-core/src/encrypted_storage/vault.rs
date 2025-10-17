@@ -8,7 +8,7 @@ use crate::encrypted_storage::{KeyManager, StorageConfig, fec_storage::FecStorag
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tokio::fs;
 use tokio::sync::RwLock;
 use zeroize::Zeroizing;
@@ -258,12 +258,12 @@ impl EncryptedVault {
             .ok_or_else(|| anyhow::anyhow!("Key not found: {}", key))?;
 
         // Check if data is in FEC shards
-        if let Some(shard_paths) = &entry.metadata.fec_shards {
-            if let Some(fec) = &self.fec_storage {
-                let encrypted = fec.retrieve_from_fec(shard_paths).await?;
-                let decrypted = self.key_manager.decrypt(&self.encryption_key, &encrypted)?;
-                return Ok(decrypted.to_vec());
-            }
+        if let Some(shard_paths) = &entry.metadata.fec_shards
+            && let Some(fec) = &self.fec_storage
+        {
+            let encrypted = fec.retrieve_from_fec(shard_paths).await?;
+            let decrypted = self.key_manager.decrypt(&self.encryption_key, &encrypted)?;
+            return Ok(decrypted.to_vec());
         }
 
         // Regular encrypted data
@@ -471,7 +471,7 @@ impl EncryptedVault {
     }
 
     async fn load_display_name(
-        vault_path: &PathBuf,
+        vault_path: &Path,
         encryption_key: &[u8],
         key_manager: &KeyManager,
     ) -> Result<String> {

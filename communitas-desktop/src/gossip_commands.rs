@@ -696,10 +696,10 @@ pub async fn gossip_get_subscribed_entities(
 
     let mut entities = Vec::new();
     for msg in messages {
-        if let Ok(msg_str) = String::from_utf8(msg) {
-            if let Some(entity_id) = msg_str.strip_prefix("entity_sub:") {
-                entities.push(entity_id.to_string());
-            }
+        if let Ok(msg_str) = String::from_utf8(msg)
+            && let Some(entity_id) = msg_str.strip_prefix("entity_sub:")
+        {
+            entities.push(entity_id.to_string());
         }
     }
 
@@ -745,10 +745,10 @@ pub async fn gossip_get_entity_messages(
     let mut entity_messages = Vec::new();
 
     for msg in messages {
-        if let Ok(msg_str) = String::from_utf8(msg.clone()) {
-            if let Some(content) = msg_str.strip_prefix(&prefix) {
-                entity_messages.push(content.as_bytes().to_vec());
-            }
+        if let Ok(msg_str) = String::from_utf8(msg.clone())
+            && let Some(content) = msg_str.strip_prefix(&prefix)
+        {
+            entity_messages.push(content.as_bytes().to_vec());
         }
     }
 
@@ -769,8 +769,8 @@ pub async fn gossip_store_entity_message(
     let ctx = guard.as_ref().ok_or("GossipContext not initialized")?;
 
     // Store with entity prefix
-    let content = String::from_utf8(message)
-        .map_err(|e| format!("Message must be valid UTF-8: {}", e))?;
+    let content =
+        String::from_utf8(message).map_err(|e| format!("Message must be valid UTF-8: {}", e))?;
     let prefixed_message = format!("entity_msg:{}:{}", entity_id, content);
 
     ctx.store_message(prefixed_message.as_bytes().to_vec())
@@ -832,15 +832,15 @@ pub async fn gossip_get_peer_metadata(
     let mut metadata = Vec::new();
 
     for msg in messages {
-        if let Ok(msg_str) = String::from_utf8(msg) {
-            if let Some(rest) = msg_str.strip_prefix(&prefix) {
-                // Parse "key:value" format
-                if let Some((key, value)) = rest.split_once(':') {
-                    metadata.push(MetadataEntry {
-                        key: key.to_string(),
-                        value: value.to_string(),
-                    });
-                }
+        if let Ok(msg_str) = String::from_utf8(msg)
+            && let Some(rest) = msg_str.strip_prefix(&prefix)
+        {
+            // Parse "key:value" format
+            if let Some((key, value)) = rest.split_once(':') {
+                metadata.push(MetadataEntry {
+                    key: key.to_string(),
+                    value: value.to_string(),
+                });
             }
         }
     }
@@ -891,15 +891,15 @@ pub async fn gossip_get_own_metadata(
     let mut metadata = Vec::new();
 
     for msg in messages {
-        if let Ok(msg_str) = String::from_utf8(msg) {
-            if let Some(rest) = msg_str.strip_prefix(prefix) {
-                // Parse "key:value" format
-                if let Some((key, value)) = rest.split_once(':') {
-                    metadata.push(MetadataEntry {
-                        key: key.to_string(),
-                        value: value.to_string(),
-                    });
-                }
+        if let Ok(msg_str) = String::from_utf8(msg)
+            && let Some(rest) = msg_str.strip_prefix(prefix)
+        {
+            // Parse "key:value" format
+            if let Some((key, value)) = rest.split_once(':') {
+                metadata.push(MetadataEntry {
+                    key: key.to_string(),
+                    value: value.to_string(),
+                });
             }
         }
     }

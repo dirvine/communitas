@@ -7,7 +7,7 @@ This playbook is for anyone (human or AI) automating Communitas. It captures the
 ## 1. Workspace at a Glance
 - `apps/communitas/` – React/Material UI console that now fronts the identity and storage surfaces. Uses the Tauri bindings defined in `communitas-desktop`.
 - `communitas-desktop/` – Tauri v2 desktop crate. The only place we expose IPC commands (see `src/core_commands.rs`, `core_groups.rs`, `core_cmds.rs`, `container.rs`, `sync.rs`, `security/raw_spki.rs`).
- - `communitas-core/` – Shared Rust library. `CoreContext` wires saorsa-core (v0.3.23) managers together (including the exported `get_user_four_words` helpers), persists PQC identities to the platform keyring, and caches group signing keys.
+ - `communitas-core/` – Shared Rust library. `CoreContext` wires saorsa-gossip networking components together (replacing saorsa-core), persists PQC identities to the platform keyring, and caches group signing keys.
 - `communitas-headless/` – Headless QUIC node with self-update, bootstrap, and metrics support. Ideal for CI smoke checks and autonomous seeders. Pass `--instance-id`, `--config`, and `--storage` (or set the matching `COMMUNITAS_*` env vars) when running more than one node so each instance keeps its own config and data roots.
 
 - `src/` – Legacy React SPA still compiled for regression coverage. Tests under `src/**/__tests__` remain part of CI; do not delete until the migration completes.
@@ -97,7 +97,7 @@ npm run tauri build
 - GitHub workflows in `.github/workflows/` assume Node 20 and Rust stable; keep scripts aligned when changing tooling.
 
 ## 7. Observability & Logs
-- Tracing uses `tracing_subscriber` with `RUST_LOG=info,communitas=debug,saorsa_core=debug` by default. Override per workflow.
+- Tracing uses `tracing_subscriber` with `RUST_LOG=info,communitas=debug,saorsa_gossip=debug` by default. Override per workflow.
 - Container watchers emit `container-tip`; sync flows emit `sync-progress`; UI network diagnostics remain under `window.testNetwork.*` in legacy `src/` tests.
 - Metrics: headless node exposes Prometheus-like endpoint when `--metrics` flag is used.
 

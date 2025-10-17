@@ -52,7 +52,7 @@ pub async fn core_recover_state(
 ) -> Result<bool, String> {
     info!("Attempting to recover core context state");
 
-    let mut guard = shared.write().await;
+    let guard = shared.write().await;
     if guard.is_some() {
         warn!("Core context already exists, skipping recovery");
         return Ok(false);
@@ -119,19 +119,24 @@ pub async fn core_initialize(
     *guard = Some(ctx);
 
     // Initialize WebRTC service with the gossip context
-    if let Some(core_ctx) = guard.as_ref() {
-        if let Some(gossip) = &core_ctx.gossip {
-            let webrtc_service = communitas_core::webrtc::service::CommunitasWebRtcService::new(gossip.clone())
+    if let Some(core_ctx) = guard.as_ref()
+        && let Some(gossip) = &core_ctx.gossip
+    {
+        let webrtc_service =
+            communitas_core::webrtc::service::CommunitasWebRtcService::new(gossip.clone())
                 .map_err(|e| format!("Failed to initialize WebRTC service: {}", e))?;
 
-            // Start the WebRTC service
-            webrtc_service.start().await
-                .map_err(|e| format!("Failed to start WebRTC service: {}", e))?;
+        // Start the WebRTC service
+        webrtc_service
+            .start()
+            .await
+            .map_err(|e| format!("Failed to start WebRTC service: {}", e))?;
 
-            // Store the WebRTC service in the state
-            webrtc_state.initialize(webrtc_service).await
-                .map_err(|e| format!("Failed to store WebRTC service: {}", e))?;
-        }
+        // Store the WebRTC service in the state
+        webrtc_state
+            .initialize(webrtc_service)
+            .await
+            .map_err(|e| format!("Failed to store WebRTC service: {}", e))?;
     }
 
     Ok(true)
@@ -159,31 +164,31 @@ pub async fn core_get_peer_id(
 #[cfg(feature = "gossip_overlay")]
 #[tauri::command]
 pub async fn core_get_user_info(
-shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
     gossip_state: State<'_, gossip_commands::GossipState>,
 ) -> Result<UserInfo, String> {
-// Check if core is initialized first
+    // Check if core is initialized first
     let core_initialized = {
-    let guard = shared.read().await;
-    guard.is_some()
+        let guard = shared.read().await;
+        guard.is_some()
     };
 
-if !core_initialized {
-    return Err("Core context not initialized. Please call core_initialize first.".to_string());
+    if !core_initialized {
+        return Err("Core context not initialized. Please call core_initialize first.".to_string());
     }
 
-// Get current user's identity from gossip
-let peer_id = gossip_commands::gossip_get_own_identity(gossip_state.clone())
-.await
-.map_err(|e| format!("Failed to get peer identity: {}", e))?;
+    // Get current user's identity from gossip
+    let peer_id = gossip_commands::gossip_get_own_identity(gossip_state.clone())
+        .await
+        .map_err(|e| format!("Failed to get peer identity: {}", e))?;
 
-// Get metadata from gossip
+    // Get metadata from gossip
     let metadata = gossip_commands::gossip_get_own_metadata(gossip_state)
-    .await
-.map_err(|e| format!("Failed to get user metadata: {}", e))?;
+        .await
+        .map_err(|e| format!("Failed to get user metadata: {}", e))?;
 
-// Extract display_name and device_name from metadata
-let mut display_name = "User".to_string();
+    // Extract display_name and device_name from metadata
+    let mut display_name = "User".to_string();
     let mut device_name = "Device".to_string();
 
     for entry in metadata {
@@ -205,11 +210,12 @@ let mut display_name = "User".to_string();
 #[cfg(not(feature = "gossip_overlay"))]
 #[tauri::command]
 pub async fn core_get_user_info(
-shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+    shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
 ) -> Result<UserInfo, String> {
-// Check if core is initialized
+    // Check if core is initialized
     let guard = shared.read().await;
-    let core_ctx = guard.as_ref()
+    let core_ctx = guard
+        .as_ref()
         .ok_or("Core context not initialized. Please call core_initialize first.")?;
 
     // Return basic info from core context
@@ -254,12 +260,8 @@ pub async fn core_create_channel(
     let channel_id = uuid::Uuid::new_v4().to_string();
 
     // Join entity (creates it if doesn't exist)
-    gossip_commands::gossip_join_entity(
-        gossip_state,
-        channel_id.clone(),
-        "channel".to_string(),
-    )
-    .await?;
+    gossip_commands::gossip_join_entity(gossip_state, channel_id.clone(), "channel".to_string())
+        .await?;
 
     Ok(ChannelInfo {
         id: channel_id,
@@ -321,8 +323,7 @@ pub async fn core_add_reaction(
     // Format: "msg_reaction:{message_id}:{emoji}:{reactor}"
     let reaction_message = format!("msg_reaction:{}:{}:{}", message_id, emoji, reactor);
 
-    gossip_commands::gossip_store_message(gossip_state, reaction_message.as_bytes().to_vec())
-        .await
+    gossip_commands::gossip_store_message(gossip_state, reaction_message.as_bytes().to_vec()).await
 }
 
 #[cfg(not(feature = "gossip_overlay"))]
@@ -422,8 +423,8 @@ pub async fn core_channel_invite_by_words(
     four_words: String,
 ) -> Result<(), String> {
     // First, find the contact by four-word address
-    let _contact = gossip_commands::gossip_find_contact(gossip_state.clone(), four_words.clone())
-        .await?;
+    let _contact =
+        gossip_commands::gossip_find_contact(gossip_state.clone(), four_words.clone()).await?;
 
     // Then invite them by joining them to the channel entity
     // Note: The actual invitation mechanism may require additional gossip operations
@@ -507,12 +508,8 @@ pub async fn core_create_thread(
     let thread_id = format!("thread_{}", message_id);
 
     // Join the thread entity (creates it if doesn't exist)
-    gossip_commands::gossip_join_entity(
-        gossip_state,
-        thread_id.clone(),
-        "thread".to_string(),
-    )
-    .await?;
+    gossip_commands::gossip_join_entity(gossip_state, thread_id.clone(), "thread".to_string())
+        .await?;
 
     Ok(thread_id)
 }
@@ -648,8 +645,7 @@ pub async fn core_send_message_to_recipients(
 
 #[tauri::command]
 pub async fn core_get_bootstrap_nodes(
-    #[cfg(feature = "gossip_overlay")]
-    gossip_state: State<'_, gossip_commands::GossipState>,
+    #[cfg(feature = "gossip_overlay")] gossip_state: State<'_, gossip_commands::GossipState>,
 ) -> Result<Vec<String>, String> {
     #[cfg(feature = "gossip_overlay")]
     {
@@ -737,7 +733,7 @@ pub async fn core_messages_list(
                 id: format!("msg_{}", idx),
                 content,
                 author: "unknown".to_string(), // TODO: Extract from message metadata
-                timestamp: 0,                   // TODO: Extract from message metadata
+                timestamp: 0,                  // TODO: Extract from message metadata
             }
         })
         .collect();
@@ -877,7 +873,7 @@ pub async fn core_entity_update(
     updates: serde_json::Value,
 ) -> Result<(), String> {
     // Store entity update in CRDT with "entity_update:{id}:{json}" format
-    let update_message = format!("entity_update:{}:{}", entity_id, updates.to_string());
+    let update_message = format!("entity_update:{}:{}", entity_id, updates);
     gossip_commands::gossip_store_message(gossip_state, update_message.as_bytes().to_vec()).await
 }
 
@@ -995,18 +991,18 @@ pub async fn unsubscribe_from_entity(
 #[cfg(not(feature = "gossip_overlay"))]
 #[tauri::command]
 pub async fn unsubscribe_from_entity(
-_shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
-_entity_id: String,
+    _shared: State<'_, Arc<RwLock<Option<CoreContext>>>>,
+    _entity_id: String,
 ) -> Result<(), String> {
-Err("Gossip overlay not enabled".to_string())
+    Err("Gossip overlay not enabled".to_string())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::webrtc_commands::WebRtcState;
     use std::sync::Arc;
     use tokio::sync::RwLock;
-    use crate::webrtc_commands::WebRtcState;
 
     #[test]
     fn test_core_recover_state_placeholder() {

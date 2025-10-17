@@ -5,11 +5,11 @@
 // Handles automatic updates from GitHub releases with signature verification
 
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
+use std::sync::Arc;
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_updater::UpdaterExt;
 use tokio::sync::RwLock;
-use std::sync::Arc;
-use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateStatus {
@@ -94,18 +94,16 @@ impl UpdateSettings {
         };
 
         match tokio::fs::read_to_string(&path).await {
-            Ok(content) => {
-                match serde_json::from_str::<UpdateSettings>(&content) {
-                    Ok(settings) => {
-                        tracing::info!("Loaded update settings from {:?}", path);
-                        settings
-                    }
-                    Err(e) => {
-                        tracing::warn!("Failed to parse settings: {}, using defaults", e);
-                        Self::default()
-                    }
+            Ok(content) => match serde_json::from_str::<UpdateSettings>(&content) {
+                Ok(settings) => {
+                    tracing::info!("Loaded update settings from {:?}", path);
+                    settings
                 }
-            }
+                Err(e) => {
+                    tracing::warn!("Failed to parse settings: {}, using defaults", e);
+                    Self::default()
+                }
+            },
             Err(e) => {
                 tracing::debug!("No settings file found ({}), using defaults", e);
                 Self::default()
@@ -119,14 +117,16 @@ impl UpdateSettings {
 
         // Ensure directory exists
         if let Some(parent) = path.parent() {
-            tokio::fs::create_dir_all(parent).await
+            tokio::fs::create_dir_all(parent)
+                .await
                 .map_err(|e| format!("Failed to create settings directory: {}", e))?;
         }
 
         let content = serde_json::to_string_pretty(self)
             .map_err(|e| format!("Failed to serialize settings: {}", e))?;
 
-        tokio::fs::write(&path, content).await
+        tokio::fs::write(&path, content)
+            .await
             .map_err(|e| format!("Failed to write settings: {}", e))?;
 
         tracing::info!("Saved update settings to {:?}", path);
@@ -157,40 +157,41 @@ pub async fn check_for_updates(
 
     // Check for updates
     let result = match app.updater() {
-        Ok(updater) => {
-            match updater.check().await {
-                Ok(Some(update)) => {
-                    let status = UpdateStatus {
-                        available: true,
-                        current_version: update.current_version.clone(),
-                        latest_version: Some(update.version.clone()),
-                        download_url: Some(update.download_url.to_string()),
-                        release_notes: update.body.clone(),
-                        checking: false,
-                        error: None,
-                    };
+        Ok(updater) => match updater.check().await {
+            Ok(Some(update)) => {
+                let status = UpdateStatus {
+                    available: true,
+                    current_version: update.current_version.clone(),
+                    latest_version: Some(update.version.clone()),
+                    download_url: Some(update.download_url.to_string()),
+                    release_notes: update.body.clone(),
+                    checking: false,
+                    error: None,
+                };
 
-                    tracing::info!(
-                        "Update available: {} -> {}",
-                        status.current_version,
-                        status.latest_version.as_ref().unwrap_or(&"unknown".to_string())
-                    );
+                tracing::info!(
+                    "Update available: {} -> {}",
+                    status.current_version,
+                    status
+                        .latest_version
+                        .as_ref()
+                        .unwrap_or(&"unknown".to_string())
+                );
 
-                    Ok(status)
-                }
-                Ok(None) => {
-                    tracing::info!("No updates available");
-                    Ok(UpdateStatus {
-                        checking: false,
-                        ..Default::default()
-                    })
-                }
-                Err(e) => {
-                    tracing::error!("Error checking for updates: {}", e);
-                    Err(format!("Failed to check for updates: {}", e))
-                }
+                Ok(status)
             }
-        }
+            Ok(None) => {
+                tracing::info!("No updates available");
+                Ok(UpdateStatus {
+                    checking: false,
+                    ..Default::default()
+                })
+            }
+            Err(e) => {
+                tracing::error!("Error checking for updates: {}", e);
+                Err(format!("Failed to check for updates: {}", e))
+            }
+        },
         Err(e) => {
             tracing::warn!("Updater not available: {}", e);
             Err(format!("Updater not configured: {}", e))
@@ -211,17 +212,17 @@ pub async fn check_for_updates(
 
 /// Download and install update
 #[tauri::command]
-pub async fn install_update(
-    app: AppHandle,
-    _state: State<'_, UpdateState>,
-) -> Result<(), String> {
+pub async fn install_update(app: AppHandle, _state: State<'_, UpdateState>) -> Result<(), String> {
     tracing::info!("Installing update...");
 
-    let updater = app.updater()
+    let updater = app
+        .updater()
         .map_err(|e| format!("Updater not configured: {}", e))?;
 
     // Check for update first
-    let update = updater.check().await
+    let update = updater
+        .check()
+        .await
         .map_err(|e| format!("Failed to check for updates: {}", e))?
         .ok_or_else(|| "No update available".to_string())?;
 
@@ -229,22 +230,26 @@ pub async fn install_update(
 
     // Download and install
     // The updater will handle signature verification automatically
-    update.download_and_install(
-        |chunk_length, content_length| {
-            let percent = content_length
-                .map(|total| (chunk_length as f32 / total as f32) * 100.0);
+    update
+        .download_and_install(
+            |chunk_length, content_length| {
+                let percent =
+                    content_length.map(|total| (chunk_length as f32 / total as f32) * 100.0);
 
-            tracing::debug!(
-                "Downloaded {} bytes ({}%)",
-                chunk_length,
-                percent.map(|p| format!("{:.1}", p)).unwrap_or_else(|| "?".to_string())
-            );
-        },
-        || {
-            tracing::info!("Download complete, installing...");
-        }
-    ).await
-    .map_err(|e| format!("Failed to install update: {}", e))?;
+                tracing::debug!(
+                    "Downloaded {} bytes ({}%)",
+                    chunk_length,
+                    percent
+                        .map(|p| format!("{:.1}", p))
+                        .unwrap_or_else(|| "?".to_string())
+                );
+            },
+            || {
+                tracing::info!("Download complete, installing...");
+            },
+        )
+        .await
+        .map_err(|e| format!("Failed to install update: {}", e))?;
 
     tracing::info!("Update installed successfully - restart required");
 
@@ -253,9 +258,7 @@ pub async fn install_update(
 
 /// Get current update status
 #[tauri::command]
-pub async fn get_update_status(
-    state: State<'_, UpdateState>,
-) -> Result<UpdateStatus, String> {
+pub async fn get_update_status(state: State<'_, UpdateState>) -> Result<UpdateStatus, String> {
     Ok(state.read().await.clone())
 }
 
@@ -285,7 +288,10 @@ pub async fn set_update_settings(
     // If auto-update is enabled, reschedule checks with new frequency
     if settings.auto_update_enabled {
         // Note: In a full implementation, we'd restart the scheduler here
-        tracing::info!("Auto-update enabled with {}h frequency", settings.check_frequency);
+        tracing::info!(
+            "Auto-update enabled with {}h frequency",
+            settings.check_frequency
+        );
     }
 
     Ok(())
@@ -301,7 +307,10 @@ pub async fn set_auto_update(
     let mut settings = settings_state.write().await;
     settings.auto_update_enabled = enabled;
     settings.save(&app).await?;
-    tracing::info!("Auto-update {}", if enabled { "enabled" } else { "disabled" });
+    tracing::info!(
+        "Auto-update {}",
+        if enabled { "enabled" } else { "disabled" }
+    );
     Ok(())
 }
 
@@ -345,21 +354,21 @@ pub fn schedule_update_checks(app: AppHandle, state: UpdateState) {
             tracing::debug!("Scheduled update check");
 
             // Manual update check without using tauri::State
-            if let Ok(updater) = app.updater() {
-                if let Ok(Some(update)) = updater.check().await {
-                    let status = UpdateStatus {
-                        available: true,
-                        current_version: update.current_version.clone(),
-                        latest_version: Some(update.version.clone()),
-                        download_url: Some(update.download_url.to_string()),
-                        release_notes: update.body.clone(),
-                        checking: false,
-                        error: None,
-                    };
+            if let Ok(updater) = app.updater()
+                && let Ok(Some(update)) = updater.check().await
+            {
+                let status = UpdateStatus {
+                    available: true,
+                    current_version: update.current_version.clone(),
+                    latest_version: Some(update.version.clone()),
+                    download_url: Some(update.download_url.to_string()),
+                    release_notes: update.body.clone(),
+                    checking: false,
+                    error: None,
+                };
 
-                    *state.write().await = status;
-                    tracing::info!("Scheduled check: Update available!");
-                }
+                *state.write().await = status;
+                tracing::info!("Scheduled check: Update available!");
             }
         }
     });

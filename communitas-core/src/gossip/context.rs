@@ -117,8 +117,7 @@ impl GossipContext {
             .join("keystore");
 
         // Ensure keystore directory exists
-        std::fs::create_dir_all(&keystore_path)
-            .context("Failed to create keystore directory")?;
+        std::fs::create_dir_all(&keystore_path).context("Failed to create keystore directory")?;
 
         let keystore_str = keystore_path
             .to_str()
@@ -196,7 +195,7 @@ impl GossipContext {
             Arc::new(RwLock::new(Box::new(coord_transport)));
 
         let coordinator = super::coordinator::CoordinatorClient::new(
-            peer_id.clone(),
+            peer_id,
             coordinator_transport,
             membership.clone(),
         );
@@ -211,7 +210,7 @@ impl GossipContext {
             Arc::new(RwLock::new(Box::new(rdv_transport_qt)));
 
         let rdv_pubsub_impl = saorsa_gossip_pubsub::PlumtreePubSub::new(
-            peer_id.clone(),
+            peer_id,
             Arc::new(rdv_pubsub_qt),
             signing_key.clone(),
         );
@@ -219,7 +218,7 @@ impl GossipContext {
             Arc::new(RwLock::new(Box::new(rdv_pubsub_impl)));
 
         let rendezvous =
-            super::rendezvous::RendezvousClient::new(peer_id.clone(), rdv_transport, rdv_pubsub);
+            super::rendezvous::RendezvousClient::new(peer_id, rdv_transport, rdv_pubsub);
         let rendezvous = Arc::new(rendezvous);
 
         // 13. Initialize Saorsa Sites (SPEC2.md §5 - Rendezvous Protocol)

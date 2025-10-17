@@ -12,7 +12,7 @@
 mod fixtures;
 
 use fixtures::webrtc_fixtures::{
-    constraints, test_identity, test_identities, MockError, WebRtcTestFixture,
+    MockError, WebRtcTestFixture, constraints, test_identities, test_identity,
 };
 
 /// Test: initiate_call - Happy Path
@@ -31,17 +31,19 @@ async fn test_initiate_call_happy_path() {
     let constraints = constraints::video_call();
 
     // This will fail until we implement the Tauri command
-    let result = fixture.webrtc_service.initiate_call(
-        target.to_string(),
-        constraints.clone(),
-    );
+    let result = fixture
+        .webrtc_service
+        .initiate_call(target.to_string(), constraints.clone());
 
     assert!(result.is_ok(), "initiate_call should succeed");
     let call_id = result.expect("call ID");
 
     // Verify call ID format (UUID)
     assert!(!call_id.is_empty(), "call ID should not be empty");
-    assert!(call_id.starts_with("call_"), "call ID should have 'call_' prefix");
+    assert!(
+        call_id.starts_with("call_"),
+        "call ID should have 'call_' prefix"
+    );
 
     // Verify call was added to active calls
     let call = fixture.webrtc_service.get_call(&call_id);
@@ -53,7 +55,9 @@ async fn test_initiate_call_happy_path() {
     assert_eq!(call.constraints.has_audio(), constraints.has_audio());
 
     // Verify CallInitiated event was emitted
-    let events = fixture.webrtc_service.get_emitted_events()
+    let events = fixture
+        .webrtc_service
+        .get_emitted_events()
         .expect("emitted events");
     assert_eq!(events.len(), 1, "should emit one event");
 
@@ -75,10 +79,9 @@ async fn test_initiate_call_invalid_target() {
     let invalid_target = "invalid-target";
     let constraints = constraints::audio_only();
 
-    let result = fixture.webrtc_service.initiate_call(
-        invalid_target.to_string(),
-        constraints,
-    );
+    let result = fixture
+        .webrtc_service
+        .initiate_call(invalid_target.to_string(), constraints);
 
     assert!(result.is_err(), "should fail with invalid target");
     let error = result.expect_err("error");
@@ -88,7 +91,9 @@ async fn test_initiate_call_invalid_target() {
     );
 
     // Verify no calls were created
-    let events = fixture.webrtc_service.get_emitted_events()
+    let events = fixture
+        .webrtc_service
+        .get_emitted_events()
         .expect("emitted events");
     assert_eq!(events.len(), 0, "should not emit any events");
 
@@ -107,16 +112,17 @@ async fn test_initiate_call_network_failure() {
     fixture.initialize().expect("fixture init");
 
     // Simulate network failure
-    fixture.webrtc_service.set_error_mode(Some(MockError::NetworkFailure))
+    fixture
+        .webrtc_service
+        .set_error_mode(Some(MockError::NetworkFailure))
         .expect("set error mode");
 
     let target = test_identity();
     let constraints = constraints::audio_only();
 
-    let result = fixture.webrtc_service.initiate_call(
-        target.to_string(),
-        constraints,
-    );
+    let result = fixture
+        .webrtc_service
+        .initiate_call(target.to_string(), constraints);
 
     assert!(result.is_err(), "should fail with network error");
     let error = result.expect_err("error");
@@ -142,10 +148,10 @@ async fn test_accept_call_happy_path() {
 
     // First, create a call
     let target = test_identity();
-    let call_id = fixture.webrtc_service.initiate_call(
-        target.to_string(),
-        constraints::video_call(),
-    ).expect("call ID");
+    let call_id = fixture
+        .webrtc_service
+        .initiate_call(target.to_string(), constraints::video_call())
+        .expect("call ID");
 
     // Accept the call
     let result = fixture.webrtc_service.accept_call(call_id.clone());
@@ -198,10 +204,10 @@ async fn test_reject_call_happy_path() {
 
     // Create a call first
     let target = test_identity();
-    let call_id = fixture.webrtc_service.initiate_call(
-        target.to_string(),
-        constraints::audio_only(),
-    ).expect("call ID");
+    let call_id = fixture
+        .webrtc_service
+        .initiate_call(target.to_string(), constraints::audio_only())
+        .expect("call ID");
 
     // Reject the call
     let result = fixture.webrtc_service.reject_call(call_id.clone());
@@ -213,7 +219,9 @@ async fn test_reject_call_happy_path() {
     assert_eq!(call.state, fixtures::webrtc_fixtures::CallState::Rejected);
 
     // Verify CallRejected event was emitted
-    let events = fixture.webrtc_service.get_emitted_events()
+    let events = fixture
+        .webrtc_service
+        .get_emitted_events()
         .expect("emitted events");
     // Should have CallInitiated + CallRejected = 2 events
     assert!(events.len() >= 2, "should have at least 2 events");
@@ -261,12 +269,14 @@ async fn test_end_call_happy_path() {
 
     // Create and accept a call first
     let target = test_identity();
-    let call_id = fixture.webrtc_service.initiate_call(
-        target.to_string(),
-        constraints::video_call(),
-    ).expect("call ID");
+    let call_id = fixture
+        .webrtc_service
+        .initiate_call(target.to_string(), constraints::video_call())
+        .expect("call ID");
 
-    fixture.webrtc_service.accept_call(call_id.clone())
+    fixture
+        .webrtc_service
+        .accept_call(call_id.clone())
         .expect("accept call");
 
     // End the call
@@ -279,9 +289,14 @@ async fn test_end_call_happy_path() {
     assert_eq!(call.state, fixtures::webrtc_fixtures::CallState::Ended);
 
     // Verify CallEnded event was emitted
-    let events = fixture.webrtc_service.get_emitted_events()
+    let events = fixture
+        .webrtc_service
+        .get_emitted_events()
         .expect("emitted events");
-    assert!(events.len() >= 2, "should have CallInitiated + CallEnded events");
+    assert!(
+        events.len() >= 2,
+        "should have CallInitiated + CallEnded events"
+    );
 
     fixture.cleanup().expect("cleanup");
 }
@@ -325,32 +340,41 @@ async fn test_call_state_transitions() {
     let target = test_identity();
 
     // Initiate call (Initiating state)
-    let call_id = fixture.webrtc_service.initiate_call(
-        target.to_string(),
-        constraints::audio_only(),
-    ).expect("call ID");
+    let call_id = fixture
+        .webrtc_service
+        .initiate_call(target.to_string(), constraints::audio_only())
+        .expect("call ID");
 
     let call = fixture.webrtc_service.get_call(&call_id).expect("call");
     assert_eq!(call.state, fixtures::webrtc_fixtures::CallState::Initiating);
 
     // Accept call (Active state)
-    fixture.webrtc_service.accept_call(call_id.clone())
+    fixture
+        .webrtc_service
+        .accept_call(call_id.clone())
         .expect("accept call");
 
     let call = fixture.webrtc_service.get_call(&call_id).expect("call");
     assert_eq!(call.state, fixtures::webrtc_fixtures::CallState::Active);
 
     // End call (Ended state)
-    fixture.webrtc_service.end_call(call_id.clone())
+    fixture
+        .webrtc_service
+        .end_call(call_id.clone())
         .expect("end call");
 
     let call = fixture.webrtc_service.get_call(&call_id).expect("call");
     assert_eq!(call.state, fixtures::webrtc_fixtures::CallState::Ended);
 
     // Verify all events were emitted
-    let events = fixture.webrtc_service.get_emitted_events()
+    let events = fixture
+        .webrtc_service
+        .get_emitted_events()
         .expect("emitted events");
-    assert!(events.len() >= 2, "should have multiple state transition events");
+    assert!(
+        events.len() >= 2,
+        "should have multiple state transition events"
+    );
 
     fixture.cleanup().expect("cleanup");
 }
@@ -371,22 +395,24 @@ async fn test_concurrent_calls() {
     let target2 = &identities[1];
 
     // Initiate two calls
-    let call_id1 = fixture.webrtc_service.initiate_call(
-        target1.to_string(),
-        constraints::audio_only(),
-    ).expect("call ID 1");
+    let call_id1 = fixture
+        .webrtc_service
+        .initiate_call(target1.to_string(), constraints::audio_only())
+        .expect("call ID 1");
 
-    let call_id2 = fixture.webrtc_service.initiate_call(
-        target2.to_string(),
-        constraints::video_call(),
-    ).expect("call ID 2");
+    let call_id2 = fixture
+        .webrtc_service
+        .initiate_call(target2.to_string(), constraints::video_call())
+        .expect("call ID 2");
 
     // Verify both calls exist
     assert!(fixture.webrtc_service.get_call(&call_id1).is_ok());
     assert!(fixture.webrtc_service.get_call(&call_id2).is_ok());
 
     // Accept first call
-    fixture.webrtc_service.accept_call(call_id1.clone())
+    fixture
+        .webrtc_service
+        .accept_call(call_id1.clone())
         .expect("accept call 1");
 
     // Verify first call is active, second is still initiating
@@ -394,10 +420,15 @@ async fn test_concurrent_calls() {
     let call2 = fixture.webrtc_service.get_call(&call_id2).expect("call 2");
 
     assert_eq!(call1.state, fixtures::webrtc_fixtures::CallState::Active);
-    assert_eq!(call2.state, fixtures::webrtc_fixtures::CallState::Initiating);
+    assert_eq!(
+        call2.state,
+        fixtures::webrtc_fixtures::CallState::Initiating
+    );
 
     // End first call
-    fixture.webrtc_service.end_call(call_id1.clone())
+    fixture
+        .webrtc_service
+        .end_call(call_id1.clone())
         .expect("end call 1");
 
     // Verify second call is still active

@@ -88,19 +88,11 @@ impl CoordinatorClient {
         info!("Publishing coordinator advert for peer {:?}", self.peer_id);
 
         // Convert SocketAddr to AddrHint with current timestamp
-        let addr_hints: Vec<AddrHint> = endpoints
-            .into_iter()
-            .map(|addr| AddrHint::new(addr))
-            .collect();
+        let addr_hints: Vec<AddrHint> = endpoints.into_iter().map(AddrHint::new).collect();
 
         // Create coordinator advert
-        let advert = CoordinatorAdvert::new(
-            self.peer_id.clone(),
-            roles,
-            addr_hints,
-            nat_class,
-            validity_ms,
-        );
+        let advert =
+            CoordinatorAdvert::new(self.peer_id, roles, addr_hints, nat_class, validity_ms);
 
         // Cache locally
         self.cached_adverts.write().await.push(advert.clone());
@@ -127,7 +119,7 @@ impl CoordinatorClient {
         for peer_id in active_peers {
             match transport
                 .send_to_peer(
-                    peer_id.clone(),
+                    peer_id,
                     StreamType::PubSub,
                     Bytes::from(advert_bytes.clone()),
                 )
@@ -205,7 +197,7 @@ impl CoordinatorClient {
         );
 
         // Create and serialize FIND_COORDINATOR query
-        let query = FindCoordinatorQuery::new(self.peer_id.clone());
+        let query = FindCoordinatorQuery::new(self.peer_id);
         let mut query_bytes = Vec::new();
         ciborium::ser::into_writer(&query, &mut query_bytes)
             .map_err(|e| anyhow::anyhow!("CBOR encoding failed: {:?}", e))?;
@@ -218,7 +210,7 @@ impl CoordinatorClient {
         for peer_id in &selected_peers {
             match transport
                 .send_to_peer(
-                    peer_id.clone(),
+                    *peer_id,
                     StreamType::Membership,
                     Bytes::from(query_bytes.clone()),
                 )
@@ -289,11 +281,7 @@ impl CoordinatorClient {
         // Send request to coordinator via membership stream
         let transport = self.transport.read().await;
         transport
-            .send_to_peer(
-                coordinator_peer_id.clone(),
-                StreamType::Membership,
-                request_bytes,
-            )
+            .send_to_peer(coordinator_peer_id, StreamType::Membership, request_bytes)
             .await
             .map_err(|e| anyhow::anyhow!("Failed to send reflection request: {}", e))?;
 
@@ -304,14 +292,12 @@ impl CoordinatorClient {
                     Ok((peer, stream_type, data)) => {
                         if peer == coordinator_peer_id && stream_type == StreamType::Membership {
                             // Parse response - expected format: "ADDR_REFLECT_RESPONSE:<ip>:<port>"
-                            if let Ok(response_str) = String::from_utf8(data.to_vec()) {
-                                if let Some(addr_str) =
+                            if let Ok(response_str) = String::from_utf8(data.to_vec())
+                                && let Some(addr_str) =
                                     response_str.strip_prefix("ADDR_REFLECT_RESPONSE:")
-                                {
-                                    if let Ok(addr) = addr_str.parse::<SocketAddr>() {
-                                        return Ok(addr);
-                                    }
-                                }
+                                && let Ok(addr) = addr_str.parse::<SocketAddr>()
+                            {
+                                return Ok(addr);
                             }
                         }
                     }
@@ -381,14 +367,14 @@ impl CoordinatorClient {
                         match ciborium::de::from_reader::<CoordinatorAdvert, _>(&data[..]) {
                             Ok(advert) => {
                                 // Deduplicate by coordinator peer
-                                let coord_peer = advert.peer.clone();
-                                if !adverts_map.contains_key(&coord_peer) {
+                                let coord_peer = advert.peer;
+                                adverts_map.entry(coord_peer).or_insert_with(|| {
                                     debug!(
                                         "Received coordinator advert from {:?} via {:?}",
                                         coord_peer, peer_id
                                     );
-                                    adverts_map.insert(coord_peer, advert);
-                                }
+                                    advert
+                                });
                             }
                             Err(e) => {
                                 debug!(

@@ -26,7 +26,7 @@ gossip_overlay = []
 communitas-core = { path = "../communitas-core" }
 
 # Saorsa Core ecosystem
-saorsa-core = { workspace = true }
+# Removed: saorsa-core - replaced with saorsa-gossip-* crates in communitas-core
 
 # Saorsa Gossip - P2P networking layer (required, no longer optional)
 saorsa-gossip-types = { workspace = true }

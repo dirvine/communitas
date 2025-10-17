@@ -9,9 +9,7 @@
 //! Provides mock implementations and test utilities for WebRTC command testing.
 
 use communitas_core::gossip::GossipContext;
-use communitas_core::webrtc::{
-    CallEvent, CallId, CommunitasIdentity, MediaConstraints, MediaType,
-};
+use communitas_core::webrtc::{CallEvent, CallId, CommunitasIdentity, MediaConstraints, MediaType};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tokio::sync::broadcast;
@@ -475,19 +473,15 @@ pub fn create_default_devices() -> Vec<MockDevice> {
 /// Generates valid four-word addresses for testing
 pub fn test_identities() -> Vec<String> {
     vec![
-        communitas_core::identity::generate_id_words()
-            .expect("generate identity 1"),
-        communitas_core::identity::generate_id_words()
-            .expect("generate identity 2"),
-        communitas_core::identity::generate_id_words()
-            .expect("generate identity 3"),
+        communitas_core::identity::generate_id_words().expect("generate identity 1"),
+        communitas_core::identity::generate_id_words().expect("generate identity 2"),
+        communitas_core::identity::generate_id_words().expect("generate identity 3"),
     ]
 }
 
 /// Get a single valid test identity
 pub fn test_identity() -> String {
-    communitas_core::identity::generate_id_words()
-        .expect("generate test identity")
+    communitas_core::identity::generate_id_words().expect("generate test identity")
 }
 
 /// Test media constraints helpers

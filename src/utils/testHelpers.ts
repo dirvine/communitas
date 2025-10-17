@@ -5,7 +5,7 @@
  * Supports both unit tests (Vitest) and E2E tests (Playwright).
  */
 
-import { vi } from 'vitest'
+
 
 // Test Data Constants
 export const TEST_CONSTANTS = {
@@ -113,12 +113,12 @@ export class PQCTestHelper {
     return MockFactory.createMockPQCKeyPair('Kyber-768')
   }
 
-  static createMockPQCSignature(data: Uint8Array, keyPair: any) {
+  static createMockPQCSignature(_data: Uint8Array, _keyPair: any) {
     // Simulate ML-DSA signature (would be 3309 bytes in reality)
     return new Uint8Array(64) // Mock signature
   }
 
-  static createMockPQCEncryption(data: Uint8Array, publicKey: string) {
+  static createMockPQCEncryption(data: Uint8Array, _publicKey: string) {
     // Simulate Kyber encryption
     return {
       ciphertext: data, // In reality this would be encrypted
@@ -220,14 +220,14 @@ export class StorageTestHelper {
 
 // UI Test Helpers
 export class UITestHelper {
-  static async waitForElement(selector: string, timeout: number = 5000): Promise<void> {
+  static async waitForElement(_selector: string, _timeout: number = 5000): Promise<void> {
     // Implementation would depend on testing framework
     await new Promise(resolve => setTimeout(resolve, 100))
   }
 
   static async simulateUserTyping(input: string, delay: number = 50): Promise<void> {
     // Simulate realistic typing with delays
-    for (const char of input) {
+    for (const _char of input) {
       await new Promise(resolve => setTimeout(resolve, delay))
       // Type character (implementation depends on framework)
     }

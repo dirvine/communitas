@@ -77,7 +77,7 @@ impl RendezvousClient {
 
     /// Get our peer ID
     pub fn peer_id(&self) -> PeerId {
-        self.peer_id.clone()
+        self.peer_id
     }
 
     /// Get the underlying transport for direct QUIC operations
@@ -123,7 +123,7 @@ impl RendezvousClient {
 
         // Subscribe via pubsub
         let pubsub = self.pubsub.read().await;
-        let _rx = pubsub.subscribe(topic_id.clone());
+        let _rx = pubsub.subscribe(topic_id);
 
         // Store subscription
         let mut subscriptions = self.subscriptions.write().await;
@@ -226,7 +226,7 @@ impl RendezvousClient {
                 return Err(anyhow::anyhow!(
                     "Invalid CBOR, not a ProviderSummary: {}",
                     e
-                ))
+                ));
             }
         };
 
@@ -318,7 +318,7 @@ impl RendezvousClient {
     /// Helper to clone self for background tasks
     fn clone_for_background(&self) -> Self {
         Self {
-            peer_id: self.peer_id.clone(),
+            peer_id: self.peer_id,
             transport: self.transport.clone(),
             pubsub: self.pubsub.clone(),
             cached_summaries: self.cached_summaries.clone(),
@@ -550,7 +550,8 @@ mod tests {
 
         // Serialize it (simulating what we'd receive from pubsub)
         let mut summary_bytes = Vec::new();
-ciborium::ser::into_writer(&summary, &mut summary_bytes).map_err(|e| anyhow::anyhow!("CBOR encoding failed: {:?}", e))?;
+        ciborium::ser::into_writer(&summary, &mut summary_bytes)
+            .map_err(|e| anyhow::anyhow!("CBOR encoding failed: {:?}", e))?;
 
         // Process the incoming message
         let result = client

@@ -371,7 +371,10 @@ pub async fn auth_list_old_vaults(
     state: State<'_, AppState>,
     days_since_access: u64,
 ) -> Result<Vec<VaultInfo>, String> {
-    tracing::info!("Listing vaults not accessed in last {} days", days_since_access);
+    tracing::info!(
+        "Listing vaults not accessed in last {} days",
+        days_since_access
+    );
 
     let service = state.auth_service.read().await;
     let auth_service = service
@@ -508,7 +511,10 @@ pub async fn auth_passkey_register(
             format!("Failed to store password in keyring: {}", e)
         })?;
 
-    tracing::info!("Passkey registered and password stored in keyring for: {}", four_words);
+    tracing::info!(
+        "Passkey registered and password stored in keyring for: {}",
+        four_words
+    );
     Ok(info.into())
 }
 
@@ -578,7 +584,10 @@ pub async fn auth_passkey_register_webauthn(
             format!("Failed to register WebAuthn passkey: {}", e)
         })?;
 
-    tracing::info!("WebAuthn passkey registered successfully for: {}", four_words);
+    tracing::info!(
+        "WebAuthn passkey registered successfully for: {}",
+        four_words
+    );
     Ok(info.into())
 }
 
@@ -591,7 +600,10 @@ pub async fn auth_passkey_authenticate_webauthn(
     four_words: String,
     assertion_data: String,
 ) -> Result<SessionInfo, String> {
-    tracing::info!("WebAuthn passkey authentication attempt for: {}", four_words);
+    tracing::info!(
+        "WebAuthn passkey authentication attempt for: {}",
+        four_words
+    );
 
     // Parse assertion data from JSON
     let _assertion_json: serde_json::Value = serde_json::from_str(&assertion_data)
@@ -715,9 +727,7 @@ pub async fn auth_touchid_register(
     );
 
     // Trigger native Touch ID authentication
-    let auth_reason = reason.unwrap_or_else(|| {
-        format!("Register Touch ID for {}", four_words)
-    });
+    let auth_reason = reason.unwrap_or_else(|| format!("Register Touch ID for {}", four_words));
 
     // Use macOS LocalAuthentication to prompt for Touch ID
     // This uses Swift command with stdin to compile and run Swift code that triggers actual biometric authentication
@@ -818,7 +828,10 @@ exit(success ? 0 : 1)
             format!("Failed to store password in keyring: {}", e)
         })?;
 
-    tracing::info!("Touch ID passkey registered successfully for: {}", four_words);
+    tracing::info!(
+        "Touch ID passkey registered successfully for: {}",
+        four_words
+    );
     Ok(info.into())
 }
 
@@ -836,9 +849,7 @@ pub async fn auth_touchid_authenticate(
     tracing::info!("Touch ID authentication attempt for: {}", four_words);
 
     // Trigger native Touch ID authentication
-    let auth_reason = reason.unwrap_or_else(|| {
-        format!("Sign in as {}", four_words)
-    });
+    let auth_reason = reason.unwrap_or_else(|| format!("Sign in as {}", four_words));
 
     // Use macOS LocalAuthentication to prompt for Touch ID
     // This uses Swift command with stdin to compile and run Swift code that triggers actual biometric authentication

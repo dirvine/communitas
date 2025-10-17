@@ -17,7 +17,7 @@ path = "src/main.rs"
 communitas-core = { path = "../communitas-core" }
 
 # Saorsa Core
-saorsa-core.workspace = true
+# Removed: saorsa-core - using communitas-core APIs instead
 
 # Web framework
 axum.workspace = true

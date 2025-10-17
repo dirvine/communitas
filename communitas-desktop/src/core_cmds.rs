@@ -31,8 +31,7 @@ pub async fn core_claim(
     let words_joined = words.join("-");
     let claim_message = format!("identity_claim:{}", words_joined);
 
-    gossip_commands::gossip_store_message(gossip_state, claim_message.as_bytes().to_vec())
-        .await?;
+    gossip_commands::gossip_store_message(gossip_state, claim_message.as_bytes().to_vec()).await?;
 
     Ok(format!("Claimed identity: {}", words_joined))
 }
@@ -74,8 +73,7 @@ pub async fn core_advertise(
 ) -> Result<(), String> {
     // Store key-value pair in gossip mesh via CRDT
     let advertise_message = format!("advertise:{}:{}", key_hex, value_hex);
-    gossip_commands::gossip_store_message(gossip_state, advertise_message.as_bytes().to_vec())
-        .await
+    gossip_commands::gossip_store_message(gossip_state, advertise_message.as_bytes().to_vec()).await
 }
 
 #[cfg(not(feature = "gossip_overlay"))]
@@ -87,8 +85,6 @@ pub async fn core_advertise(
 ) -> Result<(), String> {
     Err("Gossip overlay advertising not yet implemented".to_string())
 }
-
-
 
 #[cfg(feature = "gossip_overlay")]
 #[tauri::command]
@@ -129,8 +125,7 @@ pub async fn store_user_identity(
 ) -> Result<(), String> {
     // Store user identity in gossip mesh via CRDT
     let identity_message = format!("user_identity:{}", identity_data);
-    gossip_commands::gossip_store_message(gossip_state, identity_message.as_bytes().to_vec())
-        .await
+    gossip_commands::gossip_store_message(gossip_state, identity_message.as_bytes().to_vec()).await
 }
 
 #[cfg(not(feature = "gossip_overlay"))]

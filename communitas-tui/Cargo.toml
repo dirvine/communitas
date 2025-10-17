@@ -17,7 +17,7 @@ path = "src/main.rs"
 communitas-core = { path = "../communitas-core" }
 
 # Saorsa Core
-saorsa-core = "0.5.7"
+# Removed: saorsa-core - using four-word-networking and communitas-core instead
 
 # TUI framework
 ratatui = "0.29"

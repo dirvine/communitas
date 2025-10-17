@@ -4,7 +4,7 @@
 //! Currently a placeholder until we integrate with the existing reed_solomon_manager.
 
 use anyhow::Result;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tokio::fs;
 
 /// FEC storage manager for resilient data storage
@@ -17,7 +17,7 @@ pub struct FecStorage {
 
 impl FecStorage {
     /// Create a new FEC storage manager
-    pub async fn new(base_path: &PathBuf, default_redundancy: f32) -> Result<Self> {
+    pub async fn new(base_path: &Path, default_redundancy: f32) -> Result<Self> {
         let fec_path = base_path.join("fec");
         fs::create_dir_all(&fec_path).await?;
 

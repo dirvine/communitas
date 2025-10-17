@@ -11,7 +11,6 @@
 use communitas_core::webrtc::{
     CallId, CommunitasIdentity, CommunitasWebRtcService, MediaConstraints, MediaDevice,
 };
-use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tauri::State;
 use tokio::sync::RwLock;
@@ -33,10 +32,7 @@ impl WebRtcState {
     }
 
     /// Initialize the WebRTC service
-    pub async fn initialize(
-        &self,
-        service: CommunitasWebRtcService,
-    ) -> Result<(), String> {
+    pub async fn initialize(&self, service: CommunitasWebRtcService) -> Result<(), String> {
         let mut state = self.service.write().await;
         *state = Some(service);
         Ok(())
@@ -130,8 +126,7 @@ pub async fn webrtc_accept_call(
         .ok_or_else(|| "WebRTC service not initialized".to_string())?;
 
     // Parse call ID (UUID string to CallId)
-    let uuid = Uuid::parse_str(&call_id)
-        .map_err(|e| format!("Invalid call ID: {}", e))?;
+    let uuid = Uuid::parse_str(&call_id).map_err(|e| format!("Invalid call ID: {}", e))?;
     let call_id_parsed = CallId(uuid);
 
     service
@@ -160,8 +155,7 @@ pub async fn webrtc_reject_call(
         .as_ref()
         .ok_or_else(|| "WebRTC service not initialized".to_string())?;
 
-    let uuid = Uuid::parse_str(&call_id)
-        .map_err(|e| format!("Invalid call ID: {}", e))?;
+    let uuid = Uuid::parse_str(&call_id).map_err(|e| format!("Invalid call ID: {}", e))?;
     let call_id_parsed = CallId(uuid);
 
     service
@@ -190,8 +184,7 @@ pub async fn webrtc_end_call(
         .as_ref()
         .ok_or_else(|| "WebRTC service not initialized".to_string())?;
 
-    let uuid = Uuid::parse_str(&call_id)
-        .map_err(|e| format!("Invalid call ID: {}", e))?;
+    let uuid = Uuid::parse_str(&call_id).map_err(|e| format!("Invalid call ID: {}", e))?;
     let call_id_parsed = CallId(uuid);
 
     service
@@ -230,7 +223,11 @@ pub async fn webrtc_set_video_enabled(
         .await
         .map_err(|e| e.to_string())?;
 
-    info!("Video {} for call {}", if enabled { "enabled" } else { "disabled" }, call_id);
+    info!(
+        "Video {} for call {}",
+        if enabled { "enabled" } else { "disabled" },
+        call_id
+    );
     Ok(())
 }
 
@@ -261,7 +258,11 @@ pub async fn webrtc_set_audio_enabled(
         .await
         .map_err(|e| e.to_string())?;
 
-    info!("Audio {} for call {}", if enabled { "enabled" } else { "disabled" }, call_id);
+    info!(
+        "Audio {} for call {}",
+        if enabled { "enabled" } else { "disabled" },
+        call_id
+    );
     Ok(())
 }
 
@@ -352,9 +353,7 @@ pub async fn webrtc_get_media_devices(
 ///
 /// This sets up an event listener for WebRTC call events (incoming calls, state changes, etc.)
 #[tauri::command]
-pub async fn webrtc_subscribe_events(
-    webrtc_state: State<'_, WebRtcState>,
-) -> Result<(), String> {
+pub async fn webrtc_subscribe_events(webrtc_state: State<'_, WebRtcState>) -> Result<(), String> {
     info!("Subscribing to WebRTC call events");
 
     let service_lock = webrtc_state.get_service().await?;

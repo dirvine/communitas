@@ -18,7 +18,7 @@ homepage = "https://communitas.life"
 
 [workspace.dependencies]
 # Saorsa Core ecosystem (will be phased out in favor of saorsa-gossip)
-saorsa-core = "0.3"
+# Removed: saorsa-core - migrated to saorsa-gossip-* architecture
 saorsa-mls = "0.1.5"
 saorsa-rsps = "0.2.0"
 saorsa-pqc = "0.3.12"

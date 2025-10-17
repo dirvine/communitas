@@ -57,6 +57,12 @@ pub struct FoafDiscovery {
     query_timeout_ms: u64,
 }
 
+impl Default for FoafDiscovery {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FoafDiscovery {
     /// Create a new FOAF discovery manager
     pub fn new() -> Self {
@@ -134,14 +140,14 @@ impl FoafDiscovery {
                         continue;
                     }
 
-                    if let Some(fw) = &record.four_words {
-                        if fw == four_words {
-                            debug!("Found {} via presence in topic {:?}", four_words, topic_id);
-                            // Add to cache for faster future lookups
-                            let mut contacts = self.local_contacts.write().await;
-                            contacts.insert(four_words.to_string(), peer_id);
-                            return Ok(peer_id);
-                        }
+                    if let Some(fw) = &record.four_words
+                        && fw == four_words
+                    {
+                        debug!("Found {} via presence in topic {:?}", four_words, topic_id);
+                        // Add to cache for faster future lookups
+                        let mut contacts = self.local_contacts.write().await;
+                        contacts.insert(four_words.to_string(), peer_id);
+                        return Ok(peer_id);
                     }
                 }
             }

@@ -264,8 +264,7 @@ async fn test_update_role_deleted_member() -> Result<(), Box<dyn std::error::Err
 
 /// Test RED: Prune tombstones removes old deletions but keeps recent ones
 #[tokio::test]
-async fn test_prune_tombstones_removes_old_deletions() -> Result<(), Box<dyn std::error::Error>>
-{
+async fn test_prune_tombstones_removes_old_deletions() -> Result<(), Box<dyn std::error::Error>> {
     // Arrange
     let temp_dir = tempdir()?;
     let db_path = temp_dir.path().join("test.db");
@@ -311,11 +310,7 @@ async fn test_prune_tombstones_removes_old_deletions() -> Result<(), Box<dyn std
     assert_eq!(pruned_count, 0, "Should not prune fresh tombstones");
 
     let members_after = member_manager.list_members(entity_type, entity_id).await?;
-    assert_eq!(
-        members_after.len(),
-        1,
-        "Fresh tombstone should still exist"
-    );
+    assert_eq!(members_after.len(), 1, "Fresh tombstone should still exist");
 
     Ok(())
 }
@@ -356,8 +351,7 @@ async fn test_prune_tombstones_empty_list() -> Result<(), Box<dyn std::error::Er
 
 /// Test RED: Prune tombstones ignores active members
 #[tokio::test]
-async fn test_prune_tombstones_ignores_active_members() -> Result<(), Box<dyn std::error::Error>>
-{
+async fn test_prune_tombstones_ignores_active_members() -> Result<(), Box<dyn std::error::Error>> {
     // Arrange
     let temp_dir = tempdir()?;
     let db_path = temp_dir.path().join("test.db");

@@ -9,7 +9,7 @@
 use communitas_core::messaging::{
     MlsClient, MlsConfig, ProcessedMessage, GroupSettings
 };
-use saorsa_core::identity::enhanced::EnhancedIdentity;
+// Removed: use saorsa_core::identity::enhanced::EnhancedIdentity;
 use saorsa_mls::GroupId;
 use saorsa_mls::{MlsMessage, ApplicationMessage, MemberId};
 use saorsa_mls::crypto::DebugMlDsaSignature;

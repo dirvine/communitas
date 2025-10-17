@@ -54,33 +54,6 @@ impl MonitoringService {
         }
     }
 
-    /// Record a metric value
-    pub async fn record_metric(&self, name: &str, value: f64, tags: HashMap<String, String>) {
-        let timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
-
-        let metric = MetricValue {
-            name: name.to_string(),
-            value,
-            timestamp,
-            tags,
-        };
-
-        let mut metrics = self.metrics.write().await;
-        metrics.entry(name.to_string())
-            .or_insert_with(Vec::new)
-            .push(metric);
-
-        // Keep only last 1000 metrics per type
-        if let Some(values) = metrics.get_mut(name) {
-            if values.len() > 1000 {
-                values.drain(0..values.len() - 1000);
-            }
-        }
-    }
-
     /// Record an application error
     pub async fn record_error(
         &self,
@@ -134,7 +107,8 @@ impl MonitoringService {
 
         if let Some(metric_name) = name {
             if let Some(values) = metrics.get(metric_name) {
-                return values.iter()
+                return values
+                    .iter()
                     .rev()
                     .take(limit)
                     .cloned()
@@ -145,10 +119,7 @@ impl MonitoringService {
             }
         } else {
             // Return all metrics, sorted by timestamp
-            let mut all_metrics: Vec<MetricValue> = metrics.values()
-                .flatten()
-                .cloned()
-                .collect();
+            let mut all_metrics: Vec<MetricValue> = metrics.values().flatten().cloned().collect();
 
             all_metrics.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
             return all_metrics.into_iter().take(limit).collect();
@@ -160,11 +131,7 @@ impl MonitoringService {
     /// Get recent errors
     pub async fn get_recent_errors(&self, limit: usize) -> Vec<ErrorReport> {
         let errors = self.errors.read().await;
-        let recent: Vec<ErrorReport> = errors.iter()
-            .rev()
-            .take(limit)
-            .cloned()
-            .collect();
+        let recent: Vec<ErrorReport> = errors.iter().rev().take(limit).cloned().collect();
 
         recent.into_iter().rev().collect()
     }
@@ -179,24 +146,6 @@ impl MonitoringService {
         }
 
         stats
-    }
-
-    /// Clear old metrics (older than specified duration)
-    pub async fn cleanup_old_metrics(&self, max_age: Duration) {
-        let cutoff = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs()
-            .saturating_sub(max_age.as_secs());
-
-        let mut metrics = self.metrics.write().await;
-
-        for values in metrics.values_mut() {
-            values.retain(|m| m.timestamp >= cutoff);
-        }
-
-        // Remove empty metric arrays
-        metrics.retain(|_, values| !values.is_empty());
     }
 
     /// Export metrics for external monitoring systems
@@ -220,10 +169,15 @@ impl MonitoringService {
                     if latest.tags.is_empty() {
                         String::new()
                     } else {
-                        format!("{{{}}}", latest.tags.iter()
-                            .map(|(k, v)| format!("{}=\"{}\"", k, v))
-                            .collect::<Vec<_>>()
-                            .join(","))
+                        format!(
+                            "{{{}}}",
+                            latest
+                                .tags
+                                .iter()
+                                .map(|(k, v)| format!("{}=\"{}\"", k, v))
+                                .collect::<Vec<_>>()
+                                .join(",")
+                        )
                     },
                     latest.value
                 ));
@@ -244,12 +198,16 @@ lazy_static::lazy_static! {
 macro_rules! record_metric {
     ($name:expr, $value:expr) => {
         tokio::spawn(async move {
-            $crate::services::monitoring::MONITORING.record_metric($name, $value, std::collections::HashMap::new()).await;
+            $crate::services::monitoring::MONITORING
+                .record_metric($name, $value, std::collections::HashMap::new())
+                .await;
         });
     };
     ($name:expr, $value:expr, $tags:expr) => {
         tokio::spawn(async move {
-            $crate::services::monitoring::MONITORING.record_metric($name, $value, $tags).await;
+            $crate::services::monitoring::MONITORING
+                .record_metric($name, $value, $tags)
+                .await;
         });
     };
 }
@@ -258,44 +216,43 @@ macro_rules! record_metric {
 macro_rules! record_error {
     ($message:expr, $error_type:expr, $severity:expr) => {
         tokio::spawn(async move {
-            $crate::services::monitoring::MONITORING.record_error(
-                $message,
-                $error_type,
-                $severity,
-                std::collections::HashMap::new(),
-                None
-            ).await;
+            $crate::services::monitoring::MONITORING
+                .record_error(
+                    $message,
+                    $error_type,
+                    $severity,
+                    std::collections::HashMap::new(),
+                    None,
+                )
+                .await;
         });
     };
     ($message:expr, $error_type:expr, $severity:expr, $context:expr) => {
         tokio::spawn(async move {
-            $crate::services::monitoring::MONITORING.record_error(
-                $message,
-                $error_type,
-                $severity,
-                $context,
-                None
-            ).await;
+            $crate::services::monitoring::MONITORING
+                .record_error($message, $error_type, $severity, $context, None)
+                .await;
         });
     };
     ($message:expr, $error_type:expr, $severity:expr, $context:expr, $stack:expr) => {
         tokio::spawn(async move {
-            $crate::services::monitoring::MONITORING.record_error(
-                $message,
-                $error_type,
-                $severity,
-                $context,
-                Some($stack)
-            ).await;
+            $crate::services::monitoring::MONITORING
+                .record_error($message, $error_type, $severity, $context, Some($stack))
+                .await;
         });
     };
 }
 
 // Tauri commands for monitoring
 #[tauri::command]
-pub async fn monitoring_get_metrics(limit: Option<usize>) -> Result<Vec<serde_json::Value>, String> {
-    let metrics = MONITORING.get_recent_metrics(None, limit.unwrap_or(100)).await;
-    metrics.into_iter()
+pub async fn monitoring_get_metrics(
+    limit: Option<usize>,
+) -> Result<Vec<serde_json::Value>, String> {
+    let metrics = MONITORING
+        .get_recent_metrics(None, limit.unwrap_or(100))
+        .await;
+    metrics
+        .into_iter()
         .map(|m| serde_json::to_value(m).map_err(|e| format!("Failed to serialize metric: {}", e)))
         .collect()
 }
@@ -303,7 +260,8 @@ pub async fn monitoring_get_metrics(limit: Option<usize>) -> Result<Vec<serde_js
 #[tauri::command]
 pub async fn monitoring_get_errors(limit: Option<usize>) -> Result<Vec<serde_json::Value>, String> {
     let errors = MONITORING.get_recent_errors(limit.unwrap_or(50)).await;
-    errors.into_iter()
+    errors
+        .into_iter()
         .map(|e| serde_json::to_value(e).map_err(|e| format!("Failed to serialize error: {}", e)))
         .collect()
 }

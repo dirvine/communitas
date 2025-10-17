@@ -47,7 +47,7 @@ impl NatClass {
         }
     }
 
-    pub fn from_str(s: &str) -> Self {
+    pub fn parse(s: &str) -> Self {
         match s {
             "public" => NatClass::Public,
             "full_cone" => NatClass::FullCone,
@@ -252,7 +252,7 @@ impl PeerCache {
                     .filter_map(|s| s.parse().ok())
                     .collect();
 
-                let nat_class = NatClass::from_str(&row.get::<_, String>(2)?);
+                let nat_class = NatClass::parse(&row.get::<_, String>(2)?);
                 let roles_str: String = row.get(3)?;
                 let roles: Vec<String> = serde_json::from_str(&roles_str).unwrap_or_default();
                 let last_success = SystemTime::UNIX_EPOCH
@@ -616,12 +616,12 @@ mod tests {
 
         for nat_class in all_classes {
             let s = nat_class.as_str();
-            let deserialized = NatClass::from_str(s);
+            let deserialized = NatClass::parse(s);
             assert_eq!(nat_class, deserialized);
         }
 
         // Test unknown string
-        assert_eq!(NatClass::from_str("invalid"), NatClass::Unknown);
+        assert_eq!(NatClass::parse("invalid"), NatClass::Unknown);
     }
 
     #[tokio::test]

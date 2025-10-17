@@ -12,11 +12,11 @@
 use super::gossip_signaling::GossipSignalingTransport;
 use super::identity::CommunitasIdentity;
 use crate::gossip::GossipContext;
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use saorsa_webrtc::types::{CallEvent, CallId, MediaConstraints};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{broadcast, RwLock};
+use tokio::sync::{RwLock, broadcast};
 use tracing::{debug, info, warn};
 
 /// Active call state
@@ -52,9 +52,6 @@ pub struct MediaDevice {
 /// Manages WebRTC calls over the gossip overlay network, providing
 /// voice, video, and screen sharing capabilities.
 pub struct CommunitasWebRtcService {
-    /// Reference to gossip context
-    gossip: Arc<GossipContext>,
-
     /// Signaling transport
     signaling: Arc<GossipSignalingTransport>,
 
@@ -89,7 +86,6 @@ impl CommunitasWebRtcService {
         let active_calls = Arc::new(RwLock::new(HashMap::new()));
 
         Ok(Self {
-            gossip,
             signaling,
             local_identity,
             event_tx,

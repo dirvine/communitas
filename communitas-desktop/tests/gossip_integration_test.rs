@@ -174,8 +174,8 @@ mod batch_6_message_format_tests {
         assert!(serialized.contains("created_at"));
 
         // Verify it can be deserialized
-        let deserialized: serde_json::Value = serde_json::from_str(&serialized)
-            .expect("Should deserialize");
+        let deserialized: serde_json::Value =
+            serde_json::from_str(&serialized).expect("Should deserialize");
         assert_eq!(deserialized["name"], "New Name");
     }
 
@@ -381,7 +381,11 @@ mod batch_8_utilities_specs {
 
         assert_eq!(parts.len(), 4);
         assert!(parts.iter().all(|p| !p.is_empty()));
-        assert!(parts.iter().all(|p| p.chars().all(|c| c.is_ascii_lowercase() || c == '-')));
+        assert!(
+            parts
+                .iter()
+                .all(|p| p.chars().all(|c| c.is_ascii_lowercase() || c == '-'))
+        );
     }
 
     #[test]
@@ -420,10 +424,10 @@ mod batch_8_utilities_specs {
         // Test specification for invalid formats
 
         let invalid_identities = vec![
-            "only-three-words",      // Too few
+            "only-three-words",        // Too few
             "one-two-three-four-five", // Too many
-            "no-separators",         // Missing separators
-            "",                      // Empty
+            "no-separators",           // Missing separators
+            "",                        // Empty
         ];
 
         for identity in invalid_identities {

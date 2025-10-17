@@ -1015,14 +1015,14 @@ mod tests {
             .unwrap();
 
         // Test: Get state vector - should return non-empty encoded bytes
-        let state_vector = service
-            .get_channel_state_vector(&channel.id)
-            .await
-            .unwrap();
+        let state_vector = service.get_channel_state_vector(&channel.id).await.unwrap();
 
         // Verify state vector is encoded and non-empty
         assert!(!state_vector.is_empty(), "State vector should be non-empty");
-        assert!(state_vector.len() > 10, "State vector should have reasonable size");
+        assert!(
+            state_vector.len() > 10,
+            "State vector should have reasonable size"
+        );
     }
 
     #[tokio::test]
@@ -1061,7 +1061,10 @@ mod tests {
 
         // Verify diff is non-empty (contains both messages)
         assert!(!diff.is_empty(), "Diff should contain all messages");
-        assert!(diff.len() > 50, "Diff should have reasonable size for 2 messages");
+        assert!(
+            diff.len() > 50,
+            "Diff should have reasonable size for 2 messages"
+        );
     }
 
     #[tokio::test]
@@ -1112,8 +1115,14 @@ mod tests {
 
         // Check messages exist (order may vary)
         let contents: Vec<&str> = messages.iter().map(|m| m.content.as_str()).collect();
-        assert!(contents.contains(&"Message one"), "Should contain 'Message one'");
-        assert!(contents.contains(&"Message two"), "Should contain 'Message two'");
+        assert!(
+            contents.contains(&"Message one"),
+            "Should contain 'Message one'"
+        );
+        assert!(
+            contents.contains(&"Message two"),
+            "Should contain 'Message two'"
+        );
     }
 
     #[tokio::test]
@@ -1122,8 +1131,16 @@ mod tests {
         let dir1 = tempdir().unwrap();
         let dir2 = tempdir().unwrap();
 
-        let crdt1 = Arc::new(CrdtManager::new(dir1.path().join("peer1.db")).await.unwrap());
-        let crdt2 = Arc::new(CrdtManager::new(dir2.path().join("peer2.db")).await.unwrap());
+        let crdt1 = Arc::new(
+            CrdtManager::new(dir1.path().join("peer1.db"))
+                .await
+                .unwrap(),
+        );
+        let crdt2 = Arc::new(
+            CrdtManager::new(dir2.path().join("peer2.db"))
+                .await
+                .unwrap(),
+        );
 
         let peer1 = ChannelService::new(crdt1);
         let peer2 = ChannelService::new(crdt2);
@@ -1176,7 +1193,10 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(result.total_messages, 3, "Peer 2 should now have 3 messages total");
+        assert_eq!(
+            result.total_messages, 3,
+            "Peer 2 should now have 3 messages total"
+        );
 
         // SYNC: Peer 1 requests state from Peer 2
         let peer1_state_vector = peer1.get_channel_state_vector(&channel1.id).await.unwrap();
@@ -1191,18 +1211,35 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(result.total_messages, 3, "Peer 1 should now have 3 messages total");
+        assert_eq!(
+            result.total_messages, 3,
+            "Peer 1 should now have 3 messages total"
+        );
 
         // Verify both peers now have all 3 messages
         let final_peer1_messages = peer1.get_messages(&channel1.id, None, None).await.unwrap();
         let final_peer2_messages = peer2.get_messages(&channel2.id, None, None).await.unwrap();
 
-        assert_eq!(final_peer1_messages.len(), 3, "Peer 1 should have all 3 messages");
-        assert_eq!(final_peer2_messages.len(), 3, "Peer 2 should have all 3 messages");
+        assert_eq!(
+            final_peer1_messages.len(),
+            3,
+            "Peer 1 should have all 3 messages"
+        );
+        assert_eq!(
+            final_peer2_messages.len(),
+            3,
+            "Peer 2 should have all 3 messages"
+        );
 
         // Verify message contents match (CRDT convergence)
-        let peer1_contents: Vec<&str> = final_peer1_messages.iter().map(|m| m.content.as_str()).collect();
-        let peer2_contents: Vec<&str> = final_peer2_messages.iter().map(|m| m.content.as_str()).collect();
+        let peer1_contents: Vec<&str> = final_peer1_messages
+            .iter()
+            .map(|m| m.content.as_str())
+            .collect();
+        let peer2_contents: Vec<&str> = final_peer2_messages
+            .iter()
+            .map(|m| m.content.as_str())
+            .collect();
 
         assert!(peer1_contents.contains(&"Hello from peer 1"));
         assert!(peer1_contents.contains(&"Second from peer 1"));

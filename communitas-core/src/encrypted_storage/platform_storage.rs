@@ -8,7 +8,7 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tokio::fs;
 use tokio::sync::RwLock;
 
@@ -189,7 +189,7 @@ impl PlatformStorage {
         return PlatformType::Linux; // Default to Linux for unknown platforms
     }
 
-    fn load_locators(locator_path: &PathBuf) -> Result<HashMap<Vec<u8>, String>> {
+    fn load_locators(locator_path: &Path) -> Result<HashMap<Vec<u8>, String>> {
         let locator_file = locator_path.join("password_locators.enc");
         if !locator_file.exists() {
             return Ok(HashMap::new());
@@ -355,7 +355,7 @@ impl PlatformStorage {
 
     #[cfg(not(windows))]
     #[allow(dead_code)]
-    async fn windows_secure_file(&self, _path: &PathBuf) -> Result<()> {
+    async fn windows_secure_file(&self, _path: &Path) -> Result<()> {
         Ok(())
     }
 }

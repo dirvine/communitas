@@ -3,10 +3,13 @@
 // Integration tests for Communitas Desktop Tauri commands
 // These tests verify the full integration between frontend and backend
 
-use communitas_core::{CoreContext, encrypted_storage::{AppConfig, StorageConfig}};
+use communitas_core::{
+    CoreContext,
+    encrypted_storage::{AppConfig, StorageConfig},
+};
 use communitas_desktop::{commands::auth::AppState, core_commands};
 use std::sync::Arc;
-use tauri::{test::mock_context, State, Manager};
+use tauri::{Manager, State, test::mock_context};
 use tokio::sync::RwLock;
 
 // Mock context for testing
@@ -35,7 +38,7 @@ fn mock_app() -> tauri::App {
 #[cfg(test)]
 mod auth_integration_tests {
     use super::*;
-    use communitas_desktop::commands::auth::{VaultInfo, RecentIdentity};
+    use communitas_desktop::commands::auth::{RecentIdentity, VaultInfo};
     use serde_json::json;
 
     #[tokio::test]
@@ -47,7 +50,8 @@ mod auth_integration_tests {
             &app,
             "auth_initialize",
             serde_json::json!({}),
-        ).await;
+        )
+        .await;
 
         // Should succeed even with mock data
         assert!(result.is_ok() || result.is_err()); // Either way is fine for initialization
@@ -66,7 +70,8 @@ mod auth_integration_tests {
                 "password": "test_password_123",
                 "display_name": "Test User"
             }),
-        ).await;
+        )
+        .await;
 
         // This might fail in test environment, but should not panic
         match result {
@@ -84,7 +89,8 @@ mod auth_integration_tests {
             &app,
             "auth_list_vaults",
             serde_json::json!({}),
-        ).await;
+        )
+        .await;
 
         // Should return empty list or existing vaults
         assert!(result.is_ok());
@@ -101,7 +107,8 @@ mod auth_integration_tests {
             &app,
             "generate_four_word_identity",
             serde_json::json!({}),
-        ).await;
+        )
+        .await;
 
         // Should succeed and return valid four-word identity
         assert!(result.is_ok());
@@ -127,7 +134,8 @@ mod core_integration_tests {
                 "display_name": "Test User",
                 "device_name": "Test Device"
             }),
-        ).await;
+        )
+        .await;
 
         // This might fail in test environment without proper setup
         match result {
@@ -145,7 +153,8 @@ mod core_integration_tests {
             &app,
             "health",
             serde_json::json!({}),
-        ).await;
+        )
+        .await;
 
         assert!(result.is_ok());
         let health = result.unwrap();
@@ -164,7 +173,8 @@ mod core_integration_tests {
             &app,
             "core_get_peer_id",
             serde_json::json!({}),
-        ).await;
+        )
+        .await;
 
         // Should either succeed or fail gracefully
         match result {
@@ -190,7 +200,8 @@ mod error_handling_tests {
                 "four_words": ["invalid", "words", "here"],
                 "password": ""
             }),
-        ).await;
+        )
+        .await;
 
         // Should fail gracefully with error message
         assert!(result.is_err());
@@ -205,7 +216,8 @@ mod error_handling_tests {
             &app,
             "core_get_user_info",
             serde_json::json!({}),
-        ).await;
+        )
+        .await;
 
         // Should fail gracefully when core not initialized
         assert!(result.is_err());
@@ -228,7 +240,8 @@ mod full_flow_tests {
             &app,
             "generate_four_word_identity",
             serde_json::json!({}),
-        ).await;
+        )
+        .await;
 
         assert!(identity_result.is_ok());
 
@@ -241,12 +254,16 @@ mod full_flow_tests {
                 "password": "test_password_123",
                 "display_name": "Integration Test User"
             }),
-        ).await;
+        )
+        .await;
 
         // Log result but don't fail - test environment may not support full vault creation
         match vault_result {
             Ok(_) => println!("Vault creation succeeded in integration test"),
-            Err(e) => println!("Vault creation failed in test environment (expected): {}", e),
+            Err(e) => println!(
+                "Vault creation failed in test environment (expected): {}",
+                e
+            ),
         }
 
         // 3. Test session checking
@@ -254,7 +271,8 @@ mod full_flow_tests {
             &app,
             "auth_check_session",
             serde_json::json!({}),
-        ).await;
+        )
+        .await;
 
         // Should return session status
         assert!(session_result.is_ok());

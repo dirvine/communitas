@@ -15,7 +15,7 @@ impl CrdtManager {
         let db = Builder::new_local(db_path.as_ref())
             .build()
             .await
-            .map_err(|e| CrdtError::Database(e))?;
+            .map_err(CrdtError::Database)?;
 
         // Initialize schema - execute each statement separately
         let schema = include_str!("schema.sql");
@@ -228,7 +228,7 @@ impl CrdtManager {
     }
 
     /// Get a nested Map from a Map
-    pub fn get_nested_map<'a>(map: &'a MapRef, txn: &impl ReadTxn, key: &str) -> Option<MapRef> {
+    pub fn get_nested_map(map: &MapRef, txn: &impl ReadTxn, key: &str) -> Option<MapRef> {
         map.get(txn, key).and_then(|v| match v {
             yrs::types::Value::YMap(m) => Some(m),
             _ => None,
@@ -268,7 +268,7 @@ impl CrdtManager {
 
     /// Get a Map from a document, creating it if it doesn't exist
     #[allow(dead_code)]
-    pub fn get_or_create_map<'a>(doc: &'a Doc, name: &str) -> MapRef {
+    pub fn get_or_create_map(doc: &Doc, name: &str) -> MapRef {
         doc.get_or_insert_map(name)
     }
 
@@ -280,10 +280,10 @@ impl CrdtManager {
     ) -> MapRef {
         let key_str = key.into();
         // Check if map already exists
-        if let Some(existing) = parent.get(txn, &key_str) {
-            if let yrs::types::Value::YMap(m) = existing {
-                return m;
-            }
+        if let Some(existing) = parent.get(txn, &key_str)
+            && let yrs::types::Value::YMap(m) = existing
+        {
+            return m;
         }
         // Create new map with explicit type
         parent.insert(txn, key_str, yrs::MapPrelim::<Any>::new())

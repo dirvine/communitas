@@ -13,7 +13,11 @@ mod touchid_tests {
 
         // Should return Ok(bool), not Err
         // The bool indicates whether Touch ID is available on this device
-        assert!(result.is_ok(), "Touch ID availability check should succeed and return Ok(bool), got: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "Touch ID availability check should succeed and return Ok(bool), got: {:?}",
+            result
+        );
     }
 
     /// Test that Touch ID authentication can be triggered
@@ -180,6 +184,9 @@ mod touchid_tests {
     #[test]
     fn test_touchid_unavailable_on_non_macos() {
         // This test ensures we don't try to use Touch ID on non-macOS platforms
-        assert!(true, "Touch ID is macOS-only, test passes on other platforms");
+        assert!(
+            true,
+            "Touch ID is macOS-only, test passes on other platforms"
+        );
     }
 }

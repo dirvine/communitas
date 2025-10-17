@@ -1303,7 +1303,25 @@ async fn run_node(args: Args) -> Result<()> {
     info!("QUIC listeners ready");
 
     // Build set of self addresses to filter from bootstrap connections
-    let self_addrs: HashSet<SocketAddr> = listen_addrs.iter().copied().collect();
+    // CRITICAL: Expand 0.0.0.0 wildcards to all local interface IPs
+    let mut self_addrs: HashSet<SocketAddr> = HashSet::new();
+    for addr in &listen_addrs {
+        if addr.ip().is_unspecified() {
+            // Wildcard address (0.0.0.0 or ::) - expand to all local interfaces
+            // Add localhost
+            self_addrs.insert(SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)), addr.port()));
+
+            // Get all network interface addresses and add them
+            if let Ok(interfaces) = local_ip_address::list_afinet_netifas() {
+                for (_name, ip) in interfaces {
+                    self_addrs.insert(SocketAddr::new(ip, addr.port()));
+                }
+            }
+        } else {
+            // Specific address - use as-is
+            self_addrs.insert(*addr);
+        }
+    }
 
     // Filter bootstrap nodes to exclude self-addresses
     let filtered_bootstrap_nodes: Vec<String> = all_bootstrap_nodes
@@ -1311,7 +1329,11 @@ async fn run_node(args: Args) -> Result<()> {
         .filter(|addr_str| {
             // Try to resolve to SocketAddr and check if it matches our listen addresses
             if let Ok(Some(socket_addr)) = canonical_seed_addr(addr_str) {
-                !self_addrs.contains(&socket_addr)
+                let is_self = self_addrs.contains(&socket_addr);
+                if is_self {
+                    info!("Filtering out self-address: {} (resolved to {})", addr_str, socket_addr);
+                }
+                !is_self
             } else {
                 // If we can't resolve it, keep it (might be a DNS name or four-word that resolves differently)
                 true

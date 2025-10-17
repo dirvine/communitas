@@ -280,11 +280,13 @@ fn default_config_with_storage(base_dir: PathBuf) -> Config {
     Config {
         identity: None,
         bootstrap_nodes: vec![
-            // Digital Ocean NYC3 Bootstrap Nodes (v0.1.18 dual-stack)
+            // Digital Ocean NYC3 Bootstrap Nodes (v0.1.18+ random ports)
             // Droplet: 2064413, IPv4: 167.71.188.131, IPv6: 2604:a880:800:14:0:1:db7c:c000
-            "bless-lava-jeffrey-parking:443".to_string(),
+            // NOTE: Ports are randomly assigned - check node logs for actual four-word address
+            // Example placeholders - update with actual addresses from node logs
+            "bless-lava-jeffrey-parking:54321".to_string(),
             // Droplet: communitas-bootstrap-1, IPv4: 138.197.29.195, IPv6: 2604:a880:800:14:0:1:db7c:b000
-            "bless-route-evaporate-lunch:443".to_string(),
+            "bless-route-evaporate-lunch:43210".to_string(),
         ],
         storage: StorageConfig {
             base_dir,
@@ -295,15 +297,16 @@ fn default_config_with_storage(base_dir: PathBuf) -> Config {
         },
         network: NetworkConfig {
             listen_addrs: vec![
-                // IPv4 wildcard address - listens on all IPv4 interfaces
+                // IPv4 wildcard address with random port - listens on all IPv4 interfaces
+                // Port 0 tells OS to assign a random available port >1024 (no admin needed)
                 std::net::SocketAddr::new(
                     std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED),
-                    443,
+                    0,
                 ),
-                // IPv6 wildcard address - listens on all IPv6 interfaces
+                // IPv6 wildcard address with random port - listens on all IPv6 interfaces
                 std::net::SocketAddr::new(
                     std::net::IpAddr::V6(std::net::Ipv6Addr::UNSPECIFIED),
-                    443,
+                    0,
                 ),
             ],
             enable_ipv6: true,
@@ -1736,14 +1739,14 @@ mod tests {
 
     #[test]
     fn test_ipv4_and_ipv6_socket_addresses() {
-        // Test creating both IPv4 and IPv6 socket addresses
-        let ipv4: SocketAddr = "0.0.0.0:443".parse().unwrap();
-        let ipv6: SocketAddr = "[::]:443".parse().unwrap();
+        // Test creating both IPv4 and IPv6 socket addresses with random port assignment
+        let ipv4: SocketAddr = "0.0.0.0:0".parse().unwrap();
+        let ipv6: SocketAddr = "[::]:0".parse().unwrap();
 
         assert!(ipv4.is_ipv4());
         assert!(ipv6.is_ipv6());
-        assert_eq!(ipv4.port(), 443);
-        assert_eq!(ipv6.port(), 443);
+        assert_eq!(ipv4.port(), 0);  // Port 0 = OS assigns random port
+        assert_eq!(ipv6.port(), 0);
 
         // Test that we can create a vector of both
         let listen_addrs = vec![ipv4, ipv6];
@@ -1780,9 +1783,10 @@ mod tests {
         use four_word_networking::FourWordAdaptiveEncoder;
 
         // Convert Digital Ocean droplet IPs to four-word addresses
+        // NOTE: In production, ports are randomly assigned (>1024) - these are example ports
         let bootstrap_nodes = vec![
-            ("167.71.188.131", 443), // Droplet: 2064413
-            ("138.197.29.195", 443), // Droplet: communitas-bootstrap-1
+            ("167.71.188.131", 54321), // Droplet: 2064413 (example random port)
+            ("138.197.29.195", 43210), // Droplet: communitas-bootstrap-1 (example random port)
         ];
 
         println!("\n╔══════════════════════════════════════════════════════════╗");

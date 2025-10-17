@@ -10,9 +10,13 @@ use yrs::Transact;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Channel {
     pub id: String,
+    pub four_word_identity: String,
     pub org_id: String,
     pub name: String,
     pub description: Option<String>,
+    pub private_disk_id: String,
+    pub public_disk_id: String,
+    pub website_root: Option<String>,
     pub created_at: i64,
     pub created_by: String,
 }
@@ -67,6 +71,13 @@ impl ChannelService {
         let now = Utc::now().timestamp();
         let doc_id = format!("channel:{}", id);
 
+        // Generate four-word identity for this channel
+        let four_word_identity = Self::generate_four_word_identity()?;
+
+        // Generate disk IDs
+        let private_disk_id = format!("disk:private:{}", Uuid::new_v4());
+        let public_disk_id = format!("disk:public:{}", Uuid::new_v4());
+
         // Create CRDT document for channel messages (Map of Maps structure)
         let doc = yrs::Doc::new();
         let _messages = doc.get_or_insert_map("messages");
@@ -78,18 +89,22 @@ impl ChannelService {
         // Save channel metadata
         let db = self.crdt.connection()?;
         db.execute(
-            "INSERT INTO channels (id, org_id, name, description, crdt_doc_id, created_at, created_by)
-             VALUES (?, ?, ?, ?, ?, ?, ?)",
-            params![id.clone(), org_id, name, description.clone(), doc_id.clone(), now, created_by],
+            "INSERT INTO channels (id, four_word_identity, org_id, name, description, private_disk_id, public_disk_id, crdt_doc_id, created_at, created_by)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            params![id.clone(), four_word_identity.clone(), org_id, name, description.clone(), private_disk_id.clone(), public_disk_id.clone(), doc_id.clone(), now, created_by],
         )
         .await
         .context("Failed to create channel")?;
 
         Ok(Channel {
             id,
+            four_word_identity,
             org_id: org_id.to_string(),
             name: name.to_string(),
             description,
+            private_disk_id,
+            public_disk_id,
+            website_root: None,
             created_at: now,
             created_by: created_by.to_string(),
         })
@@ -100,7 +115,7 @@ impl ChannelService {
         let db = self.crdt.connection()?;
         let mut rows = db
             .query(
-                "SELECT id, org_id, name, description, created_at, created_by FROM channels WHERE id = ?",
+                "SELECT id, four_word_identity, org_id, name, description, private_disk_id, public_disk_id, website_root, created_at, created_by FROM channels WHERE id = ?",
                 params![channel_id],
             )
             .await?;
@@ -108,11 +123,15 @@ impl ChannelService {
         if let Some(row) = rows.next().await? {
             Ok(Some(Channel {
                 id: row.get(0)?,
-                org_id: row.get(1)?,
-                name: row.get(2)?,
-                description: row.get(3)?,
-                created_at: row.get(4)?,
-                created_by: row.get(5)?,
+                four_word_identity: row.get(1)?,
+                org_id: row.get(2)?,
+                name: row.get(3)?,
+                description: row.get(4)?,
+                private_disk_id: row.get(5)?,
+                public_disk_id: row.get(6)?,
+                website_root: row.get(7)?,
+                created_at: row.get(8)?,
+                created_by: row.get(9)?,
             }))
         } else {
             Ok(None)
@@ -124,7 +143,7 @@ impl ChannelService {
         let db = self.crdt.connection()?;
         let mut rows = db
             .query(
-                "SELECT id, org_id, name, description, created_at, created_by
+                "SELECT id, four_word_identity, org_id, name, description, private_disk_id, public_disk_id, website_root, created_at, created_by
                  FROM channels WHERE org_id = ? ORDER BY created_at DESC",
                 params![org_id],
             )
@@ -134,11 +153,15 @@ impl ChannelService {
         while let Some(row) = rows.next().await? {
             channels.push(Channel {
                 id: row.get(0)?,
-                org_id: row.get(1)?,
-                name: row.get(2)?,
-                description: row.get(3)?,
-                created_at: row.get(4)?,
-                created_by: row.get(5)?,
+                four_word_identity: row.get(1)?,
+                org_id: row.get(2)?,
+                name: row.get(3)?,
+                description: row.get(4)?,
+                private_disk_id: row.get(5)?,
+                public_disk_id: row.get(6)?,
+                website_root: row.get(7)?,
+                created_at: row.get(8)?,
+                created_by: row.get(9)?,
             });
         }
 
@@ -742,6 +765,31 @@ impl ChannelService {
             messages_updated: materialized_count,
             total_messages,
         })
+    }
+
+    /// Set website root for DNS-free publishing
+    pub async fn set_website_root(&self, channel_id: &str, website_root: &str) -> Result<()> {
+        let db = self.crdt.connection()?;
+        db.execute(
+            "UPDATE channels SET website_root = ? WHERE id = ?",
+            params![website_root, channel_id],
+        )
+        .await
+        .context("Failed to set channel website root")?;
+        Ok(())
+    }
+
+    /// Generate a four-word identity from UUID
+    fn generate_four_word_identity() -> Result<String> {
+        // TODO: Integrate with four-word-networking crate properly
+        // For now, generate a placeholder four-word identifier from UUID
+        let uuid = Uuid::new_v4();
+        let uuid_str = uuid.to_string().replace('-', "");
+        let word1 = &uuid_str[0..8];
+        let word2 = &uuid_str[8..16];
+        let word3 = &uuid_str[16..24];
+        let word4 = &uuid_str[24..32];
+        Ok(format!("{}-{}-{}-{}", word1, word2, word3, word4))
     }
 }
 

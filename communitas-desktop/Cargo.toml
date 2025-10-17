@@ -35,6 +35,9 @@ saorsa-gossip-transport = { workspace = true }
 saorsa-gossip-membership = { workspace = true }
 saorsa-gossip-pubsub = { workspace = true }
 
+# Real-time multimedia (WebRTC over QUIC)
+saorsa-webrtc = { workspace = true }
+
 # CRDT and Database
 yrs = "0.18"
 libsql = "0.3"

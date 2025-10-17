@@ -7,6 +7,7 @@
 
 import { execSync, spawn } from 'child_process';
 import { promises as fs } from 'fs';
+import { existsSync } from 'fs';
 import path from 'path';
 import { promisify } from 'util';
 
@@ -54,7 +55,7 @@ export class TauriTestEnvironment {
       appPath = path.join(process.cwd(), 'src-tauri/target/release/bundle/appimage/Communitas.AppImage');
     }
 
-    if (!require('fs').existsSync(appPath)) {
+    if (!existsSync(appPath)) {
       throw new Error(`Tauri app not found at ${appPath}. Run 'npm run tauri:build' first.`);
     }
 

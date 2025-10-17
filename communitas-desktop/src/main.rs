@@ -38,7 +38,14 @@ use communitas_core::types::DeviceType;
 use crdt_manager::CrdtManager;
 use member_commands::MemberState;
 use member_manager::MemberManager;
-use services::{channel_service::ChannelService, issue_service::IssueService};
+use services::{
+    channel_service::ChannelService,
+    group_service::GroupService,
+    issue_service::IssueService,
+    member_service::MemberService,
+    organization_service::OrganizationService,
+    virtual_disk_service::VirtualDiskService,
+};
 use std::{path::PathBuf, sync::Arc};
 use tauri::Manager;
 use tokio::sync::RwLock;
@@ -85,11 +92,19 @@ async fn main() -> anyhow::Result<()> {
     let crdt_manager = Arc::new(CrdtManager::new(&db_path).await?);
 
     let channel_service = Arc::new(ChannelService::new(crdt_manager.clone()));
+    let group_service = Arc::new(GroupService::new(crdt_manager.clone()));
     let issue_service = Arc::new(IssueService::new(crdt_manager.clone()));
+    let organization_service = Arc::new(OrganizationService::new(crdt_manager.clone()));
+    let virtual_disk_service = Arc::new(VirtualDiskService::new(crdt_manager.clone()));
+    let member_service_arc = Arc::new(MemberService::new(crdt_manager.clone(), virtual_disk_service.clone()));
 
     let org_state = OrgState {
         channel_service,
+        group_service,
         issue_service,
+        organization_service,
+        member_service: member_service_arc,
+        virtual_disk_service,
     };
 
     // Initialize member manager
@@ -355,6 +370,22 @@ async fn main() -> anyhow::Result<()> {
             commands::org_commands::add_channel_member,
             commands::org_commands::remove_channel_member,
             commands::org_commands::get_channel_members,
+            // Organization commands - Groups
+            commands::org_commands::create_group,
+            commands::org_commands::get_group,
+            commands::org_commands::list_org_groups,
+            commands::org_commands::list_personal_groups,
+            commands::org_commands::add_group_member,
+            commands::org_commands::remove_group_member,
+            commands::org_commands::get_group_members,
+            commands::org_commands::update_group,
+            commands::org_commands::delete_group,
+            // Group sync commands
+            commands::org_commands::get_group_sync_update,
+            commands::org_commands::apply_group_sync_update,
+            commands::org_commands::get_group_state_vector,
+            commands::org_commands::get_group_diff,
+            commands::org_commands::apply_group_diff,
             // Organization commands - Projects
             commands::org_commands::create_project,
             commands::org_commands::get_project,
@@ -378,6 +409,33 @@ async fn main() -> anyhow::Result<()> {
             commands::org_commands::get_channel_state_vector,
             commands::org_commands::get_channel_diff,
             commands::org_commands::apply_channel_diff,
+            // Organization entity commands
+            commands::org_commands::create_organization,
+            commands::org_commands::get_organization,
+            commands::org_commands::get_organization_by_four_words,
+            commands::org_commands::update_organization,
+            commands::org_commands::delete_organization,
+            commands::org_commands::set_organization_website_root,
+            commands::org_commands::add_organization_member,
+            commands::org_commands::remove_organization_member,
+            commands::org_commands::update_organization_member_role,
+            commands::org_commands::get_organization_members,
+            commands::org_commands::is_organization_member,
+            commands::org_commands::list_user_organizations,
+            // Member service commands
+            commands::org_commands::create_member,
+            commands::org_commands::get_member,
+            commands::org_commands::get_member_by_four_words,
+            commands::org_commands::update_member,
+            commands::org_commands::delete_member,
+            commands::org_commands::list_all_members,
+            commands::org_commands::set_member_website_root,
+            // Virtual disk commands
+            commands::org_commands::write_virtual_disk_file,
+            commands::org_commands::read_virtual_disk_file,
+            commands::org_commands::delete_virtual_disk_file,
+            commands::org_commands::file_exists_virtual_disk,
+            commands::org_commands::list_virtual_disk_directory,
             // Member management commands
             member_commands::member_add,
             member_commands::member_list,

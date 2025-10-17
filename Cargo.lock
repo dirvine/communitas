@@ -1330,6 +1330,7 @@ dependencies = [
  "saorsa-gossip-pubsub",
  "saorsa-gossip-transport",
  "saorsa-gossip-types",
+ "saorsa-webrtc",
  "security-framework 2.11.1",
  "serde",
  "serde_json",

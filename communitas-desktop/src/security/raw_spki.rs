@@ -1,11 +1,14 @@
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as B64;
+use blake3::Hasher;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tracing::{info, warn};
 
 #[derive(Default)]
 pub struct RawSpkiState {
     pinned_key: Option<[u8; 32]>, // Ed25519 raw public key bytes
+    fingerprint: Option<String>,  // SHA-256 fingerprint for logging
 }
 
 fn try_parse_hex(s: &str) -> Option<Vec<u8>> {
@@ -54,14 +57,48 @@ fn parse_spki_or_key_bytes(input: &str) -> Result<[u8; 32], String> {
     }
 }
 
+/// Calculate BLAKE3 fingerprint of SPKI key for logging
+fn calculate_fingerprint(key: &[u8; 32]) -> String {
+    let mut hasher = Hasher::new();
+    hasher.update(key);
+    let hash = hasher.finalize();
+    // Take first 16 bytes for compact fingerprint
+    hex::encode(&hash.as_bytes()[..16])
+}
+
 #[tauri::command]
 pub async fn sync_set_quic_pinned_spki(
     state: tauri::State<'_, Arc<RwLock<RawSpkiState>>>,
     value: String,
 ) -> Result<bool, String> {
+    // Release build guard: reject allow-any bypass
+    #[cfg(not(debug_assertions))]
+    {
+        if value.to_lowercase() == "allow-any" || value.to_lowercase() == "any" {
+            return Err("SPKI pinning bypass not allowed in release builds".into());
+        }
+    }
+
+    // Debug build warning
+    #[cfg(debug_assertions)]
+    {
+        if value.to_lowercase() == "allow-any" || value.to_lowercase() == "any" {
+            warn!("⚠️  SECURITY: SPKI pinning disabled in development mode");
+            let mut w = state.write().await;
+            w.pinned_key = None;
+            w.fingerprint = None;
+            return Ok(true);
+        }
+    }
+
     let key = parse_spki_or_key_bytes(&value)?;
+    let fingerprint = calculate_fingerprint(&key);
+    
+    info!("SPKI pin set: fingerprint={}", fingerprint);
+    
     let mut w = state.write().await;
     w.pinned_key = Some(key);
+    w.fingerprint = Some(fingerprint);
     Ok(true)
 }
 
@@ -69,8 +106,10 @@ pub async fn sync_set_quic_pinned_spki(
 pub async fn sync_clear_quic_pinned_spki(
     state: tauri::State<'_, Arc<RwLock<RawSpkiState>>>,
 ) -> Result<bool, String> {
+    info!("SPKI pin cleared");
     let mut w = state.write().await;
     w.pinned_key = None;
+    w.fingerprint = None;
     Ok(true)
 }
 

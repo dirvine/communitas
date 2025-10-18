@@ -120,9 +120,36 @@ pub struct PeerCache {
 }
 
 impl PeerCache {
+    /// Maximum number of peers to cache (FIFO eviction when exceeded)
+    const MAX_CACHE_SIZE: usize = 1000;
+
+    /// Get system-wide peer cache path
+    /// Returns: ~/.local/share/communitas/peer_cache.db (Linux/macOS)
+    /// or %APPDATA%\communitas\peer_cache.db (Windows)
+    pub fn default_cache_path() -> Result<std::path::PathBuf> {
+        let data_dir = dirs::data_local_dir()
+            .ok_or_else(|| anyhow::anyhow!("Failed to get system data directory"))?
+            .join("communitas");
+
+        // Ensure directory exists
+        std::fs::create_dir_all(&data_dir)
+            .context("Failed to create communitas data directory")?;
+
+        Ok(data_dir.join("peer_cache.db"))
+    }
+
     /// Load existing cache or create new one
+    /// Enables SQLite WAL mode for concurrent access across processes
     pub async fn load(path: &Path) -> Result<Self> {
         let conn = Connection::open(path).context("Failed to open peer cache database")?;
+
+        // Enable WAL mode for better concurrent access (multiple frontends)
+        conn.pragma_update(None, "journal_mode", "WAL")
+            .context("Failed to enable WAL mode")?;
+
+        // Set busy timeout for concurrent write handling (5 seconds)
+        conn.pragma_update(None, "busy_timeout", 5000)
+            .context("Failed to set busy timeout")?;
 
         // Create table if not exists
         conn.execute(
@@ -133,12 +160,19 @@ impl PeerCache {
                 roles TEXT NOT NULL,
                 last_success INTEGER NOT NULL,
                 success_count INTEGER NOT NULL,
-                failure_count INTEGER NOT NULL
+                failure_count INTEGER NOT NULL,
+                is_bootstrap INTEGER NOT NULL DEFAULT 0
             )",
             [],
         )?;
 
-        info!("Loaded peer cache from {:?}", path);
+        // Create index on last_success for FIFO eviction
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_last_success ON peers(last_success)",
+            [],
+        )?;
+
+        info!("Loaded peer cache from {:?} (WAL mode enabled)", path);
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
         })
@@ -194,6 +228,10 @@ impl PeerCache {
             )?;
             debug!("Added new peer {} to cache", peer_id_str);
         }
+
+        // Enforce max cache size with FIFO eviction
+        drop(conn); // Release lock before calling enforce_max_size
+        self.enforce_max_size().await?;
 
         Ok(())
     }
@@ -329,6 +367,114 @@ impl PeerCache {
     /// Check if cache is empty
     pub fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+
+    /// Add bootstrap node using four-word address
+    /// Bootstrap nodes are marked specially and given priority in connections
+    pub async fn add_bootstrap_node(&mut self, four_words: &str) -> Result<()> {
+        // Parse four-word address to get socket address
+        // For now, we use a placeholder peer_id derived from four-words
+        // In production, this would resolve the four-word address to actual peer_id
+        let peer_id_bytes = blake3::hash(four_words.as_bytes());
+        let peer_id = PeerId::new(*peer_id_bytes.as_bytes());
+
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Peer cache mutex poisoned: {}", e))?;
+
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .context("Time went backwards")?
+            .as_secs() as i64;
+
+        let peer_id_str = hex::encode(peer_id.as_bytes());
+
+        // Check if peer exists
+        let exists: bool = conn
+            .query_row(
+                "SELECT 1 FROM peers WHERE peer_id = ?1",
+                params![peer_id_str],
+                |_| Ok(true),
+            )
+            .unwrap_or(false);
+
+        if !exists {
+            // Insert bootstrap node with high initial success count
+            conn.execute(
+                "INSERT INTO peers (peer_id, addr_hints, nat_class, roles, last_success, success_count, failure_count, is_bootstrap)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                params![
+                    peer_id_str,
+                    four_words, // Store four-word address as hint
+                    NatClass::Public.as_str(), // Assume bootstrap nodes are public
+                    serde_json::to_string(&vec!["bootstrap".to_string()])?,
+                    now,
+                    100, // High initial success count for bootstrap priority
+                    0,   // No failures initially
+                    1    // Mark as bootstrap
+                ],
+            )?;
+            info!("Added bootstrap node: {}", four_words);
+        }
+
+        Ok(())
+    }
+
+    /// Seed peer cache with bootstrap nodes from config
+    /// Returns number of nodes seeded
+    pub async fn seed_bootstrap_nodes(&mut self, bootstrap_nodes: &[String]) -> Result<usize> {
+        let mut seeded = 0;
+        for node in bootstrap_nodes {
+            match self.add_bootstrap_node(node).await {
+                Ok(_) => seeded += 1,
+                Err(e) => warn!("Failed to seed bootstrap node {}: {}", node, e),
+            }
+        }
+        info!("Seeded {} bootstrap nodes into peer cache", seeded);
+        Ok(seeded)
+    }
+
+    /// Enforce maximum cache size using FIFO eviction
+    /// Removes oldest peers (by last_success) when cache exceeds MAX_CACHE_SIZE
+    /// Bootstrap nodes are never evicted
+    async fn enforce_max_size(&mut self) -> Result<()> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Peer cache mutex poisoned: {}", e))?;
+
+        let current_size: usize = conn.query_row(
+            "SELECT COUNT(*) FROM peers",
+            [],
+            |row| row.get(0),
+        )?;
+
+        if current_size <= Self::MAX_CACHE_SIZE {
+            return Ok(());
+        }
+
+        // Remove oldest non-bootstrap peers until we're under the limit
+        let to_remove = current_size - Self::MAX_CACHE_SIZE;
+        let removed = conn.execute(
+            "DELETE FROM peers WHERE peer_id IN (
+                SELECT peer_id FROM peers
+                WHERE is_bootstrap = 0
+                ORDER BY last_success ASC
+                LIMIT ?1
+            )",
+            params![to_remove],
+        )?;
+
+        if removed > 0 {
+            info!(
+                "Evicted {} oldest peers (FIFO) to maintain cache size <= {}",
+                removed,
+                Self::MAX_CACHE_SIZE
+            );
+        }
+
+        Ok(())
     }
 }
 

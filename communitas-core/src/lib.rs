@@ -30,17 +30,21 @@ pub mod auth_service;
 // pub mod bootstrap_integration; // TODO: Reimplement in Sprint 2 with gossip-based bootstrap
 pub mod core_context;
 pub mod crdt;
+pub mod crdt_manager;
 // pub mod dht_identity; // Removed: DHT not used in RC1b (gossip-based architecture)
 // pub mod dht_schemas; // Removed: DHT not used in RC1b (gossip-based architecture)
 pub mod doc_replicator;
 pub mod encrypted_storage;
+pub mod entity_service;
 pub mod error;
 pub mod identity;
 pub mod keystore;
+pub mod message_service;
 pub mod message_sync;
 // pub mod messaging; // TODO: Refactor in Sprint 3 for gossip pubsub
 pub mod presence_service;
 pub mod security;
+pub mod services;
 pub mod storage;
 pub mod test_harness;
 pub mod types;
@@ -54,7 +58,11 @@ pub mod webrtc;
 // Re-export commonly used types
 pub use auth_service::{AuthService, SessionInfo};
 pub use core_context::CoreContext;
+pub use crdt_manager::{CrdtError, CrdtManager, CrdtResult};
+pub use entity_service::{EntityService, EntityServiceError, EntityServiceResult};
 pub use error::{AppError, AppResult as Result};
+pub use message_service::{MessageService, MessageServiceError, MessageServiceResult};
+pub use services::CoreServices;
 
 // Re-export gossip context (now default, no longer feature-gated)
 pub use gossip::GossipContext;

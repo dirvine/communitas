@@ -3,6 +3,7 @@
 
 use base64::Engine;
 use keyring::Entry;
+use zeroize::Zeroize;
 
 const SERVICE: &str = "communitas-tauri";
 
@@ -72,18 +73,32 @@ impl Keystore {
     }
 
     pub fn load_mldsa_keys(&self, id_hex: &str) -> Result<(Vec<u8>, Vec<u8>), String> {
-        let pk_b64 = entry(&format!("mldsa_pk:{}", id_hex))?
+        let mut pk_b64 = entry(&format!("mldsa_pk:{}", id_hex))?
             .get_password()
             .map_err(|e| format!("load pk failed: {}", e))?;
-        let sk_b64 = entry(&format!("mldsa_sk:{}", id_hex))?
+        let mut sk_b64 = entry(&format!("mldsa_sk:{}", id_hex))?
             .get_password()
             .map_err(|e| format!("load sk failed: {}", e))?;
+        
         let pk = base64::engine::general_purpose::STANDARD
-            .decode(pk_b64)
-            .map_err(|e| format!("pk decode: {}", e))?;
+            .decode(&pk_b64)
+            .map_err(|e| {
+                pk_b64.zeroize();
+                sk_b64.zeroize();
+                format!("pk decode: {}", e)
+            })?;
         let sk = base64::engine::general_purpose::STANDARD
-            .decode(sk_b64)
-            .map_err(|e| format!("sk decode: {}", e))?;
+            .decode(&sk_b64)
+            .map_err(|e| {
+                pk_b64.zeroize();
+                sk_b64.zeroize();
+                format!("sk decode: {}", e)
+            })?;
+        
+        // Zeroize base64 strings after use
+        pk_b64.zeroize();
+        sk_b64.zeroize();
+        
         Ok((pk, sk))
     }
 

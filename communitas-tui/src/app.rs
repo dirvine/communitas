@@ -4,7 +4,7 @@ use crate::state::{AppState, ConnectionStatus};
 use crate::ui;
 use anyhow::Result;
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers},
+    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers, MouseButton, MouseEventKind},
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
@@ -132,10 +132,19 @@ impl App {
 
             // Handle events
             if event::poll(Duration::from_millis(100))? {
-                if let Event::Key(key) = event::read()? {
-                    if self.handle_key_event(key).await? {
-                        break; // Should quit
+                match event::read()? {
+                    Event::Key(key) => {
+                        if self.handle_key_event(key).await? {
+                            break; // Should quit
+                        }
                     }
+                    Event::Mouse(mouse) => {
+                        self.handle_mouse_event(mouse).await?;
+                    }
+                    Event::Resize(_, _) => {
+                        // Terminal was resized, re-draw on next iteration
+                    }
+                    _ => {}
                 }
             }
 
@@ -237,6 +246,75 @@ impl App {
         }
 
         Ok(false)
+    }
+
+    /// Handle mouse input
+    async fn handle_mouse_event(&mut self, mouse: event::MouseEvent) -> Result<()> {
+        use crate::state::View;
+
+        // Only handle mouse clicks (left button down)
+        if let MouseEventKind::Down(MouseButton::Left) = mouse.kind {
+            let col = mouse.column;
+            let row = mouse.row;
+
+            // Get current view
+            let current_view = self.state.navigation.current_view();
+
+            match current_view {
+                View::Auth => {
+                    // Auth screen has two options side by side
+                    // Get terminal size to calculate areas
+                    let size = self.terminal.size()?;
+                    let half_width = size.width / 2;
+
+                    // Login is on left half, Signup is on right half
+                    if row >= 3 && row <= size.height - 3 {
+                        // Within vertical bounds of auth boxes
+                        if col < half_width {
+                            // Clicked on Login (left side)
+                            self.state.navigation.selected_index = 0;
+                            handlers::handle_enter(&mut self.state, &mut self.backend).await?;
+                        } else {
+                            // Clicked on Signup (right side)
+                            self.state.navigation.selected_index = 1;
+                            handlers::handle_enter(&mut self.state, &mut self.backend).await?;
+                        }
+                    }
+                }
+                View::Dashboard | View::Organizations | View::Projects | View::Groups | View::Contacts => {
+                    // For list views, calculate which item was clicked
+                    // This is a basic implementation - you may want to enhance this
+                    // based on actual UI layout
+                    if row >= 5 {
+                        // Assuming header takes up first 5 rows
+                        let list_row = (row - 5) as usize;
+
+                        // Update selected index if within valid range
+                        let max_index = match current_view {
+                            View::Organizations => {
+                                // Organizations view shows channels
+                                self.state.entities.channels.values()
+                                    .map(|channels| channels.len())
+                                    .sum::<usize>()
+                            }
+                            View::Projects => self.state.entities.projects.len(),
+                            View::Groups => self.state.entities.groups.len(),
+                            View::Contacts => self.state.entities.contacts.len(),
+                            _ => 0,
+                        };
+
+                        if list_row < max_index {
+                            self.state.navigation.selected_index = list_row;
+                        }
+                    }
+                }
+                _ => {
+                    // Other views don't have mouse interaction yet
+                }
+            }
+        }
+
+        Ok(())
     }
 
     /// Cleanup terminal on exit

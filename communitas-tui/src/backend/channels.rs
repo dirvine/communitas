@@ -1,14 +1,9 @@
 use super::Backend;
 use anyhow::Result;
 use communitas_core::crdt::EntityType;
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-use tokio::fs;
-use tokio::io::AsyncWriteExt;
 
 /// Simple entity for tracking conversations
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Entity {
     pub id: String,
     pub name: String,
@@ -16,137 +11,169 @@ pub struct Entity {
     pub members: Vec<String>, // Four-word addresses of members
 }
 
-/// Simple entity manager with persistence
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EntityManager {
-    entities: HashMap<String, Entity>,
-    #[serde(skip)]
-    storage_path: PathBuf,
-}
-
-impl EntityManager {
-    pub fn new() -> Self {
-        Self {
-            entities: HashMap::new(),
-            storage_path: PathBuf::new(),
-        }
-    }
-
-    /// Load entity manager from storage
-    pub async fn load(data_dir: &Path) -> Result<Self> {
-        let storage_path = data_dir.join("entities.json");
-
-        if storage_path.exists() {
-            let data = fs::read_to_string(&storage_path).await?;
-            let mut manager: EntityManager = serde_json::from_str(&data)?;
-            manager.storage_path = storage_path;
-            tracing::info!("Loaded {} entities from storage", manager.entities.len());
-            Ok(manager)
-        } else {
-            tracing::info!("No existing entities, starting with empty EntityManager");
-            Ok(Self {
-                entities: HashMap::new(),
-                storage_path,
-            })
-        }
-    }
-
-    /// Save entity manager to storage
-    pub async fn save(&self) -> Result<()> {
-        let data = serde_json::to_string_pretty(&self)?;
-        let mut file = fs::File::create(&self.storage_path).await?;
-        file.write_all(data.as_bytes()).await?;
-        file.sync_all().await?;
-        tracing::debug!("Saved {} entities to storage", self.entities.len());
-        Ok(())
-    }
-
-    pub fn create_entity(
-        &mut self,
-        name: String,
-        entity_type: EntityType,
-        members: Vec<String>,
-    ) -> Entity {
-        let id = uuid::Uuid::new_v4().to_string();
-        let entity = Entity {
-            id: id.clone(),
-            name,
-            entity_type,
-            members,
-        };
-        self.entities.insert(id, entity.clone());
-        entity
-    }
-
-    pub fn get_entity(&self, id: &str) -> Option<&Entity> {
-        self.entities.get(id)
-    }
-
-    pub fn list_entities(&self) -> Vec<Entity> {
-        self.entities.values().cloned().collect()
-    }
-
-    pub fn add_member(&mut self, entity_id: &str, member_four_words: String) -> Result<()> {
-        let entity = self
-            .entities
-            .get_mut(entity_id)
-            .ok_or_else(|| anyhow::anyhow!("Entity not found"))?;
-
-        if !entity.members.contains(&member_four_words) {
-            entity.members.push(member_four_words);
-        }
-        Ok(())
-    }
-}
-
 impl Backend {
     /// Create a new entity (contact, group, channel, etc.)
-    pub fn create_entity(
+    ///
+    /// Requires CoreContext to be initialized. Returns error if not initialized.
+    pub async fn create_entity(
         &mut self,
         name: String,
-        entity_type: EntityType,
+        entity_type: communitas_core::crdt::EntityType,
         members: Vec<String>,
     ) -> Result<Entity> {
-        let entity = self
-            .entity_manager
-            .create_entity(name, entity_type, members);
+        // REQUIRE CoreContext - no fallback to legacy EntityManager
+        if !self.is_core_initialized() {
+            return Err(anyhow::anyhow!(
+                "CoreContext not initialized - cannot create entity. Call initialize_core_context() first."
+            ));
+        }
 
-        // Save to disk asynchronously (fire and forget for now)
-        let manager = self.entity_manager.clone();
-        tokio::spawn(async move {
-            if let Err(e) = manager.save().await {
-                tracing::error!("Failed to save entities: {}", e);
-            }
-        });
+        let ctx = self.context()?;
+
+        // Create entity via EntityService (CRDT-based)
+        let core_entity = ctx.entity_service.create_entity(
+            name.clone(),
+            entity_type,
+            None, // description
+            ctx.four_words.clone(), // created_by
+            members.clone(),
+        ).await?;
+
+        // Convert to TUI Entity type
+        let entity = Entity {
+            id: core_entity.id.clone(),
+            name: core_entity.name.clone(),
+            entity_type: core_entity.entity_type,
+            members: core_entity.members.clone(),
+        };
+
+        // Publish EntityCreated event
+        self.publish_event(super::events::BackendEvent::EntityCreated {
+            entity_id: entity.id.clone(),
+            entity_type: entity.entity_type,
+            name: entity.name.clone(),
+        })
+        .await;
 
         Ok(entity)
     }
 
     /// Get list of entities
-    pub fn get_entities(&self) -> Result<Vec<Entity>> {
-        Ok(self.entity_manager.list_entities())
+    ///
+    /// Requires CoreContext to be initialized. Returns error if not initialized.
+    pub async fn get_entities(&self) -> Result<Vec<Entity>> {
+        if !self.is_core_initialized() {
+            return Err(anyhow::anyhow!(
+                "CoreContext not initialized - cannot list entities. Call initialize_core_context() first."
+            ));
+        }
+
+        let ctx = self.context()?;
+
+        // Get entities from EntityService (CRDT-based)
+        let core_entities = ctx.entity_service.list_entities().await
+            .map_err(|e| anyhow::anyhow!("Failed to list entities: {}", e))?;
+
+        // Convert to TUI Entity type
+        let entities = core_entities.into_iter().map(|e| Entity {
+            id: e.id,
+            name: e.name,
+            entity_type: e.entity_type,
+            members: e.members,
+        }).collect();
+
+        Ok(entities)
     }
 
     /// Get entity by ID
-    pub fn get_entity(&self, entity_id: &str) -> Result<Entity> {
-        self.entity_manager
-            .get_entity(entity_id)
-            .cloned()
-            .ok_or_else(|| anyhow::anyhow!("Entity not found: {}", entity_id))
+    ///
+    /// Requires CoreContext to be initialized. Returns error if not initialized.
+    pub async fn get_entity(&self, entity_id: &str) -> Result<Entity> {
+        if !self.is_core_initialized() {
+            return Err(anyhow::anyhow!(
+                "CoreContext not initialized - cannot get entity. Call initialize_core_context() first."
+            ));
+        }
+
+        let ctx = self.context()?;
+
+        // Get entity from EntityService (CRDT-based)
+        let core_entity = ctx.entity_service.get_entity(entity_id).await
+            .map_err(|e| anyhow::anyhow!("Failed to get entity {}: {}", entity_id, e))?;
+
+        // Convert to TUI Entity type
+        Ok(Entity {
+            id: core_entity.id,
+            name: core_entity.name,
+            entity_type: core_entity.entity_type,
+            members: core_entity.members,
+        })
     }
 
     /// Add member to entity
-    pub fn add_entity_member(&mut self, entity_id: &str, member_four_words: String) -> Result<()> {
-        self.entity_manager
-            .add_member(entity_id, member_four_words)?;
+    ///
+    /// Requires CoreContext to be initialized. Returns error if not initialized.
+    pub async fn add_entity_member(
+        &mut self,
+        entity_type: communitas_core::crdt::EntityType,
+        entity_id: &str,
+        member_four_words: String,
+    ) -> Result<()> {
+        if !self.is_core_initialized() {
+            return Err(anyhow::anyhow!(
+                "CoreContext not initialized - cannot add member. Call initialize_core_context() first."
+            ));
+        }
 
-        // Save to disk asynchronously
-        let manager = self.entity_manager.clone();
-        tokio::spawn(async move {
-            if let Err(e) = manager.save().await {
-                tracing::error!("Failed to save entities: {}", e);
-            }
-        });
+        let ctx = self.context()?;
+
+        // Add member via EntityService (CRDT-based)
+        ctx.entity_service
+            .add_member(entity_type, entity_id, &member_four_words, "member")
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to add member: {}", e))?;
+
+        // Publish MemberAdded event
+        self.publish_event(super::events::BackendEvent::MemberAdded {
+            entity_id: entity_id.to_string(),
+            entity_type,
+            member_id: member_four_words.clone(),
+        })
+        .await;
+
+        Ok(())
+    }
+
+    /// Remove member from entity
+    ///
+    /// Requires CoreContext to be initialized. Returns error if not initialized.
+    pub async fn remove_entity_member(
+        &mut self,
+        entity_type: communitas_core::crdt::EntityType,
+        entity_id: &str,
+        member_four_words: String,
+    ) -> Result<()> {
+        if !self.is_core_initialized() {
+            return Err(anyhow::anyhow!(
+                "CoreContext not initialized - cannot remove member. Call initialize_core_context() first."
+            ));
+        }
+
+        let ctx = self.context()?;
+
+        // Remove member via EntityService (CRDT-based)
+        ctx.entity_service
+            .remove_member(entity_type, entity_id, &member_four_words, "system")
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to remove member: {}", e))?;
+
+        // Publish MemberRemoved event
+        self.publish_event(super::events::BackendEvent::MemberRemoved {
+            entity_id: entity_id.to_string(),
+            entity_type,
+            member_id: member_four_words.clone(),
+        })
+        .await;
 
         Ok(())
     }
@@ -157,6 +184,6 @@ impl Backend {
 
     /// Get channels (returns as entities)
     pub async fn get_channels(&mut self) -> Result<Vec<Entity>> {
-        self.get_entities()
+        self.get_entities().await
     }
 }

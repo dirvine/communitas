@@ -2,7 +2,8 @@ use crate::crdt_error::{CrdtError, CrdtResult};
 use chrono::Utc;
 use libsql::{Builder, Connection, Database, params};
 use std::path::Path;
-use yrs::{Any, Doc, Map, MapRef, ReadTxn, Transact};
+use yrs::{Any, Doc, Map, MapPrelim, MapRef, ReadTxn, Transact};
+use yrs::updates::encoder::Encoder;
 
 /// Manages CRDT documents with Turso (libSQL) persistence
 pub struct CrdtManager {
@@ -54,7 +55,10 @@ impl CrdtManager {
         // Encode state in a scope to drop the transaction before await
         let state = {
             let txn = doc.transact();
-            txn.encode_state_as_update_v1(&yrs::StateVector::default())
+            // Use encode_diff with new encoder API
+            let mut encoder = yrs::updates::encoder::EncoderV1::new();
+            txn.encode_diff(&yrs::StateVector::default(), &mut encoder);
+            encoder.to_vec()
         };
         let version = 1i64; // Version tracking can be simplified
         let now = Utc::now().timestamp();
@@ -158,7 +162,9 @@ impl CrdtManager {
         let doc = self.load_document(doc_id).await?;
         let update = {
             let txn = doc.transact();
-            txn.encode_state_as_update_v1(remote_sv)
+            let mut encoder = yrs::updates::encoder::EncoderV1::new();
+            txn.encode_diff(remote_sv, &mut encoder);
+            encoder.to_vec()
         };
         Ok(update)
     }
@@ -203,36 +209,26 @@ impl CrdtManager {
 
     /// Get a string value from a Map
     pub fn get_map_string(map: &MapRef, txn: &impl ReadTxn, key: &str) -> Option<String> {
-        map.get(txn, key).and_then(|v| match v {
-            yrs::types::Value::Any(Any::String(s)) => Some(s.to_string()),
-            _ => None,
-        })
+        map.get(txn, key)
+            .and_then(|out| String::try_from(out).ok())
     }
 
     /// Get an i64 value from a Map
     pub fn get_map_i64(map: &MapRef, txn: &impl ReadTxn, key: &str) -> Option<i64> {
-        map.get(txn, key).and_then(|v| match v {
-            yrs::types::Value::Any(Any::BigInt(n)) => Some(n),
-            // Handle Number type that gets stored when inserting i64 without explicit wrapper
-            yrs::types::Value::Any(Any::Number(n)) => Some(n as i64),
-            _ => None,
-        })
+        map.get(txn, key)
+            .and_then(|out| i64::try_from(out).ok())
     }
 
     /// Get a bool value from a Map
     pub fn get_map_bool(map: &MapRef, txn: &impl ReadTxn, key: &str) -> Option<bool> {
-        map.get(txn, key).and_then(|v| match v {
-            yrs::types::Value::Any(Any::Bool(b)) => Some(b),
-            _ => None,
-        })
+        map.get(txn, key)
+            .and_then(|out| bool::try_from(out).ok())
     }
 
     /// Get a nested Map from a Map
     pub fn get_nested_map(map: &MapRef, txn: &impl ReadTxn, key: &str) -> Option<MapRef> {
-        map.get(txn, key).and_then(|v| match v {
-            yrs::types::Value::YMap(m) => Some(m),
-            _ => None,
-        })
+        map.get(txn, key)
+            .and_then(|out| MapRef::try_from(out).ok())
     }
 
     /// Insert or update a string field in a Map
@@ -280,13 +276,17 @@ impl CrdtManager {
     ) -> MapRef {
         let key_str = key.into();
         // Check if map already exists
-        if let Some(existing) = parent.get(txn, &key_str)
-            && let yrs::types::Value::YMap(m) = existing
-        {
-            return m;
+        if let Some(existing) = parent.get(txn, &key_str) {
+            if let Ok(m) = MapRef::try_from(existing) {
+                return m;
+            }
         }
-        // Create new map with explicit type
-        parent.insert(txn, key_str, yrs::MapPrelim::<Any>::new())
+        // Create new map using the updated Yrs API (from syntax)
+        let empty_prelim: MapPrelim = MapPrelim::from([("_", Any::Null)]);
+        let new_map: MapRef = parent.insert(txn, key_str.as_str(), empty_prelim);
+        // Remove the temporary key
+        new_map.remove(txn, "_");
+        new_map
     }
 
     /// Check if a Map contains a key

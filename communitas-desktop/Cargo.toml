@@ -1,5 +1,5 @@
 [package]
-name = "communitas-desktop"
+name = "communitas"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -7,10 +7,18 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 description = "Communitas desktop app (Tauri) — local-first PQC collaboration"
-default-run = "communitas-desktop"
+default-run = "communitas"
+include = [
+    "src/**/*",
+    "Cargo.toml",
+    "build.rs",
+    "../dist/**/*",
+    "icons/**/*",
+    "tauri.conf.json",
+]
 
 [[bin]]
-name = "communitas-desktop"
+name = "communitas"
 path = "src/main.rs"
 
 [build-dependencies]
@@ -39,7 +47,7 @@ saorsa-gossip-pubsub = { workspace = true }
 saorsa-webrtc = { workspace = true }
 
 # CRDT and Database
-yrs = "0.18"
+yrs = { version = "0.19", features = ["sync"] }
 libsql = "0.3"
 
 # Utils

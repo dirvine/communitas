@@ -1,6 +1,10 @@
 // Copyright (c) 2025 Saorsa Labs Limited
 //
 // Container service for managing CRDT container operations
+//
+// ⚠️  DEPRECATED: This service is deprecated and will be removed.
+// The container pointer-based architecture has been replaced with
+// Yrs CRDT full-replication. Use DocumentService instead.
 
 import { invoke } from '@tauri-apps/api/core';
 
@@ -29,126 +33,110 @@ export interface ContainerStats {
 
 /**
  * Service for managing container engine operations
+ * 
+ * @deprecated This service is deprecated. Use DocumentService with Yrs CRDT instead.
+ * The container_* commands are no longer supported in the backend.
  */
 export class ContainerService {
   /**
    * Initialize the container engine with user's ML-DSA keys
+   * 
+   * @deprecated Backend container_init command has been removed. Use doc_* commands instead.
    */
   static async init(): Promise<boolean> {
-    try {
-      return await invoke<boolean>('container_init');
-    } catch (error) {
-      console.error('Failed to initialize container:', error);
-      throw error;
-    }
+    console.warn('⚠️  ContainerService.init() is deprecated. Backend command no longer exists.');
+    throw new Error('DEPRECATED: container_init removed. Use Yrs CRDT document commands instead.');
   }
 
   /**
    * Store an object in the container (pointer-only, encrypted with AEAD)
+   * 
+   * @deprecated Backend container_put_object command has been removed.
    */
   static async putObject(bytes: Uint8Array): Promise<ObjectInfo> {
-    try {
-      return await invoke<ObjectInfo>('container_put_object', { bytes });
-    } catch (error) {
-      console.error('Failed to store object:', error);
-      throw error;
-    }
+    console.warn('⚠️  ContainerService.putObject() is deprecated.');
+    throw new Error('DEPRECATED: container_put_object removed. Use Yrs CRDT document commands instead.');
   }
 
   /**
    * Store a text object in the container
+   * 
+   * @deprecated Backend container commands have been removed.
    */
   static async putText(text: string): Promise<ObjectInfo> {
-    const encoder = new TextEncoder();
-    const bytes = encoder.encode(text);
-    return this.putObject(bytes);
+    console.warn('⚠️  ContainerService.putText() is deprecated.');
+    throw new Error('DEPRECATED: Use Yrs CRDT document commands instead.');
   }
 
   /**
    * Retrieve an object from the container by OID
-   *
-   * Note: Tauri serializes Rust Vec<u8> as number[], so we convert to Uint8Array
+   * 
+   * @deprecated Backend container_get_object command has been removed.
    */
   static async getObject(oidHex: string): Promise<Uint8Array> {
-    try {
-      // Tauri serializes Vec<u8> as number[], not Uint8Array
-      const rawBytes = await invoke<number[]>('container_get_object', { oidHex });
-      // Convert to Uint8Array for proper BufferSource compatibility
-      return new Uint8Array(rawBytes);
-    } catch (error) {
-      console.error('Failed to retrieve object:', error);
-      throw error;
+    console.warn('⚠️  ContainerService.getObject() is deprecated.');
+    throw new Error('DEPRECATED: container_get_object removed. Use Yrs CRDT document commands instead.');
     }
   }
 
   /**
    * Retrieve a text object from the container
+   * 
+   * @deprecated Backend container commands have been removed.
    */
   static async getText(oidHex: string): Promise<string> {
-    const bytes = await this.getObject(oidHex);
-    const decoder = new TextDecoder();
-    // bytes is now guaranteed to be Uint8Array (BufferSource)
-    return decoder.decode(bytes);
+    console.warn('⚠️  ContainerService.getText() is deprecated.');
+    throw new Error('DEPRECATED: Use Yrs CRDT document commands instead.');
   }
 
   /**
    * Apply CRDT operations to the container
+   * 
+   * @deprecated Backend container_apply_ops command has been removed.
    */
   static async applyOps(opsJson: string): Promise<TipInfo> {
-    try {
-      return await invoke<TipInfo>('container_apply_ops', { opsJson });
-    } catch (error) {
-      console.error('Failed to apply operations:', error);
-      throw error;
-    }
+    console.warn('⚠️  ContainerService.applyOps() is deprecated.');
+    throw new Error('DEPRECATED: container_apply_ops removed. Use Yrs CRDT document commands instead.');
   }
 
   /**
    * Get the current tip of the container CRDT
+   * 
+   * @deprecated Backend container_current_tip command has been removed.
    */
   static async getCurrentTip(): Promise<TipInfo> {
-    try {
-      return await invoke<TipInfo>('container_current_tip');
-    } catch (error) {
-      console.error('Failed to get current tip:', error);
-      throw error;
-    }
+    console.warn('⚠️  ContainerService.getCurrentTip() is deprecated.');
+    throw new Error('DEPRECATED: container_current_tip removed. Use Yrs CRDT document commands instead.');
   }
 
   /**
    * Create a new post operation
+   * 
+   * @deprecated Backend container_create_post command has been removed.
    */
   static async createPost(bodyMd: string): Promise<string> {
-    try {
-      return await invoke<string>('container_create_post', { bodyMd });
-    } catch (error) {
-      console.error('Failed to create post:', error);
-      throw error;
-    }
+    console.warn('⚠️  ContainerService.createPost() is deprecated.');
+    throw new Error('DEPRECATED: container_create_post removed. Use Yrs CRDT document commands instead.');
   }
 
   /**
    * List all objects in the container
+   * 
+   * @deprecated Backend container_list_objects command has been removed.
    */
   static async listObjects(): Promise<ObjectInfo[]> {
-    try {
-      return await invoke<ObjectInfo[]>('container_list_objects');
-    } catch (error) {
-      console.error('Failed to list objects:', error);
-      throw error;
-    }
+    console.warn('⚠️  ContainerService.listObjects() is deprecated.');
+    throw new Error('DEPRECATED: container_list_objects removed. Use Yrs CRDT document commands instead.');
   }
 
   /**
    * Get container statistics
+   * 
+   * @deprecated Backend container_get_stats command has been removed.
    */
   static async getStats(): Promise<ContainerStats> {
-    try {
-      return await invoke<ContainerStats>('container_get_stats');
-    } catch (error) {
-      console.error('Failed to get container stats:', error);
-      throw error;
-    }
+    console.warn('⚠️  ContainerService.getStats() is deprecated.');
+    throw new Error('DEPRECATED: container_get_stats removed. Use Yrs CRDT document commands instead.');
   }
 
   /**

@@ -117,6 +117,14 @@ pub async fn sync_stop_tip_watcher(
 }
 
 /// Manual delta fetch from a specific peer over QUIC
+/// 
+/// **DEPRECATED:** This command is deprecated and will be removed in a future version.
+/// The system now uses automatic anti-entropy synchronization via GossipContext.
+/// Manual sync is no longer needed - the anti-entropy manager handles all sync automatically.
+#[deprecated(
+    since = "0.1.18",
+    note = "Use automatic anti-entropy sync via sync_start_tip_watcher. Manual delta fetching is no longer supported with full-replication architecture."
+)]
 #[tauri::command]
 pub async fn sync_fetch_deltas(
     app: AppHandle,
@@ -124,7 +132,7 @@ pub async fn sync_fetch_deltas(
     _rpk: State<'_, Arc<RwLock<crate::security::raw_spki::RawSpkiState>>>,
     peer_addr: String,
 ) -> Result<u64, String> {
-    info!("Manual delta fetch from peer: {}", peer_addr);
+    info!("[DEPRECATED] Manual delta fetch from peer: {}", peer_addr);
 
     // Try to resolve as four-word address first within guard scope
     let result = {

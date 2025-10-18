@@ -81,7 +81,7 @@ pub async fn create_entity(
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
     let mut backend = backend.lock().await;
 
-    match backend.create_entity(req.name, req.entity_type, req.members) {
+    match backend.create_entity(req.name, req.entity_type, req.members).await {
         Ok(entity) => {
             let response = EntityResponse {
                 id: entity.id,
@@ -106,7 +106,7 @@ pub async fn list_entities(
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
     let backend = backend.lock().await;
 
-    match backend.get_entities() {
+    match backend.get_entities().await {
         Ok(entities) => {
             let response: Vec<EntityResponse> = entities
                 .into_iter()

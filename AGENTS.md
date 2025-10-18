@@ -18,8 +18,8 @@ This playbook is for anyone (human or AI) automating Communitas. It captures the
 3. **Initialize runtime** – `core_initialize` instantiates `CoreContext`, creating enhanced identities, chat/messaging services, and per-device storage handles.
 4. **Messaging & channels** – Use `core_create_channel`, `core_send_message_to_channel`, `core_send_message_to_recipients`, `core_subscribe_messages`, and UI receives `message-received` events with decrypted payloads when possible. New in saorsa-core v0.3.23: `core_channel_list_members` and `core_resolve_channel_members` hydrate Four-Word handles directly from the address book so automations can map user IDs without guessing.
 5. **Groups** – `core_group_create`, `core_group_add_member`, `core_group_remove_member` manage ML-DSA signed membership packets. Group signing keys are cached in-memory on the Tauri side.
-6. **Container & virtual disk pointers** – `container_init`, `container_put_object`, `container_get_object`, `container_apply_ops`, and `container_current_tip` provide pointer-only storage. Use `core_private_put/get` for encrypted KV storage in the local store.
-7. **Sync & repair** – `sync_start_tip_watcher` emits `container-tip` events; `sync_fetch_deltas` pulls CRDT ops over raw-key-pinned QUIC; `sync_repair_fec` exposes Reed–Solomon recovery helpers. Pin raw SPKI values via `sync_set_quic_pinned_spki`.
+6. **Document storage** – Use Yrs CRDT-based document commands (`doc_*`) for collaborative editing. Full document replication is used (not pointer-based). Use `core_private_put/get` for encrypted KV storage in the local store.
+7. **Sync & networking** – QUIC connections are secured with raw SPKI pinning via `sync_set_quic_pinned_spki`/`sync_clear_quic_pinned_spki`. Documents sync automatically via the gossip overlay.
 8. **Bootstrap maintenance** – `core_get_bootstrap_nodes` / `core_update_bootstrap_nodes` read/write `bootstrap.toml` so automations can configure seeds.
 
 ## 3. Storage & Container Notes
@@ -32,10 +32,9 @@ This playbook is for anyone (human or AI) automating Communitas. It captures the
 - Channel helpers: `core_channel_list_members`, `core_channel_invite_by_words` (currently returns an error until saorsa-core exposes membership writes), and `core_channel_recipients` (placeholder for UI fallbacks). `core_send_message_to_channel` now looks up Four-Word addresses via the saorsa-core address book before falling back to heuristics.
 
 ## 5. Sync, Security & Networking
-- `sync_progress` events provide `{ phase, peer, ops?, new_count?, root? }` updates during QUIC delta fetches.
 - Raw SPKI pinning flows: prefer `sync_set_quic_pinned_spki`/`sync_clear_quic_pinned_spki`, or set `COMMUNITAS_QUIC_PINNED_SPKI`/`COMMUNITAS_RPK_ALLOW_ANY` in dev.
-- QUIC/IPv4 first: `sync_fetch_deltas` resolves addresses via `lookup_host`, ordering IPv4 before IPv6.
-- Headless binary exposes the same container + sync stack via CLI. Config file controls FEC, bootstrap, update cadence, and metrics (`127.0.0.1:9600`).
+- QUIC/IPv4 first: addresses are resolved via `lookup_host`, ordering IPv4 before IPv6.
+- Headless binary exposes the same sync stack via CLI. Config file controls bootstrap, update cadence, and metrics (`127.0.0.1:9600`).
 
 ## 6. Tooling & Workflows
 
@@ -98,7 +97,7 @@ npm run tauri build
 
 ## 7. Observability & Logs
 - Tracing uses `tracing_subscriber` with `RUST_LOG=info,communitas=debug,saorsa_gossip=debug` by default. Override per workflow.
-- Container watchers emit `container-tip`; sync flows emit `sync-progress`; UI network diagnostics remain under `window.testNetwork.*` in legacy `src/` tests.
+- UI network diagnostics remain under `window.testNetwork.*` in legacy `src/` tests.
 - Metrics: headless node exposes Prometheus-like endpoint when `--metrics` flag is used.
 
 ## 8. MCP (Model Context Protocol) Automation
@@ -119,7 +118,6 @@ This setup exposes DOM traversal, screenshot capture, and scripted JavaScript ex
 - Chrome DevTools MCP usage: see `CLAUDE.md` for inspector workflow.
 
 Keep this file updated when:
-- saorsa-core is bumped,
+- saorsa-gossip packages are bumped,
 - new Tauri commands are surfaced,
-- container/FEC defaults change,
 - workspace layout shifts (e.g., once `apps/communitas` fully replaces `src/`),

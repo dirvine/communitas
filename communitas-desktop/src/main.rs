@@ -15,13 +15,13 @@ mod commands;
 mod core_cmds;
 mod core_commands;
 mod core_groups;
+mod core_state;
 mod core_storage;
-mod crdt_error;
-mod crdt_manager;
 mod doc_commands;
+mod error;
 mod gossip_commands;
 mod member_commands;
-pub mod member_manager;
+// member_manager module removed - now using EntityService from communitas-core
 mod message_sync_commands;
 mod network;
 mod network_config;
@@ -33,9 +33,10 @@ mod update_manager;
 mod webrtc_commands;
 
 use commands::{auth::AppState, org_commands::OrgState};
-use communitas_core::CoreContext;
+use communitas_core::{CoreContext, CrdtManager};
 use communitas_core::types::DeviceType;
-use crdt_manager::CrdtManager;
+use core_state::CoreState;
+use error::JsError;
 use member_commands::MemberState;
 use member_manager::MemberManager;
 use services::{
@@ -52,7 +53,7 @@ use tokio::sync::RwLock;
 use tracing::info;
 
 #[tauri::command]
-async fn health() -> Result<serde_json::Value, String> {
+async fn health() -> Result<serde_json::Value, JsError> {
     Ok(serde_json::json!({
         "status": "ok",
         "app": env!("CARGO_PKG_VERSION"),
@@ -60,7 +61,7 @@ async fn health() -> Result<serde_json::Value, String> {
 }
 
 #[tauri::command]
-async fn get_app_version() -> Result<String, String> {
+async fn get_app_version() -> Result<String, JsError> {
     Ok(env!("CARGO_PKG_VERSION").to_string())
 }
 
@@ -84,7 +85,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Initialize CRDT manager and services
     let data_dir = dirs::data_local_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
+        .ok_or_else(|| anyhow::anyhow!("Failed to determine local data directory. Please set HOME or LOCALAPPDATA environment variable."))?
         .join("communitas");
     std::fs::create_dir_all(&data_dir)?;
 
@@ -107,9 +108,8 @@ async fn main() -> anyhow::Result<()> {
         virtual_disk_service,
     };
 
-    // Initialize member manager
-    let member_manager = Arc::new(MemberManager::new(crdt_manager.clone()));
-    let member_state = MemberState { member_manager };
+    // Member management is now handled by EntityService in CoreContext
+    // No separate member state needed - commands will access via CoreContext
 
     // Initialize encrypted storage app state
     let app_state = AppState::new();
@@ -128,8 +128,7 @@ async fn main() -> anyhow::Result<()> {
         .manage(app_state)
         // Organization services state
         .manage(org_state)
-        // Member management state
-        .manage(member_state)
+        // Member management now handled via CoreContext EntityService
         // Update manager state
         .manage(update_state.clone())
         // Update settings state
@@ -137,7 +136,7 @@ async fn main() -> anyhow::Result<()> {
         // WebRTC state
         .manage(webrtc_state)
         // Shared saorsa-core context (initialized via core_initialize)
-        .manage(Arc::new(RwLock::new(Option::<CoreContext>::None)))
+        .manage(Arc::new(CoreState::new()))
         // Sync watcher state
         .manage(Arc::new(RwLock::new(sync::TipWatcherState::default())))
         // Network runtime state
@@ -146,10 +145,7 @@ async fn main() -> anyhow::Result<()> {
         .manage(Arc::new(RwLock::new(
             security::raw_spki::RawSpkiState::default(),
         )))
-        // Message sync service state
-        .manage(Arc::new(RwLock::new(
-            Option::<communitas_core::message_sync::MessageSyncService>::None,
-        )))
+        // Message service now handled via CoreContext MessageService
         // Gossip overlay state
         .manage(Arc::new(RwLock::new(
             Option::<communitas_core::gossip::GossipContext>::None,

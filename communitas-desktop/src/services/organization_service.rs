@@ -1,4 +1,4 @@
-use crate::crdt_manager::CrdtManager;
+use communitas_core::CrdtManager;
 use anyhow::{Context, Result};
 use chrono::Utc;
 use libsql::params;

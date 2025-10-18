@@ -180,8 +180,9 @@ impl GossipContext {
         // 10. Initialize topics map
         let topics = Arc::new(RwLock::new(HashMap::new()));
 
-        // 11. Load or create peer cache (SPEC2.md §6)
-        let cache_path = std::path::PathBuf::from("./peer_cache.db");
+        // 11. Load or create peer cache (SPEC2.md §6) - system-wide location
+        let cache_path = super::peer_cache::PeerCache::default_cache_path()
+            .context("Failed to get default peer cache path")?;
         let peer_cache = super::peer_cache::PeerCache::load(&cache_path)
             .await
             .context("Failed to load peer cache")?;

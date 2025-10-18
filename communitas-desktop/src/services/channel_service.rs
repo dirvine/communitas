@@ -1,4 +1,4 @@
-use crate::crdt_manager::CrdtManager;
+use communitas_core::CrdtManager;
 use anyhow::{Context, Result};
 use chrono::Utc;
 use libsql::params;
@@ -207,7 +207,7 @@ impl ChannelService {
         // Add message to CRDT Map of Maps structure (not Array!)
         // Pattern: Complete all CRDT operations before any await to avoid Send issues
         {
-            use crate::crdt_manager::CrdtManager;
+            use communitas_core::CrdtManager;
 
             tracing::trace!("Creating CRDT transaction for message insertion");
 
@@ -293,7 +293,7 @@ impl ChannelService {
         // Update message in CRDT
         // Pattern: Complete all CRDT operations before any await to avoid Send issues
         {
-            use crate::crdt_manager::CrdtManager;
+            use communitas_core::CrdtManager;
 
             let messages = doc.get_or_insert_map("messages");
 
@@ -366,7 +366,7 @@ impl ChannelService {
         // Mark message as deleted in CRDT (tombstone pattern)
         // Pattern: Complete all CRDT operations before any await to avoid Send issues
         {
-            use crate::crdt_manager::CrdtManager;
+            use communitas_core::CrdtManager;
 
             let messages = doc.get_or_insert_map("messages");
 
@@ -595,7 +595,7 @@ impl ChannelService {
         msg_id: &str,
         channel_id: &str,
     ) -> Result<()> {
-        use crate::crdt_manager::CrdtManager;
+        use communitas_core::CrdtManager;
 
         tracing::trace!(
             msg_id = %msg_id,

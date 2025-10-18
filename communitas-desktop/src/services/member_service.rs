@@ -1,4 +1,4 @@
-use crate::crdt_manager::CrdtManager;
+use communitas_core::CrdtManager;
 use crate::services::virtual_disk_service::{DiskType, VirtualDiskService};
 use anyhow::{Context, Result};
 use chrono::Utc;

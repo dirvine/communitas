@@ -1,29 +1,27 @@
 //! Tauri Commands for Message Synchronization
 //!
-//! Exposes CRDT-based message sync functionality to the frontend.
-//! Supports get_all_messages(), out-of-order detection, and missing message sync.
+//! Thin wrappers around CoreContext MessageService.
+//! These commands now delegate to the unified MessageService in communitas-core,
+//! eliminating code duplication between desktop and TUI applications.
 
 use communitas_core::crdt::{
     CRDTMessage, EntitySyncState, EntityType, MessageContent, MissingRange, SyncRequest,
     SyncResponse, VectorClock,
 };
-use communitas_core::message_sync::MessageSyncService;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use tauri::State;
 use tokio::sync::RwLock;
 
-/// Global message sync service (one per app instance)
-pub type MessageSyncState = Arc<RwLock<Option<MessageSyncService>>>;
-
 /// Initialize the message sync service with our peer ID
+/// Note: MessageService is now initialized as part of CoreContext
 #[tauri::command]
 pub async fn message_sync_initialize(
-    state: tauri::State<'_, MessageSyncState>,
-    peer_id: String,
+    _core_state: State<'_, Arc<RwLock<Option<communitas_core::CoreContext>>>>,
+    _peer_id: String,
 ) -> Result<(), String> {
-    let service = MessageSyncService::new(peer_id);
-    let mut guard = state.write().await;
-    *guard = Some(service);
+    // MessageService is now automatically initialized with CoreContext
+    // This command is kept for backward compatibility
     Ok(())
 }
 
@@ -31,14 +29,15 @@ pub async fn message_sync_initialize(
 /// This is called when another peer requests sync from us
 #[tauri::command]
 pub async fn message_sync_get_all_messages(
-    state: tauri::State<'_, MessageSyncState>,
+    core_state: State<'_, Arc<RwLock<Option<communitas_core::CoreContext>>>>,
     entity_id: String,
 ) -> Result<SyncResponse, String> {
-    let guard = state.read().await;
-    let service = guard.as_ref().ok_or("MessageSyncService not initialized")?;
+    let core_ctx = core_state.read().await
+        .as_ref()
+        .ok_or("CoreContext not initialized")?;
 
-    service
-        .get_all_messages(&entity_id)
+    core_ctx.message_service
+        .get_entity_messages(entity_id)
         .await
         .map_err(|e| format!("Failed to get messages: {}", e))
 }
@@ -46,13 +45,14 @@ pub async fn message_sync_get_all_messages(
 /// Receive an incoming message - detects out-of-order and missing dependencies
 #[tauri::command]
 pub async fn message_sync_receive_message(
-    state: tauri::State<'_, MessageSyncState>,
+    core_state: State<'_, Arc<RwLock<Option<communitas_core::CoreContext>>>>,
     message: CRDTMessage,
 ) -> Result<ReceiveResultDto, String> {
-    let guard = state.read().await;
-    let service = guard.as_ref().ok_or("MessageSyncService not initialized")?;
+    let core_ctx = core_state.read().await
+        .as_ref()
+        .ok_or("CoreContext not initialized")?;
 
-    let result = service
+    let result = core_ctx.message_service
         .receive_message(message)
         .await
         .map_err(|e| format!("Failed to receive message: {}", e))?;
@@ -60,22 +60,23 @@ pub async fn message_sync_receive_message(
     Ok(ReceiveResultDto {
         accepted: result.accepted,
         out_of_order: result.out_of_order,
-        missing_ranges: result.missing_ranges,
+        missing_ranges: Some(result.missing_ranges),
     })
 }
 
 /// Send a new message - assigns vector clock and Lamport timestamp
 #[tauri::command]
 pub async fn message_sync_send_message(
-    state: tauri::State<'_, MessageSyncState>,
+    core_state: State<'_, Arc<RwLock<Option<communitas_core::CoreContext>>>>,
     entity_id: String,
     entity_type: String,
     text: String,
     author: String,
     reply_to_id: Option<String>,
 ) -> Result<CRDTMessage, String> {
-    let guard = state.read().await;
-    let service = guard.as_ref().ok_or("MessageSyncService not initialized")?;
+    let core_ctx = core_state.read().await
+        .as_ref()
+        .ok_or("CoreContext not initialized")?;
 
     let entity_type_enum = parse_entity_type(&entity_type)?;
 
@@ -85,7 +86,7 @@ pub async fn message_sync_send_message(
         attachments: None,
     };
 
-    service
+    core_ctx.message_service
         .send_message(entity_id, entity_type_enum, content, reply_to_id)
         .await
         .map_err(|e| format!("Failed to send message: {}", e))
@@ -94,50 +95,70 @@ pub async fn message_sync_send_message(
 /// Request sync from a peer - send our vector clock and get missing messages
 #[tauri::command]
 pub async fn message_sync_request_sync(
-    state: tauri::State<'_, MessageSyncState>,
+    core_state: State<'_, Arc<RwLock<Option<communitas_core::CoreContext>>>>,
     entity_id: String,
     from_peer_id: String,
 ) -> Result<SyncRequest, String> {
-    let guard = state.read().await;
-    let service = guard.as_ref().ok_or("MessageSyncService not initialized")?;
+    let core_ctx = core_state.read().await
+        .as_ref()
+        .ok_or("CoreContext not initialized")?;
 
-    service
-        .request_sync(&entity_id, &from_peer_id)
+    // Create a sync request with our current state
+    let sync_state = core_ctx.message_service
+        .get_entity_sync_state(entity_id.clone(), EntityType::Channel)
         .await
-        .map_err(|e| format!("Failed to request sync: {}", e))
+        .map_err(|e| format!("Failed to get sync state: {}", e))?;
+
+    Ok(SyncRequest {
+        entity_id,
+        entity_type: EntityType::Channel,
+        requester_peer_id: from_peer_id,
+        vector_clock: sync_state.vector_clock,
+        missing_message_ids: Some(sync_state.missing_messages),
+    })
 }
 
 /// Handle sync response - integrate received messages
 #[tauri::command]
 pub async fn message_sync_handle_sync_response(
-    state: tauri::State<'_, MessageSyncState>,
+    core_state: State<'_, Arc<RwLock<Option<communitas_core::CoreContext>>>>,
     response: SyncResponse,
 ) -> Result<SyncResultDto, String> {
-    let guard = state.read().await;
-    let service = guard.as_ref().ok_or("MessageSyncService not initialized")?;
+    let core_ctx = core_state.read().await
+        .as_ref()
+        .ok_or("CoreContext not initialized")?;
 
-    let result = service
-        .handle_sync_response(response)
-        .await
-        .map_err(|e| format!("Failed to handle sync response: {}", e))?;
+    // For sync response handling, we need to process each message individually
+    // This is a simplified implementation
+    let mut messages_added = 0;
+    for message in response.messages {
+        match core_ctx.message_service.receive_message(message).await {
+            Ok(result) if result.accepted => messages_added += 1,
+            _ => {} // Message rejected or error
+        }
+    }
 
     Ok(SyncResultDto {
-        messages_added: result.messages_added,
-        messages_rejected: result.messages_rejected,
+        messages_added,
+        messages_rejected: response.messages.len() - messages_added,
     })
 }
 
 /// Get sync state for an entity
 #[tauri::command]
 pub async fn message_sync_get_sync_state(
-    state: tauri::State<'_, MessageSyncState>,
+    core_state: State<'_, Arc<RwLock<Option<communitas_core::CoreContext>>>>,
     entity_id: String,
 ) -> Result<EntitySyncState, String> {
-    let guard = state.read().await;
-    let service = guard.as_ref().ok_or("MessageSyncService not initialized")?;
+    let core_ctx = core_state.read().await
+        .as_ref()
+        .ok_or("CoreContext not initialized")?;
 
-    service
-        .get_sync_state(&entity_id)
+    // Use default entity type - this could be made more sophisticated
+    let entity_type = EntityType::Channel;
+
+    core_ctx.message_service
+        .get_entity_sync_state(entity_id, entity_type)
         .await
         .map_err(|e| format!("Failed to get sync state: {}", e))
 }
@@ -145,29 +166,41 @@ pub async fn message_sync_get_sync_state(
 /// Get all messages for an entity in causal order
 #[tauri::command]
 pub async fn message_sync_get_messages(
-    state: tauri::State<'_, MessageSyncState>,
+    core_state: State<'_, Arc<RwLock<Option<communitas_core::CoreContext>>>>,
     entity_id: String,
 ) -> Result<Vec<CRDTMessage>, String> {
-    let guard = state.read().await;
-    let service = guard.as_ref().ok_or("MessageSyncService not initialized")?;
+    let core_ctx = core_state.read().await
+        .as_ref()
+        .ok_or("CoreContext not initialized")?;
 
-    service
-        .get_messages(&entity_id)
+    let response = core_ctx.message_service
+        .get_entity_messages(entity_id)
         .await
-        .map_err(|e| format!("Failed to get messages: {}", e))
+        .map_err(|e| format!("Failed to get messages: {}", e))?;
+
+    Ok(response.messages)
 }
 
 /// Check if we need to request a sync (missing messages)
 #[tauri::command]
 pub async fn message_sync_needs_sync(
-    state: tauri::State<'_, MessageSyncState>,
+    core_state: State<'_, Arc<RwLock<Option<communitas_core::CoreContext>>>>,
     entity_id: String,
     remote_clock: VectorClock,
 ) -> Result<bool, String> {
-    let guard = state.read().await;
-    let service = guard.as_ref().ok_or("MessageSyncService not initialized")?;
+    let core_ctx = core_state.read().await
+        .as_ref()
+        .ok_or("CoreContext not initialized")?;
 
-    Ok(service.needs_sync(&entity_id, &remote_clock).await)
+    // Simplified check - compare our sync state with remote clock
+    let entity_type = EntityType::Channel; // Default assumption
+    let our_state = core_ctx.message_service
+        .get_entity_sync_state(entity_id.clone(), entity_type)
+        .await
+        .map_err(|e| format!("Failed to get sync state: {}", e))?;
+
+    // Check if remote has messages we don't have
+    Ok(remote_clock.compare(&our_state.vector_clock) == communitas_core::crdt::ClockOrdering::After)
 }
 
 // Helper DTOs for serialization

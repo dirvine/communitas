@@ -122,14 +122,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_device_type_from_str() {
-        assert_eq!(DeviceType::from_str("desktop"), DeviceType::Desktop);
-        assert_eq!(DeviceType::from_str("Desktop"), DeviceType::Desktop);
-        assert_eq!(DeviceType::from_str("LAPTOP"), DeviceType::Laptop);
-        assert_eq!(DeviceType::from_str("mobile"), DeviceType::Mobile);
-        assert_eq!(DeviceType::from_str("server"), DeviceType::Server);
-        assert_eq!(DeviceType::from_str("unknown"), DeviceType::Unknown);
-        assert_eq!(DeviceType::from_str("invalid"), DeviceType::Unknown);
+    fn test_device_type_parse() {
+        assert_eq!(DeviceType::parse("desktop"), DeviceType::Desktop);
+        assert_eq!(DeviceType::parse("Desktop"), DeviceType::Desktop);
+        assert_eq!(DeviceType::parse("LAPTOP"), DeviceType::Laptop);
+        assert_eq!(DeviceType::parse("mobile"), DeviceType::Mobile);
+        assert_eq!(DeviceType::parse("server"), DeviceType::Server);
+        assert_eq!(DeviceType::parse("unknown"), DeviceType::Unknown);
+        assert_eq!(DeviceType::parse("invalid"), DeviceType::Unknown);
     }
 
     #[test]

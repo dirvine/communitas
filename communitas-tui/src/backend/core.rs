@@ -1,11 +1,16 @@
-use super::channels::EntityManager;
 use anyhow::Result;
 use communitas_core::types::DeviceType;
 use communitas_core::{
     AuthService, CoreContext, SessionInfo,
     encrypted_storage::{EncryptedStorageManager, RecentIdentity, StorageConfig},
 };
+use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+use super::events::{BackendEvent, EventFilter, EventManager};
+use super::offline_queue::{OfflineQueue, QueuedOperation, QueuedOperationEntry, SyncProgress, SyncResult};
+use tokio::sync::{mpsc, RwLock};
 
 /// Backend wrapper around CoreContext and AuthService
 pub struct Backend {
@@ -13,12 +18,22 @@ pub struct Backend {
     auth_service: AuthService,
     /// Core context (None if not authenticated)
     ctx: Option<CoreContext>,
-    /// Entity manager for tracking contacts, groups, channels
-    pub(crate) entity_manager: EntityManager,
     /// Data directory
     data_dir: PathBuf,
-    /// Offline mode
+    /// Offline mode (network unavailable)
     offline: bool,
+    /// Event subscription manager
+    event_manager: EventManager,
+    /// Offline operation queue (None until authenticated)
+    offline_queue: Option<OfflineQueue>,
+    /// Offline mode flag (user-controlled offline mode)
+    offline_mode: bool,
+    /// Network error simulation (for testing)
+    network_error_simulation: bool,
+    /// Sync progress subscribers
+    sync_progress_subs: Arc<RwLock<HashMap<u64, mpsc::Sender<SyncProgress>>>>,
+    /// Next sync progress subscription ID
+    next_sync_sub_id: AtomicU64,
 }
 
 impl Backend {
@@ -37,15 +52,17 @@ impl Backend {
         // Create auth service
         let auth_service = AuthService::new(storage_manager);
 
-        // Load entity manager from storage
-        let entity_manager = EntityManager::load(&data_dir).await?;
-
         Ok(Self {
             auth_service,
             ctx: None,
-            entity_manager,
             data_dir,
             offline,
+            event_manager: EventManager::new(),
+            offline_queue: None,
+            offline_mode: false,
+            network_error_simulation: false,
+            sync_progress_subs: Arc::new(RwLock::new(HashMap::new())),
+            next_sync_sub_id: AtomicU64::new(1),
         })
     }
 
@@ -70,15 +87,17 @@ impl Backend {
         // Create auth service
         let auth_service = AuthService::new(storage_manager);
 
-        // Load entity manager from storage
-        let entity_manager = EntityManager::load(&data_dir).await?;
-
         Ok(Self {
             auth_service,
             ctx: None,
-            entity_manager,
             data_dir,
             offline,
+            event_manager: EventManager::new(),
+            offline_queue: None,
+            offline_mode: false,
+            network_error_simulation: false,
+            sync_progress_subs: Arc::new(RwLock::new(HashMap::new())),
+            next_sync_sub_id: AtomicU64::new(1),
         })
     }
 
@@ -228,7 +247,12 @@ impl Backend {
 
         self.ctx = Some(ctx);
 
-        tracing::info!("CoreContext initialized successfully");
+        // Initialize offline queue for this user
+        let queue_dir = self.data_dir.join("offline_queue").join(&session.four_words);
+        let offline_queue = OfflineQueue::new(queue_dir).await?;
+        self.offline_queue = Some(offline_queue);
+
+        tracing::info!("CoreContext and offline queue initialized successfully");
         Ok(())
     }
 
@@ -322,5 +346,376 @@ impl Backend {
         // Basic validation: exactly 4 words separated by hyphens
         let parts: Vec<&str> = four_words.split('-').collect();
         parts.len() == 4 && parts.iter().all(|p| !p.is_empty())
+    }
+
+    // ========================================================================
+    // Event Subscription Methods
+    // ========================================================================
+
+    /// Subscribe to all entity events
+    ///
+    /// Returns subscription ID that can be used to unsubscribe later.
+    pub async fn subscribe_entity_events(
+        &mut self,
+        sender: mpsc::Sender<BackendEvent>,
+    ) -> Result<u64> {
+        if !self.is_core_initialized() {
+            return Err(anyhow::anyhow!(
+                "CoreContext not initialized - cannot subscribe to events"
+            ));
+        }
+
+        let id = self
+            .event_manager
+            .subscribe(sender, EventFilter::all())
+            .await;
+        Ok(id)
+    }
+
+    /// Subscribe to message events
+    ///
+    /// Returns subscription ID that can be used to unsubscribe later.
+    pub async fn subscribe_message_events(
+        &mut self,
+        sender: mpsc::Sender<BackendEvent>,
+    ) -> Result<u64> {
+        if !self.is_core_initialized() {
+            return Err(anyhow::anyhow!(
+                "CoreContext not initialized - cannot subscribe to events"
+            ));
+        }
+
+        // Use all filter for now - message events will be filtered by type automatically
+        let id = self
+            .event_manager
+            .subscribe(sender, EventFilter::all())
+            .await;
+        Ok(id)
+    }
+
+    /// Subscribe to entity events with filters
+    ///
+    /// Returns subscription ID that can be used to unsubscribe later.
+    pub async fn subscribe_entity_events_filtered(
+        &mut self,
+        sender: mpsc::Sender<BackendEvent>,
+        entity_type: Option<communitas_core::crdt::EntityType>,
+        entity_id: Option<String>,
+    ) -> Result<u64> {
+        if !self.is_core_initialized() {
+            return Err(anyhow::anyhow!(
+                "CoreContext not initialized - cannot subscribe to events"
+            ));
+        }
+
+        let filter = EventFilter {
+            entity_type,
+            entity_id,
+        };
+
+        let id = self.event_manager.subscribe(sender, filter).await;
+        Ok(id)
+    }
+
+    /// Unsubscribe from events
+    ///
+    /// Returns true if subscription was found and removed, false otherwise.
+    pub async fn unsubscribe(&mut self, subscription_id: u64) -> Result<()> {
+        let removed = self.event_manager.unsubscribe(subscription_id).await;
+        if removed {
+            Ok(())
+        } else {
+            Err(anyhow::anyhow!(
+                "Subscription ID {} not found",
+                subscription_id
+            ))
+        }
+    }
+
+    /// Enable event queue for offline support
+    ///
+    /// Events will be queued when no subscribers are active and delivered
+    /// when new subscribers connect.
+    pub async fn enable_event_queue(&mut self, max_size: usize) -> Result<()> {
+        self.event_manager.enable_queue(max_size).await;
+        Ok(())
+    }
+
+    /// Publish an event to all subscribers (internal use)
+    pub(crate) async fn publish_event(&self, event: BackendEvent) {
+        self.event_manager.publish(event).await;
+    }
+
+    // ========================================================================
+    // Offline Queue Methods
+    // ========================================================================
+
+    /// Set offline mode (for testing and manual control)
+    pub async fn set_offline_mode(&mut self, offline: bool) -> Result<()> {
+        self.offline_mode = offline;
+        Ok(())
+    }
+
+    /// Check if in offline mode
+    pub fn is_offline_mode(&self) -> bool {
+        self.offline_mode || self.network_error_simulation
+    }
+
+    /// Simulate network error (for testing)
+    pub async fn simulate_network_error(&mut self, simulate: bool) -> Result<()> {
+        self.network_error_simulation = simulate;
+        Ok(())
+    }
+
+    /// Set queue size limit
+    pub async fn set_queue_size_limit(&mut self, max_size: usize) -> Result<()> {
+        if let Some(queue) = &mut self.offline_queue {
+            queue.set_max_size(max_size);
+            Ok(())
+        } else {
+            Err(anyhow::anyhow!("Offline queue not initialized - authenticate first"))
+        }
+    }
+
+    /// Queue entity creation operation
+    pub async fn queue_create_entity(
+        &mut self,
+        name: String,
+        entity_type: communitas_core::crdt::EntityType,
+        members: Vec<String>,
+    ) -> Result<String> {
+        if !self.is_logged_in() {
+            return Err(anyhow::anyhow!("Must be authenticated to queue operations"));
+        }
+
+        let queue = self.offline_queue.as_mut()
+            .ok_or_else(|| anyhow::anyhow!("Offline queue not initialized"))?;
+
+        let operation = QueuedOperation::CreateEntity {
+            name,
+            entity_type,
+            members,
+        };
+
+        queue.enqueue(operation, 0).await
+    }
+
+    /// Queue message send operation
+    pub async fn queue_send_message(
+        &mut self,
+        entity_id: String,
+        entity_type: communitas_core::crdt::EntityType,
+        text: String,
+    ) -> Result<String> {
+        if !self.is_logged_in() {
+            return Err(anyhow::anyhow!("Must be authenticated to queue operations"));
+        }
+
+        let queue = self.offline_queue.as_mut()
+            .ok_or_else(|| anyhow::anyhow!("Offline queue not initialized"))?;
+
+        let operation = QueuedOperation::SendMessage {
+            entity_id,
+            entity_type,
+            text,
+        };
+
+        queue.enqueue(operation, 0).await
+    }
+
+    /// Queue message send operation with priority
+    pub async fn queue_send_message_with_priority(
+        &mut self,
+        entity_id: String,
+        entity_type: communitas_core::crdt::EntityType,
+        text: String,
+        priority: u8,
+    ) -> Result<String> {
+        if !self.is_logged_in() {
+            return Err(anyhow::anyhow!("Must be authenticated to queue operations"));
+        }
+
+        let queue = self.offline_queue.as_mut()
+            .ok_or_else(|| anyhow::anyhow!("Offline queue not initialized"))?;
+
+        let operation = QueuedOperation::SendMessage {
+            entity_id,
+            entity_type,
+            text,
+        };
+
+        queue.enqueue(operation, priority).await
+    }
+
+    /// Queue member addition operation
+    pub async fn queue_add_member(
+        &mut self,
+        entity_id: String,
+        entity_type: communitas_core::crdt::EntityType,
+        member_id: String,
+    ) -> Result<String> {
+        if !self.is_logged_in() {
+            return Err(anyhow::anyhow!("Must be authenticated to queue operations"));
+        }
+
+        let queue = self.offline_queue.as_mut()
+            .ok_or_else(|| anyhow::anyhow!("Offline queue not initialized"))?;
+
+        let operation = QueuedOperation::AddMember {
+            entity_id,
+            entity_type,
+            member_id,
+        };
+
+        queue.enqueue(operation, 0).await
+    }
+
+    /// Get all queued operations
+    pub async fn get_queued_operations(&self) -> Result<Vec<QueuedOperationEntry>> {
+        let queue = self.offline_queue.as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Offline queue not initialized"))?;
+
+        Ok(queue.get_all())
+    }
+
+    /// Sync queued operations
+    ///
+    /// Attempts to execute all queued operations when back online.
+    /// Returns results for each operation (Success, Failed, or Skipped).
+    /// Successfully executed operations are removed from queue.
+    /// Failed operations remain for retry.
+    pub async fn sync_queued_operations(&mut self) -> Result<Vec<SyncResult>> {
+        if !self.is_core_initialized() {
+            return Err(anyhow::anyhow!("CoreContext not initialized"));
+        }
+
+        // Get all operations first (releases borrow)
+        let operations = {
+            let queue = self.offline_queue.as_ref()
+                .ok_or_else(|| anyhow::anyhow!("Offline queue not initialized"))?;
+            queue.get_all()
+        };
+
+        if operations.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut results = Vec::new();
+        let total = operations.len();
+
+        // Track successful operation IDs for removal
+        let mut successful_ops = Vec::new();
+
+        for (idx, entry) in operations.into_iter().enumerate() {
+            // Send progress update
+            self.publish_sync_progress(SyncProgress {
+                total,
+                completed: idx,
+                current_operation_id: Some(entry.id.clone()),
+            }).await;
+
+            // Check for duplicates by comparing with previously queued ops
+            let is_duplicate = {
+                let queue = self.offline_queue.as_ref()
+                    .ok_or_else(|| anyhow::anyhow!("Offline queue not initialized"))?;
+                queue.is_duplicate(&entry.operation) && idx > 0
+            };
+
+            if is_duplicate {
+                results.push(SyncResult::Skipped {
+                    operation_id: entry.id.clone(),
+                    reason: "Duplicate operation detected".to_string(),
+                });
+                successful_ops.push(entry.id.clone());
+                continue;
+            }
+
+            // Simulate network error if testing
+            if self.network_error_simulation {
+                results.push(SyncResult::Failed {
+                    operation_id: entry.id.clone(),
+                    error: "Network error (simulated)".to_string(),
+                });
+                continue;
+            }
+
+            // Execute operation
+            let result = self.execute_queued_operation(entry.operation.clone()).await;
+
+            match result {
+                Ok(_) => {
+                    results.push(SyncResult::Success {
+                        operation_id: entry.id.clone(),
+                    });
+                    successful_ops.push(entry.id);
+                }
+                Err(e) => {
+                    results.push(SyncResult::Failed {
+                        operation_id: entry.id.clone(),
+                        error: e.to_string(),
+                    });
+                    // Keep failed operations in queue for retry
+                }
+            }
+        }
+
+        // Remove successful operations from queue
+        if !successful_ops.is_empty() {
+            let queue = self.offline_queue.as_mut()
+                .ok_or_else(|| anyhow::anyhow!("Offline queue not initialized"))?;
+            for op_id in successful_ops {
+                queue.remove(&op_id).await?;
+            }
+        }
+
+        // Final progress update
+        self.publish_sync_progress(SyncProgress {
+            total,
+            completed: total,
+            current_operation_id: None,
+        }).await;
+
+        Ok(results)
+    }
+
+    /// Execute a queued operation
+    async fn execute_queued_operation(&mut self, operation: QueuedOperation) -> Result<()> {
+        match operation {
+            QueuedOperation::CreateEntity { name, entity_type, members } => {
+                self.create_entity(name, entity_type, members).await?;
+                Ok(())
+            }
+            QueuedOperation::SendMessage { entity_id, entity_type, text } => {
+                self.send_message(entity_id, entity_type, text).await?;
+                Ok(())
+            }
+            QueuedOperation::AddMember { entity_id, entity_type, member_id } => {
+                self.add_entity_member(entity_type, &entity_id, member_id).await?;
+                Ok(())
+            }
+            QueuedOperation::RemoveMember { entity_id, entity_type, member_id } => {
+                self.remove_entity_member(entity_type, &entity_id, member_id).await?;
+                Ok(())
+            }
+        }
+    }
+
+    /// Subscribe to sync progress updates
+    pub async fn subscribe_sync_progress(
+        &mut self,
+        sender: mpsc::Sender<SyncProgress>,
+    ) -> Result<()> {
+        let id = self.next_sync_sub_id.fetch_add(1, Ordering::SeqCst);
+        let mut subs = self.sync_progress_subs.write().await;
+        subs.insert(id, sender);
+        Ok(())
+    }
+
+    /// Publish sync progress to all subscribers
+    async fn publish_sync_progress(&self, progress: SyncProgress) {
+        let subs = self.sync_progress_subs.read().await;
+        for sender in subs.values() {
+            let _ = sender.send(progress.clone()).await;
+        }
     }
 }

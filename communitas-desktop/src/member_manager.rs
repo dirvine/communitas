@@ -5,7 +5,7 @@
 /// - Event-driven tombstone pruning
 /// - Offline-first operations with automatic sync
 /// - LWW (Last-Write-Wins) conflict resolution
-use crate::crdt_manager::CrdtManager;
+use communitas_core::CrdtManager;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use yrs::{Map, Transact};

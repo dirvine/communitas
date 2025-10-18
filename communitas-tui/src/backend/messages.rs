@@ -7,10 +7,10 @@ impl Backend {
     pub async fn get_entity_messages(&mut self, entity_id: String) -> Result<Vec<CRDTMessage>> {
         let ctx = self.context_mut()?;
 
-        // Get all messages from message sync service
+        // Use the new MessageService
         let sync_response = ctx
-            .message_sync
-            .get_all_messages(&entity_id)
+            .message_service
+            .get_entity_messages(entity_id)
             .await
             .map_err(|e| anyhow::anyhow!("Failed to get messages: {}", e))?;
 
@@ -33,14 +33,23 @@ impl Backend {
             attachments: None,
         };
 
-        // Send message via message sync service
+        // Send message via new MessageService
         let message = ctx
-            .message_sync
-            .send_message(entity_id, entity_type, content, None)
+            .message_service
+            .send_message(entity_id.clone(), entity_type, content, None)
             .await
             .map_err(|e| anyhow::anyhow!("Failed to send message: {}", e))?;
 
-        Ok(message.metadata.id)
+        let message_id = message.metadata.id.clone();
+
+        // Publish MessageSent event
+        self.publish_event(super::events::BackendEvent::MessageSent {
+            message_id: message_id.clone(),
+            entity_id,
+        })
+        .await;
+
+        Ok(message_id)
     }
 
     /// Send reply to a message (threaded reply)
@@ -60,14 +69,24 @@ impl Backend {
             attachments: None,
         };
 
-        // Send message with reply_to_id
+        // Send message with reply_to_id via new MessageService
         let message = ctx
-            .message_sync
-            .send_message(entity_id, entity_type, content, Some(reply_to_id))
+            .message_service
+            .send_message(entity_id.clone(), entity_type, content, Some(reply_to_id.clone()))
             .await
             .map_err(|e| anyhow::anyhow!("Failed to send reply: {}", e))?;
 
-        Ok(message.metadata.id)
+        let thread_id = message.metadata.id.clone();
+
+        // Publish ThreadCreated event (a reply creates a thread)
+        self.publish_event(super::events::BackendEvent::ThreadCreated {
+            thread_id: thread_id.clone(),
+            parent_message_id: reply_to_id,
+            entity_id,
+        })
+        .await;
+
+        Ok(thread_id)
     }
 
     /// Get messages for a specific thread (all replies to a message)

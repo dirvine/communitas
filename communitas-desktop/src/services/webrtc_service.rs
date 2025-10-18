@@ -1,4 +1,4 @@
-use crate::crdt_manager::CrdtManager;
+use communitas_core::CrdtManager;
 use anyhow::{Context, Result};
 use chrono::Utc;
 use libsql::params;
@@ -442,7 +442,7 @@ impl WebRtcService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::crdt_manager::CrdtManager;
+    use communitas_core::CrdtManager;
     use tempfile::tempdir;
 
     async fn create_test_service() -> Result<WebRtcService> {

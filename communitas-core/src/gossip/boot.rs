@@ -96,12 +96,23 @@ impl GossipBootSequence {
     /// Use optional introducer nodes for cold start
     async fn use_introducer_nodes(&self) -> Result<()> {
         // SPEC.md §3: Keep a small optional introducer list for cold start only
+        // Load bootstrap nodes from production config
+        let bootstrap_nodes = vec![
+            "bless-lava-jeffrey-parking:443".to_string(),      // 167.71.188.131 - Digital Ocean Droplet 1
+            "bless-route-evaporate-lunch:443".to_string(),     // 138.197.29.195 - Digital Ocean Droplet 2
+        ];
+
+        // Seed peer cache with bootstrap nodes for fast boot
+        {
+            let mut cache = self.context.peer_cache.write().await;
+            match cache.seed_bootstrap_nodes(&bootstrap_nodes).await {
+                Ok(count) => info!("Seeded {} bootstrap nodes into peer cache", count),
+                Err(e) => warn!("Failed to seed bootstrap nodes: {}", e),
+            }
+        }
+
         let config = super::discovery::IntroducerConfig {
-            addresses: vec![
-                // TODO: Load from config
-                // "bootstrap-1.saorsa.com:9000".to_string(),
-                // "bootstrap-2.saorsa.com:9000".to_string(),
-            ],
+            addresses: bootstrap_nodes,
             timeout_secs: 10,
         };
 

@@ -11,6 +11,8 @@ mod app;
 mod backend;
 mod control_api;
 mod handlers;
+mod messages;
+mod model;
 mod state;
 mod ui;
 mod utils;

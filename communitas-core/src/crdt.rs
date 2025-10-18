@@ -147,11 +147,24 @@ pub struct MessageMetadata {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum EntityType {
-    Person,
-    Group,
-    Project,
-    Channel,
-    Organisation,
+Person,
+Group,
+Project,
+Channel,
+Organisation,
+}
+
+impl EntityType {
+    /// Get the string representation for document IDs
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            EntityType::Person => "person",
+            EntityType::Group => "group",
+            EntityType::Project => "project",
+            EntityType::Channel => "channel",
+            EntityType::Organisation => "organisation",
+        }
+    }
 }
 
 /// Complete message with CRDT metadata

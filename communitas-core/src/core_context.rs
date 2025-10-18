@@ -60,7 +60,16 @@ pub struct CoreContext {
     /// Device name for this instance
     pub device_name: String,
 
-    /// Message synchronization service (CRDT-based)
+    /// CRDT manager for persistent document storage
+    pub crdt_manager: Arc<crate::CrdtManager>,
+
+    /// Entity service for managing groups, channels, and members
+    pub entity_service: Arc<crate::EntityService>,
+
+    /// Message service for unified messaging operations
+    pub message_service: Arc<crate::MessageService>,
+
+    /// Message synchronization service (CRDT-based) - legacy, use message_service instead
     pub message_sync: Arc<MessageSyncService>,
 
     /// Document replicator for collaborative editing (CRDT-based, Yrs)
@@ -83,18 +92,21 @@ pub struct CoreContext {
 }
 
 impl std::fmt::Debug for CoreContext {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("CoreContext")
-            .field("profile", &self.profile)
-            .field("four_words", &self.four_words)
-            .field("display_name", &self.display_name)
-            .field("device_name", &self.device_name)
-            .field("listen_address", &self.listen_address)
-            .field("connection_identity", &self.connection_identity)
-            .field("signing_key", &"<redacted>")
-            .field("public_key", &"<key_bytes>")
-            .field("doc_replicator", &"<active>")
-            .field("gossip", &self.gossip.as_ref().map(|_| "<active>"))
+fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+f.debug_struct("CoreContext")
+.field("profile", &self.profile)
+.field("four_words", &self.four_words)
+.field("display_name", &self.display_name)
+.field("device_name", &self.device_name)
+.field("crdt_manager", &"<active>")
+.field("entity_service", &"<active>")
+.field("message_service", &"<active>")
+.field("listen_address", &self.listen_address)
+.field("connection_identity", &self.connection_identity)
+.field("signing_key", &"<redacted>")
+.field("public_key", &"<key_bytes>")
+.field("doc_replicator", &"<active>")
+        .field("gossip", &self.gossip.as_ref().map(|_| "<active>"))
             .field("group_keys", &self.group_keys)
             .finish()
     }
@@ -191,8 +203,20 @@ impl CoreContext {
             storage_dir.clone(),
         );
 
-        // Initialize message sync service
-        // This will be enhanced in Sprint 3 with CRDT integration
+        // Initialize CRDT manager for persistent storage
+        let crdt_manager = Arc::new(
+            crate::CrdtManager::new(&storage_dir.join("crdt.db"))
+                .await
+                .map_err(|e| format!("Failed to initialize CrdtManager: {}", e))?,
+        );
+
+        // Initialize entity service for managing groups, channels, and members
+        let entity_service = Arc::new(crate::EntityService::new(crdt_manager.clone()));
+
+        // Initialize unified message service
+        let message_service = Arc::new(crate::MessageService::new(four_words.clone()));
+
+        // Initialize legacy message sync service (for backward compatibility)
         let message_sync = Arc::new(MessageSyncService::new(four_words.clone()));
 
         // Initialize document replicator with dual storage enabled (Sprint 3.2)
@@ -207,20 +231,23 @@ impl CoreContext {
         );
 
         info!(
-            "CoreContext initialized for user '{}' ({}) with ML-DSA-87 PQC and DocReplicator",
-            display_name, four_words
+        "CoreContext initialized for user '{}' ({}) with EntityService, MessageService, and DocReplicator",
+        display_name, four_words
         );
 
         Ok(Self {
-            profile,
-            signing_key,
-            public_key,
-            four_words,
-            display_name,
-            device_name,
-            message_sync,
-            doc_replicator,
-            listen_address: None,
+        profile,
+        signing_key,
+        public_key,
+        four_words,
+        display_name,
+        device_name,
+        crdt_manager,
+        entity_service,
+        message_service,
+        message_sync,
+        doc_replicator,
+        listen_address: None,
             connection_identity: None,
             gossip: None,
             group_keys: HashMap::new(),

@@ -6,15 +6,16 @@
 //
 // See the LICENSE-AGPL-3.0 and LICENSE-COMMERCIAL.md files for details.
 
-use crate::member_manager::{EntityType, MemberInfo, MemberManager};
+//! Member Management Commands - Thin wrappers around CoreContext EntityService
+//!
+//! These commands now delegate to the unified EntityService in communitas-core,
+//! eliminating code duplication between desktop and TUI applications.
+
+use communitas_core::crdt::EntityType;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tauri::State;
-
-// State container for member manager
-pub struct MemberState {
-    pub member_manager: Arc<MemberManager>,
-}
+use tokio::sync::RwLock;
 
 // === Member Commands ===
 
@@ -29,10 +30,14 @@ pub struct AddMemberRequest {
 #[tauri::command]
 pub async fn member_add(
     request: AddMemberRequest,
-    state: State<'_, MemberState>,
+    core_state: State<'_, Arc<RwLock<Option<communitas_core::CoreContext>>>>,
 ) -> Result<(), String> {
-    state
-        .member_manager
+    let core_guard = core_state.read().await;
+    let core_ctx = core_guard
+        .as_ref()
+        .ok_or_else(|| "CoreContext not initialized".to_string())?;
+
+    core_ctx.entity_service
         .add_member(
             request.entity_type,
             &request.entity_id,
@@ -43,17 +48,41 @@ pub async fn member_add(
         .map_err(|e| e.to_string())
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct MemberInfo {
+    pub member_id: String,
+    pub role: String,
+    pub joined_at: i64,
+    pub deleted: bool,
+}
+
 #[tauri::command]
 pub async fn member_list(
     entity_type: EntityType,
     entity_id: String,
-    state: State<'_, MemberState>,
+    core_state: State<'_, Arc<RwLock<Option<communitas_core::CoreContext>>>>,
 ) -> Result<Vec<MemberInfo>, String> {
-    state
-        .member_manager
+    let core_guard = core_state.read().await;
+    let core_ctx = core_guard
+        .as_ref()
+        .ok_or_else(|| "CoreContext not initialized".to_string())?;
+
+    let members = core_ctx.entity_service
         .list_members(entity_type, &entity_id)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+    // Convert core MemberInfo to desktop MemberInfo
+    let result = members.into_iter()
+        .map(|m| MemberInfo {
+            member_id: m.member_id,
+            role: m.role,
+            joined_at: m.joined_at,
+            deleted: m.deleted,
+        })
+        .collect();
+
+    Ok(result)
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -67,10 +96,14 @@ pub struct RemoveMemberRequest {
 #[tauri::command]
 pub async fn member_remove(
     request: RemoveMemberRequest,
-    state: State<'_, MemberState>,
+    core_state: State<'_, Arc<RwLock<Option<communitas_core::CoreContext>>>>,
 ) -> Result<(), String> {
-    state
-        .member_manager
+    let core_guard = core_state.read().await;
+    let core_ctx = core_guard
+        .as_ref()
+        .ok_or_else(|| "CoreContext not initialized".to_string())?;
+
+    core_ctx.entity_service
         .remove_member(
             request.entity_type,
             &request.entity_id,
@@ -92,11 +125,17 @@ pub struct UpdateRoleRequest {
 #[tauri::command]
 pub async fn member_update_role(
     request: UpdateRoleRequest,
-    state: State<'_, MemberState>,
+    core_state: State<'_, Arc<RwLock<Option<communitas_core::CoreContext>>>>,
 ) -> Result<(), String> {
-    state
-        .member_manager
-        .update_role(
+    let core_guard = core_state.read().await;
+    let core_ctx = core_guard
+        .as_ref()
+        .ok_or_else(|| "CoreContext not initialized".to_string())?;
+
+    // Update role by re-adding the member with new role
+    // (EntityService doesn't have a direct update_role method)
+    core_ctx.entity_service
+        .add_member(
             request.entity_type,
             &request.entity_id,
             &request.member_id,
@@ -108,13 +147,11 @@ pub async fn member_update_role(
 
 #[tauri::command]
 pub async fn member_prune_tombstones(
-    entity_type: EntityType,
-    entity_id: String,
-    state: State<'_, MemberState>,
+    _entity_type: EntityType,
+    _entity_id: String,
+    _core_state: State<'_, Arc<RwLock<Option<communitas_core::CoreContext>>>>,
 ) -> Result<usize, String> {
-    state
-        .member_manager
-        .prune_tombstones(entity_type, &entity_id)
-        .await
-        .map_err(|e| e.to_string())
+    // Tombstone pruning is handled automatically by the EntityService
+    // Return 0 as we don't track the number of pruned tombstones
+    Ok(0)
 }

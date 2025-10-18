@@ -10,7 +10,7 @@
 //! four-word addresses.
 
 use anyhow::Result;
-use saorsa_webrtc::identity::PeerIdentity;
+use saorsa_webrtc_core::identity::PeerIdentity;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 

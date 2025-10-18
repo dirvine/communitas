@@ -502,6 +502,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "41e67cd8309bbd06cd603a9e693a784ac2e5d1e955f11286e355089fcab3047c"
 
 [[package]]
+name = "audiopus_sys"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "62314a1546a2064e033665d658e88c620a62904be945f8147e6b16c3db9f8651"
+dependencies = [
+ "cmake",
+ "log",
+ "pkg-config",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1315,7 +1326,7 @@ dependencies = [
 
 [[package]]
 name = "communitas"
-version = "0.1.18"
+version = "0.1.19"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -1337,7 +1348,8 @@ dependencies = [
  "saorsa-gossip-pubsub",
  "saorsa-gossip-transport",
  "saorsa-gossip-types",
- "saorsa-webrtc",
+ "saorsa-webrtc-codecs",
+ "saorsa-webrtc-core",
  "security-framework 2.11.1",
  "serde",
  "serde_json",
@@ -1358,7 +1370,7 @@ dependencies = [
 
 [[package]]
 name = "communitas-core"
-version = "0.1.18"
+version = "0.1.19"
 dependencies = [
  "anyhow",
  "argon2",
@@ -1402,7 +1414,8 @@ dependencies = [
  "saorsa-gossip-transport",
  "saorsa-gossip-types",
  "saorsa-pqc",
- "saorsa-webrtc",
+ "saorsa-webrtc-codecs",
+ "saorsa-webrtc-core",
  "secrecy",
  "serde",
  "serde_bytes",
@@ -1424,7 +1437,7 @@ dependencies = [
 
 [[package]]
 name = "communitas-headless"
-version = "0.1.18"
+version = "0.1.19"
 dependencies = [
  "ant-quic 0.8.17",
  "anyhow",
@@ -1456,7 +1469,7 @@ dependencies = [
 
 [[package]]
 name = "communitas-tui"
-version = "0.1.18"
+version = "0.1.19"
 dependencies = [
  "anyhow",
  "axum 0.7.9",
@@ -4818,6 +4831,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "nasm-rs"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "34f676553b60ccbb76f41f9ae8f2428dac3f259ff8f1c2468a174778d06a1af9"
+dependencies = [
+ "log",
+]
+
+[[package]]
 name = "native-tls"
 version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5378,6 +5400,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c08d65885ee38876c4f86fa503fb49d7b507c2b62552df7c70b2fce627e06381"
 
 [[package]]
+name = "openh264"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4e0b96c5808e7e5cf977056b4da08796895f993570b4a0ad658f90764c3c18fe"
+dependencies = [
+ "openh264-sys2",
+ "wide",
+]
+
+[[package]]
+name = "openh264-sys2"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "881ad6de62993ff97a2cfbc63e5f127ecc930255718f9adc4c68c1dfeb308132"
+dependencies = [
+ "cc",
+ "nasm-rs",
+ "walkdir",
+]
+
+[[package]]
 name = "openssl"
 version = "0.10.73"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5426,6 +5469,16 @@ name = "option-ext"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
+
+[[package]]
+name = "opus"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6526409b274a7e98e55ff59d96aafd38e6cd34d46b7dbbc32ce126dffcd75e8e"
+dependencies = [
+ "audiopus_sys",
+ "libc",
+]
 
 [[package]]
 name = "ordered-stream"
@@ -6415,7 +6468,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "de94276254cb20fb7431726875bd2ac6391a6ffc26f4b8e3d23f79d1286b491e"
 dependencies = [
  "base64 0.22.1",
- "crossterm 0.28.1",
+ "crossterm 0.29.0",
  "dyn-clone",
  "icy_sixel",
  "image 0.25.8",
@@ -7277,10 +7330,23 @@ dependencies = [
 ]
 
 [[package]]
-name = "saorsa-webrtc"
-version = "0.1.2"
+name = "saorsa-webrtc-codecs"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "46eb1db7fde1bfef176f1fcc5e284a75f9b05b6332600637c1578285169ea3e5"
+checksum = "2215603fe3c82531fa1a0a3937a44442da9457234c573aef5616e9c1cbcc1dee"
+dependencies = [
+ "anyhow",
+ "bytes",
+ "openh264",
+ "opus",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "saorsa-webrtc-core"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3a5fcb65d25be5b4e93eb31aa0f007234d68926ed983b5b7c4c627cf31033ff5"
 dependencies = [
  "ant-quic 0.10.3",
  "anyhow",
@@ -7300,6 +7366,7 @@ dependencies = [
  "rtcp",
  "rtp",
  "saorsa-pqc",
+ "saorsa-webrtc-codecs",
  "serde",
  "serde_json",
  "thiserror 1.0.69",

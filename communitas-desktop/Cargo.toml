@@ -22,7 +22,7 @@ name = "communitas"
 path = "src/main.rs"
 
 [build-dependencies]
-tauri-build = { version = "2.1", features = [] }
+tauri-build = { version = "2.4", features = [] }
 
 [features]
 default = ["gossip_overlay"]
@@ -43,8 +43,9 @@ saorsa-gossip-transport = { workspace = true }
 saorsa-gossip-membership = { workspace = true }
 saorsa-gossip-pubsub = { workspace = true }
 
-# Real-time multimedia (WebRTC over QUIC)
-saorsa-webrtc = { workspace = true }
+# Real-time multimedia (WebRTC over QUIC) - Using core library (Tauri plugin incompatible with Tauri 2.x)
+saorsa-webrtc-core = { workspace = true }
+saorsa-webrtc-codecs = { workspace = true }
 
 # CRDT and Database
 yrs = { version = "0.19", features = ["sync"] }

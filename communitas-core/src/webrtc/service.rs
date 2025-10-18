@@ -13,7 +13,7 @@ use super::gossip_signaling::GossipSignalingTransport;
 use super::identity::CommunitasIdentity;
 use crate::gossip::GossipContext;
 use anyhow::{Result, anyhow};
-use saorsa_webrtc::types::{CallEvent, CallId, MediaConstraints};
+use saorsa_webrtc_core::types::{CallEvent, CallId, MediaConstraints};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{RwLock, broadcast};

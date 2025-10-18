@@ -9,7 +9,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.18"
+version = "0.1.19"
 edition = "2024"
 authors = ["David Irvine <david.irvine@maidsafe.net>", "Saorsa Labs"]
 license = "GPL-3.0"
@@ -35,8 +35,10 @@ saorsa-gossip-pubsub = "0.1.6"
 saorsa-gossip-coordinator = "0.1.6"
 saorsa-gossip-rendezvous = "0.1.6"
 
-# Real-time multimedia (WebRTC over QUIC)
-saorsa-webrtc = "0.1.2"
+# Real-time multimedia (WebRTC over QUIC) - Updated to 0.2.0
+# Note: saorsa-webrtc-tauri omitted (requires Tauri 1.5, we use Tauri 2.x)
+saorsa-webrtc-core = "0.2.0"
+saorsa-webrtc-codecs = "0.2.0"
 
 # Networking
 ant-quic = "0.8.17"

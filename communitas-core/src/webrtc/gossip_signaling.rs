@@ -15,7 +15,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use blake3;
 use saorsa_gossip_types::TopicId;
-use saorsa_webrtc::signaling::{SignalingMessage, SignalingTransport};
+use saorsa_webrtc_core::signaling::{SignalingMessage, SignalingTransport};
 use std::fmt;
 use std::net::SocketAddr;
 use std::str::FromStr;

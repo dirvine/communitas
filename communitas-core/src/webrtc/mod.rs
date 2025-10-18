@@ -26,7 +26,7 @@
 //!
 //! ```no_run
 //! use communitas_core::webrtc::{GossipSignalingTransport, CommunitasIdentity};
-//! use saorsa_webrtc::service::WebRtcService;
+//! use saorsa_webrtc_core::service::WebRtcService;
 //!
 //! # async fn example() -> anyhow::Result<()> {
 //! // Create signaling transport
@@ -56,8 +56,8 @@ pub use gossip_signaling::GossipSignalingTransport;
 pub use identity::CommunitasIdentity;
 pub use service::{CallState as CommunitasCallState, CommunitasWebRtcService, MediaDevice};
 
-// Re-export saorsa-webrtc types for convenience
-pub use saorsa_webrtc::{
+// Re-export saorsa-webrtc-core types for convenience
+pub use saorsa_webrtc_core::{
     call::CallManager,
     service::WebRtcService,
     signaling::SignalingMessage,

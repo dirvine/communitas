@@ -999,7 +999,6 @@ pub async fn unsubscribe_from_entity(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::webrtc_commands::WebRtcState;
     use std::sync::Arc;
     use tokio::sync::RwLock;
@@ -1007,7 +1006,6 @@ mod tests {
     #[test]
     fn test_core_recover_state_placeholder() {
         // Placeholder test - implement when recovery logic is added
-        assert!(true);
     }
 
     #[tokio::test]
@@ -1048,8 +1046,5 @@ mod tests {
             let mut webrtc_guard = webrtc_state.service.write().await;
             *webrtc_guard = None; // This should compile and work
         }
-
-        // Test passes if we get here without compilation errors
-        assert!(true);
     }
 }

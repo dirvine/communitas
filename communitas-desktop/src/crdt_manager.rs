@@ -2,8 +2,8 @@ use crate::crdt_error::{CrdtError, CrdtResult};
 use chrono::Utc;
 use libsql::{Builder, Connection, Database, params};
 use std::path::Path;
-use yrs::{Any, Doc, Map, MapPrelim, MapRef, ReadTxn, Transact};
 use yrs::updates::encoder::Encoder;
+use yrs::{Any, Doc, Map, MapPrelim, MapRef, ReadTxn, Transact};
 
 /// Manages CRDT documents with Turso (libSQL) persistence
 pub struct CrdtManager {
@@ -209,26 +209,22 @@ impl CrdtManager {
 
     /// Get a string value from a Map
     pub fn get_map_string(map: &MapRef, txn: &impl ReadTxn, key: &str) -> Option<String> {
-        map.get(txn, key)
-            .and_then(|out| String::try_from(out).ok())
+        map.get(txn, key).and_then(|out| String::try_from(out).ok())
     }
 
     /// Get an i64 value from a Map
     pub fn get_map_i64(map: &MapRef, txn: &impl ReadTxn, key: &str) -> Option<i64> {
-        map.get(txn, key)
-            .and_then(|out| i64::try_from(out).ok())
+        map.get(txn, key).and_then(|out| i64::try_from(out).ok())
     }
 
     /// Get a bool value from a Map
     pub fn get_map_bool(map: &MapRef, txn: &impl ReadTxn, key: &str) -> Option<bool> {
-        map.get(txn, key)
-            .and_then(|out| bool::try_from(out).ok())
+        map.get(txn, key).and_then(|out| bool::try_from(out).ok())
     }
 
     /// Get a nested Map from a Map
     pub fn get_nested_map(map: &MapRef, txn: &impl ReadTxn, key: &str) -> Option<MapRef> {
-        map.get(txn, key)
-            .and_then(|out| MapRef::try_from(out).ok())
+        map.get(txn, key).and_then(|out| MapRef::try_from(out).ok())
     }
 
     /// Insert or update a string field in a Map
@@ -276,10 +272,10 @@ impl CrdtManager {
     ) -> MapRef {
         let key_str = key.into();
         // Check if map already exists
-        if let Some(existing) = parent.get(txn, &key_str) {
-            if let Ok(m) = MapRef::try_from(existing) {
-                return m;
-            }
+        if let Some(existing) = parent.get(txn, &key_str)
+            && let Ok(m) = MapRef::try_from(existing)
+        {
+            return m;
         }
         // Create new map using the updated Yrs API (from syntax)
         let empty_prelim: MapPrelim = MapPrelim::from([("_", Any::Null)]);
@@ -459,7 +455,7 @@ mod tests {
             assert_eq!(id, "msg-1");
             assert_eq!(content, "Hello");
             assert_eq!(created_at, 123456);
-            assert_eq!(deleted, false);
+            assert!(!deleted);
         }
 
         // Load from database and read again

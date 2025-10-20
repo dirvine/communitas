@@ -8,21 +8,23 @@
 use communitas_core::CoreContext;
 use communitas_core::doc_replicator::StorageMode;
 use std::sync::Arc;
+use tempfile::TempDir;
 use tokio::sync::RwLock;
 
-// Helper to create test CoreContext with DocReplicator
-async fn create_test_context() -> Arc<RwLock<Option<CoreContext>>> {
+// Helper to create test CoreContext with DocReplicator using unique temp directory
+async fn create_test_context() -> (Arc<RwLock<Option<CoreContext>>>, TempDir) {
+    let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let ctx = CoreContext::initialize(
         "test-user-one-word".to_string(),
         "Test User".to_string(),
         "TestDevice".to_string(),
         communitas_core::types::DeviceType::Desktop,
-        std::env::temp_dir().join("communitas_test"),
+        temp_dir.path().to_path_buf(),
     )
     .await
     .expect("create context");
 
-    Arc::new(RwLock::new(Some(ctx)))
+    (Arc::new(RwLock::new(Some(ctx))), temp_dir)
 }
 
 // =============================================================================
@@ -31,7 +33,7 @@ async fn create_test_context() -> Arc<RwLock<Option<CoreContext>>> {
 
 #[tokio::test]
 async fn test_doc_create_web_storage() {
-    let shared = create_test_context().await;
+    let (shared, _temp_dir) = create_test_context().await;
 
     // Test creating document in Web storage (public, unencrypted)
     let guard = shared.read().await;
@@ -61,7 +63,7 @@ async fn test_doc_create_web_storage() {
 
 #[tokio::test]
 async fn test_doc_create_files_storage() {
-    let shared = create_test_context().await;
+    let (shared, _temp_dir) = create_test_context().await;
 
     // Test creating document in Files storage (encrypted, group members)
     let guard = shared.read().await;
@@ -96,7 +98,7 @@ async fn test_doc_create_files_storage() {
 
 #[tokio::test]
 async fn test_doc_insert_and_get_text() {
-    let shared = create_test_context().await;
+    let (shared, _temp_dir) = create_test_context().await;
     let guard = shared.read().await;
     let ctx = guard.as_ref().expect("context");
 
@@ -125,7 +127,7 @@ async fn test_doc_insert_and_get_text() {
 
 #[tokio::test]
 async fn test_doc_delete_text() {
-    let shared = create_test_context().await;
+    let (shared, _temp_dir) = create_test_context().await;
     let guard = shared.read().await;
     let ctx = guard.as_ref().expect("context");
 
@@ -161,7 +163,7 @@ async fn test_doc_delete_text() {
 
 #[tokio::test]
 async fn test_doc_get_crdt_update() {
-    let shared = create_test_context().await;
+    let (shared, _temp_dir) = create_test_context().await;
     let guard = shared.read().await;
     let ctx = guard.as_ref().expect("context");
 
@@ -189,8 +191,8 @@ async fn test_doc_get_crdt_update() {
 
 #[tokio::test]
 async fn test_doc_apply_crdt_update() {
-    let shared1 = create_test_context().await;
-    let shared2 = create_test_context().await;
+    let (shared1, _temp_dir1) = create_test_context().await;
+    let (shared2, _temp_dir2) = create_test_context().await;
 
     let guard1 = shared1.read().await;
     let guard2 = shared2.read().await;
@@ -248,7 +250,7 @@ async fn test_doc_apply_crdt_update() {
 
 #[tokio::test]
 async fn test_doc_both_storage_modes() {
-    let shared = create_test_context().await;
+    let (shared, _temp_dir) = create_test_context().await;
     let guard = shared.read().await;
     let ctx = guard.as_ref().expect("context");
 
@@ -310,7 +312,7 @@ async fn test_doc_both_storage_modes() {
 
 #[tokio::test]
 async fn test_doc_nonexistent_document_error() {
-    let shared = create_test_context().await;
+    let (shared, _temp_dir) = create_test_context().await;
     let guard = shared.read().await;
     let ctx = guard.as_ref().expect("context");
 

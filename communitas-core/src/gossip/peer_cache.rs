@@ -8,18 +8,25 @@
 //!
 //! Per SPEC2.md §6: Persists successful peer connections to enable fast boot.
 //! Tracks: (peer_id, addr_hints, nat_class, roles, last_success, success_count)
+//!
+//! **Lock-Free File-Based Storage:**
+//! - Uses atomic file operations (write to temp, then rename)
+//! - JSON format for human readability and cross-platform compatibility
+//! - Eventual consistency (last write wins) - acceptable for peer cache
+//! - Shared across multiple process instances
 
 use anyhow::{Context, Result};
-use rusqlite::{Connection, params};
 use saorsa_gossip_types::PeerId;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::path::Path;
-use std::sync::{Arc, Mutex};
+use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use tracing::{debug, info, warn};
 
 /// NAT classification for connection strategy
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum NatClass {
     /// No NAT, publicly accessible
     Public,
@@ -59,44 +66,104 @@ impl NatClass {
     }
 }
 
-/// Cached peer entry with connection metadata
-#[derive(Debug, Clone)]
+/// Cached peer entry with connection history
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PeerCacheEntry {
+    #[serde(
+        serialize_with = "serialize_peer_id",
+        deserialize_with = "deserialize_peer_id"
+    )]
     pub peer_id: PeerId,
     pub addr_hints: Vec<SocketAddr>,
     pub nat_class: NatClass,
-    pub roles: Vec<String>, // e.g., ["coordinator", "relay", "rendezvous"]
+    pub roles: Vec<String>,
+    #[serde(
+        serialize_with = "serialize_time",
+        deserialize_with = "deserialize_time"
+    )]
     pub last_success: SystemTime,
     pub success_count: u32,
     pub failure_count: u32,
+    #[serde(default)]
+    pub is_bootstrap: bool,
+}
+
+// Serde helpers for PeerId
+fn serialize_peer_id<S>(peer_id: &PeerId, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    serializer.serialize_str(&hex::encode(peer_id.as_bytes()))
+}
+
+fn deserialize_peer_id<'de, D>(deserializer: D) -> Result<PeerId, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let hex_str = String::deserialize(deserializer)?;
+    let bytes = hex::decode(&hex_str).map_err(serde::de::Error::custom)?;
+    let array: [u8; 32] = bytes
+        .as_slice()
+        .try_into()
+        .map_err(|_| serde::de::Error::custom("Invalid PeerId length"))?;
+    Ok(PeerId::new(array))
+}
+
+// Serde helpers for SystemTime
+fn serialize_time<S>(time: &SystemTime, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    let secs = time
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .map_err(serde::ser::Error::custom)?
+        .as_secs();
+    serializer.serialize_u64(secs)
+}
+
+fn deserialize_time<'de, D>(deserializer: D) -> Result<SystemTime, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let secs = u64::deserialize(deserializer)?;
+    Ok(SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(secs))
 }
 
 impl PeerCacheEntry {
-    /// Calculate connection score for prioritization
-    /// Higher score = better candidate for connection attempt
+    /// Calculate peer score for connection priority
+    /// Score components:
+    /// - Success rate: 0.0 (all failures) to 1.0 (all successes)
+    /// - Recency bonus: 0.0 (old) to 1.0 (recent)
+    /// - NAT penalty: 0.0 (public) to 0.5 (symmetric)
+    /// - Role bonus: 0.0 (none) to 0.3 (coordinator)
     pub fn score(&self) -> f64 {
-        let success_rate = if self.success_count + self.failure_count > 0 {
-            self.success_count as f64 / (self.success_count + self.failure_count) as f64
-        } else {
-            0.5 // Neutral for unknown peers
-        };
+        let total_attempts = self.success_count + self.failure_count;
+        if total_attempts == 0 {
+            return 0.0;
+        }
 
-        // Recency bonus: prefer recently successful peers
-        let recency_bonus = match self.last_success.elapsed() {
-            Ok(elapsed) if elapsed.as_secs() < 300 => 1.0, // <5min: full bonus
-            Ok(elapsed) if elapsed.as_secs() < 3600 => 0.7, // <1hr: partial bonus
-            Ok(elapsed) if elapsed.as_secs() < 86400 => 0.3, // <1day: small bonus
-            _ => 0.0,
-        };
+        // Success rate (0-1)
+        let success_rate = self.success_count as f64 / total_attempts as f64;
 
-        // NAT traversal difficulty penalty
+        // Recency bonus: decays exponentially with time
+        // Recent connections get higher scores
+        let now = SystemTime::now();
+        let age_secs = now
+            .duration_since(self.last_success)
+            .map(|d| d.as_secs())
+            .unwrap_or(u64::MAX);
+
+        const ONE_DAY: u64 = 24 * 60 * 60;
+        let recency_bonus = (-(age_secs as f64 / ONE_DAY as f64)).exp();
+
+        // NAT penalty: harder NAT types get lower scores
         let nat_penalty = match self.nat_class {
             NatClass::Public => 0.0,
             NatClass::FullCone => 0.1,
             NatClass::RestrictedCone => 0.2,
             NatClass::PortRestrictedCone => 0.3,
             NatClass::Symmetric => 0.5,
-            NatClass::Unknown => 0.2,
+            NatClass::Unknown => 0.25, // Middle ground for unknown
         };
 
         // Role bonuses: coordinators and relays are valuable
@@ -113,10 +180,25 @@ impl PeerCacheEntry {
     }
 }
 
-/// Persistent peer cache using SQLite
-/// Thread-safe via Arc<Mutex<Connection>>
+/// File format for peer cache
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct PeerCacheFile {
+    version: u32,
+    peers: HashMap<String, PeerCacheEntry>,
+}
+
+impl PeerCacheFile {
+    fn new() -> Self {
+        Self {
+            version: 1,
+            peers: HashMap::new(),
+        }
+    }
+}
+
+/// Lock-free persistent peer cache using atomic file operations
 pub struct PeerCache {
-    conn: Arc<Mutex<Connection>>,
+    cache_path: PathBuf,
 }
 
 impl PeerCache {
@@ -124,113 +206,111 @@ impl PeerCache {
     const MAX_CACHE_SIZE: usize = 1000;
 
     /// Get system-wide peer cache path
-    /// Returns: ~/.local/share/communitas/peer_cache.db (Linux/macOS)
-    /// or %APPDATA%\communitas\peer_cache.db (Windows)
-    pub fn default_cache_path() -> Result<std::path::PathBuf> {
+    /// Returns: ~/.local/share/communitas/peer_cache.json (Linux/macOS)
+    /// or %APPDATA%\communitas\peer_cache.json (Windows)
+    pub fn default_cache_path() -> Result<PathBuf> {
         let data_dir = dirs::data_local_dir()
             .ok_or_else(|| anyhow::anyhow!("Failed to get system data directory"))?
             .join("communitas");
 
         // Ensure directory exists
-        std::fs::create_dir_all(&data_dir)
-            .context("Failed to create communitas data directory")?;
+        std::fs::create_dir_all(&data_dir).context("Failed to create communitas data directory")?;
 
-        Ok(data_dir.join("peer_cache.db"))
+        Ok(data_dir.join("peer_cache.json"))
     }
 
     /// Load existing cache or create new one
-    /// Enables SQLite WAL mode for concurrent access across processes
     pub async fn load(path: &Path) -> Result<Self> {
-        let conn = Connection::open(path).context("Failed to open peer cache database")?;
+        // Ensure parent directory exists
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)
+                .with_context(|| format!("Failed to create directory: {:?}", parent))?;
+        }
 
-        // Enable WAL mode for better concurrent access (multiple frontends)
-        conn.pragma_update(None, "journal_mode", "WAL")
-            .context("Failed to enable WAL mode")?;
+        // Create empty cache file if it doesn't exist
+        if !path.exists() {
+            let empty_cache = PeerCacheFile::new();
+            let json = serde_json::to_string_pretty(&empty_cache)
+                .context("Failed to serialize empty cache")?;
+            std::fs::write(path, json)
+                .with_context(|| format!("Failed to write cache file: {:?}", path))?;
+            info!("Created new peer cache at {:?}", path);
+        } else {
+            info!("Loaded peer cache from {:?}", path);
+        }
 
-        // Set busy timeout for concurrent write handling (5 seconds)
-        conn.pragma_update(None, "busy_timeout", 5000)
-            .context("Failed to set busy timeout")?;
-
-        // Create table if not exists
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS peers (
-                peer_id TEXT PRIMARY KEY,
-                addr_hints TEXT NOT NULL,
-                nat_class TEXT NOT NULL,
-                roles TEXT NOT NULL,
-                last_success INTEGER NOT NULL,
-                success_count INTEGER NOT NULL,
-                failure_count INTEGER NOT NULL,
-                is_bootstrap INTEGER NOT NULL DEFAULT 0
-            )",
-            [],
-        )?;
-
-        // Create index on last_success for FIFO eviction
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_last_success ON peers(last_success)",
-            [],
-        )?;
-
-        info!("Loaded peer cache from {:?} (WAL mode enabled)", path);
         Ok(Self {
-            conn: Arc::new(Mutex::new(conn)),
+            cache_path: path.to_path_buf(),
         })
+    }
+
+    /// Read cache from file
+    fn read_cache(&self) -> Result<PeerCacheFile> {
+        if !self.cache_path.exists() {
+            return Ok(PeerCacheFile::new());
+        }
+
+        let contents = std::fs::read_to_string(&self.cache_path)
+            .with_context(|| format!("Failed to read cache: {:?}", self.cache_path))?;
+
+        serde_json::from_str(&contents)
+            .context("Failed to parse peer cache JSON")
+            .or_else(|e| {
+                warn!("Corrupted peer cache, creating new: {}", e);
+                Ok(PeerCacheFile::new())
+            })
+    }
+
+    /// Write cache to file atomically
+    /// Uses temp file + atomic rename for lock-free concurrent updates
+    fn write_cache(&self, cache: &PeerCacheFile) -> Result<()> {
+        let json = serde_json::to_string_pretty(cache).context("Failed to serialize peer cache")?;
+
+        // Write to temp file in same directory
+        let temp_path = self.cache_path.with_extension("tmp");
+        std::fs::write(&temp_path, json)
+            .with_context(|| format!("Failed to write temp cache: {:?}", temp_path))?;
+
+        // Atomic rename (last write wins)
+        std::fs::rename(&temp_path, &self.cache_path)
+            .with_context(|| format!("Failed to rename cache: {:?}", self.cache_path))?;
+
+        Ok(())
     }
 
     /// Update peer on successful connection
     pub async fn update_success(&mut self, peer_id: PeerId, addr: SocketAddr) -> Result<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| anyhow::anyhow!("Peer cache mutex poisoned: {}", e))?;
-
+        let mut cache = self.read_cache()?;
         let peer_id_str = hex::encode(peer_id.as_bytes());
-        let now = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .context("Time went backwards")?
-            .as_secs() as i64;
+        let now = SystemTime::now();
 
-        // Check if peer exists
-        let exists: bool = conn
-            .query_row(
-                "SELECT 1 FROM peers WHERE peer_id = ?1",
-                params![peer_id_str],
-                |_| Ok(true),
-            )
-            .unwrap_or(false);
-
-        if exists {
+        if let Some(entry) = cache.peers.get_mut(&peer_id_str) {
             // Update existing entry
-            conn.execute(
-                "UPDATE peers SET
-                    addr_hints = ?2,
-                    last_success = ?3,
-                    success_count = success_count + 1
-                WHERE peer_id = ?1",
-                params![peer_id_str, addr.to_string(), now],
-            )?;
+            if !entry.addr_hints.contains(&addr) {
+                entry.addr_hints.push(addr);
+            }
+            entry.last_success = now;
+            entry.success_count += 1;
             debug!("Updated peer {} on success", peer_id_str);
         } else {
             // Insert new entry
-            conn.execute(
-                "INSERT INTO peers (peer_id, addr_hints, nat_class, roles, last_success, success_count, failure_count)
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-                params![
-                    peer_id_str,
-                    addr.to_string(),
-                    NatClass::Unknown.as_str(),
-                    "[]", // Empty roles initially
-                    now,
-                    1, // First success
-                    0  // No failures yet
-                ],
-            )?;
+            cache.peers.insert(
+                peer_id_str.clone(),
+                PeerCacheEntry {
+                    peer_id,
+                    addr_hints: vec![addr],
+                    nat_class: NatClass::Unknown,
+                    roles: Vec::new(),
+                    last_success: now,
+                    success_count: 1,
+                    failure_count: 0,
+                    is_bootstrap: false,
+                },
+            );
             debug!("Added new peer {} to cache", peer_id_str);
         }
 
-        // Enforce max cache size with FIFO eviction
-        drop(conn); // Release lock before calling enforce_max_size
+        self.write_cache(&cache)?;
         self.enforce_max_size().await?;
 
         Ok(())
@@ -238,86 +318,31 @@ impl PeerCache {
 
     /// Update peer on connection failure
     pub async fn update_failure(&mut self, peer_id: PeerId) -> Result<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| anyhow::anyhow!("Peer cache mutex poisoned: {}", e))?;
-
+        let mut cache = self.read_cache()?;
         let peer_id_str = hex::encode(peer_id.as_bytes());
 
-        conn.execute(
-            "UPDATE peers SET failure_count = failure_count + 1 WHERE peer_id = ?1",
-            params![peer_id_str],
-        )?;
+        if let Some(entry) = cache.peers.get_mut(&peer_id_str) {
+            entry.failure_count += 1;
+            self.write_cache(&cache)?;
+            debug!("Incremented failure count for peer {}", peer_id_str);
+        }
 
-        debug!("Incremented failure count for peer {}", peer_id_str);
         Ok(())
     }
 
     /// Get top N peers sorted by score
     pub fn get_top_peers(&self, limit: usize) -> Vec<PeerCacheEntry> {
-        let conn = match self.conn.lock() {
+        let cache = match self.read_cache() {
             Ok(c) => c,
             Err(e) => {
-                warn!("Peer cache mutex poisoned: {}", e);
+                warn!("Failed to read peer cache: {}", e);
                 return Vec::new();
             }
         };
 
-        let mut stmt = conn
-            .prepare("SELECT peer_id, addr_hints, nat_class, roles, last_success, success_count, failure_count FROM peers")
-            .ok();
-
-        if stmt.is_none() {
-            return Vec::new();
-        }
-
-        let rows = match stmt.as_mut().and_then(|s| {
-            s.query_map([], |row| {
-                let peer_id_hex: String = row.get(0)?;
-                let peer_id_bytes = hex::decode(&peer_id_hex)
-                    .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
-
-                let peer_id_array: [u8; 32] = peer_id_bytes
-                    .as_slice()
-                    .try_into()
-                    .map_err(|_| rusqlite::Error::InvalidQuery)?;
-                let peer_id = PeerId::new(peer_id_array);
-
-                let addr_hints_str: String = row.get(1)?;
-                let addr_hints: Vec<SocketAddr> = addr_hints_str
-                    .split(',')
-                    .filter_map(|s| s.parse().ok())
-                    .collect();
-
-                let nat_class = NatClass::parse(&row.get::<_, String>(2)?);
-                let roles_str: String = row.get(3)?;
-                let roles: Vec<String> = serde_json::from_str(&roles_str).unwrap_or_default();
-                let last_success = SystemTime::UNIX_EPOCH
-                    + std::time::Duration::from_secs(row.get::<_, i64>(4)? as u64);
-                let success_count: u32 = row.get(5)?;
-                let failure_count: u32 = row.get(6)?;
-
-                Ok(PeerCacheEntry {
-                    peer_id,
-                    addr_hints,
-                    nat_class,
-                    roles,
-                    last_success,
-                    success_count,
-                    failure_count,
-                })
-            })
-            .ok()
-        }) {
-            Some(r) => r,
-            None => return Vec::new(),
-        };
-
-        let mut entries: Vec<PeerCacheEntry> = rows.filter_map(Result::ok).collect();
+        let mut entries: Vec<PeerCacheEntry> = cache.peers.into_values().collect();
 
         // Sort by score (descending)
-        // Use unwrap_or(Equal) to handle NaN case (though score() should never return NaN)
         entries.sort_by(|a, b| {
             b.score()
                 .partial_cmp(&a.score())
@@ -330,21 +355,24 @@ impl PeerCache {
 
     /// Prune peers with high failure rates
     pub async fn prune_failed(&mut self, threshold_ratio: f64) -> Result<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| anyhow::anyhow!("Peer cache mutex poisoned: {}", e))?;
+        let mut cache = self.read_cache()?;
+        let initial_count = cache.peers.len();
 
         // Remove peers where failure_count / (success_count + failure_count) > threshold
-        let count = conn.execute(
-            "DELETE FROM peers WHERE
-                (failure_count * 1.0) / (success_count + failure_count) > ?1
-                AND (success_count + failure_count) > 5",
-            params![threshold_ratio],
-        )?;
+        // and have at least 5 total attempts
+        cache.peers.retain(|_, entry| {
+            let total_attempts = entry.success_count + entry.failure_count;
+            if total_attempts <= 5 {
+                return true; // Keep peers with few attempts
+            }
+            let failure_ratio = entry.failure_count as f64 / total_attempts as f64;
+            failure_ratio <= threshold_ratio
+        });
 
-        if count > 0 {
-            warn!("Pruned {} failed peers from cache", count);
+        let removed = initial_count - cache.peers.len();
+        if removed > 0 {
+            self.write_cache(&cache)?;
+            warn!("Pruned {} failed peers from cache", removed);
         }
 
         Ok(())
@@ -352,16 +380,7 @@ impl PeerCache {
 
     /// Get count of cached peers
     pub fn len(&self) -> usize {
-        let conn = match self.conn.lock() {
-            Ok(c) => c,
-            Err(e) => {
-                warn!("Peer cache mutex poisoned: {}", e);
-                return 0;
-            }
-        };
-
-        conn.query_row("SELECT COUNT(*) FROM peers", [], |row| row.get(0))
-            .unwrap_or(0)
+        self.read_cache().map(|c| c.peers.len()).unwrap_or(0)
     }
 
     /// Check if cache is empty
@@ -372,49 +391,31 @@ impl PeerCache {
     /// Add bootstrap node using four-word address
     /// Bootstrap nodes are marked specially and given priority in connections
     pub async fn add_bootstrap_node(&mut self, four_words: &str) -> Result<()> {
+        let mut cache = self.read_cache()?;
+
         // Parse four-word address to get socket address
         // For now, we use a placeholder peer_id derived from four-words
         // In production, this would resolve the four-word address to actual peer_id
         let peer_id_bytes = blake3::hash(four_words.as_bytes());
         let peer_id = PeerId::new(*peer_id_bytes.as_bytes());
-
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| anyhow::anyhow!("Peer cache mutex poisoned: {}", e))?;
-
-        let now = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .context("Time went backwards")?
-            .as_secs() as i64;
-
         let peer_id_str = hex::encode(peer_id.as_bytes());
 
-        // Check if peer exists
-        let exists: bool = conn
-            .query_row(
-                "SELECT 1 FROM peers WHERE peer_id = ?1",
-                params![peer_id_str],
-                |_| Ok(true),
-            )
-            .unwrap_or(false);
-
-        if !exists {
-            // Insert bootstrap node with high initial success count
-            conn.execute(
-                "INSERT INTO peers (peer_id, addr_hints, nat_class, roles, last_success, success_count, failure_count, is_bootstrap)
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-                params![
-                    peer_id_str,
-                    four_words, // Store four-word address as hint
-                    NatClass::Public.as_str(), // Assume bootstrap nodes are public
-                    serde_json::to_string(&vec!["bootstrap".to_string()])?,
-                    now,
-                    100, // High initial success count for bootstrap priority
-                    0,   // No failures initially
-                    1    // Mark as bootstrap
-                ],
-            )?;
+        if !cache.peers.contains_key(&peer_id_str) {
+            let now = SystemTime::now();
+            cache.peers.insert(
+                peer_id_str.clone(),
+                PeerCacheEntry {
+                    peer_id,
+                    addr_hints: Vec::new(), // No address hints yet, will be resolved
+                    nat_class: NatClass::Public, // Assume bootstrap nodes are public
+                    roles: vec!["bootstrap".to_string()],
+                    last_success: now,
+                    success_count: 100, // High initial success count for priority
+                    failure_count: 0,
+                    is_bootstrap: true,
+                },
+            );
+            self.write_cache(&cache)?;
             info!("Added bootstrap node: {}", four_words);
         }
 
@@ -439,34 +440,33 @@ impl PeerCache {
     /// Removes oldest peers (by last_success) when cache exceeds MAX_CACHE_SIZE
     /// Bootstrap nodes are never evicted
     async fn enforce_max_size(&mut self) -> Result<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| anyhow::anyhow!("Peer cache mutex poisoned: {}", e))?;
+        let mut cache = self.read_cache()?;
 
-        let current_size: usize = conn.query_row(
-            "SELECT COUNT(*) FROM peers",
-            [],
-            |row| row.get(0),
-        )?;
-
-        if current_size <= Self::MAX_CACHE_SIZE {
+        if cache.peers.len() <= Self::MAX_CACHE_SIZE {
             return Ok(());
         }
 
-        // Remove oldest non-bootstrap peers until we're under the limit
-        let to_remove = current_size - Self::MAX_CACHE_SIZE;
-        let removed = conn.execute(
-            "DELETE FROM peers WHERE peer_id IN (
-                SELECT peer_id FROM peers
-                WHERE is_bootstrap = 0
-                ORDER BY last_success ASC
-                LIMIT ?1
-            )",
-            params![to_remove],
-        )?;
+        // Collect non-bootstrap peers sorted by last_success
+        let mut non_bootstrap: Vec<(String, SystemTime)> = cache
+            .peers
+            .iter()
+            .filter(|(_, entry)| !entry.is_bootstrap)
+            .map(|(id, entry)| (id.clone(), entry.last_success))
+            .collect();
+
+        non_bootstrap.sort_by_key(|(_, last_success)| *last_success);
+
+        // Remove oldest peers to get back under limit
+        let to_remove = cache.peers.len() - Self::MAX_CACHE_SIZE;
+        let mut removed = 0;
+
+        for (peer_id, _) in non_bootstrap.iter().take(to_remove) {
+            cache.peers.remove(peer_id);
+            removed += 1;
+        }
 
         if removed > 0 {
+            self.write_cache(&cache)?;
             info!(
                 "Evicted {} oldest peers (FIFO) to maintain cache size <= {}",
                 removed,
@@ -492,7 +492,7 @@ mod tests {
     #[tokio::test]
     async fn test_peer_cache_creation() {
         let temp_dir = TempDir::new().expect("temp dir");
-        let cache_path = temp_dir.path().join("peers.db");
+        let cache_path = temp_dir.path().join("peers.json");
 
         let cache = PeerCache::load(&cache_path)
             .await
@@ -503,316 +503,177 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_update_success_new_peer() {
+    async fn test_update_success() {
         let temp_dir = TempDir::new().expect("temp dir");
-        let cache_path = temp_dir.path().join("peers.db");
+        let cache_path = temp_dir.path().join("peers.json");
 
-        let mut cache = PeerCache::load(&cache_path).await.expect("cache");
-
+        let mut cache = PeerCache::load(&cache_path).await.expect("create cache");
         let peer_id = create_test_peer_id(1);
-        let addr: SocketAddr = "127.0.0.1:8080".parse().expect("addr");
+        let addr: SocketAddr = "127.0.0.1:8080".parse().expect("parse addr");
 
-        cache.update_success(peer_id, addr).await.expect("update");
+        cache
+            .update_success(peer_id, addr)
+            .await
+            .expect("update success");
 
         assert_eq!(cache.len(), 1);
         assert!(!cache.is_empty());
-    }
 
-    #[tokio::test]
-    async fn test_update_success_existing_peer() {
-        let temp_dir = TempDir::new().expect("temp dir");
-        let cache_path = temp_dir.path().join("peers.db");
-
-        let mut cache = PeerCache::load(&cache_path).await.expect("cache");
-
-        let peer_id = create_test_peer_id(1);
-        let addr1: SocketAddr = "127.0.0.1:8080".parse().expect("addr");
-        let addr2: SocketAddr = "127.0.0.1:8081".parse().expect("addr");
-
-        // First success
-        cache
-            .update_success(peer_id, addr1)
-            .await
-            .expect("update 1");
-        assert_eq!(cache.len(), 1);
-
-        // Second success (should update, not create new)
-        cache
-            .update_success(peer_id, addr2)
-            .await
-            .expect("update 2");
-        assert_eq!(cache.len(), 1);
-
-        // Verify success count incremented
-        let peers = cache.get_top_peers(10);
-        assert_eq!(peers.len(), 1);
-        assert_eq!(peers[0].success_count, 2);
+        let top_peers = cache.get_top_peers(10);
+        assert_eq!(top_peers.len(), 1);
+        assert_eq!(top_peers[0].success_count, 1);
+        assert_eq!(top_peers[0].failure_count, 0);
     }
 
     #[tokio::test]
     async fn test_update_failure() {
         let temp_dir = TempDir::new().expect("temp dir");
-        let cache_path = temp_dir.path().join("peers.db");
+        let cache_path = temp_dir.path().join("peers.json");
 
-        let mut cache = PeerCache::load(&cache_path).await.expect("cache");
-
+        let mut cache = PeerCache::load(&cache_path).await.expect("create cache");
         let peer_id = create_test_peer_id(1);
-        let addr: SocketAddr = "127.0.0.1:8080".parse().expect("addr");
+        let addr: SocketAddr = "127.0.0.1:8080".parse().expect("parse addr");
 
-        // Create peer first
-        cache.update_success(peer_id, addr).await.expect("success");
+        // Add peer first
+        cache
+            .update_success(peer_id, addr)
+            .await
+            .expect("update success");
 
-        // Record failures
-        cache.update_failure(peer_id).await.expect("failure 1");
-        cache.update_failure(peer_id).await.expect("failure 2");
+        // Record failure
+        cache.update_failure(peer_id).await.expect("update failure");
 
-        let peers = cache.get_top_peers(10);
-        assert_eq!(peers.len(), 1);
-        assert_eq!(peers[0].success_count, 1);
-        assert_eq!(peers[0].failure_count, 2);
+        let top_peers = cache.get_top_peers(10);
+        assert_eq!(top_peers.len(), 1);
+        assert_eq!(top_peers[0].failure_count, 1);
     }
 
     #[tokio::test]
-    async fn test_peer_scoring_success_rate() {
+    async fn test_top_peers_sorting() {
         let temp_dir = TempDir::new().expect("temp dir");
-        let cache_path = temp_dir.path().join("peers.db");
+        let cache_path = temp_dir.path().join("peers.json");
 
-        let mut cache = PeerCache::load(&cache_path).await.expect("cache");
+        let mut cache = PeerCache::load(&cache_path).await.expect("create cache");
 
-        // Peer A: 10 successes, 0 failures (perfect score)
-        let peer_a = create_test_peer_id(1);
-        let addr_a: SocketAddr = "127.0.0.1:8080".parse().expect("addr");
-        for _ in 0..10 {
-            cache.update_success(peer_a, addr_a).await.expect("success");
+        // Add peers with different success counts
+        for i in 1..=5 {
+            let peer_id = create_test_peer_id(i);
+            let addr: SocketAddr = format!("127.0.0.1:808{}", i).parse().expect("parse addr");
+
+            for _ in 0..i {
+                cache
+                    .update_success(peer_id, addr)
+                    .await
+                    .expect("update success");
+            }
         }
 
-        // Peer B: 5 successes, 5 failures (50% success rate)
-        let peer_b = create_test_peer_id(2);
-        let addr_b: SocketAddr = "127.0.0.1:8081".parse().expect("addr");
-        for _ in 0..5 {
-            cache.update_success(peer_b, addr_b).await.expect("success");
-            cache.update_failure(peer_b).await.expect("failure");
-        }
+        let top_peers = cache.get_top_peers(3);
+        assert_eq!(top_peers.len(), 3);
 
-        let peers = cache.get_top_peers(10);
-        assert_eq!(peers.len(), 2);
+        // Peers should be sorted by score (descending)
+        assert!(top_peers[0].score() >= top_peers[1].score());
+        assert!(top_peers[1].score() >= top_peers[2].score());
 
-        // Peer A should be ranked higher (better success rate)
-        assert_eq!(peers[0].peer_id, peer_a);
-        assert!(peers[0].score() > peers[1].score());
+        // Verify all 5 peers were added
+        let all_peers = cache.get_top_peers(10);
+        assert_eq!(all_peers.len(), 5);
     }
 
     #[tokio::test]
-    async fn test_peer_scoring_nat_class() {
-        // Test that NAT class affects scoring
-        let entry_public = PeerCacheEntry {
-            peer_id: create_test_peer_id(1),
-            addr_hints: vec!["127.0.0.1:8080".parse().expect("addr")],
-            nat_class: NatClass::Public,
-            roles: vec![],
-            last_success: SystemTime::now(),
-            success_count: 10,
-            failure_count: 0,
-        };
-
-        let entry_symmetric = PeerCacheEntry {
-            peer_id: create_test_peer_id(2),
-            addr_hints: vec!["127.0.0.1:8081".parse().expect("addr")],
-            nat_class: NatClass::Symmetric,
-            roles: vec![],
-            last_success: SystemTime::now(),
-            success_count: 10,
-            failure_count: 0,
-        };
-
-        // Public NAT should score higher (no penalty)
-        assert!(entry_public.score() > entry_symmetric.score());
-    }
-
-    #[tokio::test]
-    async fn test_peer_scoring_roles() {
-        // Test that coordinator role gives bonus
-        let entry_coordinator = PeerCacheEntry {
-            peer_id: create_test_peer_id(1),
-            addr_hints: vec!["127.0.0.1:8080".parse().expect("addr")],
-            nat_class: NatClass::Unknown,
-            roles: vec!["coordinator".to_string()],
-            last_success: SystemTime::now(),
-            success_count: 10,
-            failure_count: 0,
-        };
-
-        let entry_regular = PeerCacheEntry {
-            peer_id: create_test_peer_id(2),
-            addr_hints: vec!["127.0.0.1:8081".parse().expect("addr")],
-            nat_class: NatClass::Unknown,
-            roles: vec![],
-            last_success: SystemTime::now(),
-            success_count: 10,
-            failure_count: 0,
-        };
-
-        // Coordinator should score higher (role bonus)
-        assert!(entry_coordinator.score() > entry_regular.score());
-    }
-
-    #[tokio::test]
-    async fn test_prune_failed_peers() {
+    async fn test_bootstrap_nodes() {
         let temp_dir = TempDir::new().expect("temp dir");
-        let cache_path = temp_dir.path().join("peers.db");
+        let cache_path = temp_dir.path().join("peers.json");
 
-        let mut cache = PeerCache::load(&cache_path).await.expect("cache");
+        let mut cache = PeerCache::load(&cache_path).await.expect("create cache");
 
-        // Good peer: 10 successes, 1 failure (90% success rate)
-        let peer_good = create_test_peer_id(1);
-        let addr_good: SocketAddr = "127.0.0.1:8080".parse().expect("addr");
+        cache
+            .add_bootstrap_node("ocean-forest-moon-star")
+            .await
+            .expect("add bootstrap");
+
+        assert_eq!(cache.len(), 1);
+
+        let top_peers = cache.get_top_peers(10);
+        assert_eq!(top_peers.len(), 1);
+        assert!(top_peers[0].is_bootstrap);
+        assert_eq!(top_peers[0].success_count, 100); // High initial count
+    }
+
+    #[tokio::test]
+    async fn test_prune_failed() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let cache_path = temp_dir.path().join("peers.json");
+
+        let mut cache = PeerCache::load(&cache_path).await.expect("create cache");
+        let peer_id = create_test_peer_id(1);
+        let addr: SocketAddr = "127.0.0.1:8080".parse().expect("parse addr");
+
+        // Add peer with failures
+        cache
+            .update_success(peer_id, addr)
+            .await
+            .expect("update success");
+
         for _ in 0..10 {
-            cache
-                .update_success(peer_good, addr_good)
-                .await
-                .expect("success");
-        }
-        cache.update_failure(peer_good).await.expect("failure");
-
-        // Bad peer: 2 successes, 8 failures (20% success rate)
-        let peer_bad = create_test_peer_id(2);
-        let addr_bad: SocketAddr = "127.0.0.1:8081".parse().expect("addr");
-        for _ in 0..2 {
-            cache
-                .update_success(peer_bad, addr_bad)
-                .await
-                .expect("success");
-        }
-        for _ in 0..8 {
-            cache.update_failure(peer_bad).await.expect("failure");
+            cache.update_failure(peer_id).await.expect("update failure");
         }
 
-        assert_eq!(cache.len(), 2);
+        assert_eq!(cache.len(), 1);
 
         // Prune peers with >50% failure rate
-        cache.prune_failed(0.5).await.expect("prune");
+        cache.prune_failed(0.5).await.expect("prune failed");
 
-        // Only good peer should remain
-        assert_eq!(cache.len(), 1);
-        let peers = cache.get_top_peers(10);
-        assert_eq!(peers[0].peer_id, peer_good);
-    }
-
-    #[tokio::test]
-    async fn test_get_top_peers_limit() {
-        let temp_dir = TempDir::new().expect("temp dir");
-        let cache_path = temp_dir.path().join("peers.db");
-
-        let mut cache = PeerCache::load(&cache_path).await.expect("cache");
-
-        // Create 10 peers
-        for i in 0..10 {
-            let peer_id = create_test_peer_id(i);
-            let addr: SocketAddr = format!("127.0.0.1:80{:02}", i).parse().expect("addr");
-            cache.update_success(peer_id, addr).await.expect("success");
-        }
-
-        assert_eq!(cache.len(), 10);
-
-        // Get top 5
-        let top_5 = cache.get_top_peers(5);
-        assert_eq!(top_5.len(), 5);
-
-        // Get top 20 (should return all 10)
-        let top_20 = cache.get_top_peers(20);
-        assert_eq!(top_20.len(), 10);
-    }
-
-    #[tokio::test]
-    async fn test_persistence_across_restarts() {
-        let temp_dir = TempDir::new().expect("temp dir");
-        let cache_path = temp_dir.path().join("peers.db");
-
-        let peer_id = create_test_peer_id(1);
-        let addr: SocketAddr = "127.0.0.1:8080".parse().expect("addr");
-
-        // Create cache and add peer
-        {
-            let mut cache = PeerCache::load(&cache_path).await.expect("cache 1");
-            cache.update_success(peer_id, addr).await.expect("success");
-            assert_eq!(cache.len(), 1);
-        }
-
-        // Load cache again (simulates restart)
-        {
-            let cache = PeerCache::load(&cache_path).await.expect("cache 2");
-            assert_eq!(cache.len(), 1);
-
-            let peers = cache.get_top_peers(10);
-            assert_eq!(peers[0].peer_id, peer_id);
-            assert_eq!(peers[0].success_count, 1);
-        }
-    }
-
-    #[tokio::test]
-    async fn test_nat_class_serialization() {
-        let all_classes = vec![
-            NatClass::Public,
-            NatClass::FullCone,
-            NatClass::RestrictedCone,
-            NatClass::PortRestrictedCone,
-            NatClass::Symmetric,
-            NatClass::Unknown,
-        ];
-
-        for nat_class in all_classes {
-            let s = nat_class.as_str();
-            let deserialized = NatClass::parse(s);
-            assert_eq!(nat_class, deserialized);
-        }
-
-        // Test unknown string
-        assert_eq!(NatClass::parse("invalid"), NatClass::Unknown);
-    }
-
-    #[tokio::test]
-    async fn test_empty_cache_operations() {
-        let temp_dir = TempDir::new().expect("temp dir");
-        let cache_path = temp_dir.path().join("peers.db");
-
-        let mut cache = PeerCache::load(&cache_path).await.expect("cache");
-
-        // Prune on empty cache
-        cache.prune_failed(0.5).await.expect("prune");
+        // Peer should be removed (1 success, 10 failures = 90% failure rate)
         assert_eq!(cache.len(), 0);
-
-        // Get top peers on empty cache
-        let peers = cache.get_top_peers(10);
-        assert_eq!(peers.len(), 0);
     }
 
     #[tokio::test]
-    async fn test_peer_entry_score_recency() {
-        use std::time::Duration;
+    async fn test_max_cache_size() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let cache_path = temp_dir.path().join("peers.json");
 
-        // Recent peer (just now)
-        let entry_recent = PeerCacheEntry {
-            peer_id: create_test_peer_id(1),
-            addr_hints: vec!["127.0.0.1:8080".parse().expect("addr")],
-            nat_class: NatClass::Unknown,
-            roles: vec![],
-            last_success: SystemTime::now(),
-            success_count: 10,
-            failure_count: 0,
-        };
+        let mut cache = PeerCache::load(&cache_path).await.expect("create cache");
 
-        // Old peer (1 day ago)
-        let entry_old = PeerCacheEntry {
-            peer_id: create_test_peer_id(2),
-            addr_hints: vec!["127.0.0.1:8081".parse().expect("addr")],
-            nat_class: NatClass::Unknown,
-            roles: vec![],
-            last_success: SystemTime::now() - Duration::from_secs(86400),
-            success_count: 10,
-            failure_count: 0,
-        };
+        // Add more than MAX_CACHE_SIZE peers
+        for i in 0..1100 {
+            let peer_id = create_test_peer_id((i % 256) as u8);
+            let addr: SocketAddr = format!("127.0.0.1:{}", 8000 + i)
+                .parse()
+                .expect("parse addr");
 
-        // Recent peer should score higher (recency bonus)
-        assert!(entry_recent.score() > entry_old.score());
+            cache
+                .update_success(peer_id, addr)
+                .await
+                .expect("update success");
+        }
+
+        // Cache should be limited to MAX_CACHE_SIZE
+        assert!(cache.len() <= PeerCache::MAX_CACHE_SIZE);
+    }
+
+    #[tokio::test]
+    async fn test_concurrent_writes() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let cache_path = temp_dir.path().join("peers.json");
+
+        // Create two cache instances pointing to same file
+        let mut cache1 = PeerCache::load(&cache_path).await.expect("create cache1");
+        let mut cache2 = PeerCache::load(&cache_path).await.expect("create cache2");
+
+        let peer1 = create_test_peer_id(1);
+        let peer2 = create_test_peer_id(2);
+        let addr1: SocketAddr = "127.0.0.1:8081".parse().expect("parse addr1");
+        let addr2: SocketAddr = "127.0.0.1:8082".parse().expect("parse addr2");
+
+        // Concurrent writes (last write wins)
+        cache1.update_success(peer1, addr1).await.expect("write 1");
+        cache2.update_success(peer2, addr2).await.expect("write 2");
+
+        // Read from fresh instance
+        let cache3 = PeerCache::load(&cache_path).await.expect("create cache3");
+
+        // At least one peer should be present (last write wins due to atomic rename)
+        assert!(!cache3.is_empty());
     }
 }

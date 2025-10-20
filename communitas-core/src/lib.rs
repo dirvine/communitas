@@ -29,8 +29,9 @@
 pub mod auth_service;
 // pub mod bootstrap_integration; // TODO: Reimplement in Sprint 2 with gossip-based bootstrap
 pub mod core_context;
-pub mod crdt;
+pub mod crdt; // New pure CRDT infrastructure
 pub mod crdt_manager;
+pub mod legacy_crdt; // Legacy vector clock CRDT (to be phased out)
 // pub mod dht_identity; // Removed: DHT not used in RC1b (gossip-based architecture)
 // pub mod dht_schemas; // Removed: DHT not used in RC1b (gossip-based architecture)
 pub mod doc_replicator;
@@ -48,6 +49,7 @@ pub mod services;
 pub mod storage;
 pub mod test_harness;
 pub mod types;
+pub mod validation;
 
 // Gossip overlay system (now default, no longer feature-gated)
 pub mod gossip;
@@ -63,6 +65,7 @@ pub use entity_service::{EntityService, EntityServiceError, EntityServiceResult}
 pub use error::{AppError, AppResult as Result};
 pub use message_service::{MessageService, MessageServiceError, MessageServiceResult};
 pub use services::CoreServices;
+pub use validation::{InputType, ValidationError, ValidationService};
 
 // Re-export gossip context (now default, no longer feature-gated)
 pub use gossip::GossipContext;

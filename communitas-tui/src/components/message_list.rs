@@ -10,18 +10,18 @@
 //! - Unread indicators
 //! - Thread indicators
 
-use crate::messages::{Msg, ComponentId};
-use ratatui::{
-    layout::Rect,
-    style::{Color, Modifier, Style},
-    text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, ListState},
-};
+use crate::messages::{ComponentId, Msg};
 use tuirealm::{
+    Component, Frame, MockComponent, State, StateValue,
     command::{Cmd, CmdResult, Direction},
     event::{Event, Key, KeyEvent, KeyModifiers, NoUserEvent},
     props::{AttrValue, Attribute, Props},
-    Component, MockComponent, State, StateValue,
+    ratatui::{
+        layout::Rect,
+        style::{Color, Modifier, Style},
+        text::{Line, Span},
+        widgets::{Block, Borders, List, ListItem, ListState},
+    },
 };
 
 /// Represents a single message in the list
@@ -193,10 +193,7 @@ impl MessageList {
         } else {
             Style::default().fg(Color::Green)
         };
-        spans.push(Span::styled(
-            format!("{}: ", message.sender),
-            sender_style,
-        ));
+        spans.push(Span::styled(format!("{}: ", message.sender), sender_style));
 
         // Content
         let content_style = if is_selected {
@@ -223,7 +220,7 @@ impl MessageList {
 }
 
 impl MockComponent for MessageList {
-    fn view(&mut self, frame: &mut ratatui::Frame, area: Rect) {
+    fn view(&mut self, frame: &mut Frame, area: Rect) {
         let selected = self.selected;
         let items: Vec<ListItem> = self
             .messages
@@ -338,15 +335,9 @@ impl Component<Msg, NoUserEvent> for MessageList {
             Event::Keyboard(KeyEvent {
                 code: Key::Enter,
                 modifiers: KeyModifiers::NONE,
-            }) => {
-                if let Some(msg) = self.selected_message() {
-                    Some(Msg::MessageSelected {
-                        message_id: msg.id.clone(),
-                    })
-                } else {
-                    None
-                }
-            }
+            }) => self.selected_message().map(|msg| Msg::MessageSelected {
+                message_id: msg.id.clone(),
+            }),
             Event::Keyboard(KeyEvent {
                 code: Key::Char('t'),
                 modifiers: KeyModifiers::NONE,
@@ -725,7 +716,10 @@ mod tests {
             modifiers: KeyModifiers::NONE,
         }));
 
-        assert!(result.is_none(), "Should not open thread if message has no thread");
+        assert!(
+            result.is_none(),
+            "Should not open thread if message has no thread"
+        );
     }
 
     #[test]

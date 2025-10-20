@@ -166,8 +166,7 @@ mod tests {
         let port = pm.allocate_port().expect("should allocate port");
 
         // Verify port is in ephemeral range
-        assert!(port >= PORT_RANGE_START);
-        assert!(port <= PORT_RANGE_END);
+        assert!((PORT_RANGE_START..=PORT_RANGE_END).contains(&port));
 
         // Port should now be remembered as preferred
         assert_eq!(pm.get_preferred_port(), Some(port));
@@ -182,8 +181,7 @@ mod tests {
 
         // Should get preferred port if available
         // (May fail if port is in use, but test demonstrates the logic)
-        assert!(port >= PORT_RANGE_START);
-        assert!(port <= PORT_RANGE_END);
+        assert!((PORT_RANGE_START..=PORT_RANGE_END).contains(&port));
     }
 
     #[test]
@@ -222,7 +220,7 @@ mod tests {
         let port2 = pm2.allocate_port().expect("pm2 should allocate");
 
         // Ports should be in valid range
-        assert!(port1 >= PORT_RANGE_START && port1 <= PORT_RANGE_END);
-        assert!(port2 >= PORT_RANGE_START && port2 <= PORT_RANGE_END);
+        assert!((PORT_RANGE_START..=PORT_RANGE_END).contains(&port1));
+        assert!((PORT_RANGE_START..=PORT_RANGE_END).contains(&port2));
     }
 }

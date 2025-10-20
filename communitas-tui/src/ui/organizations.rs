@@ -235,7 +235,27 @@ fn render_messages(f: &mut Frame, area: Rect, state: &AppState, channel_id: &str
 
     let messages = state.entities.messages.get(channel_id);
 
-    if messages.is_none() || messages.as_ref().map_or(true, |m| m.is_empty()) {
+    let Some(messages) = messages.as_ref() else {
+        let empty_text = vec![
+            Line::from(""),
+            Line::from(Span::styled(
+                "No messages yet",
+                Style::default().fg(Color::DarkGray),
+            )),
+            Line::from(""),
+            Line::from(Span::styled(
+                "Type a message below and press Enter",
+                Style::default().fg(Color::Yellow),
+            )),
+        ];
+        let paragraph = Paragraph::new(empty_text)
+            .block(block)
+            .wrap(Wrap { trim: true });
+        f.render_widget(paragraph, area);
+        return;
+    };
+
+    if messages.is_empty() {
         let empty_text = vec![
             Line::from(""),
             Line::from(Span::styled(
@@ -254,8 +274,6 @@ fn render_messages(f: &mut Frame, area: Rect, state: &AppState, channel_id: &str
         f.render_widget(paragraph, area);
         return;
     }
-
-    let messages = messages.as_ref().unwrap();
     let mut lines = Vec::new();
 
     for msg in messages.iter() {

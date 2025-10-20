@@ -11,7 +11,7 @@
 //! - Toggle column visibility
 //! - Responsive layout calculations
 
-use ratatui::layout::{Constraint, Direction, Layout as RatatuiLayout, Rect};
+use tuirealm::ratatui::layout::{Constraint, Direction, Layout as RatatuiLayout, Rect};
 
 /// Column identifier in the 3-column layout
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -220,11 +220,7 @@ impl SplitLayout {
             .constraints(constraints)
             .split(area);
 
-        let sidebar_area = if has_sidebar {
-            Some(chunks[0])
-        } else {
-            None
-        };
+        let sidebar_area = if has_sidebar { Some(chunks[0]) } else { None };
 
         let content_idx = if has_sidebar { 1 } else { 0 };
         let content_area = chunks[content_idx];

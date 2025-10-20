@@ -147,11 +147,11 @@ pub struct MessageMetadata {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum EntityType {
-Person,
-Group,
-Project,
-Channel,
-Organisation,
+    Person,
+    Group,
+    Project,
+    Channel,
+    Organisation,
 }
 
 impl EntityType {

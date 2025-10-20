@@ -149,9 +149,7 @@ mod tests {
     #[tokio::test]
     async fn test_fec_storage_basic() {
         let temp_dir = TempDir::new().unwrap();
-        let fec = FecStorage::new(&temp_dir.path().to_path_buf(), 1.5)
-            .await
-            .unwrap();
+        let fec = FecStorage::new(temp_dir.path(), 1.5).await.unwrap();
 
         let test_data = vec![42u8; 1000];
 

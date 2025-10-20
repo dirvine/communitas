@@ -1,16 +1,13 @@
+use super::events::{BackendEvent, EventFilter, EventManager};
+use super::offline_queue::{OfflineQueue, QueuedOperation, QueuedOperationEntry, SyncResult};
 use anyhow::Result;
 use communitas_core::types::DeviceType;
 use communitas_core::{
-    AuthService, CoreContext, SessionInfo,
+    AuthService, CoreContext, SessionInfo, ValidationService,
     encrypted_storage::{EncryptedStorageManager, RecentIdentity, StorageConfig},
 };
-use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
-use super::events::{BackendEvent, EventFilter, EventManager};
-use super::offline_queue::{OfflineQueue, QueuedOperation, QueuedOperationEntry, SyncProgress, SyncResult};
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::mpsc;
 
 /// Backend wrapper around CoreContext and AuthService
 pub struct Backend {
@@ -26,14 +23,8 @@ pub struct Backend {
     event_manager: EventManager,
     /// Offline operation queue (None until authenticated)
     offline_queue: Option<OfflineQueue>,
-    /// Offline mode flag (user-controlled offline mode)
-    offline_mode: bool,
-    /// Network error simulation (for testing)
-    network_error_simulation: bool,
-    /// Sync progress subscribers
-    sync_progress_subs: Arc<RwLock<HashMap<u64, mpsc::Sender<SyncProgress>>>>,
-    /// Next sync progress subscription ID
-    next_sync_sub_id: AtomicU64,
+    /// Input validation service
+    pub validator: ValidationService,
 }
 
 impl Backend {
@@ -59,10 +50,7 @@ impl Backend {
             offline,
             event_manager: EventManager::new(),
             offline_queue: None,
-            offline_mode: false,
-            network_error_simulation: false,
-            sync_progress_subs: Arc::new(RwLock::new(HashMap::new())),
-            next_sync_sub_id: AtomicU64::new(1),
+            validator: ValidationService::new(),
         })
     }
 
@@ -94,10 +82,7 @@ impl Backend {
             offline,
             event_manager: EventManager::new(),
             offline_queue: None,
-            offline_mode: false,
-            network_error_simulation: false,
-            sync_progress_subs: Arc::new(RwLock::new(HashMap::new())),
-            next_sync_sub_id: AtomicU64::new(1),
+            validator: ValidationService::new(),
         })
     }
 
@@ -248,7 +233,10 @@ impl Backend {
         self.ctx = Some(ctx);
 
         // Initialize offline queue for this user
-        let queue_dir = self.data_dir.join("offline_queue").join(&session.four_words);
+        let queue_dir = self
+            .data_dir
+            .join("offline_queue")
+            .join(&session.four_words);
         let offline_queue = OfflineQueue::new(queue_dir).await?;
         self.offline_queue = Some(offline_queue);
 
@@ -450,30 +438,15 @@ impl Backend {
     // Offline Queue Methods
     // ========================================================================
 
-    /// Set offline mode (for testing and manual control)
-    pub async fn set_offline_mode(&mut self, offline: bool) -> Result<()> {
-        self.offline_mode = offline;
-        Ok(())
-    }
-
-    /// Check if in offline mode
-    pub fn is_offline_mode(&self) -> bool {
-        self.offline_mode || self.network_error_simulation
-    }
-
-    /// Simulate network error (for testing)
-    pub async fn simulate_network_error(&mut self, simulate: bool) -> Result<()> {
-        self.network_error_simulation = simulate;
-        Ok(())
-    }
-
     /// Set queue size limit
     pub async fn set_queue_size_limit(&mut self, max_size: usize) -> Result<()> {
         if let Some(queue) = &mut self.offline_queue {
             queue.set_max_size(max_size);
             Ok(())
         } else {
-            Err(anyhow::anyhow!("Offline queue not initialized - authenticate first"))
+            Err(anyhow::anyhow!(
+                "Offline queue not initialized - authenticate first"
+            ))
         }
     }
 
@@ -488,7 +461,9 @@ impl Backend {
             return Err(anyhow::anyhow!("Must be authenticated to queue operations"));
         }
 
-        let queue = self.offline_queue.as_mut()
+        let queue = self
+            .offline_queue
+            .as_mut()
             .ok_or_else(|| anyhow::anyhow!("Offline queue not initialized"))?;
 
         let operation = QueuedOperation::CreateEntity {
@@ -511,7 +486,9 @@ impl Backend {
             return Err(anyhow::anyhow!("Must be authenticated to queue operations"));
         }
 
-        let queue = self.offline_queue.as_mut()
+        let queue = self
+            .offline_queue
+            .as_mut()
             .ok_or_else(|| anyhow::anyhow!("Offline queue not initialized"))?;
 
         let operation = QueuedOperation::SendMessage {
@@ -535,7 +512,9 @@ impl Backend {
             return Err(anyhow::anyhow!("Must be authenticated to queue operations"));
         }
 
-        let queue = self.offline_queue.as_mut()
+        let queue = self
+            .offline_queue
+            .as_mut()
             .ok_or_else(|| anyhow::anyhow!("Offline queue not initialized"))?;
 
         let operation = QueuedOperation::SendMessage {
@@ -558,7 +537,9 @@ impl Backend {
             return Err(anyhow::anyhow!("Must be authenticated to queue operations"));
         }
 
-        let queue = self.offline_queue.as_mut()
+        let queue = self
+            .offline_queue
+            .as_mut()
             .ok_or_else(|| anyhow::anyhow!("Offline queue not initialized"))?;
 
         let operation = QueuedOperation::AddMember {
@@ -572,7 +553,9 @@ impl Backend {
 
     /// Get all queued operations
     pub async fn get_queued_operations(&self) -> Result<Vec<QueuedOperationEntry>> {
-        let queue = self.offline_queue.as_ref()
+        let queue = self
+            .offline_queue
+            .as_ref()
             .ok_or_else(|| anyhow::anyhow!("Offline queue not initialized"))?;
 
         Ok(queue.get_all())
@@ -591,7 +574,9 @@ impl Backend {
 
         // Get all operations first (releases borrow)
         let operations = {
-            let queue = self.offline_queue.as_ref()
+            let queue = self
+                .offline_queue
+                .as_ref()
                 .ok_or_else(|| anyhow::anyhow!("Offline queue not initialized"))?;
             queue.get_all()
         };
@@ -601,22 +586,17 @@ impl Backend {
         }
 
         let mut results = Vec::new();
-        let total = operations.len();
+        let _total = operations.len();
 
         // Track successful operation IDs for removal
         let mut successful_ops = Vec::new();
 
         for (idx, entry) in operations.into_iter().enumerate() {
-            // Send progress update
-            self.publish_sync_progress(SyncProgress {
-                total,
-                completed: idx,
-                current_operation_id: Some(entry.id.clone()),
-            }).await;
-
             // Check for duplicates by comparing with previously queued ops
             let is_duplicate = {
-                let queue = self.offline_queue.as_ref()
+                let queue = self
+                    .offline_queue
+                    .as_ref()
                     .ok_or_else(|| anyhow::anyhow!("Offline queue not initialized"))?;
                 queue.is_duplicate(&entry.operation) && idx > 0
             };
@@ -627,15 +607,6 @@ impl Backend {
                     reason: "Duplicate operation detected".to_string(),
                 });
                 successful_ops.push(entry.id.clone());
-                continue;
-            }
-
-            // Simulate network error if testing
-            if self.network_error_simulation {
-                results.push(SyncResult::Failed {
-                    operation_id: entry.id.clone(),
-                    error: "Network error (simulated)".to_string(),
-                });
                 continue;
             }
 
@@ -661,19 +632,14 @@ impl Backend {
 
         // Remove successful operations from queue
         if !successful_ops.is_empty() {
-            let queue = self.offline_queue.as_mut()
+            let queue = self
+                .offline_queue
+                .as_mut()
                 .ok_or_else(|| anyhow::anyhow!("Offline queue not initialized"))?;
             for op_id in successful_ops {
                 queue.remove(&op_id).await?;
             }
         }
-
-        // Final progress update
-        self.publish_sync_progress(SyncProgress {
-            total,
-            completed: total,
-            current_operation_id: None,
-        }).await;
 
         Ok(results)
     }
@@ -681,41 +647,96 @@ impl Backend {
     /// Execute a queued operation
     async fn execute_queued_operation(&mut self, operation: QueuedOperation) -> Result<()> {
         match operation {
-            QueuedOperation::CreateEntity { name, entity_type, members } => {
+            QueuedOperation::CreateEntity {
+                name,
+                entity_type,
+                members,
+            } => {
                 self.create_entity(name, entity_type, members).await?;
                 Ok(())
             }
-            QueuedOperation::SendMessage { entity_id, entity_type, text } => {
+            QueuedOperation::SendMessage {
+                entity_id,
+                entity_type,
+                text,
+            } => {
                 self.send_message(entity_id, entity_type, text).await?;
                 Ok(())
             }
-            QueuedOperation::AddMember { entity_id, entity_type, member_id } => {
-                self.add_entity_member(entity_type, &entity_id, member_id).await?;
+            QueuedOperation::AddMember {
+                entity_id,
+                entity_type,
+                member_id,
+            } => {
+                self.add_entity_member(entity_type, &entity_id, member_id)
+                    .await?;
                 Ok(())
             }
-            QueuedOperation::RemoveMember { entity_id, entity_type, member_id } => {
-                self.remove_entity_member(entity_type, &entity_id, member_id).await?;
+            QueuedOperation::RemoveMember {
+                entity_id,
+                entity_type,
+                member_id,
+            } => {
+                self.remove_entity_member(entity_type, &entity_id, member_id)
+                    .await?;
                 Ok(())
             }
         }
     }
 
-    /// Subscribe to sync progress updates
-    pub async fn subscribe_sync_progress(
-        &mut self,
-        sender: mpsc::Sender<SyncProgress>,
-    ) -> Result<()> {
-        let id = self.next_sync_sub_id.fetch_add(1, Ordering::SeqCst);
-        let mut subs = self.sync_progress_subs.write().await;
-        subs.insert(id, sender);
-        Ok(())
+    // ========================================================================
+    // Test Helper Methods
+    // ========================================================================
+    //
+    // These methods are for testing automatic offline handling behavior.
+    // They simulate network state changes without requiring actual network conditions.
+    //
+    // **WARNING**: These are intended for testing only. Production code should never
+    // manually set network state - it should be automatically detected.
+
+    /// Simulate network unavailable (for testing)
+    ///
+    /// This method is used in tests to simulate network failures by clearing
+    /// the CoreContext, which will cause operations to detect network errors
+    /// and automatically queue for later sync.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// # use communitas_tui::backend::Backend;
+    /// # async fn example(mut backend: Backend) -> anyhow::Result<()> {
+    /// // Simulate network failure for testing
+    /// backend.simulate_network_unavailable();
+    ///
+    /// // Operations will now automatically queue
+    /// let result = backend.create_entity_auto(/* ... */)?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn simulate_network_unavailable(&mut self) {
+        self.ctx = None;
+        self.offline = true;
     }
 
-    /// Publish sync progress to all subscribers
-    async fn publish_sync_progress(&self, progress: SyncProgress) {
-        let subs = self.sync_progress_subs.read().await;
-        for sender in subs.values() {
-            let _ = sender.send(progress.clone()).await;
-        }
+    /// Simulate network available (for testing)
+    ///
+    /// This method marks the backend as online. Note that CoreContext must be
+    /// reinitialized separately using `initialize_core_context()`.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// # use communitas_tui::backend::Backend;
+    /// # async fn example(mut backend: Backend) -> anyhow::Result<()> {
+    /// // Simulate network returning
+    /// backend.simulate_network_available();
+    /// backend.initialize_core_context().await?;
+    ///
+    /// // Operations will now execute immediately
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn simulate_network_available(&mut self) {
+        self.offline = false;
     }
 }

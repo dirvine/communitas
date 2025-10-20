@@ -1,12 +1,18 @@
 use crate::state::{AppState, View};
-use crate::ui::{auth, dashboard, organizations, projects, status_bar};
+use crate::ui::{
+    auth, command_palette, contacts, context_menu, dashboard, direct_messages, groups, help,
+    issue_detail, network_status, organizations, projects, status_bar,
+};
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
 };
 
 /// Render main layout with status bar at bottom
-pub fn render_layout(f: &mut Frame, state: &AppState) {
+pub fn render_layout(f: &mut Frame, state: &mut AppState) {
+    // Record frame for performance monitoring
+    state.performance_monitor.record_frame();
+
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -20,6 +26,23 @@ pub fn render_layout(f: &mut Frame, state: &AppState) {
 
     // Render status bar
     status_bar::render(f, chunks[1], state);
+
+    // Render context menu as overlay
+    context_menu::render(f, &state.context_menu);
+
+    // Render command palette as overlay (appears on top of everything)
+    command_palette::render(f, &state.command_palette);
+
+    // TODO: Add advanced component rendering
+    // The advanced components (PerformanceMonitor, ThemeManager, AccessibilityManager, ErrorRecovery)
+    // use tuirealm::Frame which is incompatible with ratatui::Frame.
+    // Options for future integration:
+    // 1. Convert entire app to use tuirealm framework
+    // 2. Create ratatui-compatible rendering functions for these components
+    // 3. Use the components' state for logic but render manually with ratatui widgets
+    //
+    // For now, the components are initialized in AppState and their keyboard shortcuts work,
+    // but visual rendering is deferred to future work.
 }
 
 /// Render main content area based on current view
@@ -73,30 +96,36 @@ fn render_project_issues(f: &mut Frame, area: Rect, state: &AppState) {
     }
 }
 
-fn render_issue_detail(_f: &mut Frame, _area: Rect, _state: &AppState) {
-    // TODO: Implement issue detail view
+fn render_issue_detail(f: &mut Frame, area: Rect, state: &AppState) {
+    if let View::IssueDetail { issue_id } = state.navigation.current_view() {
+        issue_detail::render(f, area, state, issue_id);
+    }
 }
 
-fn render_groups(_f: &mut Frame, _area: Rect, _state: &AppState) {
-    // TODO: Implement groups view
+fn render_groups(f: &mut Frame, area: Rect, state: &AppState) {
+    groups::render(f, area, state);
 }
 
-fn render_group_messages(_f: &mut Frame, _area: Rect, _state: &AppState) {
-    // TODO: Implement group messages view
+fn render_group_messages(f: &mut Frame, area: Rect, state: &AppState) {
+    if let View::GroupMessages { group_id } = state.navigation.current_view() {
+        groups::render_messages(f, area, state, group_id);
+    }
 }
 
-fn render_contacts(_f: &mut Frame, _area: Rect, _state: &AppState) {
-    // TODO: Implement contacts view
+fn render_contacts(f: &mut Frame, area: Rect, state: &AppState) {
+    contacts::render(f, area, state);
 }
 
-fn render_direct_messages(_f: &mut Frame, _area: Rect, _state: &AppState) {
-    // TODO: Implement direct messages view
+fn render_direct_messages(f: &mut Frame, area: Rect, state: &AppState) {
+    if let View::DirectMessages { contact_id } = state.navigation.current_view() {
+        direct_messages::render(f, area, state, contact_id);
+    }
 }
 
-fn render_network_status(_f: &mut Frame, _area: Rect, _state: &AppState) {
-    // TODO: Implement network status view
+fn render_network_status(f: &mut Frame, area: Rect, state: &AppState) {
+    network_status::render(f, area, state);
 }
 
-fn render_help(_f: &mut Frame, _area: Rect, _state: &AppState) {
-    // TODO: Implement help view
+fn render_help(f: &mut Frame, area: Rect, state: &AppState) {
+    help::render(f, area, state);
 }

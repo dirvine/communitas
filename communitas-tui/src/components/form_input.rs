@@ -12,17 +12,17 @@
 //! - Focus states
 
 use crate::messages::{ComponentId, Msg};
-use ratatui::{
-    layout::Rect,
-    style::{Color, Modifier, Style},
-    text::{Line, Span},
-    widgets::{Block, Borders, Paragraph},
-};
 use tuirealm::{
+    Component, Frame, MockComponent, State, StateValue,
     command::{Cmd, CmdResult, Direction, Position},
     event::{Event, Key, KeyEvent, KeyModifiers, NoUserEvent},
     props::{AttrValue, Attribute, Props},
-    Component, MockComponent, State, StateValue,
+    ratatui::{
+        layout::Rect,
+        style::{Color, Modifier, Style},
+        text::{Line, Span},
+        widgets::{Block, Borders, Paragraph},
+    },
 };
 
 /// Input mode for FormInput
@@ -140,19 +140,9 @@ impl FormInput {
     }
 
     /// Insert character at cursor
+    /// Note: Validation is now handled by the backend ValidationService
     pub fn insert_char(&mut self, c: char) {
-        // Check max length
-        if let Some(max) = self.max_length {
-            if self.value.len() >= max {
-                return;
-            }
-        }
-
-        // Don't insert newlines in single-line mode
-        if self.mode == InputMode::SingleLine && c == '\n' {
-            return;
-        }
-
+        // Allow all characters - validation happens at submission time in backend
         self.value.insert(self.cursor, c);
         self.cursor += 1;
         self.clear_error();
@@ -217,7 +207,7 @@ impl FormInput {
 }
 
 impl MockComponent for FormInput {
-    fn view(&mut self, frame: &mut ratatui::Frame, area: Rect) {
+    fn view(&mut self, frame: &mut Frame, area: Rect) {
         // Store display value to extend its lifetime
         let display_value = self.display_value();
 
@@ -307,9 +297,7 @@ impl MockComponent for FormInput {
                 self.move_cursor_end();
                 CmdResult::Changed(self.state())
             }
-            Cmd::Submit => {
-                CmdResult::Submit(self.state())
-            }
+            Cmd::Submit => CmdResult::Submit(self.state()),
             _ => CmdResult::None,
         }
     }
@@ -456,27 +444,29 @@ mod tests {
     }
 
     #[test]
-    fn test_insert_char_respects_max_length() {
-        let mut input = FormInput::new(ComponentId::MessageComposer).max_length(3);
+    fn test_insert_char_allows_any_length() {
+        let mut input = FormInput::new(ComponentId::MessageComposer);
 
+        // Should allow any length now (validation moved to backend)
         input.insert_char('a');
         input.insert_char('b');
         input.insert_char('c');
-        input.insert_char('d'); // Should be ignored
+        input.insert_char('d');
 
-        assert_eq!(input.value(), "abc");
-        assert_eq!(input.cursor(), 3);
+        assert_eq!(input.value(), "abcd");
+        assert_eq!(input.cursor(), 4);
     }
 
     #[test]
-    fn test_insert_newline_blocked_in_singleline() {
+    fn test_insert_newline_allowed_in_singleline() {
         let mut input = FormInput::new(ComponentId::MessageComposer);
 
+        // Newlines are now allowed - validation happens in backend
         input.insert_char('H');
-        input.insert_char('\n'); // Should be ignored
+        input.insert_char('\n');
         input.insert_char('i');
 
-        assert_eq!(input.value(), "Hi");
+        assert_eq!(input.value(), "H\ni");
     }
 
     #[test]

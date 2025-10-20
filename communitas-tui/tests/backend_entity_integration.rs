@@ -76,14 +76,22 @@ async fn test_create_group_entity() -> Result<()> {
     ];
 
     let entity = backend
-        .create_entity("Project Team".to_string(), EntityType::Group, members.clone())
+        .create_entity(
+            "Project Team".to_string(),
+            EntityType::Group,
+            members.clone(),
+        )
         .await?;
 
     // Verify entity properties
     assert_eq!(entity.name, "Project Team");
     assert_eq!(entity.entity_type, EntityType::Group);
     assert_eq!(entity.members.len(), 3);
-    assert!(entity.members.contains(&"ocean-forest-moon-star".to_string()));
+    assert!(
+        entity
+            .members
+            .contains(&"ocean-forest-moon-star".to_string())
+    );
     assert!(entity.members.contains(&"alice-smith-test-one".to_string()));
     assert!(entity.members.contains(&"bob-jones-test-two".to_string()));
 
@@ -240,7 +248,12 @@ async fn test_add_member_to_entity() -> Result<()> {
 
     // Add a new member (4 args: entity_type, entity_id, member_id, role)
     ctx.entity_service
-        .add_member(EntityType::Group, &entity.id, "alice-smith-test-one", "member")
+        .add_member(
+            EntityType::Group,
+            &entity.id,
+            "alice-smith-test-one",
+            "member",
+        )
         .await
         .map_err(|e| anyhow::anyhow!("Failed to add member: {}", e))?;
 
@@ -253,8 +266,16 @@ async fn test_add_member_to_entity() -> Result<()> {
 
     // Verify member was added
     assert_eq!(updated.members.len(), 2);
-    assert!(updated.members.contains(&"ocean-forest-moon-star".to_string()));
-    assert!(updated.members.contains(&"alice-smith-test-one".to_string()));
+    assert!(
+        updated
+            .members
+            .contains(&"ocean-forest-moon-star".to_string())
+    );
+    assert!(
+        updated
+            .members
+            .contains(&"alice-smith-test-one".to_string())
+    );
 
     Ok(())
 }
@@ -282,12 +303,16 @@ async fn test_add_duplicate_member_is_idempotent() -> Result<()> {
         .map_err(|e| anyhow::anyhow!("Failed to add member: {}", e))?;
 
     // Add same member again - should fail with MemberAlreadyExists
-    let result = ctx.entity_service
+    let result = ctx
+        .entity_service
         .add_member(EntityType::Group, &entity.id, "alice-test-one", "member")
         .await;
 
     // EntityService returns error for duplicate (not idempotent)
-    assert!(result.is_err(), "Expected error when adding duplicate member");
+    assert!(
+        result.is_err(),
+        "Expected error when adding duplicate member"
+    );
 
     Ok(())
 }
@@ -312,7 +337,12 @@ async fn test_remove_member_from_entity() -> Result<()> {
 
     // Remove a member (4 args: entity_type, entity_id, member_id, deleted_by)
     ctx.entity_service
-        .remove_member(EntityType::Group, &entity.id, "alice-test-one", "ocean-forest-moon-star")
+        .remove_member(
+            EntityType::Group,
+            &entity.id,
+            "alice-test-one",
+            "ocean-forest-moon-star",
+        )
         .await
         .map_err(|e| anyhow::anyhow!("Failed to remove member: {}", e))?;
 
@@ -325,7 +355,11 @@ async fn test_remove_member_from_entity() -> Result<()> {
 
     // Verify member was removed (uses tombstone, so filtered out from members list)
     assert!(!updated.members.contains(&"alice-test-one".to_string()));
-    assert!(updated.members.contains(&"ocean-forest-moon-star".to_string()));
+    assert!(
+        updated
+            .members
+            .contains(&"ocean-forest-moon-star".to_string())
+    );
     assert!(updated.members.contains(&"bob-test-two".to_string()));
 
     Ok(())
@@ -403,9 +437,7 @@ async fn test_entity_persists_across_restarts() -> Result<()> {
 
     // Create new backend instance with same data directory
     let mut backend = Backend::new(data_dir.clone(), false).await?;
-    backend
-        .login("test-one-two-three", "password123")
-        .await?;
+    backend.login("test-one-two-three", "password123").await?;
     backend.initialize_core_context().await?;
 
     // Retrieve the entity

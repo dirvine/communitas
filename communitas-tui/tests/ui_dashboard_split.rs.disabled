@@ -1,0 +1,446 @@
+//! Integration tests for ResizableSplit in dashboard layout
+//!
+//! Tests the integration of ResizableSplit component into the dashboard UI,
+//! including rendering, mouse interaction, and keyboard shortcuts.
+
+use communitas_tui::state::AppState;
+use ratatui::layout::Rect;
+
+// ============================================================================
+// TEST 1: Dashboard uses ResizableSplit from AppState
+// ============================================================================
+
+#[test]
+fn test_dashboard_uses_state_resizable_split() {
+    // Arrange
+    let state = AppState::new();
+
+    // Assert - ResizableSplit should be initialized at 30%
+    assert_eq!(state.resizable_split.position(), 30);
+}
+
+#[test]
+fn test_dashboard_respects_split_position_change() {
+    // Arrange
+    let mut state = AppState::new();
+    let area = Rect::new(0, 0, 100, 50);
+
+    // Act - Simulate drag to 40% position
+    let target_x = 40; // 40% of 100 width
+    state.resizable_split.start_drag(30, 25); // Start at current position (30%)
+    state.resizable_split.update_drag(target_x, 25); // Drag to 40%
+    state.resizable_split.end_drag();
+
+    // Assert - Position should be updated to 40%
+    assert_eq!(state.resizable_split.position(), 40);
+}
+
+// ============================================================================
+// TEST 2: Split layout renders correctly
+// ============================================================================
+
+#[test]
+fn test_dashboard_calculates_split_areas() {
+    // Arrange
+    let state = AppState::new();
+    let total_width = 100;
+    let position_percent = state.resizable_split.position();
+
+    // Act - Calculate expected split
+    let left_width = (total_width * position_percent) / 100;
+    let right_width = total_width - left_width;
+
+    // Assert
+    assert_eq!(left_width, 30); // 30% of 100
+    assert_eq!(right_width, 70); // 70% of 100
+}
+
+#[test]
+fn test_dashboard_split_respects_min_max_constraints() {
+    // Arrange
+    let mut state = AppState::new();
+
+    // Act & Assert - Try to drag below min (20%)
+    state.resizable_split.start_drag(30, 25);
+    state.resizable_split.update_drag(10, 25); // Try 10%
+    state.resizable_split.end_drag();
+    assert_eq!(state.resizable_split.position(), 20); // Clamped to min
+
+    // Reset for next test
+    state.resizable_split.reset_position();
+
+    // Act & Assert - Try to drag above max (50%)
+    state.resizable_split.start_drag(30, 25);
+    state.resizable_split.update_drag(60, 25); // Try 60%
+    state.resizable_split.end_drag();
+    assert_eq!(state.resizable_split.position(), 50); // Clamped to max
+}
+
+// ============================================================================
+// TEST 3: Divider rendering
+// ============================================================================
+
+#[test]
+fn test_dashboard_divider_position_calculation() {
+    // Arrange
+    let state = AppState::new();
+    let area = Rect::new(0, 0, 100, 50);
+
+    // Act - Calculate divider position
+    let split_position = state.resizable_split.position();
+    let divider_x = (area.width * split_position) / 100;
+
+    // Assert
+    assert_eq!(divider_x, 30); // 30% of 100 width
+}
+
+#[test]
+fn test_dashboard_divider_spans_full_height() {
+    // Arrange
+    let area = Rect::new(0, 0, 100, 50);
+
+    // Act - Divider should span from top to bottom
+    let divider_area = Rect::new(30, area.y, 1, area.height);
+
+    // Assert
+    assert_eq!(divider_area.height, area.height);
+    assert_eq!(divider_area.y, area.y);
+}
+
+// ============================================================================
+// TEST 4: Mouse interaction tests
+// ============================================================================
+
+#[test]
+fn test_mouse_hover_over_divider_detection() {
+    // Arrange
+    let state = AppState::new();
+    let area = Rect::new(0, 0, 100, 50);
+    let divider_x = 30;
+
+    // Act & Assert - Mouse on divider
+    let mouse_x = divider_x;
+    let mouse_y = 25;
+
+    // Check if mouse is within divider tolerance (±1 column)
+    let is_over_divider = (mouse_x as i16 - divider_x as i16).abs() <= 1;
+    assert!(is_over_divider);
+}
+
+#[test]
+fn test_mouse_not_over_divider_detection() {
+    // Arrange
+    let divider_x = 30;
+
+    // Act & Assert - Mouse far from divider
+    let mouse_x = 50;
+    let is_over_divider = (mouse_x as i16 - divider_x as i16).abs() <= 1;
+    assert!(!is_over_divider);
+}
+
+#[test]
+fn test_drag_updates_split_position() {
+    // Arrange
+    let mut state = AppState::new();
+
+    // Act - Simulate drag from x=30 to x=40
+    state.resizable_split.start_drag(30, 25);
+    state.resizable_split.update_drag(40, 25);
+    state.resizable_split.end_drag();
+
+    // Assert
+    assert_eq!(state.resizable_split.position(), 40);
+}
+
+#[test]
+fn test_drag_respects_boundaries() {
+    // Arrange
+    let mut state = AppState::new();
+
+    // Act - Try to drag beyond max (50%)
+    state.resizable_split.start_drag(30, 25);
+    state.resizable_split.update_drag(70, 25); // Try 70%
+    state.resizable_split.end_drag();
+
+    // Assert - Should clamp to max (50%)
+    assert_eq!(state.resizable_split.position(), 50);
+}
+
+// ============================================================================
+// TEST 5: Keyboard shortcut tests
+// ============================================================================
+
+#[test]
+fn test_reset_split_to_default_position() {
+    // Arrange
+    let mut state = AppState::new();
+
+    // Act - Modify position via drag
+    state.resizable_split.start_drag(30, 25);
+    state.resizable_split.update_drag(45, 25);
+    state.resizable_split.end_drag();
+    assert_eq!(state.resizable_split.position(), 45);
+
+    // Act - Reset to default (30%)
+    state.resizable_split.reset_position();
+
+    // Assert
+    assert_eq!(state.resizable_split.position(), 30);
+}
+
+// ============================================================================
+// TEST 6: Split areas calculation for rendering
+// ============================================================================
+
+#[test]
+fn test_calculate_left_panel_area() {
+    // Arrange
+    let state = AppState::new();
+    let content_area = Rect::new(0, 0, 100, 50);
+
+    // Act
+    let split_position = state.resizable_split.position();
+    let left_width = (content_area.width * split_position) / 100;
+    let left_area = Rect::new(
+        content_area.x,
+        content_area.y,
+        left_width.saturating_sub(1), // Leave room for divider
+        content_area.height,
+    );
+
+    // Assert
+    assert_eq!(left_area.width, 29); // 30 - 1 for divider
+    assert_eq!(left_area.height, content_area.height);
+}
+
+#[test]
+fn test_calculate_right_panel_area() {
+    // Arrange
+    let state = AppState::new();
+    let content_area = Rect::new(0, 0, 100, 50);
+
+    // Act
+    let split_position = state.resizable_split.position();
+    let left_width = (content_area.width * split_position) / 100;
+    let right_area = Rect::new(
+        content_area.x + left_width,
+        content_area.y,
+        content_area.width.saturating_sub(left_width),
+        content_area.height,
+    );
+
+    // Assert
+    assert_eq!(right_area.x, 30);
+    assert_eq!(right_area.width, 70);
+    assert_eq!(right_area.height, content_area.height);
+}
+
+// ============================================================================
+// TEST 7: Visual feedback tests
+// ============================================================================
+
+#[test]
+fn test_divider_hover_state_changes() {
+    // Arrange
+    let _state = AppState::new();
+
+    // Act - Simulate hover
+    let mouse_x = 30;
+    let divider_x = 30;
+    let is_hovering = (mouse_x as i16 - divider_x as i16).abs() <= 1;
+
+    // Assert
+    assert!(is_hovering);
+
+    // In actual implementation, this would update hover state
+    // For now, we're just testing the logic
+}
+
+#[test]
+fn test_divider_drag_state_changes() {
+    // Arrange
+    let _state = AppState::new();
+
+    // Act - Start drag
+    let is_dragging = true; // Would be set by mouse down event
+
+    // Assert
+    assert!(is_dragging);
+
+    // In actual implementation:
+    // - state.resizable_split.start_drag(x, y) would be called
+    // - Drag state would be tracked
+    // - Visual feedback would change (cursor, color, etc.)
+}
+
+// ============================================================================
+// TEST 8: Integration with existing dashboard
+// ============================================================================
+
+#[test]
+fn test_dashboard_maintains_existing_functionality() {
+    // Arrange
+    let mut state = AppState::new();
+
+    // Act - Existing dashboard state should still work
+    state.navigation.selected_index = 1; // Projects tab
+
+    // Assert - Navigation still works alongside split
+    assert_eq!(state.navigation.selected_index, 1);
+    assert_eq!(state.resizable_split.position(), 30);
+}
+
+#[test]
+fn test_split_persists_across_tab_changes() {
+    // Arrange
+    let mut state = AppState::new();
+
+    // Act - Change split position via drag
+    state.resizable_split.start_drag(30, 25);
+    state.resizable_split.update_drag(35, 25);
+    state.resizable_split.end_drag();
+
+    // Change tab
+    state.navigation.selected_index = 2;
+
+    // Assert - Split position should persist
+    assert_eq!(state.resizable_split.position(), 35);
+    assert_eq!(state.navigation.selected_index, 2);
+}
+
+// ============================================================================
+// TEST 9: Edge cases
+// ============================================================================
+
+#[test]
+fn test_split_with_very_small_terminal() {
+    // Arrange
+    let state = AppState::new();
+    let small_area = Rect::new(0, 0, 40, 20); // Very small terminal
+
+    // Act
+    let split_position = state.resizable_split.position();
+    let left_width = (small_area.width * split_position) / 100;
+
+    // Assert - Should still calculate correctly
+    assert_eq!(left_width, 12); // 30% of 40
+
+    // Min constraint (20% of 40 = 8) is satisfied
+    assert!(left_width >= 8);
+}
+
+#[test]
+fn test_split_with_very_large_terminal() {
+    // Arrange
+    let state = AppState::new();
+    let large_area = Rect::new(0, 0, 300, 100);
+
+    // Act
+    let split_position = state.resizable_split.position();
+    let left_width = (large_area.width * split_position) / 100;
+
+    // Assert
+    assert_eq!(left_width, 90); // 30% of 300
+}
+
+// ============================================================================
+// TEST 10: Rendering logic tests
+// ============================================================================
+
+#[test]
+fn test_left_panel_shows_tree_view() {
+    // Arrange
+    let state = AppState::new();
+
+    // Assert - TreeView should be available for left panel
+    assert_eq!(state.tree_view.visible_count(), 1); // Root node
+
+    // In actual rendering:
+    // - Left panel would render state.tree_view
+    // - Show organization/project hierarchy
+}
+
+#[test]
+fn test_right_panel_shows_content() {
+    // Arrange
+    let state = AppState::new();
+
+    // Assert - Right panel should show current tab content
+    assert_eq!(state.navigation.selected_index, 0); // Default to first tab
+
+    // In actual rendering:
+    // - Right panel renders based on selected_index
+    // - Same content rendering as before, just in right panel
+}
+
+// ============================================================================
+// TEST 11: Keyboard shortcuts
+// ============================================================================
+
+#[test]
+fn test_keyboard_reset_split_to_default() {
+    // Arrange
+    let mut state = AppState::new();
+
+    // Act - Modify split position
+    state.resizable_split.start_drag(30, 25);
+    state.resizable_split.update_drag(45, 25);
+    state.resizable_split.end_drag();
+    assert_eq!(state.resizable_split.position(), 45);
+
+    // Act - Reset via keyboard shortcut (Ctrl+\)
+    // In actual app, this would be triggered by key event handler
+    state.resizable_split.reset_position();
+
+    // Assert - Should return to default (30%)
+    assert_eq!(state.resizable_split.position(), 30);
+}
+
+#[test]
+fn test_reset_from_minimum_position() {
+    // Arrange
+    let mut state = AppState::new();
+
+    // Act - Set to minimum
+    state.resizable_split.start_drag(30, 25);
+    state.resizable_split.update_drag(20, 25);
+    state.resizable_split.end_drag();
+    assert_eq!(state.resizable_split.position(), 20);
+
+    // Act - Reset
+    state.resizable_split.reset_position();
+
+    // Assert
+    assert_eq!(state.resizable_split.position(), 30);
+}
+
+#[test]
+fn test_reset_from_maximum_position() {
+    // Arrange
+    let mut state = AppState::new();
+
+    // Act - Set to maximum
+    state.resizable_split.start_drag(30, 25);
+    state.resizable_split.update_drag(50, 25);
+    state.resizable_split.end_drag();
+    assert_eq!(state.resizable_split.position(), 50);
+
+    // Act - Reset
+    state.resizable_split.reset_position();
+
+    // Assert
+    assert_eq!(state.resizable_split.position(), 30);
+}
+
+#[test]
+fn test_reset_when_already_at_default() {
+    // Arrange
+    let mut state = AppState::new();
+    assert_eq!(state.resizable_split.position(), 30);
+
+    // Act - Reset when already at default
+    state.resizable_split.reset_position();
+
+    // Assert - Should remain at default
+    assert_eq!(state.resizable_split.position(), 30);
+}

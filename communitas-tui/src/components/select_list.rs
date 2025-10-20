@@ -11,17 +11,17 @@
 //! - Filtering support
 
 use crate::messages::{ComponentId, Msg};
-use ratatui::{
-    layout::Rect,
-    style::{Color, Modifier, Style},
-    text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem as RatatuiListItem, ListState},
-};
 use tuirealm::{
+    Component, Frame, MockComponent, State, StateValue,
     command::{Cmd, CmdResult, Direction, Position},
     event::{Event, Key, KeyEvent, KeyModifiers, NoUserEvent},
     props::{AttrValue, Attribute, Props},
-    Component, MockComponent, State, StateValue,
+    ratatui::{
+        layout::Rect,
+        style::{Color, Modifier, Style},
+        text::{Line, Span},
+        widgets::{Block, Borders, List, ListItem as RatatuiListItem, ListState, Paragraph},
+    },
 };
 
 /// A single item in the list
@@ -153,22 +153,21 @@ impl SelectList {
 
     /// Toggle selection of current item (multi-select only)
     pub fn toggle_selection(&mut self) {
-        if self.multi_select {
-            if let Some(item) = self.items.get_mut(self.focused) {
-                item.selected = !item.selected;
-            }
+        if self.multi_select
+            && let Some(item) = self.items.get_mut(self.focused)
+        {
+            item.selected = !item.selected;
         }
     }
 
     /// Select current item (sets selected in multi-select, or just returns in single-select)
     pub fn select_current(&mut self) {
-        if self.multi_select {
-            if let Some(item) = self.items.get_mut(self.focused) {
-                item.selected = true;
-            }
+        if self.multi_select
+            && let Some(item) = self.items.get_mut(self.focused)
+        {
+            item.selected = true;
         }
     }
-
     /// Deselect all items
     pub fn clear_selection(&mut self) {
         for item in &mut self.items {
@@ -250,7 +249,7 @@ impl SelectList {
 }
 
 impl MockComponent for SelectList {
-    fn view(&mut self, frame: &mut ratatui::Frame, area: Rect) {
+    fn view(&mut self, frame: &mut Frame, area: Rect) {
         if self.items.is_empty() {
             // Show empty state
             let empty_text = Span::styled(
@@ -259,7 +258,7 @@ impl MockComponent for SelectList {
                     .fg(Color::DarkGray)
                     .add_modifier(Modifier::DIM),
             );
-            let paragraph = ratatui::widgets::Paragraph::new(Line::from(empty_text)).block(
+            let paragraph = Paragraph::new(Line::from(empty_text)).block(
                 Block::default()
                     .borders(Borders::ALL)
                     .title(self.title.as_str())
@@ -587,7 +586,10 @@ mod tests {
         list.set_items(create_test_items());
 
         list.toggle_selection();
-        assert!(!list.items()[0].selected, "Toggle should not work in single-select mode");
+        assert!(
+            !list.items()[0].selected,
+            "Toggle should not work in single-select mode"
+        );
     }
 
     #[test]

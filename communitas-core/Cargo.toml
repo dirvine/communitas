@@ -69,10 +69,6 @@ pbkdf2 = "0.12"
 sha2 = "0.10"
 url = "2.5"
 
-# Database and storage
-rusqlite = { version = "0.37", features = ["chrono", "serde_json", "uuid", "bundled"] }
-deadpool-sqlite = "0.12.1"
-
 # Utils
 uuid = { version = "1", features = ["v4", "v7", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }

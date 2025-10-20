@@ -10,8 +10,6 @@
 //! 4. Introducer node cold start
 //! 5. Complete discovery flow without DHT
 
-#![cfg(feature = "gossip_overlay")]
-
 use communitas_core::gossip::discovery::{FoafDiscovery, IntroducerConfig};
 use saorsa_gossip_types::PeerId;
 use std::sync::Arc;
@@ -457,7 +455,7 @@ async fn test_foaf_cycle_detection() {
 #[ignore] // TODO: Implement cold_start_discovery with actual transport
 async fn test_introducer_node_connection() {
     // GIVEN: Introducer node address
-    let config = IntroducerConfig {
+    let _config = IntroducerConfig {
         addresses: vec!["127.0.0.1:9000".to_string()],
         timeout_secs: 10,
     };
@@ -476,7 +474,7 @@ async fn test_introducer_node_connection() {
 #[tokio::test]
 async fn test_introducer_config_empty_addresses() {
     // GIVEN: Empty introducer config
-    let config = IntroducerConfig {
+    let _config = IntroducerConfig {
         addresses: vec![],
         timeout_secs: 10,
     };
@@ -496,7 +494,7 @@ async fn test_introducer_config_empty_addresses() {
 #[ignore] // TODO: Implement timeout handling
 async fn test_introducer_node_timeout() {
     // GIVEN: Introducer that doesn't respond
-    let config = IntroducerConfig {
+    let _config = IntroducerConfig {
         addresses: vec!["192.0.2.1:9000".to_string()], // TEST-NET address (should timeout)
         timeout_secs: 1,
     };
@@ -522,7 +520,7 @@ async fn test_introducer_node_timeout() {
 #[ignore] // TODO: Implement full discovery integration
 async fn test_complete_discovery_flow() {
     // GIVEN: Complete network setup
-    let discovery = FoafDiscovery::new();
+    let _discovery = FoafDiscovery::new();
 
     // Scenario:
     // 1. User starts with empty cache (new device)
@@ -551,7 +549,7 @@ async fn test_complete_discovery_flow() {
 #[ignore] // TODO: Implement discovery fallback chain
 async fn test_discovery_fallback_chain() {
     // GIVEN: Discovery with multiple strategies
-    let discovery = FoafDiscovery::new();
+    let _discovery = FoafDiscovery::new();
 
     // Strategy order:
     // 1. Check cache (empty)
@@ -635,6 +633,12 @@ pub struct MockFoafTransport {
     responses: Arc<RwLock<HashMap<[u8; 16], Vec<FoafResponse>>>>,
 }
 
+impl Default for MockFoafTransport {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MockFoafTransport {
     pub fn new() -> Self {
         Self {
@@ -658,26 +662,25 @@ impl MockFoafTransport {
         // Check if this peer knows the target
         let network = self.network.read().await;
 
-        if let Some(peer_knowledge) = network.get(&peer) {
-            if let Some(&target_peer_id) = peer_knowledge.get(&query.target_four_words) {
-                // Found! Send response
-                let response = FoafResponse {
-                    query_id: query.query_id,
-                    peer_id: target_peer_id,
-                    addr_hints: vec!["127.0.0.1:8080".to_string()],
-                    hops: query.hop + 1,
-                };
+        if let Some(peer_knowledge) = network.get(&peer)
+            && let Some(&target_peer_id) = peer_knowledge.get(&query.target_four_words)
+        {
+            // Found! Send response
+            let response = FoafResponse {
+                query_id: query.query_id,
+                peer_id: target_peer_id,
+                addr_hints: vec!["127.0.0.1:8080".to_string()],
+                hops: query.hop + 1,
+            };
 
-                let mut responses = self.responses.write().await;
-                responses
-                    .entry(query.query_id)
-                    .or_insert_with(Vec::new)
-                    .push(response);
+            let mut responses = self.responses.write().await;
+            responses
+                .entry(query.query_id)
+                .or_insert_with(Vec::new)
+                .push(response);
 
-                return;
-            }
+            return;
         }
-
         // Not found at this peer, forward if within hop limit
         if query.hop + 1 < query.max_hops {
             // Check for cycles

@@ -97,10 +97,10 @@ pub async fn find_group_storage_disk(
     let prefix = format!("group_storage:{}:", group_id_hex);
 
     for msg in messages {
-        if let Ok(msg_str) = String::from_utf8(msg) {
-            if let Some(storage_location) = msg_str.strip_prefix(&prefix) {
-                return Ok(storage_location.to_string());
-            }
+        if let Ok(msg_str) = String::from_utf8(msg)
+            && let Some(storage_location) = msg_str.strip_prefix(&prefix)
+        {
+            return Ok(storage_location.to_string());
         }
     }
 
@@ -148,10 +148,10 @@ pub async fn find_user_current_address(
     let prefix = format!("user_address:{}:", user_id);
 
     for msg in messages {
-        if let Ok(msg_str) = String::from_utf8(msg) {
-            if let Some(address) = msg_str.strip_prefix(&prefix) {
-                return Ok(address.to_string());
-            }
+        if let Ok(msg_str) = String::from_utf8(msg)
+            && let Some(address) = msg_str.strip_prefix(&prefix)
+        {
+            return Ok(address.to_string());
         }
     }
 

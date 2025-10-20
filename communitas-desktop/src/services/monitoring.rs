@@ -45,6 +45,12 @@ pub struct MonitoringService {
     start_time: Instant,
 }
 
+impl Default for MonitoringService {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MonitoringService {
     pub fn new() -> Self {
         Self {

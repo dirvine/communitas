@@ -92,21 +92,21 @@ pub struct CoreContext {
 }
 
 impl std::fmt::Debug for CoreContext {
-fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-f.debug_struct("CoreContext")
-.field("profile", &self.profile)
-.field("four_words", &self.four_words)
-.field("display_name", &self.display_name)
-.field("device_name", &self.device_name)
-.field("crdt_manager", &"<active>")
-.field("entity_service", &"<active>")
-.field("message_service", &"<active>")
-.field("listen_address", &self.listen_address)
-.field("connection_identity", &self.connection_identity)
-.field("signing_key", &"<redacted>")
-.field("public_key", &"<key_bytes>")
-.field("doc_replicator", &"<active>")
-        .field("gossip", &self.gossip.as_ref().map(|_| "<active>"))
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CoreContext")
+            .field("profile", &self.profile)
+            .field("four_words", &self.four_words)
+            .field("display_name", &self.display_name)
+            .field("device_name", &self.device_name)
+            .field("crdt_manager", &"<active>")
+            .field("entity_service", &"<active>")
+            .field("message_service", &"<active>")
+            .field("listen_address", &self.listen_address)
+            .field("connection_identity", &self.connection_identity)
+            .field("signing_key", &"<redacted>")
+            .field("public_key", &"<key_bytes>")
+            .field("doc_replicator", &"<active>")
+            .field("gossip", &self.gossip.as_ref().map(|_| "<active>"))
             .field("group_keys", &self.group_keys)
             .finish()
     }
@@ -231,23 +231,23 @@ impl CoreContext {
         );
 
         info!(
-        "CoreContext initialized for user '{}' ({}) with EntityService, MessageService, and DocReplicator",
-        display_name, four_words
+            "CoreContext initialized for user '{}' ({}) with EntityService, MessageService, and DocReplicator",
+            display_name, four_words
         );
 
         Ok(Self {
-        profile,
-        signing_key,
-        public_key,
-        four_words,
-        display_name,
-        device_name,
-        crdt_manager,
-        entity_service,
-        message_service,
-        message_sync,
-        doc_replicator,
-        listen_address: None,
+            profile,
+            signing_key,
+            public_key,
+            four_words,
+            display_name,
+            device_name,
+            crdt_manager,
+            entity_service,
+            message_service,
+            message_sync,
+            doc_replicator,
+            listen_address: None,
             connection_identity: None,
             gossip: None,
             group_keys: HashMap::new(),

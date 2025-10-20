@@ -511,17 +511,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "41e67cd8309bbd06cd603a9e693a784ac2e5d1e955f11286e355089fcab3047c"
 
 [[package]]
-name = "audiopus_sys"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "62314a1546a2064e033665d658e88c620a62904be945f8147e6b16c3db9f8651"
-dependencies = [
- "cmake",
- "log",
- "pkg-config",
-]
-
-[[package]]
 name = "autocfg"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1393,6 +1382,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "communitas-bridge"
+version = "0.1.19"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "axum 0.7.9",
+ "base64 0.22.1",
+ "chrono",
+ "communitas-core",
+ "four-word-networking",
+ "futures",
+ "hex",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "tower 0.4.13",
+ "tower-http 0.5.2",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
 name = "communitas-core"
 version = "0.1.19"
 dependencies = [
@@ -1406,7 +1419,6 @@ dependencies = [
  "chacha20poly1305",
  "chrono",
  "ciborium",
- "deadpool-sqlite",
  "dirs 5.0.1",
  "fips204",
  "flate2",
@@ -1425,7 +1437,6 @@ dependencies = [
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "regex",
- "rusqlite",
  "rustls 0.23.33",
  "saorsa-gossip-coordinator",
  "saorsa-gossip-crdt-sync",
@@ -2051,47 +2062,6 @@ name = "data-encoding"
 version = "2.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2a2330da5de22e8a3cb63252ce2abb30116bf5265e89c0e01bc17015ce30a476"
-
-[[package]]
-name = "deadpool"
-version = "0.12.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0be2b1d1d6ec8d846f05e137292d0b89133caf95ef33695424c09568bdd39b1b"
-dependencies = [
- "deadpool-runtime",
- "lazy_static",
- "num_cpus",
- "tokio",
-]
-
-[[package]]
-name = "deadpool-runtime"
-version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "092966b41edc516079bdf31ec78a2e0588d1d0c08f78b91d8307215928642b2b"
-dependencies = [
- "tokio",
-]
-
-[[package]]
-name = "deadpool-sqlite"
-version = "0.12.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8510000b26f632483a35120c2ce280c29e1e14c2dcb27b5055dbdac276f63f58"
-dependencies = [
- "deadpool",
- "deadpool-sync",
- "rusqlite",
-]
-
-[[package]]
-name = "deadpool-sync"
-version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "524bc3df0d57e98ecd022e21ba31166c2625e7d3e5bcc4510efaeeab4abcab04"
-dependencies = [
- "deadpool-runtime",
-]
 
 [[package]]
 name = "deltae"
@@ -3497,15 +3467,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "hashlink"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7382cf6263419f2d8df38c55d7da83da5c18aef87fc7a7fc1fb1e344edfe14c1"
-dependencies = [
- "hashbrown 0.15.5",
-]
-
-[[package]]
 name = "headers"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4600,7 +4561,7 @@ dependencies = [
  "bitflags 2.9.4",
  "fallible-iterator 0.2.0",
  "fallible-streaming-iterator",
- "hashlink 0.8.4",
+ "hashlink",
  "libsql-ffi",
  "smallvec",
 ]
@@ -4662,17 +4623,6 @@ dependencies = [
  "tracing",
  "uuid",
  "zerocopy 0.7.35",
-]
-
-[[package]]
-name = "libsqlite3-sys"
-version = "0.35.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "133c182a6a2c87864fe97778797e46c7e999672690dc9fa3ee8e241aa4a9c13f"
-dependencies = [
- "cc",
- "pkg-config",
- "vcpkg",
 ]
 
 [[package]]
@@ -5211,16 +5161,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "num_cpus"
-version = "1.17.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "91df4bbde75afed763b708b7eee1e8e7651e02d97f6d5dd763e89367e957b23b"
-dependencies = [
- "hermit-abi",
- "libc",
-]
-
-[[package]]
 name = "num_enum"
 version = "0.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5636,16 +5576,6 @@ name = "option-ext"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
-
-[[package]]
-name = "opus"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6526409b274a7e98e55ff59d96aafd38e6cd34d46b7dbbc32ce126dffcd75e8e"
-dependencies = [
- "audiopus_sys",
- "libc",
-]
 
 [[package]]
 name = "ordered-float"
@@ -7137,23 +7067,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rusqlite"
-version = "0.37.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "165ca6e57b20e1351573e3729b958bc62f0e48025386970b6e4d29e7a7e71f3f"
-dependencies = [
- "bitflags 2.9.4",
- "chrono",
- "fallible-iterator 0.3.0",
- "fallible-streaming-iterator",
- "hashlink 0.10.0",
- "libsqlite3-sys",
- "serde_json",
- "smallvec",
- "uuid",
-]
-
-[[package]]
 name = "rust_decimal"
 version = "1.39.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7634,22 +7547,21 @@ dependencies = [
 
 [[package]]
 name = "saorsa-webrtc-codecs"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2215603fe3c82531fa1a0a3937a44442da9457234c573aef5616e9c1cbcc1dee"
+checksum = "19cf5bf296a7d15b9bda2366283dc703eba68853112673bfbef70c9dd465a25d"
 dependencies = [
  "anyhow",
  "bytes",
  "openh264",
- "opus",
  "thiserror 1.0.69",
 ]
 
 [[package]]
 name = "saorsa-webrtc-core"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3a5fcb65d25be5b4e93eb31aa0f007234d68926ed983b5b7c4c627cf31033ff5"
+checksum = "c24c2adbadafad28e8b4210da0ad01446316bf5a640a0a42db9408bbdfcbb519"
 dependencies = [
  "ant-quic 0.10.3",
  "anyhow",

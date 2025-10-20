@@ -4,7 +4,7 @@ members = [
     "communitas-core",
     "communitas-desktop",
     "communitas-headless",  # Re-enabled for dual-stack IPv4/IPv6 support
-    # "communitas-bridge",  # Still excluded
+    "communitas-bridge",  # Enabled for browser testing
     "communitas-tui",
 ]
 

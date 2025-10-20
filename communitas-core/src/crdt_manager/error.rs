@@ -7,9 +7,17 @@ use thiserror::Error;
 /// Errors that can occur during CRDT operations
 #[derive(Error, Debug)]
 pub enum CrdtError {
-    /// Database connection or query failed
-    #[error("Database error: {0}")]
-    Database(#[from] rusqlite::Error),
+    /// Filesystem operation failed
+    #[error("Filesystem error: {0}")]
+    FileSystem(String),
+
+    /// Failed to serialize data
+    #[error("Serialization error: {0}")]
+    Serialization(String),
+
+    /// Failed to deserialize data
+    #[error("Deserialization error: {0}")]
+    Deserialization(String),
 
     /// Failed to encode or decode Yrs state
     #[error("CRDT encoding/decoding error: {0}")]
@@ -35,8 +43,8 @@ pub enum CrdtError {
     #[error("State vector mismatch: expected {expected}, got {actual}")]
     StateVectorMismatch { expected: String, actual: String },
 
-    /// Materialization to SQL failed
-    #[error("SQL materialization failed for {entity_type}/{entity_id}: {reason}")]
+    /// Materialization failed (for backwards compatibility, though less relevant now)
+    #[error("Materialization failed for {entity_type}/{entity_id}: {reason}")]
     MaterializationFailed {
         entity_type: String,
         entity_id: String,
@@ -55,17 +63,9 @@ pub enum CrdtError {
         actual: String,
     },
 
-    /// Schema initialization failed
-    #[error("Schema initialization failed: {0}")]
-    SchemaInit(String),
-
     /// Generic operation error
     #[error("Operation error: {0}")]
     Operation(String),
-
-    /// Connection pool error
-    #[error("Connection pool error: {0}")]
-    Pool(String),
 }
 
 /// Result type for CRDT operations
@@ -112,19 +112,6 @@ impl CrdtError {
     }
 }
 
-// Implement From for deadpool-sqlite error
-impl From<deadpool_sqlite::InteractError> for CrdtError {
-    fn from(err: deadpool_sqlite::InteractError) -> Self {
-        Self::Pool(err.to_string())
-    }
-}
-
-impl From<deadpool_sqlite::PoolError> for CrdtError {
-    fn from(err: deadpool_sqlite::PoolError) -> Self {
-        Self::Pool(err.to_string())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -143,10 +130,16 @@ mod tests {
 
     #[test]
     fn test_materialization_error() {
-        let err = CrdtError::materialization_failed("channel", "ch-1", "SQL constraint violation");
+        let err = CrdtError::materialization_failed("channel", "ch-1", "Validation failed");
         assert_eq!(
             err.to_string(),
-            "SQL materialization failed for channel/ch-1: SQL constraint violation"
+            "Materialization failed for channel/ch-1: Validation failed"
         );
+    }
+
+    #[test]
+    fn test_filesystem_error() {
+        let err = CrdtError::FileSystem("Failed to write file".to_string());
+        assert_eq!(err.to_string(), "Filesystem error: Failed to write file");
     }
 }

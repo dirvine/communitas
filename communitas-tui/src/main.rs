@@ -7,8 +7,14 @@
 // Security: CLI tools may use unwrap in controlled contexts
 // Core library crates maintain strict no-unwrap policies
 
+// Allow dead code, unused imports, and unused variables in TUI binary - many components are scaffolding for future implementation
+#![allow(dead_code)]
+#![allow(unused_imports)]
+#![allow(unused_variables)]
+
 mod app;
 mod backend;
+mod components;
 mod control_api;
 mod handlers;
 mod messages;

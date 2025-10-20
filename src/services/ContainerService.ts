@@ -76,7 +76,6 @@ export class ContainerService {
   static async getObject(oidHex: string): Promise<Uint8Array> {
     console.warn('⚠️  ContainerService.getObject() is deprecated.');
     throw new Error('DEPRECATED: container_get_object removed. Use Yrs CRDT document commands instead.');
-    }
   }
 
   /**

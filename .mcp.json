@@ -1,16 +1,9 @@
 {
   "mcpServers": {
-    "applescript": {
-      "command": "npx",
-      "args": ["@peakmojo/applescript-mcp"],
-      "env": {}
-    },
     "chrome-devtools": {
       "command": "npx",
-      "args": ["chrome-devtools-mcp@latest"],
-      "env": {
-        "CHROME_DEBUG_PORT": "9222"
-      }
+      "args": ["chrome-devtools-mcp@latest"]
     }
   }
 }
+

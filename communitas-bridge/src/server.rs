@@ -4,7 +4,7 @@ use crate::{handlers, state::BridgeState};
 use anyhow::Result;
 use axum::{
     Router,
-    routing::{get, post},
+    routing::{delete, get, post, put},
 };
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -72,6 +72,44 @@ fn create_router(state: Arc<BridgeState>) -> Router {
         .route(
             "/api/network/disconnect",
             post(handlers::disconnect_from_peer),
+        )
+        // Website publishing
+        .route(
+            "/api/entities/:id/website",
+            post(handlers::create_entity_website),
+        )
+        .route(
+            "/api/entities/:id/website",
+            get(handlers::get_entity_website),
+        )
+        .route(
+            "/api/entities/:id/website",
+            put(handlers::update_entity_website),
+        )
+        .route(
+            "/api/entities/:id/website",
+            delete(handlers::delete_entity_website),
+        )
+        // Virtual disk storage
+        .route(
+            "/api/entities/:id/storage/:disk_type/files",
+            post(handlers::upload_file),
+        )
+        .route(
+            "/api/entities/:id/storage/:disk_type/files",
+            get(handlers::list_files),
+        )
+        .route(
+            "/api/entities/:id/storage/:disk_type/files/*file_path",
+            get(handlers::download_file),
+        )
+        .route(
+            "/api/entities/:id/storage/:disk_type/files/*file_path",
+            delete(handlers::delete_file),
+        )
+        .route(
+            "/api/entities/:id/storage/:disk_type/stats",
+            get(handlers::get_disk_stats),
         )
         // State
         .with_state(state)

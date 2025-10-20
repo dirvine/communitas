@@ -24,7 +24,7 @@ communitas-core = { version = "0.1.19", path = "../communitas-core" }
 # Removed: saorsa-core - using four-word-networking and communitas-core instead
 
 # TUI framework
-ratatui = "0.29"
+ratatui = "0.30.0-alpha.5"
 crossterm = { version = "0.28", features = ["event-stream"] }
 
 # Component framework for interactive UIs

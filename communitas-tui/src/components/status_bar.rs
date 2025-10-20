@@ -9,17 +9,17 @@
 //! - Error messages (in red)
 
 use crate::messages::{Msg, NetworkStatus};
-use ratatui::{
-    layout::{Alignment, Rect},
-    style::{Color, Modifier, Style},
-    text::{Line, Span},
-    widgets::{Block, Borders, Paragraph},
-};
 use tuirealm::{
+    Component, Frame, MockComponent, State,
     command::{Cmd, CmdResult},
     event::{Event, NoUserEvent},
     props::{AttrValue, Attribute, Props},
-    Component, MockComponent, State,
+    ratatui::{
+        layout::{Alignment, Rect},
+        style::{Color, Modifier, Style},
+        text::{Line, Span},
+        widgets::{Block, Borders, Paragraph},
+    },
 };
 
 /// StatusBar component properties
@@ -92,7 +92,7 @@ impl StatusBar {
 }
 
 impl MockComponent for StatusBar {
-    fn view(&mut self, frame: &mut ratatui::Frame, area: Rect) {
+    fn view(&mut self, frame: &mut Frame, area: Rect) {
         // Build the status bar content
         let mut spans = Vec::new();
 
@@ -100,9 +100,7 @@ impl MockComponent for StatusBar {
         if let Some(ref error) = self.error_message {
             spans.push(Span::styled(
                 format!("⚠ {} ", error),
-                Style::default()
-                    .fg(Color::Red)
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
             ));
         } else {
             spans.push(Span::styled(
@@ -133,13 +131,11 @@ impl MockComponent for StatusBar {
         }
 
         let line = Line::from(spans);
-        let paragraph = Paragraph::new(line)
-            .alignment(Alignment::Left)
-            .block(
-                Block::default()
-                    .borders(Borders::TOP)
-                    .border_style(Style::default().fg(Color::DarkGray)),
-            );
+        let paragraph = Paragraph::new(line).alignment(Alignment::Left).block(
+            Block::default()
+                .borders(Borders::TOP)
+                .border_style(Style::default().fg(Color::DarkGray)),
+        );
 
         frame.render_widget(paragraph, area);
     }
@@ -173,6 +169,7 @@ impl Component<Msg, NoUserEvent> for StatusBar {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tuirealm::event::{Key, KeyEvent, KeyModifiers};
 
     #[test]
     fn test_status_bar_creation() {
@@ -194,7 +191,10 @@ mod tests {
         status_bar.set_status("Processing...");
 
         assert_eq!(status_bar.status_message, "Processing...");
-        assert!(status_bar.error_message.is_none(), "Setting status should clear error");
+        assert!(
+            status_bar.error_message.is_none(),
+            "Setting status should clear error"
+        );
     }
 
     #[test]
@@ -358,10 +358,10 @@ mod tests {
     fn test_component_on_event() {
         let mut status_bar = StatusBar::new();
 
-        let result = status_bar.on(Event::Keyboard(KeyEvent {
-            code: Key::Char('q'),
-            modifiers: KeyModifiers::NONE,
-        }));
+        let result = status_bar.on(Event::Keyboard(KeyEvent::new(
+            Key::Char('q'),
+            KeyModifiers::NONE,
+        )));
 
         assert_eq!(result, None, "StatusBar should not handle events");
     }

@@ -23,11 +23,7 @@ pub fn render(f: &mut Frame, area: Rect, state: &AppState) {
         _ => Color::Gray,
     };
 
-    let status_text = state
-        .status_message
-        .as_ref()
-        .map(|s| s.as_str())
-        .unwrap_or("");
+    let status_text = state.status_message.as_deref().unwrap_or("");
 
     let status_line = vec![
         Span::raw("Identity: "),

@@ -14,12 +14,6 @@ export interface Message {
   group_id?: string
 }
 
-export interface Group {
-  id: string
-  name: string
-  members: string[]
-}
-
 export interface UserPresence {
   user_id: string
   status: 'online' | 'away' | 'busy' | 'offline'
@@ -62,6 +56,9 @@ export interface IdentityGenerationParams {
 
 // Organization hierarchy types
 export * from './organization'
+
+// Collaboration types (Group, Organization, etc.)
+export { Group } from './collaboration'
 
 // CRDT types
 export * from './crdt'

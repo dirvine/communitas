@@ -299,15 +299,9 @@ fn default_config_with_storage(base_dir: PathBuf) -> Config {
             listen_addrs: vec![
                 // IPv4 wildcard address with random port - listens on all IPv4 interfaces
                 // Port 0 tells OS to assign a random available port >1024 (no admin needed)
-                std::net::SocketAddr::new(
-                    std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED),
-                    0,
-                ),
+                std::net::SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED), 0),
                 // IPv6 wildcard address with random port - listens on all IPv6 interfaces
-                std::net::SocketAddr::new(
-                    std::net::IpAddr::V6(std::net::Ipv6Addr::UNSPECIFIED),
-                    0,
-                ),
+                std::net::SocketAddr::new(std::net::IpAddr::V6(std::net::Ipv6Addr::UNSPECIFIED), 0),
             ],
             enable_ipv6: true,
             enable_webrtc: false,
@@ -1268,12 +1262,12 @@ async fn run_node(args: Args) -> Result<()> {
             // Replace all addresses with env override
             listen_addrs = vec![sa];
         }
-    } else if let Ok(v) = std::env::var("COMMUNITAS_QUIC_PORT") {
-        if let Ok(p) = v.parse::<u16>() {
-            // Update port for all addresses
-            for addr in &mut listen_addrs {
-                addr.set_port(p);
-            }
+    } else if let Ok(v) = std::env::var("COMMUNITAS_QUIC_PORT")
+        && let Ok(p) = v.parse::<u16>()
+    {
+        // Update port for all addresses
+        for addr in &mut listen_addrs {
+            addr.set_port(p);
         }
     }
 
@@ -1312,7 +1306,10 @@ async fn run_node(args: Args) -> Result<()> {
         if addr.ip().is_unspecified() {
             // Wildcard address (0.0.0.0 or ::) - expand to all local interfaces
             // Add localhost
-            self_addrs.insert(SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)), addr.port()));
+            self_addrs.insert(SocketAddr::new(
+                std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)),
+                addr.port(),
+            ));
 
             // Get all network interface addresses and add them
             if let Ok(interfaces) = local_ip_address::list_afinet_netifas() {
@@ -1334,7 +1331,10 @@ async fn run_node(args: Args) -> Result<()> {
             if let Ok(Some(socket_addr)) = canonical_seed_addr(addr_str) {
                 let is_self = self_addrs.contains(&socket_addr);
                 if is_self {
-                    info!("Filtering out self-address: {} (resolved to {})", addr_str, socket_addr);
+                    info!(
+                        "Filtering out self-address: {} (resolved to {})",
+                        addr_str, socket_addr
+                    );
                 }
                 !is_self
             } else {
@@ -1523,7 +1523,7 @@ async fn start_quic_delta_server(
     let rustls_srv = RawPublicKeyConfigBuilder::new()
         .with_server_key(sk)
         .enable_certificate_type_extensions()
-        .allow_any_key()  // Accept connections from any client
+        .allow_any_key() // Accept connections from any client
         .build_server_config()
         .map_err(|e| anyhow::anyhow!("raw pk server config: {e}"))?;
 
@@ -1540,9 +1540,13 @@ async fn start_quic_delta_server(
         .map_err(|e| anyhow::anyhow!("endpoint server bind: {e}"))?;
 
     // Get the actual bound address (important when binding to port 0 for random assignment)
-    let actual_addr = endpoint.local_addr()
+    let actual_addr = endpoint
+        .local_addr()
         .map_err(|e| anyhow::anyhow!("get local addr: {e}"))?;
-    info!("QUIC delta server listening on {} (actual bound address: {})", listen, actual_addr);
+    info!(
+        "QUIC delta server listening on {} (actual bound address: {})",
+        listen, actual_addr
+    );
 
     // Convert to four-word address for easy sharing
     match four_word_networking::FourWordAdaptiveEncoder::new() {
@@ -1676,7 +1680,7 @@ mod tests {
 
         let storage_hint = resolve_storage_hint(&args, &instance).unwrap();
         let storage_path = ensure_absolute(storage_hint.path()).unwrap();
-        assert!(storage_path.starts_with(&data_dir.join("communitas")));
+        assert!(storage_path.starts_with(data_dir.join("communitas")));
 
         unsafe {
             env::remove_var("COMMUNITAS_CONFIG_DIR");
@@ -1745,11 +1749,11 @@ mod tests {
 
         assert!(ipv4.is_ipv4());
         assert!(ipv6.is_ipv6());
-        assert_eq!(ipv4.port(), 0);  // Port 0 = OS assigns random port
+        assert_eq!(ipv4.port(), 0); // Port 0 = OS assigns random port
         assert_eq!(ipv6.port(), 0);
 
         // Test that we can create a vector of both
-        let listen_addrs = vec![ipv4, ipv6];
+        let listen_addrs = [ipv4, ipv6];
         assert_eq!(listen_addrs.len(), 2);
         assert!(listen_addrs[0].is_ipv4());
         assert!(listen_addrs[1].is_ipv6());

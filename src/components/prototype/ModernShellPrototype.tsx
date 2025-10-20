@@ -3895,7 +3895,7 @@ export const ModernShellPrototypeScreen: React.FC = () => {
                 setEntityDialogMode({ open: true, type: 'group', scope: 'organization' })
               }}
             >
-              <ListItemIcon><Group fontSize="small" /></ListItemIcon>
+              <ListItemIcon><GroupIcon fontSize="small" /></ListItemIcon>
               <ListItemText>Create Group</ListItemText>
             </MenuItem>
             <MenuItem
@@ -3926,7 +3926,7 @@ export const ModernShellPrototypeScreen: React.FC = () => {
                 setEntityDialogMode({ open: true, type: 'group', scope: 'personal' })
               }}
             >
-              <ListItemIcon><Group fontSize="small" /></ListItemIcon>
+              <ListItemIcon><GroupIcon fontSize="small" /></ListItemIcon>
               <ListItemText>Create Group</ListItemText>
             </MenuItem>
           </>
@@ -3948,7 +3948,7 @@ export const ModernShellPrototypeScreen: React.FC = () => {
                 setEntityDialogMode({ open: true, type: 'group', scope: 'personal' })
               }}
             >
-              <ListItemIcon><Group fontSize="small" /></ListItemIcon>
+              <ListItemIcon><GroupIcon fontSize="small" /></ListItemIcon>
               <ListItemText>Create Group</ListItemText>
             </MenuItem>
             <MenuItem

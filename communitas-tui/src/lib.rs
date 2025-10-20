@@ -11,11 +11,9 @@ pub mod state;
 pub mod ui;
 
 // Re-export commonly used types
-pub use backend::{FocusChange, FocusManager};
 pub use components::{
-    Avatar, AvatarShape, AvatarSize, AvatarState, Column, ColumnWidth, FormInput, InputMode,
-    ListItem, Message, MessageList, Modal, ModalSize, ModalType, SelectList, SplitLayout,
-    StatusBar,
+    ComponentArea, ContextMenu, DoubleClickDetector, DragState, EnhancedMouseEvent, HoverState,
+    MenuAction, MenuContext, ScrollState, classify_mouse_event,
 };
 pub use messages::{ComponentId, Msg, UserEvent};
 pub use model::Model;

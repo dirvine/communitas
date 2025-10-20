@@ -1339,7 +1339,7 @@ dependencies = [
 
 [[package]]
 name = "communitas"
-version = "0.1.19"
+version = "0.1.20"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -1383,7 +1383,7 @@ dependencies = [
 
 [[package]]
 name = "communitas-bridge"
-version = "0.1.19"
+version = "0.1.20"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1407,7 +1407,7 @@ dependencies = [
 
 [[package]]
 name = "communitas-core"
-version = "0.1.19"
+version = "0.1.20"
 dependencies = [
  "anyhow",
  "argon2",
@@ -1472,7 +1472,7 @@ dependencies = [
 
 [[package]]
 name = "communitas-headless"
-version = "0.1.19"
+version = "0.1.20"
 dependencies = [
  "ant-quic 0.8.17",
  "anyhow",
@@ -1504,7 +1504,7 @@ dependencies = [
 
 [[package]]
 name = "communitas-tui"
-version = "0.1.19"
+version = "0.1.20"
 dependencies = [
  "anyhow",
  "axum 0.7.9",

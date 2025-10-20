@@ -1,11 +1,12 @@
 pub mod channels;
 pub mod core;
 pub mod events;
-pub mod focus_manager;
 pub mod issues;
 pub mod messages;
+pub mod offline_handling;
 pub mod offline_queue;
 pub mod projects;
 
 pub use core::Backend;
-pub use focus_manager::{FocusChange, FocusManager};
+pub use events::{BackendEvent, EventFilter, Subscription};
+pub use offline_handling::{EntityOrQueued, MemberOperationResult, MessageOrQueued};

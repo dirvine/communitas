@@ -221,16 +221,15 @@ impl NetworkConfig {
             toml::from_str(&contents).map_err(NetworkConfigError::Toml)?;
 
         // Apply environment-specific overrides
-        if let Ok(env) = std::env::var("COMMUNITAS_ENV") {
-            if let Some(env_config) = config.environments.get(&env) {
-                if let Some(bootstrap) = &env_config.bootstrap {
-                    config.bootstrap.nodes = bootstrap.nodes.clone();
-                    info!(
-                        "Applied {} environment bootstrap nodes: {:?}",
-                        env, bootstrap.nodes
-                    );
-                }
-            }
+        if let Ok(env) = std::env::var("COMMUNITAS_ENV")
+            && let Some(env_config) = config.environments.get(&env)
+            && let Some(bootstrap) = &env_config.bootstrap
+        {
+            config.bootstrap.nodes = bootstrap.nodes.clone();
+            info!(
+                "Applied {} environment bootstrap nodes: {:?}",
+                env, bootstrap.nodes
+            );
         }
 
         // Validate configuration

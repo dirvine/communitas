@@ -72,7 +72,12 @@ impl Backend {
         // Send message with reply_to_id via new MessageService
         let message = ctx
             .message_service
-            .send_message(entity_id.clone(), entity_type, content, Some(reply_to_id.clone()))
+            .send_message(
+                entity_id.clone(),
+                entity_type,
+                content,
+                Some(reply_to_id.clone()),
+            )
             .await
             .map_err(|e| anyhow::anyhow!("Failed to send reply: {}", e))?;
 

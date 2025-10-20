@@ -68,7 +68,10 @@ pub enum SyncResult {
     /// Operation failed with error
     Failed { operation_id: String, error: String },
     /// Operation skipped (e.g., duplicate)
-    Skipped { operation_id: String, reason: String },
+    Skipped {
+        operation_id: String,
+        reason: String,
+    },
 }
 
 /// Sync progress update
@@ -137,7 +140,10 @@ impl OfflineQueue {
         let operation_id = entry.id.clone();
 
         // Find insertion position based on priority (higher priority first)
-        let insert_pos = self.queue.iter().position(|e| e.priority < priority)
+        let insert_pos = self
+            .queue
+            .iter()
+            .position(|e| e.priority < priority)
             .unwrap_or(self.queue.len());
 
         self.queue.insert(insert_pos, entry);
@@ -196,25 +202,57 @@ impl OfflineQueue {
         self.queue.iter().any(|entry| {
             match (&entry.operation, operation) {
                 // Same entity creation
-                (QueuedOperation::CreateEntity { name: n1, entity_type: t1, .. },
-                 QueuedOperation::CreateEntity { name: n2, entity_type: t2, .. }) => {
-                    n1 == n2 && t1 == t2
-                }
+                (
+                    QueuedOperation::CreateEntity {
+                        name: n1,
+                        entity_type: t1,
+                        ..
+                    },
+                    QueuedOperation::CreateEntity {
+                        name: n2,
+                        entity_type: t2,
+                        ..
+                    },
+                ) => n1 == n2 && t1 == t2,
                 // Same message to same entity
-                (QueuedOperation::SendMessage { entity_id: e1, text: t1, .. },
-                 QueuedOperation::SendMessage { entity_id: e2, text: t2, .. }) => {
-                    e1 == e2 && t1 == t2
-                }
+                (
+                    QueuedOperation::SendMessage {
+                        entity_id: e1,
+                        text: t1,
+                        ..
+                    },
+                    QueuedOperation::SendMessage {
+                        entity_id: e2,
+                        text: t2,
+                        ..
+                    },
+                ) => e1 == e2 && t1 == t2,
                 // Same member addition
-                (QueuedOperation::AddMember { entity_id: e1, member_id: m1, .. },
-                 QueuedOperation::AddMember { entity_id: e2, member_id: m2, .. }) => {
-                    e1 == e2 && m1 == m2
-                }
+                (
+                    QueuedOperation::AddMember {
+                        entity_id: e1,
+                        member_id: m1,
+                        ..
+                    },
+                    QueuedOperation::AddMember {
+                        entity_id: e2,
+                        member_id: m2,
+                        ..
+                    },
+                ) => e1 == e2 && m1 == m2,
                 // Same member removal
-                (QueuedOperation::RemoveMember { entity_id: e1, member_id: m1, .. },
-                 QueuedOperation::RemoveMember { entity_id: e2, member_id: m2, .. }) => {
-                    e1 == e2 && m1 == m2
-                }
+                (
+                    QueuedOperation::RemoveMember {
+                        entity_id: e1,
+                        member_id: m1,
+                        ..
+                    },
+                    QueuedOperation::RemoveMember {
+                        entity_id: e2,
+                        member_id: m2,
+                        ..
+                    },
+                ) => e1 == e2 && m1 == m2,
                 _ => false,
             }
         })
@@ -255,7 +293,9 @@ mod tests {
     #[tokio::test]
     async fn test_enqueue_and_get() {
         let temp_dir = TempDir::new().unwrap();
-        let mut queue = OfflineQueue::new(temp_dir.path().to_path_buf()).await.unwrap();
+        let mut queue = OfflineQueue::new(temp_dir.path().to_path_buf())
+            .await
+            .unwrap();
 
         let op = QueuedOperation::CreateEntity {
             name: "Test".to_string(),
@@ -274,27 +314,35 @@ mod tests {
     #[tokio::test]
     async fn test_priority_ordering() {
         let temp_dir = TempDir::new().unwrap();
-        let mut queue = OfflineQueue::new(temp_dir.path().to_path_buf()).await.unwrap();
+        let mut queue = OfflineQueue::new(temp_dir.path().to_path_buf())
+            .await
+            .unwrap();
 
         // Add low priority
-        queue.enqueue(
-            QueuedOperation::CreateEntity {
-                name: "Low".to_string(),
-                entity_type: EntityType::Channel,
-                members: vec![],
-            },
-            0,
-        ).await.unwrap();
+        queue
+            .enqueue(
+                QueuedOperation::CreateEntity {
+                    name: "Low".to_string(),
+                    entity_type: EntityType::Channel,
+                    members: vec![],
+                },
+                0,
+            )
+            .await
+            .unwrap();
 
         // Add high priority (should be first)
-        queue.enqueue(
-            QueuedOperation::CreateEntity {
-                name: "High".to_string(),
-                entity_type: EntityType::Channel,
-                members: vec![],
-            },
-            10,
-        ).await.unwrap();
+        queue
+            .enqueue(
+                QueuedOperation::CreateEntity {
+                    name: "High".to_string(),
+                    entity_type: EntityType::Channel,
+                    members: vec![],
+                },
+                10,
+            )
+            .await
+            .unwrap();
 
         let all_ops = queue.get_all();
         assert_eq!(all_ops.len(), 2);
@@ -315,14 +363,17 @@ mod tests {
         let op_id = {
             let mut queue = OfflineQueue::new(data_dir.clone()).await.unwrap();
 
-            queue.enqueue(
-                QueuedOperation::CreateEntity {
-                    name: "Persistent".to_string(),
-                    entity_type: EntityType::Channel,
-                    members: vec![],
-                },
-                0,
-            ).await.unwrap()
+            queue
+                .enqueue(
+                    QueuedOperation::CreateEntity {
+                        name: "Persistent".to_string(),
+                        entity_type: EntityType::Channel,
+                        members: vec![],
+                    },
+                    0,
+                )
+                .await
+                .unwrap()
         };
 
         // Create new queue instance - should load from disk
@@ -335,20 +386,25 @@ mod tests {
     #[tokio::test]
     async fn test_size_limit() {
         let temp_dir = TempDir::new().unwrap();
-        let mut queue = OfflineQueue::new(temp_dir.path().to_path_buf()).await.unwrap();
+        let mut queue = OfflineQueue::new(temp_dir.path().to_path_buf())
+            .await
+            .unwrap();
 
         queue.set_max_size(3);
 
         // Add 5 operations
         for i in 0..5 {
-            queue.enqueue(
-                QueuedOperation::SendMessage {
-                    entity_id: "test".to_string(),
-                    entity_type: EntityType::Channel,
-                    text: format!("Message {}", i),
-                },
-                0,
-            ).await.unwrap();
+            queue
+                .enqueue(
+                    QueuedOperation::SendMessage {
+                        entity_id: "test".to_string(),
+                        entity_type: EntityType::Channel,
+                        text: format!("Message {}", i),
+                    },
+                    0,
+                )
+                .await
+                .unwrap();
         }
 
         // Should only have last 3
@@ -363,7 +419,9 @@ mod tests {
     #[tokio::test]
     async fn test_duplicate_detection() {
         let temp_dir = TempDir::new().unwrap();
-        let mut queue = OfflineQueue::new(temp_dir.path().to_path_buf()).await.unwrap();
+        let mut queue = OfflineQueue::new(temp_dir.path().to_path_buf())
+            .await
+            .unwrap();
 
         let op = QueuedOperation::CreateEntity {
             name: "Duplicate".to_string(),

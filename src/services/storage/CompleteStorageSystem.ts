@@ -4,7 +4,7 @@ import { YjsMarkdownEditor } from './yjsCollaboration'
 import { MarkdownWebPublisher, WebBrowser } from './markdownPublisher'
 import { DHTStorage } from './dhtStorage'
 import { ReedSolomonEncoder } from './reedSolomon'
-import { NetworkIdentity, Organization, Group, PersonalUser, Project } from '../../types/collaboration'
+import { NetworkIdentity, Organization, PersonalUser, Project } from '../../types/collaboration'
 import { generateFourWordIdentity } from '../../utils/identity'
 
 export interface StorageSystemConfig {

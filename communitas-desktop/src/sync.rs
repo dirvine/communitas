@@ -117,7 +117,7 @@ pub async fn sync_stop_tip_watcher(
 }
 
 /// Manual delta fetch from a specific peer over QUIC
-/// 
+///
 /// **DEPRECATED:** This command is deprecated and will be removed in a future version.
 /// The system now uses automatic anti-entropy synchronization via GossipContext.
 /// Manual sync is no longer needed - the anti-entropy manager handles all sync automatically.
@@ -135,7 +135,8 @@ pub async fn sync_fetch_deltas(
     info!("[DEPRECATED] Manual delta fetch from peer: {}", peer_addr);
 
     // Try to resolve as four-word address first within guard scope
-    let result = {
+
+    {
         let guard = gossip_state.read().await;
         let gossip_ctx = guard
             .as_ref()
@@ -182,9 +183,7 @@ pub async fn sync_fetch_deltas(
                 Err(format!("Failed to resolve peer: {}", e))
             }
         }
-    };
-
-    result
+    }
 }
 
 /// Get current sync status

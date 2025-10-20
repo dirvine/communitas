@@ -44,6 +44,32 @@ Communitas TUI provides a comprehensive text-based interface that mirrors all fu
 - ⏳ CRDT sync visualization
 - ⏳ Search and filtering
 
+## Offline Capabilities
+
+Communitas TUI features **automatic offline handling** - operations work transparently whether online or offline:
+
+### ✅ **Transparent Operation Queueing**
+- Operations execute immediately when network is available
+- Operations queue automatically when network is unavailable
+- No manual "offline mode" - everything is automatic
+
+### ✅ **Persistent Queue**
+- Queued operations survive app restarts
+- Operations persist across device shutdowns
+- Automatic sync when network returns
+
+### ✅ **Smart Error Handling**
+- Network errors → automatic queueing
+- Validation errors → immediate feedback
+- Duplicate detection during sync
+
+### 📚 **Documentation**
+See [docs/architecture/offline-handling.md](../../docs/architecture/offline-handling.md) for comprehensive details on:
+- Architecture and design philosophy
+- Smart operations API
+- Testing strategies
+- Performance considerations
+
 ## Installation
 
 ### Prerequisites

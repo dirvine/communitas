@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { browserVault } from '../services/BrowserVault';
+import { isTauriApp } from '../utils/tauri';
 
-// Tauri API wrapper with strict error handling
-// Authentication MUST go through Rust backend for keychain integration
+// Tauri API wrapper with browser fallback support
 let invoke: any = async (cmd: string, args?: any) => {
   // Try to get Tauri from window first
   if (typeof window !== 'undefined' && (window as any).__TAURI__?.core?.invoke) {
@@ -24,9 +25,9 @@ let invoke: any = async (cmd: string, args?: any) => {
     console.log(`✅ Tauri command succeeded: ${cmd}`);
     return result;
   } catch (error) {
-    console.error(`❌ CRITICAL: Tauri not available or command failed: ${cmd}`, error);
-    // Authentication cannot proceed without Tauri backend
-    throw new Error(`CRITICAL: Tauri backend required for authentication. Command '${cmd}' failed. This application must run in Tauri mode for secure authentication.`);
+    console.error(`❌ Tauri not available for command: ${cmd}`, error);
+    // In browser mode, some commands can be handled locally
+    throw new Error(`Tauri command '${cmd}' not available in browser mode`);
   }
 };
 
@@ -355,61 +356,98 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       setAuthState(prev => ({ ...prev, loading: true, error: null }));
 
-      // Generate four words if not provided
       let fourWordAddress = options?.fourWords || '';
-      if (!fourWordAddress) {
-        fourWordAddress = await invoke('generate_four_word_identity');
-      }
-
-      // Create vault in Rust backend
       const password = options?.password || fourWordAddress;
-      await invoke('auth_create_vault', {
-        fourWords: fourWordAddress,
-        password,
-        displayName: name,
-      });
 
-      // Auto-login with new vault
-      const session = await invoke('auth_login', {
-        fourWords: fourWordAddress,
-        password
-      }) as SessionInfo;
+      if (!isTauriApp()) {
+        // Browser mode: Use BrowserVault
+        console.log('🌐 Browser mode: Creating vault with BrowserVault');
 
-      const newIdentity: UserIdentity = {
-        id: session.session_id,
-        name,
-        fourWordAddress,
-        publicKey: 'from-vault',
-        profile: {},
-        permissions: [],
-        createdAt: new Date().toISOString(),
-        lastActive: new Date().toISOString(),
-      };
+        if (!fourWordAddress) {
+          throw new Error('Four-word identity required in browser mode');
+        }
 
-      setAuthState({
-        isAuthenticated: true,
-        user: newIdentity,
-        loading: false,
-        error: null,
-      });
-
-      console.log('✅ Identity created:', newIdentity.fourWordAddress);
-
-      // Initialize CoreContext with P2P networking (non-blocking)
-      try {
-        console.log('🌐 Initializing CoreContext with networking...');
-        await invoke('core_initialize', {
-          fourWords: newIdentity.fourWordAddress,
-          displayName: name,
-          deviceName: navigator.platform || 'Desktop',
-          deviceType: 'Desktop'
+        await browserVault.createVault({
+          fourWords: fourWordAddress,
+          password,
+          displayName: name
         });
-        console.log('✅ CoreContext initialized with P2P networking');
-      } catch (err) {
-        console.warn('⚠️ CoreContext initialization failed (app will work in local mode):', err);
-      }
 
-      return newIdentity;
+        const newIdentity: UserIdentity = {
+          id: crypto.randomUUID(),
+          name,
+          fourWordAddress,
+          publicKey: 'browser-generated',
+          profile: {},
+          permissions: [],
+          createdAt: new Date().toISOString(),
+          lastActive: new Date().toISOString(),
+        };
+
+        setAuthState({
+          isAuthenticated: true,
+          user: newIdentity,
+          loading: false,
+          error: null,
+        });
+
+        console.log('✅ Browser vault created successfully:', newIdentity.fourWordAddress);
+        return newIdentity;
+      } else {
+        // Tauri mode: Use Rust backend
+        if (!fourWordAddress) {
+          fourWordAddress = await invoke('generate_four_word_identity');
+        }
+
+        // Create vault in Rust backend
+        await invoke('auth_create_vault', {
+          fourWords: fourWordAddress,
+          password,
+          displayName: name,
+        });
+
+        // Auto-login with new vault
+        const session = await invoke('auth_login', {
+          fourWords: fourWordAddress,
+          password
+        }) as SessionInfo;
+
+        const newIdentity: UserIdentity = {
+          id: session.session_id,
+          name,
+          fourWordAddress,
+          publicKey: 'from-vault',
+          profile: {},
+          permissions: [],
+          createdAt: new Date().toISOString(),
+          lastActive: new Date().toISOString(),
+        };
+
+        setAuthState({
+          isAuthenticated: true,
+          user: newIdentity,
+          loading: false,
+          error: null,
+        });
+
+        console.log('✅ Identity created:', newIdentity.fourWordAddress);
+
+        // Initialize CoreContext with P2P networking (non-blocking)
+        try {
+          console.log('🌐 Initializing CoreContext with networking...');
+          await invoke('core_initialize', {
+            fourWords: newIdentity.fourWordAddress,
+            displayName: name,
+            deviceName: navigator.platform || 'Desktop',
+            deviceType: 'Desktop'
+          });
+          console.log('✅ CoreContext initialized with P2P networking');
+        } catch (err) {
+          console.warn('⚠️ CoreContext initialization failed (app will work in local mode):', err);
+        }
+
+        return newIdentity;
+      }
     } catch (error) {
       console.error('Identity creation failed:', error);
       setAuthState(prev => ({

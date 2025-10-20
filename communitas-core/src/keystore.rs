@@ -79,7 +79,7 @@ impl Keystore {
         let mut sk_b64 = entry(&format!("mldsa_sk:{}", id_hex))?
             .get_password()
             .map_err(|e| format!("load sk failed: {}", e))?;
-        
+
         let pk = base64::engine::general_purpose::STANDARD
             .decode(&pk_b64)
             .map_err(|e| {
@@ -94,11 +94,11 @@ impl Keystore {
                 sk_b64.zeroize();
                 format!("sk decode: {}", e)
             })?;
-        
+
         // Zeroize base64 strings after use
         pk_b64.zeroize();
         sk_b64.zeroize();
-        
+
         Ok((pk, sk))
     }
 

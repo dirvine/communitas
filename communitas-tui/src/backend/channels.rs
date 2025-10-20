@@ -1,5 +1,6 @@
 use super::Backend;
 use anyhow::Result;
+use communitas_core::InputType;
 use communitas_core::crdt::EntityType;
 
 /// Simple entity for tracking conversations
@@ -30,14 +31,22 @@ impl Backend {
 
         let ctx = self.context()?;
 
+        // Validate entity name using backend validation service
+        let validated_name = self
+            .validator
+            .validate_and_sanitize(&name, InputType::EntityName)?;
+
         // Create entity via EntityService (CRDT-based)
-        let core_entity = ctx.entity_service.create_entity(
-            name.clone(),
-            entity_type,
-            None, // description
-            ctx.four_words.clone(), // created_by
-            members.clone(),
-        ).await?;
+        let core_entity = ctx
+            .entity_service
+            .create_entity(
+                validated_name.clone(),
+                entity_type,
+                None,                   // description
+                ctx.four_words.clone(), // created_by
+                members.clone(),
+            )
+            .await?;
 
         // Convert to TUI Entity type
         let entity = Entity {
@@ -71,16 +80,22 @@ impl Backend {
         let ctx = self.context()?;
 
         // Get entities from EntityService (CRDT-based)
-        let core_entities = ctx.entity_service.list_entities().await
+        let core_entities = ctx
+            .entity_service
+            .list_entities()
+            .await
             .map_err(|e| anyhow::anyhow!("Failed to list entities: {}", e))?;
 
         // Convert to TUI Entity type
-        let entities = core_entities.into_iter().map(|e| Entity {
-            id: e.id,
-            name: e.name,
-            entity_type: e.entity_type,
-            members: e.members,
-        }).collect();
+        let entities = core_entities
+            .into_iter()
+            .map(|e| Entity {
+                id: e.id,
+                name: e.name,
+                entity_type: e.entity_type,
+                members: e.members,
+            })
+            .collect();
 
         Ok(entities)
     }
@@ -98,7 +113,10 @@ impl Backend {
         let ctx = self.context()?;
 
         // Get entity from EntityService (CRDT-based)
-        let core_entity = ctx.entity_service.get_entity(entity_id).await
+        let core_entity = ctx
+            .entity_service
+            .get_entity(entity_id)
+            .await
             .map_err(|e| anyhow::anyhow!("Failed to get entity {}: {}", entity_id, e))?;
 
         // Convert to TUI Entity type
@@ -176,14 +194,5 @@ impl Backend {
         .await;
 
         Ok(())
-    }
-
-    // ========================================================================
-    // Compatibility methods for existing handlers
-    // ========================================================================
-
-    /// Get channels (returns as entities)
-    pub async fn get_channels(&mut self) -> Result<Vec<Entity>> {
-        self.get_entities().await
     }
 }

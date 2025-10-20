@@ -81,7 +81,10 @@ pub async fn create_entity(
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
     let mut backend = backend.lock().await;
 
-    match backend.create_entity(req.name, req.entity_type, req.members).await {
+    match backend
+        .create_entity(req.name, req.entity_type, req.members)
+        .await
+    {
         Ok(entity) => {
             let response = EntityResponse {
                 id: entity.id,
@@ -170,9 +173,7 @@ pub async fn create_vault(
     let mut backend = backend.lock().await;
 
     // Generate four-word identity if not provided
-    let four_words = req
-        .four_words
-        .unwrap_or_else(|| Backend::generate_four_words());
+    let four_words = req.four_words.unwrap_or_else(Backend::generate_four_words);
 
     tracing::info!("Creating vault for: {}", four_words);
 

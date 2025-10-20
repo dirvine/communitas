@@ -1,7 +1,8 @@
 //! Bridge server state management
 
 use anyhow::Result;
-use communitas_core::CoreContext;
+use communitas_core::{CoreContext, types::DeviceType};
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -29,13 +30,17 @@ impl BridgeState {
     ) -> Result<()> {
         let mut core = self.core.write().await;
 
+        // Create storage directory for bridge
+        let storage_dir = PathBuf::from("./bridge-data");
+
         // Create CoreContext using communitas-core
         // Use Desktop device type for bridge server
         let ctx = CoreContext::initialize(
             four_words,
             display_name,
             device_name,
-            saorsa_core::identity::enhanced::DeviceType::Desktop,
+            DeviceType::Desktop,
+            storage_dir,
         )
         .await
         .map_err(|e| anyhow::anyhow!("Failed to initialize CoreContext: {}", e))?;

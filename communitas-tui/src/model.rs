@@ -3,6 +3,8 @@
 //! This module defines the core application state and message handling logic.
 //! Following TDD principles, we start with tests and implement to pass them.
 
+#![allow(dead_code)]
+
 use crate::backend::Backend;
 use crate::messages::{ComponentId, Msg, NetworkStatus};
 use tuirealm::{Application, EventListenerCfg, Update};
@@ -144,9 +146,15 @@ mod tests {
 
         assert!(!model.quit, "Model should not be set to quit initially");
         assert!(model.redraw, "Model should need redraw initially");
-        assert!(!model.is_authenticated(), "Model should not be authenticated initially");
+        assert!(
+            !model.is_authenticated(),
+            "Model should not be authenticated initially"
+        );
         assert_eq!(model.network_status, NetworkStatus::Disconnected);
-        assert!(model.error_message.is_none(), "Should have no error initially");
+        assert!(
+            model.error_message.is_none(),
+            "Should have no error initially"
+        );
     }
 
     #[tokio::test]
@@ -189,7 +197,7 @@ mod tests {
 
         let four_words = "ocean-forest-moon-star".to_string();
         let result = model.update(Some(Msg::AuthenticationSuccess {
-            four_words: four_words.clone()
+            four_words: four_words.clone(),
         }));
 
         assert!(model.is_authenticated(), "Should be authenticated");
@@ -197,7 +205,10 @@ mod tests {
         assert!(model.status_message.contains(&four_words));
 
         // Should chain a network status change message
-        assert_eq!(result, Some(Msg::NetworkStatusChanged(NetworkStatus::Connecting)));
+        assert_eq!(
+            result,
+            Some(Msg::NetworkStatusChanged(NetworkStatus::Connecting))
+        );
     }
 
     #[tokio::test]
@@ -216,13 +227,19 @@ mod tests {
         let (mut model, _temp) = create_test_model().await;
 
         let error_msg = "Connection failed".to_string();
-        let result = model.update(Some(Msg::NetworkStatusChanged(
-            NetworkStatus::Error(error_msg.clone())
-        )));
+        let result = model.update(Some(Msg::NetworkStatusChanged(NetworkStatus::Error(
+            error_msg.clone(),
+        ))));
 
         assert!(matches!(model.network_status, NetworkStatus::Error(_)));
         assert!(model.error_message.is_some());
-        assert!(model.error_message.as_ref().unwrap().contains("Connection failed"));
+        assert!(
+            model
+                .error_message
+                .as_ref()
+                .unwrap()
+                .contains("Connection failed")
+        );
         assert_eq!(result, None);
     }
 
@@ -232,7 +249,7 @@ mod tests {
 
         // Authentication should trigger network connection
         let msg1 = model.update(Some(Msg::AuthenticationSuccess {
-            four_words: "test-identity-four-words".to_string()
+            four_words: "test-identity-four-words".to_string(),
         }));
 
         assert!(msg1.is_some(), "Should return chained message");
@@ -251,7 +268,10 @@ mod tests {
         let initial_status = model.status_message.clone();
         let result = model.update(Some(Msg::None));
 
-        assert_eq!(model.status_message, initial_status, "Status should not change");
+        assert_eq!(
+            model.status_message, initial_status,
+            "Status should not change"
+        );
         assert_eq!(result, None);
     }
 

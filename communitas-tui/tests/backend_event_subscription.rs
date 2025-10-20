@@ -17,7 +17,7 @@ use anyhow::Result;
 use communitas_core::crdt::EntityType;
 use communitas_tui::backend::{Backend, BackendEvent};
 use tempfile::TempDir;
-use tokio::time::{timeout, Duration};
+use tokio::time::{Duration, timeout};
 
 /// Create a test backend with authenticated CoreContext
 ///
@@ -365,11 +365,7 @@ async fn test_member_added_event() -> Result<()> {
 
     // Add a member - should trigger MemberAdded event
     backend
-        .add_entity_member(
-            EntityType::Group,
-            &group.id,
-            "alice-test-one".to_string(),
-        )
+        .add_entity_member(EntityType::Group, &group.id, "alice-test-one".to_string())
         .await?;
 
     // Wait for event

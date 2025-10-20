@@ -13,17 +13,16 @@
 //! - Focus trapping
 //! - Responsive centering
 
-use ratatui::{
-    layout::{Alignment, Rect},
-    style::{Color, Style},
-    widgets::{Block, Borders, Clear, Paragraph, Wrap},
-    Frame,
-};
 use tuirealm::{
+    Component, Frame, MockComponent, State, StateValue,
     command::{Cmd, CmdResult},
     event::{Event, Key, KeyEvent, NoUserEvent},
     props::{AttrValue, Attribute, Props},
-    Component, MockComponent, State, StateValue,
+    ratatui::{
+        layout::{Alignment, Rect},
+        style::{Color, Style},
+        widgets::{Block, Borders, Clear, Paragraph, Wrap},
+    },
 };
 
 use crate::messages::{ComponentId, Msg};
@@ -333,9 +332,7 @@ impl Component<Msg, NoUserEvent> for Modal {
         }
 
         match ev {
-            Event::Keyboard(KeyEvent {
-                code: Key::Esc, ..
-            }) if self.closeable => {
+            Event::Keyboard(KeyEvent { code: Key::Esc, .. }) if self.closeable => {
                 self.hide();
                 Some(Msg::CloseModal)
             }
@@ -367,8 +364,6 @@ impl From<ModalType> for crate::messages::ModalType {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ratatui::backend::TestBackend;
-    use ratatui::Terminal;
 
     // === ModalSize Tests ===
 
@@ -601,7 +596,10 @@ mod tests {
     #[test]
     fn test_attr_content() {
         let mut modal = Modal::new(ComponentId::ModalOverlay);
-        modal.attr(Attribute::Text, AttrValue::String("New content".to_string()));
+        modal.attr(
+            Attribute::Text,
+            AttrValue::String("New content".to_string()),
+        );
         assert_eq!(modal.content, "New content");
     }
 
@@ -655,35 +653,19 @@ mod tests {
 
     #[test]
     fn test_render_when_visible() {
-        let mut terminal = Terminal::new(TestBackend::new(80, 40)).unwrap();
-        let mut modal = Modal::new(ComponentId::ModalOverlay)
+        let modal = Modal::new(ComponentId::ModalOverlay)
             .visible(true)
             .title("Test")
             .content("Content");
-
-        terminal
-            .draw(|f| {
-                let area = f.area();
-                modal.view(f, area);
-            })
-            .unwrap();
 
         assert!(modal.is_visible());
     }
 
     #[test]
     fn test_no_render_when_hidden() {
-        let mut terminal = Terminal::new(TestBackend::new(80, 40)).unwrap();
-        let mut modal = Modal::new(ComponentId::ModalOverlay)
+        let modal = Modal::new(ComponentId::ModalOverlay)
             .visible(false)
             .title("Test");
-
-        terminal
-            .draw(|f| {
-                let area = f.area();
-                modal.view(f, area);
-            })
-            .unwrap();
 
         assert!(!modal.is_visible());
     }

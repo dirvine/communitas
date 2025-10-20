@@ -1,8 +1,8 @@
 use communitas_core::crdt::EntityType;
 use std::collections::{HashMap, VecDeque};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use tokio::sync::{mpsc, RwLock};
+use std::sync::atomic::{AtomicU64, Ordering};
+use tokio::sync::{RwLock, mpsc};
 
 /// Event types that can be subscribed to
 #[derive(Debug, Clone, PartialEq)]
@@ -49,14 +49,9 @@ pub enum BackendEvent {
         entity_id: String,
     },
     /// Network peer connected
-    PeerConnected {
-        peer_id: String,
-        address: String,
-    },
+    PeerConnected { peer_id: String, address: String },
     /// Network peer disconnected
-    PeerDisconnected {
-        peer_id: String,
-    },
+    PeerDisconnected { peer_id: String },
 }
 
 /// Event filter for subscription
@@ -97,44 +92,45 @@ impl EventFilter {
     pub fn matches(&self, event: &BackendEvent) -> bool {
         // Extract entity type and ID from event
         let (event_type, event_id) = match event {
-            BackendEvent::EntityCreated { entity_type, entity_id, .. } => {
-                (Some(*entity_type), Some(entity_id.as_str()))
-            }
-            BackendEvent::EntityUpdated { entity_type, entity_id } => {
-                (Some(*entity_type), Some(entity_id.as_str()))
-            }
-            BackendEvent::MemberAdded { entity_type, entity_id, .. } => {
-                (Some(*entity_type), Some(entity_id.as_str()))
-            }
-            BackendEvent::MemberRemoved { entity_type, entity_id, .. } => {
-                (Some(*entity_type), Some(entity_id.as_str()))
-            }
-            BackendEvent::MessageReceived { entity_id, .. } => {
-                (None, Some(entity_id.as_str()))
-            }
-            BackendEvent::MessageSent { entity_id, .. } => {
-                (None, Some(entity_id.as_str()))
-            }
-            BackendEvent::ThreadCreated { entity_id, .. } => {
-                (None, Some(entity_id.as_str()))
-            }
+            BackendEvent::EntityCreated {
+                entity_type,
+                entity_id,
+                ..
+            } => (Some(*entity_type), Some(entity_id.as_str())),
+            BackendEvent::EntityUpdated {
+                entity_type,
+                entity_id,
+            } => (Some(*entity_type), Some(entity_id.as_str())),
+            BackendEvent::MemberAdded {
+                entity_type,
+                entity_id,
+                ..
+            } => (Some(*entity_type), Some(entity_id.as_str())),
+            BackendEvent::MemberRemoved {
+                entity_type,
+                entity_id,
+                ..
+            } => (Some(*entity_type), Some(entity_id.as_str())),
+            BackendEvent::MessageReceived { entity_id, .. } => (None, Some(entity_id.as_str())),
+            BackendEvent::MessageSent { entity_id, .. } => (None, Some(entity_id.as_str())),
+            BackendEvent::ThreadCreated { entity_id, .. } => (None, Some(entity_id.as_str())),
             BackendEvent::PeerConnected { .. } | BackendEvent::PeerDisconnected { .. } => {
                 (None, None)
             }
         };
 
         // Check entity type filter
-        if let Some(filter_type) = &self.entity_type {
-            if event_type != Some(*filter_type) {
-                return false;
-            }
+        if let Some(filter_type) = &self.entity_type
+            && event_type != Some(*filter_type)
+        {
+            return false;
         }
 
         // Check entity ID filter
-        if let Some(filter_id) = &self.entity_id {
-            if event_id != Some(filter_id.as_str()) {
-                return false;
-            }
+        if let Some(filter_id) = &self.entity_id
+            && event_id != Some(filter_id.as_str())
+        {
+            return false;
         }
 
         true
@@ -191,12 +187,11 @@ impl EventManager {
     ///
     /// Returns subscription ID that can be used to unsubscribe later.
     /// Queued events matching the filter will be sent immediately upon subscription.
-    pub async fn subscribe(
-        &self,
-        sender: mpsc::Sender<BackendEvent>,
-        filter: EventFilter,
-    ) -> u64 {
+    pub async fn subscribe(&self, sender: mpsc::Sender<BackendEvent>, filter: EventFilter) -> u64 {
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
+
+        // Store reference to sender before moving into subscription
+        let sender_ref = sender.clone();
 
         let subscription = Subscription {
             id,
@@ -206,7 +201,7 @@ impl EventManager {
 
         // Add to subscriptions
         let mut subs = self.subscriptions.write().await;
-        let sender_ref = &subs.insert(id, subscription).unwrap().sender;
+        subs.insert(id, subscription);
 
         // Send queued events to new subscriber if queue is enabled
         let queue = self.event_queue.read().await;

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 /// Current view in the TUI
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum View {

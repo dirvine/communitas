@@ -731,7 +731,7 @@ pub async fn auth_touchid_register(
 
     // Use macOS LocalAuthentication to prompt for Touch ID
     // This uses Swift command with stdin to compile and run Swift code that triggers actual biometric authentication
-    let _auth_result = tokio::task::spawn_blocking(move || {
+    tokio::task::spawn_blocking(move || {
         use std::process::Command;
         use std::io::Write;
 
@@ -853,7 +853,7 @@ pub async fn auth_touchid_authenticate(
 
     // Use macOS LocalAuthentication to prompt for Touch ID
     // This uses Swift command with stdin to compile and run Swift code that triggers actual biometric authentication
-    let _auth_result = tokio::task::spawn_blocking(move || {
+    tokio::task::spawn_blocking(move || {
         use std::process::Command;
         use std::io::Write;
 

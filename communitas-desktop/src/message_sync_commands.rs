@@ -32,11 +32,11 @@ pub async fn message_sync_get_all_messages(
     core_state: State<'_, Arc<RwLock<Option<communitas_core::CoreContext>>>>,
     entity_id: String,
 ) -> Result<SyncResponse, String> {
-    let core_ctx = core_state.read().await
-        .as_ref()
-        .ok_or("CoreContext not initialized")?;
+    let guard = core_state.read().await;
+    let core_ctx = guard.as_ref().ok_or("CoreContext not initialized")?;
 
-    core_ctx.message_service
+    core_ctx
+        .message_service
         .get_entity_messages(entity_id)
         .await
         .map_err(|e| format!("Failed to get messages: {}", e))
@@ -48,11 +48,11 @@ pub async fn message_sync_receive_message(
     core_state: State<'_, Arc<RwLock<Option<communitas_core::CoreContext>>>>,
     message: CRDTMessage,
 ) -> Result<ReceiveResultDto, String> {
-    let core_ctx = core_state.read().await
-        .as_ref()
-        .ok_or("CoreContext not initialized")?;
+    let guard = core_state.read().await;
+    let core_ctx = guard.as_ref().ok_or("CoreContext not initialized")?;
 
-    let result = core_ctx.message_service
+    let result = core_ctx
+        .message_service
         .receive_message(message)
         .await
         .map_err(|e| format!("Failed to receive message: {}", e))?;
@@ -74,9 +74,8 @@ pub async fn message_sync_send_message(
     author: String,
     reply_to_id: Option<String>,
 ) -> Result<CRDTMessage, String> {
-    let core_ctx = core_state.read().await
-        .as_ref()
-        .ok_or("CoreContext not initialized")?;
+    let guard = core_state.read().await;
+    let core_ctx = guard.as_ref().ok_or("CoreContext not initialized")?;
 
     let entity_type_enum = parse_entity_type(&entity_type)?;
 
@@ -86,7 +85,8 @@ pub async fn message_sync_send_message(
         attachments: None,
     };
 
-    core_ctx.message_service
+    core_ctx
+        .message_service
         .send_message(entity_id, entity_type_enum, content, reply_to_id)
         .await
         .map_err(|e| format!("Failed to send message: {}", e))
@@ -99,12 +99,12 @@ pub async fn message_sync_request_sync(
     entity_id: String,
     from_peer_id: String,
 ) -> Result<SyncRequest, String> {
-    let core_ctx = core_state.read().await
-        .as_ref()
-        .ok_or("CoreContext not initialized")?;
+    let guard = core_state.read().await;
+    let core_ctx = guard.as_ref().ok_or("CoreContext not initialized")?;
 
     // Create a sync request with our current state
-    let sync_state = core_ctx.message_service
+    let sync_state = core_ctx
+        .message_service
         .get_entity_sync_state(entity_id.clone(), EntityType::Channel)
         .await
         .map_err(|e| format!("Failed to get sync state: {}", e))?;
@@ -124,12 +124,12 @@ pub async fn message_sync_handle_sync_response(
     core_state: State<'_, Arc<RwLock<Option<communitas_core::CoreContext>>>>,
     response: SyncResponse,
 ) -> Result<SyncResultDto, String> {
-    let core_ctx = core_state.read().await
-        .as_ref()
-        .ok_or("CoreContext not initialized")?;
+    let guard = core_state.read().await;
+    let core_ctx = guard.as_ref().ok_or("CoreContext not initialized")?;
 
     // For sync response handling, we need to process each message individually
     // This is a simplified implementation
+    let total_messages = response.messages.len();
     let mut messages_added = 0;
     for message in response.messages {
         match core_ctx.message_service.receive_message(message).await {
@@ -140,7 +140,7 @@ pub async fn message_sync_handle_sync_response(
 
     Ok(SyncResultDto {
         messages_added,
-        messages_rejected: response.messages.len() - messages_added,
+        messages_rejected: total_messages - messages_added,
     })
 }
 
@@ -150,14 +150,14 @@ pub async fn message_sync_get_sync_state(
     core_state: State<'_, Arc<RwLock<Option<communitas_core::CoreContext>>>>,
     entity_id: String,
 ) -> Result<EntitySyncState, String> {
-    let core_ctx = core_state.read().await
-        .as_ref()
-        .ok_or("CoreContext not initialized")?;
+    let guard = core_state.read().await;
+    let core_ctx = guard.as_ref().ok_or("CoreContext not initialized")?;
 
     // Use default entity type - this could be made more sophisticated
     let entity_type = EntityType::Channel;
 
-    core_ctx.message_service
+    core_ctx
+        .message_service
         .get_entity_sync_state(entity_id, entity_type)
         .await
         .map_err(|e| format!("Failed to get sync state: {}", e))
@@ -169,11 +169,11 @@ pub async fn message_sync_get_messages(
     core_state: State<'_, Arc<RwLock<Option<communitas_core::CoreContext>>>>,
     entity_id: String,
 ) -> Result<Vec<CRDTMessage>, String> {
-    let core_ctx = core_state.read().await
-        .as_ref()
-        .ok_or("CoreContext not initialized")?;
+    let guard = core_state.read().await;
+    let core_ctx = guard.as_ref().ok_or("CoreContext not initialized")?;
 
-    let response = core_ctx.message_service
+    let response = core_ctx
+        .message_service
         .get_entity_messages(entity_id)
         .await
         .map_err(|e| format!("Failed to get messages: {}", e))?;
@@ -188,19 +188,22 @@ pub async fn message_sync_needs_sync(
     entity_id: String,
     remote_clock: VectorClock,
 ) -> Result<bool, String> {
-    let core_ctx = core_state.read().await
-        .as_ref()
-        .ok_or("CoreContext not initialized")?;
+    let guard = core_state.read().await;
+    let core_ctx = guard.as_ref().ok_or("CoreContext not initialized")?;
 
     // Simplified check - compare our sync state with remote clock
     let entity_type = EntityType::Channel; // Default assumption
-    let our_state = core_ctx.message_service
+    let our_state = core_ctx
+        .message_service
         .get_entity_sync_state(entity_id.clone(), entity_type)
         .await
         .map_err(|e| format!("Failed to get sync state: {}", e))?;
 
     // Check if remote has messages we don't have
-    Ok(remote_clock.compare(&our_state.vector_clock) == communitas_core::crdt::ClockOrdering::After)
+    Ok(
+        remote_clock.compare(&our_state.vector_clock)
+            == communitas_core::crdt::ClockOrdering::After,
+    )
 }
 
 // Helper DTOs for serialization

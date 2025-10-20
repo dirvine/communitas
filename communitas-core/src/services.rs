@@ -19,10 +19,8 @@ impl CoreServices {
     /// Bootstrap services with a database path
     pub async fn bootstrap(db_path: impl AsRef<std::path::Path>) -> CrdtResult<Self> {
         let crdt_manager = Arc::new(CrdtManager::new(db_path).await?);
-        
-        Ok(Self {
-            crdt_manager,
-        })
+
+        Ok(Self { crdt_manager })
     }
 
     /// Get a reference to the CRDT manager
@@ -40,7 +38,7 @@ mod tests {
     async fn test_bootstrap_services() {
         let temp_dir = tempdir().unwrap();
         let db_path = temp_dir.path().join("test.db");
-        
+
         let services = CoreServices::bootstrap(&db_path).await.unwrap();
         assert!(Arc::strong_count(services.crdt_manager()) >= 1);
     }

@@ -93,9 +93,9 @@ pub async fn sync_set_quic_pinned_spki(
 
     let key = parse_spki_or_key_bytes(&value)?;
     let fingerprint = calculate_fingerprint(&key);
-    
+
     info!("SPKI pin set: fingerprint={}", fingerprint);
-    
+
     let mut w = state.write().await;
     w.pinned_key = Some(key);
     w.fingerprint = Some(fingerprint);

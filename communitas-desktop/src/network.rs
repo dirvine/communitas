@@ -43,11 +43,7 @@ fn default_bootstrap_nodes() -> Vec<String> {
 }
 
 fn normalize_four_words(input: &str) -> String {
-    input
-        .trim()
-        .to_lowercase()
-        .replace(' ', "-")
-        .replace('_', "-")
+    input.trim().to_lowercase().replace([' ', '_'], "-")
 }
 
 fn is_valid_four_words(input: &str) -> bool {

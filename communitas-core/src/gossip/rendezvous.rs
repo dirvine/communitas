@@ -355,7 +355,7 @@ mod tests {
 
         // Create test pubsub (needs separate transport instance)
         let pubsub_impl =
-            saorsa_gossip_pubsub::PlumtreePubSub::new(peer_id.clone(), Arc::new(qt2), signing_key);
+            saorsa_gossip_pubsub::PlumtreePubSub::new(peer_id, Arc::new(qt2), signing_key);
         let pubsub: Arc<RwLock<Box<dyn PubSub>>> = Arc::new(RwLock::new(Box::new(pubsub_impl)));
 
         RendezvousClient::new(peer_id, transport, pubsub)
@@ -413,12 +413,12 @@ mod tests {
         let client = create_test_rendezvous_client().await;
 
         // Create a provider summary for our peer
-        let target_id = client.peer_id().as_bytes().clone();
+        let target_id = *client.peer_id().as_bytes();
         let summary = ProviderSummary::new(
             target_id,
             client.peer_id(),
             vec![saorsa_gossip_rendezvous::Capability::Site],
-            3600_000, // 1 hour validity
+            3_600_000, // 1 hour validity
         );
 
         // Publish the summary
@@ -442,7 +442,7 @@ mod tests {
                 target_id,
                 provider1,
                 vec![saorsa_gossip_rendezvous::Capability::Site],
-                3600_000, // 1 hour validity
+                3_600_000, // 1 hour validity
             );
 
             // Provider 2: expires in 5 minutes (less valid)
@@ -521,7 +521,7 @@ mod tests {
                 target_id,
                 provider2,
                 vec![saorsa_gossip_rendezvous::Capability::Identity],
-                3600_000, // 1 hour validity
+                3_600_000, // 1 hour validity
             );
 
             cache.insert(target_id, vec![summary1, summary2]);
@@ -545,13 +545,12 @@ mod tests {
             target_id,
             provider,
             vec![saorsa_gossip_rendezvous::Capability::Site],
-            3600_000, // 1 hour validity
+            3_600_000, // 1 hour validity
         );
 
         // Serialize it (simulating what we'd receive from pubsub)
         let mut summary_bytes = Vec::new();
-        ciborium::ser::into_writer(&summary, &mut summary_bytes)
-            .map_err(|e| anyhow::anyhow!("CBOR encoding failed: {:?}", e))?;
+        ciborium::ser::into_writer(&summary, &mut summary_bytes).unwrap();
 
         // Process the incoming message
         let result = client
@@ -593,9 +592,10 @@ mod tests {
             target_id,
             provider,
             vec![saorsa_gossip_rendezvous::Capability::Site],
-            3600_000,
+            3_600_000,
         );
-        let bytes1 = serde_cbor::to_vec(&summary1).unwrap();
+        let mut bytes1 = Vec::new();
+        ciborium::ser::into_writer(&summary1, &mut bytes1).unwrap();
         client
             .process_incoming_summary(&target_id, bytes1.into())
             .await
@@ -613,9 +613,10 @@ mod tests {
                 saorsa_gossip_rendezvous::Capability::Site,
                 saorsa_gossip_rendezvous::Capability::Identity,
             ],
-            7200_000, // Different validity
+            7_200_000, // Different validity
         );
-        let bytes2 = serde_cbor::to_vec(&summary2).unwrap();
+        let mut bytes2 = Vec::new();
+        ciborium::ser::into_writer(&summary2, &mut bytes2).unwrap();
         client
             .process_incoming_summary(&target_id, bytes2.into())
             .await
@@ -641,9 +642,10 @@ mod tests {
             wrong_target,
             provider,
             vec![saorsa_gossip_rendezvous::Capability::Site],
-            3600_000,
+            3_600_000,
         );
-        let bytes = serde_cbor::to_vec(&summary).unwrap();
+        let mut bytes = Vec::new();
+        ciborium::ser::into_writer(&summary, &mut bytes).unwrap();
 
         // Should fail with mismatch error
         let result = client

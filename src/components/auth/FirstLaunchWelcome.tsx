@@ -33,6 +33,8 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { invoke } from '@tauri-apps/api/core';
 import { fourWordsToDisplay } from '../../utils/identity';
+import { bridgeClient } from '../../services/BridgeClient';
+import { isTauriApp } from '../../utils/tauri';
 
 interface FirstLaunchWelcomeProps {
   open: boolean;
@@ -119,12 +121,35 @@ export const FirstLaunchWelcome: React.FC<FirstLaunchWelcomeProps> = ({ open, on
 
   const passwordStrength = calculatePasswordStrength(password);
 
+  // Generate a random four-word identity for browser mode
+  const generateBrowserIdentity = (): string => {
+    // Simple word list for demo - in production this would use the full four-word-networking dictionary
+    const words = [
+      'ocean', 'forest', 'mountain', 'river', 'desert', 'valley', 'meadow', 'canyon',
+      'star', 'moon', 'sun', 'comet', 'galaxy', 'nebula', 'planet', 'asteroid',
+      'thunder', 'lightning', 'rainbow', 'breeze', 'storm', 'cloud', 'rain', 'snow',
+      'fire', 'water', 'earth', 'wind', 'ice', 'stone', 'metal', 'wood'
+    ];
+
+    const randomWord = () => words[Math.floor(Math.random() * words.length)];
+    return `${randomWord()}-${randomWord()}-${randomWord()}-${randomWord()}`;
+  };
+
   // Step handlers
   const handleGenerateIdentity = async () => {
     setLoading(true);
     setError(null);
     try {
-      const generated = await invoke<string>('generate_four_word_identity');
+      let generated: string;
+
+      if (isTauriApp()) {
+        // Use Tauri backend
+        generated = await invoke<string>('generate_four_word_identity');
+      } else {
+        // Use browser mode - generate random four-word identity
+        generated = generateBrowserIdentity();
+      }
+
       setFourWords(generated);
       setCurrentStep('generate');
     } catch (err) {
@@ -138,7 +163,16 @@ export const FirstLaunchWelcome: React.FC<FirstLaunchWelcomeProps> = ({ open, on
     setLoading(true);
     setError(null);
     try {
-      const generated = await invoke<string>('generate_four_word_identity');
+      let generated: string;
+
+      if (isTauriApp()) {
+        // Use Tauri backend
+        generated = await invoke<string>('generate_four_word_identity');
+      } else {
+        // Use browser mode - generate random four-word identity
+        generated = generateBrowserIdentity();
+      }
+
       setFourWords(generated);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate identity');
@@ -220,7 +254,18 @@ export const FirstLaunchWelcome: React.FC<FirstLaunchWelcomeProps> = ({ open, on
     setError(null);
 
     try {
-      // Create vault with user's chosen password
+      // In browser mode, initialize bridge server
+      if (!isTauriApp()) {
+        console.log('🌐 Browser mode: Initializing via bridge server');
+        await bridgeClient.initialize({
+          four_words: fourWords,
+          display_name: displayName,
+          device_name: 'Browser'
+        });
+        console.log('✅ Bridge initialization successful');
+      }
+
+      // Create vault with user's chosen password (works in both modes)
       await createIdentity(displayName, {
         fourWords: fourWords,
         password: password,

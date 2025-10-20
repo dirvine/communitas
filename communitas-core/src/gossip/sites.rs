@@ -511,7 +511,7 @@ mod tests {
 
         // Create test pubsub (needs separate transport instance)
         let pubsub_impl =
-            saorsa_gossip_pubsub::PlumtreePubSub::new(peer_id.clone(), Arc::new(qt2), signing_key);
+            saorsa_gossip_pubsub::PlumtreePubSub::new(peer_id, Arc::new(qt2), signing_key);
         let pubsub: Arc<RwLock<Box<dyn PubSubTrait>>> =
             Arc::new(RwLock::new(Box::new(pubsub_impl)));
 

@@ -19,8 +19,8 @@ pub mod core_commands;
 pub mod crdt_error;
 pub mod crdt_manager;
 pub mod gossip_commands;
-pub mod member_commands;
-pub mod member_manager;
+// pub mod member_commands;  // DELETED - depends on deleted member_manager.rs
+// pub mod member_manager;  // DELETED - dead code
 pub mod services;
 pub mod update_manager;
 pub mod webrtc_commands;

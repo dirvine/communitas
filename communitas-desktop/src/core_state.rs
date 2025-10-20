@@ -11,7 +11,7 @@ use tokio::sync::RwLock;
 
 /// Managed state for CoreContext with initialization tracking
 pub struct CoreState {
-    inner: RwLock<Option<CoreContext>>,
+    inner: RwLock<Option<Arc<CoreContext>>>,
 }
 
 impl CoreState {
@@ -22,20 +22,19 @@ impl CoreState {
     }
 
     /// Get the CoreContext, returning an error if not initialized
-    pub async fn get(&self) -> Result<CoreContext, JsError> {
-        self.inner
-            .read()
-            .await
-            .clone()
-            .ok_or_else(|| JsError::with_code(
+    pub async fn get(&self) -> Result<Arc<CoreContext>, JsError> {
+        let guard = self.inner.read().await;
+        guard.clone().ok_or_else(|| {
+            JsError::with_code(
                 "Core not initialized. Call core_initialize first.",
-                "CORE_NOT_INITIALIZED"
-            ))
+                "CORE_NOT_INITIALIZED",
+            )
+        })
     }
 
     /// Set the CoreContext (called by core_initialize)
     pub async fn set(&self, ctx: CoreContext) {
-        *self.inner.write().await = Some(ctx);
+        *self.inner.write().await = Some(Arc::new(ctx));
     }
 
     /// Check if initialized
@@ -62,11 +61,11 @@ mod tests {
     #[tokio::test]
     async fn test_core_state_lifecycle() {
         let state = CoreState::new();
-        
+
         // Initially not initialized
         assert!(!state.is_initialized().await);
         assert!(state.get().await.is_err());
-        
+
         // After initialization
         // Note: We can't easily create a CoreContext in tests without full setup,
         // so we'll just test the structure is correct

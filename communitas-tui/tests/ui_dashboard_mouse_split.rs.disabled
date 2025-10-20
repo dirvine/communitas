@@ -1,0 +1,390 @@
+//! Mouse interaction tests for dashboard ResizableSplit
+//!
+//! Tests mouse events for dragging the split divider, hover states,
+//! and click interactions.
+
+use communitas_tui::state::AppState;
+
+// ============================================================================
+// TEST 1: Divider hit detection
+// ============================================================================
+
+#[test]
+fn test_mouse_over_divider_at_30_percent() {
+    // Arrange
+    let state = AppState::new();
+    let terminal_width = 100;
+    let split_position = state.resizable_split.position();
+    let divider_x = (terminal_width * split_position) / 100;
+
+    // Act - Mouse directly on divider
+    let mouse_x = divider_x;
+
+    // Assert - Should be detected as over divider
+    let tolerance = 1;
+    let is_over = (mouse_x as i16 - divider_x as i16).abs() <= tolerance;
+    assert!(is_over);
+    assert_eq!(divider_x, 30); // 30% of 100
+}
+
+#[test]
+fn test_mouse_one_column_left_of_divider() {
+    // Arrange
+    let state = AppState::new();
+    let divider_x = 30; // 30% of 100 width
+
+    // Act - Mouse 1 column to the left
+    let mouse_x = divider_x - 1;
+
+    // Assert - Should still be detected (tolerance = 1)
+    let is_over = (mouse_x as i16 - divider_x as i16).abs() <= 1;
+    assert!(is_over);
+}
+
+#[test]
+fn test_mouse_one_column_right_of_divider() {
+    // Arrange
+    let divider_x = 30;
+
+    // Act - Mouse 1 column to the right
+    let mouse_x = divider_x + 1;
+
+    // Assert - Should still be detected (tolerance = 1)
+    let is_over = (mouse_x as i16 - divider_x as i16).abs() <= 1;
+    assert!(is_over);
+}
+
+#[test]
+fn test_mouse_far_from_divider() {
+    // Arrange
+    let divider_x = 30;
+
+    // Act - Mouse far away
+    let mouse_x = 50;
+
+    // Assert - Should NOT be detected
+    let is_over = (mouse_x as i16 - divider_x as i16).abs() <= 1;
+    assert!(!is_over);
+}
+
+// ============================================================================
+// TEST 2: Drag state management
+// ============================================================================
+
+#[test]
+fn test_start_drag_sets_dragging_state() {
+    // Arrange
+    let mut state = AppState::new();
+
+    // Act - Start drag at divider position
+    state.resizable_split.start_drag(30, 25);
+
+    // Assert - Component should be in dragging state
+    // Note: We can't directly check private fields, but behavior will be tested
+    // through update_drag and end_drag
+    assert_eq!(state.resizable_split.position(), 30); // Position unchanged initially
+}
+
+#[test]
+fn test_update_drag_changes_position() {
+    // Arrange
+    let mut state = AppState::new();
+    state.resizable_split.start_drag(30, 25);
+
+    // Act - Drag to new position
+    state.resizable_split.update_drag(40, 25);
+
+    // Assert - Position should update
+    assert_eq!(state.resizable_split.position(), 40);
+}
+
+#[test]
+fn test_update_drag_without_start_does_nothing() {
+    // Arrange
+    let mut state = AppState::new();
+
+    // Act - Try to drag without starting
+    state.resizable_split.update_drag(40, 25);
+
+    // Assert - Position should remain at default
+    assert_eq!(state.resizable_split.position(), 30);
+}
+
+#[test]
+fn test_end_drag_finalizes_position() {
+    // Arrange
+    let mut state = AppState::new();
+    state.resizable_split.start_drag(30, 25);
+    state.resizable_split.update_drag(35, 25);
+
+    // Act - End drag
+    state.resizable_split.end_drag();
+
+    // Assert - Position should be finalized at 35%
+    assert_eq!(state.resizable_split.position(), 35);
+}
+
+#[test]
+fn test_drag_sequence_left_to_right() {
+    // Arrange
+    let mut state = AppState::new();
+
+    // Act - Complete drag sequence
+    state.resizable_split.start_drag(30, 25); // Start at current position
+    state.resizable_split.update_drag(32, 25); // Drag right a bit
+    state.resizable_split.update_drag(35, 25); // Continue dragging
+    state.resizable_split.update_drag(38, 25); // Final position
+    state.resizable_split.end_drag();
+
+    // Assert
+    assert_eq!(state.resizable_split.position(), 38);
+}
+
+#[test]
+fn test_drag_sequence_right_to_left() {
+    // Arrange
+    let mut state = AppState::new();
+
+    // Act - Drag left from default position
+    state.resizable_split.start_drag(30, 25);
+    state.resizable_split.update_drag(28, 25);
+    state.resizable_split.update_drag(25, 25);
+    state.resizable_split.end_drag();
+
+    // Assert
+    assert_eq!(state.resizable_split.position(), 25);
+}
+
+// ============================================================================
+// TEST 3: Boundary enforcement during drag
+// ============================================================================
+
+#[test]
+fn test_drag_below_minimum_clamps_to_min() {
+    // Arrange
+    let mut state = AppState::new();
+
+    // Act - Try to drag below 20% (minimum)
+    state.resizable_split.start_drag(30, 25);
+    state.resizable_split.update_drag(15, 25); // Try 15%
+    state.resizable_split.end_drag();
+
+    // Assert - Should clamp to minimum (20%)
+    assert_eq!(state.resizable_split.position(), 20);
+}
+
+#[test]
+fn test_drag_above_maximum_clamps_to_max() {
+    // Arrange
+    let mut state = AppState::new();
+
+    // Act - Try to drag above 50% (maximum)
+    state.resizable_split.start_drag(30, 25);
+    state.resizable_split.update_drag(60, 25); // Try 60%
+    state.resizable_split.end_drag();
+
+    // Assert - Should clamp to maximum (50%)
+    assert_eq!(state.resizable_split.position(), 50);
+}
+
+#[test]
+fn test_drag_to_exact_minimum_allowed() {
+    // Arrange
+    let mut state = AppState::new();
+
+    // Act - Drag to exactly 20%
+    state.resizable_split.start_drag(30, 25);
+    state.resizable_split.update_drag(20, 25);
+    state.resizable_split.end_drag();
+
+    // Assert
+    assert_eq!(state.resizable_split.position(), 20);
+}
+
+#[test]
+fn test_drag_to_exact_maximum_allowed() {
+    // Arrange
+    let mut state = AppState::new();
+
+    // Act - Drag to exactly 50%
+    state.resizable_split.start_drag(30, 25);
+    state.resizable_split.update_drag(50, 25);
+    state.resizable_split.end_drag();
+
+    // Assert
+    assert_eq!(state.resizable_split.position(), 50);
+}
+
+// ============================================================================
+// TEST 4: Hover state
+// ============================================================================
+
+#[test]
+fn test_update_hover_over_divider() {
+    // Arrange
+    let mut state = AppState::new();
+    let divider_x = 30;
+
+    // Act - Move mouse over divider
+    state.resizable_split.update_hover(divider_x, 25);
+
+    // Assert - Hover state should be updated
+    // (Actual visual feedback tested through rendering)
+    // For now, just verify the call doesn't panic
+    assert_eq!(state.resizable_split.position(), 30);
+}
+
+#[test]
+fn test_hover_state_persists_across_movements() {
+    // Arrange
+    let mut state = AppState::new();
+
+    // Act - Move mouse over divider area
+    state.resizable_split.update_hover(29, 25); // Left of divider
+    state.resizable_split.update_hover(30, 25); // On divider
+    state.resizable_split.update_hover(31, 25); // Right of divider
+
+    // Assert - All movements should be valid
+    assert_eq!(state.resizable_split.position(), 30);
+}
+
+// ============================================================================
+// TEST 5: Multi-drag sessions
+// ============================================================================
+
+#[test]
+fn test_multiple_drag_sessions_independent() {
+    // Arrange
+    let mut state = AppState::new();
+
+    // Act - First drag session
+    state.resizable_split.start_drag(30, 25);
+    state.resizable_split.update_drag(35, 25);
+    state.resizable_split.end_drag();
+    assert_eq!(state.resizable_split.position(), 35);
+
+    // Act - Second drag session
+    state.resizable_split.start_drag(35, 25);
+    state.resizable_split.update_drag(40, 25);
+    state.resizable_split.end_drag();
+
+    // Assert
+    assert_eq!(state.resizable_split.position(), 40);
+}
+
+#[test]
+fn test_cancel_drag_by_not_ending() {
+    // Arrange
+    let mut state = AppState::new();
+
+    // Act - Start drag but don't end it properly
+    state.resizable_split.start_drag(30, 25);
+    state.resizable_split.update_drag(45, 25);
+    // Intentionally NOT calling end_drag()
+
+    // Note: Position might update during drag even without end_drag
+    // This tests the actual behavior of the component
+    let position_during_drag = state.resizable_split.position();
+    assert!(position_during_drag >= 20 && position_during_drag <= 50);
+}
+
+// ============================================================================
+// TEST 6: Edge cases
+// ============================================================================
+
+#[test]
+fn test_rapid_drag_updates() {
+    // Arrange
+    let mut state = AppState::new();
+
+    // Act - Simulate rapid mouse movements
+    state.resizable_split.start_drag(30, 25);
+    for x in 30..=40 {
+        state.resizable_split.update_drag(x, 25);
+    }
+    state.resizable_split.end_drag();
+
+    // Assert - Final position should be 40
+    assert_eq!(state.resizable_split.position(), 40);
+}
+
+#[test]
+fn test_drag_with_varying_y_coordinates() {
+    // Arrange
+    let mut state = AppState::new();
+
+    // Act - Drag with changing y (vertical position)
+    state.resizable_split.start_drag(30, 10);
+    state.resizable_split.update_drag(35, 20); // Different y
+    state.resizable_split.update_drag(40, 30); // Different y again
+    state.resizable_split.end_drag();
+
+    // Assert - Y shouldn't affect horizontal split position
+    assert_eq!(state.resizable_split.position(), 40);
+}
+
+#[test]
+fn test_drag_back_and_forth() {
+    // Arrange
+    let mut state = AppState::new();
+
+    // Act - Drag right then left
+    state.resizable_split.start_drag(30, 25);
+    state.resizable_split.update_drag(40, 25); // Right
+    state.resizable_split.update_drag(35, 25); // Left
+    state.resizable_split.update_drag(38, 25); // Right
+    state.resizable_split.update_drag(32, 25); // Left
+    state.resizable_split.end_drag();
+
+    // Assert - Final position
+    assert_eq!(state.resizable_split.position(), 32);
+}
+
+// ============================================================================
+// TEST 7: Integration with terminal size
+// ============================================================================
+
+#[test]
+fn test_divider_position_calculation_for_small_terminal() {
+    // Arrange
+    let state = AppState::new();
+    let small_width = 40;
+
+    // Act
+    let split_position = state.resizable_split.position();
+    let divider_x = (small_width * split_position) / 100;
+
+    // Assert
+    assert_eq!(divider_x, 12); // 30% of 40
+}
+
+#[test]
+fn test_divider_position_calculation_for_large_terminal() {
+    // Arrange
+    let state = AppState::new();
+    let large_width = 200;
+
+    // Act
+    let split_position = state.resizable_split.position();
+    let divider_x = (large_width * split_position) / 100;
+
+    // Assert
+    assert_eq!(divider_x, 60); // 30% of 200
+}
+
+#[test]
+fn test_drag_scales_with_terminal_width() {
+    // Arrange
+    let mut state = AppState::new();
+
+    // Scenario 1: 100 column terminal, drag to column 40 = 40%
+    state.resizable_split.start_drag(30, 25);
+    state.resizable_split.update_drag(40, 25);
+    state.resizable_split.end_drag();
+
+    // Assert - Position is 40%
+    assert_eq!(state.resizable_split.position(), 40);
+
+    // The same 40% works for any terminal width
+    // e.g., 200 columns: divider at (200 * 40) / 100 = 80
+}

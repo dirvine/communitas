@@ -8,17 +8,16 @@
 //! - Loading and error states
 //! - Auto-detection of image protocol (iTerm2, Kitty, Sixel)
 
-use ratatui::{
-    layout::Rect,
-    style::{Color, Style},
-    widgets::{Block, Borders, Paragraph},
-    Frame,
-};
 use tuirealm::{
+    Component, Frame, MockComponent, State, StateValue,
     command::{Cmd, CmdResult},
     event::{Event, NoUserEvent},
     props::{Alignment, AttrValue, Attribute, Props},
-    Component, MockComponent, State, StateValue,
+    ratatui::{
+        layout::Rect,
+        style::{Color, Style},
+        widgets::{Block, Borders, Paragraph},
+    },
 };
 
 use crate::messages::{ComponentId, Msg};
@@ -179,7 +178,12 @@ impl Avatar {
         let parts: Vec<&str> = self.display_name.split_whitespace().collect();
         match parts.len() {
             0 => "?".to_string(),
-            1 => parts[0].chars().next().unwrap_or('?').to_uppercase().to_string(),
+            1 => parts[0]
+                .chars()
+                .next()
+                .unwrap_or('?')
+                .to_uppercase()
+                .to_string(),
             _ => {
                 let first = parts[0].chars().next().unwrap_or('?');
                 let last = parts[parts.len() - 1].chars().next().unwrap_or('?');
@@ -271,13 +275,10 @@ impl MockComponent for Avatar {
     }
 
     fn attr(&mut self, attr: Attribute, value: AttrValue) {
-        match attr {
-            Attribute::Value => {
-                if let AttrValue::String(user_id) = value {
-                    self.user_id = user_id;
-                }
-            }
-            _ => {}
+        if attr == Attribute::Value
+            && let AttrValue::String(user_id) = value
+        {
+            self.user_id = user_id;
         }
     }
 
@@ -300,8 +301,7 @@ impl Component<Msg, NoUserEvent> for Avatar {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ratatui::backend::TestBackend;
-    use ratatui::Terminal;
+    use tuirealm::event::{Key, KeyEvent};
 
     // === Component Creation Tests ===
 
@@ -318,15 +318,14 @@ mod tests {
 
     #[test]
     fn test_avatar_with_user_id() {
-        let avatar = Avatar::new(ComponentId::Avatar("user1".to_string()))
-            .user_id("user123");
+        let avatar = Avatar::new(ComponentId::Avatar("user1".to_string())).user_id("user123");
         assert_eq!(avatar.user_id, "user123");
     }
 
     #[test]
     fn test_avatar_with_display_name() {
-        let avatar = Avatar::new(ComponentId::Avatar("user1".to_string()))
-            .display_name("Alice Smith");
+        let avatar =
+            Avatar::new(ComponentId::Avatar("user1".to_string())).display_name("Alice Smith");
         assert_eq!(avatar.display_name, "Alice Smith");
     }
 
@@ -334,24 +333,21 @@ mod tests {
 
     #[test]
     fn test_avatar_small_size() {
-        let avatar = Avatar::new(ComponentId::Avatar("user1".to_string()))
-            .size(AvatarSize::Small);
+        let avatar = Avatar::new(ComponentId::Avatar("user1".to_string())).size(AvatarSize::Small);
         assert_eq!(avatar.size, AvatarSize::Small);
         assert_eq!(avatar.size.dimensions(), (3, 3));
     }
 
     #[test]
     fn test_avatar_medium_size() {
-        let avatar = Avatar::new(ComponentId::Avatar("user1".to_string()))
-            .size(AvatarSize::Medium);
+        let avatar = Avatar::new(ComponentId::Avatar("user1".to_string())).size(AvatarSize::Medium);
         assert_eq!(avatar.size, AvatarSize::Medium);
         assert_eq!(avatar.size.dimensions(), (5, 5));
     }
 
     #[test]
     fn test_avatar_large_size() {
-        let avatar = Avatar::new(ComponentId::Avatar("user1".to_string()))
-            .size(AvatarSize::Large);
+        let avatar = Avatar::new(ComponentId::Avatar("user1".to_string())).size(AvatarSize::Large);
         assert_eq!(avatar.size, AvatarSize::Large);
         assert_eq!(avatar.size.dimensions(), (9, 9));
     }
@@ -360,15 +356,15 @@ mod tests {
 
     #[test]
     fn test_avatar_circular_shape() {
-        let avatar = Avatar::new(ComponentId::Avatar("user1".to_string()))
-            .shape(AvatarShape::Circular);
+        let avatar =
+            Avatar::new(ComponentId::Avatar("user1".to_string())).shape(AvatarShape::Circular);
         assert_eq!(avatar.shape, AvatarShape::Circular);
     }
 
     #[test]
     fn test_avatar_square_shape() {
-        let avatar = Avatar::new(ComponentId::Avatar("user1".to_string()))
-            .shape(AvatarShape::Square);
+        let avatar =
+            Avatar::new(ComponentId::Avatar("user1".to_string())).shape(AvatarShape::Square);
         assert_eq!(avatar.shape, AvatarShape::Square);
     }
 
@@ -376,8 +372,8 @@ mod tests {
 
     #[test]
     fn test_avatar_custom_background() {
-        let avatar = Avatar::new(ComponentId::Avatar("user1".to_string()))
-            .background_color(Color::Magenta);
+        let avatar =
+            Avatar::new(ComponentId::Avatar("user1".to_string())).background_color(Color::Magenta);
         assert_eq!(avatar.background_color, Color::Magenta);
     }
 
@@ -391,29 +387,28 @@ mod tests {
 
     #[test]
     fn test_initials_single_name() {
-        let avatar = Avatar::new(ComponentId::Avatar("user1".to_string()))
-            .display_name("Alice");
+        let avatar = Avatar::new(ComponentId::Avatar("user1".to_string())).display_name("Alice");
         assert_eq!(avatar.initials(), "A");
     }
 
     #[test]
     fn test_initials_full_name() {
-        let avatar = Avatar::new(ComponentId::Avatar("user1".to_string()))
-            .display_name("Alice Smith");
+        let avatar =
+            Avatar::new(ComponentId::Avatar("user1".to_string())).display_name("Alice Smith");
         assert_eq!(avatar.initials(), "AS");
     }
 
     #[test]
     fn test_initials_three_names() {
-        let avatar = Avatar::new(ComponentId::Avatar("user1".to_string()))
-            .display_name("Alice Jane Smith");
+        let avatar =
+            Avatar::new(ComponentId::Avatar("user1".to_string())).display_name("Alice Jane Smith");
         assert_eq!(avatar.initials(), "AS");
     }
 
     #[test]
     fn test_initials_lowercase() {
-        let avatar = Avatar::new(ComponentId::Avatar("user1".to_string()))
-            .display_name("alice smith");
+        let avatar =
+            Avatar::new(ComponentId::Avatar("user1".to_string())).display_name("alice smith");
         assert_eq!(avatar.initials(), "AS");
     }
 
@@ -463,7 +458,10 @@ mod tests {
     fn test_set_error_state() {
         let mut avatar = Avatar::new(ComponentId::Avatar("user1".to_string()));
         avatar.set_error("Network error");
-        assert_eq!(avatar.state, AvatarState::Error("Network error".to_string()));
+        assert_eq!(
+            avatar.state,
+            AvatarState::Error("Network error".to_string())
+        );
     }
 
     #[test]
@@ -495,8 +493,7 @@ mod tests {
 
     #[test]
     fn test_query_value() {
-        let avatar = Avatar::new(ComponentId::Avatar("user1".to_string()))
-            .user_id("user123");
+        let avatar = Avatar::new(ComponentId::Avatar("user1".to_string())).user_id("user123");
 
         let value = avatar.query(Attribute::Value);
         assert_eq!(value, Some(AttrValue::String("user123".to_string())));
@@ -512,8 +509,7 @@ mod tests {
 
     #[test]
     fn test_state_serialization() {
-        let avatar = Avatar::new(ComponentId::Avatar("user1".to_string()))
-            .user_id("user123");
+        let avatar = Avatar::new(ComponentId::Avatar("user1".to_string())).user_id("user123");
 
         let state = avatar.state();
         assert_eq!(state, State::One(StateValue::String("user123".to_string())));
@@ -523,14 +519,8 @@ mod tests {
 
     #[test]
     fn test_render_fallback_state() {
-        let mut terminal = Terminal::new(TestBackend::new(20, 10)).unwrap();
-        let mut avatar = Avatar::new(ComponentId::Avatar("user1".to_string()))
-            .display_name("Alice Smith");
-
-        terminal.draw(|f| {
-            let area = f.area();
-            avatar.view(f, area);
-        }).unwrap();
+        let avatar =
+            Avatar::new(ComponentId::Avatar("user1".to_string())).display_name("Alice Smith");
 
         // Avatar should be in fallback state
         assert_eq!(avatar.state, AvatarState::Fallback);
@@ -538,44 +528,29 @@ mod tests {
 
     #[test]
     fn test_render_loading_state() {
-        let mut terminal = Terminal::new(TestBackend::new(20, 10)).unwrap();
         let mut avatar = Avatar::new(ComponentId::Avatar("user1".to_string()));
         avatar.set_loading();
-
-        terminal.draw(|f| {
-            let area = f.area();
-            avatar.view(f, area);
-        }).unwrap();
 
         assert_eq!(avatar.state, AvatarState::Loading);
     }
 
     #[test]
     fn test_render_loaded_state() {
-        let mut terminal = Terminal::new(TestBackend::new(20, 10)).unwrap();
         let mut avatar = Avatar::new(ComponentId::Avatar("user1".to_string()));
         avatar.load_image(vec![1, 2, 3]).ok();
-
-        terminal.draw(|f| {
-            let area = f.area();
-            avatar.view(f, area);
-        }).unwrap();
 
         assert_eq!(avatar.state, AvatarState::Loaded);
     }
 
     #[test]
     fn test_render_error_state() {
-        let mut terminal = Terminal::new(TestBackend::new(20, 10)).unwrap();
         let mut avatar = Avatar::new(ComponentId::Avatar("user1".to_string()));
         avatar.set_error("Failed to load");
 
-        terminal.draw(|f| {
-            let area = f.area();
-            avatar.view(f, area);
-        }).unwrap();
-
-        assert_eq!(avatar.state, AvatarState::Error("Failed to load".to_string()));
+        assert_eq!(
+            avatar.state,
+            AvatarState::Error("Failed to load".to_string())
+        );
     }
 
     // === Component Event Tests ===

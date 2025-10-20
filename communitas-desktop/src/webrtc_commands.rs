@@ -380,7 +380,6 @@ pub async fn webrtc_subscribe_events(webrtc_state: State<'_, WebRtcState>) -> Re
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tauri::State;
 
     #[tokio::test]
     async fn test_webrtc_state_creation() {
@@ -417,6 +416,5 @@ mod tests {
 
         // Test the state management works
         let _service_arc = state.get_service().await.unwrap();
-        assert!(true); // If we get here, the method signature is correct
     }
 }

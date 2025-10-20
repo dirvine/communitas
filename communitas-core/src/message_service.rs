@@ -20,8 +20,7 @@
 //! - Automatic conflict resolution
 
 use crate::crdt::{
-    CRDTMessage, EntityType, MessageContent,
-    MissingRange, SyncResponse, sort_messages_causally,
+    CRDTMessage, EntityType, MessageContent, MissingRange, SyncResponse, sort_messages_causally,
 };
 use crate::message_sync::MessageSyncService;
 use serde::{Deserialize, Serialize};
@@ -88,13 +87,16 @@ impl MessageService {
         &self,
         message: CRDTMessage,
     ) -> MessageServiceResult<ReceiveResult> {
-        let result = self.message_sync.receive_message(message).await
+        let result = self
+            .message_sync
+            .receive_message(message)
+            .await
             .map_err(|e| MessageServiceError::SyncError(e.to_string()))?;
 
         Ok(ReceiveResult {
-        accepted: result.accepted,
-        out_of_order: result.out_of_order,
-        missing_ranges: result.missing_ranges.unwrap_or_default(),
+            accepted: result.accepted,
+            out_of_order: result.out_of_order,
+            missing_ranges: result.missing_ranges.unwrap_or_default(),
         })
     }
 
@@ -115,13 +117,15 @@ impl MessageService {
         entity_id: String,
         parent_message_id: String,
     ) -> MessageServiceResult<Vec<CRDTMessage>> {
-        let sync_response = self.message_sync
+        let sync_response = self
+            .message_sync
             .get_all_messages(&entity_id)
             .await
             .map_err(|e| MessageServiceError::SyncError(e.to_string()))?;
 
         // Filter to just replies to the parent message
-        let thread_messages: Vec<CRDTMessage> = sync_response.messages
+        let thread_messages: Vec<CRDTMessage> = sync_response
+            .messages
             .into_iter()
             .filter(|msg| {
                 msg.metadata
@@ -150,14 +154,12 @@ impl MessageService {
             last_sync_time: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
-                .as_secs() as u64,
+                .as_secs(),
             message_count: sync_response.messages.len(),
             missing_messages: vec![], // Not implemented in this simplified version
             out_of_order_messages: vec![], // Not implemented in this simplified version
         })
     }
-
-
 
     /// Send a direct message to specific recipients
     pub async fn send_direct_messages(
@@ -171,7 +173,8 @@ impl MessageService {
             // Create a direct message entity ID (peer-to-peer)
             let entity_id = format!("dm:{}", recipient);
 
-            let message = self.message_sync
+            let message = self
+                .message_sync
                 .send_message(entity_id, EntityType::Person, content.clone(), None)
                 .await
                 .map_err(|e| MessageServiceError::SyncError(e.to_string()))?;
@@ -204,7 +207,9 @@ impl MessageService {
         channel_id: String,
         content: MessageContent,
     ) -> MessageServiceResult<String> {
-        let message = self.send_message(channel_id, EntityType::Channel, content, None).await?;
+        let message = self
+            .send_message(channel_id, EntityType::Channel, content, None)
+            .await?;
         Ok(message.metadata.id)
     }
 
@@ -216,7 +221,9 @@ impl MessageService {
         thread_id: String,
         content: MessageContent,
     ) -> MessageServiceResult<String> {
-        let message = self.send_message(entity_id, entity_type, content, Some(thread_id)).await?;
+        let message = self
+            .send_message(entity_id, entity_type, content, Some(thread_id))
+            .await?;
         Ok(message.metadata.id)
     }
 
@@ -238,7 +245,6 @@ impl MessageService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
 
     async fn create_test_service() -> MessageService {
         MessageService::new("test-peer-123".to_string())
@@ -246,9 +252,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_message_service_creation() {
-        let service = create_test_service().await;
-        // Service should be created successfully
-        assert!(true);
+        let _service = create_test_service().await;
+        // Service should be created successfully (test passes if no panic)
     }
 
     #[tokio::test]
@@ -279,7 +284,10 @@ mod tests {
             }
             Err(e) => {
                 // This might fail if MessageSyncService has dependencies
-                println!("⚠️ Send message returned error (expected in test env): {}", e);
+                println!(
+                    "⚠️ Send message returned error (expected in test env): {}",
+                    e
+                );
             }
         }
     }
@@ -309,7 +317,10 @@ mod tests {
                 println!("✅ Thread reply test passed!");
             }
             Err(e) => {
-                println!("⚠️ Thread reply returned error (expected in test env): {}", e);
+                println!(
+                    "⚠️ Thread reply returned error (expected in test env): {}",
+                    e
+                );
             }
         }
     }
@@ -319,10 +330,7 @@ mod tests {
         let service = create_test_service().await;
 
         let result = service
-            .get_entity_sync_state(
-                "test-entity".to_string(),
-                EntityType::Channel,
-            )
+            .get_entity_sync_state("test-entity".to_string(), EntityType::Channel)
             .await;
 
         match result {
@@ -332,7 +340,10 @@ mod tests {
                 println!("✅ Get entity sync state test passed!");
             }
             Err(e) => {
-                println!("⚠️ Get sync state returned error (expected in test env): {}", e);
+                println!(
+                    "⚠️ Get sync state returned error (expected in test env): {}",
+                    e
+                );
             }
         }
     }

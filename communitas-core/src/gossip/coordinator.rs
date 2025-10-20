@@ -470,16 +470,11 @@ mod tests {
         };
         let endpoints = vec![SocketAddr::from((Ipv4Addr::LOCALHOST, 9000))];
         let nat_class = NatClass::Eim; // Published type
-        let validity_ms = 3600_000; // 1 hour
+        let validity_ms = 3_600_000; // 1 hour
 
         // Should succeed and cache locally
         let result = client
-            .publish_coordinator_advert(
-                roles.clone(),
-                endpoints.clone(),
-                nat_class.clone(),
-                validity_ms,
-            )
+            .publish_coordinator_advert(roles.clone(), endpoints.clone(), nat_class, validity_ms)
             .await;
 
         assert!(result.is_ok());

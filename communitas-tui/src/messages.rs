@@ -35,7 +35,10 @@ pub enum Msg {
     /// Navigate to specific channel
     NavigateToChannel(String),
     /// Navigate to specific thread
-    NavigateToThread { message_id: String, channel_id: String },
+    NavigateToThread {
+        message_id: String,
+        channel_id: String,
+    },
     /// Navigate to network status
     NavigateToNetworkStatus,
 
@@ -73,11 +76,17 @@ pub enum Msg {
     /// Message selected in list
     MessageSelected { message_id: String },
     /// Message edited
-    MessageEdited { message_id: String, new_content: String },
+    MessageEdited {
+        message_id: String,
+        new_content: String,
+    },
     /// Message deleted
     MessageDeleted(String),
     /// Thread created from message
-    ThreadCreated { message_id: String, thread_id: String },
+    ThreadCreated {
+        message_id: String,
+        thread_id: String,
+    },
     /// Thread opened for viewing
     ThreadOpened { message_id: String },
     /// Reply added to thread
@@ -127,11 +136,17 @@ pub enum Msg {
 
     // === Input/Forms ===
     /// Text input changed
-    InputChanged { component: ComponentId, value: String },
+    InputChanged {
+        component: ComponentId,
+        value: String,
+    },
     /// Form submitted
     FormSubmitted(ComponentId),
     /// Form validation failed
-    FormValidationFailed { component: ComponentId, errors: Vec<String> },
+    FormValidationFailed {
+        component: ComponentId,
+        errors: Vec<String>,
+    },
 
     // === UI State ===
     /// Status message updated
@@ -141,9 +156,22 @@ pub enum Msg {
     /// Success notification
     SuccessNotification(String),
     /// Selection changed in a list component
-    SelectionChanged { component: ComponentId, index: usize },
+    SelectionChanged {
+        component: ComponentId,
+        index: usize,
+    },
     /// Redraw requested
     RedrawRequested,
+
+    // === Tab Navigation ===
+    /// Tab changed (user selected different tab)
+    TabChanged(usize),
+    /// Tab activated (user pressed Enter on tab)
+    TabActivated(String),
+
+    // === User Events ===
+    /// User event from async/background systems
+    User(UserEvent),
 
     // === No-op ===
     /// No message (used for fallthrough cases)
@@ -182,6 +210,8 @@ pub enum ModalType {
     Error(String),
     /// Help screen
     Help,
+    /// User event from async/background systems
+    User(UserEvent),
 }
 
 /// User events from async/P2P systems
@@ -206,15 +236,16 @@ pub enum UserEvent {
     },
 
     /// Network peer connected
-    PeerConnected {
-        peer_id: String,
-        address: String,
-    },
+    PeerConnected { peer_id: String, address: String },
 
     /// Network peer disconnected
-    PeerDisconnected {
-        peer_id: String,
-    },
+    PeerDisconnected { peer_id: String },
+
+    /// Tab changed (for component navigation)
+    TabChanged(usize),
+
+    /// Tab activated (for component navigation)
+    TabActivated(String),
 
     /// Network status changed
     NetworkStatusChanged(NetworkStatus),
@@ -239,10 +270,7 @@ pub enum UserEvent {
     },
 
     /// Background task completed
-    TaskCompleted {
-        task_id: String,
-        result: TaskResult,
-    },
+    TaskCompleted { task_id: String, result: TaskResult },
 }
 
 /// User presence status
@@ -271,6 +299,7 @@ pub enum TaskResult {
 ///
 /// Each interactive component in the application has a unique ID.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[allow(dead_code)]
 pub enum ComponentId {
     // === Layout Components ===
     /// Main application container
@@ -339,6 +368,7 @@ pub enum ComponentId {
 
 impl ComponentId {
     /// Get a human-readable name for this component
+    #[allow(dead_code)]
     pub fn name(&self) -> String {
         match self {
             ComponentId::Main => "Main".to_string(),

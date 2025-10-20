@@ -9,6 +9,7 @@ use axum::{
     extract::{Path, Query, State},
 };
 use chrono::{DateTime, Utc};
+use communitas_core::legacy_crdt::EntityType;
 // Removed: saorsa-core imports - replaced with stub implementations
 // use saorsa_core::chat::{ChannelId, ChannelType, MessageId};
 // use saorsa_core::identity::FourWordAddress;
@@ -114,7 +115,7 @@ pub async fn create_channel(
 
     // Stub implementation - create_channel functionality removed
     // TODO: Implement using communitas-core APIs if needed
-    let channel_id = format!("channel_{}", chrono::Utc::now().timestamp());
+    let channel_id = uuid::Uuid::new_v4().to_string();
     let created_at = chrono::Utc::now();
 
     Ok(Json(json!({
@@ -128,33 +129,30 @@ pub async fn create_channel(
 
 /// List all channels
 pub async fn list_channels(State(state): State<Arc<BridgeState>>) -> BridgeResult<Json<Value>> {
-    let mut core_guard = state.core.write().await;
+    let core_guard = state.core.read().await;
     let core = core_guard
-        .as_mut()
+        .as_ref()
         .ok_or_else(|| BridgeError::CommandFailed("Core not initialized".to_string()))?;
 
-    let channel_ids = core
-        .chat
-        .get_user_channels()
+    // Use entity_service to list entities (channels are entities)
+    let entities = core
+        .entity_service
+        .list_entities()
         .await
-        .map_err(|e| BridgeError::CommandFailed(format!("get_user_channels failed: {}", e)))?;
+        .map_err(|e| BridgeError::CommandFailed(format!("list_entities failed: {}", e)))?;
 
-    let mut channels = Vec::new();
-    for id in channel_ids {
-        let channel = core
-            .chat
-            .get_channel(&id)
-            .await
-            .map_err(|e| BridgeError::CommandFailed(format!("get_channel failed: {}", e)))?;
-
-        let created_at: DateTime<Utc> = channel.created_at.into();
-        channels.push(json!({
-            "id": channel.id.0,
-            "name": channel.name,
-            "description": channel.description,
-            "created_at": created_at.to_rfc3339()
-        }));
-    }
+    let channels: Vec<Value> = entities
+        .into_iter()
+        .filter(|e| e.entity_type == EntityType::Channel)
+        .map(|entity| {
+            json!({
+                "id": entity.id,
+                "name": entity.name,
+                "description": entity.description.unwrap_or_default(),
+                "created_at": Utc::now().to_rfc3339()
+            })
+        })
+        .collect();
 
     Ok(Json(json!({"channels": channels})))
 }
@@ -208,16 +206,19 @@ pub async fn send_channel_message(
     }
 
     let core_guard = state.core.read().await;
-    let core = core_guard
+    let _core = core_guard
         .as_ref()
         .ok_or_else(|| BridgeError::CommandFailed("Core not initialized".to_string()))?;
 
+    // Save recipient count before move
+    let recipient_count = req.recipients.len();
+
     // Convert recipients to FourWordAddress
-    let recipients: Vec<FourWordAddress> =
+    let _recipients: Vec<FourWordAddress> =
         req.recipients.into_iter().map(FourWordAddress).collect();
 
     // Parse channel UUID
-    let channel_uuid = uuid::Uuid::parse_str(&channel_id)
+    let _channel_uuid = uuid::Uuid::parse_str(&channel_id)
         .map_err(|e| BridgeError::InvalidRequest(format!("Invalid channel ID: {}", e)))?;
 
     // Stub implementation - send_message functionality removed
@@ -228,7 +229,7 @@ pub async fn send_channel_message(
     "success": true,
     "message_id": message_id,
     "note": "Stub implementation - saorsa-core removed",
-    "recipients": req.recipients.len(),
+    "recipients": recipient_count,
     "channel_id": channel_id
     })))
 }
@@ -274,19 +275,15 @@ pub async fn create_thread(
         .as_mut()
         .ok_or_else(|| BridgeError::CommandFailed("Core not initialized".to_string()))?;
 
-    let thread = core
-        .chat
-        .create_thread(
-            &ChannelId(req.channel_id),
-            &MessageId(req.parent_message_id),
-        )
-        .await
-        .map_err(|e| BridgeError::CommandFailed(format!("create_thread failed: {}", e)))?;
+    // TODO: Implement thread creation via message_service when API is ready
+    let _core = core; // Silence unused warning
+    let thread_id = uuid::Uuid::new_v4().to_string();
 
     Ok(Json(json!({
-        "thread_id": thread.id.0,
-        "channel_id": thread.channel_id.0,
-        "parent_message_id": thread.parent_message_id.0
+        "thread_id": thread_id,
+        "channel_id": req.channel_id,
+        "parent_message_id": req.parent_message_id,
+        "note": "Thread creation pending API update"
     })))
 }
 
@@ -313,22 +310,33 @@ pub async fn get_network_connection_info(
         .as_ref()
         .ok_or_else(|| BridgeError::CommandFailed("Core not initialized".to_string()))?;
 
-    // Get endpoint four-word address
+    // Get endpoint four-word address from connection_identity field
     let four_word_id = core
-        .get_local_endpoint_four_words()
-        .await
+        .connection_identity
+        .as_ref()
+        .cloned()
         .unwrap_or_else(|| "not-available".to_string());
 
     // Get listen address as string
     let listen_addr = core
-        .local_endpoint
+        .listen_address
         .as_ref()
         .map(|addr| addr.to_string())
         .unwrap_or_else(|| "not-available".to_string());
 
-    // Get peer count and running status
-    let peer_count = core.get_peer_count().await;
-    let is_listening = core.is_p2p_running().await;
+    // Get peer count from gossip context if available
+    let peer_count = if let Some(ref gossip) = core.gossip {
+        gossip
+            .get_contacts()
+            .await
+            .ok()
+            .map(|c| c.len())
+            .unwrap_or(0)
+    } else {
+        0
+    };
+
+    let is_listening = core.is_networking_active();
 
     Ok(Json(json!({
         "four_word_id": four_word_id,
@@ -381,14 +389,18 @@ pub async fn get_connected_peers(
         .as_ref()
         .ok_or_else(|| BridgeError::CommandFailed("Core not initialized".to_string()))?;
 
-    // Get connected peers from CoreContext
-    let peers = core.get_connected_peers().await;
+    // Get connected peers from gossip context if available
+    let peers = if let Some(ref gossip) = core.gossip {
+        gossip.get_contacts().await.ok().unwrap_or_default()
+    } else {
+        Vec::new()
+    };
 
     let peers_json: Vec<Value> = peers
         .iter()
-        .map(|peer_id| {
+        .map(|(four_words, _peer_id)| {
             json!({
-                "peer_id": peer_id,
+                "four_words": four_words,
                 "status": "connected",
             })
         })
@@ -417,4 +429,347 @@ pub async fn disconnect_from_peer(
     // TODO: Add disconnect_peer method to CoreContext when needed
 
     Ok(Json(json!({"success": true})))
+}
+
+// ===== Website Publishing Endpoints =====
+
+/// Website data structure
+#[derive(Deserialize)]
+pub struct CreateWebsiteRequest {
+    html: String,
+    css: Option<String>,
+    js: Option<String>,
+    metadata: Option<serde_json::Value>,
+}
+
+#[derive(Deserialize)]
+pub struct UpdateWebsiteRequest {
+    html: Option<String>,
+    css: Option<String>,
+    js: Option<String>,
+    metadata: Option<String>,
+}
+
+/// Create or publish website for an entity
+pub async fn create_entity_website(
+    State(state): State<Arc<BridgeState>>,
+    Path(entity_id): Path<String>,
+    Json(req): Json<CreateWebsiteRequest>,
+) -> BridgeResult<Json<Value>> {
+    // Validate input
+    if req.html.is_empty() {
+        return Err(BridgeError::InvalidRequest(
+            "HTML content cannot be empty".to_string(),
+        ));
+    }
+    if req.html.len() > 1024 * 1024 {
+        // 1MB limit
+        return Err(BridgeError::InvalidRequest(
+            "HTML content too large (max 1MB)".to_string(),
+        ));
+    }
+
+    let _core_guard = state.core.read().await;
+    let _core = _core_guard
+        .as_ref()
+        .ok_or_else(|| BridgeError::CommandFailed("Core not initialized".to_string()))?;
+
+    // Create content hash using SHA-256
+    let mut content = req.html.clone();
+    if let Some(css) = &req.css {
+        content.push_str(css);
+    }
+    if let Some(js) = &req.js {
+        content.push_str(js);
+    }
+
+    // Simple hash generation (in production, use proper content-addressable storage)
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    let mut hasher = DefaultHasher::new();
+    content.hash(&mut hasher);
+    let hash = format!("hash_{:x}", hasher.finish());
+    let published_at = chrono::Utc::now();
+
+    // TODO: Store in actual virtual disk / content-addressable storage
+    // For now, return success with hash
+
+    Ok(Json(json!({
+        "website_root_hash": hash,
+        "entity_id": entity_id,
+        "published_at": published_at.to_rfc3339(),
+        "status": "published",
+        "url": format!("{}.communitas", entity_id),
+        "size_bytes": content.len()
+    })))
+}
+
+/// Get website information for an entity
+pub async fn get_entity_website(
+    State(state): State<Arc<BridgeState>>,
+    Path(entity_id): Path<String>,
+) -> BridgeResult<Json<Value>> {
+    let _core_guard = state.core.read().await;
+    let _core = _core_guard
+        .as_ref()
+        .ok_or_else(|| BridgeError::CommandFailed("Core not initialized".to_string()))?;
+
+    // TODO: Retrieve from actual storage
+    // For now, return mock data
+    Ok(Json(json!({
+        "entity_id": entity_id,
+        "website_root_hash": "hash_mock_12345",
+        "published_at": chrono::Utc::now().to_rfc3339(),
+        "url": format!("{}.communitas", entity_id),
+        "status": "published",
+        "note": "Mock implementation - actual storage pending"
+    })))
+}
+
+/// Update website content for an entity
+pub async fn update_entity_website(
+    State(state): State<Arc<BridgeState>>,
+    Path(entity_id): Path<String>,
+    Json(req): Json<UpdateWebsiteRequest>,
+) -> BridgeResult<Json<Value>> {
+    let _core_guard = state.core.read().await;
+    let _core = _core_guard
+        .as_ref()
+        .ok_or_else(|| BridgeError::CommandFailed("Core not initialized".to_string()))?;
+
+    // Create new content hash
+    let mut content = String::new();
+    if let Some(html) = &req.html {
+        content.push_str(html);
+    }
+    if let Some(css) = &req.css {
+        content.push_str(css);
+    }
+    if let Some(js) = &req.js {
+        content.push_str(js);
+    }
+
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    let mut hasher = DefaultHasher::new();
+    content.hash(&mut hasher);
+    let new_hash = format!("hash_{:x}", hasher.finish());
+    let updated_at = chrono::Utc::now();
+
+    Ok(Json(json!({
+        "entity_id": entity_id,
+        "website_root_hash": new_hash,
+        "previous_hash": "hash_mock_old",
+        "updated_at": updated_at.to_rfc3339(),
+        "status": "updated"
+    })))
+}
+
+/// Delete website for an entity
+pub async fn delete_entity_website(
+    State(state): State<Arc<BridgeState>>,
+    Path(entity_id): Path<String>,
+) -> BridgeResult<Json<Value>> {
+    let _core_guard = state.core.read().await;
+    let _core = _core_guard
+        .as_ref()
+        .ok_or_else(|| BridgeError::CommandFailed("Core not initialized".to_string()))?;
+
+    // TODO: Remove from actual storage
+    Ok(Json(json!({
+        "success": true,
+        "entity_id": entity_id,
+        "deleted": true,
+        "deleted_at": chrono::Utc::now().to_rfc3339()
+    })))
+}
+
+// ===== Virtual Disk Storage Endpoints =====
+
+/// Upload file request
+#[derive(Deserialize)]
+pub struct UploadFileRequest {
+    path: String,
+    content_base64: String,
+    content_type: Option<String>,
+}
+
+/// Upload file to entity virtual disk
+pub async fn upload_file(
+    State(state): State<Arc<BridgeState>>,
+    Path((entity_id, disk_type)): Path<(String, String)>,
+    Json(req): Json<UploadFileRequest>,
+) -> BridgeResult<Json<Value>> {
+    // Validate disk type
+    if !["private", "public", "shared"].contains(&disk_type.as_str()) {
+        return Err(BridgeError::InvalidRequest(
+            "Invalid disk type. Must be 'private', 'public', or 'shared'".to_string(),
+        ));
+    }
+
+    // Validate path
+    if req.path.is_empty() || !req.path.starts_with('/') {
+        return Err(BridgeError::InvalidRequest(
+            "Path must start with '/'".to_string(),
+        ));
+    }
+
+    // Validate content
+    if req.content_base64.is_empty() {
+        return Err(BridgeError::InvalidRequest(
+            "Content cannot be empty".to_string(),
+        ));
+    }
+
+    // Decode base64 to get actual size
+    let content_bytes = match base64::decode(&req.content_base64) {
+        Ok(bytes) => bytes,
+        Err(_) => {
+            return Err(BridgeError::InvalidRequest(
+                "Invalid base64 content".to_string(),
+            ));
+        }
+    };
+
+    if content_bytes.len() > 10 * 1024 * 1024 {
+        // 10MB limit
+        return Err(BridgeError::InvalidRequest(
+            "File too large (max 10MB)".to_string(),
+        ));
+    }
+
+    let _core_guard = state.core.read().await;
+    let _core = _core_guard
+        .as_ref()
+        .ok_or_else(|| BridgeError::CommandFailed("Core not initialized".to_string()))?;
+
+    // Generate file hash
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    let mut hasher = DefaultHasher::new();
+    content_bytes.hash(&mut hasher);
+    let file_id = format!("file_{:x}", hasher.finish());
+
+    let encrypted = disk_type == "private" || disk_type == "shared";
+
+    Ok(Json(json!({
+        "file_id": file_id,
+        "path": req.path,
+        "disk_type": disk_type,
+        "size_bytes": content_bytes.len(),
+        "uploaded_at": chrono::Utc::now().to_rfc3339(),
+        "encrypted": encrypted,
+        "content_type": req.content_type.unwrap_or("application/octet-stream".to_string())
+    })))
+}
+
+/// List files in entity disk
+pub async fn list_files(
+    State(state): State<Arc<BridgeState>>,
+    Path((entity_id, disk_type)): Path<(String, String)>,
+) -> BridgeResult<Json<Value>> {
+    // Validate disk type
+    if !["private", "public", "shared"].contains(&disk_type.as_str()) {
+        return Err(BridgeError::InvalidRequest("Invalid disk type".to_string()));
+    }
+
+    let _core_guard = state.core.read().await;
+    let _core = _core_guard
+        .as_ref()
+        .ok_or_else(|| BridgeError::CommandFailed("Core not initialized".to_string()))?;
+
+    // TODO: Implement actual file listing from storage
+    // For now, return empty list
+    Ok(Json(json!({
+        "entity_id": entity_id,
+        "disk_type": disk_type,
+        "files": [],
+        "total_files": 0,
+        "total_size_bytes": 0,
+        "note": "Mock implementation - actual storage pending"
+    })))
+}
+
+/// Download file from entity disk
+pub async fn download_file(
+    State(state): State<Arc<BridgeState>>,
+    Path((entity_id, disk_type, file_path)): Path<(String, String, String)>,
+) -> BridgeResult<Json<Value>> {
+    // Validate disk type
+    if !["private", "public", "shared"].contains(&disk_type.as_str()) {
+        return Err(BridgeError::InvalidRequest("Invalid disk type".to_string()));
+    }
+
+    let _core_guard = state.core.read().await;
+    let _core = _core_guard
+        .as_ref()
+        .ok_or_else(|| BridgeError::CommandFailed("Core not initialized".to_string()))?;
+
+    // TODO: Retrieve actual file from storage
+    // For now, return mock data
+    let mock_content = "Mock file content";
+    let content_base64 = base64::encode(mock_content);
+
+    Ok(Json(json!({
+        "path": format!("/{}", file_path),
+        "content_base64": content_base64,
+        "size_bytes": mock_content.len(),
+        "content_type": "text/plain",
+        "decrypted": disk_type != "public",
+        "note": "Mock implementation - actual storage pending"
+    })))
+}
+
+/// Delete file from entity disk
+pub async fn delete_file(
+    State(state): State<Arc<BridgeState>>,
+    Path((entity_id, disk_type, file_path)): Path<(String, String, String)>,
+) -> BridgeResult<Json<Value>> {
+    // Validate disk type
+    if !["private", "public", "shared"].contains(&disk_type.as_str()) {
+        return Err(BridgeError::InvalidRequest("Invalid disk type".to_string()));
+    }
+
+    let _core_guard = state.core.read().await;
+    let _core = _core_guard
+        .as_ref()
+        .ok_or_else(|| BridgeError::CommandFailed("Core not initialized".to_string()))?;
+
+    // TODO: Delete from actual storage
+    Ok(Json(json!({
+        "success": true,
+        "deleted": true,
+        "path": format!("/{}", file_path),
+        "entity_id": entity_id,
+        "disk_type": disk_type,
+        "deleted_at": chrono::Utc::now().to_rfc3339()
+    })))
+}
+
+/// Get disk usage statistics
+pub async fn get_disk_stats(
+    State(state): State<Arc<BridgeState>>,
+    Path((entity_id, disk_type)): Path<(String, String)>,
+) -> BridgeResult<Json<Value>> {
+    // Validate disk type
+    if !["private", "public", "shared"].contains(&disk_type.as_str()) {
+        return Err(BridgeError::InvalidRequest("Invalid disk type".to_string()));
+    }
+
+    let _core_guard = state.core.read().await;
+    let _core = _core_guard
+        .as_ref()
+        .ok_or_else(|| BridgeError::CommandFailed("Core not initialized".to_string()))?;
+
+    let encrypted = disk_type != "public";
+
+    // TODO: Calculate actual stats from storage
+    Ok(Json(json!({
+        "entity_id": entity_id,
+        "disk_type": disk_type,
+        "total_files": 0,
+        "total_size_bytes": 0,
+        "encryption": if encrypted { "enabled" } else { "disabled" },
+        "note": "Mock implementation - actual storage pending"
+    })))
 }

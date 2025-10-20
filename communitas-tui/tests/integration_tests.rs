@@ -1,8 +1,5 @@
 use anyhow::Result;
-use communitas_core::{
-    AuthService,
-    encrypted_storage::{EncryptedStorageManager, StorageConfig},
-};
+use communitas_core::encrypted_storage::{EncryptedStorageManager, StorageConfig};
 use tempfile::TempDir;
 use tokio::time::{Duration, timeout};
 

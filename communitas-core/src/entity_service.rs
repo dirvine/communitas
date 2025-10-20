@@ -18,12 +18,12 @@
 //! - Member addition/removal with tombstone support
 //! - Unified API for desktop and TUI applications
 
-use crate::crdt::EntityType;
 use crate::CrdtManager;
+use crate::crdt::EntityType;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;
-use yrs::{Map, Transact};
+use yrs::{Map, Transact, WriteTxn};
 
 /// Entity information
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -97,10 +97,9 @@ impl EntityService {
         let entity_id = Uuid::new_v4().to_string();
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .map_err(|e| EntityServiceError::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Time error: {}", e)
-            )))?
+            .map_err(|e| {
+                EntityServiceError::Io(std::io::Error::other(format!("Time error: {}", e)))
+            })?
             .as_secs() as i64;
 
         let entity = Entity {
@@ -122,18 +121,28 @@ impl EntityService {
             all_members.push(created_by.clone());
         }
 
-        for member_id in all_members {
-            self.add_member(entity_type, &entity_id, &member_id, "member").await?;
+        for member_id in &all_members {
+            self.add_member(entity_type, &entity_id, member_id, "member")
+                .await?;
         }
 
-        Ok(entity)
+        // Update entity with actual members list (including creator)
+        let entity_with_members = Entity {
+            members: all_members,
+            ..entity
+        };
+
+        Ok(entity_with_members)
     }
 
     /// Get entity by ID
     pub async fn get_entity(&self, entity_id: &str) -> EntityServiceResult<Entity> {
         // Load entity metadata from CRDT
         let doc_id = format!("entity:{}:metadata", entity_id);
-        let doc = self.crdt_manager.load_document(&doc_id).await
+        let doc = self
+            .crdt_manager
+            .load_document(&doc_id)
+            .await
             .map_err(|_| EntityServiceError::NotFound(entity_id.to_string()))?;
 
         // Extract entity data from CRDT document
@@ -159,11 +168,12 @@ impl EntityService {
         let created_by = CrdtManager::get_map_string(&metadata_map, &txn, "created_by")
             .unwrap_or_else(|| "unknown".to_string());
 
-        let created_at = CrdtManager::get_map_i64(&metadata_map, &txn, "created_at")
-            .unwrap_or(0);
+        let created_at = CrdtManager::get_map_i64(&metadata_map, &txn, "created_at").unwrap_or(0);
 
         // Get members list
-        let members = self.list_members(entity_type, entity_id).await?
+        let members = self
+            .list_members(entity_type, entity_id)
+            .await?
             .into_iter()
             .filter(|m| !m.deleted)
             .map(|m| m.member_id)
@@ -209,35 +219,37 @@ impl EntityService {
         };
 
         // Check if member already exists and is active
+        let members_map = doc.get_or_insert_map("members");
         {
             let txn = doc.transact();
-            let members_map = doc.get_or_insert_map("members");
 
             if let Some(member_data) = CrdtManager::get_nested_map(&members_map, &txn, member_id) {
-                let is_deleted = CrdtManager::get_map_bool(&member_data, &txn, "deleted").unwrap_or(false);
+                let is_deleted =
+                    CrdtManager::get_map_bool(&member_data, &txn, "deleted").unwrap_or(false);
                 if !is_deleted {
-                    return Err(EntityServiceError::MemberAlreadyExists(member_id.to_string()));
+                    return Err(EntityServiceError::MemberAlreadyExists(
+                        member_id.to_string(),
+                    ));
                 }
             }
         }
 
         // Add new member
+        let active_members_map = doc.get_or_insert_map("active_members");
         {
             let mut txn = doc.transact_mut();
-            let members_map = doc.get_or_insert_map("members");
-            let active_members_map = doc.get_or_insert_map("active_members");
 
-            let member_data = CrdtManager::get_or_create_nested_map(&members_map, &mut txn, member_id);
+            let member_data =
+                CrdtManager::get_or_create_nested_map(&members_map, &mut txn, member_id);
 
             CrdtManager::set_map_string(&member_data, &mut txn, "member_id", member_id);
             CrdtManager::set_map_string(&member_data, &mut txn, "role", role);
 
             let now = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .map_err(|e| EntityServiceError::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Time error: {}", e)
-                )))?
+                .map_err(|e| {
+                    EntityServiceError::Io(std::io::Error::other(format!("Time error: {}", e)))
+                })?
                 .as_secs() as i64;
 
             CrdtManager::set_map_i64(&member_data, &mut txn, "joined_at", now);
@@ -265,13 +277,19 @@ impl EntityService {
         let doc_id = format!("{}:{}:core", entity_type.as_str(), entity_id);
 
         // Load document
-        let doc = self.crdt_manager.load_document(&doc_id).await
+        let doc = self
+            .crdt_manager
+            .load_document(&doc_id)
+            .await
             .map_err(|_| EntityServiceError::NotFound(entity_id.to_string()))?;
+
+        // Get maps before transactions
+        let members_map = doc.get_or_insert_map("members");
+        let active_members_map = doc.get_or_insert_map("active_members");
 
         // Check if member exists
         {
             let txn = doc.transact();
-            let members_map = doc.get_or_insert_map("members");
 
             if CrdtManager::get_nested_map(&members_map, &txn, member_id).is_none() {
                 return Err(EntityServiceError::MemberNotFound(member_id.to_string()));
@@ -281,19 +299,17 @@ impl EntityService {
         // Mark member as deleted (tombstone)
         {
             let mut txn = doc.transact_mut();
-            let members_map = doc.get_or_insert_map("members");
-            let active_members_map = doc.get_or_insert_map("active_members");
 
-            let member_data = CrdtManager::get_or_create_nested_map(&members_map, &mut txn, member_id);
+            let member_data =
+                CrdtManager::get_or_create_nested_map(&members_map, &mut txn, member_id);
 
             CrdtManager::set_map_bool(&member_data, &mut txn, "deleted", true);
 
             let now = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .map_err(|e| EntityServiceError::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Time error: {}", e)
-                )))?
+                .map_err(|e| {
+                    EntityServiceError::Io(std::io::Error::other(format!("Time error: {}", e)))
+                })?
                 .as_secs() as i64;
 
             CrdtManager::set_map_i64(&member_data, &mut txn, "deleted_at", now);
@@ -319,16 +335,21 @@ impl EntityService {
         let doc_id = format!("{}:{}:core", entity_type.as_str(), entity_id);
 
         // Load document
-        let doc = self.crdt_manager.load_document(&doc_id).await
+        let doc = self
+            .crdt_manager
+            .load_document(&doc_id)
+            .await
             .map_err(|_| EntityServiceError::NotFound(entity_id.to_string()))?;
 
         let mut members = Vec::new();
+
+        // Get map before transaction
+        let members_map = doc.get_or_insert_map("members");
 
         // Read all members
         // Add protection against excessive member counts that could cause memory issues
         {
             let txn = doc.transact();
-            let members_map = doc.get_or_insert_map("members");
 
             // Limit member count to prevent memory exhaustion (1000 members max)
             const MAX_MEMBERS: u32 = 1000;
@@ -336,23 +357,31 @@ impl EntityService {
             if member_count > MAX_MEMBERS {
                 return Err(EntityServiceError::Io(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
-                    format!("Too many members: {} (max: {}) for entity: {}", member_count, MAX_MEMBERS, entity_id)
+                    format!(
+                        "Too many members: {} (max: {}) for entity: {}",
+                        member_count, MAX_MEMBERS, entity_id
+                    ),
                 )));
             }
 
             for (member_id, _) in members_map.iter(&txn) {
                 let member_id_string = member_id.to_string();
 
-                if let Some(member_data) = CrdtManager::get_nested_map(&members_map, &txn, &member_id_string) {
-                    let deleted = CrdtManager::get_map_bool(&member_data, &txn, "deleted").unwrap_or(false);
+                if let Some(member_data) =
+                    CrdtManager::get_nested_map(&members_map, &txn, &member_id_string)
+                {
+                    let deleted =
+                        CrdtManager::get_map_bool(&member_data, &txn, "deleted").unwrap_or(false);
 
-                    let member_id_str = CrdtManager::get_map_string(&member_data, &txn, "member_id")
-                        .unwrap_or_else(|| member_id_string.clone());
+                    let member_id_str =
+                        CrdtManager::get_map_string(&member_data, &txn, "member_id")
+                            .unwrap_or_else(|| member_id_string.clone());
 
                     let role = CrdtManager::get_map_string(&member_data, &txn, "role")
                         .unwrap_or_else(|| "member".to_string());
 
-                    let joined_at = CrdtManager::get_map_i64(&member_data, &txn, "joined_at").unwrap_or(0);
+                    let joined_at =
+                        CrdtManager::get_map_i64(&member_data, &txn, "joined_at").unwrap_or(0);
 
                     members.push(MemberInfo {
                         member_id: member_id_str,
@@ -376,10 +405,15 @@ impl EntityService {
 
         {
             let mut txn = doc.transact_mut();
-            let metadata_map = doc.get_or_insert_map("metadata");
+            let metadata_map = txn.get_or_insert_map("metadata");
 
             CrdtManager::set_map_string(&metadata_map, &mut txn, "name", &entity.name);
-            CrdtManager::set_map_string(&metadata_map, &mut txn, "entity_type", entity.entity_type.as_str());
+            CrdtManager::set_map_string(
+                &metadata_map,
+                &mut txn,
+                "entity_type",
+                entity.entity_type.as_str(),
+            );
 
             if let Some(description) = &entity.description {
                 CrdtManager::set_map_string(&metadata_map, &mut txn, "description", description);
@@ -493,7 +527,10 @@ mod tests {
             .expect("Failed to list members");
 
         assert_eq!(members.len(), 2); // creator + new member
-        let new_member = members.iter().find(|m| m.member_id == "new-member").unwrap();
+        let new_member = members
+            .iter()
+            .find(|m| m.member_id == "new-member")
+            .unwrap();
         assert_eq!(new_member.role, "admin");
         assert!(!new_member.deleted);
     }
@@ -517,7 +554,10 @@ mod tests {
             .add_member(EntityType::Group, &entity.id, "member1", "member")
             .await;
 
-        assert!(matches!(result, Err(EntityServiceError::MemberAlreadyExists(_))));
+        assert!(matches!(
+            result,
+            Err(EntityServiceError::MemberAlreadyExists(_))
+        ));
     }
 
     #[tokio::test]

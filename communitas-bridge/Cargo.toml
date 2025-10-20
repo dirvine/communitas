@@ -14,7 +14,7 @@ path = "src/main.rs"
 
 [dependencies]
 # Core business logic
-communitas-core = { path = "../communitas-core" }
+communitas-core = { version = "0.1.20", path = "../communitas-core" }
 
 # Saorsa Core
 # Removed: saorsa-core - using communitas-core APIs instead

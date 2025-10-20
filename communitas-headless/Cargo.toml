@@ -14,7 +14,7 @@ path = "src/main.rs"
 
 [dependencies]
 # Core business logic
-communitas-core = { version = "0.1.19", path = "../communitas-core" }
+communitas-core = { version = "0.1.20", path = "../communitas-core" }
 
 
 # Networking - use published crate with wildcard address fix

@@ -31,7 +31,7 @@ gossip_overlay = []
 
 [dependencies]
 # Core business logic
-communitas-core = { path = "../communitas-core" }
+communitas-core = { version = "0.1.20", path = "../communitas-core" }
 
 # Saorsa Core ecosystem
 # Removed: saorsa-core - replaced with saorsa-gossip-* crates in communitas-core

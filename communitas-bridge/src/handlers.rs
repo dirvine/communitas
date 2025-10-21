@@ -8,9 +8,19 @@ use axum::{
     Json,
     extract::{Path, Query, State},
 };
+use base64::Engine;
 use chrono::{DateTime, Utc};
 use communitas_core::legacy_crdt::EntityType;
+use yrs::{Doc, Map, Transact};
+use yrs::types::ToJson;
 // Removed: saorsa-core imports - replaced with stub implementations
+
+// Helper to convert yrs::Any to serde_json::Value
+fn yrs_to_json(any: yrs::Any) -> serde_json::Value {
+    let mut buf = String::new();
+    any.to_json(&mut buf);
+    serde_json::from_str(&buf).unwrap_or(serde_json::Value::Null)
+}
 // use saorsa_core::chat::{ChannelId, ChannelType, MessageId};
 // use saorsa_core::identity::FourWordAddress;
 // use saorsa_core::messaging::{ChannelId as MessagingChannelId, MessageContent};
@@ -108,22 +118,38 @@ pub async fn create_channel(
         ));
     }
 
-    let mut core_guard = state.core.write().await;
+    let core_guard = state.core.read().await;
     let core = core_guard
-        .as_mut()
+        .as_ref()
         .ok_or_else(|| BridgeError::CommandFailed("Core not initialized".to_string()))?;
 
-    // Stub implementation - create_channel functionality removed
-    // TODO: Implement using communitas-core APIs if needed
-    let channel_id = uuid::Uuid::new_v4().to_string();
-    let created_at = chrono::Utc::now();
+    // Get creator identity (bridge's four-word ID or default)
+    let created_by = core
+        .connection_identity
+        .as_ref()
+        .cloned()
+        .unwrap_or_else(|| "system-bridge".to_string());
+
+    // Create channel entity using CRDT-backed entity_service
+    let entity = core
+        .entity_service
+        .create_entity(
+            req.name.clone(),
+            EntityType::Channel,
+            Some(req.description.clone()),
+            created_by,
+            vec![], // No initial members for now
+        )
+        .await
+        .map_err(|e| BridgeError::CommandFailed(format!("Failed to create channel: {}", e)))?;
 
     Ok(Json(json!({
-        "id": channel_id,
-        "name": req.name,
-    "description": req.description,
-    "created_at": created_at.to_rfc3339(),
-    "note": "Stub implementation - saorsa-core removed"
+        "id": entity.id,
+        "name": entity.name,
+        "description": entity.description.unwrap_or_default(),
+        "created_at": chrono::Utc::now().timestamp(),
+        "created_by": entity.created_by,
+        "members": entity.members
     })))
 }
 
@@ -149,7 +175,9 @@ pub async fn list_channels(State(state): State<Arc<BridgeState>>) -> BridgeResul
                 "id": entity.id,
                 "name": entity.name,
                 "description": entity.description.unwrap_or_default(),
-                "created_at": Utc::now().to_rfc3339()
+                "created_at": entity.created_at, // Real timestamp from CRDT
+                "created_by": entity.created_by,
+                "members": entity.members
             })
         })
         .collect();
@@ -469,12 +497,12 @@ pub async fn create_entity_website(
         ));
     }
 
-    let _core_guard = state.core.read().await;
-    let _core = _core_guard
+    let core_guard = state.core.read().await;
+    let core = core_guard
         .as_ref()
         .ok_or_else(|| BridgeError::CommandFailed("Core not initialized".to_string()))?;
 
-    // Create content hash using SHA-256
+    // Create content hash using Blake3 for content-addressable storage
     let mut content = req.html.clone();
     if let Some(css) = &req.css {
         content.push_str(css);
@@ -483,19 +511,37 @@ pub async fn create_entity_website(
         content.push_str(js);
     }
 
-    // Simple hash generation (in production, use proper content-addressable storage)
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-    let mut hasher = DefaultHasher::new();
-    content.hash(&mut hasher);
-    let hash = format!("hash_{:x}", hasher.finish());
+    let hash = blake3::hash(content.as_bytes());
+    let hash_hex = hash.to_hex().to_string();
     let published_at = chrono::Utc::now();
 
-    // TODO: Store in actual virtual disk / content-addressable storage
-    // For now, return success with hash
+    // Create CRDT document for website
+    let doc = yrs::Doc::new();
+    {
+        let mut txn = doc.transact_mut();
+        let root = doc.get_or_insert_map("website");
+
+        root.insert(&mut txn, "entity_id", entity_id.clone());
+        root.insert(&mut txn, "html", req.html.clone());
+        root.insert(&mut txn, "css", req.css.clone().unwrap_or_default());
+        root.insert(&mut txn, "js", req.js.clone().unwrap_or_default());
+        root.insert(&mut txn, "hash", hash_hex.clone());
+        root.insert(&mut txn, "published_at", published_at.timestamp());
+        root.insert(&mut txn, "size_bytes", content.len() as i64);
+
+        if let Some(metadata) = &req.metadata {
+            root.insert(&mut txn, "metadata", metadata.to_string());
+        }
+    }
+
+    // Save to CRDT manager (persists to disk)
+    core.crdt_manager
+        .save_document(&format!("website:{}", entity_id), "website", &entity_id, &doc)
+        .await
+        .map_err(|e| BridgeError::CommandFailed(format!("Failed to save website: {}", e)))?;
 
     Ok(Json(json!({
-        "website_root_hash": hash,
+        "website_root_hash": hash_hex,
         "entity_id": entity_id,
         "published_at": published_at.to_rfc3339(),
         "status": "published",
@@ -509,20 +555,59 @@ pub async fn get_entity_website(
     State(state): State<Arc<BridgeState>>,
     Path(entity_id): Path<String>,
 ) -> BridgeResult<Json<Value>> {
-    let _core_guard = state.core.read().await;
-    let _core = _core_guard
+    let core_guard = state.core.read().await;
+    let core = core_guard
         .as_ref()
         .ok_or_else(|| BridgeError::CommandFailed("Core not initialized".to_string()))?;
 
-    // TODO: Retrieve from actual storage
-    // For now, return mock data
+    // Load website document from CRDT storage
+    let doc = core
+        .crdt_manager
+        .load_document(&format!("website:{}", entity_id))
+        .await
+        .map_err(|e| BridgeError::CommandFailed(format!("Website not found: {}", e)))?;
+
+    let txn = doc.transact();
+    let root = doc.get_or_insert_map("website");
+
+    // Extract website data
+    let html = root
+        .get(&txn, "html")
+        .and_then(|v| v.to_string(&txn).into())
+        .unwrap_or_default();
+    let css = root
+        .get(&txn, "css")
+        .and_then(|v| v.to_string(&txn).into())
+        .unwrap_or_default();
+    let js = root
+        .get(&txn, "js")
+        .and_then(|v| v.to_string(&txn).into())
+        .unwrap_or_default();
+    let hash = root
+        .get(&txn, "hash")
+        .and_then(|v| v.to_string(&txn).into())
+        .unwrap_or_default();
+    let published_at = root
+        .get(&txn, "published_at")
+        .and_then(|v| i64::try_from(v).ok())
+        .unwrap_or(0);
+    let size_bytes = root
+        .get(&txn, "size_bytes")
+        .and_then(|v| i64::try_from(v).ok())
+        .unwrap_or(0);
+
     Ok(Json(json!({
         "entity_id": entity_id,
-        "website_root_hash": "hash_mock_12345",
-        "published_at": chrono::Utc::now().to_rfc3339(),
+        "html": html,
+        "css": css,
+        "js": js,
+        "website_root_hash": hash,
+        "published_at": chrono::DateTime::from_timestamp(published_at, 0)
+            .unwrap_or_else(|| chrono::Utc::now())
+            .to_rfc3339(),
         "url": format!("{}.communitas", entity_id),
         "status": "published",
-        "note": "Mock implementation - actual storage pending"
+        "size_bytes": size_bytes
     })))
 }
 
@@ -532,34 +617,70 @@ pub async fn update_entity_website(
     Path(entity_id): Path<String>,
     Json(req): Json<UpdateWebsiteRequest>,
 ) -> BridgeResult<Json<Value>> {
-    let _core_guard = state.core.read().await;
-    let _core = _core_guard
+    let core_guard = state.core.read().await;
+    let core = core_guard
         .as_ref()
         .ok_or_else(|| BridgeError::CommandFailed("Core not initialized".to_string()))?;
 
-    // Create new content hash
-    let mut content = String::new();
-    if let Some(html) = &req.html {
-        content.push_str(html);
-    }
-    if let Some(css) = &req.css {
-        content.push_str(css);
-    }
-    if let Some(js) = &req.js {
-        content.push_str(js);
+    // Load existing website document
+    let doc = core
+        .crdt_manager
+        .load_document(&format!("website:{}", entity_id))
+        .await
+        .map_err(|e| BridgeError::CommandFailed(format!("Website not found: {}", e)))?;
+
+    let previous_hash = {
+        let txn = doc.transact();
+        let root = doc.get_or_insert_map("website");
+        root.get(&txn, "hash")
+            .and_then(|v| v.to_string(&txn).into())
+            .unwrap_or_default()
+    };
+
+    // Update document fields
+    {
+        let mut txn = doc.transact_mut();
+        let root = doc.get_or_insert_map("website");
+
+        if let Some(html) = &req.html {
+            root.insert(&mut txn, "html", html.clone());
+        }
+        if let Some(css) = &req.css {
+            root.insert(&mut txn, "css", css.clone());
+        }
+        if let Some(js) = &req.js {
+            root.insert(&mut txn, "js", js.clone());
+        }
+
+        // Recalculate hash with updated content
+        let html = root.get(&txn, "html").and_then(|v| v.to_string(&txn).into()).unwrap_or_default();
+        let css = root.get(&txn, "css").and_then(|v| v.to_string(&txn).into()).unwrap_or_default();
+        let js = root.get(&txn, "js").and_then(|v| v.to_string(&txn).into()).unwrap_or_default();
+
+        let content = format!("{}{}{}", html, css, js);
+        let hash = blake3::hash(content.as_bytes());
+        let new_hash = hash.to_hex().to_string();
+
+        root.insert(&mut txn, "hash", new_hash.clone());
+        root.insert(&mut txn, "updated_at", chrono::Utc::now().timestamp());
+        root.insert(&mut txn, "size_bytes", content.len() as i64);
     }
 
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-    let mut hasher = DefaultHasher::new();
-    content.hash(&mut hasher);
-    let new_hash = format!("hash_{:x}", hasher.finish());
+    // Save updated document
+    core.crdt_manager
+        .save_document(&format!("website:{}", entity_id), "website", &entity_id, &doc)
+        .await
+        .map_err(|e| BridgeError::CommandFailed(format!("Failed to update website: {}", e)))?;
+
     let updated_at = chrono::Utc::now();
+    let txn = doc.transact();
+    let root = doc.get_or_insert_map("website");
+    let new_hash = root.get(&txn, "hash").and_then(|v| v.to_string(&txn).into()).unwrap_or_default();
 
     Ok(Json(json!({
         "entity_id": entity_id,
         "website_root_hash": new_hash,
-        "previous_hash": "hash_mock_old",
+        "previous_hash": previous_hash,
         "updated_at": updated_at.to_rfc3339(),
         "status": "updated"
     })))
@@ -570,12 +691,17 @@ pub async fn delete_entity_website(
     State(state): State<Arc<BridgeState>>,
     Path(entity_id): Path<String>,
 ) -> BridgeResult<Json<Value>> {
-    let _core_guard = state.core.read().await;
-    let _core = _core_guard
+    let core_guard = state.core.read().await;
+    let core = core_guard
         .as_ref()
         .ok_or_else(|| BridgeError::CommandFailed("Core not initialized".to_string()))?;
 
-    // TODO: Remove from actual storage
+    // Delete website document from CRDT storage
+    core.crdt_manager
+        .delete_document(&format!("website:{}", entity_id))
+        .await
+        .map_err(|e| BridgeError::CommandFailed(format!("Failed to delete website: {}", e)))?;
+
     Ok(Json(json!({
         "success": true,
         "entity_id": entity_id,
@@ -621,15 +747,10 @@ pub async fn upload_file(
         ));
     }
 
-    // Decode base64 to get actual size
-    let content_bytes = match base64::decode(&req.content_base64) {
-        Ok(bytes) => bytes,
-        Err(_) => {
-            return Err(BridgeError::InvalidRequest(
-                "Invalid base64 content".to_string(),
-            ));
-        }
-    };
+    // Decode base64 to get actual size and validate
+    let content_bytes = base64::engine::general_purpose::STANDARD
+        .decode(&req.content_base64)
+        .map_err(|_| BridgeError::InvalidRequest("Invalid base64 content".to_string()))?;
 
     if content_bytes.len() > 10 * 1024 * 1024 {
         // 10MB limit
@@ -638,28 +759,54 @@ pub async fn upload_file(
         ));
     }
 
-    let _core_guard = state.core.read().await;
-    let _core = _core_guard
+    let core_guard = state.core.read().await;
+    let core = core_guard
         .as_ref()
         .ok_or_else(|| BridgeError::CommandFailed("Core not initialized".to_string()))?;
 
-    // Generate file hash
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-    let mut hasher = DefaultHasher::new();
-    content_bytes.hash(&mut hasher);
-    let file_id = format!("file_{:x}", hasher.finish());
+    // Generate file ID from content hash (Blake3 for consistency)
+    let hash = blake3::hash(&content_bytes);
+    let file_id = hex::encode(hash.as_bytes());
 
     let encrypted = disk_type == "private" || disk_type == "shared";
+    let uploaded_at = chrono::Utc::now();
+    let content_type = req.content_type.unwrap_or_else(|| "application/octet-stream".to_string());
+
+    // Create CRDT document for file
+    let doc = yrs::Doc::new();
+    {
+        let mut txn = doc.transact_mut();
+        let root = doc.get_or_insert_map("file");
+
+        root.insert(&mut txn, "entity_id", entity_id.clone());
+        root.insert(&mut txn, "disk_type", disk_type.clone());
+        root.insert(&mut txn, "path", req.path.clone());
+        root.insert(&mut txn, "content_base64", req.content_base64.clone());
+        root.insert(&mut txn, "content_type", content_type.clone());
+        root.insert(&mut txn, "size_bytes", content_bytes.len() as i64);
+        root.insert(&mut txn, "uploaded_at", uploaded_at.timestamp());
+        root.insert(&mut txn, "file_id", file_id.clone());
+        root.insert(&mut txn, "encrypted", encrypted);
+    }
+
+    // Store file using document ID: file:{entity_id}:{disk_type}:{path_hash}
+    let path_hash = hex::encode(blake3::hash(req.path.as_bytes()).as_bytes());
+    let doc_id = format!("{}:{}:{}", entity_id, disk_type, path_hash);
+
+    core.crdt_manager
+        .save_document(&doc_id, "file", &entity_id, &doc)
+        .await
+        .map_err(|e| BridgeError::CommandFailed(format!("Failed to save file: {}", e)))?;
 
     Ok(Json(json!({
         "file_id": file_id,
         "path": req.path,
         "disk_type": disk_type,
         "size_bytes": content_bytes.len(),
-        "uploaded_at": chrono::Utc::now().to_rfc3339(),
+        "uploaded_at": uploaded_at.to_rfc3339(),
         "encrypted": encrypted,
-        "content_type": req.content_type.unwrap_or("application/octet-stream".to_string())
+        "content_type": content_type,
+        "persisted": true
     })))
 }
 
@@ -673,20 +820,82 @@ pub async fn list_files(
         return Err(BridgeError::InvalidRequest("Invalid disk type".to_string()));
     }
 
-    let _core_guard = state.core.read().await;
-    let _core = _core_guard
+    let core_guard = state.core.read().await;
+    let core = core_guard
         .as_ref()
         .ok_or_else(|| BridgeError::CommandFailed("Core not initialized".to_string()))?;
 
-    // TODO: Implement actual file listing from storage
-    // For now, return empty list
+    // List all file documents
+    let all_doc_ids = core
+        .crdt_manager
+        .list_documents("file")
+        .await
+        .map_err(|e| BridgeError::CommandFailed(format!("Failed to list files: {}", e)))?;
+
+    // Filter by entity_id and disk_type (doc_id format: {entity_id}:{disk_type}:{path_hash})
+    let prefix = format!("{}:{}:", entity_id, disk_type);
+    let matching_doc_ids: Vec<_> = all_doc_ids
+        .into_iter()
+        .filter(|id| id.starts_with(&prefix))
+        .collect();
+
+    // Load and extract metadata from each file document
+    let mut files = Vec::new();
+    let mut total_size_bytes: i64 = 0;
+
+    for doc_id in matching_doc_ids {
+        if let Ok(doc) = core.crdt_manager.load_document(&doc_id).await {
+            let txn = doc.transact();
+            let root = doc.get_or_insert_map("file");
+
+            let path = root
+                .get(&txn, "path")
+                .and_then(|v| v.to_string(&txn).into())
+                .unwrap_or_default();
+            let size_bytes = root
+                .get(&txn, "size_bytes")
+                .and_then(|v| yrs_to_json(v.to_json(&txn)).as_i64())
+                .unwrap_or(0);
+            let file_id = root
+                .get(&txn, "file_id")
+                .and_then(|v| v.to_string(&txn).into())
+                .unwrap_or_default();
+            let content_type = root
+                .get(&txn, "content_type")
+                .and_then(|v| v.to_string(&txn).into())
+                .unwrap_or_else(|| "application/octet-stream".to_string());
+            let uploaded_at = root
+                .get(&txn, "uploaded_at")
+                .and_then(|v| yrs_to_json(v.to_json(&txn)).as_i64())
+                .map(|ts| chrono::DateTime::from_timestamp(ts, 0))
+                .flatten()
+                .map(|dt| dt.to_rfc3339())
+                .unwrap_or_default();
+            let encrypted = root
+                .get(&txn, "encrypted")
+                .and_then(|v| yrs_to_json(v.to_json(&txn)).as_bool())
+                .unwrap_or(false);
+
+            total_size_bytes += size_bytes;
+
+            files.push(json!({
+                "file_id": file_id,
+                "path": path,
+                "size_bytes": size_bytes,
+                "content_type": content_type,
+                "uploaded_at": uploaded_at,
+                "encrypted": encrypted
+            }));
+        }
+    }
+
     Ok(Json(json!({
         "entity_id": entity_id,
         "disk_type": disk_type,
-        "files": [],
-        "total_files": 0,
-        "total_size_bytes": 0,
-        "note": "Mock implementation - actual storage pending"
+        "files": files,
+        "total_files": files.len(),
+        "total_size_bytes": total_size_bytes,
+        "persisted": true
     })))
 }
 
@@ -700,23 +909,71 @@ pub async fn download_file(
         return Err(BridgeError::InvalidRequest("Invalid disk type".to_string()));
     }
 
-    let _core_guard = state.core.read().await;
-    let _core = _core_guard
+    let core_guard = state.core.read().await;
+    let core = core_guard
         .as_ref()
         .ok_or_else(|| BridgeError::CommandFailed("Core not initialized".to_string()))?;
 
-    // TODO: Retrieve actual file from storage
-    // For now, return mock data
-    let mock_content = "Mock file content";
-    let content_base64 = base64::encode(mock_content);
+    // Reconstruct full path (may need to add leading slash)
+    let full_path = if file_path.starts_with('/') {
+        file_path.clone()
+    } else {
+        format!("/{}", file_path)
+    };
+
+    // Generate document ID from entity, disk_type, and path
+    let path_hash = hex::encode(blake3::hash(full_path.as_bytes()).as_bytes());
+    let doc_id = format!("{}:{}:{}", entity_id, disk_type, path_hash);
+
+    // Load file document
+    let doc = core
+        .crdt_manager
+        .load_document(&doc_id)
+        .await
+        .map_err(|e| BridgeError::CommandFailed(format!("File not found: {}", e)))?;
+
+    // Extract file data
+    let txn = doc.transact();
+    let root = doc.get_or_insert_map("file");
+
+    let content_base64 = root
+        .get(&txn, "content_base64")
+        .and_then(|v| v.to_string(&txn).into())
+        .unwrap_or_default();
+    let size_bytes = root
+        .get(&txn, "size_bytes")
+        .and_then(|v| yrs_to_json(v.to_json(&txn)).as_i64())
+        .unwrap_or(0);
+    let content_type = root
+        .get(&txn, "content_type")
+        .and_then(|v| v.to_string(&txn).into())
+        .unwrap_or_else(|| "application/octet-stream".to_string());
+    let file_id = root
+        .get(&txn, "file_id")
+        .and_then(|v| v.to_string(&txn).into())
+        .unwrap_or_default();
+    let encrypted = root
+        .get(&txn, "encrypted")
+        .and_then(|v| yrs_to_json(v.to_json(&txn)).as_bool())
+        .unwrap_or(false);
+    let uploaded_at = root
+        .get(&txn, "uploaded_at")
+        .and_then(|v| yrs_to_json(v.to_json(&txn)).as_i64())
+        .map(|ts| chrono::DateTime::from_timestamp(ts, 0))
+        .flatten()
+        .map(|dt| dt.to_rfc3339())
+        .unwrap_or_default();
 
     Ok(Json(json!({
-        "path": format!("/{}", file_path),
+        "path": full_path,
+        "file_id": file_id,
         "content_base64": content_base64,
-        "size_bytes": mock_content.len(),
-        "content_type": "text/plain",
-        "decrypted": disk_type != "public",
-        "note": "Mock implementation - actual storage pending"
+        "size_bytes": size_bytes,
+        "content_type": content_type,
+        "uploaded_at": uploaded_at,
+        "encrypted": encrypted,
+        "decrypted": encrypted,
+        "persisted": true
     })))
 }
 
@@ -730,19 +987,36 @@ pub async fn delete_file(
         return Err(BridgeError::InvalidRequest("Invalid disk type".to_string()));
     }
 
-    let _core_guard = state.core.read().await;
-    let _core = _core_guard
+    let core_guard = state.core.read().await;
+    let core = core_guard
         .as_ref()
         .ok_or_else(|| BridgeError::CommandFailed("Core not initialized".to_string()))?;
 
-    // TODO: Delete from actual storage
+    // Reconstruct full path (may need to add leading slash)
+    let full_path = if file_path.starts_with('/') {
+        file_path.clone()
+    } else {
+        format!("/{}", file_path)
+    };
+
+    // Generate document ID from entity, disk_type, and path
+    let path_hash = hex::encode(blake3::hash(full_path.as_bytes()).as_bytes());
+    let doc_id = format!("{}:{}:{}", entity_id, disk_type, path_hash);
+
+    // Delete file document from CRDT storage
+    core.crdt_manager
+        .delete_document(&doc_id)
+        .await
+        .map_err(|e| BridgeError::CommandFailed(format!("Failed to delete file: {}", e)))?;
+
     Ok(Json(json!({
         "success": true,
         "deleted": true,
-        "path": format!("/{}", file_path),
+        "path": full_path,
         "entity_id": entity_id,
         "disk_type": disk_type,
-        "deleted_at": chrono::Utc::now().to_rfc3339()
+        "deleted_at": chrono::Utc::now().to_rfc3339(),
+        "persisted": true
     })))
 }
 
@@ -756,20 +1030,52 @@ pub async fn get_disk_stats(
         return Err(BridgeError::InvalidRequest("Invalid disk type".to_string()));
     }
 
-    let _core_guard = state.core.read().await;
-    let _core = _core_guard
+    let core_guard = state.core.read().await;
+    let core = core_guard
         .as_ref()
         .ok_or_else(|| BridgeError::CommandFailed("Core not initialized".to_string()))?;
 
     let encrypted = disk_type != "public";
 
-    // TODO: Calculate actual stats from storage
+    // List all file documents
+    let all_doc_ids = core
+        .crdt_manager
+        .list_documents("file")
+        .await
+        .map_err(|e| BridgeError::CommandFailed(format!("Failed to list files: {}", e)))?;
+
+    // Filter by entity_id and disk_type (doc_id format: {entity_id}:{disk_type}:{path_hash})
+    let prefix = format!("{}:{}:", entity_id, disk_type);
+    let matching_doc_ids: Vec<_> = all_doc_ids
+        .into_iter()
+        .filter(|id| id.starts_with(&prefix))
+        .collect();
+
+    // Calculate total size by loading each document
+    let mut total_size_bytes: i64 = 0;
+    let mut total_files = 0;
+
+    for doc_id in matching_doc_ids {
+        if let Ok(doc) = core.crdt_manager.load_document(&doc_id).await {
+            let txn = doc.transact();
+            let root = doc.get_or_insert_map("file");
+
+            let size_bytes = root
+                .get(&txn, "size_bytes")
+                .and_then(|v| yrs_to_json(v.to_json(&txn)).as_i64())
+                .unwrap_or(0);
+
+            total_size_bytes += size_bytes;
+            total_files += 1;
+        }
+    }
+
     Ok(Json(json!({
         "entity_id": entity_id,
         "disk_type": disk_type,
-        "total_files": 0,
-        "total_size_bytes": 0,
+        "total_files": total_files,
+        "total_size_bytes": total_size_bytes,
         "encryption": if encrypted { "enabled" } else { "disabled" },
-        "note": "Mock implementation - actual storage pending"
+        "persisted": true
     })))
 }

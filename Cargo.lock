@@ -1389,6 +1389,7 @@ dependencies = [
  "async-trait",
  "axum 0.7.9",
  "base64 0.22.1",
+ "blake3",
  "chrono",
  "communitas-core",
  "four-word-networking",
@@ -1403,6 +1404,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "yrs",
 ]
 
 [[package]]

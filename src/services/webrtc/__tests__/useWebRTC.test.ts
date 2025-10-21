@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { useWebRTC } from '../useWebRTC';
-import { invoke } from '@tauri-apps/api/tauri';
+import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import type { CallEvent, CallEventType, MediaDevice } from '../types';
 

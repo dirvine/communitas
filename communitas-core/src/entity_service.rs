@@ -192,9 +192,58 @@ impl EntityService {
 
     /// List all entities
     pub async fn list_entities(&self) -> EntityServiceResult<Vec<Entity>> {
-        // For now, return empty list - would need to maintain an index
-        // This is a simplified implementation for the TDD phase
-        Ok(vec![])
+        use std::fs;
+
+        // Scan the entity directory for all metadata files
+        let entity_dir = self.crdt_manager.get_storage_dir().join("crdt").join("entity");
+
+        if !entity_dir.exists() {
+            return Ok(vec![]);
+        }
+
+        let mut entities = Vec::new();
+
+        // Read all .meta files in the entity directory
+        let entries = fs::read_dir(&entity_dir).map_err(|e| {
+            EntityServiceError::Io(std::io::Error::other(format!("Failed to read entity directory: {}", e)))
+        })?;
+
+        for entry in entries {
+            let entry = entry?;
+            let path = entry.path();
+
+            // Only process .meta files
+            if path.extension().and_then(|s| s.to_str()) != Some("meta") {
+                continue;
+            }
+
+            // Check if this is an entity metadata file (contains "entity:" in the hex-decoded filename)
+            if let Some(filename) = path.file_stem().and_then(|s| s.to_str()) {
+                // Hex-decode the filename to get the doc_id
+                if let Ok(decoded_bytes) = hex::decode(filename) {
+                    if let Ok(doc_id) = String::from_utf8(decoded_bytes) {
+                        // Check if it's an entity metadata document (format: "entity:{id}:metadata")
+                        if doc_id.starts_with("entity:") && doc_id.ends_with(":metadata") {
+                            // Extract entity ID from "entity:{id}:metadata"
+                            if let Some(entity_id) = doc_id.strip_prefix("entity:")
+                                .and_then(|s| s.strip_suffix(":metadata"))
+                            {
+                                // Load the entity
+                                match self.get_entity(entity_id).await {
+                                    Ok(entity) => entities.push(entity),
+                                    Err(e) => {
+                                        // Log error but continue processing other entities
+                                        eprintln!("Warning: Failed to load entity {}: {}", entity_id, e);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(entities)
     }
 
     /// Add member to entity

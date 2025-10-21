@@ -288,13 +288,26 @@ impl CoreContext {
         info!("Allocated port {} for QUIC transport", listen_port);
 
         // Initialize gossip context
-        let gossip = crate::gossip::GossipContext::initialize(
+        let gossip_ctx = crate::gossip::GossipContext::initialize(
             self.four_words.clone(),
             self.display_name.clone(),
             self.device_name.clone(),
         )
         .await
         .map_err(|e| format!("Failed to initialize gossip: {}", e))?;
+
+        // Execute gossip boot sequence (SPEC.md §2)
+        // This enables: membership, topic subscriptions, presence, and CRDT anti-entropy
+        info!("Executing gossip boot sequence (5 steps)");
+        let mut boot_sequence = crate::gossip::GossipBootSequence::new(gossip_ctx);
+        boot_sequence
+            .execute()
+            .await
+            .map_err(|e| format!("Failed to execute boot sequence: {}", e))?;
+
+        // Extract the gossip context after boot
+        let gossip = boot_sequence.into_context();
+        info!("Gossip boot sequence completed successfully");
 
         // Build listen address
         let local_ip =

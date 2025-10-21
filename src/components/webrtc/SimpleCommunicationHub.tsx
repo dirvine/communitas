@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Fab, Snackbar, Alert } from '@mui/material';
 import { Phone, Message } from '@mui/icons-material';
-import { webRTCService, CallState } from '../../services/webrtc/WebRTCService';
+import { webrtcService } from '../../services/webrtc/WebRTCService';
+import { CallState } from '../../services/webrtc/types';
 // Removed: SimpleCallInterface - using modern shell instead
 
 export const SimpleCommunicationHub: React.FC = () => {
@@ -21,20 +22,20 @@ export const SimpleCommunicationHub: React.FC = () => {
       setError(error.message);
     };
 
-    webRTCService.on('callInitiated', handleCallInitiated);
-    webRTCService.on('callEnded', handleCallEnded);
-    webRTCService.on('error', handleError);
+    webrtcService.on('callInitiated', handleCallInitiated);
+    webrtcService.on('callEnded', handleCallEnded);
+    webrtcService.on('error', handleError);
 
     return () => {
-      webRTCService.off('callInitiated', handleCallInitiated);
-      webRTCService.off('callEnded', handleCallEnded);
-      webRTCService.off('error', handleError);
+      webrtcService.off('callInitiated', handleCallInitiated);
+      webrtcService.off('callEnded', handleCallEnded);
+      webrtcService.off('error', handleError);
     };
   }, []);
 
   const handleStartCall = async () => {
     try {
-      await webRTCService.initiateCall('demo-contact', 'audio');
+      await webrtcService.initiateCall('demo-contact', { has_audio: true, has_video: false });
     } catch (error) {
       console.error('Failed to start call:', error);
     }
@@ -42,11 +43,13 @@ export const SimpleCommunicationHub: React.FC = () => {
 
 
   const handleEndCall = async () => {
-    await webRTCService.endCall();
+    // WebRTC service method needs call ID - this is a placeholder
+    console.log('End call functionality needs refactoring');
   };
 
   const handleSendMessage = () => {
-    webRTCService.sendMessage('Hello from WebRTC!');
+    // Messaging through WebRTC needs refactoring
+    console.log('Send message functionality needs refactoring');
   };
 
   return (

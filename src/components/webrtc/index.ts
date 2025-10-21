@@ -1,14 +1,15 @@
-export { WebRTCService, webRTCService } from '../../services/webrtc/WebRTCService';
+export { WebRTCService, webrtcService } from '../../services/webrtc/WebRTCService';
 // Removed: SimpleCallInterface - using modern shell instead
 export { SimpleCommunicationHub } from './SimpleCommunicationHub';
 
+// Export WebRTC types from types.ts
 export type {
-  CallParticipant,
   CallState,
-  ChatMessage,
-  FileAttachment,
-  MessageReaction,
-  ScreenShareOptions,
-  MediaDevices
-} from '../../services/webrtc/WebRTCService';
+  CallInfo,
+  CallEvent,
+  MediaDevice,
+  MediaConstraints,
+  CallDirection,
+  CallEventType
+} from '../../services/webrtc/types';
 

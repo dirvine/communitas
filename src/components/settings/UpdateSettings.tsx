@@ -19,7 +19,7 @@ import {
   IconButton,
   Tooltip,
 } from '@mui/material'
-import { invoke } from '@tauri-apps/api/tauri'
+import { invoke } from '@tauri-apps/api/core'
 import {
   Refresh as RefreshIcon,
   Download as DownloadIcon,

@@ -269,7 +269,7 @@ const StoragePanel: React.FC<StoragePanelProps> = ({
       const files = await localStorage.list(entityId, fullPath);
 
       // Convert to StorageItem format
-      const storageItems: StorageItem[] = files.map(file => ({
+      const storageItems: StorageItem[] = files.map((file: any) => ({
         name: file.name,
         path: file.path,
         type: file.isDirectory ? 'folder' : 'file',

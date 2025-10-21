@@ -13,6 +13,7 @@ export interface FileAttachment {
 export interface MessageReaction {
   emoji: string;
   userId: string;
+  userName?: string;
   timestamp: number;
 }
 
@@ -20,7 +21,9 @@ export interface ChatMessage {
   id: string;
   content: string;
   senderId: string;
+  senderName?: string;
   timestamp: number;
+  type?: string;
   attachments?: FileAttachment[];
   reactions?: MessageReaction[];
   threadId?: string;

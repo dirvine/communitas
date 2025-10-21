@@ -235,7 +235,7 @@ export class OfflineStorageService {
             invoke('gossip_store_message', {
               key: item.key,
               value: Array.from(new TextEncoder().encode(JSON.stringify(item.data)))
-            }).catch(error => {
+            }).catch((error: unknown) => {
               console.warn(`Failed to store encrypted ${item.key}:`, error);
             })
           );

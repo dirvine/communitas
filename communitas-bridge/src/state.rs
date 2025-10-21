@@ -30,22 +30,82 @@ impl BridgeState {
     ) -> Result<()> {
         let mut core = self.core.write().await;
 
-        // Create storage directory for bridge
-        let storage_dir = PathBuf::from("./bridge-data");
+        // Validate four-word format to prevent path traversal attacks
+        Self::validate_four_words(&four_words)?;
 
-        // Create CoreContext using communitas-core
+        // Get base storage directory from env var or use default
+        let base_dir = std::env::var("BRIDGE_STORAGE_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from("./bridge-data"));
+
+        // Create per-user storage directory: ./bridge-data/{four-words}/
+        let user_storage_dir = base_dir.join(&four_words);
+
+        // Ensure directory exists with proper permissions
+        std::fs::create_dir_all(&user_storage_dir).map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to create user storage directory {}: {}",
+                user_storage_dir.display(),
+                e
+            )
+        })?;
+
+        tracing::info!(
+            "Initializing user '{}' with isolated storage at: {}",
+            four_words,
+            user_storage_dir.display()
+        );
+
+        // Create CoreContext using communitas-core with per-user storage
         // Use Desktop device type for bridge server
         let ctx = CoreContext::initialize(
             four_words,
             display_name,
             device_name,
             DeviceType::Desktop,
-            storage_dir,
+            user_storage_dir,
         )
         .await
         .map_err(|e| anyhow::anyhow!("Failed to initialize CoreContext: {}", e))?;
 
         *core = Some(ctx);
+        Ok(())
+    }
+
+    /// Validate four-word format to prevent path traversal attacks
+    fn validate_four_words(four_words: &str) -> Result<()> {
+        // Check for path traversal attempts
+        if four_words.contains("..") || four_words.contains('/') || four_words.contains('\\') {
+            return Err(anyhow::anyhow!(
+                "Invalid four-word format: contains invalid characters"
+            ));
+        }
+
+        // Validate format: word-word-word-word
+        let parts: Vec<&str> = four_words.split('-').collect();
+        if parts.len() != 4 {
+            return Err(anyhow::anyhow!(
+                "Invalid four-word format: expected 4 words separated by hyphens, got {}",
+                parts.len()
+            ));
+        }
+
+        // Ensure each word is non-empty and contains only alphanumeric characters
+        for (i, word) in parts.iter().enumerate() {
+            if word.is_empty() {
+                return Err(anyhow::anyhow!(
+                    "Invalid four-word format: word {} is empty",
+                    i + 1
+                ));
+            }
+            if !word.chars().all(|c| c.is_alphanumeric()) {
+                return Err(anyhow::anyhow!(
+                    "Invalid four-word format: word {} contains non-alphanumeric characters",
+                    i + 1
+                ));
+            }
+        }
+
         Ok(())
     }
 

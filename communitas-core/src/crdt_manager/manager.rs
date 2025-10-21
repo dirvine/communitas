@@ -50,6 +50,11 @@ impl CrdtManager {
         Ok(Self { storage_dir })
     }
 
+    /// Get the storage directory path
+    pub fn get_storage_dir(&self) -> &Path {
+        &self.storage_dir
+    }
+
     /// Get the directory path for a specific entity type
     fn entity_dir(&self, entity_type: &str) -> PathBuf {
         self.storage_dir.join("crdt").join(entity_type)

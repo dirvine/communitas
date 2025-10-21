@@ -1,37 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Box, Fab, Snackbar, Alert } from '@mui/material';
 import { Phone, Message } from '@mui/icons-material';
 import { webrtcService } from '../../services/webrtc/WebRTCService';
-import { CallState } from '../../services/webrtc/types';
 // Removed: SimpleCallInterface - using modern shell instead
 
 export const SimpleCommunicationHub: React.FC = () => {
-  const [currentCall, setCurrentCall] = useState<CallState | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const handleCallInitiated = (call: CallState) => {
-      setCurrentCall(call);
-    };
-
-    const handleCallEnded = () => {
-      setCurrentCall(null);
-    };
-
-    const handleError = (error: Error) => {
-      setError(error.message);
-    };
-
-    webrtcService.on('callInitiated', handleCallInitiated);
-    webrtcService.on('callEnded', handleCallEnded);
-    webrtcService.on('error', handleError);
-
-    return () => {
-      webrtcService.off('callInitiated', handleCallInitiated);
-      webrtcService.off('callEnded', handleCallEnded);
-      webrtcService.off('error', handleError);
-    };
-  }, []);
+  // Note: Event listener functionality removed - use modern shell call interface instead
+  // WebRTC service events are handled via Tauri event listeners in the modern shell
 
   const handleStartCall = async () => {
     try {
@@ -55,11 +32,9 @@ export const SimpleCommunicationHub: React.FC = () => {
   return (
     <>
       {/* Removed: SimpleCallInterface - using modern shell instead */}
-      {currentCall && (
-        <Box>Call interface placeholder - use modern shell</Box>
-      )}
+      {/* Call UI is handled by modern shell prototype */}
 
-      {!currentCall && (
+      {(
         <Box
           sx={{
             position: 'fixed',

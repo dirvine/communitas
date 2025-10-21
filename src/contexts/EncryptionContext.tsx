@@ -185,13 +185,13 @@ export const EncryptionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           masterKey?: string;
           keyPair?: string;
         } | null;
-        
-        if (storedKeys.masterKey) {
+
+        if (storedKeys?.masterKey) {
           const masterKeyData = JSON.parse(storedKeys.masterKey);
           masterKey = await cryptoManager.importKey(masterKeyData);
         }
-        
-        if (storedKeys.keyPair) {
+
+        if (storedKeys?.keyPair) {
           const keyPairData = JSON.parse(storedKeys.keyPair);
           userKeyPair = {
             publicKey: await cryptoManager.importKey(

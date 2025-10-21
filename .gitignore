@@ -167,3 +167,7 @@ geckodriver
 debug_app.html
 .worktrees/
 communitas-desktop/keystore/*.identity
+
+# Test data directories
+communitas-bridge/test-bridge-instance*/
+communitas-bridge/test-*/

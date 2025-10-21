@@ -91,33 +91,6 @@ async fn main() -> anyhow::Result<()> {
 
     info!("Starting Communitas (saorsa-core integrated)");
 
-    // REMOVED: Old service architecture - now using CoreContext EntityService/MessageService
-    // All entity and message operations now go through CoreContext, initialized via core_initialize command
-    //
-    // let data_dir = dirs::data_local_dir()
-    //     .ok_or_else(|| anyhow::anyhow!("Failed to determine local data directory."))?
-    //     .join("communitas");
-    // std::fs::create_dir_all(&data_dir)?;
-    //
-    // let db_path = data_dir.join("communitas.db");
-    // let crdt_manager = Arc::new(CrdtManager::new(&db_path).await?);
-    //
-    // let channel_service = Arc::new(ChannelService::new(crdt_manager.clone()));
-    // let group_service = Arc::new(GroupService::new(crdt_manager.clone()));
-    // let issue_service = Arc::new(IssueService::new(crdt_manager.clone()));
-    // let organization_service = Arc::new(OrganizationService::new(crdt_manager.clone()));
-    // let virtual_disk_service = Arc::new(VirtualDiskService::new(crdt_manager.clone()));
-    // let member_service_arc = Arc::new(MemberService::new(crdt_manager.clone(), virtual_disk_service.clone()));
-    //
-    // let org_state = OrgState {
-    //     channel_service,
-    //     group_service,
-    //     issue_service,
-    //     organization_service,
-    //     member_service: member_service_arc,
-    //     virtual_disk_service,
-    // };
-
     // Initialize encrypted storage app state
     let app_state = AppState::new();
 
@@ -344,94 +317,6 @@ async fn main() -> anyhow::Result<()> {
             webrtc_commands::webrtc_subscribe_events,
             health,
             get_app_version,
-            // REMOVED: Old org_commands architecture - now using CoreContext EntityService/MessageService
-            // These 79 commands used broken service files. Use core_commands instead.
-            //
-            // Organization commands - Channels
-            // commands::org_commands::create_channel,
-            // commands::org_commands::get_channel,
-            // commands::org_commands::list_channels,
-            // commands::org_commands::send_message,
-            // commands::org_commands::edit_message,
-            // commands::org_commands::delete_message,
-            // commands::org_commands::get_messages,
-            // commands::org_commands::create_thread,
-            // commands::org_commands::get_thread_replies,
-            // commands::org_commands::add_channel_member,
-            // commands::org_commands::remove_channel_member,
-            // commands::org_commands::get_channel_members,
-            // Organization commands - Groups
-            // commands::org_commands::create_group,
-            // commands::org_commands::get_group,
-            // commands::org_commands::list_org_groups,
-            // commands::org_commands::list_personal_groups,
-            // commands::org_commands::add_group_member,
-            // commands::org_commands::remove_group_member,
-            // commands::org_commands::get_group_members,
-            // commands::org_commands::update_group,
-            // commands::org_commands::delete_group,
-            // Group sync commands
-            // commands::org_commands::get_group_sync_update,
-            // commands::org_commands::apply_group_sync_update,
-            // commands::org_commands::get_group_state_vector,
-            // commands::org_commands::get_group_diff,
-            // commands::org_commands::apply_group_diff,
-            // Organization commands - Projects
-            // commands::org_commands::create_project,
-            // commands::org_commands::get_project,
-            // commands::org_commands::list_projects,
-            // Organization commands - Issues
-            // commands::org_commands::create_issue,
-            // commands::org_commands::get_issue,
-            // commands::org_commands::list_issues,
-            // commands::org_commands::list_issues_by_status,
-            // commands::org_commands::update_issue_status,
-            // commands::org_commands::assign_issue,
-            // commands::org_commands::update_issue_priority,
-            // commands::org_commands::add_issue_comment,
-            // commands::org_commands::get_issue_comments,
-            // Sync commands
-            // commands::org_commands::get_channel_sync_update,
-            // commands::org_commands::apply_channel_sync_update,
-            // commands::org_commands::get_issue_sync_update,
-            // commands::org_commands::apply_issue_sync_update,
-            // Phase 3: Efficient channel sync (state vector protocol)
-            // commands::org_commands::get_channel_state_vector,
-            // commands::org_commands::get_channel_diff,
-            // commands::org_commands::apply_channel_diff,
-            // Organization entity commands
-            // commands::org_commands::create_organization,
-            // commands::org_commands::get_organization,
-            // commands::org_commands::get_organization_by_four_words,
-            // commands::org_commands::update_organization,
-            // commands::org_commands::delete_organization,
-            // commands::org_commands::set_organization_website_root,
-            // commands::org_commands::add_organization_member,
-            // commands::org_commands::remove_organization_member,
-            // commands::org_commands::update_organization_member_role,
-            // commands::org_commands::get_organization_members,
-            // commands::org_commands::is_organization_member,
-            // commands::org_commands::list_user_organizations,
-            // Member service commands
-            // commands::org_commands::create_member,
-            // commands::org_commands::get_member,
-            // commands::org_commands::get_member_by_four_words,
-            // commands::org_commands::update_member,
-            // commands::org_commands::delete_member,
-            // commands::org_commands::list_all_members,
-            // commands::org_commands::set_member_website_root,
-            // Virtual disk commands
-            // commands::org_commands::write_virtual_disk_file,
-            // commands::org_commands::read_virtual_disk_file,
-            // commands::org_commands::delete_virtual_disk_file,
-            // commands::org_commands::file_exists_virtual_disk,
-            // commands::org_commands::list_virtual_disk_directory,
-            // Member management commands
-            // member_commands::member_add,
-            // member_commands::member_list,
-            // member_commands::member_remove,
-            // member_commands::member_update_role,
-            // member_commands::member_prune_tombstones,
             // Update manager commands
             update_manager::check_for_updates,
             update_manager::install_update,

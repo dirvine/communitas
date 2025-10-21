@@ -517,9 +517,9 @@ pub async fn create_entity_website(
 
     // Create CRDT document for website
     let doc = yrs::Doc::new();
+    let root = doc.get_or_insert_map("website");
     {
         let mut txn = doc.transact_mut();
-        let root = doc.get_or_insert_map("website");
 
         root.insert(&mut txn, "entity_id", entity_id.clone());
         root.insert(&mut txn, "html", req.html.clone());
@@ -567,8 +567,8 @@ pub async fn get_entity_website(
         .await
         .map_err(|e| BridgeError::CommandFailed(format!("Website not found: {}", e)))?;
 
-    let txn = doc.transact();
     let root = doc.get_or_insert_map("website");
+    let txn = doc.transact();
 
     // Extract website data
     let html = root
@@ -629,9 +629,10 @@ pub async fn update_entity_website(
         .await
         .map_err(|e| BridgeError::CommandFailed(format!("Website not found: {}", e)))?;
 
+    let root = doc.get_or_insert_map("website");
+
     let previous_hash = {
         let txn = doc.transact();
-        let root = doc.get_or_insert_map("website");
         root.get(&txn, "hash")
             .and_then(|v| v.to_string(&txn).into())
             .unwrap_or_default()
@@ -640,7 +641,6 @@ pub async fn update_entity_website(
     // Update document fields
     {
         let mut txn = doc.transact_mut();
-        let root = doc.get_or_insert_map("website");
 
         if let Some(html) = &req.html {
             root.insert(&mut txn, "html", html.clone());
@@ -674,7 +674,6 @@ pub async fn update_entity_website(
 
     let updated_at = chrono::Utc::now();
     let txn = doc.transact();
-    let root = doc.get_or_insert_map("website");
     let new_hash = root.get(&txn, "hash").and_then(|v| v.to_string(&txn).into()).unwrap_or_default();
 
     Ok(Json(json!({
@@ -774,9 +773,9 @@ pub async fn upload_file(
 
     // Create CRDT document for file
     let doc = yrs::Doc::new();
+    let root = doc.get_or_insert_map("file");
     {
         let mut txn = doc.transact_mut();
-        let root = doc.get_or_insert_map("file");
 
         root.insert(&mut txn, "entity_id", entity_id.clone());
         root.insert(&mut txn, "disk_type", disk_type.clone());
@@ -845,8 +844,8 @@ pub async fn list_files(
 
     for doc_id in matching_doc_ids {
         if let Ok(doc) = core.crdt_manager.load_document(&doc_id).await {
-            let txn = doc.transact();
             let root = doc.get_or_insert_map("file");
+            let txn = doc.transact();
 
             let path = root
                 .get(&txn, "path")
@@ -933,8 +932,8 @@ pub async fn download_file(
         .map_err(|e| BridgeError::CommandFailed(format!("File not found: {}", e)))?;
 
     // Extract file data
-    let txn = doc.transact();
     let root = doc.get_or_insert_map("file");
+    let txn = doc.transact();
 
     let content_base64 = root
         .get(&txn, "content_base64")
@@ -1057,8 +1056,8 @@ pub async fn get_disk_stats(
 
     for doc_id in matching_doc_ids {
         if let Ok(doc) = core.crdt_manager.load_document(&doc_id).await {
-            let txn = doc.transact();
             let root = doc.get_or_insert_map("file");
+            let txn = doc.transact();
 
             let size_bytes = root
                 .get(&txn, "size_bytes")

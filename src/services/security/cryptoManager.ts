@@ -119,8 +119,9 @@ export class CryptoManager {
           },
         );
       });
-    } catch (error) {
-      throw new Error(`Key derivation error: ${error.message}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      throw new Error(`Key derivation error: ${message}`);
     }
   }
 
@@ -157,8 +158,9 @@ export class CryptoManager {
           authTag: new Uint8Array(authTag),
           keyId: keyId || "default",
         };
-      } catch (error) {
-        throw new Error(`Encryption failed: ${error.message}`);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        throw new Error(`Encryption failed: ${message}`);
       }
     } else {
       // Test-mode Web Crypto AES-GCM
@@ -202,8 +204,9 @@ export class CryptoManager {
         );
         decipher.final();
         return new Uint8Array(decrypted);
-      } catch (error) {
-        throw new Error(`Decryption failed: ${error.message}`);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        throw new Error(`Decryption failed: ${message}`);
       }
     } else {
       const cryptoKey = await crypto.webcrypto.subtle.importKey(
@@ -246,8 +249,9 @@ export class CryptoManager {
       const secretKey = JSON.parse(keyPair.privateKey);
       const signature = await pqcCrypto.signData(data, secretKey, "dht-storage");
       return new Uint8Array(signature.signature);
-    } catch (error) {
-      throw new Error(`PQC signing failed: ${error.message}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      throw new Error(`PQC signing failed: ${message}`);
     }
   }
 

@@ -59,7 +59,7 @@ export class ElementCommunicationService extends EventEmitter {
       senderId: this.currentUserId,
       senderName: this.currentUserId, // TODO: Get actual display name
       content,
-      timestamp: new Date(),
+      timestamp: Date.now(),
       type: 'text',
       attachments: attachments?.map(file => ({
         id: this.generateId(),
@@ -97,7 +97,7 @@ export class ElementCommunicationService extends EventEmitter {
       senderId: this.currentUserId,
       senderName: this.currentUserId,
       content: '',
-      timestamp: new Date(),
+      timestamp: Date.now(),
       type: 'file',
       attachments: [attachment],
     };
@@ -115,7 +115,7 @@ export class ElementCommunicationService extends EventEmitter {
       emoji,
       userId: this.currentUserId,
       userName: this.currentUserId,
-      timestamp: new Date(),
+      timestamp: Date.now(),
     };
 
     message.reactions = message.reactions || [];
@@ -153,7 +153,7 @@ export class ElementCommunicationService extends EventEmitter {
 
   getMessages(limit: number = 50, offset: number = 0): ChatMessage[] {
     return this.messages
-      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+      .sort((a, b) => b.timestamp - a.timestamp)
       .slice(offset, offset + limit)
       .reverse();
   }

@@ -1505,6 +1505,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "communitas-p2p-test"
+version = "0.1.20"
+dependencies = [
+ "anyhow",
+ "communitas-core",
+ "futures",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
 name = "communitas-tui"
 version = "0.1.20"
 dependencies = [

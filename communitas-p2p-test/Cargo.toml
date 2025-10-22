@@ -1,0 +1,29 @@
+[package]
+name = "communitas-p2p-test"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[dependencies]
+# Core library with P2P networking
+communitas-core = { path = "../communitas-core" }
+
+# Async runtime
+tokio = { workspace = true }
+futures = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# Error handling
+anyhow = { workspace = true }
+
+# Serialization
+serde_json = { workspace = true }
+
+# Utils
+uuid = { workspace = true }

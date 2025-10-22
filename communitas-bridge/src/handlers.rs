@@ -11,7 +11,7 @@ use axum::{
 use base64::Engine;
 use chrono::{DateTime, Utc};
 use communitas_core::legacy_crdt::EntityType;
-use yrs::{Doc, Map, Transact};
+use yrs::{Map, Transact};
 use yrs::types::ToJson;
 // Removed: saorsa-core imports - replaced with stub implementations
 

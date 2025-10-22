@@ -59,7 +59,7 @@ impl BridgeState {
         // Create CoreContext using communitas-core with per-user storage
         // Use Desktop device type for bridge server
         let ctx = CoreContext::initialize(
-            four_words,
+            four_words.clone(),
             display_name,
             device_name,
             DeviceType::Desktop,
@@ -117,5 +117,26 @@ impl BridgeState {
     /// Check if core is initialized
     pub async fn is_initialized(&self) -> bool {
         self.core.read().await.is_some()
+    }
+
+    /// Start P2P networking for initialized core
+    pub async fn start_networking(&self, preferred_port: Option<u16>) -> Result<(String, String)> {
+        let mut core_guard = self.core.write().await;
+        let core = core_guard
+            .as_mut()
+            .ok_or_else(|| anyhow::anyhow!("Core not initialized"))?;
+
+        // Start networking with optional preferred port
+        let connection_identity = core
+            .start_networking(preferred_port)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to start networking: {}", e))?;
+
+        let listen_addr = core
+            .listen_address
+            .map(|a| a.to_string())
+            .unwrap_or_else(|| "not-available".to_string());
+
+        Ok((connection_identity, listen_addr))
     }
 }

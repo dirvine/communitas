@@ -171,3 +171,6 @@ communitas-desktop/keystore/*.identity
 # Test data directories
 communitas-bridge/test-bridge-instance*/
 communitas-bridge/test-*/
+test-data/
+p2p-test-data/
+bridge-data/

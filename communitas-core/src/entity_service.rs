@@ -222,8 +222,8 @@ impl EntityService {
                 // Check if this is an entity metadata file (contains "entity:" in the hex-decoded filename)
                 if let Some(filename) = path.file_stem().and_then(|s| s.to_str()) {
                     // Hex-decode the filename to get the doc_id
-                    if let Ok(decoded_bytes) = hex::decode(filename) {
-                        if let Ok(doc_id) = String::from_utf8(decoded_bytes) {
+                    if let Ok(decoded_bytes) = hex::decode(filename)
+                        && let Ok(doc_id) = String::from_utf8(decoded_bytes) {
                             // Check if it's an entity metadata document (format: "entity:{id}:metadata")
                             if doc_id.starts_with("entity:") && doc_id.ends_with(":metadata") {
                                 // Extract entity ID from "entity:{id}:metadata"
@@ -232,7 +232,6 @@ impl EntityService {
                                 {
                                     ids.push(entity_id.to_string());
                                 }
-                            }
                         }
                     }
                 }

@@ -233,8 +233,8 @@ fn current_timestamp() -> u64 {
 }
 
 fn generate_session_id() -> String {
-    use rand::Rng;
-    let mut rng = rand::thread_rng();
+    use rand::{Rng, SeedableRng};
+    let mut rng = rand::rngs::StdRng::from_entropy();
     let random_bytes: Vec<u8> = (0..16).map(|_| rng.r#gen::<u8>()).collect();
     hex::encode(random_bytes)
 }

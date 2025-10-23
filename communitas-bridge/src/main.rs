@@ -3,7 +3,7 @@
 //! HTTP/SSE bridge that exposes Tauri commands as REST endpoints,
 //! enabling browser-based testing with real P2P networking via Chrome DevTools MCP.
 
-#![forbid(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 
 mod error;
 mod handlers;

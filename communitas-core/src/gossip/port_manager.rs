@@ -65,7 +65,8 @@ impl PortManager {
         }
 
         // Generate random port in ephemeral range
-        let mut rng = rand::thread_rng();
+        use rand::SeedableRng;
+        let mut rng = rand::rngs::StdRng::from_entropy();
         for attempt in 1..=MAX_PORT_RETRIES {
             let port = rng.gen_range(PORT_RANGE_START..=PORT_RANGE_END);
             debug!("Attempt {}: Trying random port {}", attempt, port);

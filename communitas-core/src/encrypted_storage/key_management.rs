@@ -140,7 +140,8 @@ impl KeyManager {
 
     /// Generate a random nonce for ChaCha20-Poly1305
     pub fn generate_nonce() -> Nonce {
-        ChaCha20Poly1305::generate_nonce(&mut rand::thread_rng())
+        use rand::SeedableRng;
+        ChaCha20Poly1305::generate_nonce(&mut rand::rngs::StdRng::from_entropy())
     }
 
     /// Encrypt data using ChaCha20-Poly1305
@@ -189,9 +190,9 @@ impl KeyManager {
 
     /// Generate a secure random salt
     pub fn generate_salt() -> Vec<u8> {
-        use rand::Rng;
+        use rand::{Rng, SeedableRng};
         let mut salt = vec![0u8; 32];
-        rand::thread_rng().fill(&mut salt[..]);
+        rand::rngs::StdRng::from_entropy().fill(&mut salt[..]);
         salt
     }
 }

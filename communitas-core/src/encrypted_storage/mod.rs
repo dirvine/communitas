@@ -774,9 +774,9 @@ fn get_vault_directory() -> PathBuf {
 
 /// Generate a cryptographically secure salt
 fn generate_salt() -> Vec<u8> {
-    use rand::Rng;
+    use rand::{Rng, SeedableRng};
     let mut salt = vec![0u8; 32];
-    rand::thread_rng().fill(&mut salt[..]);
+    rand::rngs::StdRng::from_entropy().fill(&mut salt[..]);
     salt
 }
 

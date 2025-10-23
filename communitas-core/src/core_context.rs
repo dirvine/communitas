@@ -287,11 +287,12 @@ impl CoreContext {
 
         info!("Allocated port {} for QUIC transport", listen_port);
 
-        // Initialize gossip context
+        // Initialize gossip context with allocated port
         let gossip_ctx = crate::gossip::GossipContext::initialize(
             self.four_words.clone(),
             self.display_name.clone(),
             self.device_name.clone(),
+            Some(listen_port),
         )
         .await
         .map_err(|e| format!("Failed to initialize gossip: {}", e))?;

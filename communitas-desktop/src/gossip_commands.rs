@@ -22,7 +22,7 @@ pub async fn gossip_initialize(
     display_name: String,
     device_name: String,
 ) -> Result<bool, String> {
-    let ctx = GossipContext::initialize(four_words, display_name, device_name)
+    let ctx = GossipContext::initialize(four_words, display_name, device_name, None)
         .await
         .map_err(|e| format!("Failed to initialize GossipContext: {}", e))?;
 

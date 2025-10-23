@@ -123,12 +123,8 @@ pub async fn create_channel(
         .as_ref()
         .ok_or_else(|| BridgeError::CommandFailed("Core not initialized".to_string()))?;
 
-    // Get creator identity (bridge's four-word ID or default)
-    let created_by = core
-        .connection_identity
-        .as_ref()
-        .cloned()
-        .unwrap_or_else(|| "system-bridge".to_string());
+    // Get creator identity (user's four-word identity, not connection endpoint)
+    let created_by = core.four_words.clone();
 
     // Create channel entity using CRDT-backed entity_service
     let entity = core
@@ -971,7 +967,6 @@ pub async fn download_file(
         "content_type": content_type,
         "uploaded_at": uploaded_at,
         "encrypted": encrypted,
-        "decrypted": encrypted,
         "persisted": true
     })))
 }

@@ -106,8 +106,9 @@ impl GossipContext {
         four_words: String,
         display_name: String,
         device_name: String,
+        listen_port: Option<u16>,
     ) -> Result<Self> {
-        info!("Initializing GossipContext for {}", four_words);
+        info!("Initializing GossipContext for {} (port: {:?})", four_words, listen_port);
 
         // 1. Load or create ML-DSA identity
         // Use system data directory to avoid triggering file watchers in dev mode
@@ -133,6 +134,19 @@ impl GossipContext {
         let config = saorsa_gossip_transport::TransportConfig::default();
         let transport = QuicTransport::new(config);
         let transport = Arc::new(transport);
+
+        // 2b. Bind transport to specified port
+        if let Some(port) = listen_port {
+            let local_ip = local_ip_address::local_ip()
+                .context("Failed to get local IP address for transport binding")?;
+            let bind_addr = std::net::SocketAddr::new(local_ip, port);
+
+            info!("Binding transport to {}", bind_addr);
+            transport
+                .listen(bind_addr)
+                .await
+                .context("Failed to bind transport to specified address")?;
+        }
 
         // 3. Create membership layer (will be started in boot sequence)
         // HyParView parameters: active_degree (3-7), passive_degree (3x active)
@@ -710,6 +724,7 @@ mod tests {
             "ocean-forest-moon-star".to_string(),
             "Alice".to_string(),
             "Desktop".to_string(),
+            None,
         )
         .await;
 
@@ -728,6 +743,7 @@ mod tests {
             "ocean-forest-moon-star".to_string(),
             "Alice".to_string(),
             "Desktop".to_string(),
+            None,
         )
         .await
         .expect("init");
@@ -747,6 +763,7 @@ mod tests {
             "ocean-forest-moon-star".to_string(),
             "Alice".to_string(),
             "Desktop".to_string(),
+            None,
         )
         .await
         .expect("init");

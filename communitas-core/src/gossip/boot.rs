@@ -305,6 +305,7 @@ mod tests {
             "ocean-forest-moon-star".to_string(),
             "Alice".to_string(),
             "Desktop".to_string(),
+            None,
         )
         .await
         .expect("context init");

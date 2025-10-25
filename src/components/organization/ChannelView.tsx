@@ -11,6 +11,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { channelService } from '../../services/channelService';
 import type { Channel, Message } from '../../types/channels';
 import { GlassCard } from '../ui/GlassCard';
+import { AddMemberDialog } from '../members/AddMemberDialog';
 
 interface ChannelViewProps {
   channelId: string;
@@ -30,6 +31,7 @@ export const ChannelView: React.FC<ChannelViewProps> = ({
   const [threadMessages, setThreadMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
+  const [addMemberDialogOpen, setAddMemberDialogOpen] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -286,7 +288,10 @@ export const ChannelView: React.FC<ChannelViewProps> = ({
             </IconButton>
           </Tooltip>
           <Tooltip title="Add members">
-            <IconButton size="small">
+            <IconButton 
+              size="small"
+              onClick={() => setAddMemberDialogOpen(true)}
+            >
               <AddMemberIcon fontSize="small" />
             </IconButton>
           </Tooltip>
@@ -461,6 +466,19 @@ export const ChannelView: React.FC<ChannelViewProps> = ({
           </Tooltip>
         </Stack>
       </GlassCard>
+
+      {/* Member Management Dialog */}
+      <AddMemberDialog
+        open={addMemberDialogOpen}
+        onClose={() => setAddMemberDialogOpen(false)}
+        entityType="channel"
+        entityId={channelId}
+        onMemberAdded={() => {
+          // Member added successfully
+          console.log('Member added to channel', channelId)
+          // Could refresh channel data here if needed
+        }}
+      />
     </Box>
   );
 };

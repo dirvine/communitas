@@ -9,6 +9,7 @@ import {
 import { PersonAdd } from '@mui/icons-material'
 import { MemberCard } from './MemberCard'
 import { AddMemberDialog } from './AddMemberDialog'
+import { RemoveMemberConfirmDialog } from './RemoveMemberConfirmDialog'
 import type { MemberInfo, MemberEntityType, MemberRole } from '@/types/memberManagement'
 import { memberManagementService } from '@/services/MemberManagementService'
 
@@ -28,6 +29,8 @@ export function MemberListPanel({
   const [members, setMembers] = useState<MemberInfo[]>([])
   const [loading, setLoading] = useState(true)
   const [addDialogOpen, setAddDialogOpen] = useState(false)
+  const [removeDialogOpen, setRemoveDialogOpen] = useState(false)
+  const [memberToRemove, setMemberToRemove] = useState<string | null>(null)
 
   useEffect(() => {
     loadMembers()
@@ -51,17 +54,26 @@ export function MemberListPanel({
     }
   }
 
-  const handleRemove = async (memberId: string) => {
+  const openRemoveDialog = (memberId: string) => {
+    setMemberToRemove(memberId)
+    setRemoveDialogOpen(true)
+  }
+
+  const confirmRemove = async () => {
+    if (!memberToRemove) return
+
     try {
       const result = await memberManagementService.removeMember({
         entity_type: entityType,
         entity_id: entityId,
-        member_id: memberId,
+        member_id: memberToRemove,
         deleted_by: currentUserId
       })
 
       if (result.success) {
-        // Reload member list
+        // Close dialog and reload member list
+        setRemoveDialogOpen(false)
+        setMemberToRemove(null)
         loadMembers()
       } else {
         console.error('Failed to remove member:', result.error)
@@ -69,6 +81,11 @@ export function MemberListPanel({
     } catch (err) {
       console.error('Error removing member:', err)
     }
+  }
+
+  const cancelRemove = () => {
+    setRemoveDialogOpen(false)
+    setMemberToRemove(null)
   }
 
   const handleRoleChange = async (memberId: string, newRole: MemberRole) => {
@@ -134,7 +151,7 @@ export function MemberListPanel({
               key={member.member_id}
               member={member}
               canManage={canManageMembers && member.member_id !== currentUserId}
-              onRemove={() => handleRemove(member.member_id)}
+              onRemove={() => openRemoveDialog(member.member_id)}
               onRoleChange={(newRole) => handleRoleChange(member.member_id, newRole)}
             />
           ))}
@@ -147,6 +164,13 @@ export function MemberListPanel({
         entityType={entityType}
         entityId={entityId}
         onMemberAdded={loadMembers}
+      />
+
+      <RemoveMemberConfirmDialog
+        open={removeDialogOpen}
+        memberName={memberToRemove || ''}
+        onConfirm={confirmRemove}
+        onCancel={cancelRemove}
       />
     </Box>
   )

@@ -4,29 +4,17 @@
  * Prominently displays the current endpoint four-word address or offline status
  */
 
-import React, { useState, useEffect } from 'react';
 import {
-  Box,
-  Typography,
-  Chip,
-  Stack,
-  IconButton,
-  Tooltip,
-  Paper,
-  Fade,
-  Alert,
-} from '@mui/material';
-import {
-  LocationOn as LocationIcon,
-  WifiOff as OfflineIcon,
-  Wifi as OnlineIcon,
-  CloudOff as LocalIcon,
-  ContentCopy as CopyIcon,
-  Refresh as RefreshIcon,
-  Sync as ConnectingIcon,
+    CloudOff as LocalIcon,
+    ContentCopy as CopyIcon, LocationOn as LocationIcon, Refresh as RefreshIcon,
+    Sync as ConnectingIcon, Wifi as OnlineIcon, WifiOff as OfflineIcon
 } from '@mui/icons-material';
+import {
+    Alert, Box, Chip, Fade, IconButton, Paper, Stack, Tooltip, Typography
+} from '@mui/material';
 import { motion } from 'framer-motion';
-import { networkService, NetworkStatus } from '../../services/network/NetworkConnectionService';
+import React, { useEffect, useState } from 'react';
+import { networkService } from '../../services/network/NetworkConnectionService';
 
 export const EndpointStatusDisplay: React.FC = () => {
   const [networkState, setNetworkState] = useState(networkService.getState());

@@ -1,30 +1,16 @@
-import React, { useCallback, useState } from 'react';
 import {
-  AppBar,
-  AppBarProps,
-  Toolbar,
-  IconButton,
-  Typography,
-  Box,
-  useTheme,
-  alpha,
-  SxProps,
-  Theme,
-  Menu,
-  MenuItem,
-  Badge,
-} from '@mui/material';
-import {
-  Menu as MenuIcon,
-  MoreVert as MoreVertIcon,
-  Search as SearchIcon,
-  Notifications as NotificationsIcon,
-  AccountCircle as AccountCircleIcon,
-  ArrowBack as ArrowBackIcon,
-  Home as HomeIcon,
-  Settings as SettingsIcon,
+    AccountCircle as AccountCircleIcon,
+    ArrowBack as ArrowBackIcon,
+    Home as HomeIcon, Menu as MenuIcon,
+    MoreVert as MoreVertIcon, Notifications as NotificationsIcon, Search as SearchIcon, Settings as SettingsIcon
 } from '@mui/icons-material';
-import { motion } from 'framer-motion';
+import {
+    alpha, AppBar,
+    AppBarProps, Badge, Box, IconButton, Menu,
+    MenuItem, SxProps,
+    Theme, Toolbar, Typography, useTheme
+} from '@mui/material';
+import React, { useCallback, useState } from 'react';
 
 // Enhanced responsive hooks
 import { useTouchDevice, useTouchFriendlySizing } from '../../hooks/useResponsive';

@@ -1,20 +1,14 @@
-import React, { useEffect, useState } from 'react'
 import {
-  Box,
-  Paper,
-  Typography,
-  LinearProgress,
-  Collapse,
-  IconButton,
-  Alert,
-  Snackbar
-} from '@mui/material'
-import {
-  Close as CloseIcon,
-  ExpandLess as ExpandLessIcon,
-  ExpandMore as ExpandMoreIcon
+    Close as CloseIcon,
+    ExpandLess as ExpandLessIcon,
+    ExpandMore as ExpandMoreIcon
 } from '@mui/icons-material'
-import { useDHTSync, DHTSyncEvent } from '../../hooks/useDHTSync'
+import {
+    Alert, Box, Collapse,
+    IconButton, LinearProgress, Paper, Snackbar, Typography
+} from '@mui/material'
+import React, { useEffect, useState } from 'react'
+import { DHTSyncEvent, useDHTSync } from '../../hooks/useDHTSync'
 import SyncStatusIndicator from './SyncStatusIndicator'
 
 interface GlobalSyncBarProps {

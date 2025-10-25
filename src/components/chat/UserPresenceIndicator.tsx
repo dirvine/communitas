@@ -1,25 +1,18 @@
-import React, { useState, useEffect, useCallback } from 'react'
 import {
-  Box,
-  Avatar,
-  Badge,
-  Tooltip,
-  Typography,
-  List,
-  ListItem,
-  ListItemAvatar,
-  ListItemText,
-  Paper,
-  Chip,
-  Divider,
-} from '@mui/material'
-import {
-  Circle as CircleIcon,
-  Schedule as ScheduleIcon,
-  DoNotDisturb as DoNotDisturbIcon,
-  OfflinePin as OfflinePinIcon
+    Circle as CircleIcon, DoNotDisturb as DoNotDisturbIcon,
+    OfflinePin as OfflinePinIcon, Schedule as ScheduleIcon
 } from '@mui/icons-material'
-import { useDHTSync, DHTSyncEvent } from '../../hooks/useDHTSync'
+import {
+    Avatar,
+    Badge, Box, Chip,
+    Divider, List,
+    ListItem,
+    ListItemAvatar,
+    ListItemText,
+    Paper, Tooltip,
+    Typography
+} from '@mui/material'
+import React, { useCallback, useEffect, useState } from 'react'
 
 // User presence types
 interface UserPresence {

@@ -1,27 +1,8 @@
-import React, { useState } from 'react'
+import { Add, Close as CloseIcon, GroupAdd } from '@mui/icons-material'
 import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Button,
-  TextField,
-  Box,
-  Typography,
-  IconButton,
-  Alert,
-  Tabs,
-  Tab,
-  Chip,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Checkbox,
-  ListItemText,
-  OutlinedInput,
+    Alert, Box, Button, Checkbox, Chip, Dialog, DialogActions, DialogContent, DialogTitle, FormControl, IconButton, InputLabel, ListItemText, MenuItem, OutlinedInput, Select, Tab, Tabs, TextField, Typography
 } from '@mui/material'
-import { Close as CloseIcon, Add, GroupAdd } from '@mui/icons-material'
+import React, { useState } from 'react'
 import type { Contact } from './ContactManagementDialogs'
 
 export type EntityType = 'group' | 'organization' | 'channel' | 'project'

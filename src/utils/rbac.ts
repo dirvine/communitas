@@ -1,4 +1,4 @@
-import { UserIdentity, Permission } from '../contexts/AuthContext';
+import { UserIdentity } from '../contexts/AuthContext';
 
 // Role definitions
 export enum SystemRole {

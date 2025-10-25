@@ -1,15 +1,11 @@
-import React, { useCallback } from 'react';
 import {
-  Grid,
-  GridProps,
-  useTheme,
-  alpha,
-  SxProps,
-  Theme,
+    GridProps, SxProps,
+    Theme, useTheme
 } from '@mui/material';
+import React, { useCallback } from 'react';
 
 // Enhanced responsive hooks
-import { useTouchDevice, useTouchFriendlySizing, useResponsiveColumns } from '../../hooks/useResponsive';
+import { useResponsiveColumns, useTouchDevice, useTouchFriendlySizing } from '../../hooks/useResponsive';
 
 export interface TouchGridProps extends Omit<GridProps, 'columns' | 'spacing'> {
   /** Enable touch-friendly spacing */

@@ -1,93 +1,28 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  Box,
-  Paper,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
-  ListItemSecondaryAction,
-  IconButton,
-  Typography,
-  Breadcrumbs,
-  Link,
-  Button,
-  Stack,
-  Chip,
-  CircularProgress,
-  LinearProgress,
-  Alert,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
-  Menu,
-  MenuItem,
-  Divider,
-  Tooltip,
-  Grid,
-  Card,
-  CardContent,
-  CardActions,
-  Select,
-  FormControl,
-  InputLabel,
-  Fab,
-  Tabs,
-  Tab,
-  Badge,
-} from '@mui/material';
-import {
-  Folder as FolderIcon,
-  InsertDriveFile as FileIcon,
-  CloudUpload as UploadIcon,
-  CloudDownload as DownloadIcon,
-  CreateNewFolder as NewFolderIcon,
-  Delete as DeleteIcon,
-  Edit as EditIcon,
-  Share as ShareIcon,
-  MoreVert as MoreIcon,
-  Lock as LockIcon,
-  LockOpen as UnlockIcon,
-  Security as SecurityIcon,
-  Warning as WarningIcon,
-  CheckCircle as HealthyIcon,
-  Error as CriticalIcon,
-  Home as HomeIcon,
-  NavigateNext as NavigateNextIcon,
-  ViewList as ListViewIcon,
-  ViewModule as GridViewIcon,
-  Search as SearchIcon,
-  FilterList as FilterIcon,
-  Sort as SortIcon,
-  Refresh as RefreshIcon,
-  Add as AddIcon,
-  Code as CodeIcon,
-  Image as ImageIcon,
-  VideoFile as VideoIcon,
-  AudioFile as AudioIcon,
-  PictureAsPdf as PdfIcon,
-  Description as DocumentIcon,
-  Archive as ArchiveIcon,
-  CloudOff as OfflineIcon,
-  Language as WebsiteIcon,
-  Storage as DataIcon,
-  Public as PublicIcon,
-  Group as GroupIcon,
-  Language as LanguageOutlined,
+    Add as AddIcon, Archive as ArchiveIcon, AudioFile as AudioIcon, CheckCircle as HealthyIcon, CloudDownload as DownloadIcon, CloudUpload as UploadIcon, Code as CodeIcon, CreateNewFolder as NewFolderIcon,
+    Delete as DeleteIcon, Description as DocumentIcon, Edit as EditIcon, Error as CriticalIcon, Folder as FolderIcon, Home as HomeIcon, Image as ImageIcon, InsertDriveFile as FileIcon, Language as LanguageOutlined, Language as WebsiteIcon, Lock as LockIcon, MoreVert as MoreIcon, NavigateNext as NavigateNextIcon, PictureAsPdf as PdfIcon, Public as PublicIcon, Refresh as RefreshIcon, Search as SearchIcon, Share as ShareIcon, Storage as DataIcon, VideoFile as VideoIcon, ViewList as ListViewIcon,
+    ViewModule as GridViewIcon, Warning as WarningIcon
 } from '@mui/icons-material';
+import {
+    Alert, Badge, Box, Breadcrumbs, Button, Card,
+    CardContent, Chip,
+    CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Divider, Fab, FormControl, Grid, IconButton, LinearProgress, Link, List,
+    ListItem,
+    ListItemIcon, ListItemSecondaryAction, ListItemText, Menu,
+    MenuItem, Paper, Select, Stack, Tab, Tabs, TextField, Tooltip, Typography
+} from '@mui/material';
+import { alpha, styled, useTheme } from '@mui/material/styles';
 import { invoke } from '@tauri-apps/api/core';
 import { format } from 'date-fns';
+import { motion } from 'framer-motion';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocalStorage } from '../../contexts/LocalStorageProvider';
 import { networkService } from '../../services/network/NetworkConnectionService';
 import { offlineStorage } from '../../services/storage/OfflineStorageService';
-import { GlassCard, GlassCardContent } from '../ui/GlassCard';
-import { ModernButton } from '../ui/ModernButton';
 import { designTokens } from '../../styles/theme';
-import { motion } from 'framer-motion';
-import { alpha, styled, useTheme } from '@mui/material/styles';
 import { EntityDocumentWorkspace } from '../documents/EntityDocumentWorkspace';
+import { GlassCard } from '../ui/GlassCard';
+import { ModernButton } from '../ui/ModernButton';
 
 interface StorageItem {
   name: string;

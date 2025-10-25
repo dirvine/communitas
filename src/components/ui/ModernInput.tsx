@@ -1,6 +1,6 @@
+import { InputAdornment, TextField, TextFieldProps } from '@mui/material';
+import { alpha, styled } from '@mui/material/styles';
 import React from 'react';
-import { TextField, TextFieldProps, InputAdornment } from '@mui/material';
-import { styled, alpha } from '@mui/material/styles';
 import { designTokens } from '../../styles/theme';
 
 interface ModernInputProps extends Omit<TextFieldProps, 'variant'> {

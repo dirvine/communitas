@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
+use std::time::Duration;
 use tracing::{error, info, warn};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -21,6 +22,8 @@ pub struct NetworkConfig {
     pub presence: PresenceConfig,
     pub security: SecurityConfig,
     pub monitoring: MonitoringConfig,
+    #[serde(default)]
+    pub resource_limits: ResourceLimitsConfig,
     #[serde(default)]
     pub environments: HashMap<String, EnvironmentConfig>,
 }
@@ -206,6 +209,63 @@ pub struct EnvironmentConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EnvironmentBootstrap {
     pub nodes: Vec<String>,
+}
+
+/// Resource limits configuration (Phase 2 TDD - MESH_CAPABILITIES.md §8.3)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResourceLimitsConfig {
+    #[serde(default = "default_max_peer_connections")]
+    pub max_peer_connections: usize,
+    #[serde(default = "default_max_relay_connections")]
+    pub max_relay_connections: usize,
+    #[serde(default = "default_connection_timeout_secs")]
+    pub connection_timeout_secs: u64,
+    #[serde(default = "default_max_memory_mb")]
+    pub max_memory_mb: usize,
+    #[serde(default = "default_crdt_document_limit_mb")]
+    pub crdt_document_limit_mb: usize,
+    pub upload_rate_limit_mbps: Option<u64>,
+    pub download_rate_limit_mbps: Option<u64>,
+}
+
+fn default_max_peer_connections() -> usize { 50 }
+fn default_max_relay_connections() -> usize { 3 }
+fn default_connection_timeout_secs() -> u64 { 30 }
+fn default_max_memory_mb() -> usize { 2048 }
+fn default_crdt_document_limit_mb() -> usize { 50 }
+
+impl Default for ResourceLimitsConfig {
+    fn default() -> Self {
+        Self {
+            max_peer_connections: default_max_peer_connections(),
+            max_relay_connections: default_max_relay_connections(),
+            connection_timeout_secs: default_connection_timeout_secs(),
+            max_memory_mb: default_max_memory_mb(),
+            crdt_document_limit_mb: default_crdt_document_limit_mb(),
+            upload_rate_limit_mbps: None,
+            download_rate_limit_mbps: None,
+        }
+    }
+}
+
+impl ResourceLimitsConfig {
+    /// Convert to communitas_core::ResourceLimits
+    pub fn to_core_limits(&self) -> communitas_core::ResourceLimits {
+        communitas_core::ResourceLimits {
+            max_memory_mb: self.max_memory_mb,
+            crdt_document_limit_mb: self.crdt_document_limit_mb,
+            cache_size_mb: 500, // Default from spec
+            max_peer_connections: self.max_peer_connections,
+            max_relay_connections: self.max_relay_connections,
+            connection_timeout: Duration::from_secs(self.connection_timeout_secs),
+            upload_rate_limit_mbps: self.upload_rate_limit_mbps,
+            download_rate_limit_mbps: self.download_rate_limit_mbps,
+            burst_allowance_mb: 10, // Default from spec
+            max_worker_threads: 4, // Default from spec
+            crypto_thread_pool: 2, // Default from spec
+            anti_entropy_max_interval: Duration::from_secs(300), // Default from spec
+        }
+    }
 }
 
 impl NetworkConfig {

@@ -1,6 +1,6 @@
-import React from 'react';
 import { Box, CircularProgress } from '@mui/material';
-import { styled, keyframes, alpha } from '@mui/material/styles';
+import { alpha, keyframes, styled } from '@mui/material/styles';
+import React from 'react';
 import { designTokens } from '../../styles/theme';
 
 interface ModernLoaderProps {

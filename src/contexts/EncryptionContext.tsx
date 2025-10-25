@@ -1,13 +1,9 @@
-import React, { createContext, useContext, useReducer, useEffect, useCallback } from 'react';
-import { useAuth, UserIdentity } from './AuthContext';
-import { 
-  cryptoManager, 
-  KeyPair, 
-  DerivedKey, 
-  EncryptedData,
-  encryptUserData,
-  decryptUserData 
+import React, { createContext, useCallback, useContext, useEffect, useReducer } from 'react';
+import {
+    cryptoManager, DerivedKey,
+    EncryptedData, KeyPair
 } from '../utils/crypto';
+import { useAuth, UserIdentity } from './AuthContext';
 // Dynamic import of Tauri API with fallback
 let invoke: any = async (cmd: string, args?: any) => {
   // Try to get Tauri from window first

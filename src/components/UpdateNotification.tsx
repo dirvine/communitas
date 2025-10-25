@@ -5,30 +5,24 @@
 // Displays update notifications with comprehensive progress tracking
 // Design: Matches STORYBOARD.md design system
 
-import React, { useEffect, useState, useCallback } from 'react';
+import {
+    Close as CloseIcon,
+    Download as DownloadIcon, InfoOutlined, NewReleases as UpdateIcon
+} from '@mui/icons-material';
+import {
+    Alert,
+    AlertTitle,
+    Box,
+    Button, Chip, Dialog,
+    DialogActions,
+    DialogContent,
+    DialogTitle,
+    IconButton,
+    Snackbar, Stack, Typography
+} from '@mui/material';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import {
-  Alert,
-  AlertTitle,
-  Box,
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  IconButton,
-  Snackbar,
-  Typography,
-  Stack,
-  Chip,
-} from '@mui/material';
-import {
-  Close as CloseIcon,
-  Download as DownloadIcon,
-  NewReleases as UpdateIcon,
-  InfoOutlined,
-} from '@mui/icons-material';
+import React, { useCallback, useEffect, useState } from 'react';
 import { UpdateProgress } from './update/UpdateProgress';
 
 // STORYBOARD.md Design Tokens

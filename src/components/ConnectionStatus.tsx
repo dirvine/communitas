@@ -14,35 +14,18 @@
  * - Bootstrap peer management
  */
 
-import React, { useEffect, useState } from 'react';
 import {
-  Box,
-  Typography,
-  Chip,
-  IconButton,
-  TextField,
-  Button,
-  List,
-  ListItem,
-  ListItemText,
-  Collapse,
-  Tooltip,
-  CircularProgress,
-  Alert,
-} from '@mui/material';
-import {
-  Wifi as WifiIcon,
-  WifiOff as WifiOffIcon,
-  Refresh as RefreshIcon,
-  ExpandMore as ExpandMoreIcon,
-  ExpandLess as ExpandLessIcon,
-  PersonAdd as PersonAddIcon,
+    ExpandLess as ExpandLessIcon, ExpandMore as ExpandMoreIcon, PersonAdd as PersonAddIcon, Refresh as RefreshIcon, Wifi as WifiIcon,
+    WifiOff as WifiOffIcon
 } from '@mui/icons-material';
 import {
-  connectionService,
-  ConnectionStatus as ConnectionStatusType,
-  BootstrapPeer,
-  ConnectionService,
+    Alert, Box, Button, Chip, CircularProgress, Collapse, IconButton, List,
+    ListItem,
+    ListItemText, TextField, Tooltip, Typography
+} from '@mui/material';
+import React, { useEffect, useState } from 'react';
+import {
+    BootstrapPeer, connectionService, ConnectionService, ConnectionStatus as ConnectionStatusType
 } from '../services/ConnectionService';
 
 interface ConnectionStatusProps {

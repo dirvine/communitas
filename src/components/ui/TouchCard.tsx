@@ -1,24 +1,13 @@
-import React, { useCallback, useState } from 'react';
 import {
-  Card,
-  CardProps,
-  CardContent,
-  CardActions,
-  CardHeader,
-  CardMedia,
-  IconButton,
-  Box,
-  useTheme,
-  alpha,
-  SxProps,
-  Theme,
-} from '@mui/material';
-import {
-  Favorite as FavoriteIcon,
-  Share as ShareIcon,
-  MoreVert as MoreVertIcon,
+    Favorite as FavoriteIcon, MoreVert as MoreVertIcon, Share as ShareIcon
 } from '@mui/icons-material';
+import {
+    alpha, Box, Card, CardActions, CardContent, CardHeader,
+    CardMedia, CardProps, IconButton, SxProps,
+    Theme, useTheme
+} from '@mui/material';
 import { motion, PanInfo } from 'framer-motion';
+import React, { useCallback, useState } from 'react';
 
 // Enhanced responsive hooks
 import { useTouchDevice, useTouchFriendlySizing } from '../../hooks/useResponsive';

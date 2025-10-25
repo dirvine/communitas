@@ -1,27 +1,18 @@
-import React, { useState, useEffect } from 'react'
 import {
-  Box,
-  Typography,
-  Button,
-  Alert,
-  CircularProgress,
-  Snackbar,
-  Card,
-  CardContent,
-  Grid,
-  Chip,
-  Stack,
-} from '@mui/material'
-import {
-  Add as AddIcon,
-  Refresh as RefreshIcon,
-  Storage as StorageIcon,
+    Add as AddIcon,
+    Refresh as RefreshIcon,
+    Storage as StorageIcon
 } from '@mui/icons-material'
+import {
+    Alert, Box, Button, Card,
+    CardContent, Chip, CircularProgress, Grid, Snackbar, Stack, Typography
+} from '@mui/material'
+import React, { useEffect, useState } from 'react'
+import { offlineStorage } from '../../services/storage/OfflineStorageService'
 import { IdentityInfo, StorageBackendInfo } from '../../types'
+import { safeInvoke } from '../../utils/tauri'
 import IdentityCard from './IdentityCard'
 import IdentitySetup from './IdentitySetup'
-import { safeInvoke } from '../../utils/tauri'
-import { offlineStorage } from '../../services/storage/OfflineStorageService'
 
 const IdentityManager: React.FC = () => {
   const [currentIdentity, setCurrentIdentity] = useState<IdentityInfo | null>(null)

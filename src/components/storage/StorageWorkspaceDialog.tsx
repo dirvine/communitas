@@ -1,11 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react'
-import { Dialog, DialogTitle, DialogContent, IconButton, Box, CircularProgress, Alert } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
-import { WebStorageWorkspace } from '../unified/WebStorageWorkspace'
-import { CompleteStorageSystem } from '../../services/storage/CompleteStorageSystem'
+import { Alert, Box, CircularProgress, Dialog, DialogContent, DialogTitle, IconButton } from '@mui/material'
+import React, { useEffect, useMemo, useState } from 'react'
 import { DHTWebRouter } from '../../services/dht/DHTWebRouter'
+import { CompleteStorageSystem } from '../../services/storage/CompleteStorageSystem'
 import { DHTStorage } from '../../services/storage/dhtStorage'
-import { NetworkIdentity, PersonalUser, Organization, Project } from '../../types/collaboration'
+import { NetworkIdentity, Organization, PersonalUser, Project } from '../../types/collaboration'
+import { WebStorageWorkspace } from '../unified/WebStorageWorkspace'
 
 export interface StorageEntityRef {
   entityId: string

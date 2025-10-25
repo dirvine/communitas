@@ -1,6 +1,6 @@
-import { Element, ElementConfig, ElementIdentity, ElementCapabilities, ElementMembership, ElementStorage, ElementCommunication, ElementMetadata, ElementType } from '../../types/element';
-import { ELEMENT_TEMPLATES, getElementTemplate } from './ElementTemplates';
+import { Element, ElementCapabilities, ElementCommunication, ElementConfig, ElementIdentity, ElementMembership, ElementMetadata, ElementStorage, ElementType } from '../../types/element';
 import { generateFourWords } from '../../utils/fourWords';
+import { ELEMENT_TEMPLATES, getElementTemplate } from './ElementTemplates';
 
 export class ElementFactory {
   private static instance: ElementFactory;

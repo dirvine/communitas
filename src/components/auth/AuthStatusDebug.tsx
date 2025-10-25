@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { Button } from '@mui/material';
 import { Login as LoginIcon } from '@mui/icons-material';
+import { Button } from '@mui/material';
+import React, { useState } from 'react';
 
 export const AuthStatusDebug: React.FC = () => {
   const [clicked, setClicked] = useState(0);

@@ -1,31 +1,16 @@
-import React, { useState } from 'react'
 import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Button,
-  TextField,
-  Typography,
-  Box,
-  CircularProgress,
-  Alert,
-  FormControlLabel,
-  Checkbox,
-  Stepper,
-  Step,
-  StepLabel,
-  StepContent,
-} from '@mui/material'
-import {
-  PersonAdd as PersonAddIcon,
-  // Security as SecurityIcon,
-  Check as CheckIcon,
+    // Security as SecurityIcon,
+    Check as CheckIcon, PersonAdd as PersonAddIcon
 } from '@mui/icons-material'
-import { IdentityInfo } from '../../types'
-import { safeInvoke } from '../../utils/tauri'
-import { generateFourWordIdentity } from '../../utils/identity'
+import {
+    Alert, Box, Button, Checkbox, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, Step, StepContent, StepLabel, Stepper, TextField,
+    Typography
+} from '@mui/material'
+import React, { useState } from 'react'
 import { offlineStorage } from '../../services/storage/OfflineStorageService'
+import { IdentityInfo } from '../../types'
+import { generateFourWordIdentity } from '../../utils/identity'
+import { safeInvoke } from '../../utils/tauri'
 
 interface IdentitySetupProps {
   open: boolean

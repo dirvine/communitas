@@ -12,9 +12,9 @@
  * Rust backend with saorsa-webrtc and gossip overlay network integration.
  */
 
-import { invoke } from '@tauri-apps/api/tauri';
+import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import type { MediaConstraints, MediaDevice, CallEvent } from './types';
+import type { CallEvent, MediaConstraints, MediaDevice } from './types';
 
 /**
  * WebRTC service for managing calls

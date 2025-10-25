@@ -156,9 +156,9 @@ Actions: jump, swim, fly, run, walk
 2. Words are validated (all must be in dictionary)
        ↓
 3. Hash of four-word sequence becomes network location
-       ↓
-4. Entity data published to that location in DHT
-       ↓
+↓
+4. Entity data published to that location in gossip overlay
+↓
 5. Anyone can find entity by its four-word identifier
 ```
 
@@ -263,8 +263,8 @@ HTTP:   GET http://example.com/index.html
 **Communitas**:
 ```
 Identity: ocean-forest-moon-star
-DHT:      ocean-forest-moon-star → entity with website_root hash
-Content:  Fetch content from DHT using root hash
+Gossip:   ocean-forest-moon-star → entity with website_root hash
+Content:  Fetch content from gossip overlay using root hash
 Render:   Display markdown as website
 ```
 
@@ -282,7 +282,7 @@ When you use a four-word entity identifier:
 
 ```
 1. Hash the four words → location key
-2. Query DHT for entity data at that key
+2. Query gossip overlay for entity data at that key
 3. Retrieve entity metadata (public key, website root, etc.)
 4. Access published content (websites, public files, etc.)
 ```
@@ -297,8 +297,8 @@ if (!validate_four_words(fourWords)) {
   throw new Error("Invalid four-word address");
 }
 
-// 2. Look up entity in DHT
-const entity = await dht_lookup(fourWords);
+// 2. Look up entity in gossip overlay
+const entity = await gossip_lookup(fourWords);
 // Returns: {
 //   fourWords: "ocean-forest-moon-star",
 //   publicKey: "...",
@@ -384,7 +384,7 @@ let suggestions = suggest_corrections("mountian-lake-tree-bird");
 
 **Key Difference**:
 - **Network Encoding**: Bidirectional (IP ⟷ words), includes port
-- **Entity Identifiers**: One-way (words → DHT location), no port concept
+- **Entity Identifiers**: One-way (words → gossip location), no port concept
 
 ---
 
@@ -580,14 +580,14 @@ console.log('Did you mean:', suggestions);
 **Problem**: Four-word entity identifier doesn't resolve
 
 **Causes**:
-- Entity hasn't been published to DHT
+- Entity hasn't been published to gossip overlay
 - Network connectivity issues
 - Typo in four-word identifier
 
 **Solutions**:
 - Verify identifier is correct (check with sender)
 - Check network connectivity
-- Try again later (DHT propagation delay)
+- Try again later (gossip propagation delay)
 
 ---
 

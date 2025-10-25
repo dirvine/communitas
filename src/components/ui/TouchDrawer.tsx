@@ -1,24 +1,17 @@
-import React, { useCallback, useState } from 'react';
 import {
-  Drawer,
-  DrawerProps,
-  List,
-  ListItem,
-  ListItemButton,
-  ListItemIcon,
-  ListItemText,
-  IconButton,
-  Box,
-  useTheme,
-  alpha,
-  SxProps,
-  Theme,
-  Divider,
-} from '@mui/material';
-import {
-  Close as CloseIcon,
+    Close as CloseIcon
 } from '@mui/icons-material';
+import {
+    alpha, Box, Divider, Drawer,
+    DrawerProps, IconButton, List,
+    ListItem,
+    ListItemButton,
+    ListItemIcon,
+    ListItemText, SxProps,
+    Theme, useTheme
+} from '@mui/material';
 import { motion, PanInfo } from 'framer-motion';
+import React, { useCallback, useState } from 'react';
 
 // Enhanced responsive hooks
 import { useTouchDevice, useTouchFriendlySizing } from '../../hooks/useResponsive';

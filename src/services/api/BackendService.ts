@@ -1,8 +1,8 @@
 // Environment-aware API service that works in both browser and Tauri
 import { invoke } from '@tauri-apps/api/core';
+import type { MemberEntityType, MemberRole } from '../../types/memberManagement';
 import { logger } from '../LoggingService';
 import { memberManagementService } from '../MemberManagementService';
-import type { MemberEntityType, MemberRole } from '../../types/memberManagement';
 
 // Detect runtime environment
 const isTauri = () => {

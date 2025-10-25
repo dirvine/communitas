@@ -1,9 +1,9 @@
-import * as Y from 'yjs'
 import { Mutex } from 'async-mutex'
-import { offlineStorage } from '../services/storage/OfflineStorageService'
-import { logger } from '../services/LoggingService'
-import { backendService } from '../services/api/BackendService'
+import * as Y from 'yjs'
 import type { Message } from '../components/chat/EntityChatView'
+import { backendService } from '../services/api/BackendService'
+import { logger } from '../services/LoggingService'
+import { offlineStorage } from '../services/storage/OfflineStorageService'
 
 interface MessageDoc {
   messages: Record<string, Message>

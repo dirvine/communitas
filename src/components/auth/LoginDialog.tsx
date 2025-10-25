@@ -1,36 +1,16 @@
-import React, { useState } from 'react';
 import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
-  Button,
-  Stack,
-  Typography,
-  IconButton,
-  Alert,
-  Box,
-  Chip,
-  Divider,
-  Switch,
-  FormControlLabel,
-  CircularProgress,
-} from '@mui/material';
-import {
-  Close as CloseIcon,
-  Visibility as VisibilityIcon,
-  VisibilityOff as VisibilityOffIcon,
-  Key as KeyIcon,
-  Person as PersonIcon,
-  NetworkCheck as NetworkIcon,
-  Security as SecurityIcon,
-  Fingerprint as FingerprintIcon,
+    Close as CloseIcon, Fingerprint as FingerprintIcon, Key as KeyIcon, NetworkCheck as NetworkIcon, Person as PersonIcon, Security as SecurityIcon, Visibility as VisibilityIcon,
+    VisibilityOff as VisibilityOffIcon
 } from '@mui/icons-material';
-import { motion, AnimatePresence } from 'framer-motion';
+import {
+    Alert,
+    Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Divider, FormControlLabel, IconButton, Stack, Switch, TextField, Typography
+} from '@mui/material';
+import { AnimatePresence, motion } from 'framer-motion';
+import React, { useState } from 'react';
+import validator from 'validator';
 import { useAuth } from '../../contexts/AuthContext';
 import { generateFourWordIdentity } from '../../utils/identity';
-import validator from 'validator';
 import { useResponsive } from '../responsive';
 
 interface LoginDialogProps {

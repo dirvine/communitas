@@ -1,7 +1,7 @@
-import * as Y from 'yjs'
-import { WebrtcProvider } from 'y-webrtc'
 import { IndexeddbPersistence } from 'y-indexeddb'
 import { Awareness } from 'y-protocols/awareness'
+import { WebrtcProvider } from 'y-webrtc'
+import * as Y from 'yjs'
 
 export interface YjsSnapshot {
   version: number

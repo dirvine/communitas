@@ -1,31 +1,12 @@
-import React, { useState, useEffect } from 'react'
 import {
-  Box,
-  Typography,
-  Switch,
-  FormControlLabel,
-  Button,
-  LinearProgress,
-  Alert,
-  Chip,
-  Card,
-  CardContent,
-  Divider,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
-  Stack,
-  IconButton,
-  Tooltip,
-} from '@mui/material'
-import { invoke } from '@tauri-apps/api/tauri'
-import {
-  Refresh as RefreshIcon,
-  Download as DownloadIcon,
-  CheckCircle as CheckCircleIcon,
-  Error as ErrorIcon,
+    CheckCircle as CheckCircleIcon, Download as DownloadIcon, Refresh as RefreshIcon
 } from '@mui/icons-material'
+import {
+    Alert, Box, Button, Card,
+    CardContent, Chip, Divider, FormControl, FormControlLabel, IconButton, InputLabel, LinearProgress, MenuItem, Select, Stack, Switch, Tooltip, Typography
+} from '@mui/material'
+import { invoke } from '@tauri-apps/api/core'
+import React, { useEffect, useState } from 'react'
 
 interface UpdateStatus {
   available: boolean

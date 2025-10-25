@@ -1,47 +1,21 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react'
 import {
-  Box,
-  TextField,
-  Button,
-  List,
-  ListItem,
-  // ListItemText,
-  ListItemAvatar,
-  Typography,
-  Paper,
-  Divider,
-  Chip,
-  IconButton,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Menu,
-  MenuItem,
-  Avatar,
-  Badge,
-  Tooltip,
-  InputAdornment,
-  Card,
-  CardContent,
-  Fade,
-  Alert,
-} from '@mui/material'
-import {
-  Send,
-  Add,
-  MoreVert,
-  Person,
-  PersonAdd,
-  ExitToApp,
-  Settings,
-  EmojiEmotions,
-  AttachFile,
-  // Search,
-  Notifications,
-  NotificationsOff,
+    Add, AttachFile, EmojiEmotions, ExitToApp, MoreVert,
+    // Search,
+    Notifications,
+    NotificationsOff, Person,
+    PersonAdd, Send, Settings
 } from '@mui/icons-material'
+import {
+    Alert, Avatar,
+    Badge, Box, Button, Card,
+    CardContent, Chip, Dialog, DialogActions, DialogContent, DialogTitle, Divider, Fade, IconButton, InputAdornment, List,
+    ListItem,
+    // ListItemText,
+    ListItemAvatar, Menu,
+    MenuItem, Paper, TextField, Tooltip, Typography
+} from '@mui/material'
 import { invoke } from '@tauri-apps/api/core'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import backendService from '../../services/api/BackendService'
 
 // Enhanced message type with P2P integration

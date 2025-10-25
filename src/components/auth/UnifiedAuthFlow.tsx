@@ -1,53 +1,15 @@
-import React, { useState, useEffect } from 'react';
 import {
-  Box,
-  Card,
-  CardContent,
-  TextField,
-  Button,
-  Typography,
-  Stack,
-  Divider,
-  Alert,
-  InputAdornment,
-  IconButton,
-  LinearProgress,
-  Chip,
-  useTheme,
-  alpha,
-  Fade,
-  Slide,
-  Paper,
-  Tooltip,
-  CircularProgress,
-  Checkbox,
-  FormControlLabel,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-} from '@mui/material';
-import {
-  Person as PersonIcon,
-  Lock as LockIcon,
-  Visibility as VisibilityIcon,
-  VisibilityOff as VisibilityOffIcon,
-  Security as SecurityIcon,
-  Key as KeyIcon,
-  CheckCircle as CheckCircleIcon,
-  Error as ErrorIcon,
-  ArrowForward as ArrowForwardIcon,
-  Fingerprint as FingerprintIcon,
-  AutoAwesome as AutoAwesomeIcon,
-  ContentCopy as ContentCopyIcon,
-  Warning as WarningIcon,
-  Info as InfoIcon,
-  SaveAlt as SaveAltIcon,
+    ArrowForward as ArrowForwardIcon, AutoAwesome as AutoAwesomeIcon, CheckCircle as CheckCircleIcon, ContentCopy as ContentCopyIcon, Error as ErrorIcon, Fingerprint as FingerprintIcon, Info as InfoIcon, Key as KeyIcon, Lock as LockIcon, Person as PersonIcon, SaveAlt as SaveAltIcon, Visibility as VisibilityIcon,
+    VisibilityOff as VisibilityOffIcon
 } from '@mui/icons-material';
-import { motion, AnimatePresence } from 'framer-motion';
+import {
+    Alert, alpha, Box, Button, Card,
+    CardContent, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Divider, IconButton, InputAdornment, LinearProgress, Paper, Stack, TextField, Typography, useTheme
+} from '@mui/material';
+import { AnimatePresence, motion } from 'framer-motion';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { generateFourWordIdentity } from '../../utils/identity';
-import validator from 'validator';
 import { PasskeyRegistration } from './PasskeyRegistration';
 
 interface UnifiedAuthFlowProps {

@@ -5,11 +5,9 @@
  */
 
 import type {
-  CRDTMessage,
-  VectorClock,
-  EntitySyncState,
-  SyncRequest,
-  SyncResponse,
+    CRDTMessage, EntitySyncState,
+    SyncRequest,
+    SyncResponse, VectorClock
 } from '../types/crdt'
 
 export interface ReceiveResult {

@@ -212,7 +212,7 @@ Groups are persistent collections of people:
 Groups can have:
 - Shared channels
 - Shared virtual disks (file storage)
-- Voice/video calls (coming soon)
+- Voice/video calls
 - Group administration
 
 ## Understanding Four-Word Addresses

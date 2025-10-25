@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 export const useTauri = () => {
   const [isTauriAvailable, setIsTauriAvailable] = useState(false);

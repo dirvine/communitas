@@ -1,53 +1,17 @@
-import React, { useState } from 'react';
 import {
-  Box,
-  SpeedDial,
-  SpeedDialAction,
-  SpeedDialIcon,
-  Fab,
-  Stack,
-  Tooltip,
-  Badge,
-  IconButton,
-  Menu,
-  MenuItem,
-  ListItemIcon,
-  ListItemText,
-  Divider,
-  Avatar,
-  Typography,
-  Paper,
-} from '@mui/material';
-import {
-  Add as AddIcon,
-  Close as CloseIcon,
-  Phone as PhoneIcon,
-  Videocam as VideocamIcon,
-  Chat as ChatIcon,
-  FolderOpen as FolderIcon,
-  Upload as UploadIcon,
-  GroupAdd as GroupAddIcon,
-  CreateNewFolder as CreateFolderIcon,
-  Business as BusinessIcon,
-  PersonAdd as PersonAddIcon,
-  Share as ShareIcon,
-  Settings as SettingsIcon,
-  Notifications as NotificationsIcon,
-  Search as SearchIcon,
-  Edit as EditIcon,
-  FileCopy as FileCopyIcon,
-  Delete as DeleteIcon,
-  CloudUpload as CloudUploadIcon,
-  CloudDownload as CloudDownloadIcon,
-  Link as LinkIcon,
-  QrCode as QrCodeIcon,
-  VpnKey as VpnKeyIcon,
-  Storage as StorageIcon,
-  Menu as MenuIcon,
-  Brush as BrushIcon,
+    Add as AddIcon, Brush as BrushIcon, Business as BusinessIcon, Chat as ChatIcon, Close as CloseIcon, CloudUpload as CloudUploadIcon, CreateNewFolder as CreateFolderIcon, Delete as DeleteIcon, Edit as EditIcon,
+    FileCopy as FileCopyIcon, GroupAdd as GroupAddIcon, Link as LinkIcon, Menu as MenuIcon, Notifications as NotificationsIcon, PersonAdd as PersonAddIcon, Phone as PhoneIcon, QrCode as QrCodeIcon, Search as SearchIcon, Settings as SettingsIcon, Share as ShareIcon, Storage as StorageIcon, Videocam as VideocamIcon, VpnKey as VpnKeyIcon
 } from '@mui/icons-material';
-import { useTheme } from './theme/ThemeProvider'
-import type { ColorPreset } from '../theme'
+import {
+    Badge, Divider, Fab, IconButton, ListItemIcon,
+    ListItemText, Menu,
+    MenuItem, Paper, SpeedDial,
+    SpeedDialAction,
+    SpeedDialIcon, Stack,
+    Tooltip
+} from '@mui/material';
+import React, { useState } from 'react';
+import { useTheme } from './theme/ThemeProvider';
 
 interface QuickActionsBarProps {
   context: {

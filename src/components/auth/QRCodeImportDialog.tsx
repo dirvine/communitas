@@ -1,22 +1,13 @@
-import React, { useState, useEffect, useRef } from 'react';
 import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Button,
-  Box,
-  Typography,
-  Alert,
-  Stack,
-  CircularProgress,
-} from '@mui/material';
-import {
-  Close as CloseIcon,
-  QrCodeScanner as QrCodeScannerIcon,
-  Upload as UploadIcon,
+    Close as CloseIcon,
+    QrCodeScanner as QrCodeScannerIcon,
+    Upload as UploadIcon
 } from '@mui/icons-material';
+import {
+    Alert, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Stack, Typography
+} from '@mui/material';
 import { Html5Qrcode } from 'html5-qrcode';
+import React, { useEffect, useRef, useState } from 'react';
 
 interface QRCodeImportDialogProps {
   open: boolean;

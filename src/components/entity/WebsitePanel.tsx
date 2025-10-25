@@ -1,77 +1,20 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  Box,
-  Paper,
-  IconButton,
-  Button,
-  Stack,
-  Typography,
-  TextField,
-  Alert,
-  CircularProgress,
-  Tooltip,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Tabs,
-  Tab,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemIcon,
-  ListItemSecondaryAction,
-  Divider,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
-  Chip,
-  Switch,
-  FormControlLabel,
-} from '@mui/material';
-import {
-  Edit as EditIcon,
-  Preview as PreviewIcon,
-  Code as CodeIcon,
-  Save as SaveIcon,
-  Publish as PublishIcon,
-  Refresh as RefreshIcon,
-  OpenInNew as OpenInNewIcon,
-  Settings as SettingsIcon,
-  CloudUpload as UploadIcon,
-  Image as ImageIcon,
-  VideoFile as VideoIcon,
-  AudioFile as AudioIcon,
-  Description as DocumentIcon,
-  Add as AddIcon,
-  Link as LinkIcon,
-  FormatBold as BoldIcon,
-  FormatItalic as ItalicIcon,
-  FormatUnderlined as UnderlineIcon,
-  FormatListBulleted as ListIcon,
-  FormatListNumbered as NumberedListIcon,
-  FormatQuote as QuoteIcon,
-  Code as CodeBlockIcon,
-  Title as HeadingIcon,
-  InsertLink as InsertLinkIcon,
-  InsertPhoto as InsertImageIcon,
-  Undo as UndoIcon,
-  Redo as RedoIcon,
-  ContentCopy as CopyIcon,
-  ContentPaste as PasteIcon,
-  ContentCut as CutIcon,
-  SelectAll as SelectAllIcon,
-  Public as PublicIcon,
-  Lock as PrivateIcon,
-  History as HistoryIcon,
-  CompareArrows as DiffIcon,
+    Add as AddIcon, Code as CodeBlockIcon, Code as CodeIcon, Description as DocumentIcon, Edit as EditIcon, FormatBold as BoldIcon,
+    FormatItalic as ItalicIcon, FormatListBulleted as ListIcon, FormatQuote as QuoteIcon, History as HistoryIcon, InsertLink as InsertLinkIcon,
+    InsertPhoto as InsertImageIcon, Lock as PrivateIcon, OpenInNew as OpenInNewIcon, Preview as PreviewIcon, Public as PublicIcon, Publish as PublishIcon,
+    Refresh as RefreshIcon, Save as SaveIcon, Settings as SettingsIcon, Title as HeadingIcon
 } from '@mui/icons-material';
+import {
+    Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Divider, FormControl, IconButton, InputLabel, List,
+    ListItem, ListItemIcon,
+    ListItemSecondaryAction, ListItemText, MenuItem, Paper, Select, Stack, Tab, Tabs, TextField, Tooltip, Typography
+} from '@mui/material';
 import { invoke } from '@tauri-apps/api/core';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { materialDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import remarkGfm from 'remark-gfm';
 
 interface WebsitePage {
   path: string;

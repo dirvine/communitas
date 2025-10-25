@@ -1,8 +1,8 @@
-import React from 'react';
-import { Box, Container, Typography, Button, Paper, Alert } from '@mui/material';
 import DesktopMacIcon from '@mui/icons-material/DesktopMac';
 import DownloadIcon from '@mui/icons-material/Download';
 import InfoIcon from '@mui/icons-material/Info';
+import { Alert, Box, Button, Container, Paper, Typography } from '@mui/material';
+import React from 'react';
 
 export const BrowserFallback: React.FC = () => {
   return (

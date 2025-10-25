@@ -1,47 +1,17 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import {
-  Box,
-  Paper,
-  Tabs,
-  Tab,
-  Divider,
-  Alert,
-  Snackbar,
-  LinearProgress,
-  Typography,
-  IconButton,
-  Tooltip,
-  Menu,
-  MenuItem,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Button,
-  TextField,
-  Switch,
-  FormControlLabel,
-  Chip
-} from '@mui/material'
-import {
-  Edit,
-  Preview,
-  CloudUpload,
-  Settings,
-  Info,
-  Group,
-  Storage,
-  Language,
-  Public,
-  Security
+    CloudUpload, Edit, Group, Info, Language, Preview, Settings, Storage
 } from '@mui/icons-material'
+import {
+    Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, Divider, FormControlLabel, IconButton, LinearProgress, MenuItem, Paper, Snackbar, Switch, Tab, Tabs, TextField, Tooltip, Typography
+} from '@mui/material'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 
-import { CollaborativeMarkdownEditor } from '../editor/CollaborativeMarkdownEditor'
-import { MarkdownBrowser } from '../browser/MarkdownBrowser'
-import { CompleteStorageSystem } from '../../services/storage/CompleteStorageSystem'
-import { DHTWebRouter } from '../../services/dht/DHTWebRouter'
-import { NetworkIdentity, PersonalUser, Organization, Project } from '../../types/collaboration'
 import { useAuth } from '../../contexts/AuthContext'
+import { DHTWebRouter } from '../../services/dht/DHTWebRouter'
+import { CompleteStorageSystem } from '../../services/storage/CompleteStorageSystem'
+import { NetworkIdentity, Organization, PersonalUser, Project } from '../../types/collaboration'
+import { MarkdownBrowser } from '../browser/MarkdownBrowser'
+import { CollaborativeMarkdownEditor } from '../editor/CollaborativeMarkdownEditor'
 
 interface TabPanelProps {
   children?: React.ReactNode

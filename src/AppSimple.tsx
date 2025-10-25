@@ -1,5 +1,5 @@
 
-import { Box, Typography, Button } from '@mui/material'
+import { Box, Button, Typography } from '@mui/material'
 
 export default function AppSimple() {
   return (

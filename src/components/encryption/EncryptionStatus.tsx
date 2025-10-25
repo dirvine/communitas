@@ -1,36 +1,18 @@
-import React, { useState } from 'react';
 import {
-  Box,
-  Chip,
-  IconButton,
-  Tooltip,
-  Menu,
-  MenuItem,
-  Typography,
-  Switch,
-  FormControlLabel,
-  Alert,
-  Divider,
-  ListItemIcon,
-  ListItemText,
-  Stack,
-  CircularProgress,
-} from '@mui/material';
-import {
-  Security as SecurityIcon,
-  SecurityOutlined as SecurityOutlinedIcon,
-  Key as KeyIcon,
-  VpnKey as VpnKeyIcon,
-  Shield as ShieldIcon,
-  Warning as WarningIcon,
-  Info as InfoIcon,
-  Settings as SettingsIcon,
-  Lock as LockIcon,
-  LockOpen as LockOpenIcon,
+    Info as InfoIcon, Key as KeyIcon, Lock as LockIcon,
+    LockOpen as LockOpenIcon, Security as SecurityIcon,
+    SecurityOutlined as SecurityOutlinedIcon, Shield as ShieldIcon, VpnKey as VpnKeyIcon, Warning as WarningIcon
 } from '@mui/icons-material';
-import { motion, AnimatePresence } from 'framer-motion';
-import { useEncryption } from '../../contexts/EncryptionContext';
+import {
+    Alert, Box,
+    Chip, CircularProgress, Divider, IconButton, ListItemIcon,
+    ListItemText, Menu,
+    MenuItem, Stack, Tooltip, Typography
+} from '@mui/material';
+import { motion } from 'framer-motion';
+import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useEncryption } from '../../contexts/EncryptionContext';
 
 export interface EncryptionStatusProps {
   showDetails?: boolean;

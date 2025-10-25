@@ -376,32 +376,7 @@ await invoke('revoke_session', {
 await invoke('revoke_other_sessions');
 ```
 
-## Two-Factor Authentication (Coming Soon)
 
-Future support for additional authentication factors:
-
-### Time-Based OTP (TOTP)
-
-```typescript
-// Enable TOTP
-const secret = await invoke('enable_totp');
-// → Returns QR code for authenticator app
-
-// Verify TOTP
-await invoke('verify_totp', {
-  code: '123456'
-});
-```
-
-### Hardware Security Keys
-
-```typescript
-// Register FIDO2 key
-await invoke('register_security_key');
-
-// Authenticate with key
-await invoke('authenticate_security_key');
-```
 
 ## Security Best Practices
 

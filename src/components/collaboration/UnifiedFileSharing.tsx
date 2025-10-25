@@ -1,67 +1,17 @@
-import React, { useState } from 'react';
 import {
-  Box,
-  Paper,
-  Typography,
-  Button,
-  IconButton,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
-  ListItemSecondaryAction,
-  Chip,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
-  Tab,
-  Tabs,
-  Grid,
-  Card,
-  CardContent,
-  CardActions,
-  Avatar,
-  LinearProgress,
-  Alert,
-  Stack,
-  Divider,
-  Tooltip,
-  Menu,
-  MenuItem,
-  Switch,
-  FormControlLabel,
-  InputAdornment,
-  alpha,
-} from '@mui/material';
-import {
-  CloudUpload as UploadIcon,
-  Folder as FolderIcon,
-  InsertDriveFile as FileIcon,
-  Language as WebsiteIcon,
-  Public as PublishIcon,
-  Lock as PrivateIcon,
-  Share as ShareIcon,
-  Download as DownloadIcon,
-  Delete as DeleteIcon,
-  MoreVert as MoreIcon,
-  ContentCopy as CopyIcon,
-  Visibility as PreviewIcon,
-  Edit as EditIcon,
-  Code as CodeIcon,
-  Description as MarkdownIcon,
-  Image as ImageIcon,
-  VideoLibrary as VideoIcon,
-  AudioFile as AudioIcon,
-  Archive as ZipIcon,
-  CheckCircle as PublishedIcon,
-  RadioButtonUnchecked as UnpublishedIcon,
-  Dns as DnsIcon,
-  VpnKey as KeyIcon,
-  ForwardToInbox as ForwardIcon,
+    Archive as ZipIcon, AudioFile as AudioIcon, CheckCircle as PublishedIcon, CloudUpload as UploadIcon, Code as CodeIcon, ContentCopy as CopyIcon, Delete as DeleteIcon, Description as MarkdownIcon, Dns as DnsIcon, Download as DownloadIcon, Edit as EditIcon, Folder as FolderIcon, ForwardToInbox as ForwardIcon, Image as ImageIcon, InsertDriveFile as FileIcon,
+    Language as WebsiteIcon, MoreVert as MoreIcon, Public as PublishIcon, RadioButtonUnchecked as UnpublishedIcon, Share as ShareIcon, VideoLibrary as VideoIcon, Visibility as PreviewIcon, VpnKey as KeyIcon
 } from '@mui/icons-material';
-import { SharedFile, PublishedWebsite, NetworkIdentity } from '../../types/collaboration';
+import {
+    Alert, Avatar, Box, Button, Card, CardActions, CardContent, Chip,
+    Dialog, DialogActions, DialogContent, DialogTitle, Divider, FormControlLabel, Grid, IconButton, InputAdornment, List,
+    ListItem,
+    ListItemIcon, ListItemSecondaryAction, ListItemText, Menu,
+    MenuItem, Paper, Stack, Switch, Tab,
+    Tabs, TextField, Typography
+} from '@mui/material';
+import React, { useState } from 'react';
+import { NetworkIdentity, PublishedWebsite, SharedFile } from '../../types/collaboration';
 
 interface UnifiedFileSharingProps {
   entityId: string;

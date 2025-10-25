@@ -1,28 +1,15 @@
-import React, { useCallback, useState, useRef } from 'react';
 import {
-  List,
-  ListProps,
-  ListItem,
-  ListItemButton,
-  ListItemText,
-  ListItemIcon,
-  IconButton,
-  Box,
-  Typography,
-  useTheme,
-  alpha,
-  CircularProgress,
-  LinearProgress,
-  SxProps,
-  Theme,
-} from '@mui/material';
-import {
-  ArrowUpward as ArrowUpIcon,
-  ArrowDownward as ArrowDownIcon,
-  Delete as DeleteIcon,
-  Edit as EditIcon,
+    ArrowDownward as ArrowDownIcon, ArrowUpward as ArrowUpIcon, Delete as DeleteIcon,
+    Edit as EditIcon
 } from '@mui/icons-material';
+import {
+    alpha, Box, CircularProgress, IconButton, LinearProgress, List, ListItem,
+    ListItemButton, ListItemIcon, ListItemText, ListProps, SxProps,
+    Theme, Typography,
+    useTheme
+} from '@mui/material';
 import { motion, PanInfo } from 'framer-motion';
+import React, { useCallback, useRef, useState } from 'react';
 
 // Enhanced responsive hooks
 import { useTouchDevice, useTouchFriendlySizing } from '../../hooks/useResponsive';

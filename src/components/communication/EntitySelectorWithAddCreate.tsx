@@ -7,62 +7,17 @@
  * - Selecting from already-known entities
  */
 
-import React, { useState, useEffect } from 'react';
 import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Button,
-  List,
-  ListItem,
-  ListItemButton,
-  ListItemIcon,
-  ListItemText,
-  ListItemAvatar,
-  Avatar,
-  TextField,
-  InputAdornment,
-  Tabs,
-  Tab,
-  Box,
-  Typography,
-  Chip,
-  Divider,
-  IconButton,
-  Stack,
-  Badge,
-  ToggleButton,
-  ToggleButtonGroup,
-  Paper,
-  Alert,
-  FormControl,
-  FormLabel,
-  RadioGroup,
-  FormControlLabel,
-  Radio,
-  Tooltip,
-} from '@mui/material';
-import {
-  Close as CloseIcon,
-  Search as SearchIcon,
-  Person as PersonIcon,
-  Group as GroupIcon,
-  Business as OrganizationIcon,
-  Add as AddIcon,
-  Create as CreateIcon,
-  Phone as PhoneIcon,
-  VideoCall as VideoIcon,
-  ScreenShare as ScreenIcon,
-  Folder as StorageIcon,
-  Link as LinkIcon,
-  PersonAdd as PersonAddIcon,
-  GroupAdd as GroupAddIcon,
-  BusinessCenter as BusinessAddIcon,
-  Info as InfoIcon,
-  Check as CheckIcon,
+    Add as AddIcon, Business as OrganizationIcon, Check as CheckIcon, Close as CloseIcon, Create as CreateIcon, Group as GroupIcon, Info as InfoIcon, Link as LinkIcon, Person as PersonIcon, Search as SearchIcon
 } from '@mui/icons-material';
-import { motion, AnimatePresence } from 'framer-motion';
+import {
+    Alert, Avatar, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, FormControl, FormControlLabel, FormLabel, IconButton, InputAdornment, List,
+    ListItem, ListItemAvatar, ListItemButton,
+    ListItemIcon,
+    ListItemText, Paper, Radio, RadioGroup, Stack, Tab, Tabs, TextField, ToggleButton,
+    ToggleButtonGroup, Typography
+} from '@mui/material';
+import React, { useEffect, useState } from 'react';
 import { useEntityDirectory } from '../../contexts/EntityDirectoryContext';
 import { validateFourWordIdentity } from '../../utils/identity';
 

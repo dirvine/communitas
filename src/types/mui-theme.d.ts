@@ -1,5 +1,5 @@
 // MUI Theme module augmentation for custom fields used across the app
-import type {} from '@mui/material/styles';
+import type { } from '@mui/material/styles';
 
 declare module '@mui/material/styles' {
   interface Theme {

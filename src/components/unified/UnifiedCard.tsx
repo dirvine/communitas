@@ -1,6 +1,6 @@
-import React, { useMemo, useCallback, forwardRef, useState } from 'react'
-import { Card, CardProps, useTheme, alpha, useMediaQuery } from '@mui/material'
+import { alpha, Card, CardProps, useMediaQuery, useTheme } from '@mui/material'
 import { SxProps, Theme } from '@mui/material/styles'
+import React, { forwardRef, useCallback, useMemo, useState } from 'react'
 import { generateFourWordGradient } from '../../utils/fourWords'
 
 export interface UnifiedCardProps extends Omit<CardProps, 'variant'> {

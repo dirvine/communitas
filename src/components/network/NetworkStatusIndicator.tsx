@@ -5,33 +5,18 @@
  * Click to retry connection when offline
  */
 
-import React, { useState, useEffect } from 'react';
 import {
-  Button,
-  Chip,
-  CircularProgress,
-  Tooltip,
-  Box,
-  Typography,
-  Popover,
-  Stack,
-  IconButton,
-  Alert,
-  Divider,
-} from '@mui/material';
-import {
-  WifiOff as OfflineIcon,
-  Wifi as OnlineIcon,
-  CloudOff as LocalIcon,
-  Sync as ConnectingIcon,
-  Error as ErrorIcon,
-  Refresh as RefreshIcon,
-  Group as PeersIcon,
-  AccessTime as TimeIcon,
-  Router as NodeIcon,
+    AccessTime as TimeIcon, CloudOff as LocalIcon, Error as ErrorIcon, Group as PeersIcon, Refresh as RefreshIcon, Router as NodeIcon, Wifi as OnlineIcon, WifiOff as OfflineIcon
 } from '@mui/icons-material';
-import { motion, AnimatePresence } from 'framer-motion';
-import { networkService, NetworkStatus } from '../../services/network/NetworkConnectionService';
+import {
+    Alert, Box, Button,
+    Chip,
+    CircularProgress, Divider, IconButton, Popover,
+    Stack, Tooltip, Typography
+} from '@mui/material';
+import { AnimatePresence, motion } from 'framer-motion';
+import React, { useEffect, useState } from 'react';
+import { networkService } from '../../services/network/NetworkConnectionService';
 
 export const NetworkStatusIndicator: React.FC = () => {
   const [networkState, setNetworkState] = useState(networkService.getState());

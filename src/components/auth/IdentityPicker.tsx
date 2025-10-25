@@ -1,40 +1,18 @@
-import React, { useState, useEffect } from 'react';
 import {
-  Box,
-  Card,
-  CardContent,
-  Typography,
-  Button,
-  Avatar,
-  Chip,
-  Stack,
-  IconButton,
-  Tooltip,
-  CircularProgress,
-  Alert,
-  Divider,
-  alpha,
-  TextField,
-  InputAdornment,
-  Menu,
-  MenuItem,
-  ListItemIcon,
-  ListItemText,
-} from '@mui/material';
-import {
-  Fingerprint as FingerprintIcon,
-  Add as AddIcon,
-  ArrowForward as ArrowForwardIcon,
-  AccessTime as AccessTimeIcon,
-  Security as SecurityIcon,
-  QrCode as QrCodeIcon,
-  QrCodeScanner as QrCodeScannerIcon,
-  Search as SearchIcon,
-  MoreVert as MoreVertIcon,
-  Delete as DeleteIcon,
+    AccessTime as AccessTimeIcon, Add as AddIcon,
+    ArrowForward as ArrowForwardIcon, Delete as DeleteIcon, Fingerprint as FingerprintIcon, MoreVert as MoreVertIcon, QrCode as QrCodeIcon,
+    QrCodeScanner as QrCodeScannerIcon,
+    Search as SearchIcon, Security as SecurityIcon
 } from '@mui/icons-material';
+import {
+    Alert, alpha, Avatar, Box, Button, Card,
+    CardContent, Chip, CircularProgress, Divider, IconButton, InputAdornment, ListItemIcon,
+    ListItemText, Menu,
+    MenuItem, Stack, TextField, Tooltip, Typography
+} from '@mui/material';
 import { invoke } from '@tauri-apps/api/core';
 import { ask } from '@tauri-apps/plugin-dialog';
+import React, { useEffect, useState } from 'react';
 import { QRCodeExportDialog } from './QRCodeExportDialog';
 import { QRCodeImportDialog } from './QRCodeImportDialog';
 

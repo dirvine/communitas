@@ -1,31 +1,14 @@
-import React, { useState, useEffect } from 'react';
 import {
-  Menu,
-  MenuItem,
-  ListItemIcon,
-  ListItemText,
-  Avatar,
-  Box,
-  Typography,
-  Divider,
-  IconButton,
-  Badge,
-  Chip,
-  alpha,
-  CircularProgress,
-} from '@mui/material';
-import {
-  Person as PersonIcon,
-  SwapHoriz as SwapIcon,
-  Add as AddIcon,
-  Logout as LogoutIcon,
-  Settings as SettingsIcon,
-  Security as SecurityIcon,
-  Fingerprint as FingerprintIcon,
-  Check as CheckIcon,
-  ExpandMore as ExpandMoreIcon,
+    Add as AddIcon, ExpandMore as ExpandMoreIcon, Fingerprint as FingerprintIcon, Logout as LogoutIcon, Person as PersonIcon, Security as SecurityIcon, Settings as SettingsIcon
 } from '@mui/icons-material';
+import {
+    alpha, Avatar, Badge, Box, CircularProgress, Divider,
+    IconButton, ListItemIcon,
+    ListItemText, Menu,
+    MenuItem, Typography
+} from '@mui/material';
 import { invoke } from '@tauri-apps/api/core';
+import React, { useEffect, useState } from 'react';
 
 // Recent identity from backend
 interface RecentIdentity {

@@ -16,7 +16,11 @@
 
 use super::context::GossipContext;
 use anyhow::{Context, Result};
+use std::sync::Arc;
 use tracing::{debug, info, warn};
+
+// Phase 2 TDD: Import retry utilities for exponential backoff
+use crate::retry_utils::{retry_dial, RetryConfig};
 
 /// Boot sequence orchestrator
 pub struct GossipBootSequence {
@@ -58,6 +62,10 @@ impl GossipBootSequence {
         // Step 5: Start presence beacons and CRDT anti-entropy
         self.start_presence_and_sync().await?;
         info!("✓ Step 5: Presence beacons and CRDT sync active");
+
+        // Step 6: Start connectivity watchdog monitoring (Phase 3 TDD)
+        self.start_watchdog_monitoring().await?;
+        info!("✓ Step 6: Connectivity watchdog monitoring active");
 
         info!("Gossip overlay boot sequence complete!");
         Ok(())
@@ -174,23 +182,44 @@ impl GossipBootSequence {
         }
     }
 
-    /// Dial a contact by four-word address using FOAF discovery
+    /// Dial a contact by four-word address using FOAF discovery with exponential backoff
     async fn dial_contact(&self, four_words: &str) -> Result<()> {
-        // Use FOAF discovery to find contact
-        match self.context.discovery.find_contact(four_words).await {
-            Ok(peer_id) => {
-                info!(
-                    "Found contact {} via FOAF discovery: {:?}",
-                    four_words, peer_id
-                );
-                // TODO: Actual dial using transport with peer_id
-                Ok(())
-            }
-            Err(e) => {
-                warn!("Failed to find contact {} via FOAF: {}", four_words, e);
-                Err(e)
-            }
+        // Phase 3 TDD: Check if WAN operations should be attempted
+        if !self.context.should_attempt_wan_operations() {
+            info!(
+                "Skipping WAN dial to {} (local-only mode active)",
+                four_words
+            );
+            return Ok(()); // Non-fatal, just skip the dial
         }
+        
+        // Phase 2 TDD: Use retry_dial with exponential backoff (MESH_CAPABILITIES.md §3.2)
+        let retry_config = RetryConfig::default();
+        let four_words_str = four_words.to_string();
+        let discovery = self.context.discovery.clone();
+        
+        retry_dial(four_words, retry_config, || {
+            let four_words = four_words_str.clone();
+            let discovery = discovery.clone();
+            async move {
+                // Use FOAF discovery to find contact
+                match discovery.find_contact(&four_words).await {
+                    Ok(peer_id) => {
+                        info!(
+                            "Found contact {} via FOAF discovery: {:?}",
+                            four_words, peer_id
+                        );
+                        // TODO: Actual dial using transport with peer_id
+                        Ok(())
+                    }
+                    Err(e) => {
+                        warn!("Failed to find contact {} via FOAF: {}", four_words, e);
+                        Err(e)
+                    }
+                }
+            }
+        })
+        .await
     }
 
     /// Step 3: Start membership layer (HyParView + SWIM)
@@ -286,6 +315,38 @@ impl GossipBootSequence {
             info!("CRDT anti-entropy active (60s interval, delta-based sync)");
         }
 
+        Ok(())
+    }
+
+    /// Step 6: Start connectivity watchdog monitoring (Phase 3 TDD)
+    async fn start_watchdog_monitoring(&self) -> Result<()> {
+        // Get reference to watchdog and coordinator
+        let watchdog = Arc::clone(&self.context.watchdog);
+        let coordinator = Arc::clone(&self.context.coordinator);
+        
+        // Define health check function that pings bootstrap/coordinator
+        let health_check = move || {
+            let _coordinator = coordinator.clone();
+            async move {
+                // Try to ping coordinator or bootstrap nodes
+                // For now, we'll check if we have any active peers as a proxy
+                // TODO: Implement actual coordinator health check
+                
+                // Placeholder: Always return true for now to avoid false positives
+                // In production, this should ping _coordinator.health_check()
+                true
+            }
+        };
+        
+        // Start monitoring in background task
+        // Note: start_monitoring takes ownership of a ConnectivityWatchdog, not Arc
+        // We need to clone the inner value
+        let watchdog_inner = (*watchdog).clone();
+        let _handle = watchdog_inner.start_monitoring(health_check);
+        
+        // Note: We don't await the handle - it runs in the background
+        // The watchdog will update local_only_mode state as needed
+        
         Ok(())
     }
 

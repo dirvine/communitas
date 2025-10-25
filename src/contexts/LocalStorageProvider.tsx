@@ -6,11 +6,10 @@
  * to the network when available.
  */
 
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { offlineStorage } from '../services/storage/OfflineStorageService';
-import { vaultManager } from '../services/vault/UserVault';
+import React, { createContext, ReactNode, useCallback, useContext, useEffect, useState } from 'react';
 import { networkService } from '../services/network/NetworkConnectionService';
+import { offlineStorage } from '../services/storage/OfflineStorageService';
 
 // Storage types
 export interface StorageFile {

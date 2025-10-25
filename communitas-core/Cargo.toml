@@ -35,6 +35,7 @@ yrs = { version = "0.19", features = ["sync"] }
 
 # Async runtime
 tokio = { version = "1.39", features = ["full"] }
+tokio-retry = "0.3"  # Exponential backoff for resilient retries (MESH_CAPABILITIES.md §3.2)
 async-trait = "0.1"
 futures = "0.3"
 

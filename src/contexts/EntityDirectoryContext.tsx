@@ -1,44 +1,26 @@
-import React, {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  ReactNode,
-} from 'react';
 import { nanoid } from 'nanoid';
+import React, {
+    createContext, ReactNode, useCallback,
+    useContext,
+    useEffect,
+    useMemo,
+    useState
+} from 'react';
 import {
-  Organization,
-  Group,
-  PersonalUser,
-  Channel,
-  Project,
-  CollaborationCapabilities,
-  NetworkIdentity,
+    Channel, CollaborationCapabilities, Group, NetworkIdentity, Organization, PersonalUser, Project
 } from '../types/collaboration';
 // Mock data removed - now loading from backend
-import { useAuth } from './AuthContext';
-import {
-  CreateNewOrganizationInput,
-  CreateNewGroupInput,
-  CreateNewChannelInput,
-  CreateNewProjectInput,
-  CreateNewContactInput,
-  AddExistingOrganizationInput,
-  AddExistingGroupInput,
-  AddExistingChannelInput,
-  AddExistingProjectInput,
-  AddExistingContactInput,
-  EntityOperationResult,
-  FourWordsValidationResult,
-} from '../types/entityOperations';
-import {
-  markMessageStatus as markCachedMessageStatus,
-  removeMessage as removeCachedMessage,
-} from '../utils/messageStore';
 import { invoke } from '@tauri-apps/api/core';
+import {
+    AddExistingChannelInput, AddExistingContactInput, AddExistingGroupInput, AddExistingOrganizationInput, AddExistingProjectInput, CreateNewChannelInput, CreateNewContactInput, CreateNewGroupInput, CreateNewOrganizationInput, CreateNewProjectInput, EntityOperationResult,
+    FourWordsValidationResult
+} from '../types/entityOperations';
 import { validateFourWordIdentity } from '../utils/identity';
+import {
+    markMessageStatus as markCachedMessageStatus,
+    removeMessage as removeCachedMessage
+} from '../utils/messageStore';
+import { useAuth } from './AuthContext';
 
 type SyncStatus = 'synced' | 'new' | 'dirty' | 'deleted' | 'error';
 

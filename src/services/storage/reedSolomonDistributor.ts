@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import { ProcessedFile, EncryptedShard } from './fileProcessor';
+import { EncryptedShard, ProcessedFile } from './fileProcessor';
 
 export interface WitnessProof {
   witnessId: string;

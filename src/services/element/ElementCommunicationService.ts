@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events';
-import { Element } from '../../types/element';
 import { ChatMessage, FileAttachment, MessageReaction } from '../../services/webrtc/WebRTCService';
+import { Element } from '../../types/element';
 
 export interface MessageData {
   content: string;

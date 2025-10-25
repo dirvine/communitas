@@ -5,34 +5,16 @@
  * Allows quick access to bootstrap connection dialog
  */
 
-import React, { useState, useEffect } from 'react';
 import {
-  Box,
-  Chip,
-  IconButton,
-  Tooltip,
-  Typography,
-  Menu,
-  MenuItem,
-  ListItemIcon,
-  ListItemText,
-  Divider,
-  Badge,
-  Stack,
-} from '@mui/material';
-import {
-  Wifi as WifiIcon,
-  WifiOff as WifiOffIcon,
-  Sync as SyncIcon,
-  Error as ErrorIcon,
-  Computer as ComputerIcon,
-  Person as PersonIcon,
-  ContentCopy as CopyIcon,
-  Settings as SettingsIcon,
-  CloudSync as CloudSyncIcon,
-  Storage as StorageIcon,
-  Link as LinkIcon,
+    CloudSync as CloudSyncIcon, Computer as ComputerIcon, ContentCopy as CopyIcon, Error as ErrorIcon, Link as LinkIcon, Person as PersonIcon, Settings as SettingsIcon, Storage as StorageIcon, Sync as SyncIcon, Wifi as WifiIcon,
+    WifiOff as WifiOffIcon
 } from '@mui/icons-material';
+import {
+    Badge, Chip, Divider, IconButton, ListItemIcon,
+    ListItemText, Menu,
+    MenuItem, Stack, Typography
+} from '@mui/material';
+import React, { useEffect, useState } from 'react';
 import { networkService, NetworkStatus } from '../services/network/NetworkConnectionService';
 import { BootstrapConnectionDialog } from './dialogs/BootstrapConnectionDialog';
 

@@ -1,14 +1,11 @@
-import React, { useState } from 'react'
 import {
-  Popover,
-  Box,
-  IconButton,
-  Tooltip,
-  alpha,
-} from '@mui/material'
-import {
-  Add as AddIcon,
+    Add as AddIcon
 } from '@mui/icons-material'
+import {
+    alpha, Box,
+    IconButton, Popover, Tooltip
+} from '@mui/material'
+import React, { useState } from 'react'
 
 const COMMON_REACTIONS = ['👍', '❤️', '😄', '🎉', '👏', '🔥', '✅', '😍']
 

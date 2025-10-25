@@ -12,10 +12,9 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import type {
-  Document,
-  DocumentStorageMode,
-  DocumentWithState,
-  createDocId,
+    Document,
+    DocumentStorageMode,
+    DocumentWithState
 } from '../types/documents';
 
 /**

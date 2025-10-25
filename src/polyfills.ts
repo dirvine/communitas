@@ -14,4 +14,4 @@ if (typeof window !== 'undefined') {
 }
 
 // Export to make TypeScript happy
-export {};
+export { };

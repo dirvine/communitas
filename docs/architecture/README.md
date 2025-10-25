@@ -285,7 +285,7 @@ See [Operations Guide - Kubernetes Deployment](../operations/README.md#kubernete
 
 ### Bootstrap Nodes
 Network infrastructure for peer discovery:
-- DHT-based bootstrap service
+- Gossip-based bootstrap service
 - Geographic routing optimization
 - High availability deployment
 

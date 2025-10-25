@@ -688,7 +688,7 @@ API versioning:
 ## Migration Guides
 
 When upgrading between major versions, see:
-- [Migration from v0.x to v1.x](../guides/migration-v1.md) (Coming soon)
+- [Migration from v0.x to v1.x](../guides/migration-v1.md)
 - [Breaking Changes Log](../CHANGELOG.md)
 
 ## Additional Resources

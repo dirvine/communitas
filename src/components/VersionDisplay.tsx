@@ -3,9 +3,9 @@
 // Version Display Component
 // Shows app version from Tauri backend
 
-import { useEffect, useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { Box, Typography } from '@mui/material';
+import { invoke } from '@tauri-apps/api/core';
+import { useEffect, useState } from 'react';
 
 interface VersionDisplayProps {
   /**

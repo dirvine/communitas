@@ -3,8 +3,8 @@
  * Addresses critical security vulnerability of missing authentication
  */
 
-import { cryptoManager } from './cryptoManager'
 import { NetworkIdentity } from '../../types/collaboration'
+import { cryptoManager } from './cryptoManager'
 
 export interface AuthenticationConfig {
   tokenExpirationTime: number // in milliseconds

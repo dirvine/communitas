@@ -1,12 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import type {
-  Project,
-  Issue,
-  IssueComment,
-  IssueStatus,
-  IssuePriority,
-  CreateProjectRequest,
-  CreateIssueRequest,
+    CreateIssueRequest, CreateProjectRequest, Issue,
+    IssueComment, IssuePriority, IssueStatus, Project
 } from '../types/projects';
 
 /**

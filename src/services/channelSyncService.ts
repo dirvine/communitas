@@ -1,5 +1,5 @@
-import { channelService } from './channelService';
 import type { AppliedDiffResult, ChannelSyncState } from '../types/channels';
+import { channelService } from './channelService';
 
 /**
  * ChannelSyncService - Orchestrates efficient CRDT synchronization

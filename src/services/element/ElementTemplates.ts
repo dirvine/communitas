@@ -1,4 +1,4 @@
-import { ElementTemplate, ElementCapabilities, ElementStorage, ElementMetadata, ElementType } from '../../types/element';
+import { ElementTemplate, ElementType } from '../../types/element';
 
 export const ELEMENT_TEMPLATES: Record<ElementType, ElementTemplate> = {
   'personal-individual': {

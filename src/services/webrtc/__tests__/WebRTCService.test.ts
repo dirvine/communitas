@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { WebRTCService } from '../WebRTCService';
 import type { MediaConstraints, CallEvent, CallEventType, MediaDevice } from '../types';
-import { invoke } from '@tauri-apps/api/tauri';
+import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 
 // Get mocked functions (they're already mocked by vitest config)

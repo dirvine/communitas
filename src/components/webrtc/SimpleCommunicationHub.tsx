@@ -1,40 +1,49 @@
-import React, { useState, useEffect } from 'react';
-import { Box, Fab, Snackbar, Alert } from '@mui/material';
-import { Phone, Message } from '@mui/icons-material';
-import { webRTCService, CallState } from '../../services/webrtc/WebRTCService';
+import { Message, Phone } from '@mui/icons-material';
+import { Alert, Box, Fab, Snackbar } from '@mui/material';
+import React, { useEffect, useState } from 'react';
+import type { CallInfo } from '../../services/webrtc/types';
+import { createAudioOnlyConstraints } from '../../services/webrtc/types';
+import { webrtcService } from '../../services/webrtc/WebRTCService';
 // Removed: SimpleCallInterface - using modern shell instead
 
 export const SimpleCommunicationHub: React.FC = () => {
-  const [currentCall, setCurrentCall] = useState<CallState | null>(null);
+  const [currentCall, setCurrentCall] = useState<CallInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const handleCallInitiated = (call: CallState) => {
-      setCurrentCall(call);
+    let unsubscribe: (() => void) | null = null;
+
+    const setupEventListener = async () => {
+      try {
+        unsubscribe = await webrtcService.subscribeToCallEvents((event) => {
+          // Handle different event types
+          if (event.type === 'call-initiated' || event.type === 'incoming-call') {
+            // We'd need to fetch call info separately or the event should contain it
+            // For now, just clear any error
+            setError(null);
+          } else if (event.type === 'call-ended') {
+            setCurrentCall(null);
+          } else if (event.type === 'call-error') {
+            setError(event.error);
+          }
+        });
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to subscribe to call events');
+      }
     };
 
-    const handleCallEnded = () => {
-      setCurrentCall(null);
-    };
-
-    const handleError = (error: Error) => {
-      setError(error.message);
-    };
-
-    webRTCService.on('callInitiated', handleCallInitiated);
-    webRTCService.on('callEnded', handleCallEnded);
-    webRTCService.on('error', handleError);
+    setupEventListener();
 
     return () => {
-      webRTCService.off('callInitiated', handleCallInitiated);
-      webRTCService.off('callEnded', handleCallEnded);
-      webRTCService.off('error', handleError);
+      if (unsubscribe) {
+        unsubscribe();
+      }
     };
   }, []);
 
   const handleStartCall = async () => {
     try {
-      await webRTCService.initiateCall('demo-contact', 'audio');
+      await webrtcService.initiateCall('demo-contact', createAudioOnlyConstraints());
     } catch (error) {
       console.error('Failed to start call:', error);
     }
@@ -42,11 +51,11 @@ export const SimpleCommunicationHub: React.FC = () => {
 
 
   const handleEndCall = async () => {
-    await webRTCService.endCall();
+    await webrtcService.endCall();
   };
 
   const handleSendMessage = () => {
-    webRTCService.sendMessage('Hello from WebRTC!');
+    webrtcService.sendMessage('Hello from WebRTC!');
   };
 
   return (

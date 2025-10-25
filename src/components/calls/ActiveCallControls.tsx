@@ -14,22 +14,17 @@
  * - End call button
  */
 
-import React, { useState } from 'react';
 import {
-  IconButton,
-  Box,
-  Tooltip,
-  CircularProgress,
-} from '@mui/material';
-import {
-  Videocam,
-  VideocamOff,
-  Mic,
-  MicOff,
-  ScreenShare,
-  StopScreenShare,
-  CallEnd,
+    CallEnd, Mic,
+    MicOff,
+    ScreenShare,
+    StopScreenShare, Videocam,
+    VideocamOff
 } from '@mui/icons-material';
+import {
+    Box, CircularProgress, IconButton, Tooltip
+} from '@mui/material';
+import { useState } from 'react';
 
 export interface ActiveCallControlsProps {
   /** Call ID for the active call */

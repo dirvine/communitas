@@ -6,8 +6,8 @@
 // to handle intermittent connectivity and network degradation gracefully.
 
 use std::time::Duration;
-use tokio_retry::strategy::{jitter, ExponentialBackoff};
 use tokio_retry::Retry;
+use tokio_retry::strategy::{ExponentialBackoff, jitter};
 use tracing::{debug, warn};
 
 /// Default retry configuration for network operations
@@ -15,13 +15,13 @@ use tracing::{debug, warn};
 pub struct RetryConfig {
     /// Initial delay before first retry (default: 100ms)
     pub initial_delay: Duration,
-    
+
     /// Maximum delay between retries (default: 60 seconds)
     pub max_delay: Duration,
-    
+
     /// Maximum number of retry attempts (default: 10)
     pub max_attempts: usize,
-    
+
     /// Apply random jitter to prevent retry storms (default: true)
     pub jitter: bool,
 }
@@ -47,7 +47,7 @@ impl RetryConfig {
             jitter: true,
         }
     }
-    
+
     /// Create config for slow retries (expensive operations)
     pub fn slow() -> Self {
         Self {
@@ -57,7 +57,7 @@ impl RetryConfig {
             jitter: true,
         }
     }
-    
+
     /// Create config for critical operations (more attempts)
     pub fn critical() -> Self {
         Self {
@@ -67,13 +67,13 @@ impl RetryConfig {
             jitter: true,
         }
     }
-    
+
     /// Build tokio-retry strategy from config
     pub fn build_strategy(&self) -> impl Iterator<Item = Duration> {
         let base = ExponentialBackoff::from_millis(self.initial_delay.as_millis() as u64)
             .max_delay(self.max_delay)
             .take(self.max_attempts);
-        
+
         if self.jitter {
             // Apply jitter to each duration in the iterator
             Box::new(base.map(jitter)) as Box<dyn Iterator<Item = Duration> + Send>
@@ -99,17 +99,14 @@ impl RetryConfig {
 ///     || async { connect_to_peer().await }
 /// ).await;
 /// ```
-pub async fn retry_with_backoff<F, Fut, T, E>(
-    config: RetryConfig,
-    operation: F,
-) -> Result<T, E>
+pub async fn retry_with_backoff<F, Fut, T, E>(config: RetryConfig, operation: F) -> Result<T, E>
 where
     F: FnMut() -> Fut,
     Fut: std::future::Future<Output = Result<T, E>>,
     E: std::fmt::Display,
 {
     let strategy = config.build_strategy();
-    
+
     Retry::spawn(strategy, operation).await
 }
 
@@ -126,10 +123,10 @@ where
 {
     let mut attempt = 0;
     let strategy = config.build_strategy();
-    
+
     for delay in strategy {
         attempt += 1;
-        
+
         match dial_fn().await {
             Ok(result) => {
                 if attempt > 1 {
@@ -154,7 +151,7 @@ where
             }
         }
     }
-    
+
     // This should never be reached due to take() on strategy
     unreachable!("Retry strategy exhausted")
 }
@@ -175,21 +172,21 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
-    
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
     #[tokio::test]
     async fn test_retry_succeeds_eventually() {
         let attempts = Arc::new(AtomicUsize::new(0));
         let attempts_clone = attempts.clone();
-        
+
         let config = RetryConfig {
             initial_delay: Duration::from_millis(10),
             max_delay: Duration::from_millis(100),
             max_attempts: 5,
             jitter: false,
         };
-        
+
         let result = retry_with_backoff(config, || {
             let attempts = attempts_clone.clone();
             async move {
@@ -200,62 +197,64 @@ mod tests {
                     Ok("Success")
                 }
             }
-        }).await;
-        
+        })
+        .await;
+
         assert_eq!(result, Ok("Success"));
         assert_eq!(attempts.load(Ordering::SeqCst), 3);
     }
-    
+
     #[tokio::test]
     async fn test_retry_fails_after_max_attempts() {
         let attempts = Arc::new(AtomicUsize::new(0));
         let attempts_clone = attempts.clone();
-        
+
         let config = RetryConfig {
             initial_delay: Duration::from_millis(10),
             max_delay: Duration::from_millis(50),
             max_attempts: 3,
             jitter: false,
         };
-        
+
         let result = retry_with_backoff(config, || {
             let attempts = attempts_clone.clone();
             async move {
                 attempts.fetch_add(1, Ordering::SeqCst);
                 Err::<(), _>("Always fails")
             }
-        }).await;
-        
+        })
+        .await;
+
         assert!(result.is_err());
         assert_eq!(attempts.load(Ordering::SeqCst), 3);
     }
-    
+
     #[test]
     fn test_retry_config_presets() {
         let fast = RetryConfig::fast();
         assert_eq!(fast.initial_delay, Duration::from_millis(50));
         assert_eq!(fast.max_attempts, 5);
-        
+
         let slow = RetryConfig::slow();
         assert_eq!(slow.initial_delay, Duration::from_secs(1));
         assert_eq!(slow.max_attempts, 15);
-        
+
         let critical = RetryConfig::critical();
         assert_eq!(critical.max_attempts, 20);
     }
-    
+
     #[tokio::test]
     async fn test_retry_dial_with_logging() {
         let attempts = Arc::new(AtomicUsize::new(0));
         let attempts_clone = attempts.clone();
-        
+
         let config = RetryConfig {
             initial_delay: Duration::from_millis(10),
             max_delay: Duration::from_millis(50),
             max_attempts: 3,
             jitter: false,
         };
-        
+
         let result = retry_dial("test-peer", config, || {
             let attempts = attempts_clone.clone();
             async move {
@@ -266,8 +265,9 @@ mod tests {
                     Ok(())
                 }
             }
-        }).await;
-        
+        })
+        .await;
+
         assert!(result.is_ok());
         assert_eq!(attempts.load(Ordering::SeqCst), 2);
     }

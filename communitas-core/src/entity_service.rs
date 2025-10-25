@@ -35,6 +35,8 @@ pub struct Entity {
     pub created_by: String,
     pub created_at: i64,
     pub members: Vec<String>, // Four-word addresses of members
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_org_id: Option<String>, // Links child entities (channel/group/project) to parent organization
 }
 
 /// Member information
@@ -74,6 +76,14 @@ pub enum EntityServiceError {
 /// Result type for entity service operations
 pub type EntityServiceResult<T> = Result<T, EntityServiceError>;
 
+/// Result of cascading member removal operation
+#[derive(Debug, Clone)]
+pub struct CascadeRemovalResult {
+    pub removed_in: Vec<(EntityType, String)>,
+    pub skipped_not_member: Vec<(EntityType, String)>,
+    pub failed: Vec<(EntityType, String, String)>,
+}
+
 /// Unified entity and member management service
 pub struct EntityService {
     crdt_manager: Arc<CrdtManager>,
@@ -110,6 +120,7 @@ impl EntityService {
             created_by: created_by.clone(),
             created_at: now,
             members: initial_members.clone(),
+            parent_org_id: None,
         };
 
         // Save entity metadata
@@ -129,6 +140,7 @@ impl EntityService {
         // Update entity with actual members list (including creator)
         let entity_with_members = Entity {
             members: all_members,
+            parent_org_id: None,
             ..entity
         };
 
@@ -170,6 +182,8 @@ impl EntityService {
 
         let created_at = CrdtManager::get_map_i64(&metadata_map, &txn, "created_at").unwrap_or(0);
 
+        let parent_org_id = CrdtManager::get_map_string(&metadata_map, &txn, "parent_org_id");
+
         // Get members list
         let members = self
             .list_members(entity_type, entity_id)
@@ -187,6 +201,7 @@ impl EntityService {
             created_by,
             created_at,
             members,
+            parent_org_id,
         })
     }
 
@@ -195,52 +210,67 @@ impl EntityService {
         use std::fs;
 
         // Scan the entity directory for all metadata files
-        let entity_dir = self.crdt_manager.get_storage_dir().join("crdt").join("entity");
+        let entity_dir = self
+            .crdt_manager
+            .get_storage_dir()
+            .join("crdt")
+            .join("entity");
 
         // Perform blocking filesystem scan in dedicated blocking thread pool
-        let entity_ids = tokio::task::spawn_blocking(move || -> Result<Vec<String>, EntityServiceError> {
-            if !entity_dir.exists() {
-                return Ok(vec![]);
-            }
-
-            let mut ids = Vec::new();
-
-            // Read all .meta files in the entity directory
-            let entries = fs::read_dir(&entity_dir).map_err(|e| {
-                EntityServiceError::Io(std::io::Error::other(format!("Failed to read entity directory: {}", e)))
-            })?;
-
-            for entry in entries {
-                let entry = entry?;
-                let path = entry.path();
-
-                // Only process .meta files
-                if path.extension().and_then(|s| s.to_str()) != Some("meta") {
-                    continue;
+        let entity_ids =
+            tokio::task::spawn_blocking(move || -> Result<Vec<String>, EntityServiceError> {
+                if !entity_dir.exists() {
+                    return Ok(vec![]);
                 }
 
-                // Check if this is an entity metadata file (contains "entity:" in the hex-decoded filename)
-                if let Some(filename) = path.file_stem().and_then(|s| s.to_str()) {
-                    // Hex-decode the filename to get the doc_id
-                    if let Ok(decoded_bytes) = hex::decode(filename)
-                        && let Ok(doc_id) = String::from_utf8(decoded_bytes) {
+                let mut ids = Vec::new();
+
+                // Read all .meta files in the entity directory
+                let entries = fs::read_dir(&entity_dir).map_err(|e| {
+                    EntityServiceError::Io(std::io::Error::other(format!(
+                        "Failed to read entity directory: {}",
+                        e
+                    )))
+                })?;
+
+                for entry in entries {
+                    let entry = entry?;
+                    let path = entry.path();
+
+                    // Only process .meta files
+                    if path.extension().and_then(|s| s.to_str()) != Some("meta") {
+                        continue;
+                    }
+
+                    // Check if this is an entity metadata file (contains "entity:" in the hex-decoded filename)
+                    if let Some(filename) = path.file_stem().and_then(|s| s.to_str()) {
+                        // Hex-decode the filename to get the doc_id
+                        if let Ok(decoded_bytes) = hex::decode(filename)
+                            && let Ok(doc_id) = String::from_utf8(decoded_bytes)
+                        {
                             // Check if it's an entity metadata document (format: "entity:{id}:metadata")
                             if doc_id.starts_with("entity:") && doc_id.ends_with(":metadata") {
                                 // Extract entity ID from "entity:{id}:metadata"
-                                if let Some(entity_id) = doc_id.strip_prefix("entity:")
+                                if let Some(entity_id) = doc_id
+                                    .strip_prefix("entity:")
                                     .and_then(|s| s.strip_suffix(":metadata"))
                                 {
                                     ids.push(entity_id.to_string());
                                 }
+                            }
                         }
                     }
                 }
-            }
 
-            Ok(ids)
-        })
-        .await
-        .map_err(|e| EntityServiceError::Io(std::io::Error::other(format!("Blocking task failed: {}", e))))??;
+                Ok(ids)
+            })
+            .await
+            .map_err(|e| {
+                EntityServiceError::Io(std::io::Error::other(format!(
+                    "Blocking task failed: {}",
+                    e
+                )))
+            })??;
 
         // Load entities using async operations (outside blocking section)
         let mut entities = Vec::new();
@@ -456,6 +486,96 @@ impl EntityService {
         Ok(members)
     }
 
+    /// Set parent organization for a child entity
+    pub async fn set_parent_organization(
+        &self,
+        entity_id: &str,
+        parent_org_id: &str,
+    ) -> EntityServiceResult<()> {
+        // Load entity
+        let mut entity = self.get_entity(entity_id).await?;
+
+        // Update parent_org_id
+        entity.parent_org_id = Some(parent_org_id.to_string());
+
+        // Save entity
+        self.save_entity(&entity).await?;
+
+        Ok(())
+    }
+
+    /// List all child entities of an organization
+    async fn list_child_entities_of_org(
+        &self,
+        org_id: &str,
+    ) -> EntityServiceResult<Vec<(EntityType, String)>> {
+        // Scan all entities and find those with parent_org_id == org_id
+        let entities = self.list_entities().await?;
+        let children = entities
+            .into_iter()
+            .filter(|e| {
+                e.parent_org_id.as_deref() == Some(org_id)
+                    && matches!(
+                        e.entity_type,
+                        EntityType::Channel | EntityType::Group | EntityType::Project
+                    )
+            })
+            .map(|e| (e.entity_type, e.id))
+            .collect();
+        Ok(children)
+    }
+
+    /// Remove member from organization and all child entities (channels, groups, projects)
+    pub async fn remove_organization_member(
+        &self,
+        org_id: &str,
+        member_id: &str,
+        deleted_by: &str,
+    ) -> EntityServiceResult<CascadeRemovalResult> {
+        let mut result = CascadeRemovalResult {
+            removed_in: vec![],
+            skipped_not_member: vec![],
+            failed: vec![],
+        };
+
+        // 1. Remove from organization itself
+        match self
+            .remove_member(EntityType::Organisation, org_id, member_id, deleted_by)
+            .await
+        {
+            Ok(_) => result
+                .removed_in
+                .push((EntityType::Organisation, org_id.to_string())),
+            Err(EntityServiceError::MemberNotFound(_)) => result
+                .skipped_not_member
+                .push((EntityType::Organisation, org_id.to_string())),
+            Err(e) => {
+                result
+                    .failed
+                    .push((EntityType::Organisation, org_id.to_string(), e.to_string()))
+            }
+        }
+
+        // 2. Find all child entities
+        let children = self.list_child_entities_of_org(org_id).await?;
+
+        // 3. Remove from each child entity
+        for (entity_type, entity_id) in children {
+            match self
+                .remove_member(entity_type, &entity_id, member_id, deleted_by)
+                .await
+            {
+                Ok(_) => result.removed_in.push((entity_type, entity_id)),
+                Err(EntityServiceError::MemberNotFound(_)) => {
+                    result.skipped_not_member.push((entity_type, entity_id))
+                }
+                Err(e) => result.failed.push((entity_type, entity_id, e.to_string())),
+            }
+        }
+
+        Ok(result)
+    }
+
     /// Save entity metadata to CRDT
     async fn save_entity(&self, entity: &Entity) -> EntityServiceResult<()> {
         use yrs::Doc;
@@ -481,6 +601,15 @@ impl EntityService {
 
             CrdtManager::set_map_string(&metadata_map, &mut txn, "created_by", &entity.created_by);
             CrdtManager::set_map_i64(&metadata_map, &mut txn, "created_at", entity.created_at);
+
+            if let Some(parent_org_id) = &entity.parent_org_id {
+                CrdtManager::set_map_string(
+                    &metadata_map,
+                    &mut txn,
+                    "parent_org_id",
+                    parent_org_id,
+                );
+            }
         }
 
         self.crdt_manager

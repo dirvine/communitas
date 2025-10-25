@@ -7,11 +7,7 @@
 //! CoreContext operations in a standard async runtime without HTTP framework bounds.
 
 use anyhow::Result;
-use communitas_core::{
-    legacy_crdt::EntityType,
-    types::DeviceType,
-    CoreContext,
-};
+use communitas_core::{CoreContext, legacy_crdt::EntityType, types::DeviceType};
 use std::path::PathBuf;
 use tracing::{error, info};
 use tracing_subscriber::EnvFilter;
@@ -74,7 +70,10 @@ async fn main() -> Result<()> {
     for (i, (name, ctx)) in contexts.iter_mut().enumerate() {
         let preferred_port = users[i].3;
 
-        info!("Starting networking for {} (preferred port: {})...", name, preferred_port);
+        info!(
+            "Starting networking for {} (preferred port: {})...",
+            name, preferred_port
+        );
 
         match ctx.start_networking(Some(preferred_port)).await {
             Ok(connection_identity) => {
@@ -102,8 +101,13 @@ async fn main() -> Result<()> {
     info!("");
     info!("Summary:");
     info!("  - {} users initialized successfully", contexts.len());
-    info!("  - Networking started on {} users",
-        contexts.iter().filter(|(_, ctx)| ctx.connection_identity.is_some()).count());
+    info!(
+        "  - Networking started on {} users",
+        contexts
+            .iter()
+            .filter(|(_, ctx)| ctx.connection_identity.is_some())
+            .count()
+    );
     info!("");
     info!("Key Findings:");
     info!("  ✓ CoreContext works correctly in direct Rust code");
@@ -134,7 +138,10 @@ async fn main() -> Result<()> {
                 info!("✓ Channel created successfully:");
                 info!("  - ID: {}", entity.id);
                 info!("  - Name: {}", entity.name);
-                info!("  - Description: {}", entity.description.unwrap_or_default());
+                info!(
+                    "  - Description: {}",
+                    entity.description.unwrap_or_default()
+                );
                 info!("");
             }
             Err(e) => {

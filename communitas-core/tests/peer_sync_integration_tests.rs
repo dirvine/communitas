@@ -18,7 +18,7 @@ async fn test_two_peers_sync_stream() {
     // GIVEN: 2 connected nodes
     let harness = TestHarness::new(2).await.expect("harness creation failed");
     harness.mesh().await.expect("mesh setup failed");
-    
+
     harness
         .wait_until_connected(1, Duration::from_secs(5))
         .await
@@ -27,13 +27,13 @@ async fn test_two_peers_sync_stream() {
     // Create sync services for both peers
     let node_a = harness.get_node(0).await.expect("node 0 not found");
     let node_b = harness.get_node(1).await.expect("node 1 not found");
-    
+
     let peer_id_a = node_a.read().await.four_words.clone();
     let peer_id_b = node_b.read().await.four_words.clone();
-    
+
     let sync_a = MessageSyncService::new(peer_id_a.clone());
     let sync_b = MessageSyncService::new(peer_id_b.clone());
-    
+
     let entity_id = "contact-alice";
 
     // WHEN: Peer A sends 10 messages
@@ -54,15 +54,24 @@ async fn test_two_peers_sync_stream() {
     }
 
     // Sync from A to B
-    let messages_a = sync_a.get_all_messages(entity_id).await.expect("get messages failed");
-    let result = sync_b.handle_sync_response(messages_a).await.expect("sync failed");
-    
+    let messages_a = sync_a
+        .get_all_messages(entity_id)
+        .await
+        .expect("get messages failed");
+    let result = sync_b
+        .handle_sync_response(messages_a)
+        .await
+        .expect("sync failed");
+
     // THEN: Peer B should receive all messages in order
     assert_eq!(result.messages_added, 10, "Should add 10 messages");
-    
-    let messages_b = sync_b.get_messages(entity_id).await.expect("get messages failed");
+
+    let messages_b = sync_b
+        .get_messages(entity_id)
+        .await
+        .expect("get messages failed");
     assert_eq!(messages_b.len(), 10, "Peer B should have 10 messages");
-    
+
     // Verify causal order
     for i in 0..9 {
         let ord = messages_b[i]
@@ -85,7 +94,7 @@ async fn test_missing_range_repair() {
     let harness = TestHarness::new(2).await.expect("harness creation failed");
     harness.set_loss(0, 1, 0.4).await;
     harness.mesh().await.expect("mesh setup failed");
-    
+
     harness
         .wait_until_connected(1, Duration::from_secs(10))
         .await
@@ -93,13 +102,13 @@ async fn test_missing_range_repair() {
 
     let node_a = harness.get_node(0).await.expect("node 0 not found");
     let node_b = harness.get_node(1).await.expect("node 1 not found");
-    
+
     let peer_id_a = node_a.read().await.four_words.clone();
     let peer_id_b = node_b.read().await.four_words.clone();
-    
+
     let sync_a = MessageSyncService::new(peer_id_a);
     let sync_b = MessageSyncService::new(peer_id_b);
-    
+
     let entity_id = "contact-test";
 
     // WHEN: Peer A sends 20 messages (some will be lost)
@@ -120,22 +129,31 @@ async fn test_missing_range_repair() {
     }
 
     // Initial sync (some messages lost)
-    let messages_a = sync_a.get_all_messages(entity_id).await.expect("get failed");
+    let messages_a = sync_a
+        .get_all_messages(entity_id)
+        .await
+        .expect("get failed");
     let _ = sync_b.handle_sync_response(messages_a.clone()).await;
-    
+
     // THEN: Peer B should detect missing ranges
-    let state_b = sync_b.get_sync_state(entity_id).await.expect("state failed");
-    
+    let state_b = sync_b
+        .get_sync_state(entity_id)
+        .await
+        .expect("state failed");
+
     if state_b.message_count < 20 {
         // Missing messages detected
         assert!(
             !state_b.missing_messages.is_empty(),
             "Should detect missing messages"
         );
-        
+
         // Repair: sync again
-        let repair_result = sync_b.handle_sync_response(messages_a).await.expect("repair failed");
-        
+        let repair_result = sync_b
+            .handle_sync_response(messages_a)
+            .await
+            .expect("repair failed");
+
         // Eventually should have all messages
         let final_messages = sync_b.get_messages(entity_id).await.expect("get failed");
         assert_eq!(final_messages.len(), 20, "Should repair all messages");
@@ -154,7 +172,7 @@ async fn test_convergence_after_partition() {
     // GIVEN: 3 nodes in mesh
     let harness = TestHarness::new(3).await.expect("harness creation failed");
     harness.mesh().await.expect("mesh setup failed");
-    
+
     harness
         .wait_until_connected(3, Duration::from_secs(10))
         .await
@@ -169,17 +187,20 @@ async fn test_convergence_after_partition() {
         }
         ids
     };
-    
+
     let sync_services: Vec<MessageSyncService> = peer_ids
         .iter()
         .map(|id| MessageSyncService::new(id.clone()))
         .collect();
-    
+
     let entity_id = "project-communitas";
 
     // WHEN: Network partitions into {0} and {1,2}
-    harness.partition(&[0], &[1, 2]).await.expect("partition failed");
-    
+    harness
+        .partition(&[0], &[1, 2])
+        .await
+        .expect("partition failed");
+
     // Each partition sends messages
     // Partition A (node 0)
     for i in 0..3 {
@@ -197,7 +218,7 @@ async fn test_convergence_after_partition() {
             .await
             .expect("send failed");
     }
-    
+
     // Partition B (nodes 1 and 2)
     for i in 0..2 {
         sync_services[1]
@@ -216,8 +237,14 @@ async fn test_convergence_after_partition() {
     }
 
     // Sync within partition B
-    let messages_1 = sync_services[1].get_all_messages(entity_id).await.expect("get failed");
-    sync_services[2].handle_sync_response(messages_1).await.expect("sync failed");
+    let messages_1 = sync_services[1]
+        .get_all_messages(entity_id)
+        .await
+        .expect("get failed");
+    sync_services[2]
+        .handle_sync_response(messages_1)
+        .await
+        .expect("sync failed");
 
     // THEN: Heal network
     harness.heal().await.expect("heal failed");
@@ -230,8 +257,14 @@ async fn test_convergence_after_partition() {
     for i in 0..3 {
         for j in 0..3 {
             if i != j {
-                let messages = sync_services[i].get_all_messages(entity_id).await.expect("get failed");
-                sync_services[j].handle_sync_response(messages).await.expect("sync failed");
+                let messages = sync_services[i]
+                    .get_all_messages(entity_id)
+                    .await
+                    .expect("get failed");
+                sync_services[j]
+                    .handle_sync_response(messages)
+                    .await
+                    .expect("sync failed");
             }
         }
     }
@@ -256,7 +289,7 @@ async fn test_three_peer_bidirectional_sync() {
     // GIVEN: 3 nodes in mesh
     let harness = TestHarness::new(3).await.expect("harness creation failed");
     harness.mesh().await.expect("mesh setup failed");
-    
+
     harness
         .wait_until_connected(3, Duration::from_secs(10))
         .await
@@ -270,12 +303,12 @@ async fn test_three_peer_bidirectional_sync() {
         }
         ids
     };
-    
+
     let sync_services: Vec<MessageSyncService> = peer_ids
         .iter()
         .map(|id| MessageSyncService::new(id.clone()))
         .collect();
-    
+
     let entity_id = "contact-bob";
 
     // WHEN: Each peer sends 2 messages
@@ -300,8 +333,14 @@ async fn test_three_peer_bidirectional_sync() {
     for i in 0..3 {
         for j in 0..3 {
             if i != j {
-                let messages = sync_services[i].get_all_messages(entity_id).await.expect("get failed");
-                sync_services[j].handle_sync_response(messages).await.expect("sync failed");
+                let messages = sync_services[i]
+                    .get_all_messages(entity_id)
+                    .await
+                    .expect("get failed");
+                sync_services[j]
+                    .handle_sync_response(messages)
+                    .await
+                    .expect("sync failed");
             }
         }
     }
@@ -309,12 +348,7 @@ async fn test_three_peer_bidirectional_sync() {
     // THEN: All peers should have 6 messages (2 from each peer)
     for (idx, sync) in sync_services.iter().enumerate() {
         let messages = sync.get_messages(entity_id).await.expect("get failed");
-        assert_eq!(
-            messages.len(),
-            6,
-            "Peer {} should have 6 messages",
-            idx
-        );
+        assert_eq!(messages.len(), 6, "Peer {} should have 6 messages", idx);
     }
 
     harness.cleanup().await.expect("cleanup failed");
@@ -351,19 +385,38 @@ async fn test_out_of_order_local() {
     }
 
     // Receive in order: 0, 2 (skipping 1)
-    receiver.receive_message(messages[0].clone()).await.expect("receive 0 failed");
-    let result = receiver.receive_message(messages[2].clone()).await.expect("receive 2 failed");
+    receiver
+        .receive_message(messages[0].clone())
+        .await
+        .expect("receive 0 failed");
+    let result = receiver
+        .receive_message(messages[2].clone())
+        .await
+        .expect("receive 2 failed");
 
     // Message 2 should be out of order
-    assert!(!result.accepted, "Message 2 should be rejected as out of order");
+    assert!(
+        !result.accepted,
+        "Message 2 should be rejected as out of order"
+    );
     assert!(result.out_of_order, "Should be marked out of order");
 
     // Check pending queue
-    let state = receiver.get_sync_state(entity_id).await.expect("state failed");
-    assert_eq!(state.out_of_order_messages.len(), 1, "Should have 1 pending message");
+    let state = receiver
+        .get_sync_state(entity_id)
+        .await
+        .expect("state failed");
+    assert_eq!(
+        state.out_of_order_messages.len(),
+        1,
+        "Should have 1 pending message"
+    );
 
     // Receive missing message 1
-    receiver.receive_message(messages[1].clone()).await.expect("receive 1 failed");
+    receiver
+        .receive_message(messages[1].clone())
+        .await
+        .expect("receive 1 failed");
 
     // Now all 3 should be processed
     let final_messages = receiver.get_messages(entity_id).await.expect("get failed");

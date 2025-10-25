@@ -228,11 +228,21 @@ pub struct ResourceLimitsConfig {
     pub download_rate_limit_mbps: Option<u64>,
 }
 
-fn default_max_peer_connections() -> usize { 50 }
-fn default_max_relay_connections() -> usize { 3 }
-fn default_connection_timeout_secs() -> u64 { 30 }
-fn default_max_memory_mb() -> usize { 2048 }
-fn default_crdt_document_limit_mb() -> usize { 50 }
+fn default_max_peer_connections() -> usize {
+    50
+}
+fn default_max_relay_connections() -> usize {
+    3
+}
+fn default_connection_timeout_secs() -> u64 {
+    30
+}
+fn default_max_memory_mb() -> usize {
+    2048
+}
+fn default_crdt_document_limit_mb() -> usize {
+    50
+}
 
 impl Default for ResourceLimitsConfig {
     fn default() -> Self {
@@ -261,8 +271,8 @@ impl ResourceLimitsConfig {
             upload_rate_limit_mbps: self.upload_rate_limit_mbps,
             download_rate_limit_mbps: self.download_rate_limit_mbps,
             burst_allowance_mb: 10, // Default from spec
-            max_worker_threads: 4, // Default from spec
-            crypto_thread_pool: 2, // Default from spec
+            max_worker_threads: 4,  // Default from spec
+            crypto_thread_pool: 2,  // Default from spec
             anti_entropy_max_interval: Duration::from_secs(300), // Default from spec
         }
     }

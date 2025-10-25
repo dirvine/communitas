@@ -3,8 +3,6 @@
 //! HTTP/SSE bridge that exposes Tauri commands as REST endpoints,
 //! enabling browser-based testing with real P2P networking via Chrome DevTools MCP.
 
-
-
 mod error;
 mod handlers;
 mod server;

@@ -53,7 +53,7 @@ async fn test_spki_pinning_reject() {
 
     // THEN: Connection should be rejected
     tokio::time::sleep(Duration::from_secs(2)).await;
-    
+
     let network = harness.network.read().await;
     // Connection should fail due to SPKI mismatch
     // TODO: Verify connection was rejected
@@ -66,18 +66,21 @@ async fn test_reconnect_after_drop() {
     // GIVEN: Two connected nodes
     let harness = TestHarness::new(2).await.expect("harness creation failed");
     harness.mesh().await.expect("mesh setup failed");
-    
+
     harness
         .wait_until_connected(1, Duration::from_secs(5))
         .await
         .expect("initial connection failed");
 
     // WHEN: Network is partitioned
-    harness.partition(&[0], &[1]).await.expect("partition failed");
-    
+    harness
+        .partition(&[0], &[1])
+        .await
+        .expect("partition failed");
+
     // Wait a bit to ensure disconnection
     tokio::time::sleep(Duration::from_millis(500)).await;
-    
+
     let network = harness.network.read().await;
     assert!(!network.are_connected(0, 1).await, "Should be disconnected");
     drop(network);
@@ -98,7 +101,7 @@ async fn test_reconnect_after_drop() {
 async fn test_connection_with_latency() {
     // GIVEN: Two nodes with high latency link
     let harness = TestHarness::new(2).await.expect("harness creation failed");
-    
+
     // Set 200ms latency
     harness.set_latency(0, 1, 200).await;
     harness.mesh().await.expect("mesh setup failed");
@@ -124,7 +127,7 @@ async fn test_connection_with_latency() {
 async fn test_connection_with_packet_loss() {
     // GIVEN: Two nodes with 30% packet loss
     let harness = TestHarness::new(2).await.expect("harness creation failed");
-    
+
     // Set 30% packet loss
     harness.set_loss(0, 1, 0.3).await;
     harness.mesh().await.expect("mesh setup failed");
@@ -193,7 +196,7 @@ async fn test_star_topology() {
 
     // THEN: Hub should be connected to all, spokes not to each other
     let network = harness.network.read().await;
-    
+
     // Hub to spokes
     for i in 1..5 {
         assert!(
@@ -202,7 +205,7 @@ async fn test_star_topology() {
             i
         );
     }
-    
+
     // Spokes not connected to each other
     assert!(
         !network.are_connected(1, 2).await,
@@ -231,11 +234,11 @@ async fn test_line_topology() {
 
     // THEN: Adjacent nodes connected, non-adjacent not
     let network = harness.network.read().await;
-    
+
     assert!(network.are_connected(0, 1).await, "0-1 should be connected");
     assert!(network.are_connected(1, 2).await, "1-2 should be connected");
     assert!(network.are_connected(2, 3).await, "2-3 should be connected");
-    
+
     assert!(
         !network.are_connected(0, 2).await,
         "0-2 should not be connected"
@@ -257,17 +260,20 @@ async fn test_partition_healing() {
     // GIVEN: 4 nodes in mesh
     let harness = TestHarness::new(4).await.expect("harness creation failed");
     harness.mesh().await.expect("mesh setup failed");
-    
+
     harness
         .wait_until_connected(6, Duration::from_secs(10))
         .await
         .expect("initial mesh failed");
 
     // WHEN: Network is partitioned into [0,1] and [2,3]
-    harness.partition(&[0, 1], &[2, 3]).await.expect("partition failed");
-    
+    harness
+        .partition(&[0, 1], &[2, 3])
+        .await
+        .expect("partition failed");
+
     tokio::time::sleep(Duration::from_millis(500)).await;
-    
+
     // THEN: Within-partition connections remain, cross-partition drop
     let network = harness.network.read().await;
     assert!(network.are_connected(0, 1).await, "Partition A internal");
@@ -278,7 +284,7 @@ async fn test_partition_healing() {
 
     // WHEN: Network heals
     harness.heal().await.expect("heal failed");
-    
+
     // THEN: All connections should restore
     harness
         .wait_until_connected(6, Duration::from_secs(10))
@@ -293,16 +299,22 @@ async fn test_cascading_failure() {
     // GIVEN: 5 nodes in line (0-1-2-3-4)
     let harness = TestHarness::new(5).await.expect("harness creation failed");
     harness.line().await.expect("line setup failed");
-    
+
     harness
         .wait_until_connected(4, Duration::from_secs(10))
         .await
         .expect("line failed to form");
 
     // WHEN: Middle node (2) fails
-    harness.partition(&[0, 1], &[2]).await.expect("partition 1 failed");
-    harness.partition(&[3, 4], &[2]).await.expect("partition 2 failed");
-    
+    harness
+        .partition(&[0, 1], &[2])
+        .await
+        .expect("partition 1 failed");
+    harness
+        .partition(&[3, 4], &[2])
+        .await
+        .expect("partition 2 failed");
+
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // THEN: Network splits into [0-1] and [3-4]
@@ -323,7 +335,7 @@ async fn test_cascading_failure() {
 async fn test_high_latency_high_loss() {
     // GIVEN: Two nodes with realistic bad network (300ms latency, 20% loss)
     let harness = TestHarness::new(2).await.expect("harness creation failed");
-    
+
     harness.set_latency(0, 1, 300).await;
     harness.set_loss(0, 1, 0.2).await;
     harness.mesh().await.expect("mesh setup failed");
@@ -344,7 +356,7 @@ async fn test_flapping_connection() {
     // GIVEN: Two connected nodes
     let harness = TestHarness::new(2).await.expect("harness creation failed");
     harness.mesh().await.expect("mesh setup failed");
-    
+
     harness
         .wait_until_connected(1, Duration::from_secs(5))
         .await
@@ -352,9 +364,12 @@ async fn test_flapping_connection() {
 
     // WHEN: Connection flaps (disconnect/reconnect 5 times)
     for _ in 0..5 {
-        harness.partition(&[0], &[1]).await.expect("partition failed");
+        harness
+            .partition(&[0], &[1])
+            .await
+            .expect("partition failed");
         tokio::time::sleep(Duration::from_millis(200)).await;
-        
+
         harness.heal().await.expect("heal failed");
         harness
             .wait_until_connected(1, Duration::from_secs(5))

@@ -462,23 +462,26 @@ async fn test_introducer_node_connection() {
     // Setup mock transport that simulates successful connection
     let transport = Arc::new(MockFoafTransport::new());
     let introducer_peer = test_peer_id(99);
-    
+
     // Introducer knows some peers
     transport
-        .add_knowledge(introducer_peer, "alice-beta-gamma-delta".to_string(), test_peer_id(10))
+        .add_knowledge(
+            introducer_peer,
+            "alice-beta-gamma-delta".to_string(),
+            test_peer_id(10),
+        )
         .await;
     transport
-        .add_knowledge(introducer_peer, "bob-charlie-delta-echo".to_string(), test_peer_id(20))
+        .add_knowledge(
+            introducer_peer,
+            "bob-charlie-delta-echo".to_string(),
+            test_peer_id(20),
+        )
         .await;
 
     // Discovery with introducer configured
-    let discovery = FoafDiscovery::with_config(
-        None,
-        Some(transport),
-        test_peer_id(1),
-        2,
-    );
-    
+    let discovery = FoafDiscovery::with_config(None, Some(transport), test_peer_id(1), 2);
+
     // Simulate having introducer as a contact
     discovery
         .add_contact("introducer-node-test".to_string(), introducer_peer)
@@ -522,14 +525,9 @@ async fn test_introducer_node_timeout() {
     // Mock transport with no knowledge (simulates no response)
     let transport = Arc::new(MockFoafTransport::new());
     let introducer_peer = test_peer_id(99);
-    
-    let discovery = FoafDiscovery::with_config(
-        None,
-        Some(transport),
-        test_peer_id(1),
-        2,
-    );
-    
+
+    let discovery = FoafDiscovery::with_config(None, Some(transport), test_peer_id(1), 2);
+
     discovery
         .add_contact("slow-introducer".to_string(), introducer_peer)
         .await;

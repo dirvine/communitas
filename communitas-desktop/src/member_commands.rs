@@ -103,15 +103,29 @@ pub async fn member_remove(
         .as_ref()
         .ok_or_else(|| "CoreContext not initialized".to_string())?;
 
-    core_ctx.entity_service
-        .remove_member(
-            request.entity_type,
-            &request.entity_id,
-            &request.member_id,
-            &request.deleted_by,
-        )
-        .await
-        .map_err(|e| e.to_string())
+    if request.entity_type == communitas_core::crdt::EntityType::Organisation {
+        // Use cascading removal for organizations
+        core_ctx.entity_service
+            .remove_organization_member(
+                &request.entity_id,
+                &request.member_id,
+                &request.deleted_by,
+            )
+            .await
+            .map(|_result| ()) // Ignore summary for now, just succeed/fail
+            .map_err(|e| e.to_string())
+    } else {
+        // Regular removal for non-org entities
+        core_ctx.entity_service
+            .remove_member(
+                request.entity_type,
+                &request.entity_id,
+                &request.member_id,
+                &request.deleted_by,
+            )
+            .await
+            .map_err(|e| e.to_string())
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]

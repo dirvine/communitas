@@ -117,7 +117,10 @@ impl GossipContext {
         device_name: String,
         listen_port: Option<u16>,
     ) -> Result<Self> {
-        info!("Initializing GossipContext for {} (port: {:?})", four_words, listen_port);
+        info!(
+            "Initializing GossipContext for {} (port: {:?})",
+            four_words, listen_port
+        );
 
         // 1. Load or create ML-DSA identity
         // Use system data directory to avoid triggering file watchers in dev mode

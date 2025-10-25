@@ -20,7 +20,7 @@ use std::sync::Arc;
 use tracing::{debug, info, warn};
 
 // Phase 2 TDD: Import retry utilities for exponential backoff
-use crate::retry_utils::{retry_dial, RetryConfig};
+use crate::retry_utils::{RetryConfig, retry_dial};
 
 /// Boot sequence orchestrator
 pub struct GossipBootSequence {
@@ -192,12 +192,12 @@ impl GossipBootSequence {
             );
             return Ok(()); // Non-fatal, just skip the dial
         }
-        
+
         // Phase 2 TDD: Use retry_dial with exponential backoff (MESH_CAPABILITIES.md §3.2)
         let retry_config = RetryConfig::default();
         let four_words_str = four_words.to_string();
         let discovery = self.context.discovery.clone();
-        
+
         retry_dial(four_words, retry_config, || {
             let four_words = four_words_str.clone();
             let discovery = discovery.clone();
@@ -323,7 +323,7 @@ impl GossipBootSequence {
         // Get reference to watchdog and coordinator
         let watchdog = Arc::clone(&self.context.watchdog);
         let coordinator = Arc::clone(&self.context.coordinator);
-        
+
         // Define health check function that pings bootstrap/coordinator
         let health_check = move || {
             let _coordinator = coordinator.clone();
@@ -331,22 +331,22 @@ impl GossipBootSequence {
                 // Try to ping coordinator or bootstrap nodes
                 // For now, we'll check if we have any active peers as a proxy
                 // TODO: Implement actual coordinator health check
-                
+
                 // Placeholder: Always return true for now to avoid false positives
                 // In production, this should ping _coordinator.health_check()
                 true
             }
         };
-        
+
         // Start monitoring in background task
         // Note: start_monitoring takes ownership of a ConnectivityWatchdog, not Arc
         // We need to clone the inner value
         let watchdog_inner = (*watchdog).clone();
         let _handle = watchdog_inner.start_monitoring(health_check);
-        
+
         // Note: We don't await the handle - it runs in the background
         // The watchdog will update local_only_mode state as needed
-        
+
         Ok(())
     }
 

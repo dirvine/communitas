@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { rbacManager, ResourceType, Action, PermissionContext } from '../utils/rbac';
+import { Action, PermissionContext, rbacManager, ResourceType } from '../utils/rbac';
 
 // Hook return type
 export interface RBACHook {

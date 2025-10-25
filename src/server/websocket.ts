@@ -1,6 +1,6 @@
 // WebSocket server for WebRTC signaling and real-time communication
-import { WebSocketServer, WebSocket } from 'ws';
 import { IncomingMessage } from 'http';
+import { WebSocket, WebSocketServer } from 'ws';
 
 interface WebSocketMessage {
   type: 'offer' | 'answer' | 'ice-candidate' | 'call-ended' | 'join-room' | 'leave-room';

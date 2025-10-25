@@ -1,5 +1,5 @@
-import { useTheme, useMediaQuery } from '@mui/material';
-import { useState, useEffect } from 'react';
+import { useMediaQuery, useTheme } from '@mui/material';
+import { useEffect, useState } from 'react';
 
 // Breakpoint names type
 export type Breakpoint = 'xs' | 'sm' | 'md' | 'lg' | 'xl';

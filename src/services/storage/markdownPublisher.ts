@@ -1,9 +1,9 @@
+import crypto from 'crypto'
 import { marked } from 'marked'
-import { DHTStorage } from './dhtStorage'
-import { ReedSolomonEncoder } from './reedSolomon'
 import { NetworkIdentity } from '../../types/collaboration'
 import { inputSanitizer } from '../security/inputSanitization'
-import crypto from 'crypto'
+import { DHTStorage } from './dhtStorage'
+import { ReedSolomonEncoder } from './reedSolomon'
 
 export interface PublisherConfig {
   identity: NetworkIdentity

@@ -1,5 +1,5 @@
-import { listen, UnlistenFn } from '@tauri-apps/api/event'
 import { invoke } from '@tauri-apps/api/core'
+import { listen, UnlistenFn } from '@tauri-apps/api/event'
 
 export interface DecryptedMessagePayload {
   id?: string

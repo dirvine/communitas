@@ -1,7 +1,7 @@
-import { useEffect, useCallback, useRef, useState } from 'react';
-import { listen, Event, UnlistenFn } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
+import { Event, listen, UnlistenFn } from '@tauri-apps/api/event';
 import { useSnackbar } from 'notistack';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 const isTauriEnvironment = () =>
   typeof window !== 'undefined' && Boolean((window as any).__TAURI__);

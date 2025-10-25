@@ -1,20 +1,15 @@
-import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
-import * as monaco from 'monaco-editor'
-import { Box, Paper, IconButton, Toolbar, Typography, Chip, Avatar, Tooltip, Menu, MenuItem, Divider } from '@mui/material'
 import {
-  Save,
-  Preview,
-  Fullscreen,
-  FullscreenExit,
-  Settings,
-  History,
-  Share
+    Fullscreen,
+    FullscreenExit, History, Preview, Save, Settings, Share
 } from '@mui/icons-material'
-import { YjsMarkdownEditor } from '../../services/storage/yjsCollaboration'
-import { MarkdownWebPublisher } from '../../services/storage/markdownPublisher'
-import { NetworkIdentity } from '../../types/collaboration'
-import { inputSanitizer } from '../../services/security/inputSanitization'
+import { Avatar, Box, Chip, Divider, IconButton, Menu, MenuItem, Paper, Toolbar, Tooltip, Typography } from '@mui/material'
 import { marked } from 'marked'
+import * as monaco from 'monaco-editor'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { inputSanitizer } from '../../services/security/inputSanitization'
+import { MarkdownWebPublisher } from '../../services/storage/markdownPublisher'
+import { YjsMarkdownEditor } from '../../services/storage/yjsCollaboration'
+import { NetworkIdentity } from '../../types/collaboration'
 
 interface CollaborationCursor {
   userId: string

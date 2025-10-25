@@ -9,13 +9,13 @@
  * - Print-friendly layout
  */
 
-import React from 'react';
-import { Box, Paper, Typography, styled, useTheme } from '@mui/material';
+import { Box, Paper, styled, Typography, useTheme } from '@mui/material';
 import { alpha } from '@mui/material/styles';
+import React from 'react';
 import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { vs, vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import remarkGfm from 'remark-gfm';
 
 interface MarkdownPreviewProps {
   /** Markdown content to render */

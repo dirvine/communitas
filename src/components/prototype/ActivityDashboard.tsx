@@ -1,29 +1,15 @@
-import React, { useState, useEffect, useMemo } from 'react'
 import {
-  Box,
-  Typography,
-  Card,
-  CardContent,
-  Grid,
-  LinearProgress,
-  Chip,
-  Stack,
-  Avatar,
-  IconButton,
-  Tooltip,
-} from '@mui/material'
-import {
-  ChatBubbleOutline,
-  Description,
-  People,
-  Storage,
-  TrendingUp,
-  TrendingDown,
-  NotificationsOff,
-  Settings,
+    ChatBubbleOutline,
+    Description,
+    People, Settings, Storage, TrendingDown, TrendingUp
 } from '@mui/icons-material'
-import { useEntityDirectory } from '../../contexts/EntityDirectoryContext'
+import {
+    Avatar, Box, Card,
+    CardContent, Chip, Grid, IconButton, LinearProgress, Stack, Tooltip, Typography
+} from '@mui/material'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
+import { useEntityDirectory } from '../../contexts/EntityDirectoryContext'
 
 interface ActivityMetric {
   label: string

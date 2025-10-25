@@ -1,48 +1,17 @@
-import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import {
-  Box,
-  Paper,
-  AppBar,
-  Toolbar,
-  IconButton,
-  TextField,
-  Typography,
-  Breadcrumbs,
-  Link,
-  CircularProgress,
-  Alert,
-  Fab,
-  Drawer,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemIcon,
-  Chip,
-  InputAdornment,
-  Menu,
-  MenuItem,
-  Tooltip
-} from '@mui/material'
-import {
-  ArrowBack,
-  ArrowForward,
-  Home,
-  Refresh,
-  Search,
-  Bookmark,
-  BookmarkBorder,
-  Share,
-  Print,
-  Download,
-  Fullscreen,
-  FullscreenExit,
-  Menu as MenuIcon,
-  Close,
-  History,
-  Language,
-  Visibility,
-  VisibilityOff
+    ArrowBack,
+    ArrowForward, Bookmark,
+    BookmarkBorder, Close, Download,
+    Fullscreen,
+    FullscreenExit, History, Home, Menu as MenuIcon, Print, Refresh,
+    Search, Share
 } from '@mui/icons-material'
+import {
+    Alert, AppBar, Box, Breadcrumbs, CircularProgress, Drawer, IconButton, InputAdornment, Link, List,
+    ListItem, ListItemIcon, ListItemText, Menu,
+    MenuItem, Paper, TextField, Toolbar, Tooltip, Typography
+} from '@mui/material'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CompleteStorageSystem } from '../../services/storage/CompleteStorageSystem'
 import { MarkdownWebPublisher, TableOfContentsEntry } from '../../services/storage/markdownPublisher'
 import { NetworkIdentity } from '../../types/collaboration'

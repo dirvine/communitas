@@ -1,39 +1,19 @@
-import React, { useState, useEffect } from 'react';
 import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
-  FormControl,
-  FormLabel,
-  Select,
-  MenuItem,
-  Box,
-  Typography,
-  Alert,
-  CircularProgress,
-  Stack,
-  Chip,
-  alpha,
+    CheckCircle as OnlineIcon, GroupAdd as AddExistingIcon, PersonAdd as CreateIcon, WifiOff as OfflineIcon
+} from '@mui/icons-material';
+import {
+    Alert, alpha, Box, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, FormControl,
+    FormLabel, MenuItem, Select, Stack, TextField, Typography
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
-import {
-  PersonAdd as CreateIcon,
-  GroupAdd as AddExistingIcon,
-  WifiOff as OfflineIcon,
-  CheckCircle as OnlineIcon,
-} from '@mui/icons-material';
-import { ModernButton } from '../ui/ModernButton';
-import { SearchInput } from '../ui/ModernInput';
-import { designTokens } from '../../styles/theme';
+import React, { useEffect, useState } from 'react';
 import { useEntityDirectory } from '../../contexts/EntityDirectoryContext';
+import { designTokens } from '../../styles/theme';
 import type {
-  CreateNewContactInput,
-  AddExistingContactInput,
-  EntityOperationMode,
-  EntityOperationResult,
+    AddExistingContactInput, CreateNewContactInput, EntityOperationMode,
+    EntityOperationResult
 } from '../../types/entityOperations';
+import { ModernButton } from '../ui/ModernButton';
 
 // Styled Components
 const StyledDialog = styled(Dialog)(({ theme }) => ({

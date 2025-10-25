@@ -477,7 +477,7 @@ We are committed to providing a welcoming and inclusive community for everyone, 
 - Code review
 - Implementation discussions
 
-**Discord** (Coming Soon):
+**Discord**:
 - Real-time chat
 - Community support
 - General discussions

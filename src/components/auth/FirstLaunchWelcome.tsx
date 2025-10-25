@@ -1,39 +1,21 @@
-import React, { useState, useEffect } from 'react';
 import {
-  Dialog,
-  DialogContent,
-  DialogActions,
-  Box,
-  Typography,
-  Button,
-  TextField,
-  Card,
-  CardContent,
-  Alert,
-  IconButton,
-  InputAdornment,
-  LinearProgress,
-  Radio,
-  RadioGroup,
-  FormControlLabel,
-  FormControl,
-  alpha,
-  Chip,
-} from '@mui/material';
-import {
-  Visibility,
-  VisibilityOff,
-  Refresh as RefreshIcon,
-  CheckCircle as CheckCircleIcon,
-  Security as SecurityIcon,
-  Fingerprint as FingerprintIcon,
-  Lock as LockIcon,
-  ArrowBack as ArrowBackIcon,
+    ArrowBack as ArrowBackIcon, CheckCircle as CheckCircleIcon, Fingerprint as FingerprintIcon,
+    Lock as LockIcon, Refresh as RefreshIcon, Security as SecurityIcon, Visibility,
+    VisibilityOff
 } from '@mui/icons-material';
-import { useAuth } from '../../contexts/AuthContext';
+import {
+    Alert, alpha, Box, Button, Card,
+    CardContent, Chip, Dialog, DialogActions, DialogContent, FormControl, FormControlLabel, IconButton,
+    InputAdornment,
+    LinearProgress,
+    Radio,
+    RadioGroup, TextField, Typography
+} from '@mui/material';
 import { invoke } from '@tauri-apps/api/core';
-import { fourWordsToDisplay } from '../../utils/identity';
+import React, { useEffect, useState } from 'react';
+import { useAuth } from '../../contexts/AuthContext';
 import { bridgeClient } from '../../services/BridgeClient';
+import { fourWordsToDisplay } from '../../utils/identity';
 import { isTauriApp } from '../../utils/tauri';
 
 interface FirstLaunchWelcomeProps {

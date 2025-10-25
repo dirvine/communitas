@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { subscribeMessages, DecryptedMessagePayload } from '../../services/messagingSubscription'
+import { DecryptedMessagePayload, subscribeMessages } from '../../services/messagingSubscription'
 
 export const MessageConsole: React.FC<{ channelId?: string }> = ({ channelId }) => {
   const [messages, setMessages] = useState<DecryptedMessagePayload[]>([])

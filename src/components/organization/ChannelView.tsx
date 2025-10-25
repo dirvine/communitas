@@ -1,33 +1,16 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  Box,
-  TextField,
-  IconButton,
-  Avatar,
-  Typography,
-  List,
-  ListItem,
-  Tooltip,
-  Chip,
-  Stack,
-  Divider,
-  Menu,
-  MenuItem,
-  Badge,
-} from '@mui/material';
-import {
-  Send as SendIcon,
-  Reply as ReplyIcon,
-  MoreVert as MoreIcon,
-  VideoCall as VideoIcon,
-  Phone as PhoneIcon,
-  PersonAdd as AddMemberIcon,
-  Tag as TagIcon,
+    MoreVert as MoreIcon, PersonAdd as AddMemberIcon, Phone as PhoneIcon, Reply as ReplyIcon, Send as SendIcon, VideoCall as VideoIcon
 } from '@mui/icons-material';
-import { GlassCard } from '../ui/GlassCard';
-import { channelService } from '../../services/channelService';
-import type { Channel, Message, Thread } from '../../types/channels';
+import {
+    Avatar, Box, Chip, IconButton, List,
+    ListItem, Menu,
+    MenuItem, Stack, TextField, Tooltip, Typography
+} from '@mui/material';
 import { listen } from '@tauri-apps/api/event';
+import React, { useEffect, useRef, useState } from 'react';
+import { channelService } from '../../services/channelService';
+import type { Channel, Message } from '../../types/channels';
+import { GlassCard } from '../ui/GlassCard';
 
 interface ChannelViewProps {
   channelId: string;

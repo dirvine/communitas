@@ -1,4 +1,4 @@
-import { createTheme, alpha } from '@mui/material/styles';
+import { alpha, createTheme } from '@mui/material/styles';
 
 // Ultra-modern design tokens
 const designTokens = {

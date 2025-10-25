@@ -1,12 +1,5 @@
-import { 
-  Organization, 
-  Group, 
-  PersonalUser, 
-  Channel, 
-  Project, 
-  OrganizationUser,
-  SharedFile,
-  PublishedWebsite 
+import {
+    Group, Organization, PersonalUser, PublishedWebsite, SharedFile
 } from '../types/collaboration';
 
 // Helper to generate four-word identities

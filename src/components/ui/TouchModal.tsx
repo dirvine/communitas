@@ -1,22 +1,13 @@
-import React, { useCallback, useEffect, useState } from 'react';
 import {
-  Dialog,
-  DialogProps,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  IconButton,
-  Box,
-  useTheme,
-  alpha,
-  SxProps,
-  Theme,
-} from '@mui/material';
-import {
-  Close as CloseIcon,
-  ArrowBack as ArrowBackIcon,
+    ArrowBack as ArrowBackIcon, Close as CloseIcon
 } from '@mui/icons-material';
+import {
+    alpha, Box, Dialog, DialogActions, DialogContent, DialogProps,
+    DialogTitle, IconButton, SxProps,
+    Theme, useTheme
+} from '@mui/material';
 import { motion, PanInfo } from 'framer-motion';
+import React, { useCallback, useEffect, useState } from 'react';
 
 // Enhanced responsive hooks
 import { useTouchDevice, useTouchFriendlySizing } from '../../hooks/useResponsive';

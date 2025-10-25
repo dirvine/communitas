@@ -1,12 +1,4 @@
 // Copyright (c) 2025 Saorsa Labs Limited
-//
-// Container service for managing CRDT container operations
-//
-// ⚠️  DEPRECATED: This service is deprecated and will be removed.
-// The container pointer-based architecture has been replaced with
-// Yrs CRDT full-replication. Use DocumentService instead.
-
-import { invoke } from '@tauri-apps/api/core';
 
 export interface ObjectInfo {
   oid_hex: string;

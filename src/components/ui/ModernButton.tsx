@@ -1,6 +1,6 @@
-import React from 'react';
 import { Button, ButtonProps, CircularProgress } from '@mui/material';
 import { styled } from '@mui/material/styles';
+import React from 'react';
 import { designTokens } from '../../styles/theme';
 
 interface ModernButtonProps extends ButtonProps {

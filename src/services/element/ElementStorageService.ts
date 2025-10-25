@@ -58,6 +58,27 @@ export class ElementStorageService extends EventEmitter {
         this.emit('upload-progress', updatedProgress);
       }
 
+      // Store file data in localStorage (in real app, this would be uploaded to backend)
+      const fileData = await file.arrayBuffer();
+      localStorage.setItem(`element_${this.element.id}_file_${fileId}`, JSON.stringify({
+        data: Array.from(new Uint8Array(fileData)),
+        name: file.name,
+        type: file.type,
+        size: file.size
+      }));
+
+      // Store file metadata
+      const files = JSON.parse(localStorage.getItem(`element_${this.element.id}_files`) || '[]');
+      files.push({
+        id: fileId,
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        modified: new Date().toISOString(),
+        path: `/${file.name}`
+      });
+      localStorage.setItem(`element_${this.element.id}_files`, JSON.stringify(files));
+
       // Mark as complete
       const completeProgress = {
         ...progress,
@@ -84,8 +105,14 @@ export class ElementStorageService extends EventEmitter {
       throw new Error('Storage is not enabled for this element');
     }
 
-    // For now, return empty data - would need to implement proper file retrieval
-    return new Uint8Array();
+    // Retrieve file data from localStorage
+    const fileDataStr = localStorage.getItem(`element_${this.element.id}_file_${fileId}`);
+    if (!fileDataStr) {
+      throw new Error('File not found');
+    }
+
+    const fileData = JSON.parse(fileDataStr);
+    return new Uint8Array(fileData.data);
   }
 
   async listFiles(path: string = '/'): Promise<any[]> {
@@ -93,23 +120,36 @@ export class ElementStorageService extends EventEmitter {
       throw new Error('Storage is not enabled for this element');
     }
 
-    // Return mock file list for now
-    return [
-      {
-        id: 'file1',
-        name: 'document.pdf',
-        size: 1024000,
-        type: 'application/pdf',
-        modified: new Date(),
-      },
-      {
-        id: 'file2',
-        name: 'image.jpg',
-        size: 2048000,
-        type: 'image/jpeg',
-        modified: new Date(),
-      },
-    ];
+    // Get stored files
+    const files = JSON.parse(localStorage.getItem(`element_${this.element.id}_files`) || '[]');
+
+    // Get stored directories
+    const directories = JSON.parse(localStorage.getItem(`element_${this.element.id}_directories`) || '[]');
+
+    // Filter files by path (basic implementation)
+    const filteredFiles = files.filter((file: any) => {
+      if (path === '/') {
+        // For root directory, include files with exactly one path segment (e.g., '/filename')
+        const pathSegments = file.path.split('/').filter(segment => segment.length > 0);
+        return pathSegments.length === 1;
+      }
+      return file.path.startsWith(path);
+    });
+
+    // Filter directories by path
+    const filteredDirectories = directories.filter((dir: string) => {
+      if (path === '/') return dir.split('/').length === 2; // Top-level directories
+      return dir.startsWith(path) && dir !== path;
+    }).map((dir: string) => ({
+      id: `dir_${dir}`,
+      name: dir.split('/').pop(),
+      path: dir,
+      type: 'directory',
+      modified: new Date(),
+      size: 0
+    }));
+
+    return [...filteredDirectories, ...filteredFiles];
   }
 
   async createDirectory(path: string): Promise<void> {
@@ -117,8 +157,28 @@ export class ElementStorageService extends EventEmitter {
       throw new Error('Storage is not enabled for this element');
     }
 
-    // TODO: Implement directory creation
-    console.log('Create directory not yet implemented:', path);
+    // Validate path
+    if (!path.startsWith('/')) {
+      throw new Error('Path must start with /');
+    }
+
+    if (path.includes('..') || path.includes('//')) {
+      throw new Error('Invalid path format');
+    }
+
+    // For now, store directory metadata in local storage
+    // In a real implementation, this would call the backend API
+    const directories = JSON.parse(localStorage.getItem(`element_${this.element.id}_directories`) || '[]');
+
+    if (directories.includes(path)) {
+      throw new Error('Directory already exists');
+    }
+
+    directories.push(path);
+    localStorage.setItem(`element_${this.element.id}_directories`, JSON.stringify(directories));
+
+    console.log('Created directory:', path);
+    this.emit('directory-created', { path });
   }
 
   async deleteFile(fileId: string): Promise<void> {
@@ -126,8 +186,25 @@ export class ElementStorageService extends EventEmitter {
       throw new Error('Storage is not enabled for this element');
     }
 
-    // TODO: Implement file deletion
-    console.log('Delete file not yet implemented:', fileId);
+    // Check if file exists in our mock storage
+    const files = JSON.parse(localStorage.getItem(`element_${this.element.id}_files`) || '[]');
+    const fileIndex = files.findIndex((f: any) => f.id === fileId);
+
+    if (fileIndex === -1) {
+      throw new Error('File not found');
+    }
+
+    const file = files[fileIndex];
+
+    // Remove file data from localStorage
+    localStorage.removeItem(`element_${this.element.id}_file_${fileId}`);
+
+    // Remove file metadata
+    files.splice(fileIndex, 1);
+    localStorage.setItem(`element_${this.element.id}_files`, JSON.stringify(files));
+
+    console.log('Deleted file:', fileId);
+    this.emit('file-deleted', { fileId, fileName: file.name });
   }
 
   getUploadProgress(fileId: string): FileUploadProgress | null {

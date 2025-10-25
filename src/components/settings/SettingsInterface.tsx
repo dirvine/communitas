@@ -1,53 +1,19 @@
-import React, { useState } from 'react'
 import {
-  Box,
-  Paper,
-  Typography,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
-  ListItemButton,
-  Switch,
-  FormControlLabel,
-  TextField,
-  Button,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
-  Slider,
-  Card,
-  CardContent,
-  Divider,
-
-
-
-
-  Alert,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-} from '@mui/material'
-import {
-  Person,
-  Palette,
-  Security,
-  Notifications,
-  Hub,
-  Storage,
-  Videocam,
-  Info,
-  Warning,
-  CheckCircle,
-  ImportExport,
-  Backup,
-  Restore,
-  UpdateOutlined,
+    Backup, CheckCircle, Hub, ImportExport, Info, Notifications, Palette, Person, Restore, Security, Storage, UpdateOutlined, Videocam, Warning
 } from '@mui/icons-material'
-import { UpdateSettings } from '../update/UpdateSettings'
+import {
+
+
+
+
+    Alert, Box, Button, Card,
+    CardContent, Dialog, DialogActions, DialogContent, DialogTitle, Divider, FormControl, FormControlLabel, InputLabel, List,
+    ListItem, ListItemButton, ListItemIcon,
+    ListItemText, MenuItem, Paper, Select, Slider, Switch, TextField, Typography
+} from '@mui/material'
 import { invoke } from '@tauri-apps/api/core'
+import React, { useState } from 'react'
+import { UpdateSettings } from '../update/UpdateSettings'
 
 interface SettingsData {
   profile: {

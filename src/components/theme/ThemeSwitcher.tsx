@@ -1,35 +1,26 @@
-import React, { useState } from 'react';
 import {
-  Box,
-  Button,
-  Card,
-  CardContent,
-  Chip,
-  Divider,
-  Fade,
-  IconButton,
-  Menu,
-  MenuItem,
-  Paper,
-  Stack,
-  Switch,
-  Tooltip,
-  Typography,
-  useTheme as useMuiTheme,
-} from '@mui/material';
-import {
-  Palette as PaletteIcon,
-  DarkMode as DarkModeIcon,
-  LightMode as LightModeIcon,
-  AutoAwesome as AutoIcon,
-  Brush as BrushIcon,
-  Computer as TechIcon,
-  LocalFireDepartment as WarmIcon,
-  Check as CheckIcon,
+    AutoAwesome as AutoIcon,
+    Brush as BrushIcon, Check as CheckIcon, Computer as TechIcon, DarkMode as DarkModeIcon,
+    LightMode as LightModeIcon, LocalFireDepartment as WarmIcon, Palette as PaletteIcon
 } from '@mui/icons-material';
-import { motion, AnimatePresence } from 'framer-motion';
-import { useTheme } from './ThemeProvider';
+import {
+    Box, Card,
+    CardContent,
+    Chip,
+    Divider, IconButton,
+    Menu,
+    MenuItem,
+    Paper,
+    Stack,
+    Switch,
+    Tooltip,
+    Typography,
+    useTheme as useMuiTheme
+} from '@mui/material';
+import { motion } from 'framer-motion';
+import React, { useState } from 'react';
 import type { ColorPreset } from '../../theme';
+import { useTheme } from './ThemeProvider';
 
 // Color preset configurations
 const COLOR_PRESETS: { [key in ColorPreset]: { 

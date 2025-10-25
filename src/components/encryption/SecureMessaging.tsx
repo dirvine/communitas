@@ -1,36 +1,17 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  Box,
-  Paper,
-  TextField,
-  IconButton,
-  Typography,
-  Stack,
-  Avatar,
-  Chip,
-  Alert,
-  CircularProgress,
-  Tooltip,
-  Menu,
-  MenuItem,
-  ListItemIcon,
-  ListItemText,
-} from '@mui/material';
-import {
-  Send as SendIcon,
-  Lock as LockIcon,
-  LockOpen as LockOpenIcon,
-  Key as KeyIcon,
-  Security as SecurityIcon,
-  Warning as WarningIcon,
-  VpnKey as VpnKeyIcon,
-  Shield as ShieldIcon,
-  MoreVert as MoreIcon,
+    Key as KeyIcon, Lock as LockIcon,
+    LockOpen as LockOpenIcon, MoreVert as MoreIcon, Send as SendIcon, Shield as ShieldIcon, VpnKey as VpnKeyIcon, Warning as WarningIcon
 } from '@mui/icons-material';
-import { motion, AnimatePresence } from 'framer-motion';
-import { useEncryption } from '../../contexts/EncryptionContext';
-import { useAuth } from '../../contexts/AuthContext';
+import {
+    Alert, Avatar, Box, Chip, CircularProgress, IconButton, ListItemIcon,
+    ListItemText, Menu,
+    MenuItem, Paper, Stack, TextField, Tooltip, Typography
+} from '@mui/material';
 import { invoke } from '@tauri-apps/api/core';
+import { AnimatePresence, motion } from 'framer-motion';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useAuth } from '../../contexts/AuthContext';
+import { useEncryption } from '../../contexts/EncryptionContext';
 
 export interface SecureMessage {
   id: string;

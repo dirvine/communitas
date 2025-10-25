@@ -3,8 +3,8 @@
  * Provides comprehensive security monitoring, logging, and compliance
  */
 
-import { cryptoManager } from './cryptoManager'
 import { authService } from './authenticationService'
+import { cryptoManager } from './cryptoManager'
 
 export interface SecurityEvent {
   id: string

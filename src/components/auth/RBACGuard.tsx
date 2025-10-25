@@ -1,8 +1,8 @@
-import React from 'react';
-import { Box, Alert, Typography, Button } from '@mui/material';
 import { Lock as LockIcon, Warning as WarningIcon } from '@mui/icons-material';
+import { Alert, Box, Button, Typography } from '@mui/material';
+import React from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { rbacManager, ResourceType, Action } from '../../utils/rbac';
+import { Action, rbacManager, ResourceType } from '../../utils/rbac';
 
 // Props for RBAC-protected components
 export interface RBACGuardProps {

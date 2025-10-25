@@ -1,38 +1,16 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
-  Box,
-  Paper,
-  TextField,
-  IconButton,
-  Avatar,
-  Typography,
-  List,
-  ListItem,
-  ListItemAvatar,
-  ListItemText,
-  Divider,
-  Chip,
-  Badge,
-  InputAdornment,
-  Menu,
-  MenuItem,
-  Tooltip,
-  CircularProgress,
-} from '@mui/material';
-import {
-  Send as SendIcon,
-  AttachFile as AttachFileIcon,
-  EmojiEmotions as EmojiIcon,
-  Mic as MicIcon,
-  VideocamOutlined as VideoIcon,
-  CallOutlined as CallIcon,
-  MoreVert as MoreIcon,
-  Done as DoneIcon,
-  DoneAll as DoneAllIcon,
-  Search as SearchIcon,
+    AttachFile as AttachFileIcon, CallOutlined as CallIcon, Done as DoneIcon,
+    DoneAll as DoneAllIcon, EmojiEmotions as EmojiIcon,
+    Mic as MicIcon, MoreVert as MoreIcon, Search as SearchIcon, Send as SendIcon, VideocamOutlined as VideoIcon
 } from '@mui/icons-material';
-import { useDHTSync, DHTSyncEvent } from '../../hooks/useDHTSync';
-import { useSnackbar } from 'notistack';
+import {
+    Avatar, Badge, Box, Chip, CircularProgress, IconButton, InputAdornment, List,
+    ListItem,
+    ListItemAvatar, Paper,
+    TextField, Tooltip, Typography
+} from '@mui/material';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { DHTSyncEvent, useDHTSync } from '../../hooks/useDHTSync';
 
 // Mock user ID for demo - in real app this would come from auth context
 const MOCK_USER_ID = 'user-1';
@@ -120,8 +98,78 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   ]);
   const [isTyping, setIsTyping] = useState(false);
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+  const [typingUsers, setTypingUsers] = useState<string[]>([]);
+  const [typingTimeout, setTypingTimeout] = useState<NodeJS.Timeout | null>(null);
+  const [readMessageIds, setReadMessageIds] = useState<Set<string>>(new Set());
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Cleanup typing timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (typingTimeout) {
+        clearTimeout(typingTimeout);
+      }
+    };
+  }, [typingTimeout]);
+
+  // Read receipts - mark messages as read when they come into view
+  useEffect(() => {
+    const markMessagesAsRead = () => {
+      if (!messagesContainerRef.current) return;
+
+      const container = messagesContainerRef.current;
+      const containerRect = container.getBoundingClientRect();
+      const newReadMessageIds = new Set(readMessageIds);
+
+      // Check each message element
+      messages.forEach((message) => {
+        if (message.sender !== 'You' && message.status !== 'read') {
+          const messageElement = document.getElementById(`message-${message.id}`);
+          if (messageElement) {
+            const messageRect = messageElement.getBoundingClientRect();
+            // Consider message read if it's visible in the container
+            if (messageRect.top >= containerRect.top &&
+                messageRect.bottom <= containerRect.bottom) {
+              newReadMessageIds.add(message.id);
+            }
+          }
+        }
+      });
+
+      // Update read status if any messages were marked as read
+      if (newReadMessageIds.size > readMessageIds.size) {
+        setReadMessageIds(newReadMessageIds);
+
+        // Update message statuses
+        setMessages(prev => prev.map(msg =>
+          newReadMessageIds.has(msg.id) && msg.status !== 'read'
+            ? { ...msg, status: 'read' }
+            : msg
+        ));
+
+        // Send read receipts to other participants
+        const newlyReadIds = Array.from(newReadMessageIds).filter(id => !readMessageIds.has(id));
+        if (newlyReadIds.length > 0) {
+          console.log('Marked messages as read:', newlyReadIds);
+          // TODO: Send read receipts via WebRTC or gossip protocol
+        }
+      }
+    };
+
+    // Set up scroll listener
+    const container = messagesContainerRef.current;
+    if (container) {
+      container.addEventListener('scroll', markMessagesAsRead);
+      // Also check initially
+      setTimeout(markMessagesAsRead, 100);
+
+      return () => {
+        container.removeEventListener('scroll', markMessagesAsRead);
+      };
+    }
+  }, [messages, readMessageIds]);
 
   // Real-time DHT sync for this chat
   // Only subscribe to chat updates when we have a valid chat ID and are in Tauri environment
@@ -168,6 +216,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       setMessage('');
       setAttachedFiles([]);
 
+      // Stop typing when sending message
+      handleTypingStop();
+
       // Simulate message status updates
       setTimeout(() => {
         setMessages(prev => prev.map(msg => 
@@ -190,6 +241,51 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const handleFileAttach = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files) {
       setAttachedFiles(Array.from(event.target.files));
+    }
+  };
+
+  const handleTypingStart = () => {
+    if (!isTyping) {
+      setIsTyping(true);
+      // Send typing start event to other participants
+      console.log('Started typing');
+      // TODO: Send typing event via WebRTC or gossip protocol
+    }
+
+    // Clear existing timeout
+    if (typingTimeout) {
+      clearTimeout(typingTimeout);
+    }
+
+    // Set timeout to stop typing after 3 seconds of inactivity
+    const timeout = setTimeout(() => {
+      handleTypingStop();
+    }, 3000);
+
+    setTypingTimeout(timeout);
+  };
+
+  const handleTypingStop = () => {
+    if (isTyping) {
+      setIsTyping(false);
+      // Send typing stop event to other participants
+      console.log('Stopped typing');
+      // TODO: Send typing stop event via WebRTC or gossip protocol
+    }
+
+    if (typingTimeout) {
+      clearTimeout(typingTimeout);
+      setTypingTimeout(null);
+    }
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setMessage(e.target.value);
+
+    if (e.target.value.trim().length > 0) {
+      handleTypingStart();
+    } else {
+      handleTypingStop();
     }
   };
 
@@ -279,6 +375,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
       {/* Messages Area */}
       <Box
+        ref={messagesContainerRef}
         sx={{
           flex: 1,
           overflow: 'auto',
@@ -290,6 +387,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
           {messages.map((msg, index) => (
             <ListItem
               key={msg.id}
+              id={`message-${msg.id}`}
               sx={{
                 flexDirection: msg.sender === 'You' ? 'row-reverse' : 'row',
                 gap: 1,
@@ -367,11 +465,18 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
           ))}
         </List>
         
-        {isTyping && (
+        {typingUsers.length > 0 && (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, pl: 2 }}>
-            <Avatar sx={{ width: 24, height: 24 }}>A</Avatar>
+            <Avatar sx={{ width: 24, height: 24 }}>
+              {typingUsers[0].charAt(0).toUpperCase()}
+            </Avatar>
             <Typography variant="caption" color="text.secondary">
-              Alice is typing...
+              {typingUsers.length === 1
+                ? `${typingUsers[0]} is typing...`
+                : typingUsers.length === 2
+                ? `${typingUsers[0]} and ${typingUsers[1]} are typing...`
+                : `${typingUsers[0]} and ${typingUsers.length - 1} others are typing...`
+              }
             </Typography>
           </Box>
         )}
@@ -423,7 +528,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
             maxRows={4}
             placeholder="Type a message..."
             value={message}
-            onChange={(e) => setMessage(e.target.value)}
+            onChange={handleInputChange}
             onKeyPress={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();

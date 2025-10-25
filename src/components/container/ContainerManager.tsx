@@ -2,44 +2,18 @@
 //
 // Container management component
 
-import React, { useState, useEffect } from 'react';
 import {
-  Box,
-  Card,
-  CardContent,
-  Typography,
-  Button,
-  TextField,
-  List,
-  ListItem,
-  ListItemText,
-  IconButton,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Alert,
-  Snackbar,
-  Chip,
-  LinearProgress,
-  Tabs,
-  Tab,
-  Paper,
-  Grid,
-  Divider,
-} from '@mui/material';
-import {
-  CloudUpload as UploadIcon,
-  CloudDownload as DownloadIcon,
-  Add as AddIcon,
-  Delete as DeleteIcon,
-  Visibility as ViewIcon,
-  Refresh as RefreshIcon,
-  Storage as StorageIcon,
-  PostAdd as PostIcon,
-  Info as InfoIcon,
+    CloudUpload as UploadIcon, PostAdd as PostIcon, Refresh as RefreshIcon,
+    Storage as StorageIcon, Visibility as ViewIcon
 } from '@mui/icons-material';
-import { ContainerService, ObjectInfo, TipInfo, ContainerStats } from '../../services/ContainerService';
+import {
+    Alert, Box, Button, Card,
+    CardContent, Chip, Dialog, DialogActions, DialogContent, DialogTitle, Divider, Grid, IconButton, LinearProgress, List,
+    ListItem,
+    ListItemText, Paper, Snackbar, Tab, Tabs, TextField, Typography
+} from '@mui/material';
+import React, { useEffect, useState } from 'react';
+import { ContainerService, ContainerStats, ObjectInfo, TipInfo } from '../../services/ContainerService';
 
 interface TabPanelProps {
   children?: React.ReactNode;

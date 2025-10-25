@@ -11,10 +11,10 @@
  * Provides state management and lifecycle methods for voice, video, and screen sharing.
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { CallEvent, MediaConstraints, MediaDevice } from './types';
+import { CallEventType, isIncomingCallEvent } from './types';
 import { webrtcService } from './WebRTCService';
-import type { MediaConstraints, MediaDevice, CallEvent } from './types';
-import { isIncomingCallEvent, CallEventType } from './types';
 
 /**
  * WebRTC hook state

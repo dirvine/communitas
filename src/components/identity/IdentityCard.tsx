@@ -1,19 +1,12 @@
-import React from 'react'
 import {
-  Card,
-  CardContent,
-  Typography,
-  Box,
-  Chip,
-  IconButton,
-  Tooltip,
-  Stack,
-} from '@mui/material'
-import {
-  ContentCopy as CopyIcon,
-  Verified as VerifiedIcon,
-  Person as PersonIcon,
+    ContentCopy as CopyIcon, Person as PersonIcon, Verified as VerifiedIcon
 } from '@mui/icons-material'
+import {
+    Box, Card,
+    CardContent, Chip,
+    IconButton, Stack, Tooltip, Typography
+} from '@mui/material'
+import React from 'react'
 import { IdentityInfo } from '../../types'
 
 interface IdentityCardProps {

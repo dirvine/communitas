@@ -1,8 +1,8 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react'
-import { authService, SessionInfo, AuthToken } from '../../services/security/authenticationService'
-import { NetworkIdentity } from '../../types/collaboration'
-import { Box, CircularProgress, Alert, Button } from '@mui/material'
 import { Login } from '@mui/icons-material'
+import { Alert, Box, Button, CircularProgress } from '@mui/material'
+import React, { createContext, ReactNode, useContext, useEffect, useState } from 'react'
+import { authService, SessionInfo } from '../../services/security/authenticationService'
+import { NetworkIdentity } from '../../types/collaboration'
 
 interface AuthContextType {
   session: SessionInfo | null

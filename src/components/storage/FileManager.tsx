@@ -1,59 +1,15 @@
-import React, { useState } from 'react';
 import {
-  Box,
-  Paper,
-  IconButton,
-  Typography,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
-  ListItemSecondaryAction,
-  Breadcrumbs,
-  Link,
-  Menu,
-  MenuItem,
-  LinearProgress,
-  Chip,
-  Button,
-  TextField,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Grid,
-  Card,
-  CardContent,
-  CardActions,
-  Avatar,
-  Tooltip,
-  InputAdornment,
-} from '@mui/material';
-import {
-  Folder as FolderIcon,
-  InsertDriveFile as FileIcon,
-  CloudUpload as UploadIcon,
-  CreateNewFolder as NewFolderIcon,
-  Delete as DeleteIcon,
-  Share as ShareIcon,
-  GetApp as DownloadIcon,
-  MoreVert as MoreIcon,
-  GridView as GridViewIcon,
-  ViewList as ListViewIcon,
-  Search as SearchIcon,
-  History as HistoryIcon,
-  CloudDone as SyncedIcon,
-  CloudSync as SyncingIcon,
-  CloudOff as OfflineIcon,
-  Image as ImageIcon,
-  VideoLibrary as VideoIcon,
-  AudioFile as AudioIcon,
-  Description as DocIcon,
-  Code as CodeIcon,
-  Archive as ZipIcon,
-  Star as StarIcon,
-  StarBorder as StarBorderIcon,
+    Archive as ZipIcon, AudioFile as AudioIcon, CloudDone as SyncedIcon, CloudOff as OfflineIcon, CloudSync as SyncingIcon, CloudUpload as UploadIcon, Code as CodeIcon, CreateNewFolder as NewFolderIcon,
+    Delete as DeleteIcon, Description as DocIcon, Folder as FolderIcon, GetApp as DownloadIcon, GridView as GridViewIcon, History as HistoryIcon, Image as ImageIcon, InsertDriveFile as FileIcon, MoreVert as MoreIcon, Search as SearchIcon, Share as ShareIcon, Star as StarIcon,
+    StarBorder as StarBorderIcon, VideoLibrary as VideoIcon, ViewList as ListViewIcon
 } from '@mui/icons-material';
+import {
+    Box, Breadcrumbs, Button, Card, CardActions, CardContent, Chip, Dialog, DialogActions, DialogContent, DialogTitle, Grid, IconButton, InputAdornment, LinearProgress, Link, List,
+    ListItem,
+    ListItemIcon, ListItemSecondaryAction, ListItemText, Menu,
+    MenuItem, Paper, TextField, Typography
+} from '@mui/material';
+import React, { useState } from 'react';
 
 interface FileItem {
   id: string;

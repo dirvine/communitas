@@ -30,6 +30,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
+// Phase 2 TDD: Import resilience modules
+use crate::{ConnectivityWatchdog, ResourceLimits, WatchdogConfig};
+
 /// Centralized context for the gossip overlay system
 ///
 /// This replaces CoreContext's DHT-based discovery with a gossip-based
@@ -87,6 +90,12 @@ pub struct GossipContext {
 
     /// Local peer ID
     pub peer_id: PeerId,
+
+    /// Connectivity watchdog for internet collapse detection (Phase 2 TDD)
+    pub watchdog: Arc<ConnectivityWatchdog>,
+
+    /// Resource limits for connection/memory management (Phase 2 TDD)
+    pub resource_limits: Arc<ResourceLimits>,
 }
 
 impl GossipContext {
@@ -247,6 +256,13 @@ impl GossipContext {
         // Create SiteFetcher with transport access via rendezvous
         let site_fetcher = Arc::new(super::sites::SiteFetcher::new(rendezvous.clone()));
 
+        // 14. Initialize connectivity watchdog (Phase 2 TDD - MESH_CAPABILITIES.md §3.2)
+        let watchdog_config = WatchdogConfig::default();
+        let watchdog = Arc::new(ConnectivityWatchdog::new(watchdog_config));
+
+        // 15. Initialize resource limits (Phase 2 TDD - MESH_CAPABILITIES.md §8.3)
+        let resource_limits = Arc::new(ResourceLimits::default());
+
         Ok(Self {
             identity,
             four_words,
@@ -269,6 +285,8 @@ impl GossipContext {
             site_publisher: Some(site_publisher),
             site_fetcher: Some(site_fetcher),
             peer_id,
+            watchdog,
+            resource_limits,
         })
     }
 
@@ -280,6 +298,21 @@ impl GossipContext {
     /// Get four-word address
     pub fn four_words(&self) -> &str {
         &self.four_words
+    }
+
+    /// Check if WAN (wide-area network) operations should be attempted
+    ///
+    /// Returns false when in local-only mode (bootstrap nodes unreachable)
+    /// to prevent wasting resources on doomed WAN dial attempts.
+    ///
+    /// Phase 3 TDD: Respects connectivity watchdog state (MESH_CAPABILITIES.md §3.2)
+    pub fn should_attempt_wan_operations(&self) -> bool {
+        !self.watchdog.is_local_only_mode()
+    }
+
+    /// Check if system is currently in local-only mode
+    pub fn is_local_only_mode(&self) -> bool {
+        self.watchdog.is_local_only_mode()
     }
 
     /// Add a favourite contact for backup replication

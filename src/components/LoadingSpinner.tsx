@@ -1,13 +1,9 @@
-import React from 'react';
 import {
-  Box,
-  CircularProgress,
-  Typography,
-  Paper,
-  alpha,
-  useTheme,
+    alpha, Box,
+    CircularProgress, Paper, Typography, useTheme
 } from '@mui/material';
-import { styled, keyframes } from '@mui/material/styles';
+import { keyframes, styled } from '@mui/material/styles';
+import React from 'react';
 
 interface LoadingSpinnerProps {
   message?: string;

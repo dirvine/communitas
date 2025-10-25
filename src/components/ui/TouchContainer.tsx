@@ -1,27 +1,13 @@
-import React, { useCallback, useState, useRef, useEffect } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import {
-  Box,
-  BoxProps,
-  useTheme,
-  alpha,
-  SxProps,
-  Theme,
-  CircularProgress,
-  Typography,
-  Chip,
-  IconButton,
-  Tooltip,
-  Badge,
-} from '@mui/material';
-import {
-  CloudSync as SyncIcon,
-  CloudOff as OfflineIcon,
-  CloudDone as OnlineIcon,
-  Storage as StorageIcon,
-  Refresh as RefreshIcon,
-  Group as GroupIcon,
+    CloudDone as OnlineIcon, CloudOff as OfflineIcon, CloudSync as SyncIcon, Group as GroupIcon, Refresh as RefreshIcon, Storage as StorageIcon
 } from '@mui/icons-material';
+import {
+    alpha, Box,
+    BoxProps, Chip, CircularProgress, IconButton, SxProps,
+    Theme, Tooltip, Typography, useTheme
+} from '@mui/material';
+import { invoke } from '@tauri-apps/api/core';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 // Auth context
 import { useAuth } from '../../contexts/AuthContext';
@@ -30,14 +16,13 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useTouchDevice, useTouchFriendlySizing } from '../../hooks/useResponsive';
 
 // Saorsa-Core integration hooks
-import { useSaorsaStorage, useMarkdownStorage, useFileStorage } from '../../hooks/useSaorsaStorage';
-import { useDHTSync, DHTSyncEvent } from '../../hooks/useDHTSync';
+import { DHTSyncEvent, useDHTSync } from '../../hooks/useDHTSync';
+import { useFileStorage, useMarkdownStorage, useSaorsaStorage } from '../../hooks/useSaorsaStorage';
 
 // Saorsa-Core types
 import {
-  StoragePolicy,
-  StorageAddress,
-  StorageEngineStats,
+    StorageAddress,
+    StorageEngineStats, StoragePolicy
 } from '../../types/saorsa-storage';
 
 export interface TouchContainerProps extends Omit<BoxProps, 'onScroll'> {

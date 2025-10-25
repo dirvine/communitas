@@ -1,49 +1,16 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  Box,
-  Paper,
-  TextField,
-  IconButton,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemAvatar,
-  Avatar,
-  Typography,
-  Divider,
-  Stack,
-  Chip,
-  CircularProgress,
-  Alert,
-  Tooltip,
-  Menu,
-  MenuItem,
-  ListItemIcon,
-  InputAdornment,
-  Badge,
-} from '@mui/material';
-import {
-  Send as SendIcon,
-  AttachFile as AttachIcon,
-  EmojiEmotions as EmojiIcon,
-  MoreVert as MoreIcon,
-  Reply as ReplyIcon,
-  Forward as ForwardIcon,
-  Delete as DeleteIcon,
-  Edit as EditIcon,
-  Check as CheckIcon,
-  DoneAll as DoneAllIcon,
-  Schedule as PendingIcon,
-  Error as ErrorIcon,
-  Lock as EncryptedIcon,
-  Image as ImageIcon,
-  VideoFile as VideoIcon,
-  AudioFile as AudioIcon,
-  Description as DocumentIcon,
-  Close as CloseIcon,
+    AttachFile as AttachIcon, AudioFile as AudioIcon, Check as CheckIcon, Close as CloseIcon, Delete as DeleteIcon, Description as DocumentIcon, DoneAll as DoneAllIcon, Edit as EditIcon, EmojiEmotions as EmojiIcon, Error as ErrorIcon, Forward as ForwardIcon, Image as ImageIcon, Lock as EncryptedIcon, MoreVert as MoreIcon,
+    Reply as ReplyIcon, Schedule as PendingIcon, Send as SendIcon, VideoFile as VideoIcon
 } from '@mui/icons-material';
+import {
+    Alert, Avatar, Box, Chip,
+    CircularProgress, Divider, IconButton, InputAdornment, List,
+    ListItem, ListItemAvatar, ListItemIcon, ListItemText, Menu,
+    MenuItem, Paper, Stack, TextField, Tooltip, Typography
+} from '@mui/material';
 import { invoke } from '@tauri-apps/api/core';
 import { format, isToday, isYesterday } from 'date-fns';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 
 interface Message {

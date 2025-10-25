@@ -6,47 +6,20 @@
  * - Save trusted bootstrap nodes
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Button,
-  TextField,
-  Typography,
-  Box,
-  Alert,
-  Stack,
-  Chip,
-  IconButton,
-  Tooltip,
-  CircularProgress,
-  Paper,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemSecondaryAction,
-  Divider,
-  InputAdornment,
-} from '@mui/material';
-import {
-  ContentCopy as CopyIcon,
-  Close as CloseIcon,
-  Check as CheckIcon,
-  Wifi as WifiIcon,
-  WifiOff as WifiOffIcon,
-  Computer as ComputerIcon,
-  Person as PersonIcon,
-  Delete as DeleteIcon,
-  Add as AddIcon,
-  QrCode2 as QrCodeIcon,
-  Share as ShareIcon,
+    Check as CheckIcon, Close as CloseIcon, Computer as ComputerIcon, ContentCopy as CopyIcon, Delete as DeleteIcon, Person as PersonIcon, QrCode2 as QrCodeIcon,
+    Share as ShareIcon, Wifi as WifiIcon,
+    WifiOff as WifiOffIcon
 } from '@mui/icons-material';
+import {
+    Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Divider, IconButton, InputAdornment, List,
+    ListItem, ListItemSecondaryAction, ListItemText, Paper, Stack, TextField, Tooltip, Typography
+} from '@mui/material';
+import { invoke } from '@tauri-apps/api/core';
+import React, { useEffect, useState } from 'react';
 import { networkService } from '../../services/network/NetworkConnectionService';
 import { offlineStorage } from '../../services/storage/OfflineStorageService';
 import { validateFourWordIdentity } from '../../utils/identity';
-import { invoke } from '@tauri-apps/api/core';
 
 interface BootstrapConnectionDialogProps {
   open: boolean;

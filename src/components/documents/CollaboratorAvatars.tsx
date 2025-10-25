@@ -9,24 +9,19 @@
  * - Color-coded user indicators
  */
 
-import React from 'react';
 import {
-  Box,
-  Avatar,
-  AvatarGroup,
-  Chip,
-  Stack,
-  Tooltip,
-  Typography,
-  Paper,
-  Badge,
-} from '@mui/material';
-import { styled, alpha } from '@mui/material/styles';
-import {
-  Circle as OnlineIcon,
-  Edit as EditingIcon,
-  Visibility as ViewingIcon,
+    Circle as OnlineIcon,
+    Edit as EditingIcon,
+    Visibility as ViewingIcon
 } from '@mui/icons-material';
+import {
+    Avatar,
+    AvatarGroup, Badge, Box, Chip, Paper, Stack,
+    Tooltip,
+    Typography
+} from '@mui/material';
+import { alpha, styled } from '@mui/material/styles';
+import React from 'react';
 
 export interface Collaborator {
   userId: string;

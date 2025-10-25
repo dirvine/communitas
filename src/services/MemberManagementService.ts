@@ -3,12 +3,9 @@
 
 import { invoke } from '@tauri-apps/api/core'
 import type {
-  MemberEntityType,
-  MemberInfo,
-  AddMemberRequest,
-  RemoveMemberRequest,
-  UpdateRoleRequest,
-  MemberOperationResult,
+    AddMemberRequest, MemberEntityType,
+    MemberInfo, MemberOperationResult, RemoveMemberRequest,
+    UpdateRoleRequest
 } from '../types/memberManagement'
 import { MemberError } from '../types/memberManagement'
 

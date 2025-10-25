@@ -3,6 +3,7 @@ export class WebRTCService {
   private websocket: WebSocket | null = null;
   private localStream: MediaStream | null = null;
   private peerConnections: Map<string, RTCPeerConnection> = new Map();
+  private screenTrack: MediaStreamTrack | null = null;
   private isInitialized = false;
   private listeners: Map<string, Function[]> = new Map();
 
@@ -37,6 +38,7 @@ export class WebRTCService {
       this.websocket.onopen = () => {
         console.log('🔌 WebSocket connected for WebRTC');
         this.isInitialized = true;
+        this.emit('connectionChanged', { connected: true });
       };
 
       this.websocket.onmessage = (event) => {
@@ -46,6 +48,7 @@ export class WebRTCService {
       this.websocket.onclose = () => {
         console.log('🔌 WebSocket disconnected');
         this.isInitialized = false;
+        this.emit('connectionChanged', { connected: false });
         // Reconnect after 3 seconds
         setTimeout(() => this.initializeWebSocket(), 3000);
       };
@@ -71,6 +74,18 @@ export class WebRTCService {
         break;
       case 'call-ended':
         this.handleCallEnded(message);
+        break;
+      case 'audio-state-changed':
+        this.handleAudioStateChanged(message);
+        break;
+      case 'video-state-changed':
+        this.handleVideoStateChanged(message);
+        break;
+      case 'screen-share-started':
+        this.handleScreenShareStarted(message);
+        break;
+      case 'screen-share-stopped':
+        this.handleScreenShareStopped(message);
         break;
     }
   }
@@ -259,6 +274,36 @@ export class WebRTCService {
     this.endCall(message.entityId);
   }
 
+  private handleAudioStateChanged(message: any) {
+    console.log(`Remote audio state changed for ${message.entityId}: ${message.enabled ? 'enabled' : 'disabled'}`);
+    this.emit('remoteAudioStateChanged', {
+      entityId: message.entityId,
+      enabled: message.enabled
+    });
+  }
+
+  private handleVideoStateChanged(message: any) {
+    console.log(`Remote video state changed for ${message.entityId}: ${message.enabled ? 'enabled' : 'disabled'}`);
+    this.emit('remoteVideoStateChanged', {
+      entityId: message.entityId,
+      enabled: message.enabled
+    });
+  }
+
+  private handleScreenShareStarted(message: any) {
+    console.log(`Remote screen share started for ${message.entityId}`);
+    this.emit('remoteScreenShareStarted', {
+      entityId: message.entityId
+    });
+  }
+
+  private handleScreenShareStopped(message: any) {
+    console.log(`Remote screen share stopped for ${message.entityId}`);
+    this.emit('remoteScreenShareStopped', {
+      entityId: message.entityId
+    });
+  }
+
   endCall(entityId: string) {
     console.log(`📞 Ending call for ${entityId}`);
     
@@ -294,29 +339,54 @@ export class WebRTCService {
   }
 
   private showCallUI(entityId: string, entityType: string, callType: 'audio' | 'video', direction: 'incoming' | 'outgoing') {
-    // TODO: Implement call UI
     console.log(`📱 Showing ${direction} ${callType} call UI for ${entityType} ${entityId}`);
-    
-    // For now, show a simple alert
-    if (direction === 'outgoing') {
-      alert(`${callType === 'video' ? '📹' : '🎵'} Calling ${entityType} ${entityId}...`);
-    } else {
-      const accept = confirm(`${callType === 'video' ? '📹' : '🎵'} Incoming ${callType} call from ${entityType} ${entityId}. Accept?`);
-      if (!accept) {
-        this.endCall(entityId);
+
+    // Emit event to show call UI through CallManager
+    this.emit('showCallUI', {
+      entityId,
+      entityType,
+      callType,
+      direction
+    });
+
+    // For incoming calls, also emit incoming call event
+    if (direction === 'incoming') {
+      this.emit('incomingCall', {
+        entityId,
+        entityType,
+        callType
+      });
+    }
+
+    // Fallback UI until CallManager is properly mounted
+    // This ensures users get some feedback even if the new UI isn't wired in
+    if (typeof window !== 'undefined') {
+      if (direction === 'outgoing') {
+        alert(`${callType === 'video' ? '📹' : '🎵'} Calling ${entityType} ${entityId}...`);
+      } else {
+        const accept = confirm(`${callType === 'video' ? '📹' : '🎵'} Incoming ${callType} call from ${entityType} ${entityId}. Accept?`);
+        if (!accept) {
+          this.endCall(entityId);
+        }
       }
     }
   }
 
   private displayRemoteStream(stream: MediaStream, entityId: string) {
-    // TODO: Implement remote stream display
     console.log(`📺 Displaying remote stream for ${entityId}`, stream);
+
+    // Emit event to update remote stream in CallManager
+    this.emit('remoteStream', {
+      entityId,
+      stream
+    });
   }
 
   private hideCallUI(entityId: string) {
-    // TODO: Implement hide call UI
     console.log(`📱 Hiding call UI for ${entityId}`);
-    alert('Call ended');
+
+    // Emit event to hide call UI through CallManager
+    this.emit('hideCallUI', { entityId });
   }
 
   private async joinRoom(entityId: string, entityType: string): Promise<void> {
@@ -388,6 +458,145 @@ export class WebRTCService {
         console.error(`Error in WebRTC event callback for ${event}:`, error);
       }
     });
+  }
+
+  // Toggle audio mute/unmute
+  toggleAudio(entityId: string): boolean {
+    if (this.localStream) {
+      const audioTracks = this.localStream.getAudioTracks();
+      if (audioTracks.length > 0) {
+        const enabled = !audioTracks[0].enabled;
+        audioTracks[0].enabled = enabled;
+
+        // Send audio state change to remote peer
+        this.sendMessage({
+          type: 'audio-state-changed',
+          entityId,
+          enabled
+        });
+
+        return enabled;
+      }
+    }
+    return false;
+  }
+
+  // Toggle video on/off
+  toggleVideo(entityId: string): boolean {
+    if (this.localStream) {
+      const videoTracks = this.localStream.getVideoTracks();
+      if (videoTracks.length > 0) {
+        const enabled = !videoTracks[0].enabled;
+        videoTracks[0].enabled = enabled;
+
+        // Send video state change to remote peer
+        this.sendMessage({
+          type: 'video-state-changed',
+          entityId,
+          enabled
+        });
+
+        return enabled;
+      }
+    }
+    return false;
+  }
+
+  // Start screen sharing
+  async startScreenShare(entityId: string): Promise<boolean> {
+    try {
+      // Get screen sharing stream
+      const screenStream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: false // Screen sharing typically doesn't include audio
+      });
+
+      // Replace video track in existing peer connection
+      const peerConnection = this.peerConnections.get(entityId);
+      if (peerConnection && this.localStream) {
+        const screenVideoTrack = screenStream.getVideoTracks()[0];
+        const sender = peerConnection.getSenders().find(s =>
+          s.track && s.track.kind === 'video'
+        );
+
+        if (sender && screenVideoTrack) {
+          await sender.replaceTrack(screenVideoTrack);
+
+          // Store screen track for cleanup
+          this.screenTrack = screenVideoTrack;
+
+          // Listen for when user stops sharing via browser UI
+          screenVideoTrack.onended = () => {
+            this.stopScreenShare(entityId);
+          };
+
+          // Send screen share state change
+          this.sendMessage({
+            type: 'screen-share-started',
+            entityId
+          });
+
+          return true;
+        }
+      }
+      return false;
+    } catch (error) {
+      console.error('Failed to start screen share:', error);
+      return false;
+    }
+  }
+
+  // Stop screen sharing
+  async stopScreenShare(entityId: string): Promise<boolean> {
+    try {
+      if (this.screenTrack) {
+        this.screenTrack.stop();
+        this.screenTrack = null;
+      }
+
+      // Restore camera video if we have one
+      const peerConnection = this.peerConnections.get(entityId);
+      if (peerConnection && this.localStream) {
+        const cameraVideoTrack = this.localStream.getVideoTracks()[0];
+        const sender = peerConnection.getSenders().find(s =>
+          s.track && s.track.kind === 'video'
+        );
+
+        if (sender && cameraVideoTrack) {
+          await sender.replaceTrack(cameraVideoTrack);
+        }
+      }
+
+      // Send screen share state change
+      this.sendMessage({
+        type: 'screen-share-stopped',
+        entityId
+      });
+
+      return true;
+    } catch (error) {
+      console.error('Failed to stop screen share:', error);
+      return false;
+    }
+  }
+
+  // Get current audio/video state
+  getMediaState(): { audioEnabled: boolean; videoEnabled: boolean; screenSharing: boolean } {
+    let audioEnabled = false;
+    let videoEnabled = false;
+    let screenSharing = false;
+
+    if (this.localStream) {
+      const audioTracks = this.localStream.getAudioTracks();
+      const videoTracks = this.localStream.getVideoTracks();
+
+      audioEnabled = audioTracks.length > 0 && audioTracks[0].enabled;
+      videoEnabled = videoTracks.length > 0 && videoTracks[0].enabled;
+    }
+
+    screenSharing = this.screenTrack !== null;
+
+    return { audioEnabled, videoEnabled, screenSharing };
   }
 
   isConnected(): boolean {

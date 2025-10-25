@@ -1,40 +1,18 @@
-import React, { useState } from 'react';
 import {
-  Box,
-  Avatar,
-  Menu,
-  MenuItem,
-  ListItemIcon,
-  ListItemText,
-  Typography,
-  Divider,
-  Chip,
-  Button,
-  Stack,
-  CircularProgress,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  List,
-  ListItem,
-  Alert,
-  Tooltip,
-} from '@mui/material';
-import {
-  Person as PersonIcon,
-  Login as LoginIcon,
-  Logout as LogoutIcon,
-  Settings as SettingsIcon,
-  Security as SecurityIcon,
-  Key as KeyIcon,
-  NetworkCheck as NetworkIcon,
-  AccountCircle as AccountCircleIcon,
-  ArrowDropDown as ArrowDropDownIcon,
+    AccountCircle as AccountCircleIcon,
+    ArrowDropDown as ArrowDropDownIcon, Key as KeyIcon, Login as LoginIcon,
+    Logout as LogoutIcon, NetworkCheck as NetworkIcon, Person as PersonIcon, Security as SecurityIcon, Settings as SettingsIcon
 } from '@mui/icons-material';
+import {
+    Alert, Avatar, Box, Button, Chip, CircularProgress,
+    Dialog, DialogActions, DialogContent, DialogTitle, Divider, List,
+    ListItem, ListItemIcon,
+    ListItemText, Menu,
+    MenuItem, Stack, Tooltip, Typography
+} from '@mui/material';
+import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigation } from '../../contexts/NavigationContext';
-import { LoginDialog } from './LoginDialog';
 import { UnifiedAuthFlow } from './UnifiedAuthFlow';
 // Removed: ProfileManager - using ModernShellPrototype instead
 import SettingsInterface from '../settings/SettingsInterface';

@@ -1,13 +1,9 @@
-import React, { useMemo, forwardRef } from 'react'
 import {
-  Avatar,
-  Badge,
-  Box,
-  Typography,
-  Tooltip,
-  useTheme,
-  keyframes,
+    Avatar,
+    Badge,
+    Box, keyframes, Tooltip, Typography, useTheme
 } from '@mui/material'
+import React, { forwardRef, useMemo } from 'react'
 import { generateFourWordGradient } from '../../utils/fourWords'
 
 export interface FourWordAvatarProps {

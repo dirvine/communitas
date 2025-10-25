@@ -1,31 +1,18 @@
-import React, { useState, useEffect } from 'react';
 import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Button,
-  Box,
-  Typography,
-  Alert,
-  CircularProgress,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
-  Divider,
-  alpha,
-  useTheme,
-} from '@mui/material';
-import {
-  Fingerprint as FingerprintIcon,
-  Security as SecurityIcon,
-  Verified as VerifiedIcon,
-  Warning as WarningIcon,
-  CheckCircle as CheckCircleIcon,
-  DevicesOther as DevicesIcon,
+    CheckCircle as CheckCircleIcon,
+    DevicesOther as DevicesIcon, Fingerprint as FingerprintIcon,
+    Security as SecurityIcon,
+    Verified as VerifiedIcon,
+    Warning as WarningIcon
 } from '@mui/icons-material';
+import {
+    Alert, alpha, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, List,
+    ListItem,
+    ListItemIcon,
+    ListItemText, Typography, useTheme
+} from '@mui/material';
 import { invoke } from '@tauri-apps/api/core';
+import React, { useEffect, useState } from 'react';
 
 interface PasskeyInfo {
   four_words: string;

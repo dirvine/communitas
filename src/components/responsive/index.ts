@@ -1,23 +1,12 @@
 // Removed: ResponsiveLayout - using ModernShellPrototype instead
 
 export {
-  ResponsiveCard,
-  BottomSheet,
-  ResponsiveDataDisplay,
-  ResponsiveActionButtons,
+    ResponsiveHooks, useOrientation, useResponsive, useResponsiveColumns, useResponsiveSpacing,
+    useResponsiveTypography, useResponsiveValue, useSidebarBehavior, useTouchDevice, useWindowSize
+} from '../../hooks/useResponsive';
+export type { Breakpoint } from '../../hooks/useResponsive';
+export {
+    BottomSheet, ResponsiveActionButtons, ResponsiveCard, ResponsiveDataDisplay
 } from './ResponsiveComponents';
 
-export {
-  useResponsive,
-  useResponsiveValue,
-  useWindowSize,
-  useTouchDevice,
-  useOrientation,
-  useResponsiveSpacing,
-  useResponsiveTypography,
-  useResponsiveColumns,
-  useSidebarBehavior,
-  ResponsiveHooks,
-} from '../../hooks/useResponsive';
 
-export type { Breakpoint } from '../../hooks/useResponsive';

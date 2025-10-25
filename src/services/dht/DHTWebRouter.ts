@@ -1,7 +1,7 @@
 import { EventEmitter } from 'events'
+import { NetworkIdentity } from '../../types/collaboration'
 import { DHTStorage } from '../storage/dhtStorage'
 import { MarkdownWebPublisher } from '../storage/markdownPublisher'
-import { NetworkIdentity } from '../../types/collaboration'
 
 export interface RouteMatch {
   identity: NetworkIdentity

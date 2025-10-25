@@ -1,33 +1,12 @@
-import React, { useState } from 'react';
 import {
-  Box,
-  Card,
-  CardContent,
-  CardActions,
-  Typography,
-  IconButton,
-  Collapse,
-  Stack,
-  Chip,
-  Button,
-  Paper,
-  Divider,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemIcon,
-  ListItemButton,
-  SwipeableDrawer,
-  useTheme,
-  alpha,
-} from '@mui/material';
-import {
-  ExpandMore as ExpandMoreIcon,
-  ExpandLess as ExpandLessIcon,
-  SwipeUp as SwipeUpIcon,
-  DragHandle as DragHandleIcon,
+    DragHandle as DragHandleIcon, ExpandLess as ExpandLessIcon, ExpandMore as ExpandMoreIcon
 } from '@mui/icons-material';
+import {
+    Box, Button, Card, CardActions, CardContent, Chip, Collapse, IconButton, List,
+    ListItem, ListItemIcon, ListItemText, Paper, Stack, SwipeableDrawer, Typography, useTheme
+} from '@mui/material';
 import { motion } from 'framer-motion';
+import React, { useState } from 'react';
 import { useResponsive, useResponsiveSpacing, useTouchDevice } from '../../hooks/useResponsive';
 
 // Responsive card component that adapts layout based on screen size

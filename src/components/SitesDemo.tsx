@@ -11,22 +11,17 @@
  * via the rendezvous protocol.
  */
 
-import React, { useState } from 'react';
 import {
-  Box,
-  Button,
-  Card,
-  CardContent,
-  TextField,
-  Typography,
-  Alert,
-  CircularProgress,
-  List,
-  ListItem,
-  ListItemText,
-  Divider,
+    Alert, Box,
+    Button,
+    Card,
+    CardContent, CircularProgress, Divider, List,
+    ListItem,
+    ListItemText, TextField,
+    Typography
 } from '@mui/material';
-import { sitesService, SitesService, AssetData } from '../services/SitesService';
+import React, { useState } from 'react';
+import { AssetData, sitesService, SitesService } from '../services/SitesService';
 
 export const SitesDemo: React.FC = () => {
   const [htmlContent, setHtmlContent] = useState('<html><body><h1>Hello from Saorsa Sites!</h1></body></html>');

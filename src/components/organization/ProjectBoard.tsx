@@ -1,57 +1,17 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { DragDropContext, Draggable, Droppable } from '@hello-pangea/dnd';
 import {
-  Box,
-  Typography,
-  Stack,
-  IconButton,
-  Avatar,
-  AvatarGroup,
-  Chip,
-  Button,
-  TextField,
-  InputAdornment,
-  Menu,
-  MenuItem,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  FormControl,
-  InputLabel,
-  Select,
-  SelectChangeEvent,
-  Tooltip,
-  Badge,
-  Fade,
-  Zoom,
-  alpha,
-} from '@mui/material';
-import {
-  Add as AddIcon,
-  Search as SearchIcon,
-  FilterList as FilterIcon,
-  MoreVert as MoreIcon,
-  Flag as FlagIcon,
-  CalendarToday as CalendarIcon,
-  ChatBubble as CommentIcon,
-  AttachFile as AttachIcon,
-  PlayArrow as PlayIcon,
-  CheckCircle as DoneIcon,
-  Cancel as CancelIcon,
-  Menu as MenuIcon,
+    Add as AddIcon, AttachFile as AttachIcon, Cancel as CancelIcon, ChatBubble as CommentIcon, CheckCircle as DoneIcon, Flag as FlagIcon, Menu as MenuIcon, MoreVert as MoreIcon, PlayArrow as PlayIcon, Search as SearchIcon
 } from '@mui/icons-material';
-import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
-import { GlassCard } from '../ui/GlassCard';
+import {
+    alpha, Avatar, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, FormControl, IconButton, InputAdornment, InputLabel, Menu,
+    MenuItem, Select, Stack, TextField, Typography
+} from '@mui/material';
+import React, { useEffect, useState } from 'react';
 import { projectService } from '../../services/projectService';
 import type {
-  Project,
-  Issue,
-  IssueStatus,
-  IssuePriority,
-  issueStatusColors,
-  issuePriorityColors,
-  CreateIssueRequest,
+    CreateIssueRequest, Issue, IssuePriority, IssueStatus, Project
 } from '../../types/projects';
+import { GlassCard } from '../ui/GlassCard';
 
 interface ProjectBoardProps {
   projectId: string;

@@ -11,71 +11,29 @@
  * This is the killer feature that gives Communitas an edge over Slack/Discord/Teams.
  */
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  Box,
-  Paper,
-  Typography,
-  Button,
-  IconButton,
-  TextField,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemIcon,
-  ListItemSecondaryAction,
-  Grid,
-  Card,
-  CardContent,
-  CardActions,
-  Chip,
-  Tooltip,
-  Menu,
-  MenuItem,
-  Divider,
-  Stack,
-  Alert,
-  CircularProgress,
-  Breadcrumbs,
-  Link,
-  ToggleButtonGroup,
-  ToggleButton,
-} from '@mui/material';
-import {
-  Add as AddIcon,
-  Edit as EditIcon,
-  Visibility as PreviewIcon,
-  Delete as DeleteIcon,
-  MoreVert as MoreIcon,
-  ViewList as ListViewIcon,
-  ViewModule as GridViewIcon,
-  Description as DocumentIcon,
-  Lock as LockIcon,
-  Public as PublicIcon,
-  People as PeopleIcon,
-  NavigateNext as NavigateNextIcon,
-  Home as HomeIcon,
-  Refresh as RefreshIcon,
-  Search as SearchIcon,
-  DriveFileRenameOutline as RenameIcon,
-  FileCopy as DuplicateIcon,
+    Add as AddIcon, Delete as DeleteIcon, Description as DocumentIcon, DriveFileRenameOutline as RenameIcon, Edit as EditIcon, FileCopy as DuplicateIcon, Home as HomeIcon, Lock as LockIcon, MoreVert as MoreIcon, Public as PublicIcon, Refresh as RefreshIcon,
+    Search as SearchIcon, ViewList as ListViewIcon,
+    ViewModule as GridViewIcon, Visibility as PreviewIcon
 } from '@mui/icons-material';
-import { documentService } from '../../services/DocumentService';
-import type {
-  Document,
-  DocumentStorageMode,
-  DocumentWithState,
-} from '../../types/documents';
-import { GlassCard } from '../ui/GlassCard';
-import { ModernButton } from '../ui/ModernButton';
-import { RenameDocumentDialog } from './RenameDocumentDialog';
+import {
+    Alert, Box, Breadcrumbs, Button, Card, CardActions, CardContent, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Divider, Grid, IconButton, Link, List,
+    ListItem, ListItemIcon,
+    ListItemSecondaryAction, ListItemText, Menu,
+    MenuItem, Paper, Stack, TextField, ToggleButton, ToggleButtonGroup, Tooltip, Typography
+} from '@mui/material';
+import { alpha, useTheme } from '@mui/material/styles';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { alpha, useTheme } from '@mui/material/styles';
+import { documentService } from '../../services/DocumentService';
+import type {
+    Document,
+    DocumentStorageMode,
+    DocumentWithState
+} from '../../types/documents';
+import { ModernButton } from '../ui/ModernButton';
+import { RenameDocumentDialog } from './RenameDocumentDialog';
 
 interface EntityDocumentWorkspaceProps {
   entityId: string;

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react'
+import React, { createContext, ReactNode, useCallback, useContext, useState } from 'react'
 
 // Navigation context types
 export type NavigationContextType = 'personal' | 'organization'

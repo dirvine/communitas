@@ -1,17 +1,9 @@
-import React from 'react';
+import { Close as CloseIcon, Download as DownloadIcon } from '@mui/icons-material';
 import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Button,
-  Box,
-  Typography,
-  Alert,
-  Stack,
+    Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, Typography
 } from '@mui/material';
 import { QRCodeSVG } from 'qrcode.react';
-import { Close as CloseIcon, Download as DownloadIcon } from '@mui/icons-material';
+import React from 'react';
 
 interface QRCodeExportDialogProps {
   open: boolean;

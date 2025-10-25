@@ -1,23 +1,12 @@
-import React from 'react';
 import {
-  Box,
-  CircularProgress,
-  Tooltip,
-  Badge,
-  Chip,
-  alpha,
-} from '@mui/material';
-import {
-  Cloud,
-  CloudOff,
-  CloudQueue,
-  CloudDone,
-  Error as ErrorIcon,
-  Schedule,
-  SyncProblem,
-  CheckCircle,
-  Warning,
+    CheckCircle, Cloud, CloudDone, CloudOff,
+    CloudQueue, SyncProblem
 } from '@mui/icons-material';
+import {
+    alpha, Badge, Box, Chip, CircularProgress,
+    Tooltip
+} from '@mui/material';
+import React from 'react';
 import { EntitySyncStatus } from '../../types/collaboration';
 
 interface EntitySyncIndicatorProps {

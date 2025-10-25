@@ -1,11 +1,11 @@
 import { EventEmitter } from 'events'
-import { StoragePipeline } from './storagePipeline'
-import { YjsMarkdownEditor } from './yjsCollaboration'
-import { MarkdownWebPublisher, WebBrowser } from './markdownPublisher'
-import { DHTStorage } from './dhtStorage'
-import { ReedSolomonEncoder } from './reedSolomon'
 import { NetworkIdentity, Organization, PersonalUser, Project } from '../../types/collaboration'
 import { generateFourWordIdentity } from '../../utils/identity'
+import { DHTStorage } from './dhtStorage'
+import { MarkdownWebPublisher, WebBrowser } from './markdownPublisher'
+import { ReedSolomonEncoder } from './reedSolomon'
+import { StoragePipeline } from './storagePipeline'
+import { YjsMarkdownEditor } from './yjsCollaboration'
 
 export interface StorageSystemConfig {
   bootstrapNodes?: string[]

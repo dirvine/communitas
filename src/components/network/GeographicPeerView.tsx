@@ -1,32 +1,18 @@
-import React, { useState, useEffect } from 'react'
-import { invoke } from '@tauri-apps/api/core'
 import {
-  Box,
-  Card,
-  CardContent,
-  Typography,
-  Grid,
-  Chip,
-  LinearProgress,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
-  Tooltip,
-  IconButton,
-  Alert,
-} from '@mui/material'
-import {
-  Public,
-  LocationOn,
-  Speed,
-  SignalCellularAlt,
-  Refresh,
-  Map as MapIcon,
+    LocationOn, Map as MapIcon, Public, Refresh, SignalCellularAlt, Speed
 } from '@mui/icons-material'
+import {
+    Alert, Box,
+    Card,
+    CardContent, Chip, Grid, IconButton, LinearProgress, Paper, Table,
+    TableBody,
+    TableCell,
+    TableContainer,
+    TableHead,
+    TableRow, Tooltip, Typography
+} from '@mui/material'
+import { invoke } from '@tauri-apps/api/core'
+import React, { useEffect, useState } from 'react'
 
 interface GeographicPeerInfo {
   peer_id: string

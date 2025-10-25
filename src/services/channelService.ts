@@ -1,12 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import type {
-  Channel,
-  Message,
-  Thread,
-  CreateChannelRequest,
-  SendMessageRequest,
-  ChannelMember,
-  AppliedDiffResult,
+    AppliedDiffResult, Channel, CreateChannelRequest, Message, SendMessageRequest, Thread
 } from '../types/channels';
 
 /**

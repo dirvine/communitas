@@ -1,42 +1,21 @@
-import React, { useState, useEffect } from 'react';
 import {
-  Box,
-  Paper,
-  Tabs,
-  Tab,
-  Typography,
-  Chip,
-  Stack,
-  IconButton,
-  Tooltip,
-  Alert,
-  CircularProgress,
-  Avatar,
-  Badge,
-  alpha,
-  useTheme,
+    BusinessOutlined as ProjectIcon, ChatBubbleOutline as MessagesIcon,
+    FolderOutlined as StorageIcon, GroupOutlined as GroupIcon, LanguageOutlined as WebsiteIcon, PersonOutlined as PersonIcon, RefreshOutlined as RefreshIcon, SecurityOutlined as SecurityIcon, TagOutlined as ChannelIcon
+} from '@mui/icons-material';
+import {
+    Alert, alpha, Avatar,
+    Badge, Box, Chip, CircularProgress, IconButton, Stack, Tab, Tabs, Tooltip, Typography, useTheme
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
-import { motion } from 'framer-motion';
-import {
-  ChatBubbleOutline as MessagesIcon,
-  FolderOutlined as StorageIcon,
-  LanguageOutlined as WebsiteIcon,
-  SecurityOutlined as SecurityIcon,
-  GroupOutlined as GroupIcon,
-  PersonOutlined as PersonIcon,
-  BusinessOutlined as ProjectIcon,
-  TagOutlined as ChannelIcon,
-  RefreshOutlined as RefreshIcon,
-} from '@mui/icons-material';
 import { invoke } from '@tauri-apps/api/core';
+import { motion } from 'framer-motion';
+import React, { useEffect, useState } from 'react';
 import { useNavigation } from '../../contexts/NavigationContext';
+import { designTokens } from '../../styles/theme';
+import { GlassCard } from '../ui/GlassCard';
 import MessagesPanel from './MessagesPanel';
 import StoragePanel from './StoragePanel';
 import WebsitePanel from './WebsitePanel';
-import { GlassCard } from '../ui/GlassCard';
-import { ModernButton } from '../ui/ModernButton';
-import { designTokens } from '../../styles/theme';
 
 interface EncryptionStatus {
   enabled: boolean;

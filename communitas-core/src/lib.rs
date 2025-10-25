@@ -28,6 +28,7 @@
 
 pub mod auth_service;
 // pub mod bootstrap_integration; // TODO: Reimplement in Sprint 2 with gossip-based bootstrap
+pub mod connectivity_watchdog; // Internet collapse detection (MESH_CAPABILITIES.md §3.2)
 pub mod core_context;
 pub mod crdt; // New pure CRDT infrastructure
 pub mod crdt_manager;
@@ -44,6 +45,8 @@ pub mod message_service;
 pub mod message_sync;
 // pub mod messaging; // TODO: Refactor in Sprint 3 for gossip pubsub
 pub mod presence_service;
+pub mod resource_limits; // Resource management and limits (MESH_CAPABILITIES.md §8.3)
+pub mod retry_utils; // Exponential backoff for resilient retries (MESH_CAPABILITIES.md §3.2)
 pub mod security;
 pub mod services;
 pub mod storage;
@@ -59,11 +62,14 @@ pub mod webrtc;
 
 // Re-export commonly used types
 pub use auth_service::{AuthService, SessionInfo};
+pub use connectivity_watchdog::{ConnectivityWatchdog, WatchdogConfig};
 pub use core_context::CoreContext;
 pub use crdt_manager::{CrdtError, CrdtManager, CrdtResult};
 pub use entity_service::{EntityService, EntityServiceError, EntityServiceResult};
 pub use error::{AppError, AppResult as Result};
 pub use message_service::{MessageService, MessageServiceError, MessageServiceResult};
+pub use resource_limits::{ResourceLimitError, ResourceLimits};
+pub use retry_utils::{RetryConfig, retry_dial, retry_with_backoff};
 pub use services::CoreServices;
 pub use validation::{InputType, ValidationError, ValidationService};
 

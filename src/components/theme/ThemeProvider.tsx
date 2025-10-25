@@ -1,7 +1,7 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { ThemeProvider as MuiThemeProvider, CssBaseline, GlobalStyles } from '@mui/material';
+import { CssBaseline, GlobalStyles, ThemeProvider as MuiThemeProvider } from '@mui/material';
 import { createTheme } from '@mui/material/styles';
-import type { ThemeMode, ColorPreset } from '../../theme';
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import type { ColorPreset, ThemeMode } from '../../theme';
 
 // Theme context interface
 interface ThemeContextType {

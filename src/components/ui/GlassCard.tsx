@@ -1,6 +1,6 @@
-import React from 'react';
 import { Card, CardProps } from '@mui/material';
 import { styled } from '@mui/material/styles';
+import React from 'react';
 import { designTokens } from '../../styles/theme';
 
 interface GlassCardProps extends Omit<CardProps, 'variant'> {

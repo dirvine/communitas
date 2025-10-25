@@ -1,6 +1,6 @@
 // Server routes setup with WebSocket integration
-import { createServer } from 'http';
 import express from 'express';
+import { createServer } from 'http';
 import { CommunicationWebSocketServer } from './websocket.js';
 
 const app = express();

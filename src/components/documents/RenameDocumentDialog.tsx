@@ -9,27 +9,15 @@
  * - Prevents submission with invalid names
  */
 
-import React, { useState, useEffect } from 'react';
 import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
-  Button,
-  Alert,
-  Stack,
-  Chip,
-  Typography,
-  CircularProgress,
-} from '@mui/material';
-import {
-  Lock as PrivateIcon,
-  Language as PublicIcon,
-  Edit as RenameIcon,
+    Edit as RenameIcon, Language as PublicIcon, Lock as PrivateIcon
 } from '@mui/icons-material';
-import { ModernButton } from '../ui/ModernButton';
+import {
+    Alert, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Stack, TextField, Typography
+} from '@mui/material';
+import React, { useEffect, useState } from 'react';
 import { Document, DocumentStorageMode, isValidDocumentName } from '../../types/documents';
+import { ModernButton } from '../ui/ModernButton';
 
 interface RenameDocumentDialogProps {
   /** Whether dialog is open */

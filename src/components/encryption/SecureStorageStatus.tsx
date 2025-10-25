@@ -1,25 +1,13 @@
-import React, { useState, useEffect } from 'react';
 import {
-  Box,
-  Paper,
-  Typography,
-  Chip,
-  Stack,
-  Alert,
-  IconButton,
-  Tooltip,
-  CircularProgress,
-  Collapse,
-} from '@mui/material';
-import {
-  Security as SecurityIcon,
-  CheckCircle as CheckIcon,
-  Error as ErrorIcon,
-  Info as InfoIcon,
-  ExpandMore as ExpandIcon,
-  ExpandLess as CollapseIcon,
+    CheckCircle as CheckIcon,
+    Error as ErrorIcon, ExpandLess as CollapseIcon, ExpandMore as ExpandIcon, Info as InfoIcon, Security as SecurityIcon
 } from '@mui/icons-material';
+import {
+    Alert, Box, Chip, CircularProgress,
+    Collapse, IconButton, Paper, Stack, Tooltip, Typography
+} from '@mui/material';
 import { invoke } from '@tauri-apps/api/core';
+import React, { useEffect, useState } from 'react';
 
 interface SecureStorageInfo {
   available: boolean;

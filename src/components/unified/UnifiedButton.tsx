@@ -1,10 +1,10 @@
-import React from 'react';
 import {
-  Button,
-  ButtonProps,
-  CircularProgress,
+    Button,
+    ButtonProps,
+    CircularProgress
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
+import React from 'react';
 
 export interface UnifiedButtonProps extends Omit<ButtonProps, 'variant' | 'size'> {
   loading?: boolean;

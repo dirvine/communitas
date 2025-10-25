@@ -8,7 +8,7 @@
  * - Progress tracking for downloads
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { offlineStorage } from '../services/storage/OfflineStorageService';
 
 interface OfflineContentOptions {

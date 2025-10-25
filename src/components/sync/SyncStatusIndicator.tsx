@@ -1,29 +1,17 @@
-import React from 'react'
 import {
-  Box,
-  Typography,
-  Badge,
-  Tooltip,
-  IconButton,
-  Popover,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
-  Divider,
-  CircularProgress
-} from '@mui/material'
-import {
-  Sync as SyncIcon,
-  SyncDisabled as SyncDisabledIcon,
-  Cloud as CloudIcon,
-  CloudOff as CloudOffIcon,
-  People as PeopleIcon,
-  Update as UpdateIcon,
-  Check as CheckIcon,
-  Warning as WarningIcon
+    Check as CheckIcon, Cloud as CloudIcon,
+    CloudOff as CloudOffIcon,
+    People as PeopleIcon, Sync as SyncIcon,
+    SyncDisabled as SyncDisabledIcon, Update as UpdateIcon
 } from '@mui/icons-material'
+import {
+    Badge, Box, CircularProgress, Divider, IconButton, List,
+    ListItem,
+    ListItemIcon,
+    ListItemText, Popover, Tooltip, Typography
+} from '@mui/material'
 import { format } from 'date-fns'
+import React from 'react'
 
 interface SyncStatusIndicatorProps {
   connected: boolean

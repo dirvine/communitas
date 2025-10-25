@@ -1,35 +1,15 @@
-import React, { useState, useCallback, useRef } from 'react';
 import {
-  Box,
-  Paper,
-  Typography,
-  Button,
-  LinearProgress,
-  Alert,
-  Chip,
-  IconButton,
-  Stack,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  FormControlLabel,
-  Switch,
-  TextField,
-} from '@mui/material';
-import {
-  CloudUpload as UploadIcon,
-  Security as SecurityIcon,
-  Delete as DeleteIcon,
-  Visibility as VisibilityIcon,
-  FilePresent as FileIcon,
-  Lock as LockIcon,
-  Key as KeyIcon,
+    CloudUpload as UploadIcon, Delete as DeleteIcon, FilePresent as FileIcon, Key as KeyIcon, Lock as LockIcon, Security as SecurityIcon
 } from '@mui/icons-material';
-import { motion, AnimatePresence } from 'framer-motion';
+import {
+    Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, IconButton, LinearProgress, Paper, Stack, Switch,
+    TextField, Typography
+} from '@mui/material';
+import { invoke } from '@tauri-apps/api/core';
+import { AnimatePresence, motion } from 'framer-motion';
+import React, { useCallback, useRef, useState } from 'react';
 import { useEncryption } from '../../contexts/EncryptionContext';
 import { EncryptedData } from '../../utils/crypto';
-import { invoke } from '@tauri-apps/api/core';
 
 export interface SecureFileInfo {
   id: string;

@@ -1,11 +1,11 @@
 import { createTheme, Theme, ThemeOptions } from '@mui/material/styles';
 import { deepmerge } from '@mui/utils';
 import { baseThemeOptions } from './base';
-import { lightThemeOptions } from './light';
-import { darkThemeOptions } from './dark';
 import { components } from './components';
+import { darkThemeOptions } from './dark';
+import { lightThemeOptions } from './light';
+import { createCssVariables, getTokens } from './tokens';
 import { typography } from './typography';
-import { getTokens, createCssVariables } from './tokens';
 
 export type ThemeMode = 'light' | 'dark' | 'auto';
 
@@ -267,7 +267,7 @@ const getColorPreset = (preset: string, isDark: boolean): CustomThemeOptions => 
 };
 
 export * from './base';
-export * from './light';
-export * from './dark';
 export * from './components';
+export * from './dark';
+export * from './light';
 export * from './typography';

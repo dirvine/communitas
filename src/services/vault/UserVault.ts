@@ -6,10 +6,10 @@
  * and IndexedDB persistence for offline support.
  */
 
-import * as Y from 'yjs';
 import { IndexeddbPersistence } from 'y-indexeddb';
-import { localVault, VaultData, Friend, Organization, Group } from './LocalVaultService';
+import * as Y from 'yjs';
 import { UserIdentity } from '../../contexts/AuthContext';
+import { Friend, Group, localVault, Organization, VaultData } from './LocalVaultService';
 
 // Event types for subscription
 export type VaultEventType = 'identity' | 'friends' | 'organizations' | 'groups' | 'sync';

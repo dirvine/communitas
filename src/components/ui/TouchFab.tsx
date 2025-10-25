@@ -1,14 +1,9 @@
-import React, { useCallback } from 'react';
 import {
-  Fab,
-  FabProps,
-  Box,
-  useTheme,
-  alpha,
-  SxProps,
-  Theme,
+    alpha, Box, Fab,
+    FabProps, SxProps,
+    Theme, useTheme
 } from '@mui/material';
-import { motion } from 'framer-motion';
+import React, { useCallback } from 'react';
 
 // Enhanced responsive hooks
 import { useTouchDevice, useTouchFriendlySizing } from '../../hooks/useResponsive';

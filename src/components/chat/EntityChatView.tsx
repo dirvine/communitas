@@ -1,103 +1,22 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
-  Box,
-  Paper,
-  Typography,
-  TextField,
-  IconButton,
-  Avatar,
-  Stack,
-  Chip,
-  Menu,
-  MenuItem,
-  ListItemIcon,
-  ListItemText,
-  Divider,
-  Card,
-  CardContent,
-  Button,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  List,
-  ListItem,
-  ListItemButton,
-  ListItemAvatar,
-  Badge,
-  Tooltip,
-  InputAdornment,
-  Collapse,
-  Alert,
-  LinearProgress,
-  CircularProgress,
-  Tab,
-  Tabs,
-  Grid,
-  Slide,
-  useMediaQuery,
-  useTheme,
-  Drawer,
-  SwipeableDrawer,
-} from '@mui/material';
-import {
-  Send as SendIcon,
-  AttachFile as AttachFileIcon,
-  EmojiEmotions as EmojiIcon,
-  Reply as ReplyIcon,
-  Edit as EditIcon,
-  Delete as DeleteIcon,
-  MoreVert as MoreVertIcon,
-  Phone as PhoneIcon,
-  Videocam as VideocamIcon,
-  Star as StarIcon,
-  StarBorder as StarBorderIcon,
-  Search as SearchIcon,
-  FilterList as FilterIcon,
-  Image as ImageIcon,
-  VideoFile as VideoIcon,
-  AudioFile as AudioIcon,
-  InsertDriveFile as FileIcon,
-  Link as LinkIcon,
-  Schedule as ScheduleIcon,
-  Check as CheckIcon,
-  CheckCircle as CheckCircleIcon,
-  Error as ErrorIcon,
-  Refresh as RefreshIcon,
-  VolumeUp as VolumeUpIcon,
-  VolumeOff as VolumeOffIcon,
-  Download as DownloadIcon,
-  Share as ShareIcon,
-  Forward as ForwardIcon,
-  ContentCopy as CopyIcon,
-  Bookmark as BookmarkIcon,
-  Flag as FlagIcon,
-  Group as GroupIcon,
-  Person as PersonIcon,
-  Business as BusinessIcon,
-  Work as ProjectIcon,
-  Tag as ChannelIcon,
-  Add as AddIcon,
-  Remove as RemoveIcon,
-  Forum as ThreadIcon,
-  Close as CloseIcon,
-  ArrowBack as ArrowBackIcon,
-  PushPin as PinIcon,
-  Notifications as NotificationIcon,
-  Settings as SettingsIcon,
+    Add as AddIcon, AttachFile as AttachFileIcon, Business as BusinessIcon, Close as CloseIcon, EmojiEmotions as EmojiIcon, Error as ErrorIcon, Forum as ThreadIcon, Group as GroupIcon, MoreVert as MoreVertIcon, Person as PersonIcon, Phone as PhoneIcon, Remove as RemoveIcon, Reply as ReplyIcon, Search as SearchIcon, Send as SendIcon, Tag as ChannelIcon, Videocam as VideocamIcon, Work as ProjectIcon
 } from '@mui/icons-material';
-import { motion, AnimatePresence } from 'framer-motion';
-import { invoke } from '@tauri-apps/api/core';
-import { validateFourWordIdentity } from '../../utils/identity';
-import { webRTCService } from '../../services/communication/WebRTCService';
-import { backendService } from '../../services/api/BackendService';
-import { logger } from '../../services/LoggingService';
-import { useEntityDirectory } from '../../contexts/EntityDirectoryContext';
 import {
-  loadMessages as loadCachedMessages,
-  mergeRemoteMessages,
-  upsertMessage as upsertCachedMessage,
-  markMessageStatus as markCachedMessageStatus,
+    Alert, Avatar, Badge, Box, Button, Card, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, InputAdornment, LinearProgress, List,
+    ListItem, ListItemAvatar, ListItemButton, ListItemText, Paper, Slide, Stack, SwipeableDrawer, Tab,
+    Tabs, TextField, Tooltip, Typography, useMediaQuery,
+    useTheme
+} from '@mui/material';
+import { AnimatePresence, motion } from 'framer-motion';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useEntityDirectory } from '../../contexts/EntityDirectoryContext';
+import { backendService } from '../../services/api/BackendService';
+import { webRTCService } from '../../services/communication/WebRTCService';
+import { logger } from '../../services/LoggingService';
+import { validateFourWordIdentity } from '../../utils/identity';
+import {
+    loadMessages as loadCachedMessages, markMessageStatus as markCachedMessageStatus, mergeRemoteMessages,
+    upsertMessage as upsertCachedMessage
 } from '../../utils/messageStore';
 
 // Transform backend message format to component format

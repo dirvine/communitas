@@ -1,8 +1,8 @@
 import { EventEmitter } from 'events'
-import { ReedSolomonEncoder } from './reedSolomon'
-import { DHTStorage } from './dhtStorage'
-import { YjsMarkdownEditor } from './yjsCollaboration'
 import { NetworkIdentity } from '../../types/collaboration'
+import { DHTStorage } from './dhtStorage'
+import { ReedSolomonEncoder } from './reedSolomon'
+import { YjsMarkdownEditor } from './yjsCollaboration'
 
 export interface PipelineConfig {
   groupMembers: NetworkIdentity[]

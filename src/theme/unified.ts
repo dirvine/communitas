@@ -3,7 +3,7 @@
  * Beautiful, modern theme combining the best of WhatsApp, Slack, and Dropbox
  */
 
-import { createTheme, alpha } from '@mui/material/styles'
+import { alpha, createTheme } from '@mui/material/styles'
 
 // Color Palette
 const colors = {

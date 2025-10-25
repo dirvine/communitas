@@ -5,44 +5,17 @@
  * when initiating communication actions without a pre-selected entity
  */
 
-import React, { useState, useEffect } from 'react';
 import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Button,
-  List,
-  ListItem,
-  ListItemButton,
-  ListItemIcon,
-  ListItemText,
-  ListItemAvatar,
-  Avatar,
-  TextField,
-  InputAdornment,
-  Tabs,
-  Tab,
-  Box,
-  Typography,
-  Chip,
-  Divider,
-  IconButton,
-  Stack,
-  Badge,
-} from '@mui/material';
-import {
-  Close as CloseIcon,
-  Search as SearchIcon,
-  Person as PersonIcon,
-  Group as GroupIcon,
-  Business as OrganizationIcon,
-  Phone as PhoneIcon,
-  VideoCall as VideoIcon,
-  ScreenShare as ScreenIcon,
-  Folder as StorageIcon,
+    Business as OrganizationIcon, Close as CloseIcon, Folder as StorageIcon, Group as GroupIcon, Person as PersonIcon, Phone as PhoneIcon, ScreenShare as ScreenIcon, Search as SearchIcon, VideoCall as VideoIcon
 } from '@mui/icons-material';
-import { motion, AnimatePresence } from 'framer-motion';
+import {
+    Avatar, Badge, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, InputAdornment, List,
+    ListItem, ListItemAvatar, ListItemButton,
+    ListItemIcon,
+    ListItemText, Stack, Tab, Tabs, TextField, Typography
+} from '@mui/material';
+import { AnimatePresence, motion } from 'framer-motion';
+import React, { useEffect, useState } from 'react';
 import { useEntityDirectory } from '../../contexts/EntityDirectoryContext';
 
 interface EntitySelectorProps {

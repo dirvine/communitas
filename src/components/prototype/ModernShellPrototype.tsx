@@ -1,119 +1,38 @@
-import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react'
 import {
-  Box,
-  Typography,
-  IconButton,
-  Avatar,
-  Stack,
-  Chip,
-  Tooltip,
-  alpha,
-  useMediaQuery,
-  Theme,
-  Button,
-  LinearProgress,
-  Menu,
-  MenuItem,
-  ListItemIcon,
-  ListItemText,
-  InputBase,
-  Divider,
-  Badge,
-  Modal,
-  Paper,
+    Add, Apartment, AttachFileOutlined, Business, Call, ChatBubbleOutline, Check,
+    CheckCircle, CloudOutlined, ContentCopyOutlined, DeleteOutline, EditOutlined, EmojiEmotionsOutlined, ExpandLess,
+    ExpandMore, ExploreOutlined, Fingerprint, Folder, FolderOutlined, ForumOutlined, ForwardOutlined, Group as GroupIcon, Groups, HomeOutlined, InfoOutlined, KeyboardArrowDown, LanguageOutlined, LinkOutlined, LockOutlined as LockIcon, LockOutlined, Logout, Message, MoreHoriz, MoreVert, PeopleOutline, PersonAdd, PersonOutline, PhoneOutlined, ReplyOutlined, ReportProblemOutlined, Search as SearchIcon, SendRounded, SettingsOutlined, StarBorder, StorageOutlined, StorageRounded, Tag, VideocamOutlined, Visibility as VisibilityIcon, VisibilityOff as VisibilityOffIcon, WorkOutline
+} from '@mui/icons-material'
+import {
+    Alert, alpha, Avatar, Badge, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, Divider, IconButton, InputAdornment, InputBase, ListItemIcon,
+    ListItemText, Menu,
+    MenuItem, Modal,
+    Paper, Stack, TextField, Theme, Tooltip, Typography, useMediaQuery
 } from '@mui/material'
+import { styled } from '@mui/material/styles'
+import { AnimatePresence, motion } from 'framer-motion'
+import { useSnackbar } from 'notistack'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useAuth } from '../../contexts/AuthContext'
+import { useEntityDirectory } from '../../contexts/EntityDirectoryContext'
 import { getMessageSyncService } from '../../services/MessageSyncService.browser'
 import type { CRDTMessage } from '../../types/crdt'
+import { FirstLaunchWelcome } from '../auth/FirstLaunchWelcome'
+import { IdentityPicker } from '../auth/IdentityPicker'
+import { PasskeyRegistration } from '../auth/PasskeyRegistration'
+import { UnifiedAuthFlow } from '../auth/UnifiedAuthFlow'
+import { ContainerManager } from '../container/ContainerManager'
+import { EntityDocumentWorkspace } from '../documents/EntityDocumentWorkspace'
+import { VersionDisplay } from '../VersionDisplay'
+import { ActivityDashboard } from './ActivityDashboard'
 import {
-  ChatBubbleOutline,
-  PeopleOutline,
-  Apartment,
-  ExploreOutlined,
-  SettingsOutlined,
-  StorageOutlined,
-  PhoneOutlined,
-  VideocamOutlined,
-  InfoOutlined,
-  Search as SearchIcon,
-  PushPinOutlined,
-  NotificationsOffOutlined,
-  Check,
-  CheckCircle,
-  Call,
-  GridView,
-  Add,
-  MoreHoriz,
-  LibraryBooksOutlined,
-  FolderOutlined,
-  EmojiEmotionsOutlined,
-  AttachFileOutlined,
-  ReplyOutlined,
-  LockOutlined,
-  ForumOutlined,
-  CloudOutlined,
-  LinkOutlined,
-  StorageRounded,
-  SendRounded,
-  Close as CloseIcon,
-  StarBorder,
-  ForwardOutlined,
-  ContentCopyOutlined,
-  ReportProblemOutlined,
-  DeleteOutline,
-  CheckBoxOutlineBlankOutlined,
-  PersonOutline,
-  HomeOutlined,
-  LanguageOutlined,
-  ArchiveOutlined,
-  MoreVert,
-  KeyboardArrowDown,
-  EditOutlined,
-  ExpandLess,
-  ExpandMore,
-  Tag,
-  Groups,
-  WorkOutline,
-  Message,
-  AddCircleOutline,
-  PersonAdd,
-  Group as GroupIcon,
-  Folder,
-  Business,
-  Logout,
-  Fingerprint,
-} from '@mui/icons-material'
-import { styled } from '@mui/material/styles'
-import {
-  AddContactDialog,
-  EditContactDialog,
-  EditGroupDialog,
-  DeleteContactDialog,
-  type Contact,
-  type Group,
+    AddContactDialog, DeleteContactDialog, EditContactDialog,
+    EditGroupDialog, type Contact,
+    type Group
 } from './ContactManagementDialogs'
 import {
-  EntityCreationDialog,
-  type EntityType,
-  type EntityScope,
-  type EntityCreationResult,
+    EntityCreationDialog, type EntityCreationResult, type EntityScope, type EntityType
 } from './EntityCreationDialog'
-import { MessageReactionPicker, MessageReactionsDisplay } from './MessageReactionPicker'
-import { Star, StarBorder as StarOutlineIcon } from '@mui/icons-material'
-import { ConnectionStatus } from '../ConnectionStatus'
-import { VersionDisplay } from '../VersionDisplay'
-import { useEntityDirectory } from '../../contexts/EntityDirectoryContext'
-import { EntityDocumentWorkspace } from '../documents/EntityDocumentWorkspace'
-import { ContainerManager } from '../container/ContainerManager'
-import { useSnackbar } from 'notistack'
-import { AnimatePresence, motion } from 'framer-motion'
-import { useAuth } from '../../contexts/AuthContext'
-import { IdentityPicker } from '../auth/IdentityPicker'
-import { UnifiedAuthFlow } from '../auth/UnifiedAuthFlow'
-import { FirstLaunchWelcome } from '../auth/FirstLaunchWelcome'
-import { PasskeyRegistration } from '../auth/PasskeyRegistration'
-import { Dialog, DialogTitle, DialogContent, DialogActions, TextField, InputAdornment, Alert } from '@mui/material'
-import { LockOutlined as LockIcon, Visibility as VisibilityIcon, VisibilityOff as VisibilityOffIcon } from '@mui/icons-material'
-import { ActivityDashboard } from './ActivityDashboard'
 
 const TOKENS = {
   bgBase: '#101518',

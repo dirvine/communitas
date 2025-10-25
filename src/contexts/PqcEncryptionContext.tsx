@@ -3,16 +3,12 @@
  * Provides PQC encryption and signing operations for the frontend
  */
 
-import React, { createContext, useContext, useReducer, useEffect, useCallback } from 'react';
-import { useAuth, UserIdentity } from './AuthContext';
-import { 
-  pqcCrypto, 
-  PqcKeyPair, 
-  PqcSignature, 
-  PqcEncryptionResult, 
-  PqcVerificationResult,
-  PqcInfo 
+import React, { createContext, useCallback, useContext, useEffect, useReducer } from 'react';
+import {
+    pqcCrypto, PqcEncryptionResult, PqcInfo, PqcKeyPair,
+    PqcSignature, PqcVerificationResult
 } from '../utils/pqcCrypto';
+import { useAuth, UserIdentity } from './AuthContext';
 
 // PQC state types
 export interface PqcKeyManager {

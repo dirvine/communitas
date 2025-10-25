@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core'
+import { invoke } from '@tauri-apps/api/core';
 
 export interface NamedEntry { id: string; name: string }
 export interface OrganizationEntry { id: string; name: string; groups: NamedEntry[]; projects: NamedEntry[] }

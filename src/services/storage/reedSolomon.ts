@@ -1,4 +1,4 @@
-import crypto from 'crypto'
+import crypto from 'crypto';
 
 // Lazy load the WASM module to avoid TextDecoder issues during initialization
 let rsEncode: any = null;

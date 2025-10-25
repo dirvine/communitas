@@ -1,7 +1,7 @@
-import React, { useCallback, useMemo, useState } from 'react'
-import { Box, Button, TextField, Typography, Alert, Stack, Divider } from '@mui/material'
-import { buildWebsiteRootCanonicalHex, applyWebsiteRootWithSignature, publishWebsiteAndSetRoot } from '../../services/website'
+import { Alert, Box, Button, Divider, Stack, TextField, Typography } from '@mui/material'
 import { invoke } from '@tauri-apps/api/core'
+import React, { useCallback, useMemo, useState } from 'react'
+import { applyWebsiteRootWithSignature, buildWebsiteRootCanonicalHex, publishWebsiteAndSetRoot } from '../../services/website'
 
 export const WebsitePublishPanel: React.FC = () => {
   const [entityHex, setEntityHex] = useState('')

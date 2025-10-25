@@ -4,15 +4,11 @@
 // Displays download/install progress with speed and time remaining
 // Design: Matches STORYBOARD.md storage meter component
 
-import React from 'react';
-import { Box, Typography, LinearProgress, Stack, Chip } from '@mui/material';
 import {
-  DownloadOutlined,
-  InstallDesktopOutlined,
-  CheckCircleOutline,
-  ErrorOutline,
-  UpdateOutlined,
+    CheckCircleOutline, DownloadOutlined, ErrorOutline, InstallDesktopOutlined, UpdateOutlined
 } from '@mui/icons-material';
+import { Box, Chip, LinearProgress, Stack, Typography } from '@mui/material';
+import React from 'react';
 
 // STORYBOARD.md Design Tokens
 const TOKENS = {

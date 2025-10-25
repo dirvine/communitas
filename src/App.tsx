@@ -1,21 +1,21 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Box } from '@mui/material'
 import { SnackbarProvider } from 'notistack'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 
 // Theme System
+import { ThemeProvider as MuiThemeProvider } from '@mui/material/styles'
 import { ThemeProvider } from './components/theme'
 import { darkTheme as modernDarkTheme } from './styles/theme'
-import { ThemeProvider as MuiThemeProvider } from '@mui/material/styles'
 
 // Modern Shell - The only UI we need
 import { ModernShellPrototypeScreen } from './components/prototype/ModernShellPrototype'
 import { SitesDemo } from './components/SitesDemo'
 
 // Contexts needed for ModernShell
-import { TauriProvider } from './contexts/TauriContext'
 import { AuthProvider } from './components/auth'
 import { EncryptionProvider } from './components/encryption'
 import { EntityDirectoryProvider } from './contexts/EntityDirectoryContext'
+import { TauriProvider } from './contexts/TauriContext'
 
 // Error handling
 import ErrorBoundary from './components/ErrorBoundary'

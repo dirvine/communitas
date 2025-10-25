@@ -1,52 +1,21 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  Box,
-  Paper,
-  Typography,
-  IconButton,
-  Avatar,
-  Badge,
-  Chip,
-  Button,
-  Fab,
-  Tooltip,
-  Stack,
-  Divider,
-  LinearProgress,
-  alpha,
-  useTheme,
-  useMediaQuery,
-} from '@mui/material';
-import {
-  Chat as ChatIcon,
-  VideoCall as VideoIcon,
-  Call as VoiceIcon,
-  CallEnd as CallIcon,
-  ScreenShare as ScreenShareIcon,
-  Folder as StorageIcon,
-  Web as WebDriveIcon,
-  People as MembersIcon,
-  Settings as SettingsIcon,
-  Close as CloseIcon,
-  Mic as MicIcon,
-  MicOff as MicOffIcon,
-  Videocam as VideocamIcon,
-  VideocamOff as VideocamOffIcon,
-  VolumeUp as VolumeUpIcon,
-  VolumeOff as VolumeOffIcon,
-  MoreVert as MoreIcon,
-  Send as SendIcon,
-  AttachFile as AttachFileIcon,
-  Image as ImageIcon,
-  Description as DocumentIcon,
+    Call as VoiceIcon,
+    CallEnd as CallIcon, Chat as ChatIcon, Close as CloseIcon, Folder as StorageIcon, Mic as MicIcon,
+    MicOff as MicOffIcon, MoreVert as MoreIcon, People as MembersIcon, ScreenShare as ScreenShareIcon, Settings as SettingsIcon, VideoCall as VideoIcon, Videocam as VideocamIcon,
+    VideocamOff as VideocamOffIcon, Web as WebDriveIcon
 } from '@mui/icons-material';
-import { motion, AnimatePresence } from 'framer-motion';
+import {
+    alpha, Avatar,
+    Badge, Box, Button, Chip, Divider, IconButton, Paper, Stack, Tooltip, Typography, useMediaQuery, useTheme
+} from '@mui/material';
+import { AnimatePresence, motion } from 'framer-motion';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import webRTCService from '../../services/communication/WebRTCService';
+import { ElementCommunicationService } from '../../services/element/ElementCommunicationService';
+import { ElementStorageService } from '../../services/element/ElementStorageService';
 import { Element as ElementType, ElementContext } from '../../types/element';
 import { ChatInterface } from '../chat/ChatInterface';
 import { FileManager } from '../storage/FileManager';
-import { WebRTCService } from '../../services/webrtc/WebRTCService';
-import { ElementStorageService } from '../../services/element/ElementStorageService';
-import { ElementCommunicationService } from '../../services/element/ElementCommunicationService';
 
 const MotionPaper = motion(Paper);
 const MotionBox = motion(Box);
@@ -191,7 +160,7 @@ export const Element: React.FC<ElementProps> = ({
   const [unreadCount, setUnreadCount] = useState(element.communication.unreadCount);
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
 
-  const webRTCService = useRef<WebRTCService | null>(null);
+
   const storageService = useRef<ElementStorageService | null>(null);
   const communicationService = useRef<ElementCommunicationService | null>(null);
 
@@ -227,13 +196,50 @@ export const Element: React.FC<ElementProps> = ({
   const userRole = userMembership?.role || 'guest';
   const userPermissions = userMembership?.permissions || [];
 
+  // Presence detection using WebRTC service connection status
+  const [isOnline, setIsOnline] = useState(webRTCService.isConnected());
+
+  // Activity tracking - track recent activities
+  const [recentActivity, setRecentActivity] = useState<any[]>([]);
+
+  const addActivity = useCallback((activity: any) => {
+    setRecentActivity(prev => {
+      const newActivities = [activity, ...prev].slice(0, 10); // Keep last 10 activities
+      return newActivities;
+    });
+  }, []);
+
+  // Track when user joins/leaves
+  useEffect(() => {
+    addActivity({
+      id: `activity_${Date.now()}`,
+      type: 'user_joined',
+      userId: 'current_user', // TODO: Get from auth context
+      timestamp: new Date(),
+      message: 'User joined the element'
+    });
+  }, [element.identity.id, addActivity]);
+
+  // Listen for WebRTC connection status changes
+  useEffect(() => {
+    const handleConnectionChange = (data: { connected: boolean }) => {
+      setIsOnline(data.connected);
+    };
+
+    webRTCService.on('connectionChanged', handleConnectionChange);
+
+    return () => {
+      webRTCService.off('connectionChanged', handleConnectionChange);
+    };
+  }, []);
+
   const elementContext: ElementContext = {
     currentElement: element,
     userRole,
     userPermissions,
-    isOnline: true, // TODO: Implement presence detection
+    isOnline,
     activeUsers: element.membership.filter(m => m.isActive).map(m => m.userId),
-    recentActivity: [], // TODO: Implement activity tracking
+    recentActivity,
   };
 
   const handleStartCall = useCallback(async (type: 'voice' | 'video' | 'screen-share') => {
@@ -243,13 +249,30 @@ export const Element: React.FC<ElementProps> = ({
       setIsVideoEnabled(type === 'video');
       setIsScreenSharing(type === 'screen-share');
 
-      // TODO: Integrate with actual WebRTC service
+      // Integrate with WebRTC service
+      if (type === 'video') {
+        await webRTCService.startVideoCall(element.identity.id, element.identity.type);
+      } else if (type === 'voice') {
+        await webRTCService.startAudioCall(element.identity.id, element.identity.type);
+      }
+
+      // Track activity
+      addActivity({
+        id: `activity_${Date.now()}`,
+        type: 'call_started',
+        userId: 'current_user', // TODO: Get from auth context
+        timestamp: new Date(),
+        message: `Started ${type} call`
+      });
+
       console.log(`Starting ${type} call for element ${element.identity.id}`);
     } catch (error) {
       console.error('Failed to start call:', error);
       setIsInCall(false);
+      setIsVideoEnabled(false);
+      setIsScreenSharing(false);
     }
-  }, [element]);
+  }, [element.identity.id, element.type, addActivity]);
 
   const handleEndCall = useCallback(async () => {
     try {
@@ -258,12 +281,23 @@ export const Element: React.FC<ElementProps> = ({
       setIsVideoEnabled(false);
       setIsScreenSharing(false);
 
-      // TODO: Integrate with actual WebRTC service
+      // Integrate with WebRTC service
+      webRTCService.endCall(element.identity.id);
+
+      // Track activity
+      addActivity({
+        id: `activity_${Date.now()}`,
+        type: 'call_ended',
+        userId: 'current_user', // TODO: Get from auth context
+        timestamp: new Date(),
+        message: 'Ended call'
+      });
+
       console.log('Ending call');
     } catch (error) {
       console.error('Failed to end call:', error);
     }
-  }, []);
+  }, [element.identity.id, addActivity]);
 
   const handleToggleAudio = useCallback(() => {
     setIsAudioEnabled(prev => !prev);

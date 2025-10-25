@@ -1,19 +1,16 @@
-import React, { useEffect, useState } from 'react'
-import { invoke } from '@tauri-apps/api/core'
 import {
-  Box,
-  Button,
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  Step,
-  StepContent,
-  StepLabel,
-  Stepper,
-  Typography,
-  Alert,
-  CircularProgress,
+    Alert, Box,
+    Button, CircularProgress, Dialog,
+    DialogContent,
+    DialogTitle,
+    Step,
+    StepContent,
+    StepLabel,
+    Stepper,
+    Typography
 } from '@mui/material'
+import { invoke } from '@tauri-apps/api/core'
+import React, { useEffect, useState } from 'react'
 import IdentitySetup from '../identity/IdentitySetup'
 
 interface FirstRunWizardProps {

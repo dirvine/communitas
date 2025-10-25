@@ -5,8 +5,8 @@
  * Tauri's built-in updater system with GitHub releases.
  */
 
-import { check } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
+import { check } from '@tauri-apps/plugin-updater';
 
 export interface UpdateInfo {
   available: boolean;

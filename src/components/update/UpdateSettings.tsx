@@ -4,28 +4,14 @@
 // Settings panel for auto-update configuration
 // Design: Matches STORYBOARD.md dashboard card component
 
-import React, { useState, useEffect } from 'react';
 import {
-  Box,
-  Typography,
-  Stack,
-  Switch,
-  FormControlLabel,
-  Select,
-  MenuItem,
-  Button,
-  Divider,
-  Alert,
-  Chip,
-  SelectChangeEvent,
-} from '@mui/material';
-import {
-  UpdateOutlined,
-  DownloadOutlined,
-  SettingsOutlined,
-  CheckCircleOutline,
-  InfoOutlined,
+    CheckCircleOutline, DownloadOutlined, InfoOutlined, UpdateOutlined
 } from '@mui/icons-material';
+import {
+    Alert, Box, Button, Chip, Divider, FormControlLabel, MenuItem, Select, SelectChangeEvent, Stack,
+    Switch, Typography
+} from '@mui/material';
+import React, { useEffect, useState } from 'react';
 import { VersionDisplay } from '../VersionDisplay';
 
 // STORYBOARD.md Design Tokens

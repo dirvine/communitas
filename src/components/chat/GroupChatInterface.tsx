@@ -5,6 +5,7 @@ import {
     NotificationsOff, Person,
     PersonAdd, Send, Settings
 } from '@mui/icons-material'
+import { AddMemberDialog } from '../members/AddMemberDialog'
 import {
     Alert, Avatar,
     Badge, Box, Button, Card,
@@ -80,6 +81,7 @@ const GroupChatInterface: React.FC<GroupChatInterfaceProps> = ({
   // UI state
   const [createGroupOpen, setCreateGroupOpen] = useState(false)
   const [groupMenuAnchor, setGroupMenuAnchor] = useState<null | HTMLElement>(null)
+  const [addMemberDialogOpen, setAddMemberDialogOpen] = useState(false)
   const [newGroupName, setNewGroupName] = useState('')
   const [newGroupDescription, setNewGroupDescription] = useState('')
   
@@ -574,7 +576,10 @@ const GroupChatInterface: React.FC<GroupChatInterfaceProps> = ({
         open={Boolean(groupMenuAnchor)}
         onClose={() => setGroupMenuAnchor(null)}
       >
-        <MenuItem onClick={() => setGroupMenuAnchor(null)}>
+        <MenuItem onClick={() => {
+          setGroupMenuAnchor(null)
+          setAddMemberDialogOpen(true)
+        }}>
           <PersonAdd sx={{ mr: 1 }} />
           Invite Members
         </MenuItem>
@@ -592,6 +597,21 @@ const GroupChatInterface: React.FC<GroupChatInterfaceProps> = ({
           Leave Group
         </MenuItem>
       </Menu>
+
+      {/* Member Management Dialog */}
+      {currentGroup && (
+        <AddMemberDialog
+          open={addMemberDialogOpen}
+          onClose={() => setAddMemberDialogOpen(false)}
+          entityType="group"
+          entityId={currentGroup.id}
+          onMemberAdded={() => {
+            // Reload group members
+            console.log('Member added to group', currentGroup.id)
+            // Could refresh group info here
+          }}
+        />
+      )}
     </Box>
   )
 }

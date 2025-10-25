@@ -11,8 +11,8 @@ use axum::{
 use base64::Engine;
 use chrono::{DateTime, Utc};
 use communitas_core::legacy_crdt::EntityType;
-use yrs::{Map, Transact};
 use yrs::types::ToJson;
+use yrs::{Map, Transact};
 // Removed: saorsa-core imports - replaced with stub implementations
 
 // Helper to convert yrs::Any to serde_json::Value
@@ -532,7 +532,12 @@ pub async fn create_entity_website(
 
     // Save to CRDT manager (persists to disk)
     core.crdt_manager
-        .save_document(&format!("website:{}", entity_id), "website", &entity_id, &doc)
+        .save_document(
+            &format!("website:{}", entity_id),
+            "website",
+            &entity_id,
+            &doc,
+        )
         .await
         .map_err(|e| BridgeError::CommandFailed(format!("Failed to save website: {}", e)))?;
 
@@ -649,9 +654,18 @@ pub async fn update_entity_website(
         }
 
         // Recalculate hash with updated content
-        let html = root.get(&txn, "html").and_then(|v| v.to_string(&txn).into()).unwrap_or_default();
-        let css = root.get(&txn, "css").and_then(|v| v.to_string(&txn).into()).unwrap_or_default();
-        let js = root.get(&txn, "js").and_then(|v| v.to_string(&txn).into()).unwrap_or_default();
+        let html = root
+            .get(&txn, "html")
+            .and_then(|v| v.to_string(&txn).into())
+            .unwrap_or_default();
+        let css = root
+            .get(&txn, "css")
+            .and_then(|v| v.to_string(&txn).into())
+            .unwrap_or_default();
+        let js = root
+            .get(&txn, "js")
+            .and_then(|v| v.to_string(&txn).into())
+            .unwrap_or_default();
 
         let content = format!("{}{}{}", html, css, js);
         let hash = blake3::hash(content.as_bytes());
@@ -664,13 +678,21 @@ pub async fn update_entity_website(
 
     // Save updated document
     core.crdt_manager
-        .save_document(&format!("website:{}", entity_id), "website", &entity_id, &doc)
+        .save_document(
+            &format!("website:{}", entity_id),
+            "website",
+            &entity_id,
+            &doc,
+        )
         .await
         .map_err(|e| BridgeError::CommandFailed(format!("Failed to update website: {}", e)))?;
 
     let updated_at = chrono::Utc::now();
     let txn = doc.transact();
-    let new_hash = root.get(&txn, "hash").and_then(|v| v.to_string(&txn).into()).unwrap_or_default();
+    let new_hash = root
+        .get(&txn, "hash")
+        .and_then(|v| v.to_string(&txn).into())
+        .unwrap_or_default();
 
     Ok(Json(json!({
         "entity_id": entity_id,
@@ -765,7 +787,9 @@ pub async fn upload_file(
 
     let encrypted = disk_type == "private" || disk_type == "shared";
     let uploaded_at = chrono::Utc::now();
-    let content_type = req.content_type.unwrap_or_else(|| "application/octet-stream".to_string());
+    let content_type = req
+        .content_type
+        .unwrap_or_else(|| "application/octet-stream".to_string());
 
     // Create CRDT document for file
     let doc = yrs::Doc::new();

@@ -270,10 +270,7 @@ mod tests {
         let temp_dir = TempDir::new().expect("temp dir failed");
         let _state = create_test_state(&temp_dir).expect("state creation failed");
 
-        let bootstrap_addrs = vec![
-            "127.0.0.1:9000".to_string(),
-            "127.0.0.1:9001".to_string(),
-        ];
+        let bootstrap_addrs = vec!["127.0.0.1:9000".to_string(), "127.0.0.1:9001".to_string()];
 
         // WHEN: Updating bootstrap nodes
         // let update_result = core_update_bootstrap_nodes(state.clone(), bootstrap_addrs.clone()).await;

@@ -183,8 +183,8 @@ impl CoordinatorClient {
         }
 
         // Select up to `fanout` peers randomly
-        use rand::seq::SliceRandom;
         use rand::SeedableRng;
+        use rand::seq::SliceRandom;
         let mut rng = rand::rngs::StdRng::from_entropy();
         let selected_peers: Vec<_> = active_peers
             .choose_multiple(&mut rng, fanout as usize)

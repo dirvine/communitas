@@ -65,7 +65,9 @@ pub use auth_service::{AuthService, SessionInfo};
 pub use connectivity_watchdog::{ConnectivityWatchdog, WatchdogConfig};
 pub use core_context::CoreContext;
 pub use crdt_manager::{CrdtError, CrdtManager, CrdtResult};
-pub use entity_service::{EntityService, EntityServiceError, EntityServiceResult};
+pub use entity_service::{
+    CascadeRemovalResult, EntityService, EntityServiceError, EntityServiceResult,
+};
 pub use error::{AppError, AppResult as Result};
 pub use message_service::{MessageService, MessageServiceError, MessageServiceResult};
 pub use resource_limits::{ResourceLimitError, ResourceLimits};

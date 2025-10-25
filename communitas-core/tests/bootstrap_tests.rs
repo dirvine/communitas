@@ -68,14 +68,17 @@ async fn test_multiple_bootstrap_nodes() {
     let bootstrap_list = vec![bootstrap_addrs[0].clone(), bootstrap_addrs[1].clone()];
 
     // WHEN: One bootstrap fails
-    harness.partition(&[0], &[2, 3]).await.expect("partition failed");
+    harness
+        .partition(&[0], &[2, 3])
+        .await
+        .expect("partition failed");
 
     // TODO: Configure nodes 2 and 3 with both bootstrap addresses
     // TODO: Initiate connection
 
     // THEN: Nodes should connect via second bootstrap
     tokio::time::sleep(Duration::from_secs(2)).await;
-    
+
     let network = harness.network.read().await;
     assert!(
         network.are_connected(1, 2).await,

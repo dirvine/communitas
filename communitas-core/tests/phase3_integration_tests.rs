@@ -11,8 +11,8 @@
 use communitas_core::{
     ConnectivityWatchdog, GossipContext, ResourceLimitError, ResourceLimits, WatchdogConfig,
 };
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Duration;
 use tokio::time::sleep;
 
@@ -23,7 +23,7 @@ async fn test_watchdog_starts_monitoring_bootstrap() {
     // 1. Watchdog monitoring task is spawned during boot
     // 2. It pings bootstrap nodes periodically
     // 3. It detects failures and enters local-only mode
-    
+
     // Arrange: Create a watchdog that should detect failure quickly
     let config = WatchdogConfig {
         check_interval: Duration::from_millis(50),
@@ -31,13 +31,13 @@ async fn test_watchdog_starts_monitoring_bootstrap() {
         recovery_check_interval: Duration::from_millis(100),
         enabled: true,
     };
-    
+
     let watchdog = ConnectivityWatchdog::new(config);
     let call_count = Arc::new(AtomicUsize::new(0));
     let call_count_clone = call_count.clone();
     let should_fail = Arc::new(AtomicBool::new(true));
     let should_fail_clone = should_fail.clone();
-    
+
     // Health check that can be controlled
     let health_check = move || {
         let count = call_count_clone.clone();
@@ -47,38 +47,42 @@ async fn test_watchdog_starts_monitoring_bootstrap() {
             !fail.load(Ordering::SeqCst) // Succeed when should_fail is false
         }
     };
-    
+
     // Act: Start monitoring (simulates boot sequence behavior)
     let handle = watchdog.clone().start_monitoring(health_check);
-    
+
     // Initially should be online
     assert!(!watchdog.is_local_only_mode());
-    
+
     // Wait for detection threshold
     sleep(Duration::from_millis(300)).await;
-    
+
     // Assert: Should enter local-only mode
     assert!(
         watchdog.is_local_only_mode(),
         "Watchdog should enter local-only mode when bootstrap fails"
     );
-    
+
     // Simulate bootstrap recovery
     should_fail.store(false, Ordering::SeqCst);
-    
+
     // Wait for recovery check
     sleep(Duration::from_millis(250)).await;
-    
+
     // Should exit local-only mode
     assert!(
         !watchdog.is_local_only_mode(),
         "Watchdog should exit local-only mode when bootstrap recovers"
     );
-    
+
     // Verify health checks were called multiple times
     let checks = call_count.load(Ordering::SeqCst);
-    assert!(checks >= 5, "Health check should be called at least 5 times, got {}", checks);
-    
+    assert!(
+        checks >= 5,
+        "Health check should be called at least 5 times, got {}",
+        checks
+    );
+
     handle.abort();
 }
 
@@ -87,10 +91,10 @@ async fn test_watchdog_starts_monitoring_bootstrap() {
 async fn test_gossip_context_respects_local_only_mode() {
     // This test verifies that GossipContext exposes a method to check
     // whether WAN operations should be attempted based on watchdog state
-    
+
     // For now, this is a placeholder that will guide implementation
     // We expect a method like: context.should_attempt_wan_dial()
-    
+
     // TODO: Once GossipContext has should_attempt_wan_dial(), implement this test
     // Expected behavior:
     // - When watchdog.is_local_only_mode() == true → should_attempt_wan_dial() == false
@@ -104,30 +108,30 @@ async fn test_membership_enforces_peer_limits() {
     // 1. ResourceLimits are checked before adding peers
     // 2. Excess peer connections are rejected
     // 3. Error is returned when limit exceeded
-    
+
     // Arrange: Create resource limits with very low peer count
     let limits = ResourceLimits {
         max_peer_connections: 2,
         ..ResourceLimits::default()
     };
-    
+
     // Act: Try to add 3 peers
     let mut current_peers = 0;
-    
+
     // First peer should succeed
     let result1 = limits.enforce_peer_limit(current_peers);
     assert!(result1.is_ok());
     current_peers += 1;
-    
+
     // Second peer should succeed
     let result2 = limits.enforce_peer_limit(current_peers);
     assert!(result2.is_ok());
     current_peers += 1;
-    
+
     // Third peer should fail (at limit)
     let result3 = limits.enforce_peer_limit(current_peers);
     assert!(result3.is_err());
-    
+
     match result3 {
         Err(ResourceLimitError::PeerLimitExceeded { current, limit }) => {
             assert_eq!(current, 2);
@@ -145,14 +149,14 @@ async fn test_document_operations_enforce_size_limits() {
         crdt_document_limit_mb: 10,
         ..ResourceLimits::default()
     };
-    
+
     // Act & Assert: Small document succeeds
     assert!(limits.enforce_document_limit(5).is_ok());
-    
+
     // Large document fails
     let result = limits.enforce_document_limit(11);
     assert!(result.is_err());
-    
+
     match result {
         Err(ResourceLimitError::DocumentTooLarge { size_mb, limit_mb }) => {
             assert_eq!(size_mb, 11);
@@ -173,13 +177,13 @@ fn test_resource_limits_customization() {
         crdt_document_limit_mb: 100,
         ..ResourceLimits::default()
     };
-    
+
     // Assert: Custom values are applied
     assert_eq!(limits.max_peer_connections, 100);
     assert_eq!(limits.max_relay_connections, 5);
     assert_eq!(limits.max_memory_mb, 4096);
     assert_eq!(limits.crdt_document_limit_mb, 100);
-    
+
     // Should still validate
     assert!(limits.validate().is_ok());
 }
@@ -192,11 +196,11 @@ async fn test_watchdog_can_be_disabled() {
         enabled: false,
         ..Default::default()
     };
-    
+
     let watchdog = ConnectivityWatchdog::new(config);
     let call_count = Arc::new(AtomicUsize::new(0));
     let call_count_clone = call_count.clone();
-    
+
     let health_check = move || {
         let count = call_count_clone.clone();
         async move {
@@ -204,66 +208,64 @@ async fn test_watchdog_can_be_disabled() {
             false // Always fail
         }
     };
-    
+
     // Act: Start monitoring
     let handle = watchdog.clone().start_monitoring(health_check);
-    
+
     // Wait a bit
     sleep(Duration::from_millis(200)).await;
-    
+
     // Assert: Should never enter local-only mode when disabled
     assert!(!watchdog.is_local_only_mode());
-    
+
     // Health check should not be called
     assert_eq!(call_count.load(Ordering::SeqCst), 0);
-    
+
     handle.abort();
 }
 
 /// Test that multiple simultaneous retry operations use jitter
 #[tokio::test]
 async fn test_concurrent_retries_use_jitter() {
-    use communitas_core::retry_utils::{retry_with_backoff, RetryConfig};
+    use communitas_core::retry_utils::{RetryConfig, retry_with_backoff};
     use std::time::Instant;
-    
+
     // This test verifies that concurrent retry operations don't
     // create a thundering herd by using jitter
-    
+
     let config = RetryConfig {
         initial_delay: Duration::from_millis(100),
         max_delay: Duration::from_millis(500),
         max_attempts: 3,
         jitter: true,
     };
-    
+
     let start_times = Arc::new(tokio::sync::Mutex::new(Vec::new()));
-    
+
     // Launch 10 concurrent retry operations
     let mut handles = vec![];
     for _ in 0..10 {
         let config = config.clone();
         let times = start_times.clone();
-        
+
         let handle = tokio::spawn(async move {
             let start = Instant::now();
             times.lock().await.push(start);
-            
-            let _ = retry_with_backoff(config, || async {
-                Err::<(), _>("Fail")
-            }).await;
+
+            let _ = retry_with_backoff(config, || async { Err::<(), _>("Fail") }).await;
         });
-        
+
         handles.push(handle);
     }
-    
+
     // Wait for all to complete
     for handle in handles {
         let _ = handle.await;
     }
-    
+
     // Verify start times are not all identical (jitter applied)
     let times = start_times.lock().await;
-    
+
     // At least some should differ by more than 1ms
     let mut differs = false;
     for i in 0..times.len() - 1 {
@@ -272,8 +274,11 @@ async fn test_concurrent_retries_use_jitter() {
             break;
         }
     }
-    
-    assert!(differs, "Concurrent retries should have jittered start times");
+
+    assert!(
+        differs,
+        "Concurrent retries should have jittered start times"
+    );
 }
 
 /// Test integration: Watchdog state affects dial decisions
@@ -284,20 +289,23 @@ async fn test_end_to_end_local_only_mode_blocks_wan_dials() {
     // 2. System enters local-only mode
     // 3. WAN dial attempts are skipped
     // 4. LAN operations continue normally
-    
+
     // Arrange: Create watchdog in failed state
     let watchdog = ConnectivityWatchdog::default();
     watchdog.force_local_only();
-    
+
     // Act: Check if WAN dials should be attempted
     let should_dial_wan = !watchdog.is_local_only_mode();
-    
+
     // Assert: WAN dials should be blocked
-    assert!(!should_dial_wan, "WAN dials should be blocked in local-only mode");
-    
+    assert!(
+        !should_dial_wan,
+        "WAN dials should be blocked in local-only mode"
+    );
+
     // Simulate recovery
     watchdog.force_online();
-    
+
     // Now WAN dials should be allowed
     let should_dial_wan = !watchdog.is_local_only_mode();
     assert!(should_dial_wan, "WAN dials should be allowed when online");
@@ -311,7 +319,7 @@ fn test_resource_limits_prevent_oom() {
         max_memory_mb: 1024,
         ..ResourceLimits::default()
     };
-    
+
     // Act & Assert: Check various memory usage levels
     assert!(limits.check_memory_usage(512).is_ok());
     assert!(limits.check_memory_usage(1024).is_ok());
@@ -328,15 +336,15 @@ fn test_bandwidth_limit_conversion() {
         download_rate_limit_mbps: Some(100),
         ..ResourceLimits::default()
     };
-    
+
     // Act: Convert to bytes/sec
     let upload_bps = limits.upload_rate_bytes_per_sec();
     let download_bps = limits.download_rate_bytes_per_sec();
-    
+
     // Assert: Conversion is correct
     // 10 Mbps = 10 * 1,000,000 / 8 = 1,250,000 bytes/sec
     assert_eq!(upload_bps, Some(1_250_000));
-    
+
     // 100 Mbps = 100 * 1,000,000 / 8 = 12,500,000 bytes/sec
     assert_eq!(download_bps, Some(12_500_000));
 }
@@ -348,7 +356,7 @@ fn test_connection_timeout_enforcement() {
     let default_limits = ResourceLimits::default();
     let low_res_limits = ResourceLimits::low_resource();
     let high_perf_limits = ResourceLimits::high_performance();
-    
+
     // Assert: Timeouts match specifications
     assert_eq!(default_limits.connection_timeout, Duration::from_secs(30));
     assert_eq!(low_res_limits.connection_timeout, Duration::from_secs(15));

@@ -105,18 +105,24 @@ async fn main() -> Result<()> {
     if args.self_update {
         match tokio::task::spawn_blocking(try_self_update).await {
             Ok(Ok(Some(ver))) => {
-                println!("✅ Successfully updated to version: {}", ver);
-                println!("Please restart the application to use the new version.");
+                #[allow(clippy::print_stdout)]
+                {
+                    println!("✅ Successfully updated to version: {}", ver);
+                    println!("Please restart the application to use the new version.");
+                }
             }
             Ok(Ok(None)) => {
-                println!("Already on latest version");
+                #[allow(clippy::print_stdout)]
+                {
+                    println!("Already on latest version");
+                }
             }
             Ok(Err(e)) => {
-                eprintln!("❌ Self-update error: {:#}", e);
+                tracing::error!("Self-update error: {:#}", e);
                 std::process::exit(1);
             }
             Err(e) => {
-                eprintln!("❌ Spawn error: {:#}", e);
+                tracing::error!("Spawn error: {:#}", e);
                 std::process::exit(1);
             }
         }

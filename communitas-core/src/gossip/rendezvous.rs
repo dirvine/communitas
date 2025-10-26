@@ -303,7 +303,7 @@ impl RendezvousClient {
                     .await
                 {
                     // Log error but continue collecting
-                    eprintln!("Error processing summary: {}", e);
+                    tracing::error!("Error processing summary: {}", e);
                 }
             }
         });

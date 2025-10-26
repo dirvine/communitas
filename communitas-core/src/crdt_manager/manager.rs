@@ -358,14 +358,12 @@ impl CrdtManager {
         let root = doc.get_or_insert_map("root");
         let txn = doc.transact();
 
-        if let Some(metadata_val) = root.get(&txn, "metadata") {
-            if let Ok(metadata) = MapRef::try_from(metadata_val) {
-                if let Some(deleted_val) = metadata.get(&txn, "deleted") {
-                    if let Ok(deleted) = bool::try_from(deleted_val) {
-                        return Ok(deleted);
-                    }
-                }
-            }
+        if let Some(metadata_val) = root.get(&txn, "metadata")
+            && let Ok(metadata) = MapRef::try_from(metadata_val)
+            && let Some(deleted_val) = metadata.get(&txn, "deleted")
+            && let Ok(deleted) = bool::try_from(deleted_val)
+        {
+            return Ok(deleted);
         }
 
         Ok(false)

@@ -6,9 +6,7 @@
 // <https://www.gnu.org/licenses/agpl-3.0.html>
 
 fn main() {
-    // Emit cargo:dev instruction expected by tauri-build 2.5.1
-    println!("cargo:dev=false");
-
-    // Always build Tauri for the desktop app
+    // Build Tauri for the desktop app
+    // Note: tauri 2.8.x emits the cargo:dev instruction that tauri-build 2.5.1 expects
     tauri_build::build();
 }

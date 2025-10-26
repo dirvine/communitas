@@ -49,14 +49,14 @@ impl BackoffConfig {
     pub fn into_strategy(self) -> impl Iterator<Item = Duration> {
         let mut current = self.initial.as_millis() as u64;
         let max_ms = self.max.as_millis() as u64;
-        
+
         std::iter::from_fn(move || {
             let delay = Duration::from_millis(current);
             current = (current as f64 * self.multiplier) as u64;
             if current > max_ms {
                 current = max_ms;
             }
-            
+
             let jitter = (rand::random::<f64>() * 0.1 - 0.05) * current as f64;
             Some(Duration::from_millis((current as f64 + jitter) as u64))
         })
@@ -67,10 +67,7 @@ impl BackoffConfig {
 pub type RetryResult<T> = Result<T, anyhow::Error>;
 
 /// Retry an async operation with exponential backoff
-pub async fn retry_with_backoff<F, Fut, T>(
-    mut operation: F,
-    config: RetryConfig,
-) -> RetryResult<T>
+pub async fn retry_with_backoff<F, Fut, T>(mut operation: F, config: RetryConfig) -> RetryResult<T>
 where
     F: FnMut() -> Fut,
     Fut: std::future::Future<Output = RetryResult<T>>,
@@ -197,17 +194,20 @@ mod tests {
             backoff_multiplier: 2.0,
         };
 
-        let result = retry_with_backoff(|| {
-            let attempts = attempts_clone.clone();
-            async move {
-                let count = attempts.fetch_add(1, Ordering::SeqCst);
-                if count < 2 {
-                    Err(anyhow::anyhow!("Not yet"))
-                } else {
-                    Ok("Success")
+        let result = retry_with_backoff(
+            || {
+                let attempts = attempts_clone.clone();
+                async move {
+                    let count = attempts.fetch_add(1, Ordering::SeqCst);
+                    if count < 2 {
+                        Err(anyhow::anyhow!("Not yet"))
+                    } else {
+                        Ok("Success")
+                    }
                 }
-            }
-        }, config)
+            },
+            config,
+        )
         .await;
 
         assert_eq!(result, Ok("Success"));

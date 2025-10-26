@@ -10,9 +10,17 @@ export type MemberRole = 'owner' | 'admin' | 'member' | 'guest'
 /** Member information returned by the backend */
 export interface MemberInfo {
   member_id: string
-  role: string
+  role: MemberRole
   joined_at: number
   deleted: boolean
+}
+
+/** Runtime validator for API boundaries */
+export function normalizeMemberRole(role: string): MemberRole {
+  const validRoles: MemberRole[] = ['owner', 'admin', 'member', 'guest']
+  return validRoles.includes(role as MemberRole) 
+    ? (role as MemberRole) 
+    : 'guest' // Default fallback
 }
 
 /** Request to add a new member */

@@ -22,7 +22,7 @@ name = "communitas"
 path = "src/main.rs"
 
 [build-dependencies]
-tauri-build = { version = "2.5.1", features = [] }
+tauri-build = { version = "=2.5.1", features = [] }
 
 [features]
 default = ["gossip_overlay"]
@@ -67,11 +67,11 @@ rustls-pemfile = "2.0"
 [target.'cfg(target_os = "macos")'.dependencies]
 security-framework = "2.11"
 
-# Tauri framework (using 2.8.x for compatibility with tauri-build 2.5.1)
-tauri = { version = ">=2.8, <2.9", features = ["custom-protocol"] }
-tauri-plugin-dialog = { version = "2.4" }
-tauri-plugin-log = { version = "2.5" }
-tauri-plugin-updater = { version = "2.5" }
+# Tauri framework - pinned versions for stability (see TAURI_VERSION_RESOLUTION.md)
+tauri = { version = "=2.8.5", features = ["custom-protocol"] }
+tauri-plugin-dialog = { version = "=2.4.0" }
+tauri-plugin-log = { version = "=2.5.0" }
+tauri-plugin-updater = { version = "=2.5.0" }
 
 # Async runtime (re-export from workspace)
 tokio = { version = "1.39", features = ["full"] }

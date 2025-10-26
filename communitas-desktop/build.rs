@@ -6,7 +6,13 @@
 // <https://www.gnu.org/licenses/agpl-3.0.html>
 
 fn main() {
+    //  Workaround for tauri-build 2.5.1 expecting DEP_TAURI_DEV
+    // The tauri crate should emit this, but it doesn't propagate to build dependencies
+    // See: https://github.com/tauri-apps/tauri/issues/10591
+    unsafe {
+        std::env::set_var("DEP_TAURI_DEV", "false");
+    }
+    
     // Build Tauri for the desktop app
-    // Note: tauri 2.8.x emits the cargo:dev instruction that tauri-build 2.5.1 expects
     tauri_build::build();
 }

@@ -20,10 +20,10 @@ pub struct RetryConfig {
     pub max_delay: Duration,
 
     /// Maximum number of retry attempts (default: 10)
-    pub max_attempts: usize,
+    pub max_retries: usize,
 
-    /// Apply random jitter to prevent retry storms (default: true)
-    pub jitter: bool,
+    /// Backoff multiplier (default: 2.0 for exponential)
+    pub backoff_multiplier: f64,
 }
 
 impl Default for RetryConfig {
@@ -31,10 +31,53 @@ impl Default for RetryConfig {
         Self {
             initial_delay: Duration::from_millis(100),
             max_delay: Duration::from_secs(60),
-            max_attempts: 10,
-            jitter: true,
+            max_retries: 10,
+            backoff_multiplier: 2.0,
         }
     }
+}
+
+/// Backoff configuration
+#[derive(Debug, Clone)]
+pub struct BackoffConfig {
+    pub initial: Duration,
+    pub max: Duration,
+    pub multiplier: f64,
+}
+
+impl BackoffConfig {
+    pub fn into_strategy(self) -> impl Iterator<Item = Duration> {
+        let mut current = self.initial.as_millis() as u64;
+        let max_ms = self.max.as_millis() as u64;
+        
+        std::iter::from_fn(move || {
+            let delay = Duration::from_millis(current);
+            current = (current as f64 * self.multiplier) as u64;
+            if current > max_ms {
+                current = max_ms;
+            }
+            
+            let jitter = (rand::random::<f64>() * 0.1 - 0.05) * current as f64;
+            Some(Duration::from_millis((current as f64 + jitter) as u64))
+        })
+    }
+}
+
+/// Result type for retry operations
+pub type RetryResult<T> = Result<T, anyhow::Error>;
+
+/// Retry an async operation with exponential backoff
+pub async fn retry_with_backoff<F, Fut, T>(
+    mut operation: F,
+    config: RetryConfig,
+) -> RetryResult<T>
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = RetryResult<T>>,
+{
+    let strategy = config.build_strategy();
+
+    Retry::spawn(strategy, operation).await
 }
 
 impl RetryConfig {
@@ -43,8 +86,8 @@ impl RetryConfig {
         Self {
             initial_delay: Duration::from_millis(50),
             max_delay: Duration::from_secs(5),
-            max_attempts: 5,
-            jitter: true,
+            max_retries: 5,
+            backoff_multiplier: 2.0,
         }
     }
 
@@ -53,8 +96,8 @@ impl RetryConfig {
         Self {
             initial_delay: Duration::from_secs(1),
             max_delay: Duration::from_secs(300), // 5 minutes
-            max_attempts: 15,
-            jitter: true,
+            max_retries: 15,
+            backoff_multiplier: 2.0,
         }
     }
 
@@ -63,51 +106,19 @@ impl RetryConfig {
         Self {
             initial_delay: Duration::from_millis(100),
             max_delay: Duration::from_secs(120), // 2 minutes
-            max_attempts: 20,
-            jitter: true,
+            max_retries: 20,
+            backoff_multiplier: 2.0,
         }
     }
 
     /// Build tokio-retry strategy from config
     pub fn build_strategy(&self) -> impl Iterator<Item = Duration> {
-        let base = ExponentialBackoff::from_millis(self.initial_delay.as_millis() as u64)
+        let backoff = ExponentialBackoff::from_millis(self.initial_delay.as_millis() as u64)
             .max_delay(self.max_delay)
-            .take(self.max_attempts);
+            .take(self.max_retries + 1);
 
-        if self.jitter {
-            // Apply jitter to each duration in the iterator
-            Box::new(base.map(jitter)) as Box<dyn Iterator<Item = Duration> + Send>
-        } else {
-            Box::new(base) as Box<dyn Iterator<Item = Duration> + Send>
-        }
+        backoff.map(jitter)
     }
-}
-
-/// Retry a network operation with exponential backoff
-///
-/// # Example
-/// ```no_run
-/// use communitas_core::retry_utils::{retry_with_backoff, RetryConfig};
-///
-/// async fn connect_to_peer() -> Result<(), String> {
-///     // Connection logic here
-///     Ok(())
-/// }
-///
-/// let result = retry_with_backoff(
-///     RetryConfig::default(),
-///     || async { connect_to_peer().await }
-/// ).await;
-/// ```
-pub async fn retry_with_backoff<F, Fut, T, E>(config: RetryConfig, operation: F) -> Result<T, E>
-where
-    F: FnMut() -> Fut,
-    Fut: std::future::Future<Output = Result<T, E>>,
-    E: std::fmt::Display,
-{
-    let strategy = config.build_strategy();
-
-    Retry::spawn(strategy, operation).await
 }
 
 /// Retry a network dial operation with logging
@@ -135,7 +146,7 @@ where
                 return Ok(result);
             }
             Err(e) => {
-                if attempt < config.max_attempts {
+                if attempt <= config.max_retries {
                     debug!(
                         "Dial to {} failed (attempt {}): {} - retrying in {:?}",
                         peer_id, attempt, e, delay
@@ -157,16 +168,15 @@ where
 }
 
 /// Retry a coordinator discovery operation with appropriate backoff
-pub async fn retry_coordinator_discovery<F, Fut, T, E>(
+pub async fn retry_coordinator_discovery<F, Fut, T>(
     config: RetryConfig,
     operation: F,
-) -> Result<T, E>
+) -> RetryResult<T>
 where
     F: FnMut() -> Fut,
-    Fut: std::future::Future<Output = Result<T, E>>,
-    E: std::fmt::Display,
+    Fut: std::future::Future<Output = RetryResult<T>>,
 {
-    retry_with_backoff(config, operation).await
+    retry_with_backoff(operation, config).await
 }
 
 #[cfg(test)]
@@ -183,21 +193,21 @@ mod tests {
         let config = RetryConfig {
             initial_delay: Duration::from_millis(10),
             max_delay: Duration::from_millis(100),
-            max_attempts: 5,
-            jitter: false,
+            max_retries: 5,
+            backoff_multiplier: 2.0,
         };
 
-        let result = retry_with_backoff(config, || {
+        let result = retry_with_backoff(|| {
             let attempts = attempts_clone.clone();
             async move {
                 let count = attempts.fetch_add(1, Ordering::SeqCst);
                 if count < 2 {
-                    Err("Not yet")
+                    Err(anyhow::anyhow!("Not yet"))
                 } else {
                     Ok("Success")
                 }
             }
-        })
+        }, config)
         .await;
 
         assert_eq!(result, Ok("Success"));

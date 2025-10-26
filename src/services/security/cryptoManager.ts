@@ -50,7 +50,6 @@ export class CryptoManager {
   // Secure defaults
   private readonly AES_KEY_LENGTH = 32; // 256 bits
   private readonly IV_LENGTH = 12; // 96 bits for GCM
-  private readonly _TAG_LENGTH = 16; // 128 bits for GCM
   private readonly PBKDF2_ITERATIONS = 100000;
 
   static getInstance(): CryptoManager {

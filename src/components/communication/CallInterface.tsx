@@ -81,7 +81,6 @@ export const CallInterface: React.FC<CallInterfaceProps> = ({
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
 
-  const _videoRef = useRef<HTMLVideoElement>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
 
   // Call timer

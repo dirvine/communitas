@@ -228,17 +228,6 @@ export const EntitySelectorWithAddCreate: React.FC<EntitySelectorWithAddCreatePr
     }
   };
 
-  const _getEntityIcon = (type: EntityType) => {
-    switch (type) {
-      case 'person':
-        return <PersonIcon />;
-      case 'group':
-        return <GroupIcon />;
-      case 'organization':
-        return <OrganizationIcon />;
-    }
-  };
-
   const getEntityLabel = (type: EntityType) => {
     switch (type) {
       case 'person':

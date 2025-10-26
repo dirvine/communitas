@@ -233,7 +233,6 @@ export class DHTWebRouter extends EventEmitter {
 
     // Store in DHT at well-known location
     const recordData = JSON.stringify(record)
-    const _recordKey = this.generateIdentityKey(identity.fourWords)
     await this.dht.putWithMetadata(Buffer.from(recordData, 'utf-8'), {
       size: recordData.length,
       createdAt: Date.now(),

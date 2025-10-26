@@ -117,25 +117,7 @@ const StyledTextField = styled(TextField, {
   },
 }));
 
-const _FloatingLabel = styled('label')<{ focused: boolean; hasValue: boolean }>(({ theme, focused, hasValue }) => ({
-  position: 'absolute',
-  top: focused || hasValue ? '-8px' : '14px',
-  left: '12px',
-  fontSize: focused || hasValue ? '0.75rem' : '0.95rem',
-  fontWeight: 500,
-  color: focused ? theme.palette.primary.main : theme.palette.text.secondary,
-  background: theme.palette.background.paper,
-  padding: focused || hasValue ? '0 8px' : '0',
-  borderRadius: designTokens.borderRadius.xs,
-  transition: `all ${designTokens.transitions.normal}`,
-  pointerEvents: 'none',
-  zIndex: 1,
-}));
 
-const _InputWrapper = styled('div')({
-  position: 'relative',
-  width: '100%',
-});
 
 export const ModernInput: React.FC<ModernInputProps> = ({
   icon,

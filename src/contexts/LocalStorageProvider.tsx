@@ -71,15 +71,6 @@ class VirtualFileSystem {
   }
 
   private initializeDefaults(): void {
-    // Create default directories for common entity types
-    const _defaultDirs = [
-      '/documents',
-      '/images',
-      '/videos',
-      '/shared',
-      '/private',
-    ];
-
     // These would be created for each entity
     // For now, just structure setup
   }

@@ -133,7 +133,6 @@ export const EntityChatView: React.FC<EntityChatViewProps> = ({
   const { queueMessage } = useEntityDirectory();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-  const _isTablet = useMediaQuery(theme.breakpoints.between('md', 'lg'));
   
   const [messages, setMessages] = useState<Message[]>([]);
   const [members, setMembers] = useState<Member[]>([]);

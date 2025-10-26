@@ -135,9 +135,7 @@ export class StoragePipeline extends EventEmitter {
     }
   }
 
-  private async uploadWithFullReplication(file: FileUpload, uploader: NetworkIdentity, fileId: string): Promise<UploadResult> {
-    const _uploaderDHT = this.dhtNodes.get(uploader.fourWords)!
-    
+  private async uploadWithFullReplication(file: FileUpload, _uploader: NetworkIdentity, fileId: string): Promise<UploadResult> {
     // Store complete file on each member
     const distribution: Record<string, Array<{ shardId: string; nodeId: string }>> = {}
     const dhtEntries: Array<{ blockId: string; nodeIds: string[] }> = []

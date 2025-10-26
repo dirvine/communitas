@@ -9,7 +9,7 @@ import {
     Alert, alpha, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, List,
     ListItem,
     ListItemIcon,
-    ListItemText, Typography, useTheme
+    ListItemText, Typography
 } from '@mui/material';
 import { invoke } from '@tauri-apps/api/core';
 import React, { useEffect, useState } from 'react';
@@ -38,7 +38,6 @@ export const PasskeyRegistration: React.FC<PasskeyRegistrationProps> = ({
   onClose,
   onSuccess,
 }) => {
-  const _theme = useTheme();
   const [step, setStep] = useState<'intro' | 'registering' | 'success' | 'error'>('intro');
   const [error, setError] = useState<string | null>(null);
   const [passkeyInfo, setPasskeyInfo] = useState<PasskeyInfo | null>(null);

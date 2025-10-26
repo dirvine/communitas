@@ -2,17 +2,6 @@ import {
     Group, Organization, PersonalUser, PublishedWebsite, SharedFile
 } from '../types/collaboration';
 
-// Helper to generate four-word identities
-const _generateFourWords = () => {
-  const words = [
-    ['ocean', 'forest', 'mountain', 'desert', 'river', 'valley', 'island', 'prairie'],
-    ['blue', 'green', 'golden', 'silver', 'crystal', 'shadow', 'bright', 'misty'],
-    ['eagle', 'wolf', 'bear', 'fox', 'owl', 'hawk', 'lion', 'tiger'],
-    ['star', 'moon', 'sun', 'cloud', 'storm', 'wind', 'fire', 'ice']
-  ];
-  return words.map(group => group[Math.floor(Math.random() * group.length)]).join(' ');
-};
-
 // Mock Organizations
 export const mockOrganizations: Organization[] = [
   {

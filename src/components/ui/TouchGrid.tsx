@@ -1,13 +1,11 @@
-import {
-    GridProps, SxProps,
-    Theme, useTheme
-} from '@mui/material';
 import React, { useCallback } from 'react';
+import type { SxProps, Theme } from '@mui/material';
 
 // Enhanced responsive hooks
-import { useResponsiveColumns, useTouchDevice, useTouchFriendlySizing } from '../../hooks/useResponsive';
+import { useResponsiveColumns, useTouchDevice } from '../../hooks/useResponsive';
 
-export interface TouchGridProps extends Omit<GridProps, 'columns' | 'spacing'> {
+export interface TouchGridProps {
+  children?: React.ReactNode;
   /** Enable touch-friendly spacing */
   enableTouchSpacing?: boolean;
   /** Enable haptic feedback on item tap */
@@ -64,19 +62,10 @@ export const TouchGrid: React.FC<TouchGridProps> = ({
   onItemClick,
   onItemTap,
   onItemLongPress,
-  enableAnimations = true,
-  animationDuration = 300,
-  touchSizing = true,
-  itemSx,
   responsiveColumns,
-  spacing = { xs: 2, sm: 3, md: 4 },
-  sx,
   children,
-  ..._props
 }) => {
-  const _theme = useTheme();
   const isTouch = useTouchDevice();
-  const _touchSizingValues = useTouchFriendlySizing();
   const columns = useResponsiveColumns(responsiveColumns);
 
   // Enhanced item click handler with haptic feedback
@@ -102,40 +91,6 @@ export const TouchGrid: React.FC<TouchGridProps> = ({
     }
     onItemLongPress?.(item, index);
   }, [onItemLongPress, hapticFeedback, isTouch, hapticDuration]);
-
-  // Touch-friendly styles
-  const _gridStyles = {
-    // Touch-friendly spacing
-    gap: enableTouchSpacing ? 2 : 1,
-    // Touch-friendly grid items
-    '& > *': {
-      minHeight: isTouch ? 44 : 'auto',
-      minWidth: isTouch ? 44 : 'auto',
-      // Enhanced touch feedback
-      transition: 'all 0.2s ease-in-out',
-      cursor: 'pointer',
-      // Touch-friendly hover effects
-      '&:hover': {
-        transform: !isTouch ? 'translateY(-2px)' : 'none',
-        boxShadow: !isTouch ? 4 : 2,
-      },
-      '&:active': {
-        transform: isTouch ? 'scale(0.98)' : 'none',
-        backgroundColor: 'action.selected',
-      },
-      '&:focus-visible': {
-        outline: `2px solid`,
-        outlineColor: 'primary.main',
-        outlineOffset: 2,
-      },
-      // Animation support
-      ...(enableAnimations && {
-        animation: `fadeInUp ${animationDuration}ms ease-out`,
-      }),
-      ...itemSx,
-    },
-    ...sx,
-  };
 
   return (
     <div

@@ -42,19 +42,6 @@ const triggerHapticFeedback = (duration: number = 50) => {
   }
 };
 
-// Animation variants
-const _fabVariants = {
-  tap: {
-    scale: 0.9,
-    transition: { duration: 0.1 }
-  },
-  scale: {
-    scale: 1.1,
-    transition: { duration: 0.2 }
-  },
-  none: {}
-};
-
 // Touch-friendly FAB component
 export const TouchFab: React.FC<TouchFabProps> = ({
   hapticFeedback = false,

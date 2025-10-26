@@ -99,21 +99,6 @@ export class DHTStorage {
     return this.cryptoReady
   }
 
-  private async _initializeCrypto(): Promise<void> {
-    // SECURITY: Generate secure encryption key using Web Crypto API
-    this.encryptionKey = new Uint8Array(32)
-    crypto.getRandomValues(this.encryptionKey)
-
-    // SECURITY: Generate key ID using Web Crypto API
-    const hashBuffer = await crypto.subtle.digest('SHA-256', this.toArrayBuffer(this.encryptionKey))
-    const hashArray = new Uint8Array(hashBuffer)
-    this.keyId = Array.from(hashArray.slice(0, 16))
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join('')
-
-    console.log(`DHT initialized with key ID: ${this.keyId}`)
-  }
-
   async connect(): Promise<void> {
     await this.ensureReady()
     // Simulate connection to bootstrap nodes

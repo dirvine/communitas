@@ -194,7 +194,6 @@ export class CompleteStorageSystem extends EventEmitter {
     if (!storage) {
       const orgEntity = this.entities.get(organizationId)
       if (orgEntity) {
-        const _org = orgEntity.data as Organization
         // For demo, use empty member identities
         await this.setupEntityStorage(organizationId, [])
         storage = this.storages.get(organizationId)!
@@ -212,7 +211,6 @@ export class CompleteStorageSystem extends EventEmitter {
     if (!storage) {
       const projectEntity = this.entities.get(projectId)
       if (projectEntity) {
-        const _project = projectEntity.data as Project
         await this.setupEntityStorage(projectId, [])
         storage = this.storages.get(projectId)!
       } else {
@@ -451,10 +449,8 @@ class EntityStorageImpl implements EntityStorage {
 }
 
 class MockWebBrowser implements WebBrowser {
-  private _visitorId = 'anonymous'
-
-  setVisitorId(id: string): void {
-    this._visitorId = id
+  setVisitorId(_id: string): void {
+    // Store visitor id if needed
   }
 
   async navigate(url: string): Promise<{ status: number; content: string; url: string }> {

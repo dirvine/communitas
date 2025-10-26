@@ -268,26 +268,6 @@ class FeatureFlagsService {
   }
 
   /**
-   * Load flags from localStorage
-   */
-  private _loadFlags() {
-    try {
-      const stored = localStorage.getItem('communitas-feature-flags')
-      if (stored) {
-        const data = JSON.parse(stored)
-        Object.entries(data).forEach(([name, config]: [string, any]) => {
-          const flag = this.flags.get(name)
-          if (flag) {
-            Object.assign(flag, config)
-          }
-        })
-      }
-    } catch (e) {
-      console.error('Failed to load feature flags:', e)
-    }
-  }
-
-  /**
    * Persist flags to localStorage
    */
   private persistFlags() {

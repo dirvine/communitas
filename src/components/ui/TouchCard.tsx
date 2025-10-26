@@ -101,8 +101,8 @@ export const TouchCard: React.FC<TouchCardProps> = ({
   const theme = useTheme();
   const isTouch = useTouchDevice();
   const touchSizing = useTouchFriendlySizing();
-  const [isSwiped, setIsSwiped] = useState(false);
-  const [swipeDirection, setSwipeDirection] = useState<'left' | 'right' | null>(null);
+  const [isSwiped] = useState(false);
+  const [swipeDirection] = useState<'left' | 'right' | null>(null);
 
   // Enhanced click handler with haptic feedback
   const handleClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
@@ -111,33 +111,6 @@ export const TouchCard: React.FC<TouchCardProps> = ({
     }
     onClick?.(event);
   }, [onClick, hapticFeedback, isTouch, hapticDuration]);
-
-  // Swipe gesture handlers
-  const _handleDragEnd = useCallback((event: any, info: PanInfo) => {
-    const { offset, velocity } = info;
-    const absOffset = Math.abs(offset.x);
-    const absVelocity = Math.abs(velocity.x);
-
-    // Check if swipe meets threshold
-    if (absOffset > swipeThreshold || absVelocity > 500) {
-      if (offset.x > 0) {
-        // Swipe right
-        setSwipeDirection('right');
-        onSwipeRight?.(event, info);
-      } else {
-        // Swipe left
-        setSwipeDirection('left');
-        onSwipeLeft?.(event, info);
-      }
-      setIsSwiped(true);
-
-      // Reset swipe state after animation
-      setTimeout(() => {
-        setIsSwiped(false);
-        setSwipeDirection(null);
-      }, animationDuration);
-    }
-  }, [swipeThreshold, onSwipeRight, onSwipeLeft, animationDuration]);
 
   // Default action handlers
   const handleFavorite = useCallback(() => {
@@ -189,8 +162,6 @@ export const TouchCard: React.FC<TouchCardProps> = ({
     },
     ...sx,
   };
-
-  const _MotionCard = motion(Card);
 
   return (
     <motion.div

@@ -17,4 +17,4 @@ mod types;
 
 pub use manager::WebsiteManager;
 pub use markdown::{MarkdownRenderer, render_markdown, sanitize_html};
-pub use types::{MarkdownPage, WebsiteMetadata, WebsiteError, WebsiteResult};
+pub use types::{MarkdownPage, WebsiteError, WebsiteMetadata, WebsiteResult};

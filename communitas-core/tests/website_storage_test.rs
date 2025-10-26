@@ -195,7 +195,12 @@ async fn test_publish_unpublish_website() {
         .expect("Save page");
 
     // Initially not published
-    assert!(!website_manager.is_published(four_words).await.expect("Check published"));
+    assert!(
+        !website_manager
+            .is_published(four_words)
+            .await
+            .expect("Check published")
+    );
 
     // Publish the website
     website_manager
@@ -204,7 +209,12 @@ async fn test_publish_unpublish_website() {
         .expect("Publish website");
 
     // Should now be published
-    assert!(website_manager.is_published(four_words).await.expect("Check published"));
+    assert!(
+        website_manager
+            .is_published(four_words)
+            .await
+            .expect("Check published")
+    );
 
     // Verify metadata
     let metadata = website_manager
@@ -222,7 +232,12 @@ async fn test_publish_unpublish_website() {
         .expect("Unpublish");
 
     // Should no longer be published
-    assert!(!website_manager.is_published(four_words).await.expect("Check published"));
+    assert!(
+        !website_manager
+            .is_published(four_words)
+            .await
+            .expect("Check published")
+    );
 }
 
 /// Test 4-word address resolution
@@ -538,7 +553,9 @@ async fn test_markdown_with_images() {
 
     let page = MarkdownPage {
         path: "gallery.md".to_string(),
-        content: "# Gallery\n\n![My Image](images/photo.jpg)\n\n![External](https://example.com/pic.png)".to_string(),
+        content:
+            "# Gallery\n\n![My Image](images/photo.jpg)\n\n![External](https://example.com/pic.png)"
+                .to_string(),
         title: Some("Gallery".to_string()),
         created_at: 1000,
         updated_at: 1000,

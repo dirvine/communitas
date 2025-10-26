@@ -39,7 +39,11 @@ impl WebsiteManager {
     }
 
     /// Save a markdown page
-    pub async fn save_page(&self, four_word_address: &str, page: &MarkdownPage) -> WebsiteResult<()> {
+    pub async fn save_page(
+        &self,
+        four_word_address: &str,
+        page: &MarkdownPage,
+    ) -> WebsiteResult<()> {
         let doc_id = Self::page_doc_id(four_word_address, &page.path);
         let doc = Doc::new();
 
@@ -67,7 +71,11 @@ impl WebsiteManager {
     }
 
     /// Load a markdown page
-    pub async fn load_page(&self, four_word_address: &str, path: &str) -> WebsiteResult<MarkdownPage> {
+    pub async fn load_page(
+        &self,
+        four_word_address: &str,
+        path: &str,
+    ) -> WebsiteResult<MarkdownPage> {
         let doc_id = Self::page_doc_id(four_word_address, path);
         let doc = self
             .crdt_manager
@@ -89,8 +97,8 @@ impl WebsiteManager {
             String::new()
         };
 
-        let path = CrdtManager::get_map_string(&root, &txn, "path")
-            .unwrap_or_else(|| path.to_string());
+        let path =
+            CrdtManager::get_map_string(&root, &txn, "path").unwrap_or_else(|| path.to_string());
         let title = CrdtManager::get_map_string(&root, &txn, "title");
         let created_at = CrdtManager::get_map_i64(&root, &txn, "created_at").unwrap_or(0);
         let updated_at = CrdtManager::get_map_i64(&root, &txn, "updated_at").unwrap_or(0);
@@ -173,9 +181,8 @@ impl WebsiteManager {
                 .transact()
                 .encode_state_as_update_v1(&yrs::StateVector::default());
 
-            let update = yrs::Update::decode_v1(&update_bytes).map_err(|e| {
-                WebsiteError::Rendering(format!("Failed to decode update: {}", e))
-            })?;
+            let update = yrs::Update::decode_v1(&update_bytes)
+                .map_err(|e| WebsiteError::Rendering(format!("Failed to decode update: {}", e)))?;
 
             let mut txn = base.transact_mut();
             txn.apply_update(update);
@@ -186,10 +193,7 @@ impl WebsiteManager {
 
     /// List all pages for a website
     pub async fn list_pages(&self, four_word_address: &str) -> WebsiteResult<Vec<String>> {
-        let pages = self
-            .crdt_manager
-            .list_documents("website")
-            .await?;
+        let pages = self.crdt_manager.list_documents("website").await?;
 
         // Filter pages that belong to this address
         let prefix = format!("website:{}:page:", four_word_address);
@@ -227,7 +231,12 @@ impl WebsiteManager {
             let mut txn = doc.transact_mut();
             let root = txn.get_or_insert_map("root");
 
-            CrdtManager::set_map_string(&root, &mut txn, "four_word_address", &metadata.four_word_address);
+            CrdtManager::set_map_string(
+                &root,
+                &mut txn,
+                "four_word_address",
+                &metadata.four_word_address,
+            );
             CrdtManager::set_map_string(&root, &mut txn, "title", &metadata.title);
 
             if let Some(ref desc) = metadata.description {
@@ -266,13 +275,11 @@ impl WebsiteManager {
 
         let four_word_address = CrdtManager::get_map_string(&root, &txn, "four_word_address")
             .unwrap_or_else(|| four_word_address.to_string());
-        let title = CrdtManager::get_map_string(&root, &txn, "title")
-            .unwrap_or_default();
+        let title = CrdtManager::get_map_string(&root, &txn, "title").unwrap_or_default();
         let description = CrdtManager::get_map_string(&root, &txn, "description");
         let home_page = CrdtManager::get_map_string(&root, &txn, "home_page")
             .unwrap_or_else(|| "home.md".to_string());
-        let published = CrdtManager::get_map_bool(&root, &txn, "published")
-            .unwrap_or(false);
+        let published = CrdtManager::get_map_bool(&root, &txn, "published").unwrap_or(false);
         let published_at = CrdtManager::get_map_i64(&root, &txn, "published_at");
         let created_at = CrdtManager::get_map_i64(&root, &txn, "created_at").unwrap_or(0);
         let updated_at = CrdtManager::get_map_i64(&root, &txn, "updated_at").unwrap_or(0);
@@ -291,13 +298,14 @@ impl WebsiteManager {
 
     /// Publish a website
     pub async fn publish(&self, four_word_address: &str, _publisher_id: &str) -> WebsiteResult<()> {
-        let mut metadata = self.get_metadata(four_word_address).await.unwrap_or_else(|_| {
-            WebsiteMetadata {
+        let mut metadata = self
+            .get_metadata(four_word_address)
+            .await
+            .unwrap_or_else(|_| WebsiteMetadata {
                 four_word_address: four_word_address.to_string(),
                 title: four_word_address.to_string(),
                 ..Default::default()
-            }
-        });
+            });
 
         metadata.published = true;
         metadata.published_at = Some(chrono::Utc::now().timestamp());
@@ -327,12 +335,20 @@ impl WebsiteManager {
     }
 
     /// Resolve a 4-word address to a page
-    pub async fn resolve_address(&self, four_word_address: &str, path: &str) -> WebsiteResult<MarkdownPage> {
+    pub async fn resolve_address(
+        &self,
+        four_word_address: &str,
+        path: &str,
+    ) -> WebsiteResult<MarkdownPage> {
         self.load_page(four_word_address, path).await
     }
 
     /// Render a page to HTML
-    pub async fn render_to_html(&self, four_word_address: &str, path: &str) -> WebsiteResult<String> {
+    pub async fn render_to_html(
+        &self,
+        four_word_address: &str,
+        path: &str,
+    ) -> WebsiteResult<String> {
         let page = self.load_page(four_word_address, path).await?;
         Ok(render_and_sanitize(&page.content))
     }

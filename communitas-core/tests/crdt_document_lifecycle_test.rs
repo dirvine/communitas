@@ -270,10 +270,7 @@ async fn test_three_way_concurrent_merge() {
 
     // Verify expected values (LWW semantics)
     assert_eq!(channel_a.name, "Edited by A");
-    assert_eq!(
-        channel_a.description,
-        Some("Edited by B".to_string())
-    );
+    assert_eq!(channel_a.description, Some("Edited by B".to_string()));
     assert_eq!(
         channel_a.website_root,
         Some("https://peer-c.com".to_string())
@@ -490,10 +487,7 @@ async fn test_offline_online_sync() {
 
     // All edits should be present
     assert_eq!(channel_a.name, "Offline Edit 1");
-    assert_eq!(
-        channel_a.description,
-        Some("Offline Edit 2".to_string())
-    );
+    assert_eq!(channel_a.description, Some("Offline Edit 2".to_string()));
     assert_eq!(
         channel_a.website_root,
         Some("https://peer-b.com".to_string())

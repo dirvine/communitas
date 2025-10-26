@@ -5,7 +5,7 @@
 //! Markdown rendering and sanitization
 
 use ammonia::clean;
-use pulldown_cmark::{html, Options, Parser};
+use pulldown_cmark::{Options, Parser, html};
 
 /// Render markdown to HTML with GitHub-flavored markdown support
 pub fn render_markdown(markdown: &str) -> String {

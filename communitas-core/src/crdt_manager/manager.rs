@@ -241,12 +241,14 @@ impl CrdtManager {
     /// Used for syncing updates from remote peers.
     pub async fn apply_update(&self, doc_id: &str, update_bytes: &[u8]) -> CrdtResult<()> {
         // Load the document (or create new if it doesn't exist)
-        let doc = self.load_document(doc_id).await.unwrap_or_else(|_| Doc::new());
+        let doc = self
+            .load_document(doc_id)
+            .await
+            .unwrap_or_else(|_| Doc::new());
 
         // Decode and apply the update
-        let update = Update::decode_v1(update_bytes).map_err(|e| {
-            CrdtError::Deserialization(format!("Failed to decode update: {}", e))
-        })?;
+        let update = Update::decode_v1(update_bytes)
+            .map_err(|e| CrdtError::Deserialization(format!("Failed to decode update: {}", e)))?;
 
         {
             let mut txn = doc.transact_mut();
@@ -277,13 +279,12 @@ impl CrdtManager {
     ///
     /// Takes a document ID and a list of update blobs from different peers,
     /// applies them all, and saves the merged result.
-    pub async fn merge_updates(
-        &self,
-        doc_id: &str,
-        updates: Vec<Vec<u8>>,
-    ) -> CrdtResult<Doc> {
+    pub async fn merge_updates(&self, doc_id: &str, updates: Vec<Vec<u8>>) -> CrdtResult<Doc> {
         // Load existing document or create new
-        let doc = self.load_document(doc_id).await.unwrap_or_else(|_| Doc::new());
+        let doc = self
+            .load_document(doc_id)
+            .await
+            .unwrap_or_else(|_| Doc::new());
 
         // Apply all updates
         for update_bytes in updates {
@@ -312,11 +313,7 @@ impl CrdtManager {
     ///
     /// Instead of physically deleting the document, this sets a "deleted" flag
     /// in the metadata. The tombstone will replicate to all peers via CRDT sync.
-    pub async fn mark_deleted(
-        &self,
-        doc_id: &str,
-        deleted_by: &str,
-    ) -> CrdtResult<()> {
+    pub async fn mark_deleted(&self, doc_id: &str, deleted_by: &str) -> CrdtResult<()> {
         let doc = self.load_document(doc_id).await?;
 
         {
@@ -337,11 +334,7 @@ impl CrdtManager {
 
             // Set tombstone fields
             metadata.insert(&mut txn, "deleted", true);
-            metadata.insert(
-                &mut txn,
-                "deleted_at",
-                chrono::Utc::now().timestamp(),
-            );
+            metadata.insert(&mut txn, "deleted_at", chrono::Utc::now().timestamp());
             metadata.insert(&mut txn, "deleted_by", deleted_by);
         }
 
@@ -725,10 +718,10 @@ mod tests {
             .load_document("channel:ch-1:metadata")
             .await
             .expect("load document");
-        
+
         // Peer makes a change
         CrdtManager::set_map_value(&doc_peer, "name", "Updated").expect("set name");
-        
+
         // Encode the peer's state as update
         let update_bytes = doc_peer
             .transact()

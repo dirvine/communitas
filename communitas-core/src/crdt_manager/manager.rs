@@ -235,6 +235,149 @@ impl CrdtManager {
         Ok(doc_ids)
     }
 
+    /// Apply an update to an existing document
+    ///
+    /// This method loads a document, applies the update, and saves it back.
+    /// Used for syncing updates from remote peers.
+    pub async fn apply_update(&self, doc_id: &str, update_bytes: &[u8]) -> CrdtResult<()> {
+        // Load the document (or create new if it doesn't exist)
+        let doc = self.load_document(doc_id).await.unwrap_or_else(|_| Doc::new());
+
+        // Decode and apply the update
+        let update = Update::decode_v1(update_bytes).map_err(|e| {
+            CrdtError::Deserialization(format!("Failed to decode update: {}", e))
+        })?;
+
+        {
+            let mut txn = doc.transact_mut();
+            txn.apply_update(update);
+        }
+
+        // Extract entity_type and entity_id from doc_id
+        // Expected format: "entity_type:entity_id:metadata" or similar
+        let parts: Vec<&str> = doc_id.split(':').collect();
+        if parts.len() < 2 {
+            return Err(CrdtError::InvalidDocumentId(format!(
+                "Invalid doc_id format: {}",
+                doc_id
+            )));
+        }
+
+        let entity_type = parts[0];
+        let entity_id = parts[1];
+
+        // Save the updated document
+        self.save_document(doc_id, entity_type, entity_id, &doc)
+            .await?;
+
+        Ok(())
+    }
+
+    /// Merge updates from multiple peers into a document
+    ///
+    /// Takes a document ID and a list of update blobs from different peers,
+    /// applies them all, and saves the merged result.
+    pub async fn merge_updates(
+        &self,
+        doc_id: &str,
+        updates: Vec<Vec<u8>>,
+    ) -> CrdtResult<Doc> {
+        // Load existing document or create new
+        let doc = self.load_document(doc_id).await.unwrap_or_else(|_| Doc::new());
+
+        // Apply all updates
+        for update_bytes in updates {
+            let update = Update::decode_v1(&update_bytes).map_err(|e| {
+                CrdtError::Deserialization(format!("Failed to decode update: {}", e))
+            })?;
+
+            let mut txn = doc.transact_mut();
+            txn.apply_update(update);
+        }
+
+        // Extract entity info and save
+        let parts: Vec<&str> = doc_id.split(':').collect();
+        if parts.len() >= 2 {
+            let entity_type = parts[0];
+            let entity_id = parts[1];
+
+            self.save_document(doc_id, entity_type, entity_id, &doc)
+                .await?;
+        }
+
+        Ok(doc)
+    }
+
+    /// Mark a document as deleted with a tombstone
+    ///
+    /// Instead of physically deleting the document, this sets a "deleted" flag
+    /// in the metadata. The tombstone will replicate to all peers via CRDT sync.
+    pub async fn mark_deleted(
+        &self,
+        doc_id: &str,
+        deleted_by: &str,
+    ) -> CrdtResult<()> {
+        let doc = self.load_document(doc_id).await?;
+
+        {
+            let root = doc.get_or_insert_map("root");
+            let mut txn = doc.transact_mut();
+
+            // Get or create metadata map
+            let metadata = if let Some(existing) = root.get(&txn, "metadata") {
+                MapRef::try_from(existing).map_err(|e| {
+                    CrdtError::Operation(format!("Invalid metadata structure: {:?}", e))
+                })?
+            } else {
+                let empty_prelim: MapPrelim = MapPrelim::from([("_", Any::Null)]);
+                let m = root.insert(&mut txn, "metadata", empty_prelim);
+                m.remove(&mut txn, "_");
+                m
+            };
+
+            // Set tombstone fields
+            metadata.insert(&mut txn, "deleted", true);
+            metadata.insert(
+                &mut txn,
+                "deleted_at",
+                chrono::Utc::now().timestamp(),
+            );
+            metadata.insert(&mut txn, "deleted_by", deleted_by);
+        }
+
+        // Extract entity info and save
+        let parts: Vec<&str> = doc_id.split(':').collect();
+        if parts.len() >= 2 {
+            let entity_type = parts[0];
+            let entity_id = parts[1];
+
+            self.save_document(doc_id, entity_type, entity_id, &doc)
+                .await?;
+        }
+
+        Ok(())
+    }
+
+    /// Check if a document is marked as deleted (tombstone check)
+    pub async fn is_deleted(&self, doc_id: &str) -> CrdtResult<bool> {
+        let doc = self.load_document(doc_id).await?;
+
+        let root = doc.get_or_insert_map("root");
+        let txn = doc.transact();
+
+        if let Some(metadata_val) = root.get(&txn, "metadata") {
+            if let Ok(metadata) = MapRef::try_from(metadata_val) {
+                if let Some(deleted_val) = metadata.get(&txn, "deleted") {
+                    if let Ok(deleted) = bool::try_from(deleted_val) {
+                        return Ok(deleted);
+                    }
+                }
+            }
+        }
+
+        Ok(false)
+    }
+
     /// Delete a document from the filesystem
     pub async fn delete_document(&self, doc_id: &str) -> CrdtResult<()> {
         // Find and delete from all entity type directories
@@ -557,5 +700,163 @@ mod tests {
         assert_eq!(metadata.doc_id, "doc-1");
         assert_eq!(metadata.entity_type, "channel");
         assert_eq!(metadata.entity_id, "ch-1");
+    }
+
+    #[tokio::test]
+    async fn test_apply_update() {
+        let temp_dir = tempdir().expect("temp dir");
+        let storage_path = temp_dir.path();
+
+        let manager = CrdtManager::new(storage_path)
+            .await
+            .expect("create manager");
+
+        // Create initial document
+        let doc = Doc::new();
+        CrdtManager::set_map_value(&doc, "name", "Initial").expect("set name");
+
+        manager
+            .save_document("channel:ch-1:metadata", "channel", "ch-1", &doc)
+            .await
+            .expect("save document");
+
+        // Simulate peer loading the document and making an update
+        let doc_peer = manager
+            .load_document("channel:ch-1:metadata")
+            .await
+            .expect("load document");
+        
+        // Peer makes a change
+        CrdtManager::set_map_value(&doc_peer, "name", "Updated").expect("set name");
+        
+        // Encode the peer's state as update
+        let update_bytes = doc_peer
+            .transact()
+            .encode_state_as_update_v1(&yrs::StateVector::default());
+
+        // Apply the update to a fresh load
+        manager
+            .apply_update("channel:ch-1:metadata", &update_bytes)
+            .await
+            .expect("apply update");
+
+        // Load and verify
+        let loaded_doc = manager
+            .load_document("channel:ch-1:metadata")
+            .await
+            .expect("load document");
+
+        let name: String = CrdtManager::get_map_value(&loaded_doc, "name")
+            .expect("get value")
+            .expect("name exists");
+        assert_eq!(name, "Updated");
+    }
+
+    #[tokio::test]
+    async fn test_merge_updates() {
+        let temp_dir = tempdir().expect("temp dir");
+        let storage_path = temp_dir.path();
+
+        let manager = CrdtManager::new(storage_path)
+            .await
+            .expect("create manager");
+
+        // Create three updates from different peers
+        let doc1 = Doc::new();
+        CrdtManager::set_map_value(&doc1, "field1", "value1").expect("set field1");
+        let update1 = doc1
+            .transact()
+            .encode_state_as_update_v1(&yrs::StateVector::default());
+
+        let doc2 = Doc::new();
+        CrdtManager::set_map_value(&doc2, "field2", "value2").expect("set field2");
+        let update2 = doc2
+            .transact()
+            .encode_state_as_update_v1(&yrs::StateVector::default());
+
+        let doc3 = Doc::new();
+        CrdtManager::set_map_value(&doc3, "field3", "value3").expect("set field3");
+        let update3 = doc3
+            .transact()
+            .encode_state_as_update_v1(&yrs::StateVector::default());
+
+        // Merge all updates
+        let merged_doc = manager
+            .merge_updates("channel:ch-1:metadata", vec![update1, update2, update3])
+            .await
+            .expect("merge updates");
+
+        // Verify all fields are present
+        let field1: String = CrdtManager::get_map_value(&merged_doc, "field1")
+            .expect("get value")
+            .expect("field1 exists");
+        let field2: String = CrdtManager::get_map_value(&merged_doc, "field2")
+            .expect("get value")
+            .expect("field2 exists");
+        let field3: String = CrdtManager::get_map_value(&merged_doc, "field3")
+            .expect("get value")
+            .expect("field3 exists");
+
+        assert_eq!(field1, "value1");
+        assert_eq!(field2, "value2");
+        assert_eq!(field3, "value3");
+    }
+
+    #[tokio::test]
+    async fn test_mark_deleted() {
+        let temp_dir = tempdir().expect("temp dir");
+        let storage_path = temp_dir.path();
+
+        let manager = CrdtManager::new(storage_path)
+            .await
+            .expect("create manager");
+
+        // Create a document
+        let doc = Doc::new();
+        CrdtManager::set_map_value(&doc, "name", "Test").expect("set name");
+
+        manager
+            .save_document("channel:ch-1:metadata", "channel", "ch-1", &doc)
+            .await
+            .expect("save document");
+
+        // Mark as deleted
+        manager
+            .mark_deleted("channel:ch-1:metadata", "deleter-id")
+            .await
+            .expect("mark deleted");
+
+        // Verify tombstone
+        let is_deleted = manager
+            .is_deleted("channel:ch-1:metadata")
+            .await
+            .expect("check deleted");
+        assert!(is_deleted);
+    }
+
+    #[tokio::test]
+    async fn test_is_deleted_false_for_non_deleted() {
+        let temp_dir = tempdir().expect("temp dir");
+        let storage_path = temp_dir.path();
+
+        let manager = CrdtManager::new(storage_path)
+            .await
+            .expect("create manager");
+
+        // Create a normal document
+        let doc = Doc::new();
+        CrdtManager::set_map_value(&doc, "name", "Test").expect("set name");
+
+        manager
+            .save_document("channel:ch-1:metadata", "channel", "ch-1", &doc)
+            .await
+            .expect("save document");
+
+        // Should not be marked as deleted
+        let is_deleted = manager
+            .is_deleted("channel:ch-1:metadata")
+            .await
+            .expect("check deleted");
+        assert!(!is_deleted);
     }
 }

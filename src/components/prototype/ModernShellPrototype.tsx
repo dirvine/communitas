@@ -3793,6 +3793,15 @@ export const ModernShellPrototypeScreen: React.FC = () => {
             <MenuItem
               onClick={() => {
                 setAddMenuAnchor(null)
+                setContactDialogMode('add')
+              }}
+            >
+              <ListItemIcon><PersonAdd fontSize="small" /></ListItemIcon>
+              <ListItemText>Add Member</ListItemText>
+            </MenuItem>
+            <MenuItem
+              onClick={() => {
+                setAddMenuAnchor(null)
                 setEntityDialogMode({ open: true, type: 'channel', scope: 'organization' })
               }}
             >
@@ -3817,15 +3826,6 @@ export const ModernShellPrototypeScreen: React.FC = () => {
               <ListItemIcon><GroupIcon fontSize="small" /></ListItemIcon>
               <ListItemText>Create Group</ListItemText>
             </MenuItem>
-            <MenuItem
-              onClick={() => {
-                setAddMenuAnchor(null)
-                setContactDialogMode('add')
-              }}
-            >
-              <ListItemIcon><PersonAdd fontSize="small" /></ListItemIcon>
-              <ListItemText>Add Contact</ListItemText>
-            </MenuItem>
           </>
         )}
         {scopeFilter === 'personal' && (
@@ -3847,6 +3847,15 @@ export const ModernShellPrototypeScreen: React.FC = () => {
             >
               <ListItemIcon><GroupIcon fontSize="small" /></ListItemIcon>
               <ListItemText>Create Group</ListItemText>
+            </MenuItem>
+            <MenuItem
+              onClick={() => {
+                setAddMenuAnchor(null)
+                setEntityDialogMode({ open: true, type: 'organization' })
+              }}
+            >
+              <ListItemIcon><Business fontSize="small" /></ListItemIcon>
+              <ListItemText>Create Organisation</ListItemText>
             </MenuItem>
           </>
         )}

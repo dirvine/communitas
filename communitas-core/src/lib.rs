@@ -53,6 +53,7 @@ pub mod storage;
 pub mod test_harness;
 pub mod types;
 pub mod validation;
+pub mod website;
 
 // Gossip overlay system (now default, no longer feature-gated)
 pub mod gossip;

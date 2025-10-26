@@ -72,8 +72,8 @@ impl MarkdownRenderer {
     pub fn extract_title(&self, markdown: &str) -> Option<String> {
         for line in markdown.lines() {
             let trimmed = line.trim();
-            if trimmed.starts_with("# ") {
-                return Some(trimmed[2..].trim().to_string());
+            if let Some(stripped) = trimmed.strip_prefix("# ") {
+                return Some(stripped.trim().to_string());
             }
         }
         None

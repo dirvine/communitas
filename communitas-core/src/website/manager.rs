@@ -14,16 +14,12 @@ use yrs::{Doc, GetString, Map, ReadTxn, Text, Transact, WriteTxn};
 /// Manager for website storage and operations
 pub struct WebsiteManager {
     crdt_manager: Arc<CrdtManager>,
-    renderer: MarkdownRenderer,
 }
 
 impl WebsiteManager {
     /// Create a new website manager
     pub fn new(crdt_manager: Arc<CrdtManager>) -> Self {
-        Self {
-            crdt_manager,
-            renderer: MarkdownRenderer::new(),
-        }
+        Self { crdt_manager }
     }
 
     /// Get the document ID for a website page
@@ -126,12 +122,12 @@ impl WebsiteManager {
         let root = doc.get_or_insert_map("root");
         let mut txn = doc.transact_mut();
 
-        if let Some(content_val) = root.get(&txn, "content") {
-            if let Ok(content_text) = yrs::TextRef::try_from(content_val) {
-                let len = content_text.len(&txn);
-                content_text.insert(&mut txn, len, text);
-                return Ok(());
-            }
+        if let Some(content_val) = root.get(&txn, "content")
+            && let Ok(content_text) = yrs::TextRef::try_from(content_val)
+        {
+            let len = content_text.len(&txn);
+            content_text.insert(&mut txn, len, text);
+            return Ok(());
         }
 
         Err(WebsiteError::Rendering("No content text found".to_string()))
@@ -142,11 +138,11 @@ impl WebsiteManager {
         let root = doc.get_or_insert_map("root");
         let mut txn = doc.transact_mut();
 
-        if let Some(content_val) = root.get(&txn, "content") {
-            if let Ok(content_text) = yrs::TextRef::try_from(content_val) {
-                content_text.insert(&mut txn, index, text);
-                return Ok(());
-            }
+        if let Some(content_val) = root.get(&txn, "content")
+            && let Ok(content_text) = yrs::TextRef::try_from(content_val)
+        {
+            content_text.insert(&mut txn, index, text);
+            return Ok(());
         }
 
         Err(WebsiteError::Rendering("No content text found".to_string()))
@@ -157,10 +153,10 @@ impl WebsiteManager {
         let root = doc.get_or_insert_map("root");
         let txn = doc.transact();
 
-        if let Some(content_val) = root.get(&txn, "content") {
-            if let Ok(content_text) = yrs::TextRef::try_from(content_val) {
-                return Ok(content_text.get_string(&txn));
-            }
+        if let Some(content_val) = root.get(&txn, "content")
+            && let Ok(content_text) = yrs::TextRef::try_from(content_val)
+        {
+            return Ok(content_text.get_string(&txn));
         }
 
         Err(WebsiteError::Rendering("No content found".to_string()))

@@ -279,7 +279,7 @@ impl EntityService {
                 Ok(entity) => entities.push(entity),
                 Err(e) => {
                     // Log error but continue processing other entities
-                    eprintln!("Warning: Failed to load entity {}: {}", entity_id, e);
+                    tracing::warn!("Failed to load entity {}: {}", entity_id, e);
                 }
             }
         }

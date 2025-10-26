@@ -22,7 +22,7 @@ name = "communitas"
 path = "src/main.rs"
 
 [build-dependencies]
-tauri-build = { version = "2.5", features = [] }
+tauri-build = { version = "2.5.1", features = [] }
 
 [features]
 default = ["gossip_overlay"]

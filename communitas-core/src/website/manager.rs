@@ -4,7 +4,7 @@
 
 //! Website Manager - Handles website storage and operations
 
-use super::markdown::{MarkdownRenderer, render_and_sanitize};
+use super::markdown::render_and_sanitize;
 use super::types::{MarkdownPage, WebsiteError, WebsiteMetadata, WebsiteResult};
 use crate::crdt_manager::CrdtManager;
 use std::sync::Arc;

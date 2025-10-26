@@ -12,7 +12,7 @@ fn main() {
     unsafe {
         std::env::set_var("DEP_TAURI_DEV", "false");
     }
-    
+
     // Build Tauri for the desktop app
     tauri_build::build();
 }

@@ -68,10 +68,10 @@ rustls-pemfile = "2.0"
 security-framework = "2.11"
 
 # Tauri framework
-tauri = { version = "2.9", features = ["custom-protocol"] }
+tauri = { version = "2.5.1", features = ["custom-protocol"] }
 tauri-plugin-dialog = { version = "2.4" }
-tauri-plugin-log = { version = "2.7" }
-tauri-plugin-updater = { version = "2.9" }
+tauri-plugin-log = { version = "2.5" }
+tauri-plugin-updater = { version = "2.5" }
 
 # Async runtime (re-export from workspace)
 tokio = { version = "1.39", features = ["full"] }

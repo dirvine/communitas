@@ -1,6 +1,6 @@
 import {
     Brush as BrushIcon, Business as BusinessIcon, Chat as ChatIcon, Close as CloseIcon, CloudUpload as CloudUploadIcon, CreateNewFolder as CreateFolderIcon, Delete as DeleteIcon, Edit as EditIcon,
-    FileCopy as FileCopyIcon, GroupAdd as GroupAddIcon, Link as LinkIcon, Menu as MenuIcon, Notifications as NotificationsIcon, PersonAdd as PersonAddIcon, Phone as PhoneIcon, QrCode as QrCodeIcon, Search as SearchIcon, Settings as SettingsIcon, Share as ShareIcon, Storage as StorageIcon, Videocam as VideocamIcon, VpnKey as VpnKeyIcon
+    FileCopy as FileCopyIcon, GroupAdd as GroupAddIcon, Link as LinkIcon, Menu as MenuIcon, MoreVert, Notifications as NotificationsIcon, PersonAdd as PersonAddIcon, Phone as PhoneIcon, QrCode as QrCodeIcon, Search as SearchIcon, Settings as SettingsIcon, Share as ShareIcon, Storage as StorageIcon, Videocam as VideocamIcon, VpnKey as VpnKeyIcon
 } from '@mui/icons-material';
 import {
     Badge, Divider, IconButton, ListItemIcon,
@@ -35,6 +35,9 @@ export const QuickActionsBar: React.FC<QuickActionsBarProps> = ({
   const { mode: _mode, toggleMode: _toggleMode, setColorPreset: _setColorPreset } = useTheme();
 
   const handleAction = (action: string, data?: any) => {
+    if (action === 'open_advanced_menu') {
+      return;
+    }
     setOpen(false);
     onAction(action, data);
   };
@@ -64,6 +67,12 @@ export const QuickActionsBar: React.FC<QuickActionsBarProps> = ({
         icon: <SettingsIcon />, 
         name: 'Settings', 
         action: 'settings',
+        color: 'default' as const,
+      },
+      { 
+        icon: <MoreVert />, 
+        name: 'More', 
+        action: 'open_advanced_menu',
         color: 'default' as const,
       },
     ];
@@ -308,7 +317,14 @@ export const QuickActionsBar: React.FC<QuickActionsBarProps> = ({
             }
             tooltipTitle={action.name}
             tooltipOpen
-            onClick={() => handleAction(action.action)}
+            onClick={(event) => {
+              if (action.action === 'open_advanced_menu') {
+                setMenuAnchor(event.currentTarget);
+                setActiveMenu('advanced');
+              } else {
+                handleAction(action.action);
+              }
+            }}
             FabProps={{
               color: action.color,
               sx: {

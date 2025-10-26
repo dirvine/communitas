@@ -17,10 +17,7 @@ fn test_default_resource_limits() {
     assert_eq!(limits.max_peer_connections(), 50);
     assert_eq!(limits.max_memory_mb(), 2048);
     assert_eq!(limits.connection_timeout(), Duration::from_secs(30));
-    assert_eq!(
-        limits.anti_entropy_max_interval(),
-        Duration::from_secs(300)
-    );
+    assert_eq!(limits.anti_entropy_max_interval(), Duration::from_secs(300));
 }
 
 #[test]
@@ -70,7 +67,11 @@ fn test_enforce_peer_limit_exceeded() {
     match result {
         Err(e) => {
             let msg = e.to_string();
-            assert!(msg.contains("Peer") || msg.contains("limit"), "Error: {}", msg);
+            assert!(
+                msg.contains("Peer") || msg.contains("limit"),
+                "Error: {}",
+                msg
+            );
         }
         Ok(_) => panic!("Should have returned an error"),
     }
@@ -196,11 +197,7 @@ async fn test_periodic_enforcement() {
         usage.peer_connections = i;
 
         if i < 50 {
-            assert!(
-                limits.check_all(&usage).is_ok(),
-                "Should allow {} peers",
-                i
-            );
+            assert!(limits.check_all(&usage).is_ok(), "Should allow {} peers", i);
         } else {
             assert!(
                 limits.check_all(&usage).is_err(),

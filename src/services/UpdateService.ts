@@ -99,14 +99,16 @@ export class UpdateService {
       console.log('Downloading and installing update...');
 
       // Download and install - this returns once download is complete
+      let downloaded = 0;
       await update.downloadAndInstall((event) => {
         if (event.event === 'Started') {
+          downloaded = 0;
           console.log(`Download started: ${event.data.contentLength || 0} bytes`);
         } else if (event.event === 'Progress') {
-          const { chunkLength } = event.data;
-          const contentLength = (event.data as any).contentLength;
-          if (onProgress && contentLength) {
-            onProgress(chunkLength, contentLength);
+          downloaded += event.data.chunkLength ?? 0;
+          const total = (event.data as any).contentLength ?? 0;
+          if (onProgress && total > 0) {
+            onProgress(downloaded, total);
           }
         } else if (event.event === 'Finished') {
           console.log('Update download and installation complete');

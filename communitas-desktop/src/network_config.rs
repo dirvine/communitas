@@ -261,20 +261,16 @@ impl Default for ResourceLimitsConfig {
 impl ResourceLimitsConfig {
     /// Convert to communitas_core::ResourceLimits
     pub fn to_core_limits(&self) -> communitas_core::ResourceLimits {
-        communitas_core::ResourceLimits {
-            max_memory_mb: self.max_memory_mb,
-            crdt_document_limit_mb: self.crdt_document_limit_mb,
-            cache_size_mb: 500, // Default from spec
+        let config = communitas_core::resource_limits::ResourceLimitsConfig {
             max_peer_connections: self.max_peer_connections,
-            max_relay_connections: self.max_relay_connections,
-            connection_timeout: Duration::from_secs(self.connection_timeout_secs),
-            upload_rate_limit_mbps: self.upload_rate_limit_mbps,
-            download_rate_limit_mbps: self.download_rate_limit_mbps,
-            burst_allowance_mb: 10, // Default from spec
-            max_worker_threads: 4,  // Default from spec
-            crypto_thread_pool: 2,  // Default from spec
-            anti_entropy_max_interval: Duration::from_secs(300), // Default from spec
-        }
+            max_memory_mb: self.max_memory_mb,
+            connection_timeout_secs: self.connection_timeout_secs,
+            anti_entropy_max_interval_secs: 300,
+            max_upload_rate_mbps: self.upload_rate_limit_mbps,
+            max_download_rate_mbps: self.download_rate_limit_mbps,
+        };
+
+        communitas_core::resource_limits::ResourceLimits::from_config(config)
     }
 }
 

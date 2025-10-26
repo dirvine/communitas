@@ -22,11 +22,66 @@ impl WebsiteManager {
         Self { crdt_manager }
     }
 
+    /// Validate and sanitize a page path
+    fn validate_page_path(path: &str) -> WebsiteResult<String> {
+        // Max length check
+        if path.len() > 255 {
+            return Err(WebsiteError::InvalidPath("Path too long".into()));
+        }
+
+        if path.is_empty() {
+            return Err(WebsiteError::InvalidPath("Empty path".into()));
+        }
+
+        // Split into components
+        let parts: Vec<&str> = path.split('/').filter(|c| !c.is_empty()).collect();
+
+        if parts.is_empty() {
+            return Err(WebsiteError::InvalidPath("No valid path components".into()));
+        }
+
+        let mut components = Vec::new();
+
+        // Validate each component
+        for comp in parts {
+            // Reject dangerous components
+            if comp == "." || comp == ".." {
+                return Err(WebsiteError::InvalidPath("Path traversal attempt".into()));
+            }
+
+            // Only allow alphanumeric, dash, underscore, dot
+            if !comp
+                .chars()
+                .all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '.')
+            {
+                return Err(WebsiteError::InvalidPath(format!(
+                    "Invalid characters in: {}",
+                    comp
+                )));
+            }
+
+            // Don't allow components that are just dots (e.g., "...")
+            if comp.chars().all(|c| c == '.') {
+                return Err(WebsiteError::InvalidPath("Invalid component".into()));
+            }
+
+            // Don't allow consecutive dots anywhere
+            if comp.contains("..") {
+                return Err(WebsiteError::InvalidPath(
+                    "Consecutive dots not allowed".into(),
+                ));
+            }
+
+            components.push(comp);
+        }
+
+        Ok(components.join("/"))
+    }
+
     /// Get the document ID for a website page
-    fn page_doc_id(four_word_address: &str, path: &str) -> String {
-        // Sanitize path to prevent directory traversal
-        let safe_path = path.replace("..", "").replace("//", "/");
-        format!("website:{}:page:{}", four_word_address, safe_path)
+    fn page_doc_id(four_word_address: &str, path: &str) -> WebsiteResult<String> {
+        let safe_path = Self::validate_page_path(path)?;
+        Ok(format!("website:{}:page:{}", four_word_address, safe_path))
     }
 
     /// Get the document ID for website metadata
@@ -40,7 +95,7 @@ impl WebsiteManager {
         four_word_address: &str,
         page: &MarkdownPage,
     ) -> WebsiteResult<()> {
-        let doc_id = Self::page_doc_id(four_word_address, &page.path);
+        let doc_id = Self::page_doc_id(four_word_address, &page.path)?;
         let doc = Doc::new();
 
         {
@@ -72,7 +127,7 @@ impl WebsiteManager {
         four_word_address: &str,
         path: &str,
     ) -> WebsiteResult<MarkdownPage> {
-        let doc_id = Self::page_doc_id(four_word_address, path);
+        let doc_id = Self::page_doc_id(four_word_address, path)?;
         let doc = self
             .crdt_manager
             .load_document(&doc_id)
@@ -110,7 +165,7 @@ impl WebsiteManager {
 
     /// Load a page as a Yrs document for collaborative editing
     pub async fn load_page_doc(&self, four_word_address: &str, path: &str) -> WebsiteResult<Doc> {
-        let doc_id = Self::page_doc_id(four_word_address, path);
+        let doc_id = Self::page_doc_id(four_word_address, path)?;
         self.crdt_manager
             .load_document(&doc_id)
             .await
@@ -209,7 +264,7 @@ impl WebsiteManager {
 
     /// Delete a page
     pub async fn delete_page(&self, four_word_address: &str, path: &str) -> WebsiteResult<()> {
-        let doc_id = Self::page_doc_id(four_word_address, path);
+        let doc_id = Self::page_doc_id(four_word_address, path)?;
         self.crdt_manager.delete_document(&doc_id).await?;
         Ok(())
     }

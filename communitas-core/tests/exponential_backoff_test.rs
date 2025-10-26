@@ -8,8 +8,8 @@
 //! MESH_CAPABILITIES.md Section 3.2 Scenario C
 
 use communitas_core::retry_utils::{BackoffConfig, RetryConfig, RetryResult, retry_with_backoff};
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
 #[tokio::test]
@@ -27,7 +27,11 @@ async fn test_successful_operation_no_retry() {
     .await;
 
     assert!(result.is_ok());
-    assert_eq!(attempt_count.load(Ordering::SeqCst), 1, "Should only try once on success");
+    assert_eq!(
+        attempt_count.load(Ordering::SeqCst),
+        1,
+        "Should only try once on success"
+    );
 }
 
 #[tokio::test]
@@ -49,7 +53,11 @@ async fn test_retry_with_eventual_success() {
     .await;
 
     assert!(result.is_ok());
-    assert_eq!(attempt_count.load(Ordering::SeqCst), 3, "Should retry until success");
+    assert_eq!(
+        attempt_count.load(Ordering::SeqCst),
+        3,
+        "Should retry until success"
+    );
 }
 
 #[tokio::test]
@@ -74,7 +82,11 @@ async fn test_max_retries_exceeded() {
     .await;
 
     assert!(result.is_err());
-    assert_eq!(attempt_count.load(Ordering::SeqCst), 4, "Should try 1 + 3 retries");
+    assert_eq!(
+        attempt_count.load(Ordering::SeqCst),
+        4,
+        "Should try 1 + 3 retries"
+    );
 }
 
 #[tokio::test]
@@ -106,10 +118,22 @@ async fn test_exponential_delay_progression() {
         .map(|w| w[1].duration_since(w[0]))
         .collect();
 
-    assert!(delays[0] >= Duration::from_millis(100), "First delay >= 100ms");
-    assert!(delays[1] >= Duration::from_millis(200), "Second delay >= 200ms");
-    assert!(delays[2] >= Duration::from_millis(400), "Third delay >= 400ms");
-    assert!(delays[3] >= Duration::from_millis(800), "Fourth delay >= 800ms");
+    assert!(
+        delays[0] >= Duration::from_millis(100),
+        "First delay >= 100ms"
+    );
+    assert!(
+        delays[1] >= Duration::from_millis(200),
+        "Second delay >= 200ms"
+    );
+    assert!(
+        delays[2] >= Duration::from_millis(400),
+        "Third delay >= 400ms"
+    );
+    assert!(
+        delays[3] >= Duration::from_millis(800),
+        "Fourth delay >= 800ms"
+    );
 }
 
 #[tokio::test]

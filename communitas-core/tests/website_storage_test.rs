@@ -575,3 +575,188 @@ async fn test_markdown_with_images() {
     assert!(html.contains("<img"));
     assert!(html.contains("images/photo.jpg") || html.contains("src=\"images/photo.jpg\""));
 }
+
+/// Test path traversal attack prevention
+#[tokio::test]
+async fn test_path_traversal_attacks() {
+    let temp_dir = tempdir().expect("Failed to create temp dir");
+    let manager = Arc::new(
+        CrdtManager::new(temp_dir.path())
+            .await
+            .expect("Failed to create manager"),
+    );
+    let website_manager = WebsiteManager::new(manager);
+
+    let four_words = "security-test-site";
+
+    // Test various path traversal attempts
+    let malicious_paths = vec![
+        "../../../etc/passwd",
+        "../../sensitive.md",
+        "../outside.md",
+        "....//..//test.md",
+    ];
+
+    for path in malicious_paths {
+        let page = MarkdownPage {
+            path: path.to_string(),
+            content: "# Malicious Content".to_string(),
+            title: Some("Bad".to_string()),
+            created_at: 1000,
+            updated_at: 1000,
+        };
+
+        let result = website_manager.save_page(four_words, &page).await;
+        assert!(
+            result.is_err(),
+            "Path '{}' should be rejected but was accepted",
+            path
+        );
+    }
+}
+
+/// Test invalid path component rejection
+#[tokio::test]
+async fn test_invalid_path_components() {
+    let temp_dir = tempdir().expect("Failed to create temp dir");
+    let manager = Arc::new(
+        CrdtManager::new(temp_dir.path())
+            .await
+            .expect("Failed to create manager"),
+    );
+    let website_manager = WebsiteManager::new(manager);
+
+    let four_words = "invalid-path-test";
+
+    // Test path with only dots
+    let page = MarkdownPage {
+        path: "a..b.md".to_string(),
+        content: "# Content".to_string(),
+        title: Some("Test".to_string()),
+        created_at: 1000,
+        updated_at: 1000,
+    };
+
+    let result = website_manager.save_page(four_words, &page).await;
+    assert!(
+        result.is_err(),
+        "Path with multiple consecutive dots should be rejected"
+    );
+}
+
+/// Test valid path acceptance
+#[tokio::test]
+async fn test_valid_paths_accepted() {
+    let temp_dir = tempdir().expect("Failed to create temp dir");
+    let manager = Arc::new(
+        CrdtManager::new(temp_dir.path())
+            .await
+            .expect("Failed to create manager"),
+    );
+    let website_manager = WebsiteManager::new(manager);
+
+    let four_words = "valid-path-test";
+
+    // Test various valid paths
+    let valid_paths = vec![
+        "home.md",
+        "blog/post-1.md",
+        "docs/api/v1.0.md",
+        "my_file.md",
+        "test-page_2.md",
+    ];
+
+    for path in valid_paths {
+        let page = MarkdownPage {
+            path: path.to_string(),
+            content: "# Valid Content".to_string(),
+            title: Some("Valid".to_string()),
+            created_at: 1000,
+            updated_at: 1000,
+        };
+
+        let result = website_manager.save_page(four_words, &page).await;
+        assert!(
+            result.is_ok(),
+            "Valid path '{}' should be accepted but was rejected: {:?}",
+            path,
+            result.err()
+        );
+    }
+}
+
+/// Test max path length rejection
+#[tokio::test]
+async fn test_path_length_limit() {
+    let temp_dir = tempdir().expect("Failed to create temp dir");
+    let manager = Arc::new(
+        CrdtManager::new(temp_dir.path())
+            .await
+            .expect("Failed to create manager"),
+    );
+    let website_manager = WebsiteManager::new(manager);
+
+    let four_words = "xyz";
+
+    // Create a path longer than 255 characters
+    let long_path = "a".repeat(256) + ".md";
+
+    let page = MarkdownPage {
+        path: long_path.clone(),
+        content: "# Content".to_string(),
+        title: Some("Test".to_string()),
+        created_at: 1000,
+        updated_at: 1000,
+    };
+
+    let result = website_manager.save_page(four_words, &page).await;
+    assert!(
+        result.is_err(),
+        "Path longer than 255 characters should be rejected"
+    );
+
+    // Test exactly 255 characters - should be accepted by our validation
+    // (though the filesystem may have stricter limits for the full doc_id)
+    // Use a reasonable length that will pass both our validation and filesystem limits
+    let max_path = "a".repeat(100) + "-x.md"; // 105 characters, well within limits
+
+    let page_max = MarkdownPage {
+        path: max_path,
+        content: "# Content".to_string(),
+        title: Some("Test".to_string()),
+        created_at: 1000,
+        updated_at: 1000,
+    };
+
+    let result_max = website_manager.save_page(four_words, &page_max).await;
+    assert!(
+        result_max.is_ok(),
+        "Valid path within length limits should be accepted: {:?}",
+        result_max.err()
+    );
+}
+
+/// Test empty path rejection
+#[tokio::test]
+async fn test_empty_path_rejection() {
+    let temp_dir = tempdir().expect("Failed to create temp dir");
+    let manager = Arc::new(
+        CrdtManager::new(temp_dir.path())
+            .await
+            .expect("Failed to create manager"),
+    );
+    let website_manager = WebsiteManager::new(manager);
+
+    let four_words = "empty-path-test";
+
+    let page = MarkdownPage {
+        path: "".to_string(),
+        content: "# Content".to_string(),
+        title: Some("Test".to_string()),
+        created_at: 1000,
+        updated_at: 1000,
+    };
+
+    let result = website_manager.save_page(four_words, &page).await;
+    assert!(result.is_err(), "Empty path should be rejected");
+}

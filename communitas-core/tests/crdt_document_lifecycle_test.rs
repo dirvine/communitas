@@ -532,3 +532,100 @@ async fn test_document_size_limit() {
         "Should reject document exceeding size limit"
     );
 }
+
+/// Test that same doc_id in different entity types doesn't collide
+#[tokio::test]
+async fn test_entity_type_isolation() {
+    let temp_dir = tempdir().expect("Failed to create temp dir");
+    let manager = CrdtManager::new(temp_dir.path())
+        .await
+        .expect("Failed to create manager");
+
+    // Create two documents with same suffix but different entity types
+    let doc_channel = Doc::new();
+    {
+        let root = doc_channel.get_or_insert_map("root");
+        let mut txn = doc_channel.transact_mut();
+        root.insert(&mut txn, "type", "channel_data");
+        root.insert(&mut txn, "value", "Channel Value");
+    }
+
+    let doc_org = Doc::new();
+    {
+        let root = doc_org.get_or_insert_map("root");
+        let mut txn = doc_org.transact_mut();
+        root.insert(&mut txn, "type", "organization_data");
+        root.insert(&mut txn, "value", "Organization Value");
+    }
+
+    // Save both with entity_type in doc_id format: "entity_type:entity_id:suffix"
+    manager
+        .save_document("channel:123:metadata", "channel", "123", &doc_channel)
+        .await
+        .expect("Save channel document");
+
+    manager
+        .save_document("organization:123:metadata", "organization", "123", &doc_org)
+        .await
+        .expect("Save organization document");
+
+    // Load and verify they remain separate
+    let loaded_channel = manager
+        .load_document("channel:123:metadata")
+        .await
+        .expect("Load channel document");
+
+    let loaded_org = manager
+        .load_document("organization:123:metadata")
+        .await
+        .expect("Load organization document");
+
+    // Verify channel document
+    {
+        let root = loaded_channel.get_or_insert_map("root");
+        let txn = loaded_channel.transact();
+        let type_val = root
+            .get(&txn, "type")
+            .and_then(|v| String::try_from(v).ok())
+            .expect("Channel type exists");
+        let value_val = root
+            .get(&txn, "value")
+            .and_then(|v| String::try_from(v).ok())
+            .expect("Channel value exists");
+
+        assert_eq!(type_val, "channel_data");
+        assert_eq!(value_val, "Channel Value");
+    }
+
+    // Verify organization document
+    {
+        let root = loaded_org.get_or_insert_map("root");
+        let txn = loaded_org.transact();
+        let type_val = root
+            .get(&txn, "type")
+            .and_then(|v| String::try_from(v).ok())
+            .expect("Organization type exists");
+        let value_val = root
+            .get(&txn, "value")
+            .and_then(|v| String::try_from(v).ok())
+            .expect("Organization value exists");
+
+        assert_eq!(type_val, "organization_data");
+        assert_eq!(value_val, "Organization Value");
+    }
+
+    // Verify they are stored in different directories
+    let channel_list = manager
+        .list_documents("channel")
+        .await
+        .expect("List channel docs");
+    let org_list = manager
+        .list_documents("organization")
+        .await
+        .expect("List org docs");
+
+    assert_eq!(channel_list.len(), 1);
+    assert_eq!(org_list.len(), 1);
+    assert!(channel_list.contains(&"channel:123:metadata".to_string()));
+    assert!(org_list.contains(&"organization:123:metadata".to_string()));
+}

@@ -109,9 +109,7 @@ impl ResourceLimits {
             max_peer_connections: config.max_peer_connections,
             max_memory_mb: config.max_memory_mb,
             connection_timeout: Duration::from_secs(config.connection_timeout_secs),
-            anti_entropy_max_interval: Duration::from_secs(
-                config.anti_entropy_max_interval_secs,
-            ),
+            anti_entropy_max_interval: Duration::from_secs(config.anti_entropy_max_interval_secs),
             max_upload_rate_mbps: config.max_upload_rate_mbps.map(|r| r as f64),
             max_download_rate_mbps: config.max_download_rate_mbps.map(|r| r as f64),
         }

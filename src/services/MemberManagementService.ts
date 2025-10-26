@@ -7,7 +7,7 @@ import type {
     MemberInfo, MemberOperationResult, RemoveMemberRequest,
     UpdateRoleRequest
 } from '../types/memberManagement'
-import { MemberError } from '../types/memberManagement'
+import { MemberError, normalizeMemberRole } from '../types/memberManagement'
 
 class MemberManagementService {
   /**
@@ -34,9 +34,14 @@ class MemberManagementService {
         entityType,
         entityId,
       })
+      // Normalize roles from backend
+      const normalized = members.map(m => ({
+        ...m,
+        role: normalizeMemberRole(m.role as unknown as string)
+      }))
       return {
         success: true,
-        data: members,
+        data: normalized,
       }
     } catch (error) {
       return this.handleError(error)

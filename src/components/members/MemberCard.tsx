@@ -89,7 +89,7 @@ export function MemberCard({ member, canManage, onRemove, onRoleChange }: Member
             <Chip
               label={member.role.toUpperCase()}
               size="small"
-              color={getRoleBadgeColor(member.role as MemberRole)}
+              color={getRoleBadgeColor(member.role)}
             />
             <Typography variant="caption" color="textSecondary">
               Joined: {formatRelativeTime(member.joined_at)}
@@ -107,7 +107,7 @@ export function MemberCard({ member, canManage, onRemove, onRoleChange }: Member
           <MenuItem
             onClick={() => {
               setAnchorEl(null)
-              if (onRoleChange && (member.role === 'owner' || member.role === 'admin' || member.role === 'member' || member.role === 'guest')) {
+              if (onRoleChange) {
                 onRoleChange(member.member_id, member.role)
               }
             }}

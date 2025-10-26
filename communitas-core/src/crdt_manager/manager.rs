@@ -4,8 +4,8 @@
 
 use super::{CrdtError, CrdtResult};
 use serde::{Deserialize, Serialize};
-use std::fs;
 use std::path::{Path, PathBuf};
+use tokio::fs;
 use yrs::updates::decoder::Decode;
 use yrs::{Any, Doc, Map, MapPrelim, MapRef, Out, ReadTxn, Transact, TransactionMut, Update};
 
@@ -43,7 +43,7 @@ impl CrdtManager {
         let crdt_dir = storage_dir.join("crdt");
 
         // Create directory structure
-        fs::create_dir_all(&crdt_dir).map_err(|e| {
+        fs::create_dir_all(&crdt_dir).await.map_err(|e| {
             CrdtError::FileSystem(format!("Failed to create CRDT directory: {}", e))
         })?;
 
@@ -85,9 +85,17 @@ impl CrdtManager {
         entity_id: &str,
         doc: &Doc,
     ) -> CrdtResult<()> {
+        // Validate that doc_id starts with entity_type
+        if !doc_id.starts_with(entity_type) {
+            return Err(CrdtError::InvalidDocumentId(format!(
+                "doc_id '{}' must start with entity_type '{}'",
+                doc_id, entity_type
+            )));
+        }
+
         // Ensure entity directory exists
         let entity_dir = self.entity_dir(entity_type);
-        fs::create_dir_all(&entity_dir).map_err(|e| {
+        fs::create_dir_all(&entity_dir).await.map_err(|e| {
             CrdtError::FileSystem(format!("Failed to create entity directory: {}", e))
         })?;
 
@@ -111,24 +119,26 @@ impl CrdtManager {
         // Load existing metadata or create new
         let mut metadata = if meta_path.exists() {
             let meta_json = fs::read_to_string(&meta_path)
+                .await
                 .map_err(|e| CrdtError::FileSystem(format!("Failed to read metadata: {}", e)))?;
-            serde_json::from_str(&meta_json)
-                .map_err(|e| CrdtError::Serialization(format!("Invalid metadata JSON: {}", e)))?
+            let mut existing: DocumentMetadata = serde_json::from_str(&meta_json)
+                .map_err(|e| CrdtError::Serialization(format!("Invalid metadata JSON: {}", e)))?;
+            existing.version += 1; // Increment for this save
+            existing
         } else {
             let now = chrono::Utc::now().timestamp();
             DocumentMetadata {
                 doc_id: doc_id.to_string(),
                 entity_type: entity_type.to_string(),
                 entity_id: entity_id.to_string(),
-                version: 1,
+                version: 1, // First version
                 created_at: now,
                 updated_at: now,
             }
         };
 
-        // Update metadata
+        // Update timestamp
         metadata.updated_at = chrono::Utc::now().timestamp();
-        metadata.version += 1;
 
         // Write files atomically (temp + rename)
         // Create temp files in same directory to avoid cross-filesystem rename (EXDEV error)
@@ -136,18 +146,22 @@ impl CrdtManager {
         let meta_temp = meta_path.with_extension("meta.tmp");
 
         fs::write(&yrs_temp, &state)
+            .await
             .map_err(|e| CrdtError::FileSystem(format!("Failed to write Yrs state: {}", e)))?;
 
         let meta_json = serde_json::to_string_pretty(&metadata).map_err(|e| {
             CrdtError::Serialization(format!("Failed to serialize metadata: {}", e))
         })?;
         fs::write(&meta_temp, meta_json)
+            .await
             .map_err(|e| CrdtError::FileSystem(format!("Failed to write metadata: {}", e)))?;
 
         // Atomic rename (same filesystem - no EXDEV error)
         fs::rename(&yrs_temp, &yrs_path)
+            .await
             .map_err(|e| CrdtError::FileSystem(format!("Failed to rename Yrs file: {}", e)))?;
         fs::rename(&meta_temp, &meta_path)
+            .await
             .map_err(|e| CrdtError::FileSystem(format!("Failed to rename metadata file: {}", e)))?;
 
         Ok(())
@@ -155,49 +169,38 @@ impl CrdtManager {
 
     /// Load a Yrs document from the filesystem
     pub async fn load_document(&self, doc_id: &str) -> CrdtResult<Doc> {
-        // Find the document by searching all entity type directories
-        let crdt_dir = self.storage_dir.join("crdt");
+        // Parse entity_type from doc_id (format: "entity_type:entity_id:suffix")
+        let parts: Vec<&str> = doc_id.split(':').collect();
+        if parts.len() < 2 {
+            return Err(CrdtError::InvalidDocumentId(format!(
+                "Invalid doc_id format (expected 'entity_type:entity_id:...'): {}",
+                doc_id
+            )));
+        }
 
-        if !crdt_dir.exists() {
+        let entity_type = parts[0];
+        let (yrs_path, _) = self.doc_paths(entity_type, doc_id);
+
+        if !yrs_path.exists() {
             return Err(CrdtError::DocumentNotFound(doc_id.to_string()));
         }
 
-        // Search all entity type directories
-        for entry in fs::read_dir(&crdt_dir)
-            .map_err(|e| CrdtError::FileSystem(format!("Failed to read CRDT directory: {}", e)))?
+        // Load and decode
+        let state_bytes = fs::read(&yrs_path)
+            .await
+            .map_err(|e| CrdtError::FileSystem(format!("Failed to read Yrs state: {}", e)))?;
+
+        let update = Update::decode_v1(&state_bytes).map_err(|e| {
+            CrdtError::Deserialization(format!("Failed to decode Yrs state: {}", e))
+        })?;
+
+        let doc = Doc::new();
         {
-            let entry = entry.map_err(|e| {
-                CrdtError::FileSystem(format!("Failed to read directory entry: {}", e))
-            })?;
-
-            if !entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false) {
-                continue;
-            }
-
-            let entity_type = entry.file_name().to_string_lossy().to_string();
-            let (yrs_path, _) = self.doc_paths(&entity_type, doc_id);
-
-            if yrs_path.exists() {
-                // Load and decode
-                let state_bytes = fs::read(&yrs_path).map_err(|e| {
-                    CrdtError::FileSystem(format!("Failed to read Yrs state: {}", e))
-                })?;
-
-                let update = Update::decode_v1(&state_bytes).map_err(|e| {
-                    CrdtError::Deserialization(format!("Failed to decode Yrs state: {}", e))
-                })?;
-
-                let doc = Doc::new();
-                {
-                    let mut txn = doc.transact_mut();
-                    txn.apply_update(update);
-                }
-
-                return Ok(doc);
-            }
+            let mut txn = doc.transact_mut();
+            txn.apply_update(update);
         }
 
-        Err(CrdtError::DocumentNotFound(doc_id.to_string()))
+        Ok(doc)
     }
 
     /// List all document IDs for a given entity type
@@ -210,13 +213,15 @@ impl CrdtManager {
 
         let mut doc_ids = Vec::new();
 
-        for entry in fs::read_dir(&entity_dir)
-            .map_err(|e| CrdtError::FileSystem(format!("Failed to read entity directory: {}", e)))?
-        {
-            let entry = entry.map_err(|e| {
-                CrdtError::FileSystem(format!("Failed to read directory entry: {}", e))
-            })?;
+        let mut read_dir = fs::read_dir(&entity_dir).await.map_err(|e| {
+            CrdtError::FileSystem(format!("Failed to read entity directory: {}", e))
+        })?;
 
+        while let Some(entry) = read_dir
+            .next_entry()
+            .await
+            .map_err(|e| CrdtError::FileSystem(format!("Failed to read directory entry: {}", e)))?
+        {
             let file_name = entry.file_name();
             let file_name_str = file_name.to_string_lossy();
 
@@ -240,11 +245,18 @@ impl CrdtManager {
     /// This method loads a document, applies the update, and saves it back.
     /// Used for syncing updates from remote peers.
     pub async fn apply_update(&self, doc_id: &str, update_bytes: &[u8]) -> CrdtResult<()> {
-        // Load the document (or create new if it doesn't exist)
-        let doc = self
-            .load_document(doc_id)
-            .await
-            .unwrap_or_else(|_| Doc::new());
+        // Check update size limit
+        const MAX_ENCODED_SIZE: usize = 10 * 1024 * 1024;
+        if update_bytes.len() > MAX_ENCODED_SIZE {
+            return Err(CrdtError::encoding_error(format!(
+                "Update too large: {} bytes (max: {})",
+                update_bytes.len(),
+                MAX_ENCODED_SIZE
+            )));
+        }
+
+        // Load the document (error if it doesn't exist)
+        let doc = self.load_document(doc_id).await?;
 
         // Decode and apply the update
         let update = Update::decode_v1(update_bytes)
@@ -280,11 +292,21 @@ impl CrdtManager {
     /// Takes a document ID and a list of update blobs from different peers,
     /// applies them all, and saves the merged result.
     pub async fn merge_updates(&self, doc_id: &str, updates: Vec<Vec<u8>>) -> CrdtResult<Doc> {
-        // Load existing document or create new
-        let doc = self
-            .load_document(doc_id)
-            .await
-            .unwrap_or_else(|_| Doc::new());
+        // Check update size limits
+        const MAX_ENCODED_SIZE: usize = 10 * 1024 * 1024;
+        for (i, update_bytes) in updates.iter().enumerate() {
+            if update_bytes.len() > MAX_ENCODED_SIZE {
+                return Err(CrdtError::encoding_error(format!(
+                    "Update {} too large: {} bytes (max: {})",
+                    i,
+                    update_bytes.len(),
+                    MAX_ENCODED_SIZE
+                )));
+            }
+        }
+
+        // Load existing document (error if it doesn't exist)
+        let doc = self.load_document(doc_id).await?;
 
         // Apply all updates
         for update_bytes in updates {
@@ -371,47 +393,30 @@ impl CrdtManager {
 
     /// Delete a document from the filesystem
     pub async fn delete_document(&self, doc_id: &str) -> CrdtResult<()> {
-        // Find and delete from all entity type directories
-        let crdt_dir = self.storage_dir.join("crdt");
+        // Parse entity_type from doc_id
+        let parts: Vec<&str> = doc_id.split(':').collect();
+        if parts.len() < 2 {
+            return Err(CrdtError::InvalidDocumentId(format!(
+                "Invalid doc_id format (expected 'entity_type:entity_id:...'): {}",
+                doc_id
+            )));
+        }
 
-        if !crdt_dir.exists() {
+        let entity_type = parts[0];
+        let (yrs_path, meta_path) = self.doc_paths(entity_type, doc_id);
+
+        if !yrs_path.exists() {
             return Err(CrdtError::DocumentNotFound(doc_id.to_string()));
         }
 
-        let mut found = false;
+        fs::remove_file(&yrs_path)
+            .await
+            .map_err(|e| CrdtError::FileSystem(format!("Failed to delete Yrs file: {}", e)))?;
 
-        for entry in fs::read_dir(&crdt_dir)
-            .map_err(|e| CrdtError::FileSystem(format!("Failed to read CRDT directory: {}", e)))?
-        {
-            let entry = entry.map_err(|e| {
-                CrdtError::FileSystem(format!("Failed to read directory entry: {}", e))
+        if meta_path.exists() {
+            fs::remove_file(&meta_path).await.map_err(|e| {
+                CrdtError::FileSystem(format!("Failed to delete metadata file: {}", e))
             })?;
-
-            if !entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false) {
-                continue;
-            }
-
-            let entity_type = entry.file_name().to_string_lossy().to_string();
-            let (yrs_path, meta_path) = self.doc_paths(&entity_type, doc_id);
-
-            if yrs_path.exists() {
-                fs::remove_file(&yrs_path).map_err(|e| {
-                    CrdtError::FileSystem(format!("Failed to delete Yrs file: {}", e))
-                })?;
-
-                if meta_path.exists() {
-                    fs::remove_file(&meta_path).map_err(|e| {
-                        CrdtError::FileSystem(format!("Failed to delete metadata file: {}", e))
-                    })?;
-                }
-
-                found = true;
-                break;
-            }
-        }
-
-        if !found {
-            return Err(CrdtError::DocumentNotFound(doc_id.to_string()));
         }
 
         Ok(())
@@ -537,12 +542,15 @@ mod tests {
         CrdtManager::set_map_value(&doc, "count", 42i64).expect("set count");
 
         manager
-            .save_document("doc-1", "channel", "ch-1", &doc)
+            .save_document("channel:ch-1:doc", "channel", "ch-1", &doc)
             .await
             .expect("save document");
 
         // Load and verify using helper methods
-        let loaded_doc = manager.load_document("doc-1").await.expect("load document");
+        let loaded_doc = manager
+            .load_document("channel:ch-1:doc")
+            .await
+            .expect("load document");
 
         let name: String = CrdtManager::get_map_value(&loaded_doc, "name")
             .expect("get value")
@@ -568,7 +576,12 @@ mod tests {
         for i in 1..=3 {
             let doc = Doc::new();
             manager
-                .save_document(&format!("doc-{}", i), "channel", &format!("ch-{}", i), &doc)
+                .save_document(
+                    &format!("channel:ch-{}:doc", i),
+                    "channel",
+                    &format!("ch-{}", i),
+                    &doc,
+                )
                 .await
                 .expect("save document");
         }
@@ -578,9 +591,9 @@ mod tests {
             .await
             .expect("list documents");
         assert_eq!(docs.len(), 3);
-        assert!(docs.contains(&"doc-1".to_string()));
-        assert!(docs.contains(&"doc-2".to_string()));
-        assert!(docs.contains(&"doc-3".to_string()));
+        assert!(docs.contains(&"channel:ch-1:doc".to_string()));
+        assert!(docs.contains(&"channel:ch-2:doc".to_string()));
+        assert!(docs.contains(&"channel:ch-3:doc".to_string()));
     }
 
     #[tokio::test]
@@ -595,7 +608,7 @@ mod tests {
         // Create and save a document
         let doc = Doc::new();
         manager
-            .save_document("doc-1", "channel", "ch-1", &doc)
+            .save_document("channel:ch-1:doc", "channel", "ch-1", &doc)
             .await
             .expect("save document");
 
@@ -608,7 +621,7 @@ mod tests {
 
         // Delete it
         manager
-            .delete_document("doc-1")
+            .delete_document("channel:ch-1:doc")
             .await
             .expect("delete document");
 
@@ -629,8 +642,13 @@ mod tests {
             .await
             .expect("create manager");
 
-        // Try to load non-existent document
+        // Try to load non-existent document with invalid format
         let result = manager.load_document("nonexistent").await;
+        assert!(result.is_err());
+        assert!(matches!(result, Err(CrdtError::InvalidDocumentId(_))));
+
+        // Try to load non-existent document with valid format
+        let result = manager.load_document("channel:ch-1:doc").await;
         assert!(result.is_err());
         assert!(matches!(result, Err(CrdtError::DocumentNotFound(_))));
     }
@@ -650,13 +668,16 @@ mod tests {
             CrdtManager::set_map_value(&doc, "version", i as i64).expect("set version");
 
             manager
-                .save_document("doc-1", "channel", "ch-1", &doc)
+                .save_document("channel:ch-1:doc", "channel", "ch-1", &doc)
                 .await
                 .expect("save document");
         }
 
         // Last write should win
-        let loaded_doc = manager.load_document("doc-1").await.expect("load document");
+        let loaded_doc = manager
+            .load_document("channel:ch-1:doc")
+            .await
+            .expect("load document");
 
         let version: i64 = CrdtManager::get_map_value(&loaded_doc, "version")
             .expect("get value")
@@ -675,20 +696,22 @@ mod tests {
 
         let doc = Doc::new();
         manager
-            .save_document("doc-1", "channel", "ch-1", &doc)
+            .save_document("channel:ch-1:doc", "channel", "ch-1", &doc)
             .await
             .expect("save document");
 
         // Verify metadata file exists (using hex-encoded filename)
-        let hex_doc_id = hex::encode("doc-1".as_bytes());
+        let hex_doc_id = hex::encode("channel:ch-1:doc".as_bytes());
         let meta_path = storage_path.join(format!("crdt/channel/{}.meta", hex_doc_id));
         assert!(meta_path.exists());
 
         // Read and verify metadata
-        let meta_json = fs::read_to_string(meta_path).expect("read metadata");
+        let meta_json = tokio::fs::read_to_string(meta_path)
+            .await
+            .expect("read metadata");
         let metadata: DocumentMetadata = serde_json::from_str(&meta_json).expect("parse metadata");
 
-        assert_eq!(metadata.doc_id, "doc-1");
+        assert_eq!(metadata.doc_id, "channel:ch-1:doc");
         assert_eq!(metadata.entity_type, "channel");
         assert_eq!(metadata.entity_id, "ch-1");
     }
@@ -751,6 +774,13 @@ mod tests {
         let manager = CrdtManager::new(storage_path)
             .await
             .expect("create manager");
+
+        // Create initial document first
+        let doc_initial = Doc::new();
+        manager
+            .save_document("channel:ch-1:metadata", "channel", "ch-1", &doc_initial)
+            .await
+            .expect("save initial document");
 
         // Create three updates from different peers
         let doc1 = Doc::new();
@@ -849,5 +879,155 @@ mod tests {
             .await
             .expect("check deleted");
         assert!(!is_deleted);
+    }
+
+    #[tokio::test]
+    async fn test_doc_id_validation() {
+        let temp_dir = tempdir().expect("temp dir");
+        let storage_path = temp_dir.path();
+
+        let manager = CrdtManager::new(storage_path)
+            .await
+            .expect("create manager");
+
+        let doc = Doc::new();
+
+        // Should fail: doc_id doesn't start with entity_type
+        let result = manager
+            .save_document("wrong:ch-1:doc", "channel", "ch-1", &doc)
+            .await;
+        assert!(matches!(result, Err(CrdtError::InvalidDocumentId(_))));
+
+        // Should succeed: doc_id starts with entity_type
+        let result = manager
+            .save_document("channel:ch-1:doc", "channel", "ch-1", &doc)
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_apply_update_requires_existing_doc() {
+        let temp_dir = tempdir().expect("temp dir");
+        let storage_path = temp_dir.path();
+
+        let manager = CrdtManager::new(storage_path)
+            .await
+            .expect("create manager");
+
+        let doc = Doc::new();
+        CrdtManager::set_map_value(&doc, "field", "value").expect("set field");
+        let update_bytes = doc
+            .transact()
+            .encode_state_as_update_v1(&yrs::StateVector::default());
+
+        // Should fail: document doesn't exist
+        let result = manager
+            .apply_update("channel:ch-1:doc", &update_bytes)
+            .await;
+        assert!(matches!(result, Err(CrdtError::DocumentNotFound(_))));
+    }
+
+    #[tokio::test]
+    async fn test_merge_updates_requires_existing_doc() {
+        let temp_dir = tempdir().expect("temp dir");
+        let storage_path = temp_dir.path();
+
+        let manager = CrdtManager::new(storage_path)
+            .await
+            .expect("create manager");
+
+        let doc = Doc::new();
+        CrdtManager::set_map_value(&doc, "field", "value").expect("set field");
+        let update_bytes = doc
+            .transact()
+            .encode_state_as_update_v1(&yrs::StateVector::default());
+
+        // Should fail: document doesn't exist
+        let result = manager
+            .merge_updates("channel:ch-1:doc", vec![update_bytes])
+            .await;
+        assert!(matches!(result, Err(CrdtError::DocumentNotFound(_))));
+    }
+
+    #[tokio::test]
+    async fn test_update_size_limits() {
+        let temp_dir = tempdir().expect("temp dir");
+        let storage_path = temp_dir.path();
+
+        let manager = CrdtManager::new(storage_path)
+            .await
+            .expect("create manager");
+
+        // Create initial document
+        let doc = Doc::new();
+        manager
+            .save_document("channel:ch-1:doc", "channel", "ch-1", &doc)
+            .await
+            .expect("save document");
+
+        // Create a large update (11MB)
+        let large_update = vec![0u8; 11 * 1024 * 1024];
+
+        // Should fail: update too large
+        let result = manager
+            .apply_update("channel:ch-1:doc", &large_update)
+            .await;
+        assert!(matches!(result, Err(CrdtError::Encoding(_))));
+
+        // Should also fail in merge_updates
+        let result = manager
+            .merge_updates("channel:ch-1:doc", vec![large_update])
+            .await;
+        assert!(matches!(result, Err(CrdtError::Encoding(_))));
+    }
+
+    #[tokio::test]
+    async fn test_metadata_version_progression() {
+        let temp_dir = tempdir().expect("temp dir");
+        let storage_path = temp_dir.path();
+
+        let manager = CrdtManager::new(storage_path)
+            .await
+            .expect("create manager");
+
+        let doc = Doc::new();
+
+        // First save: version should be 1
+        manager
+            .save_document("channel:ch-1:doc", "channel", "ch-1", &doc)
+            .await
+            .expect("save document");
+
+        let hex_doc_id = hex::encode("channel:ch-1:doc".as_bytes());
+        let meta_path = storage_path.join(format!("crdt/channel/{}.meta", hex_doc_id));
+        let meta_json = tokio::fs::read_to_string(&meta_path)
+            .await
+            .expect("read metadata");
+        let metadata: DocumentMetadata = serde_json::from_str(&meta_json).expect("parse metadata");
+        assert_eq!(metadata.version, 1, "First save should be version 1");
+
+        // Second save: version should be 2
+        manager
+            .save_document("channel:ch-1:doc", "channel", "ch-1", &doc)
+            .await
+            .expect("save document");
+
+        let meta_json = tokio::fs::read_to_string(&meta_path)
+            .await
+            .expect("read metadata");
+        let metadata: DocumentMetadata = serde_json::from_str(&meta_json).expect("parse metadata");
+        assert_eq!(metadata.version, 2, "Second save should be version 2");
+
+        // Third save: version should be 3
+        manager
+            .save_document("channel:ch-1:doc", "channel", "ch-1", &doc)
+            .await
+            .expect("save document");
+
+        let meta_json = tokio::fs::read_to_string(&meta_path)
+            .await
+            .expect("read metadata");
+        let metadata: DocumentMetadata = serde_json::from_str(&meta_json).expect("parse metadata");
+        assert_eq!(metadata.version, 3, "Third save should be version 3");
     }
 }

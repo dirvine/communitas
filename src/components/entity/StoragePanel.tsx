@@ -6,12 +6,12 @@ import {
 import {
     Alert, Badge, Box, Breadcrumbs, Button, Card,
     CardContent, Chip,
-    CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Divider, Fab, FormControl, Grid, IconButton, LinearProgress, Link, List,
+    CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Divider, FormControl, Grid, IconButton, LinearProgress, Link, List,
     ListItem,
     ListItemIcon, ListItemSecondaryAction, ListItemText, Menu,
     MenuItem, Paper, Select, Stack, Tab, Tabs, TextField, Tooltip, Typography
 } from '@mui/material';
-import { alpha, styled, useTheme } from '@mui/material/styles';
+import { alpha, useTheme } from '@mui/material/styles';
 import { invoke } from '@tauri-apps/api/core';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
@@ -19,7 +19,6 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocalStorage, type StorageFile } from '../../contexts/LocalStorageProvider';
 import { networkService } from '../../services/network/NetworkConnectionService';
 import { offlineStorage } from '../../services/storage/OfflineStorageService';
-import { designTokens } from '../../styles/theme';
 import { EntityDocumentWorkspace } from '../documents/EntityDocumentWorkspace';
 import { GlassCard } from '../ui/GlassCard';
 import { ModernButton } from '../ui/ModernButton';
@@ -61,22 +60,6 @@ type StorageArea = 'website' | 'data' | 'shared';
 
 // Styled components for glassmorphism
 const MotionCard = motion(GlassCard);
-const _StorageSection = styled(GlassCard)(({ theme }) => ({
-  marginBottom: theme.spacing(2),
-  padding: theme.spacing(2),
-  background: alpha(theme.palette.background.paper, 0.6),
-  backdropFilter: 'blur(10px)',
-}));
-
-const _StyledFab = styled(Fab)(({ theme: _theme }) => ({
-  background: designTokens.colors.primary.gradient,
-  color: '#ffffff',
-  boxShadow: designTokens.shadows.xl,
-  '&:hover': {
-    background: designTokens.colors.primary.gradient,
-    transform: 'scale(1.1)',
-  },
-}));
 
 interface StoragePanelProps {
   entityType: 'individual' | 'group' | 'channel' | 'project';

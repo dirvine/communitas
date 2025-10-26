@@ -1,13 +1,13 @@
 import {
-    Add as AddIcon, Brush as BrushIcon, Business as BusinessIcon, Chat as ChatIcon, Close as CloseIcon, CloudUpload as CloudUploadIcon, CreateNewFolder as CreateFolderIcon, Delete as DeleteIcon, Edit as EditIcon,
+    Brush as BrushIcon, Business as BusinessIcon, Chat as ChatIcon, Close as CloseIcon, CloudUpload as CloudUploadIcon, CreateNewFolder as CreateFolderIcon, Delete as DeleteIcon, Edit as EditIcon,
     FileCopy as FileCopyIcon, GroupAdd as GroupAddIcon, Link as LinkIcon, Menu as MenuIcon, Notifications as NotificationsIcon, PersonAdd as PersonAddIcon, Phone as PhoneIcon, QrCode as QrCodeIcon, Search as SearchIcon, Settings as SettingsIcon, Share as ShareIcon, Storage as StorageIcon, Videocam as VideocamIcon, VpnKey as VpnKeyIcon
 } from '@mui/icons-material';
 import {
-    Badge, Divider, Fab, IconButton, ListItemIcon,
+    Badge, Divider, IconButton, ListItemIcon,
     ListItemText, Menu,
-    MenuItem, Paper, SpeedDial,
+    MenuItem, SpeedDial,
     SpeedDialAction,
-    SpeedDialIcon, Stack,
+    SpeedDialIcon,
     Tooltip
 } from '@mui/material';
 import React, { useState } from 'react';
@@ -32,17 +32,11 @@ export const QuickActionsBar: React.FC<QuickActionsBarProps> = ({
   const [open, setOpen] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
-  const [settingsAnchor, setSettingsAnchor] = useState<null | HTMLElement>(null);
   const { mode: _mode, toggleMode: _toggleMode, setColorPreset: _setColorPreset } = useTheme();
 
   const handleAction = (action: string, data?: any) => {
     setOpen(false);
     onAction(action, data);
-  };
-
-  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, menu: string) => {
-    setMenuAnchor(event.currentTarget);
-    setActiveMenu(menu);
   };
 
   const handleMenuClose = () => {
@@ -216,108 +210,6 @@ export const QuickActionsBar: React.FC<QuickActionsBarProps> = ({
     }
   };
 
-  // Simple settings menu (now rendered inline, not as a FAB)
-  const _renderSettings = () => (
-    <>
-      <Menu
-        anchorEl={settingsAnchor}
-        open={Boolean(settingsAnchor)}
-        onClose={() => setSettingsAnchor(null)}
-        anchorOrigin={{
-          vertical: position.includes('bottom') ? 'top' : 'bottom',
-          horizontal: position.includes('right') ? 'left' : 'right',
-        }}
-        transformOrigin={{
-          vertical: position.includes('bottom') ? 'bottom' : 'top',
-          horizontal: position.includes('right') ? 'right' : 'left',
-        }}
-        PaperProps={{
-          sx: {
-            minWidth: 240,
-            mt: position.includes('bottom') ? -2 : 2,
-            ml: position.includes('right') ? -2 : 2,
-          }
-        }}
-      >
-        <MenuItem onClick={() => { onAction('settings'); setSettingsAnchor(null); }}>
-          <ListItemIcon><SettingsIcon /></ListItemIcon>
-          <ListItemText>Open Settings</ListItemText>
-        </MenuItem>
-      </Menu>
-    </>
-  );
-
-  // Floating Action Buttons for common actions
-  const _renderFloatingActions = () => {
-    const showCallButtons = context.type === 'organization' || 
-                           context.type === 'project' || 
-                           context.type === 'group' ||
-                           context.type === 'personal';
-
-    // Avoid visual overlap with main SpeedDial; hide when SpeedDial is open
-    if (!showCallButtons || open) return null;
-
-    return (
-      <Stack
-        direction="column"
-        spacing={2}
-        sx={{
-          position: 'fixed',
-          // Keep a generous offset so we don't collide with the main + FAB
-          bottom: 240,
-          right: position.includes('right') ? 24 : undefined,
-          left: position.includes('left') ? 24 : undefined,
-          zIndex: 1200,
-        }}
-      >
-        <Tooltip title="Voice Call" placement={position.includes('right') ? 'left' : 'right'}>
-          <Fab
-            size="small"
-            color="success"
-            onClick={() => handleAction('start_voice_call')}
-            sx={{ 
-              boxShadow: 2,
-              '&:hover': { transform: 'scale(1.1)' },
-              transition: 'transform 0.2s',
-            }}
-          >
-            <PhoneIcon />
-          </Fab>
-        </Tooltip>
-        
-        <Tooltip title="Video Call" placement={position.includes('right') ? 'left' : 'right'}>
-          <Fab
-            size="small"
-            color="primary"
-            onClick={() => handleAction('start_video_call')}
-            sx={{ 
-              boxShadow: 2,
-              '&:hover': { transform: 'scale(1.1)' },
-              transition: 'transform 0.2s',
-            }}
-          >
-            <VideocamIcon />
-          </Fab>
-        </Tooltip>
-        
-        <Tooltip title="Storage" placement={position.includes('right') ? 'left' : 'right'}>
-          <Fab
-            size="small"
-            color="info"
-            onClick={() => handleAction('storage_settings')}
-            sx={{ 
-              boxShadow: 2,
-              '&:hover': { transform: 'scale(1.1)' },
-              transition: 'transform 0.2s',
-            }}
-          >
-            <StorageIcon />
-          </Fab>
-        </Tooltip>
-      </Stack>
-    );
-  };
-
   // Context Menu for advanced actions
   const renderContextMenu = () => (
     <Menu
@@ -378,56 +270,6 @@ export const QuickActionsBar: React.FC<QuickActionsBarProps> = ({
       )}
     </Menu>
   );
-
-  // Mini floating toolbar for quick actions
-  const _renderMiniToolbar = () => {
-    if (context.type === 'personal') return null;
-
-    return (
-      <Paper
-        elevation={3}
-        sx={{
-          position: 'fixed',
-          top: 80,
-          left: '50%',
-          transform: 'translateX(-50%)',
-          zIndex: 1200,
-          borderRadius: 2,
-          overflow: 'hidden',
-        }}
-      >
-        <Stack direction="row" spacing={0}>
-          <Tooltip title="Upload">
-            <IconButton onClick={() => handleAction('upload')}>
-              <CloudUploadIcon />
-            </IconButton>
-          </Tooltip>
-          
-          <Divider orientation="vertical" flexItem />
-          
-          <Tooltip title="Share">
-            <IconButton onClick={() => handleAction('share')}>
-              <ShareIcon />
-            </IconButton>
-          </Tooltip>
-          
-          <Tooltip title="Edit">
-            <IconButton onClick={() => handleAction('edit')}>
-              <EditIcon />
-            </IconButton>
-          </Tooltip>
-          
-          <Divider orientation="vertical" flexItem />
-          
-          <Tooltip title="More Actions">
-            <IconButton onClick={(e) => handleMenuOpen(e, 'advanced')}>
-              <AddIcon />
-            </IconButton>
-          </Tooltip>
-        </Stack>
-      </Paper>
-    );
-  };
 
   return (
     <>

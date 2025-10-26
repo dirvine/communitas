@@ -276,12 +276,6 @@ Happy collaborating! 🚀
     }
   }, [currentEntity, isDirty, saveFile, currentFile, editorContent, theme, getWebPublisher, dhtRouter, activeTab, canWrite])
 
-  // Handle content changes
-  const _handleContentChange = useCallback((content: string) => {
-    setEditorContent(content)
-    setIsDirty(true)
-  }, [])
-
   // Tab labels and icons with clear storage vs website distinction
   const tabs = useMemo(() => [
     { label: 'Storage Editor', icon: <Edit fontSize="small" /> },

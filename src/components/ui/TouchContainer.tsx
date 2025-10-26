@@ -13,11 +13,11 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 
 // Enhanced responsive hooks
-import { useTouchDevice, useTouchFriendlySizing } from '../../hooks/useResponsive';
+import { useTouchDevice } from '../../hooks/useResponsive';
 
 // Saorsa-Core integration hooks
 import { DHTSyncEvent, useDHTSync } from '../../hooks/useDHTSync';
-import { useFileStorage, useMarkdownStorage, useSaorsaStorage } from '../../hooks/useSaorsaStorage';
+import { useSaorsaStorage } from '../../hooks/useSaorsaStorage';
 
 // Saorsa-Core types
 import {
@@ -154,7 +154,6 @@ export const TouchContainer: React.FC<TouchContainerProps> = ({
  }) => {
    const theme = useTheme();
    const isTouch = useTouchDevice();
-   const _touchSizing = useTouchFriendlySizing();
    const { authState } = useAuth();
    const containerRef = useRef<HTMLDivElement>(null);
    const [isPulling, setIsPulling] = useState(false);
@@ -180,13 +179,11 @@ export const TouchContainer: React.FC<TouchContainerProps> = ({
    // Networking state
    const [_networkPeers, setNetworkPeers] = useState<Map<string, any>>(new Map());
    const [quicConnections, setQuicConnections] = useState<Map<string, any>>(new Map());
-   const [_networkLatency, setNetworkLatency] = useState<Map<string, number>>(new Map());
+   const [_networkLatency] = useState<Map<string, number>>(new Map());
    const [_touchGestures, setTouchGestures] = useState<any[]>([]);
 
    // Initialize Saorsa-Core hooks
    const storage = useSaorsaStorage();
-   const markdownStorage = useMarkdownStorage();
-   const _fileStorage = useFileStorage();
 
    const dhtSync = useDHTSync({
      userId: userId || '',
@@ -279,44 +276,6 @@ export const TouchContainer: React.FC<TouchContainerProps> = ({
          break;
      }
    }, [autoSync]);
-
-   // Storage operations with collaboration
-   const _storeContent = useCallback(async (content: string, _contentType: string = 'text/markdown') => {
-     if (!enableStorage || !userId) return null;
-
-     try {
-       const result = await markdownStorage.storeMarkdown(
-         content,
-         defaultStoragePolicy,
-         'TouchContainer',
-         userId,
-         [`touch-container`, `timestamp:${Date.now()}`, `collaborative:${enableCollaboration}`]
-       );
-
-       onContentStored?.(result.address);
-       onStorageEvent?.({ type: 'content-stored', data: result });
-
-       // Broadcast collaborative update
-       if (enableCollaboration && dhtSync.connected) {
-         await broadcastCollaborativeUpdate({
-           type: 'content-updated',
-           contentId: result.address.content_id,
-           userId,
-           timestamp: new Date(),
-         });
-       }
-
-       if (hapticFeedback && isTouch) {
-         triggerHapticFeedback(hapticDuration);
-       }
-
-       return result.address;
-     } catch (error) {
-       console.error('Failed to store content:', error);
-       onStorageEvent?.({ type: 'storage-error', data: error });
-       return null;
-     }
-   }, [enableStorage, userId, markdownStorage, defaultStoragePolicy, onContentStored, onStorageEvent, hapticFeedback, isTouch, hapticDuration, enableCollaboration, dhtSync]);
 
    // Collaborative messaging functions
    const broadcastCollaborativeUpdate = useCallback(async (update: any) => {
@@ -436,44 +395,6 @@ export const TouchContainer: React.FC<TouchContainerProps> = ({
        console.error('Failed to send touch gesture:', error);
      }
    }, [userId, quicConnections, broadcastCollaborativeUpdate]);
-
-   const _measureNetworkLatency = useCallback(async (peerId: string) => {
-     if (!userId || !quicConnections.has(peerId)) return;
-
-     try {
-       const startTime = Date.now();
-
-       await invoke('sync_ping_peer', {
-         peer_id: peerId,
-         user_id: userId,
-       });
-
-       const latency = Date.now() - startTime;
-       setNetworkLatency(prev => new Map(prev).set(peerId, latency));
-
-       return latency;
-     } catch (error) {
-       console.error(`Failed to ping peer ${peerId}:`, error);
-       return null;
-     }
-   }, [userId, quicConnections]);
-
-   const _retrieveContent = useCallback(async (address: StorageAddress) => {
-     if (!enableStorage || !userId) return null;
-
-     try {
-       const result = await markdownStorage.retrieveMarkdown(address, userId);
-
-       onContentRetrieved?.(result.content, result.metadata);
-       onStorageEvent?.({ type: 'content-retrieved', data: result });
-
-       return result.content;
-     } catch (error) {
-       console.error('Failed to retrieve content:', error);
-       onStorageEvent?.({ type: 'retrieval-error', data: error });
-       return null;
-     }
-   }, [enableStorage, userId, markdownStorage, onContentRetrieved, onStorageEvent]);
 
    const refreshContent = useCallback(async () => {
      if (!enableStorage || !userId) return;

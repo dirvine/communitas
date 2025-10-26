@@ -99,21 +99,6 @@ export const EntitySelector: React.FC<EntitySelectorProps> = ({
     }
   };
 
-  const _getActionText = () => {
-    switch (actionType) {
-      case 'call':
-        return 'Start Voice Call';
-      case 'video':
-        return 'Start Video Call';
-      case 'screen':
-        return 'Share Screen';
-      case 'storage':
-        return 'Open Storage';
-      default:
-        return 'Select Action';
-    }
-  };
-
   const getDefaultTitle = () => {
     switch (actionType) {
       case 'call':

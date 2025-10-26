@@ -141,21 +141,6 @@ const LoadingWrapper = styled('div')({
   justifyContent: 'center',
 });
 
-const _RippleEffect = styled('span')({
-  position: 'absolute',
-  borderRadius: '50%',
-  background: 'rgba(255, 255, 255, 0.5)',
-  transform: 'scale(0)',
-  animation: 'ripple 0.6s ease-out',
-  pointerEvents: 'none',
-  '@keyframes ripple': {
-    to: {
-      transform: 'scale(4)',
-      opacity: 0,
-    },
-  },
-});
-
 export const ModernButton: React.FC<ModernButtonProps> = ({
   children,
   gradient = true,

@@ -267,10 +267,10 @@ export const components: Components<Omit<Theme, 'components'>> = {
         borderRadius: theme.shape.borderRadius,
         border: `1px solid`,
       }),
-      filled: ({ _theme }) => ({
+      filled: () => ({
         fontWeight: 500,
       }),
-      outlined: ({ _theme }) => ({
+      outlined: () => ({
         backgroundColor: 'transparent',
       }),
     },
@@ -309,7 +309,7 @@ export const components: Components<Omit<Theme, 'components'>> = {
   // Badge styling
   MuiBadge: {
     styleOverrides: {
-      badge: ({ _theme }) => ({
+      badge: () => ({
         fontWeight: 600,
         fontSize: '0.75rem',
         minWidth: 20,
@@ -322,7 +322,7 @@ export const components: Components<Omit<Theme, 'components'>> = {
   // Breadcrumbs styling
   MuiBreadcrumbs: {
     styleOverrides: {
-      root: ({ _theme }) => ({
+      root: () => ({
         fontSize: '0.875rem',
       }),
       separator: ({ theme }) => ({

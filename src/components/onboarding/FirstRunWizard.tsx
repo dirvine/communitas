@@ -42,7 +42,7 @@ const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ open, onClose }) => {
     try {
       // The network is already initialized when core_initialize is called
       // Just check the health status
-      const _health = await invoke<any>('health')
+      await invoke<any>('health')
       setNetworkReady(true)
       setActiveStep(2)
     } catch (e: any) {
@@ -55,30 +55,11 @@ const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ open, onClose }) => {
     }
   }
 
-  const verifySecureStorage = async () => {
-    try {
-      // For now, just mark as complete since secure storage is optional
-      console.log('Secure storage verification skipped')
-    } catch (e) {
-      console.warn('Secure storage check failed:', e)
-    }
-  }
-
   const onIdentityCreated = () => {
     setIdentityCreated(true)
     setActiveStep(1)
     // Mark onboarded immediately to avoid re-opening wizard on refresh
     localStorage.setItem('communitas-onboarded', 'true')
-  }
-
-  const _onContinue = async () => {
-    if (activeStep === 1) {
-      await startNetwork()
-      setActiveStep(2)
-    } else if (activeStep === 2) {
-      await verifySecureStorage()
-      onClose()
-    }
   }
 
   return (

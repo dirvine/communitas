@@ -4,7 +4,7 @@ import {
 } from '@mui/icons-material';
 import {
     Alert, alpha, Avatar,
-    Badge, Box, Chip, CircularProgress, IconButton, Stack, Tab, Tabs, Tooltip, Typography, useTheme
+    Badge, Box, Chip, CircularProgress, IconButton, Stack, Tab, Tabs, Tooltip, Typography
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import { invoke } from '@tauri-apps/api/core';
@@ -216,8 +216,6 @@ const EntityContentView: React.FC<EntityContentViewProps> = ({
       </Box>
     );
   }
-
-  const _theme = useTheme();
 
   return (
     <MotionBox

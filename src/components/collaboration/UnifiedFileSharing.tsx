@@ -596,14 +596,14 @@ export const UnifiedFileSharing: React.FC<UnifiedFileSharingProps> = ({ entityId
         onClose={() => setAnchorEl(null)}
       >
         <MenuItem onClick={() => {
-          const _identity = onGenerateIdentity?.('file');
+          onGenerateIdentity?.('file');
           setAnchorEl(null);
         }}>
           <ListItemIcon><KeyIcon fontSize="small" /></ListItemIcon>
           <ListItemText>Generate Identity</ListItemText>
         </MenuItem>
         <MenuItem onClick={() => {
-          const _identity = onGenerateIdentity?.('file');
+          onGenerateIdentity?.('file');
           setAnchorEl(null);
         }}>
           <ListItemIcon><ForwardIcon fontSize="small" /></ListItemIcon>

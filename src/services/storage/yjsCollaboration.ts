@@ -39,7 +39,6 @@ export class YjsMarkdownEditor {
   private awareness: Awareness
   private userId: string
   private roomId: string
-  private _userInfo: YjsUserInfo | null = null
   private isConnected = false
 
   constructor(userId: string, roomId: string) {
@@ -154,7 +153,6 @@ export class YjsMarkdownEditor {
 
   // User management and awareness
   setUserInfo(userInfo: YjsUserInfo): void {
-    this._userInfo = userInfo
     this.awareness.setLocalStateField('user', {
       name: userInfo.name,
       color: userInfo.color,

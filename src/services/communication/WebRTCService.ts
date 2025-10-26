@@ -372,16 +372,6 @@ export class WebRTCService {
     }
   }
 
-  private _displayRemoteStream(stream: MediaStream, entityId: string) {
-    console.log(`📺 Displaying remote stream for ${entityId}`, stream);
-
-    // Emit event to update remote stream in CallManager
-    this.emit('remoteStream', {
-      entityId,
-      stream
-    });
-  }
-
   private hideCallUI(entityId: string) {
     console.log(`📱 Hiding call UI for ${entityId}`);
 

@@ -33,6 +33,10 @@ fips204 = "0.4"  # Direct dependency for ML-DSA traits and methods
 # sync feature enables Send + Sync traits for multithreaded environments
 yrs = { version = "0.19", features = ["sync"] }
 
+# Markdown rendering and sanitization
+pulldown-cmark = "0.12"
+ammonia = "4.0"
+
 # Async runtime
 tokio = { version = "1.39", features = ["full"] }
 tokio-retry = "0.3"  # Exponential backoff for resilient retries (MESH_CAPABILITIES.md §3.2)

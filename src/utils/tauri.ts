@@ -5,11 +5,11 @@ export const isTauriApp = (): boolean => {
   // Check multiple possible Tauri indicators
   if (typeof window === 'undefined') return false;
   
-  // Check for __TAURI__ global
-  if (typeof (window as any).__TAURI__ !== 'undefined') return true;
+  // Check for _TAURI_ global
+  if (typeof (window as any)._TAURI_ !== 'undefined') return true;
   
-  // Check for __TAURI_IPC__ global (alternative)
-  if (typeof (window as any).__TAURI_IPC__ !== 'undefined') return true;
+  // Check for _TAURI_IPC_ global (alternative)
+  if (typeof (window as any)._TAURI_IPC_ !== 'undefined') return true;
   
   // Check for tauri:// protocol in window.location
   if (window.location.protocol === 'tauri:') return true;
@@ -24,7 +24,7 @@ export const getTauriApi = () => {
   if (!isTauriApp()) {
     return null;
   }
-  return (window as any).__TAURI__;
+  return (window as any)._TAURI_;
 };
 
 // Safe invoke wrapper that handles missing Tauri context

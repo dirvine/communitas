@@ -45,14 +45,14 @@ interface WebsitePanelProps {
 }
 
 const WebsitePanel: React.FC<WebsitePanelProps> = ({
-  entityType,
+  entityType: _entityType,
   entityId,
-  entityName,
+  entityName: _entityName,
   fourWords,
   permissions,
 }) => {
   const [mode, setMode] = useState<'edit' | 'preview' | 'split'>('split');
-  const [activeTab, setActiveTab] = useState(0);
+  const [_activeTab, _setActiveTab] = useState(0);
   const [pages, setPages] = useState<WebsitePage[]>([]);
   const [currentPage, setCurrentPage] = useState<WebsitePage | null>(null);
   const [content, setContent] = useState('');
@@ -65,7 +65,7 @@ const WebsitePanel: React.FC<WebsitePanelProps> = ({
   const [newPageDialog, setNewPageDialog] = useState(false);
   const [newPagePath, setNewPagePath] = useState('');
   const [newPageTitle, setNewPageTitle] = useState('');
-  const [history, setHistory] = useState<any[]>([]);
+  const [history, _setHistory] = useState<any[]>([]);
   const [historyDialog, setHistoryDialog] = useState(false);
   const [websiteUrl, setWebsiteUrl] = useState<string | null>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
@@ -260,7 +260,7 @@ const WebsitePanel: React.FC<WebsitePanelProps> = ({
         <Stack direction="row" alignItems="center" justifyContent="space-between">
           <Stack direction="row" spacing={1} alignItems="center">
             {/* Mode Toggle */}
-            <Tabs value={mode} onChange={(e, v) => setMode(v)} sx={{ minHeight: 36 }}>
+            <Tabs value={mode} onChange={(_e, v) => setMode(v)} sx={{ minHeight: 36 }}>
               <Tab value="edit" icon={<EditIcon />} label="Edit" sx={{ minHeight: 36, py: 0 }} />
               <Tab value="preview" icon={<PreviewIcon />} label="Preview" sx={{ minHeight: 36, py: 0 }} />
               <Tab value="split" icon={<CodeIcon />} label="Split" sx={{ minHeight: 36, py: 0 }} />

@@ -1,6 +1,31 @@
 import { EventEmitter } from 'events';
-import { ChatMessage, FileAttachment, MessageReaction } from '../../services/webrtc/WebRTCService';
 import { Element } from '../../types/element';
+
+export interface FileAttachment {
+  id: string;
+  name: string;
+  size: number;
+  type: string;
+  url: string;
+}
+
+export interface MessageReaction {
+  emoji: string;
+  userId: string;
+  userName: string;
+  timestamp: Date;
+}
+
+export interface ChatMessage {
+  id: string;
+  senderId: string;
+  senderName: string;
+  content: string;
+  timestamp: Date;
+  type: 'text' | 'file';
+  attachments?: FileAttachment[];
+  reactions?: MessageReaction[];
+}
 
 export interface MessageData {
   content: string;
@@ -142,7 +167,7 @@ export class ElementCommunicationService extends EventEmitter {
     const lowercaseQuery = query.toLowerCase();
     return this.messages.filter(message =>
       message.content.toLowerCase().includes(lowercaseQuery) ||
-      message.attachments?.some(att => att.name.toLowerCase().includes(lowercaseQuery))
+      message.attachments?.some((att: FileAttachment) => att.name.toLowerCase().includes(lowercaseQuery))
     );
   }
 
@@ -165,7 +190,7 @@ export class ElementCommunicationService extends EventEmitter {
 
     // Clear message attachments URLs
     for (const message of this.messages) {
-      message.attachments?.forEach(att => {
+      message.attachments?.forEach((att: FileAttachment) => {
         URL.revokeObjectURL(att.url);
       });
     }

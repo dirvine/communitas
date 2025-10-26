@@ -72,11 +72,11 @@ export const TouchGrid: React.FC<TouchGridProps> = ({
   spacing = { xs: 2, sm: 3, md: 4 },
   sx,
   children,
-  ...props
+  ..._props
 }) => {
-  const theme = useTheme();
+  const _theme = useTheme();
   const isTouch = useTouchDevice();
-  const touchSizingValues = useTouchFriendlySizing();
+  const _touchSizingValues = useTouchFriendlySizing();
   const columns = useResponsiveColumns(responsiveColumns);
 
   // Enhanced item click handler with haptic feedback
@@ -104,7 +104,7 @@ export const TouchGrid: React.FC<TouchGridProps> = ({
   }, [onItemLongPress, hapticFeedback, isTouch, hapticDuration]);
 
   // Touch-friendly styles
-  const gridStyles = {
+  const _gridStyles = {
     // Touch-friendly spacing
     gap: enableTouchSpacing ? 2 : 1,
     // Touch-friendly grid items

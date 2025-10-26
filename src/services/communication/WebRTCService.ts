@@ -18,7 +18,7 @@ export class WebRTCService {
       
       // Detect Tauri environment
       const isTauri = typeof window !== 'undefined' && 
-                      typeof (window as any).__TAURI__ !== 'undefined';
+                      typeof (window as any)._TAURI_ !== 'undefined';
       
       if (isTauri) {
         // In Tauri, use a fixed backend URL since window.location.host is empty
@@ -372,7 +372,7 @@ export class WebRTCService {
     }
   }
 
-  private displayRemoteStream(stream: MediaStream, entityId: string) {
+  private _displayRemoteStream(stream: MediaStream, entityId: string) {
     console.log(`📺 Displaying remote stream for ${entityId}`, stream);
 
     // Emit event to update remote stream in CallManager

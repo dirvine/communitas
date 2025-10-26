@@ -141,7 +141,7 @@ const LoadingWrapper = styled('div')({
   justifyContent: 'center',
 });
 
-const RippleEffect = styled('span')({
+const _RippleEffect = styled('span')({
   position: 'absolute',
   borderRadius: '50%',
   background: 'rgba(255, 255, 255, 0.5)',

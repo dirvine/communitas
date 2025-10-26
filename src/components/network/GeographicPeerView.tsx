@@ -61,7 +61,7 @@ export const GeographicPeerView: React.FC = () => {
   const [peers, setPeers] = useState<GeographicPeerInfo[]>([])
   const [regionalStats, setRegionalStats] = useState<RegionalPeerStats[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [_error, setError] = useState<string | null>(null)
 
   const fetchGeographicData = async () => {
     try {

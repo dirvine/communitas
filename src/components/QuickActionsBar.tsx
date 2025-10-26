@@ -33,7 +33,7 @@ export const QuickActionsBar: React.FC<QuickActionsBarProps> = ({
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [settingsAnchor, setSettingsAnchor] = useState<null | HTMLElement>(null);
-  const { mode, toggleMode, setColorPreset } = useTheme();
+  const { mode: _mode, toggleMode: _toggleMode, setColorPreset: _setColorPreset } = useTheme();
 
   const handleAction = (action: string, data?: any) => {
     setOpen(false);
@@ -217,7 +217,7 @@ export const QuickActionsBar: React.FC<QuickActionsBarProps> = ({
   };
 
   // Simple settings menu (now rendered inline, not as a FAB)
-  const renderSettings = () => (
+  const _renderSettings = () => (
     <>
       <Menu
         anchorEl={settingsAnchor}
@@ -248,7 +248,7 @@ export const QuickActionsBar: React.FC<QuickActionsBarProps> = ({
   );
 
   // Floating Action Buttons for common actions
-  const renderFloatingActions = () => {
+  const _renderFloatingActions = () => {
     const showCallButtons = context.type === 'organization' || 
                            context.type === 'project' || 
                            context.type === 'group' ||
@@ -380,7 +380,7 @@ export const QuickActionsBar: React.FC<QuickActionsBarProps> = ({
   );
 
   // Mini floating toolbar for quick actions
-  const renderMiniToolbar = () => {
+  const _renderMiniToolbar = () => {
     if (context.type === 'personal') return null;
 
     return (

@@ -107,7 +107,7 @@ export function MemberCard({ member, canManage, onRemove, onRoleChange }: Member
           <MenuItem
             onClick={() => {
               setAnchorEl(null)
-              if (onRoleChange) {
+              if (onRoleChange && (member.role === 'owner' || member.role === 'admin' || member.role === 'member' || member.role === 'guest')) {
                 onRoleChange(member.member_id, member.role)
               }
             }}

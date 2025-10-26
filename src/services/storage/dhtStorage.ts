@@ -19,7 +19,7 @@ export interface EncryptedBlock {
   metadata?: BlockMetadata
   // Test/compatibility helpers
   nonce?: Uint8Array
-  __returnType?: 'buffer' | 'uint8array'
+  _returnType?: 'buffer' | 'uint8array'
 }
 
 export interface BlockMetadata {
@@ -99,7 +99,7 @@ export class DHTStorage {
     return this.cryptoReady
   }
 
-  private async initializeCrypto(): Promise<void> {
+  private async _initializeCrypto(): Promise<void> {
     // SECURITY: Generate secure encryption key using Web Crypto API
     this.encryptionKey = new Uint8Array(32)
     crypto.getRandomValues(this.encryptionKey)
@@ -278,7 +278,7 @@ export class DHTStorage {
     }
     result.nonce = encryptionResult.iv
     // Track original input type to match test expectations on decrypt
-    result.__returnType = Buffer.isBuffer(data) ? 'buffer' : 'uint8array'
+    result._returnType = Buffer.isBuffer(data) ? 'buffer' : 'uint8array'
     return result
   }
 
@@ -319,7 +319,7 @@ export class DHTStorage {
     
     const plain = await cryptoManager.decryptData(encryptionResult, decKey)
     // Return Buffer when original input to encrypt was a Buffer
-    return (block as any).__returnType === 'buffer' ? Buffer.from(plain) : plain
+    return (block as any)._returnType === 'buffer' ? Buffer.from(plain) : plain
   }
 
   async createSignedBlock(data: EncryptedBlock | Uint8Array): Promise<EncryptedBlock> {
@@ -422,7 +422,7 @@ export class DHTStorage {
 
 
   // Replication and self-healing
-  private async replicateToNodes(blockId: string, block: EncryptedBlock): Promise<void> {
+  private async replicateToNodes(blockId: string, _block: EncryptedBlock): Promise<void> {
     const targetNodes = await this.findNodes(blockId)
     
     for (const node of targetNodes) {
@@ -432,7 +432,7 @@ export class DHTStorage {
   }
 
   async simulateNodeFailure(nodeAddress: string): Promise<void> {
-    for (const [nodeId, node] of this.connectedNodes) {
+    for (const [_nodeId, node] of this.connectedNodes) {
       if (node.address === nodeAddress) {
         node.isOnline = false
         this.emit('nodeFailure', node)

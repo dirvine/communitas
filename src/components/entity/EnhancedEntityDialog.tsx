@@ -52,7 +52,7 @@ const ModeButton = styled(ModernButton)<{ selected: boolean }>(({ theme, selecte
   },
 }));
 
-const StatusBadge = styled(Chip)(({ theme }) => ({
+const StatusBadge = styled(Chip)(({ theme: _theme }) => ({
   marginLeft: 'auto',
   fontWeight: 600,
   fontSize: '0.75rem',

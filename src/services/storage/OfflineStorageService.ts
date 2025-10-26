@@ -11,8 +11,8 @@
 // Dynamic import of Tauri API with fallback
 let invoke: any = async (cmd: string, args?: any) => {
   // Try to get Tauri from window first
-  if (typeof window !== 'undefined' && (window as any).__TAURI__?.core?.invoke) {
-    return (window as any).__TAURI__.core.invoke(cmd, args);
+  if (typeof window !== 'undefined' && (window as any)._TAURI_?.core?.invoke) {
+    return (window as any)._TAURI_.core.invoke(cmd, args);
   }
 
   // Try dynamic import
@@ -235,7 +235,7 @@ export class OfflineStorageService {
             invoke('gossip_store_message', {
               key: item.key,
               value: Array.from(new TextEncoder().encode(JSON.stringify(item.data)))
-            }).catch(error => {
+            }).catch((error: unknown) => {
               console.warn(`Failed to store encrypted ${item.key}:`, error);
             })
           );
@@ -411,7 +411,7 @@ export class OfflineStorageService {
         // Check if decoded string is valid before parsing
         if (!decoded || decoded.trim() === '') {
           console.debug('Empty response from network storage');
-          return undefined;
+          return null;
         }
 
         const data = JSON.parse(decoded);

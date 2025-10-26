@@ -43,7 +43,7 @@ export async function publishWebsiteAndSetRoot(
   signer?: (canonicalHex: string) => Promise<string>,
   pkHex?: string,
 ): Promise<{ published: boolean; updatedIdentity: boolean }> {
-  const receipt = await invoke('core_website_publish_receipt', { entityHex, websiteRootHex })
+  const _receipt = await invoke('core_website_publish_receipt', { entityHex, websiteRootHex })
   let updated = false
   if (signer && pkHex) {
     const canonical = buildWebsiteRootCanonicalHex(entityHex, pkHex, websiteRootHex)

@@ -63,16 +63,12 @@ export function AddMemberDialog({
         return
       }
 
-      // Get current user ID (in production, get from auth context)
-      const currentUserId = 'current-user' // TODO: Get from auth context
-
       // Call backend
       const result = await memberManagementService.addMember({
         entity_type: entityType,
         entity_id: entityId,
         member_id: fourWords,
-        role,
-        added_by: currentUserId
+        role
       })
 
       if (result.success) {

@@ -45,7 +45,7 @@ export class ContainerService {
    * 
    * @deprecated Backend container_put_object command has been removed.
    */
-  static async putObject(bytes: Uint8Array): Promise<ObjectInfo> {
+  static async putObject(_bytes: Uint8Array): Promise<ObjectInfo> {
     console.warn('⚠️  ContainerService.putObject() is deprecated.');
     throw new Error('DEPRECATED: container_put_object removed. Use Yrs CRDT document commands instead.');
   }
@@ -55,7 +55,7 @@ export class ContainerService {
    * 
    * @deprecated Backend container commands have been removed.
    */
-  static async putText(text: string): Promise<ObjectInfo> {
+  static async putText(_text: string): Promise<ObjectInfo> {
     console.warn('⚠️  ContainerService.putText() is deprecated.');
     throw new Error('DEPRECATED: Use Yrs CRDT document commands instead.');
   }
@@ -65,7 +65,7 @@ export class ContainerService {
    * 
    * @deprecated Backend container_get_object command has been removed.
    */
-  static async getObject(oidHex: string): Promise<Uint8Array> {
+  static async getObject(_oidHex: string): Promise<Uint8Array> {
     console.warn('⚠️  ContainerService.getObject() is deprecated.');
     throw new Error('DEPRECATED: container_get_object removed. Use Yrs CRDT document commands instead.');
   }
@@ -75,7 +75,7 @@ export class ContainerService {
    * 
    * @deprecated Backend container commands have been removed.
    */
-  static async getText(oidHex: string): Promise<string> {
+  static async getText(_oidHex: string): Promise<string> {
     console.warn('⚠️  ContainerService.getText() is deprecated.');
     throw new Error('DEPRECATED: Use Yrs CRDT document commands instead.');
   }
@@ -85,7 +85,7 @@ export class ContainerService {
    * 
    * @deprecated Backend container_apply_ops command has been removed.
    */
-  static async applyOps(opsJson: string): Promise<TipInfo> {
+  static async applyOps(_opsJson: string): Promise<TipInfo> {
     console.warn('⚠️  ContainerService.applyOps() is deprecated.');
     throw new Error('DEPRECATED: container_apply_ops removed. Use Yrs CRDT document commands instead.');
   }
@@ -105,7 +105,7 @@ export class ContainerService {
    * 
    * @deprecated Backend container_create_post command has been removed.
    */
-  static async createPost(bodyMd: string): Promise<string> {
+  static async createPost(_bodyMd: string): Promise<string> {
     console.warn('⚠️  ContainerService.createPost() is deprecated.');
     throw new Error('DEPRECATED: container_create_post removed. Use Yrs CRDT document commands instead.');
   }

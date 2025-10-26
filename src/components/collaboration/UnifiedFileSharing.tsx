@@ -51,24 +51,21 @@ function TabPanel(props: TabPanelProps) {
   );
 }
 
-export const UnifiedFileSharing: React.FC<UnifiedFileSharingProps> = ({
-  entityId,
-  entityType,
+export const UnifiedFileSharing: React.FC<UnifiedFileSharingProps> = ({ entityId: _entityId, entityType: _entityType,
   entityName,
   files,
   publishedWebsite,
   onFileUpload,
-  onFileDelete,
-  onFileShare,
+  onFileDelete, onFileShare: _onFileShare,
   onPublishWebsite,
   onUnpublishWebsite,
   onGenerateIdentity,
 }) => {
   const [activeTab, setActiveTab] = useState(0);
-  const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
+  const [_selectedFiles, _setSelectedFiles] = useState<string[]>([]);
   const [publishDialog, setPublishDialog] = useState(false);
   const [identityDialog, setIdentityDialog] = useState(false);
-  const [shareDialog, setShareDialog] = useState(false);
+  const [_shareDialog, setShareDialog] = useState(false);
   const [selectedFile, setSelectedFile] = useState<SharedFile | null>(null);
   const [websiteConfig, setWebsiteConfig] = useState<WebsitePublishConfig>({
     name: `${entityName} Website`,
@@ -165,7 +162,7 @@ export const UnifiedFileSharing: React.FC<UnifiedFileSharingProps> = ({
 
       {/* Tabs */}
       <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-        <Tabs value={activeTab} onChange={(e, v) => setActiveTab(v)}>
+        <Tabs value={activeTab} onChange={(_e, v) => setActiveTab(v)}>
           <Tab label="Files" icon={<FolderIcon />} iconPosition="start" />
           <Tab 
             label="Website" 
@@ -599,14 +596,14 @@ export const UnifiedFileSharing: React.FC<UnifiedFileSharingProps> = ({
         onClose={() => setAnchorEl(null)}
       >
         <MenuItem onClick={() => {
-          const identity = onGenerateIdentity?.('file');
+          const _identity = onGenerateIdentity?.('file');
           setAnchorEl(null);
         }}>
           <ListItemIcon><KeyIcon fontSize="small" /></ListItemIcon>
           <ListItemText>Generate Identity</ListItemText>
         </MenuItem>
         <MenuItem onClick={() => {
-          const identity = onGenerateIdentity?.('file');
+          const _identity = onGenerateIdentity?.('file');
           setAnchorEl(null);
         }}>
           <ListItemIcon><ForwardIcon fontSize="small" /></ListItemIcon>

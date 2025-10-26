@@ -122,7 +122,7 @@ export class StoragePipeline extends EventEmitter {
     this.activeYjsEditors.clear()
   }
 
-  async uploadFile(file: FileUpload, uploader: NetworkIdentity, options?: { partition?: number }): Promise<UploadResult> {
+  async uploadFile(file: FileUpload, uploader: NetworkIdentity, _options?: { partition?: number }): Promise<UploadResult> {
     const fileId = this.generateFileId(file)
     
     // Determine storage mode based on group size
@@ -136,7 +136,7 @@ export class StoragePipeline extends EventEmitter {
   }
 
   private async uploadWithFullReplication(file: FileUpload, uploader: NetworkIdentity, fileId: string): Promise<UploadResult> {
-    const uploaderDHT = this.dhtNodes.get(uploader.fourWords)!
+    const _uploaderDHT = this.dhtNodes.get(uploader.fourWords)!
     
     // Store complete file on each member
     const distribution: Record<string, Array<{ shardId: string; nodeId: string }>> = {}
@@ -263,7 +263,7 @@ export class StoragePipeline extends EventEmitter {
     }
   }
 
-  async downloadFile(fileId: string, options?: { requestingNode?: NetworkIdentity }): Promise<{ data: Uint8Array }> {
+  async downloadFile(fileId: string, _options?: { requestingNode?: NetworkIdentity }): Promise<{ data: Uint8Array }> {
     // Find file manifest (simplified - in production would be stored in DHT)
     const manifest = await this.findFileManifest(fileId)
     
@@ -289,7 +289,14 @@ export class StoragePipeline extends EventEmitter {
     
     // Decode using Reed-Solomon
     if (availableShards.length >= 10) { // Minimum data shards needed
-      const decoded = await this.encoder.decode(availableShards)
+      const properShards = availableShards.map(shard => ({
+        ...shard,
+        index: shard.shardIndex,
+        checksum: '',
+        version: '1.0',
+        originalLength: manifest.size
+      }))
+      const decoded = await this.encoder.decode(properShards)
       return { data: decoded.slice(0, manifest.size) }
     }
     
@@ -367,7 +374,7 @@ export class StoragePipeline extends EventEmitter {
     }
   }
 
-  async retrieveYjsCheckpoint(checkpointId: string): Promise<{ content: string }> {
+  async retrieveYjsCheckpoint(_checkpointId: string): Promise<{ content: string }> {
     // Simplified retrieval - in production would query DHT
     return { content: '# Document Title\n\nThis is content.' }
   }
@@ -387,7 +394,7 @@ export class StoragePipeline extends EventEmitter {
 
   async healNetworkPartition(): Promise<void> {
     // Restore all network connections
-    for (const [nodeId, dht] of this.dhtNodes) {
+    for (const [_nodeId, dht] of this.dhtNodes) {
       if (!dht.getStats().isConnected) {
         await dht.connect()
       }

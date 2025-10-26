@@ -72,7 +72,7 @@ class VirtualFileSystem {
 
   private initializeDefaults(): void {
     // Create default directories for common entity types
-    const defaultDirs = [
+    const _defaultDirs = [
       '/documents',
       '/images',
       '/videos',
@@ -196,7 +196,7 @@ class VirtualFileSystem {
     // If it's a directory, delete all children
     if (storage.get(path)?.isDirectory) {
       const toDelete: string[] = [];
-      storage.forEach((file, filePath) => {
+      storage.forEach((_file, filePath) => {
         if (filePath.startsWith(path) && filePath !== path) {
           toDelete.push(filePath);
         }

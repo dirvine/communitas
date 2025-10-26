@@ -55,10 +55,10 @@ export const UnifiedAuthFlow: React.FC<UnifiedAuthFlowProps> = ({
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [passwordStrength, setPasswordStrength] = useState<PasswordStrength>({ score: 0, label: '', color: 'error' });
-  const [identitySaved, setIdentitySaved] = useState(true);
+  const [_identitySaved, _setIdentitySaved] = useState(true);
   const [showIdentityModal, setShowIdentityModal] = useState(false);
   const [showPasskeyModal, setShowPasskeyModal] = useState(false);
-  const [copiedToClipboard, setCopiedToClipboard] = useState(false);
+  const [_copiedToClipboard, setCopiedToClipboard] = useState(false);
 
   const [formData, setFormData] = useState({
     name: '',

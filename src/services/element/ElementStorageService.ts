@@ -60,7 +60,7 @@ export class ElementStorageService extends EventEmitter {
 
       // Store file data in localStorage (in real app, this would be uploaded to backend)
       const fileData = await file.arrayBuffer();
-      localStorage.setItem(`element_${this.element.id}_file_${fileId}`, JSON.stringify({
+      localStorage.setItem(`element_${this.element.identity.id}_file_${fileId}`, JSON.stringify({
         data: Array.from(new Uint8Array(fileData)),
         name: file.name,
         type: file.type,
@@ -68,7 +68,7 @@ export class ElementStorageService extends EventEmitter {
       }));
 
       // Store file metadata
-      const files = JSON.parse(localStorage.getItem(`element_${this.element.id}_files`) || '[]');
+      const files = JSON.parse(localStorage.getItem(`element_${this.element.identity.id}_files`) || '[]');
       files.push({
         id: fileId,
         name: file.name,
@@ -77,7 +77,7 @@ export class ElementStorageService extends EventEmitter {
         modified: new Date().toISOString(),
         path: `/${file.name}`
       });
-      localStorage.setItem(`element_${this.element.id}_files`, JSON.stringify(files));
+      localStorage.setItem(`element_${this.element.identity.id}_files`, JSON.stringify(files));
 
       // Mark as complete
       const completeProgress = {
@@ -106,7 +106,7 @@ export class ElementStorageService extends EventEmitter {
     }
 
     // Retrieve file data from localStorage
-    const fileDataStr = localStorage.getItem(`element_${this.element.id}_file_${fileId}`);
+    const fileDataStr = localStorage.getItem(`element_${this.element.identity.id}_file_${fileId}`);
     if (!fileDataStr) {
       throw new Error('File not found');
     }
@@ -121,16 +121,16 @@ export class ElementStorageService extends EventEmitter {
     }
 
     // Get stored files
-    const files = JSON.parse(localStorage.getItem(`element_${this.element.id}_files`) || '[]');
+    const files = JSON.parse(localStorage.getItem(`element_${this.element.identity.id}_files`) || '[]');
 
     // Get stored directories
-    const directories = JSON.parse(localStorage.getItem(`element_${this.element.id}_directories`) || '[]');
+    const directories = JSON.parse(localStorage.getItem(`element_${this.element.identity.id}_directories`) || '[]');
 
     // Filter files by path (basic implementation)
     const filteredFiles = files.filter((file: any) => {
       if (path === '/') {
         // For root directory, include files with exactly one path segment (e.g., '/filename')
-        const pathSegments = file.path.split('/').filter(segment => segment.length > 0);
+        const pathSegments = file.path.split('/').filter((segment: string) => segment.length > 0);
         return pathSegments.length === 1;
       }
       return file.path.startsWith(path);
@@ -168,14 +168,14 @@ export class ElementStorageService extends EventEmitter {
 
     // For now, store directory metadata in local storage
     // In a real implementation, this would call the backend API
-    const directories = JSON.parse(localStorage.getItem(`element_${this.element.id}_directories`) || '[]');
+    const directories = JSON.parse(localStorage.getItem(`element_${this.element.identity.id}_directories`) || '[]');
 
     if (directories.includes(path)) {
       throw new Error('Directory already exists');
     }
 
     directories.push(path);
-    localStorage.setItem(`element_${this.element.id}_directories`, JSON.stringify(directories));
+    localStorage.setItem(`element_${this.element.identity.id}_directories`, JSON.stringify(directories));
 
     console.log('Created directory:', path);
     this.emit('directory-created', { path });
@@ -187,7 +187,7 @@ export class ElementStorageService extends EventEmitter {
     }
 
     // Check if file exists in our mock storage
-    const files = JSON.parse(localStorage.getItem(`element_${this.element.id}_files`) || '[]');
+    const files = JSON.parse(localStorage.getItem(`element_${this.element.identity.id}_files`) || '[]');
     const fileIndex = files.findIndex((f: any) => f.id === fileId);
 
     if (fileIndex === -1) {
@@ -197,11 +197,11 @@ export class ElementStorageService extends EventEmitter {
     const file = files[fileIndex];
 
     // Remove file data from localStorage
-    localStorage.removeItem(`element_${this.element.id}_file_${fileId}`);
+    localStorage.removeItem(`element_${this.element.identity.id}_file_${fileId}`);
 
     // Remove file metadata
     files.splice(fileIndex, 1);
-    localStorage.setItem(`element_${this.element.id}_files`, JSON.stringify(files));
+    localStorage.setItem(`element_${this.element.identity.id}_files`, JSON.stringify(files));
 
     console.log('Deleted file:', fileId);
     this.emit('file-deleted', { fileId, fileName: file.name });

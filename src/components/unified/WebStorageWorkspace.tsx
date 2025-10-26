@@ -48,14 +48,13 @@ export const WebStorageWorkspace: React.FC<WebStorageWorkspaceProps> = ({
   dhtRouter,
   currentUser,
   initialEntity,
-  initialFile = 'home.md',
-  onEntityChange,
+  initialFile = 'home.md', onEntityChange: _onEntityChange,
   className
 }) => {
   const { authState, hasPermission } = useAuth()
   
   // Secure permission helpers with proper authorization checks
-  const canWrite = (resource: string, context?: any) => {
+  const canWrite = (resource: string, _context?: any) => {
     if (!authState.isAuthenticated || !authState.user) return false
     
     // For entity storage, check proper permissions
@@ -78,7 +77,7 @@ export const WebStorageWorkspace: React.FC<WebStorageWorkspaceProps> = ({
     return hasPermission(resource, 'write')
   }
   
-  const canCollaborate = (resource: string, context?: any) => {
+  const canCollaborate = (resource: string, _context?: any) => {
     if (!authState.isAuthenticated || !authState.user) return false
     
     // For entity storage, check collaboration permissions
@@ -102,7 +101,7 @@ export const WebStorageWorkspace: React.FC<WebStorageWorkspaceProps> = ({
     return hasPermission(resource, 'collaborate')
   }
   const [activeTab, setActiveTab] = useState(0)
-  const [currentEntity, setCurrentEntity] = useState(initialEntity)
+  const [currentEntity, _setCurrentEntity] = useState(initialEntity)
   const [currentFile, setCurrentFile] = useState(initialFile)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -278,7 +277,7 @@ Happy collaborating! 🚀
   }, [currentEntity, isDirty, saveFile, currentFile, editorContent, theme, getWebPublisher, dhtRouter, activeTab, canWrite])
 
   // Handle content changes
-  const handleContentChange = useCallback((content: string) => {
+  const _handleContentChange = useCallback((content: string) => {
     setEditorContent(content)
     setIsDirty(true)
   }, [])

@@ -39,7 +39,7 @@ class BrowserVault {
     return crypto.subtle.deriveKey(
       {
         name: 'PBKDF2',
-        salt,
+        salt: salt as BufferSource,
         iterations: 100000,
         hash: 'SHA-256'
       },
@@ -81,8 +81,8 @@ class BrowserVault {
         fourWords: options.fourWords, // Store in plaintext for identity lookup
         displayName: options.displayName,
         encryptedData: this.arrayBufferToBase64(encryptedData),
-        salt: this.arrayBufferToBase64(salt),
-        iv: this.arrayBufferToBase64(iv),
+        salt: this.arrayBufferToBase64(salt.buffer),
+        iv: this.arrayBufferToBase64(iv.buffer),
         createdAt: new Date().toISOString()
       };
 

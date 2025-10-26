@@ -144,7 +144,7 @@ const defaultCapabilities: CollaborationCapabilities = {
 
 const generateFourWords = async (): Promise<string> => {
   // Check if running in Tauri
-  if (typeof window !== 'undefined' && '__TAURI__' in window) {
+  if (typeof window !== 'undefined' && '_TAURI_' in window) {
     // Use real saorsa-core four-word generation
     return await invoke<string>('generate_four_word_identity');
   }
@@ -246,7 +246,7 @@ const applySyncedMetadata = <T extends { createdAt?: Date; updatedAt?: Date }>(e
   lastSyncedAt: cloneDate(entity.updatedAt) ?? new Date(),
 });
 
-const cloneOrganizationGraph = (org: Organization): Organization & EntityMetadata => ({
+const _cloneOrganizationGraph = (org: Organization): Organization & EntityMetadata => ({
   ...org,
   createdAt: cloneDate(org.createdAt) ?? new Date(),
   updatedAt: cloneDate(org.updatedAt) ?? new Date(),
@@ -288,7 +288,7 @@ const cloneOrganizationGraph = (org: Organization): Organization & EntityMetadat
   lastSyncedAt: cloneDate(org.updatedAt) ?? new Date(),
 });
 
-const clonePersonalGroupEntity = (group: Group): Group & EntityMetadata => (
+const _clonePersonalGroupEntity = (group: Group): Group & EntityMetadata => (
   applySyncedMetadata({
     ...group,
     createdAt: cloneDate(group.createdAt) ?? new Date(),
@@ -296,7 +296,7 @@ const clonePersonalGroupEntity = (group: Group): Group & EntityMetadata => (
   })
 );
 
-const clonePersonalUserEntity = (user: PersonalUser): PersonalUser & EntityMetadata => ({
+const _clonePersonalUserEntity = (user: PersonalUser): PersonalUser & EntityMetadata => ({
   ...user,
   createdAt: cloneDate(user.createdAt) ?? new Date(),
   updatedAt: cloneDate(user.updatedAt) ?? new Date(),
@@ -409,10 +409,11 @@ export const EntityDirectoryProvider: React.FC<EntityDirectoryProviderProps> = (
     });
 
     if (failedMessage) {
+      const msg = failedMessage as MessageOperationPayload;
       void markCachedMessageStatus(
-        failedMessage.entityType,
-        failedMessage.entityId,
-        failedMessage.id,
+        msg.entityType,
+        msg.entityId,
+        msg.id,
         'failed',
       );
     }
@@ -1140,7 +1141,7 @@ export const EntityDirectoryProvider: React.FC<EntityDirectoryProviderProps> = (
   }, [queueCreateOperation, withMetadata]);
 
   const removeOrganization = useCallback((organizationId: string) => {
-    let entityToDelete: Organization | null = null;
+    let entityToDelete: (Organization & EntityMetadata) | null = null;
 
     setState(prev => {
       // Find the organization to delete
@@ -1164,9 +1165,10 @@ export const EntityDirectoryProvider: React.FC<EntityDirectoryProviderProps> = (
     });
 
     if (entityToDelete) {
+      const entity = entityToDelete as Organization & EntityMetadata;
       queueDeleteOperation('organization', {
         id: organizationId,
-        networkIdentity: entityToDelete.networkIdentity
+        networkIdentity: entity.networkIdentity
       });
     }
   }, [queueDeleteOperation]);
@@ -1205,7 +1207,7 @@ export const EntityDirectoryProvider: React.FC<EntityDirectoryProviderProps> = (
   }, [queueCreateOperation]);
 
   const removeOrganizationGroup = useCallback((organizationId: string, groupId: string) => {
-    let entityToDelete: Group | null = null;
+    let entityToDelete: (Group & EntityMetadata) | null = null;
 
     setState(prev => {
       // Find the group to delete
@@ -1240,9 +1242,10 @@ export const EntityDirectoryProvider: React.FC<EntityDirectoryProviderProps> = (
     });
 
     if (entityToDelete) {
+      const entity = entityToDelete as Group & EntityMetadata;
       queueDeleteOperation('group', {
         id: groupId,
-        networkIdentity: entityToDelete.networkIdentity
+        networkIdentity: entity.networkIdentity
       });
     }
   }, [queueDeleteOperation]);

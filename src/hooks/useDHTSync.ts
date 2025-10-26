@@ -4,7 +4,7 @@ import { useSnackbar } from 'notistack';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 const isTauriEnvironment = () =>
-  typeof window !== 'undefined' && Boolean((window as any).__TAURI__);
+  typeof window !== 'undefined' && Boolean((window as any)._TAURI_);
 
 // DHT Event Types
 export interface DHTSyncEvent {

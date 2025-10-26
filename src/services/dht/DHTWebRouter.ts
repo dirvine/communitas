@@ -233,7 +233,7 @@ export class DHTWebRouter extends EventEmitter {
 
     // Store in DHT at well-known location
     const recordData = JSON.stringify(record)
-    const recordKey = this.generateIdentityKey(identity.fourWords)
+    const _recordKey = this.generateIdentityKey(identity.fourWords)
     await this.dht.putWithMetadata(Buffer.from(recordData, 'utf-8'), {
       size: recordData.length,
       createdAt: Date.now(),
@@ -279,7 +279,7 @@ export class DHTWebRouter extends EventEmitter {
   /**
    * Get directory listing for a path (if enabled)
    */
-  async getDirectoryListing(routeMatch: RouteMatch, path: string): Promise<{
+  async getDirectoryListing(_routeMatch: RouteMatch, _path: string): Promise<{
     directories: string[]
     files: Array<{ name: string; size: number; modified: number }>
   }> {

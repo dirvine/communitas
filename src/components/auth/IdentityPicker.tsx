@@ -24,14 +24,6 @@ interface RecentIdentity {
   has_passkey: boolean;
 }
 
-// Passkey info from backend
-interface PasskeyInfo {
-  four_words: string;
-  registered_at: number;
-  last_used: number | null;
-  device_name: string;
-}
-
 interface IdentityPickerProps {
   onSelectIdentity: (fourWords: string, usePasskey: boolean) => Promise<void>;
   onCreateNew: () => void;

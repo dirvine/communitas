@@ -39,7 +39,7 @@ export function MemberListPanel({
   const loadMembers = async () => {
     setLoading(true)
     try {
-      const result = await memberManagementService.listMembers(entityId, entityType)
+      const result = await memberManagementService.listMembers(entityType, entityId)
       if (result.success && result.data) {
         setMembers(result.data)
       } else {
@@ -94,8 +94,7 @@ export function MemberListPanel({
         entity_type: entityType,
         entity_id: entityId,
         member_id: memberId,
-        new_role: newRole,
-        updated_by: currentUserId
+        new_role: newRole
       })
 
       if (result.success) {
@@ -152,7 +151,7 @@ export function MemberListPanel({
               member={member}
               canManage={canManageMembers && member.member_id !== currentUserId}
               onRemove={() => openRemoveDialog(member.member_id)}
-              onRoleChange={(newRole) => handleRoleChange(member.member_id, newRole)}
+              onRoleChange={(_, newRole) => handleRoleChange(member.member_id, newRole)}
             />
           ))}
         </List>

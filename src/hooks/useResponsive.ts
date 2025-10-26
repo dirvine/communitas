@@ -216,7 +216,7 @@ export const useResponsiveTypography = () => {
 export const useResponsiveColumns = (
   config: Partial<Record<Breakpoint, number>> = { xs: 1, sm: 2, md: 3, lg: 4 }
 ) => {
-  const { currentBreakpoint } = useResponsive();
+  const { currentBreakpoint: _currentBreakpoint } = useResponsive();
   
   return useResponsiveValue(config, 1);
 };

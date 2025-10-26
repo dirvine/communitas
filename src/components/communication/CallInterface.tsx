@@ -58,8 +58,7 @@ export const CallInterface: React.FC<CallInterfaceProps> = ({
   onEndCall,
   onToggleMute,
   onToggleVideo,
-  onToggleScreenShare,
-  onInviteParticipant,
+  onToggleScreenShare, onInviteParticipant: _onInviteParticipant,
   isMinimized = false,
   onMinimize,
   onMaximize,
@@ -69,20 +68,20 @@ export const CallInterface: React.FC<CallInterfaceProps> = ({
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoEnabled, setIsVideoEnabled] = useState(callType === 'video');
   const [isScreenSharing, setIsScreenSharing] = useState(false);
-  const [volume, setVolume] = useState(50);
+  const [_volume, _setVolume] = useState(50);
   const [isRecording, setIsRecording] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isPipMode, setIsPipMode] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [showParticipants, setShowParticipants] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
+  const [_showSettings, setShowSettings] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [callDuration, setCallDuration] = useState(0);
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
 
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const _videoRef = useRef<HTMLVideoElement>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
 
   // Call timer
@@ -326,7 +325,7 @@ export const CallInterface: React.FC<CallInterfaceProps> = ({
         {/* Video Grid */}
         {callType === 'video' && (
           <Grid container sx={{ height: '100%' }}>
-            {participants.map((participant, index) => (
+            {participants.map((participant, _index) => (
               <Grid 
                 key={participant.user_id} 
                 item 

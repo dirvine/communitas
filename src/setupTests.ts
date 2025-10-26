@@ -4,7 +4,7 @@ import crypto from 'crypto'
 import { expect } from 'vitest'
 
 // @ts-ignore
-globalThis.__BLAKE3_SHIM__ = (input: string) => {
+globalThis._BLAKE3_SHIM_ = (input: string) => {
   const h = crypto.createHash('sha256')
   h.update(input)
   return h.digest('hex')

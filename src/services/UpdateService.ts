@@ -7,6 +7,7 @@
 
 import { relaunch } from '@tauri-apps/plugin-process';
 import { check } from '@tauri-apps/plugin-updater';
+import { getVersion } from '@tauri-apps/api/app';
 
 export interface UpdateInfo {
   available: boolean;
@@ -62,9 +63,10 @@ export class UpdateService {
       }
 
       console.log('No updates available');
+      const currentVersion = await getVersion();
       return {
         available: false,
-        currentVersion: update?.currentVersion || 'unknown',
+        currentVersion: currentVersion || 'unknown',
       };
     } catch (error) {
       console.error('Failed to check for updates:', error);

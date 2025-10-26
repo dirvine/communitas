@@ -43,11 +43,11 @@ async function bootstrap() {
   console.info('[Communitas] Bootstrapping app', {
     mode: import.meta.env.MODE,
     dev: import.meta.env.DEV,
-    tauri: typeof window !== 'undefined' && !!(window as any).__TAURI__,
+    tauri: typeof window !== 'undefined' && !!(window as any)._TAURI_,
     hasTextDecoder: typeof TextDecoder !== 'undefined',
   })
 
-  if (typeof window !== 'undefined' && (window as any).__TAURI__) {
+  if (typeof window !== 'undefined' && (window as any)._TAURI_) {
     console.info('[Communitas] Tauri detected')
 
     // Check for updates on startup (non-blocking)

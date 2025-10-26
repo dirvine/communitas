@@ -36,7 +36,7 @@ interface ActivityItem {
 
 export const ActivityDashboard: React.FC = () => {
   const { organizations, personalGroups, personalUsers } = useEntityDirectory()
-  const { user } = useAuth()
+  const { authState } = useAuth()
   const [activityItems, setActivityItems] = useState<ActivityItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
@@ -47,7 +47,7 @@ export const ActivityDashboard: React.FC = () => {
     const unreadMessages = Math.floor(Math.random() * 50) // TODO: Calculate from actual message data
 
     // Count active members (simulate activity)
-    const activeMembers = organizations.reduce((acc, org) => acc + (org.members?.length || 0), 0) +
+    const activeMembers = organizations.reduce((acc, org) => acc + (org.users?.length || 0), 0) +
                          personalGroups.reduce((acc, group) => acc + (group.members?.length || 0), 0) +
                          personalUsers.length
 
@@ -111,15 +111,17 @@ export const ActivityDashboard: React.FC = () => {
       const items: ActivityItem[] = []
 
       // Add recent entity activities
+      const userName = authState.user?.name || 'You'
+      const userAvatar = authState.user?.avatar
       organizations.slice(0, 3).forEach(org => {
         items.push({
           id: `org-${org.id}`,
           type: 'member',
-          title: `${user?.name || 'You'} joined ${org.name}`,
+          title: `${userName} joined ${org.name}`,
           description: `Welcome to the ${org.name} organization`,
           timestamp: '2 hours ago',
           entity: org.name,
-          avatar: user?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.name || 'user'}`
+          avatar: userAvatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${userName}`
         })
       })
 
@@ -162,7 +164,7 @@ export const ActivityDashboard: React.FC = () => {
       setActivityItems(generateActivityItems())
       setIsLoading(false)
     }, 1000)
-  }, [organizations, user])
+  }, [organizations, authState])
 
   const getActivityIcon = (type: ActivityItem['type']) => {
     switch (type) {
@@ -199,7 +201,7 @@ export const ActivityDashboard: React.FC = () => {
       <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Box>
           <Typography variant="h4" sx={{ fontWeight: 600, mb: 1 }}>
-            Good afternoon, {user?.name?.split(' ')[0] || 'User'} 👋
+            Good afternoon, {authState.user?.name?.split(' ')[0] || 'User'} 👋
           </Typography>
           <Typography variant="body1" sx={{ color: 'text.secondary' }}>
             Here's what's happening across your spaces

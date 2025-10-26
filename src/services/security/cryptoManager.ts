@@ -50,7 +50,7 @@ export class CryptoManager {
   // Secure defaults
   private readonly AES_KEY_LENGTH = 32; // 256 bits
   private readonly IV_LENGTH = 12; // 96 bits for GCM
-  private readonly TAG_LENGTH = 16; // 128 bits for GCM
+  private readonly _TAG_LENGTH = 16; // 128 bits for GCM
   private readonly PBKDF2_ITERATIONS = 100000;
 
   static getInstance(): CryptoManager {
@@ -120,7 +120,7 @@ export class CryptoManager {
         );
       });
     } catch (error) {
-      throw new Error(`Key derivation error: ${error.message}`);
+      throw new Error(`Key derivation error: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -158,7 +158,7 @@ export class CryptoManager {
           keyId: keyId || "default",
         };
       } catch (error) {
-        throw new Error(`Encryption failed: ${error.message}`);
+        throw new Error(`Encryption failed: ${error instanceof Error ? error.message : String(error)}`);
       }
     } else {
       // Test-mode Web Crypto AES-GCM
@@ -186,7 +186,7 @@ export class CryptoManager {
   async decryptData(
     encryptedData: EncryptionResult,
     key: Uint8Array,
-    options: DecryptionOptions = {},
+    _options: DecryptionOptions = {},
   ): Promise<Uint8Array> {
     if (key.length !== this.AES_KEY_LENGTH) {
       throw new Error(`Key must be ${this.AES_KEY_LENGTH} bytes long`);
@@ -203,7 +203,7 @@ export class CryptoManager {
         decipher.final();
         return new Uint8Array(decrypted);
       } catch (error) {
-        throw new Error(`Decryption failed: ${error.message}`);
+        throw new Error(`Decryption failed: ${error instanceof Error ? error.message : String(error)}`);
       }
     } else {
       const cryptoKey = await crypto.webcrypto.subtle.importKey(
@@ -247,7 +247,7 @@ export class CryptoManager {
       const signature = await pqcCrypto.signData(data, secretKey, "dht-storage");
       return new Uint8Array(signature.signature);
     } catch (error) {
-      throw new Error(`PQC signing failed: ${error.message}`);
+      throw new Error(`PQC signing failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 

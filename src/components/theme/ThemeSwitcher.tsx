@@ -67,14 +67,14 @@ export const ThemeSwitcher: React.FC<ThemeSwitcherProps> = ({
 }) => {
   const muiTheme = useMuiTheme();
   const { mode, colorPreset, toggleMode, setColorPreset, isDarkMode } = useTheme();
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const [_anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [presetMenuAnchor, setPresetMenuAnchor] = useState<null | HTMLElement>(null);
 
-  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+  const _handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
   };
 
-  const handleMenuClose = () => {
+  const _handleMenuClose = () => {
     setAnchorEl(null);
   };
 

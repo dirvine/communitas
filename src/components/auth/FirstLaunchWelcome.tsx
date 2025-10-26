@@ -60,7 +60,7 @@ export const FirstLaunchWelcome: React.FC<FirstLaunchWelcomeProps> = ({ open, on
 
   // Detect if running in Tauri desktop app
   useEffect(() => {
-    setIsTauri(!!(window as any).__TAURI__);
+    setIsTauri(!!(window as any)._TAURI_);
   }, []);
 
   // Initialize display name from OS username

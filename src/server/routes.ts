@@ -7,14 +7,14 @@ const app = express();
 app.use(express.json());
 
 // Health check endpoint
-app.get('/api/health', (req, res) => {
+app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
 // WebSocket stats endpoint  
 let wsServer: CommunicationWebSocketServer;
 
-app.get('/api/ws-stats', (req, res) => {
+app.get('/api/ws-stats', (_req, res) => {
   if (wsServer) {
     res.json(wsServer.getStats());
   } else {

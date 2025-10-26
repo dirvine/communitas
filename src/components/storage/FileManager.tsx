@@ -33,14 +33,12 @@ interface FileManagerProps {
   onFileUpload?: (files: File[]) => void;
 }
 
-export const FileManager: React.FC<FileManagerProps> = ({
-  organizationId,
-  folderId,
+export const FileManager: React.FC<FileManagerProps> = ({ organizationId: _organizationId, folderId: _folderId,
   onFileSelect,
   onFileUpload,
 }) => {
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
-  const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
+  const [selectedFiles, _setSelectedFiles] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [createFolderOpen, setCreateFolderOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');

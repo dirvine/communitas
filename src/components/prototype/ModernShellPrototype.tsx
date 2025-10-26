@@ -170,7 +170,7 @@ const personModes: { key: PersonMode; label: string }[] = [
   { key: 'website', label: 'Website' },
 ]
 
-const SystemRailButton = styled(IconButton)(({ theme }) => ({
+const SystemRailButton = styled(IconButton)(({ theme: _theme }) => ({
   width: '100%',
   color: TOKENS.textSecondary,
   borderRadius: 12,
@@ -482,8 +482,8 @@ export const ModernShellPrototypeScreen: React.FC = () => {
   }>({ open: false, type: null })
 
   // Organization and group management state
-  const [showOrgManagementDialog, setShowOrgManagementDialog] = useState(false)
-  const [showGroupManagementDialog, setShowGroupManagementDialog] = useState(false)
+  const [_showOrgManagementDialog, _setShowOrgManagementDialog] = useState(false)
+  const [_showGroupManagementDialog, _setShowGroupManagementDialog] = useState(false)
 
   const conversationToContact = useCallback((conversation: Conversation): Contact => ({
     id: conversation.id,
@@ -1006,13 +1006,13 @@ export const ModernShellPrototypeScreen: React.FC = () => {
       let testDisplayName = '' // default empty
 
       // Check if running in Tauri - try to get user info from backend with retry
-      if ((window as any).__TAURI__?.tauri?.invoke) {
+      if ((window as any)._TAURI_?.tauri?.invoke) {
         let retries = 5
         let userInfoRetrieved = false
 
         while (retries > 0 && !userInfoRetrieved) {
           try {
-            const userInfo = await (window as any).__TAURI__.tauri.invoke('core_get_user_info') as { peerId: string; displayName: string }
+            const userInfo = await (window as any)._TAURI_.tauri.invoke('core_get_user_info') as { peerId: string; displayName: string }
             if (userInfo && userInfo.peerId) {
               testPeerId = userInfo.peerId
               testDisplayName = userInfo.displayName || ''
@@ -1169,9 +1169,9 @@ export const ModernShellPrototypeScreen: React.FC = () => {
       return
     }
 
-    if ((window as any).__TAURI__?.tauri?.invoke) {
+    if ((window as any)._TAURI_?.tauri?.invoke) {
       try {
-        await (window as any).__TAURI__.tauri.invoke('core_add_bootstrap_node', {
+        await (window as any)._TAURI_.tauri.invoke('core_add_bootstrap_node', {
           node: connectionWordsInput.trim()
         })
         console.log('✅ Added bootstrap node:', connectionWordsInput.trim())
@@ -1193,9 +1193,9 @@ export const ModernShellPrototypeScreen: React.FC = () => {
       return
     }
 
-    if ((window as any).__TAURI__?.tauri?.invoke) {
+    if ((window as any)._TAURI_?.tauri?.invoke) {
       try {
-        await (window as any).__TAURI__.tauri.invoke('core_set_display_name', {
+        await (window as any)._TAURI_.tauri.invoke('core_set_display_name', {
           displayName: displayNameInput.trim()
         })
         console.log('✅ Display name updated:', displayNameInput.trim())
@@ -1897,7 +1897,7 @@ export const ModernShellPrototypeScreen: React.FC = () => {
   // Dialog callbacks that call Tauri backend
   const handleSaveEntityEdit = async (id: string, updates: Partial<Conversation>) => {
     try {
-      if (typeof window !== 'undefined' && '__TAURI__' in window) {
+      if (typeof window !== 'undefined' && '_TAURI_' in window) {
         const { invoke } = await import('@tauri-apps/api/core')
 
         // Find the entity type from the conversation
@@ -1991,7 +1991,7 @@ export const ModernShellPrototypeScreen: React.FC = () => {
 
   const handleGenerateIdentity = async (): Promise<string> => {
     try {
-      if (typeof window !== 'undefined' && '__TAURI__' in window) {
+      if (typeof window !== 'undefined' && '_TAURI_' in window) {
         const { invoke } = await import('@tauri-apps/api/core')
         const fourWords = await invoke<string>('generate_four_word_identity')
         return fourWords
@@ -3727,7 +3727,7 @@ export const ModernShellPrototypeScreen: React.FC = () => {
           setGroupDialogMode(null)
           setSelectedGroup(null)
         }}
-        onSave={async (id, updates) => {
+        onSave={async (_id, _updates) => {
           // Group updates are handled by EntityDirectoryContext
           // The conversations memo will automatically update when backend state changes
         }}

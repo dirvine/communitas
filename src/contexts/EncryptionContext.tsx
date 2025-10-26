@@ -7,8 +7,8 @@ import { useAuth, UserIdentity } from './AuthContext';
 // Dynamic import of Tauri API with fallback
 let invoke: any = async (cmd: string, args?: any) => {
   // Try to get Tauri from window first
-  if (typeof window !== 'undefined' && (window as any).__TAURI__?.core?.invoke) {
-    return (window as any).__TAURI__.core.invoke(cmd, args);
+  if (typeof window !== 'undefined' && (window as any)._TAURI_?.core?.invoke) {
+    return (window as any)._TAURI_.core.invoke(cmd, args);
   }
 
   // Try dynamic import
@@ -182,12 +182,12 @@ export const EncryptionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           keyPair?: string;
         } | null;
         
-        if (storedKeys.masterKey) {
+        if (storedKeys?.masterKey) {
           const masterKeyData = JSON.parse(storedKeys.masterKey);
           masterKey = await cryptoManager.importKey(masterKeyData);
         }
         
-        if (storedKeys.keyPair) {
+        if (storedKeys?.keyPair) {
           const keyPairData = JSON.parse(storedKeys.keyPair);
           userKeyPair = {
             publicKey: await cryptoManager.importKey(

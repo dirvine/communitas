@@ -51,10 +51,10 @@ interface MarkdownBrowserProps {
 
 export const MarkdownBrowser: React.FC<MarkdownBrowserProps> = ({
   storageSystem,
-  currentUser,
+  currentUser: _currentUser,
   initialUrl = 'ocean-forest-moon-star/home.md',
-  theme = 'auto',
-  showNavigationHistory = true,
+  theme: _theme = 'auto',
+  showNavigationHistory: _showNavigationHistory = true,
   enableSearch = true,
   enableBookmarks = true,
   showTableOfContents = true,
@@ -88,7 +88,7 @@ export const MarkdownBrowser: React.FC<MarkdownBrowserProps> = ({
   // Bookmarks
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([])
   const [isBookmarked, setIsBookmarked] = useState(false)
-  const [bookmarksOpen, setBookmarksOpen] = useState(false)
+  const [_bookmarksOpen, _setBookmarksOpen] = useState(false)
   
   // Menus
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null)

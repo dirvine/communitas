@@ -140,7 +140,7 @@ class OrganizationService {
           if (userId !== creatorId) {
             const shortId = userId.substring(0, 8)
             const shortIdForAddress = userId.substring(0, 4)
-            group.members.push({
+            groupMock.members.push({
               user_id: userId,
               display_name: `User ${shortId}`,
               four_word_address: `user.${shortIdForAddress}.test.here`,

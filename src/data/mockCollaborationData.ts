@@ -3,7 +3,7 @@ import {
 } from '../types/collaboration';
 
 // Helper to generate four-word identities
-const generateFourWords = () => {
+const _generateFourWords = () => {
   const words = [
     ['ocean', 'forest', 'mountain', 'desert', 'river', 'valley', 'island', 'prairie'],
     ['blue', 'green', 'golden', 'silver', 'crystal', 'shadow', 'bright', 'misty'],

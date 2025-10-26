@@ -78,7 +78,7 @@ export const CallManager: React.FC = () => {
       }));
     };
 
-    const handleHideCallUI = (data: any) => {
+    const handleHideCallUI = (_data: any) => {
       setCallState({
         isActive: false,
         callType: 'audio',
@@ -109,7 +109,7 @@ export const CallManager: React.FC = () => {
       }));
     };
 
-    const handleRemoteScreenShareStarted = (data: any) => {
+    const handleRemoteScreenShareStarted = (_data: any) => {
       setCallState(prev => ({
         ...prev,
         participant: prev.participant ? {
@@ -119,7 +119,7 @@ export const CallManager: React.FC = () => {
       }));
     };
 
-    const handleRemoteScreenShareStopped = (data: any) => {
+    const handleRemoteScreenShareStopped = (_data: any) => {
       setCallState(prev => ({
         ...prev,
         participant: prev.participant ? {
@@ -129,7 +129,7 @@ export const CallManager: React.FC = () => {
       }));
     };
 
-    const handleCallEnded = (data: any) => {
+    const handleCallEnded = (_data: any) => {
       setCallState({
         isActive: false,
         callType: 'audio',
@@ -320,8 +320,8 @@ export const CallManager: React.FC = () => {
     setNotification(prev => ({ ...prev, open: false }));
   };
 
-  // Public methods that can be called from outside
-  React.useImperativeHandle(React.forwardRef(() => ({})), () => ({
+  // Expose public methods through ref
+  const methodsRef = React.useRef({
     startAudioCall: async (entityId: string, entityType: string) => {
       try {
         const participant: CallParticipant = {
@@ -383,7 +383,11 @@ export const CallManager: React.FC = () => {
         });
       }
     }
-  }));
+  });
+
+  React.useEffect(() => {
+    (callManager as any).current = methodsRef.current;
+  }, []);
 
   return (
     <Box>
@@ -393,8 +397,8 @@ export const CallManager: React.FC = () => {
           callType={callState.callType}
           direction={callState.direction}
           participant={callState.participant}
-          localStream={callState.localStream}
-          remoteStream={callState.remoteStream}
+          localStream={callState.localStream || undefined}
+          remoteStream={callState.remoteStream || undefined}
           onAccept={callState.direction === 'incoming' ? handleAcceptCall : undefined}
           onReject={callState.direction === 'incoming' ? handleRejectCall : undefined}
           onEnd={callState.direction === 'outgoing' ? handleEndCall : undefined}

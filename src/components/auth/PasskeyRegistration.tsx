@@ -38,7 +38,7 @@ export const PasskeyRegistration: React.FC<PasskeyRegistrationProps> = ({
   onClose,
   onSuccess,
 }) => {
-  const theme = useTheme();
+  const _theme = useTheme();
   const [step, setStep] = useState<'intro' | 'registering' | 'success' | 'error'>('intro');
   const [error, setError] = useState<string | null>(null);
   const [passkeyInfo, setPasskeyInfo] = useState<PasskeyInfo | null>(null);

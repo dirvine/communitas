@@ -238,8 +238,7 @@ export const BulkSyncIndicator: React.FC<BulkSyncIndicatorProps> = ({
   totalItems,
   syncedItems,
   pendingItems,
-  errorItems,
-  size = 'medium',
+  errorItems, size: _size = 'medium',
   showDetails = true,
 }) => {
   const allSynced = syncedItems === totalItems;

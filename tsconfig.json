@@ -7,6 +7,10 @@
     "skipLibCheck": true,
     "moduleResolution": "node",
     "esModuleInterop": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    },
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "isolatedModules": true,

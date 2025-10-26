@@ -16,7 +16,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { useLocalStorage } from '../../contexts/LocalStorageProvider';
+import { useLocalStorage, type StorageFile } from '../../contexts/LocalStorageProvider';
 import { networkService } from '../../services/network/NetworkConnectionService';
 import { offlineStorage } from '../../services/storage/OfflineStorageService';
 import { designTokens } from '../../styles/theme';
@@ -61,14 +61,14 @@ type StorageArea = 'website' | 'data' | 'shared';
 
 // Styled components for glassmorphism
 const MotionCard = motion(GlassCard);
-const StorageSection = styled(GlassCard)(({ theme }) => ({
+const _StorageSection = styled(GlassCard)(({ theme }) => ({
   marginBottom: theme.spacing(2),
   padding: theme.spacing(2),
   background: alpha(theme.palette.background.paper, 0.6),
   backdropFilter: 'blur(10px)',
 }));
 
-const StyledFab = styled(Fab)(({ theme }) => ({
+const _StyledFab = styled(Fab)(({ theme: _theme }) => ({
   background: designTokens.colors.primary.gradient,
   color: '#ffffff',
   boxShadow: designTokens.shadows.xl,
@@ -153,7 +153,7 @@ const StoragePanel: React.FC<StoragePanelProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [websiteStats, setWebsiteStats] = useState<StorageStats | null>(null);
   const [dataStats, setDataStats] = useState<StorageStats | null>(null);
-  const [isOffline, setIsOffline] = useState(false);
+  const [_isOffline, _setIsOffline] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; item: StorageItem } | null>(null);
   const [renameDialog, setRenameDialog] = useState<{ open: boolean; item: StorageItem | null }>({ open: false, item: null });
   const [newFolderDialog, setNewFolderDialog] = useState(false);
@@ -175,12 +175,12 @@ const StoragePanel: React.FC<StoragePanelProps> = ({
   // Monitor network status
   useEffect(() => {
     const unsubscribe = networkService.subscribe((state) => {
-      setIsOffline(state.status !== 'connected');
+      _setIsOffline(state.status !== 'connected');
     });
 
     // Get initial state
     const currentState = networkService.getState();
-    setIsOffline(currentState.status !== 'connected');
+    _setIsOffline(currentState.status !== 'connected');
 
     return unsubscribe;
   }, []);
@@ -204,7 +204,7 @@ const StoragePanel: React.FC<StoragePanelProps> = ({
       const files = await localStorage.list(entityId, fullPath);
 
       // Convert to StorageItem format
-      const storageItems: StorageItem[] = files.map(file => ({
+      const storageItems: StorageItem[] = files.map((file: StorageFile) => ({
         name: file.name,
         path: file.path,
         type: file.isDirectory ? 'folder' : 'file',
@@ -255,7 +255,7 @@ const StoragePanel: React.FC<StoragePanelProps> = ({
   }, [entityId, currentPath, localStorage, encryptionStatus, permissions, currentArea, entityType]);
 
   // Handle area change
-  const handleAreaChange = (event: React.SyntheticEvent, newArea: StorageArea) => {
+  const handleAreaChange = (_event: React.SyntheticEvent, newArea: StorageArea) => {
     setCurrentArea(newArea);
     setCurrentPath('/'); // Reset path when switching areas
     setSelectedItems(new Set()); // Clear selection

@@ -103,7 +103,7 @@ const EntityContentView: React.FC<EntityContentViewProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [encryptionStatus, setEncryptionStatus] = useState<EncryptionStatus | null>(null);
   const [permissions, setPermissions] = useState<string[]>([]);
-  const { state: navState } = useNavigation();
+  const { state: _navState } = useNavigation();
 
   // Get entity icon based on type
   const getEntityIcon = () => {
@@ -169,7 +169,7 @@ const EntityContentView: React.FC<EntityContentViewProps> = ({
       .finally(() => setLoading(false));
   }, [entityId]);
 
-  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
+  const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setActiveTab(newValue);
   };
 
@@ -217,7 +217,7 @@ const EntityContentView: React.FC<EntityContentViewProps> = ({
     );
   }
 
-  const theme = useTheme();
+  const _theme = useTheme();
 
   return (
     <MotionBox

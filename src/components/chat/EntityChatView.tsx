@@ -133,7 +133,7 @@ export const EntityChatView: React.FC<EntityChatViewProps> = ({
   const { queueMessage } = useEntityDirectory();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-  const isTablet = useMediaQuery(theme.breakpoints.between('md', 'lg'));
+  const _isTablet = useMediaQuery(theme.breakpoints.between('md', 'lg'));
   
   const [messages, setMessages] = useState<Message[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
@@ -150,14 +150,14 @@ export const EntityChatView: React.FC<EntityChatViewProps> = ({
     () => (activeThread ? messages.find(msg => msg.id === activeThread.parentMessageId) : undefined),
     [activeThread, messages],
   );
-  const [showMembers, setShowMembers] = useState(false);
+  const [_showMembers, _setShowMembers] = useState(false);
   const [showAddMember, setShowAddMember] = useState(false);
   const [newMemberAddress, setNewMemberAddress] = useState('');
   const [newMemberRole, setNewMemberRole] = useState<'admin' | 'member'>('member');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [_searchQuery, setSearchQuery] = useState('');
   const [selectedTab, setSelectedTab] = useState(0); // 0: Chat, 1: Members, 2: Files
-  const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
-  const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
+  const [_menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
+  const [_selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [membersDrawerOpen, setMembersDrawerOpen] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -788,7 +788,7 @@ export const EntityChatView: React.FC<EntityChatViewProps> = ({
 
           {/* Desktop Tabs - Only show on desktop */}
           {!isMobile && (
-            <Tabs value={selectedTab} onChange={(e, v) => setSelectedTab(v)} sx={{ mt: 1 }}>
+            <Tabs value={selectedTab} onChange={(_e, v) => setSelectedTab(v)} sx={{ mt: 1 }}>
               <Tab label="Chat" />
               {entityType !== 'user' && <Tab label={`Members (${members.length})`} />}
               <Tab label="Files" />

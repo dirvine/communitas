@@ -28,7 +28,7 @@ export class CommunicationWebSocketServer {
     this.wss = new WebSocketServer({ 
       server,
       path: '/ws',
-      verifyClient: (info: { origin: string; secure: boolean; req: IncomingMessage }) => {
+      verifyClient: (_info: { origin: string; secure: boolean; req: IncomingMessage }) => {
         // Add basic verification if needed
         return true;
       }
@@ -38,7 +38,7 @@ export class CommunicationWebSocketServer {
     console.log('🔌 WebSocket server started on /ws');
   }
 
-  private handleConnection(ws: WebSocket, req: IncomingMessage) {
+  private handleConnection(ws: WebSocket, _req: IncomingMessage) {
     console.log('🔗 New WebSocket connection');
     
     const clientId = this.generateClientId();
@@ -121,7 +121,7 @@ export class CommunicationWebSocketServer {
     ws.send(JSON.stringify({ type: 'joined-room', entityId: message.entityId }));
   }
 
-  private handleLeaveRoom(clientId: string, message: WebSocketMessage) {
+  private handleLeaveRoom(clientId: string, _message: WebSocketMessage) {
     const client = this.clients.get(clientId);
     if (!client || !client.entityId) return;
 
@@ -159,7 +159,7 @@ export class CommunicationWebSocketServer {
     console.log(`📡 Forwarded ${message.type} from ${client.userId} to room ${client.entityId}`);
   }
 
-  private handleCallEnded(clientId: string, message: WebSocketMessage) {
+  private handleCallEnded(clientId: string, _message: WebSocketMessage) {
     const client = this.clients.get(clientId);
     if (!client || !client.entityId) return;
 
@@ -187,7 +187,7 @@ export class CommunicationWebSocketServer {
 
     const messageStr = JSON.stringify(message);
     
-    this.clients.forEach((client, clientId) => {
+    this.clients.forEach((client, _clientId) => {
       if (client.entityId === entityId && 
           !excludeUsers.includes(client.userId) &&
           client.ws.readyState === WebSocket.OPEN) {

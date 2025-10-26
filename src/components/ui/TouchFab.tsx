@@ -43,7 +43,7 @@ const triggerHapticFeedback = (duration: number = 50) => {
 };
 
 // Animation variants
-const fabVariants = {
+const _fabVariants = {
   tap: {
     scale: 0.9,
     transition: { duration: 0.1 }

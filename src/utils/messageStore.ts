@@ -5,15 +5,6 @@ import { backendService } from '../services/api/BackendService'
 import { logger } from '../services/LoggingService'
 import { offlineStorage } from '../services/storage/OfflineStorageService'
 
-interface MessageDoc {
-  messages: Record<string, Message>
-  order: string[]
-  metadata: {
-    updatedAt: number
-    version: number
-  }
-}
-
 interface MessageState {
   doc: Y.Doc
   cachedMessages: Message[] | null

@@ -56,7 +56,7 @@ export interface IdentityGenerationParams {
 
 // Organization hierarchy types
 // Collaboration types (Group, Organization, etc.)
-export { Group } from './collaboration'
+export type { Group } from './collaboration'
 // CRDT types
 export * from './crdt'
 // Document CRDT types

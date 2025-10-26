@@ -117,7 +117,7 @@ const StyledTextField = styled(TextField, {
   },
 }));
 
-const FloatingLabel = styled('label')<{ focused: boolean; hasValue: boolean }>(({ theme, focused, hasValue }) => ({
+const _FloatingLabel = styled('label')<{ focused: boolean; hasValue: boolean }>(({ theme, focused, hasValue }) => ({
   position: 'absolute',
   top: focused || hasValue ? '-8px' : '14px',
   left: '12px',
@@ -132,7 +132,7 @@ const FloatingLabel = styled('label')<{ focused: boolean; hasValue: boolean }>((
   zIndex: 1,
 }));
 
-const InputWrapper = styled('div')({
+const _InputWrapper = styled('div')({
   position: 'relative',
   width: '100%',
 });
@@ -149,8 +149,8 @@ export const ModernInput: React.FC<ModernInputProps> = ({
   onBlur,
   ...props
 }) => {
-  const [focused, setFocused] = React.useState(false);
-  const [hasValue, setHasValue] = React.useState(Boolean(value));
+  const [_focused, setFocused] = React.useState(false);
+  const [_hasValue, setHasValue] = React.useState(Boolean(value));
 
   React.useEffect(() => {
     setHasValue(Boolean(value));

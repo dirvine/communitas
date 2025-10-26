@@ -113,7 +113,7 @@ export const TouchCard: React.FC<TouchCardProps> = ({
   }, [onClick, hapticFeedback, isTouch, hapticDuration]);
 
   // Swipe gesture handlers
-  const handleDragEnd = useCallback((event: any, info: PanInfo) => {
+  const _handleDragEnd = useCallback((event: any, info: PanInfo) => {
     const { offset, velocity } = info;
     const absOffset = Math.abs(offset.x);
     const absVelocity = Math.abs(velocity.x);
@@ -190,7 +190,7 @@ export const TouchCard: React.FC<TouchCardProps> = ({
     ...sx,
   };
 
-  const MotionCard = motion(Card);
+  const _MotionCard = motion(Card);
 
   return (
     <motion.div

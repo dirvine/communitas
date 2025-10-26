@@ -22,7 +22,7 @@ const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ open, onClose }) => {
   const [activeStep, setActiveStep] = useState(0)
   const [networkReady, setNetworkReady] = useState<boolean>(false)
   const [checkingNetwork, setCheckingNetwork] = useState<boolean>(false)
-  const [identityCreated, setIdentityCreated] = useState<boolean>(false)
+  const [_identityCreated, setIdentityCreated] = useState<boolean>(false)
   const [error, setError] = useState<string | null>(null)
 
   const steps = [
@@ -42,7 +42,7 @@ const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ open, onClose }) => {
     try {
       // The network is already initialized when core_initialize is called
       // Just check the health status
-      const health = await invoke<any>('health')
+      const _health = await invoke<any>('health')
       setNetworkReady(true)
       setActiveStep(2)
     } catch (e: any) {
@@ -71,7 +71,7 @@ const FirstRunWizard: React.FC<FirstRunWizardProps> = ({ open, onClose }) => {
     localStorage.setItem('communitas-onboarded', 'true')
   }
 
-  const onContinue = async () => {
+  const _onContinue = async () => {
     if (activeStep === 1) {
       await startNetwork()
       setActiveStep(2)

@@ -50,10 +50,13 @@ const IdentityManager: React.FC = () => {
       const allIdentities = await safeInvoke<IdentityInfo[]>('list_identities')
       if (allIdentities && allIdentities.length > 0) {
         setIdentities(allIdentities)
-      } else if (current ?? fallbackIdentity) {
-        setIdentities([current ?? fallbackIdentity])
       } else {
-        setIdentities([])
+        const identity = current ?? fallbackIdentity
+        if (identity) {
+          setIdentities([identity])
+        } else {
+          setIdentities([])
+        }
       }
 
       // Load storage info

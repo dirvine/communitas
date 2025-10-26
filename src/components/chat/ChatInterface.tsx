@@ -43,8 +43,7 @@ interface ChatInterfaceProps {
   onStartCall?: (type: 'voice' | 'video') => void;
 }
 
-export const ChatInterface: React.FC<ChatInterfaceProps> = ({
-  chatId,
+export const ChatInterface: React.FC<ChatInterfaceProps> = ({ chatId: _chatId,
   chatName,
   chatType,
   participants = 1,
@@ -98,7 +97,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   ]);
   const [isTyping, setIsTyping] = useState(false);
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
-  const [typingUsers, setTypingUsers] = useState<string[]>([]);
+  const [typingUsers, _setTypingUsers] = useState<string[]>([]);
   const [typingTimeout, setTypingTimeout] = useState<NodeJS.Timeout | null>(null);
   const [readMessageIds, setReadMessageIds] = useState<Set<string>>(new Set());
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -173,7 +172,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
   // Real-time DHT sync for this chat
   // Only subscribe to chat updates when we have a valid chat ID and are in Tauri environment
-  const { connected, peerCount, pendingEvents, clearPendingEvents } = useDHTSync({
+  const { connected, peerCount, pendingEvents: _pendingEvents, clearPendingEvents: _clearPendingEvents } = useDHTSync({
     userId: MOCK_USER_ID,
     entityIds: [], // Don't subscribe to any entities - let useDHTSync handle connection state
     onEvent: useCallback((event: DHTSyncEvent) => {
@@ -384,7 +383,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         }}
       >
         <List>
-          {messages.map((msg, index) => (
+          {messages.map((msg, _index) => (
             <ListItem
               key={msg.id}
               id={`message-${msg.id}`}

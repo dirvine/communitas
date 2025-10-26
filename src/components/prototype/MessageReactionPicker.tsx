@@ -17,8 +17,7 @@ interface MessageReactionPickerProps {
 
 export const MessageReactionPicker: React.FC<MessageReactionPickerProps> = ({
   messageId,
-  onReact,
-  existingReactions = [],
+  onReact, existingReactions: _existingReactions = [],
 }) => {
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null)
 

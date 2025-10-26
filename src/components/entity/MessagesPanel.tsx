@@ -51,10 +51,10 @@ interface MessagesPanelProps {
 }
 
 const MessagesPanel: React.FC<MessagesPanelProps> = ({
-  entityType,
+  entityType: _entityType,
   entityId,
   entityName,
-  fourWords,
+  fourWords: _fourWords,
   permissions,
 }) => {
   const { authState } = useAuth();

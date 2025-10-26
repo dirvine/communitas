@@ -315,7 +315,7 @@ export class AuthenticationService {
    * Get active session for user
    */
   private getActiveSession(userId: string): SessionInfo | null {
-    for (const [token, session] of this.sessionStore.entries()) {
+    for (const [_token, session] of this.sessionStore.entries()) {
       if (session.userId === userId && session.isValid) {
         return session
       }
@@ -326,7 +326,7 @@ export class AuthenticationService {
   /**
    * Generate secure authentication token
    */
-  private async generateAuthToken(userId: string, networkIdentity: NetworkIdentity): Promise<AuthToken> {
+  private async generateAuthToken(userId: string, _networkIdentity: NetworkIdentity): Promise<AuthToken> {
     const token = cryptoManager.generateSecureId()
     const refreshToken = cryptoManager.generateSecureId()
     const now = Date.now()
@@ -399,7 +399,7 @@ export class AuthenticationService {
   /**
    * Get default permissions for user
    */
-  private getUserPermissions(userId: string): Permission[] {
+  private getUserPermissions(_userId: string): Permission[] {
     // Default permissions for authenticated users
     return [
       { action: 'read', resource: 'own_documents' },

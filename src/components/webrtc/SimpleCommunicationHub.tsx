@@ -50,12 +50,13 @@ export const SimpleCommunicationHub: React.FC = () => {
   };
 
 
-  const handleEndCall = async () => {
-    await webrtcService.endCall();
+  const _handleEndCall = async () => {
+    await webrtcService.endCall('demo-contact');
   };
 
   const handleSendMessage = () => {
-    webrtcService.sendMessage('Hello from WebRTC!');
+    // TODO: Messaging not yet implemented in WebRTC service
+    console.log('Message button clicked - WebRTC messaging not yet implemented');
   };
 
   return (

@@ -11,16 +11,16 @@ export const useTauri = () => {
     const checkTauri = () => {
       // Check for various Tauri indicators
       const hasTauri = !!(
-        (window as any).__TAURI__ ||
-        (window as any).__TAURI_IPC__ ||
+        (window as any)._TAURI_ ||
+        (window as any)._TAURI_IPC_ ||
         window.location.protocol === 'tauri:' ||
         navigator.userAgent.includes('Tauri')
       );
       
       if (hasTauri) {
         console.log('Tauri detected!', {
-          __TAURI__: !!(window as any).__TAURI__,
-          __TAURI_IPC__: !!(window as any).__TAURI_IPC__,
+          _TAURI_: !!(window as any)._TAURI_,
+          _TAURI_IPC_: !!(window as any)._TAURI_IPC_,
           protocol: window.location.protocol,
           userAgent: navigator.userAgent
         });

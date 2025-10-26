@@ -77,8 +77,8 @@ export class NetworkConnectionService {
   }
 
   private async setupInvoke() {
-    if (typeof window !== 'undefined' && (window as any).__TAURI__?.core?.invoke) {
-      this.invoke = (window as any).__TAURI__.core.invoke;
+    if (typeof window !== 'undefined' && (window as any)._TAURI_?.core?.invoke) {
+      this.invoke = (window as any)._TAURI_.core.invoke;
     } else {
       try {
         const { invoke } = await import('@tauri-apps/api/core');

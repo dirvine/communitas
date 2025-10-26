@@ -20,7 +20,7 @@ vi.mock('@tauri-apps/api', () => ({
 }))
 
 // Mock the mock network utilities
-vi.mock('../utils/__tests__/mockNetwork.test', () => ({
+vi.mock('../utils/_tests_/mockNetwork.test', () => ({
   MockNetwork: {
     getInstance: () => ({
       addPeer: vi.fn(),

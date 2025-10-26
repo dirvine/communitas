@@ -60,8 +60,7 @@ export const EntitySelectorWithAddCreate: React.FC<EntitySelectorWithAddCreatePr
   onClose,
   onSelect,
   onCreateNew,
-  onAddExisting,
-  actionType = 'manage',
+  onAddExisting, actionType: _actionType = 'manage',
   title,
   allowCreate = true,
   allowAdd = true,
@@ -229,7 +228,7 @@ export const EntitySelectorWithAddCreate: React.FC<EntitySelectorWithAddCreatePr
     }
   };
 
-  const getEntityIcon = (type: EntityType) => {
+  const _getEntityIcon = (type: EntityType) => {
     switch (type) {
       case 'person':
         return <PersonIcon />;

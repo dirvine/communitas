@@ -78,7 +78,7 @@ export function useDocumentCRDT(
   const [isSyncing, setIsSyncing] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [collaborators, setCollaborators] = useState<CollaboratorCursor[]>([]);
+  const [collaborators, _setCollaborators] = useState<CollaboratorCursor[]>([]);
 
   // Refs for managing timers and state
   const syncIntervalRef = useRef<NodeJS.Timeout | null>(null);

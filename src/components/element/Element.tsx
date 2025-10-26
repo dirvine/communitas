@@ -153,7 +153,7 @@ export const Element: React.FC<ElementProps> = ({
 
   const [activeView, setActiveView] = useState<'chat' | 'files' | 'webdrive' | 'members' | 'settings'>(initialView);
   const [isInCall, setIsInCall] = useState(false);
-  const [callType, setCallType] = useState<'voice' | 'video' | 'screen-share' | null>(null);
+  const [_callType, setCallType] = useState<'voice' | 'video' | 'screen-share' | null>(null);
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
   const [isVideoEnabled, setIsVideoEnabled] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
@@ -251,9 +251,9 @@ export const Element: React.FC<ElementProps> = ({
 
       // Integrate with WebRTC service
       if (type === 'video') {
-        await webRTCService.startVideoCall(element.identity.id, element.identity.type);
+        await webRTCService.startVideoCall(element.identity.id, element.identity.type.toString());
       } else if (type === 'voice') {
-        await webRTCService.startAudioCall(element.identity.id, element.identity.type);
+        await webRTCService.startAudioCall(element.identity.id, element.identity.type.toString());
       }
 
       // Track activity
@@ -272,7 +272,7 @@ export const Element: React.FC<ElementProps> = ({
       setIsVideoEnabled(false);
       setIsScreenSharing(false);
     }
-  }, [element.identity.id, element.type, addActivity]);
+  }, [element.identity.id, element.identity.type, addActivity]);
 
   const handleEndCall = useCallback(async () => {
     try {

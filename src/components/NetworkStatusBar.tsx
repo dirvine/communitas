@@ -26,7 +26,7 @@ export const NetworkStatusBar: React.FC<NetworkStatusBarProps> = ({ onSyncClick 
   const [networkState, setNetworkState] = useState(networkService.getState());
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [bootstrapDialogOpen, setBootstrapDialogOpen] = useState(false);
-  const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [_copiedField, setCopiedField] = useState<string | null>(null);
 
   useEffect(() => {
     const unsubscribe = networkService.subscribe(setNetworkState);

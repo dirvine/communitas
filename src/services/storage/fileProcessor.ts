@@ -42,7 +42,7 @@ export class FileProcessor {
    */
   static async processFile(
     file: File,
-    fourWordId?: string
+    _fourWordId?: string
   ): Promise<ProcessedFile> {
     console.log(`Processing file: ${file.name} (${file.size} bytes)`);
     
@@ -144,7 +144,7 @@ export class FileProcessor {
     return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
   }
 
-  private static async compressFile(data: Uint8Array, fileName: string): Promise<Uint8Array> {
+  private static async compressFile(data: Uint8Array, _fileName: string): Promise<Uint8Array> {
     try {
       // Use Rust backend for optimal compression
       const compressed = await invoke<number[]>('compress_data', { 
@@ -186,7 +186,7 @@ export class FileProcessor {
     }
   }
 
-  private static async decompressFile(data: Uint8Array, fileName: string): Promise<Uint8Array> {
+  private static async decompressFile(data: Uint8Array, _fileName: string): Promise<Uint8Array> {
     try {
       // Use Rust backend for decompression
       const decompressed = await invoke<number[]>('decompress_data', { 
@@ -330,12 +330,12 @@ export class FileProcessor {
     return result;
   }
 
-  private static encryptAES(data: Uint8Array, password: string): Uint8Array {
+  private static encryptAES(_data: Uint8Array, _password: string): Uint8Array {
     // SECURITY: This is a critical path that must use proper encryption
     throw new Error('SECURITY: XOR encryption removed. Must implement proper AES-GCM encryption via Rust/Tauri backend. See communitas-core cryptography module.');
   }
 
-  private static decryptAES(encryptedData: Uint8Array, password: string): Uint8Array {
+  private static decryptAES(_encryptedData: Uint8Array, _password: string): Uint8Array {
     // SECURITY: This is a critical path that must use proper encryption
     throw new Error('SECURITY: XOR decryption removed. Must implement proper AES-GCM decryption via Rust/Tauri backend. See communitas-core cryptography module.');
   }

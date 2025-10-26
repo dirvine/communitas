@@ -31,7 +31,7 @@ export class CompleteStorageSystem extends EventEmitter {
   private publishers = new Map<string, MarkdownWebPublisher>()
   private pipelines = new Map<string, StoragePipeline>()
 
-  constructor(config: StorageSystemConfig = {}) {
+  constructor(_config: StorageSystemConfig = {}) {
     super()
     // System initialization
   }
@@ -194,7 +194,7 @@ export class CompleteStorageSystem extends EventEmitter {
     if (!storage) {
       const orgEntity = this.entities.get(organizationId)
       if (orgEntity) {
-        const org = orgEntity.data as Organization
+        const _org = orgEntity.data as Organization
         // For demo, use empty member identities
         await this.setupEntityStorage(organizationId, [])
         storage = this.storages.get(organizationId)!
@@ -212,7 +212,7 @@ export class CompleteStorageSystem extends EventEmitter {
     if (!storage) {
       const projectEntity = this.entities.get(projectId)
       if (projectEntity) {
-        const project = projectEntity.data as Project
+        const _project = projectEntity.data as Project
         await this.setupEntityStorage(projectId, [])
         storage = this.storages.get(projectId)!
       } else {
@@ -303,7 +303,7 @@ export class CompleteStorageSystem extends EventEmitter {
     this.storages.set(entityId, storage)
   }
 
-  private async setupWebPublisher(entityId: string, identity: NetworkIdentity): Promise<MarkdownWebPublisher> {
+  private async setupWebPublisher(_entityId: string, identity: NetworkIdentity): Promise<MarkdownWebPublisher> {
     const dht = new DHTStorage({
       identity,
       bootstrapNodes: ['localhost:5001'],
@@ -328,7 +328,7 @@ export class CompleteStorageSystem extends EventEmitter {
     return publisher
   }
 
-  private async redistributeStorage(entityId: string, newMembers: NetworkIdentity[]): Promise<void> {
+  private async redistributeStorage(entityId: string, _newMembers: NetworkIdentity[]): Promise<void> {
     const pipeline = this.pipelines.get(entityId)
     if (pipeline) {
       // Trigger healing process
@@ -451,10 +451,10 @@ class EntityStorageImpl implements EntityStorage {
 }
 
 class MockWebBrowser implements WebBrowser {
-  private visitorId = 'anonymous'
+  private _visitorId = 'anonymous'
 
   setVisitorId(id: string): void {
-    this.visitorId = id
+    this._visitorId = id
   }
 
   async navigate(url: string): Promise<{ status: number; content: string; url: string }> {
@@ -466,13 +466,13 @@ class MockWebBrowser implements WebBrowser {
     }
   }
 
-  async followLink(page: any, linkText: string): Promise<{ url: string; content: string }> {
+  async followLink(_page: any, linkText: string): Promise<{ url: string; content: string }> {
     const url = `https://example.com/${linkText.toLowerCase().replace(/\s+/g, '-')}`
     const response = await this.navigate(url)
     return { url: response.url, content: response.content }
   }
 
-  async extractLinks(page: any): Promise<Array<{ text: string; href: string }>> {
+  async extractLinks(_page: any): Promise<Array<{ text: string; href: string }>> {
     return [
       { text: 'Home', href: '/home.md' },
       { text: 'About', href: '/about.md' }

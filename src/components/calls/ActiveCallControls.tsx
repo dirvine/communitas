@@ -57,8 +57,7 @@ export interface ActiveCallControlsProps {
  *
  * Renders control buttons for managing an active WebRTC call.
  */
-export function ActiveCallControls({
-  callId,
+export function ActiveCallControls({ callId: _callId,
   isVideoEnabled,
   isAudioEnabled,
   isScreenSharing,

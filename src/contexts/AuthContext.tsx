@@ -5,10 +5,10 @@ import { isTauriApp } from '../utils/tauri';
 // Tauri API wrapper with browser fallback support
 let invoke: any = async (cmd: string, args?: any) => {
   // Try to get Tauri from window first
-  if (typeof window !== 'undefined' && (window as any).__TAURI__?.core?.invoke) {
+  if (typeof window !== 'undefined' && (window as any)._TAURI_?.core?.invoke) {
     console.log(`🔧 Calling Tauri command: ${cmd}`, args);
     try {
-      const result = await (window as any).__TAURI__.core.invoke(cmd, args);
+      const result = await (window as any)._TAURI_.core.invoke(cmd, args);
       console.log(`✅ Tauri command succeeded: ${cmd}`);
       return result;
     } catch (error) {
@@ -695,7 +695,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   // Enable auto-login by storing password in keyring
-  const enableAutoLogin = async (fourWords: string, password: string): Promise<void> => {
+  const enableAutoLogin = async (fourWords: string, _password: string): Promise<void> => {
     try {
       // Register passkey stores password in keyring
       await invoke('auth_passkey_register', {

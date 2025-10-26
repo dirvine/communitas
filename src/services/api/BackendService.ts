@@ -7,7 +7,7 @@ import { memberManagementService } from '../MemberManagementService';
 // Detect runtime environment
 const isTauri = () => {
   return typeof window !== 'undefined' && 
-         typeof (window as any).__TAURI__ !== 'undefined';
+         typeof (window as any)._TAURI_ !== 'undefined';
 };
 
 // Browser fallback API - simulates backend calls with localStorage or mock data
@@ -123,7 +123,7 @@ class BrowserAPIService {
     }
   }
 
-  async createThread(messageId: string, entityType: string, entityId: string): Promise<string> {
+  async createThread(_messageId: string, _entityType: string, _entityId: string): Promise<string> {
     // For browser, create a mock thread and seed local storage for consistency
     const threadId = `thread_${Date.now()}`;
     try {

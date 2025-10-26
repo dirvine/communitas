@@ -164,7 +164,7 @@ export const TouchList: React.FC<TouchListProps> = ({
   const theme = useTheme();
   const isTouch = useTouchDevice();
   const touchSizing = useTouchFriendlySizing();
-  const [swipedItems, setSwipedItems] = useState<Set<string>>(new Set());
+  const [swipedItems, _setSwipedItems] = useState<Set<string>>(new Set());
 
   const {
     pullDistance,

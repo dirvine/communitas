@@ -248,7 +248,7 @@ export class RBACManager {
   /**
    * Check if a user has system-level permissions (super admin, etc.)
    */
-  private hasSystemPermission(user: UserIdentity, resource: ResourceType, action: Action): boolean {
+  private hasSystemPermission(user: UserIdentity, _resource: ResourceType, action: Action): boolean {
     // Check if user has super admin permissions
     const systemPermissions = user.permissions.filter(p => p.resource === ResourceType.SYSTEM);
     

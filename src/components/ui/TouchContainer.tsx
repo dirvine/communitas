@@ -154,39 +154,39 @@ export const TouchContainer: React.FC<TouchContainerProps> = ({
  }) => {
    const theme = useTheme();
    const isTouch = useTouchDevice();
-   const touchSizing = useTouchFriendlySizing();
+   const _touchSizing = useTouchFriendlySizing();
    const { authState } = useAuth();
    const containerRef = useRef<HTMLDivElement>(null);
    const [isPulling, setIsPulling] = useState(false);
    const [pullDistance, setPullDistance] = useState(0);
-   const [isRefreshing, setIsRefreshing] = useState(false);
+   const [_isRefreshing, setIsRefreshing] = useState(false);
    const [scrollTop, setScrollTop] = useState(0);
 
    // Get current user ID (prefer prop, fallback to auth)
    const currentUserId = userId || authState.user?.id;
 
    // Saorsa-Core integration state
-   const [contentCache, setContentCache] = useState<Map<string, any>>(new Map());
+   const [_contentCache, _setContentCache] = useState<Map<string, any>>(new Map());
    const [syncStatus, setSyncStatus] = useState<'online' | 'offline' | 'syncing'>('offline');
    const [storageStats, setStorageStats] = useState<StorageEngineStats | null>(null);
-   const [pendingChanges, setPendingChanges] = useState<any[]>([]);
+   const [pendingChanges, _setPendingChanges] = useState<any[]>([]);
 
    // Collaboration state
-   const [collaborators, setCollaborators] = useState<Map<string, any>>(new Map());
-   const [liveCursors, setLiveCursors] = useState<Map<string, any>>(new Map());
+   const [_collaborators, setCollaborators] = useState<Map<string, any>>(new Map());
+   const [_liveCursors, _setLiveCursors] = useState<Map<string, any>>(new Map());
    const [activeCollaborators, setActiveCollaborators] = useState<string[]>([]);
    const [collaborationEvents, setCollaborationEvents] = useState<any[]>([]);
 
    // Networking state
-   const [networkPeers, setNetworkPeers] = useState<Map<string, any>>(new Map());
+   const [_networkPeers, setNetworkPeers] = useState<Map<string, any>>(new Map());
    const [quicConnections, setQuicConnections] = useState<Map<string, any>>(new Map());
-   const [networkLatency, setNetworkLatency] = useState<Map<string, number>>(new Map());
-   const [touchGestures, setTouchGestures] = useState<any[]>([]);
+   const [_networkLatency, setNetworkLatency] = useState<Map<string, number>>(new Map());
+   const [_touchGestures, setTouchGestures] = useState<any[]>([]);
 
    // Initialize Saorsa-Core hooks
    const storage = useSaorsaStorage();
    const markdownStorage = useMarkdownStorage();
-   const fileStorage = useFileStorage();
+   const _fileStorage = useFileStorage();
 
    const dhtSync = useDHTSync({
      userId: userId || '',
@@ -205,31 +205,31 @@ export const TouchContainer: React.FC<TouchContainerProps> = ({
          setSyncStatus(event.status?.connected ? 'online' : 'offline');
          break;
        case 'PeerConnected':
-         setSyncStatus('online');
-         // Add new collaborator
-         if (event.peer_id && event.address) {
-           setCollaborators(prev => new Map(prev).set(event.peer_id, {
-             id: event.peer_id,
-             address: event.address,
-             connected: true,
-             lastSeen: new Date(),
-           }));
-         }
-         break;
+       setSyncStatus('online');
+       // Add new collaborator
+       if (event.peer_id !== undefined && event.address !== undefined) {
+       setCollaborators(prev => new Map(prev).set(event.peer_id!, {
+       id: event.peer_id!,
+       address: event.address!,
+       connected: true,
+       lastSeen: new Date(),
+       }));
+       }
+       break;
        case 'PeerDisconnected':
-         setSyncStatus('offline');
-         // Mark collaborator as disconnected
-         if (event.peer_id) {
-           setCollaborators(prev => {
-             const updated = new Map(prev);
-             const collaborator = updated.get(event.peer_id);
-             if (collaborator) {
-               updated.set(event.peer_id, { ...collaborator, connected: false });
-             }
-             return updated;
-           });
-         }
-         break;
+       setSyncStatus('offline');
+       // Mark collaborator as disconnected
+       if (event.peer_id !== undefined) {
+       setCollaborators(prev => {
+       const updated = new Map(prev);
+       const collaborator = updated.get(event.peer_id!);
+       if (collaborator) {
+       updated.set(event.peer_id!, { ...collaborator, connected: false });
+       }
+       return updated;
+       });
+       }
+       break;
        case 'FileUploaded':
        case 'FileShared':
          // Handle collaborative content updates
@@ -243,27 +243,27 @@ export const TouchContainer: React.FC<TouchContainerProps> = ({
          }
          break;
        case 'MemberJoined':
-         // Handle new collaborator joining
-         if (event.member && event.user_id) {
-           setActiveCollaborators(prev => [...prev, event.user_id]);
-           setCollaborationEvents(prev => [...prev, {
-             type: 'member-joined',
-             data: event.member,
-             timestamp: new Date(),
-           }]);
-         }
-         break;
+       // Handle new collaborator joining
+       if (event.member && event.user_id !== undefined) {
+       setActiveCollaborators(prev => [...prev, event.user_id!]);
+       setCollaborationEvents(prev => [...prev, {
+       type: 'member-joined',
+       data: event.member,
+       timestamp: new Date(),
+       }]);
+       }
+       break;
        case 'MemberLeft':
-         // Handle collaborator leaving
-         if (event.user_id) {
-           setActiveCollaborators(prev => prev.filter(id => id !== event.user_id));
-           setCollaborationEvents(prev => [...prev, {
-             type: 'member-left',
-             data: { user_id: event.user_id },
-             timestamp: new Date(),
-           }]);
-         }
-         break;
+       // Handle collaborator leaving
+       if (event.user_id !== undefined) {
+       setActiveCollaborators(prev => prev.filter(id => id !== event.user_id!));
+       setCollaborationEvents(prev => [...prev, {
+       type: 'member-left',
+       data: { user_id: event.user_id! },
+       timestamp: new Date(),
+       }]);
+       }
+       break;
        case 'NetworkStatusChanged':
          // Handle network status changes
          if (event.status) {
@@ -281,7 +281,7 @@ export const TouchContainer: React.FC<TouchContainerProps> = ({
    }, [autoSync]);
 
    // Storage operations with collaboration
-   const storeContent = useCallback(async (content: string, contentType: string = 'text/markdown') => {
+   const _storeContent = useCallback(async (content: string, _contentType: string = 'text/markdown') => {
      if (!enableStorage || !userId) return null;
 
      try {
@@ -437,7 +437,7 @@ export const TouchContainer: React.FC<TouchContainerProps> = ({
      }
    }, [userId, quicConnections, broadcastCollaborativeUpdate]);
 
-   const measureNetworkLatency = useCallback(async (peerId: string) => {
+   const _measureNetworkLatency = useCallback(async (peerId: string) => {
      if (!userId || !quicConnections.has(peerId)) return;
 
      try {
@@ -458,7 +458,7 @@ export const TouchContainer: React.FC<TouchContainerProps> = ({
      }
    }, [userId, quicConnections]);
 
-   const retrieveContent = useCallback(async (address: StorageAddress) => {
+   const _retrieveContent = useCallback(async (address: StorageAddress) => {
      if (!enableStorage || !userId) return null;
 
      try {

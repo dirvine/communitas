@@ -270,7 +270,7 @@ class FeatureFlagsService {
   /**
    * Load flags from localStorage
    */
-  private loadFlags() {
+  private _loadFlags() {
     try {
       const stored = localStorage.getItem('communitas-feature-flags')
       if (stored) {

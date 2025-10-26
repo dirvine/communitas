@@ -72,7 +72,7 @@ export const EntityCreationDialog: React.FC<EntityCreationDialogProps> = ({
     }
 
     try {
-      if (typeof window !== 'undefined' && '__TAURI__' in window) {
+      if (typeof window !== 'undefined' && '_TAURI_' in window) {
         const { invoke } = await import('@tauri-apps/api/core')
         const isValid = await invoke<boolean>('validate_four_words', { fourWords: normalized })
         return isValid

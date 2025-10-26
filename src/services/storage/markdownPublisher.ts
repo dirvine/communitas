@@ -347,7 +347,7 @@ export class MarkdownWebPublisher {
     return inputSanitizer.sanitizeHTML(html)
   }
 
-  async renderPage(path: string, content: string): Promise<string> {
+  async renderPage(_path: string, content: string): Promise<string> {
     const html = await this.markdownToHtml(content)
     const theme = this.currentTheme || this.currentManifest?.theme || 'auto'
     

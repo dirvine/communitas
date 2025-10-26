@@ -99,7 +99,7 @@ export const EntitySelector: React.FC<EntitySelectorProps> = ({
     }
   };
 
-  const getActionText = () => {
+  const _getActionText = () => {
     switch (actionType) {
       case 'call':
         return 'Start Voice Call';

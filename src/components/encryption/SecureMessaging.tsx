@@ -53,7 +53,7 @@ export const SecureMessaging: React.FC<SecureMessagingProps> = ({
   const { 
     state: encryptionState, 
     encryptText, 
-    decryptText, 
+    decryptText: _decryptText, 
     deriveSharedKey,
     getOrCreateKey,
     exportPublicKey,

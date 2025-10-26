@@ -1,6 +1,6 @@
-// In tests, we provide a shim via globalThis.__BLAKE3_SHIM__ (see setupTests)
+// In tests, we provide a shim via globalThis._BLAKE3_SHIM_ (see setupTests)
 function blake3Hash(input: string): string {
-  const shim = (globalThis as any).__BLAKE3_SHIM__ as ((s: string) => string) | undefined
+  const shim = (globalThis as any)._BLAKE3_SHIM_ as ((s: string) => string) | undefined
   if (shim) return shim(input)
   // Fallback to SHA-256 via Web Crypto for browser envs
   // Note: This is only used for deterministic color generation, not security

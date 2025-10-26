@@ -140,7 +140,7 @@ class MockTauriAPI {
     return this.networkHealth;
   }
 
-  private getOrganization(id?: string) {
+  private getOrganization(_id?: string) {
     return this.organizationData;
   }
 
@@ -170,7 +170,7 @@ class MockTauriAPI {
     return this.organizationData;
   }
 
-  private getMessages(args: any) {
+  private getMessages(_args: any) {
     return this.messages;
   }
 
@@ -255,7 +255,7 @@ class MockTauriAPI {
     };
   }
 
-  private disconnectPeer(args: any) {
+  private disconnectPeer(_args: any) {
     return { success: true };
   }
 
@@ -283,15 +283,15 @@ export const mockTauriApi = new MockTauriAPI();
 
 // Function to inject mock API into window for browser development
 export const injectMockTauriApi = () => {
-  if (typeof window !== 'undefined' && !(window as any).__TAURI__) {
+  if (typeof window !== 'undefined' && !(window as any)._TAURI_) {
     console.log('[Mock Tauri] Injecting mock API for browser development');
-    (window as any).__TAURI__ = {
+    (window as any)._TAURI_ = {
       invoke: (command: string, args?: any) => mockTauriApi.invoke(command, args),
       core: {
         invoke: (command: string, args?: any) => mockTauriApi.invoke(command, args),
       },
       event: {
-        listen: (event: string, handler: Function) => {
+        listen: (event: string, _handler: Function) => {
           console.log(`[Mock Tauri] Listening to event: ${event}`);
           // Return a mock unlisten function
           return Promise.resolve(() => {});
@@ -303,7 +303,7 @@ export const injectMockTauriApi = () => {
       },
       window: {
         getCurrent: () => ({
-          setTitle: (title: string) => Promise.resolve(),
+          setTitle: (_title: string) => Promise.resolve(),
           center: () => Promise.resolve(),
           minimize: () => Promise.resolve(),
           maximize: () => Promise.resolve(),

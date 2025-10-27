@@ -26,27 +26,33 @@ fn yrs_to_json(any: yrs::Any) -> serde_json::Value {
 // use saorsa_core::messaging::{ChannelId as MessagingChannelId, MessageContent};
 
 // Stub types to replace saorsa-core dependencies
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct ChannelId(pub String);
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub enum ChannelType {
     Public,
     Private,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct MessageId(pub String);
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct FourWordAddress(pub String);
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub enum MessageContent {
     Text(String),
     System(String),
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct Channel {
     pub id: ChannelId,
@@ -184,6 +190,7 @@ pub async fn list_channels(State(state): State<Arc<BridgeState>>) -> BridgeResul
 /// Get channel messages
 #[derive(Deserialize)]
 pub struct GetMessagesQuery {
+    #[allow(dead_code)]
     limit: Option<usize>,
 }
 
@@ -203,6 +210,7 @@ pub async fn get_channel_messages(
 #[derive(Deserialize)]
 pub struct SendMessageRequest {
     content: String,
+    #[allow(dead_code)]
     reply_to_id: Option<String>,
     recipients: Vec<String>, // Four-word addresses
 }
@@ -270,7 +278,9 @@ pub async fn get_members(
 /// Add member to entity
 #[derive(Deserialize)]
 pub struct AddMemberRequest {
+    #[allow(dead_code)]
     four_word_address: String,
+    #[allow(dead_code)]
     role: String,
 }
 
@@ -436,6 +446,7 @@ pub async fn get_connected_peers(
 /// Disconnect from a peer
 #[derive(Deserialize)]
 pub struct DisconnectFromPeerRequest {
+    #[allow(dead_code)]
     four_word_addr: String,
 }
 
@@ -471,6 +482,7 @@ pub struct UpdateWebsiteRequest {
     html: Option<String>,
     css: Option<String>,
     js: Option<String>,
+    #[allow(dead_code)]
     metadata: Option<String>,
 }
 
@@ -604,7 +616,7 @@ pub async fn get_entity_website(
         "js": js,
         "website_root_hash": hash,
         "published_at": chrono::DateTime::from_timestamp(published_at, 0)
-            .unwrap_or_else(|| chrono::Utc::now())
+            .unwrap_or_else(chrono::Utc::now)
             .to_rfc3339(),
         "url": format!("{}.communitas", entity_id),
         "status": "published",
@@ -886,8 +898,7 @@ pub async fn list_files(
             let uploaded_at = root
                 .get(&txn, "uploaded_at")
                 .and_then(|v| yrs_to_json(v.to_json(&txn)).as_i64())
-                .map(|ts| chrono::DateTime::from_timestamp(ts, 0))
-                .flatten()
+                .and_then(|ts| chrono::DateTime::from_timestamp(ts, 0))
                 .map(|dt| dt.to_rfc3339())
                 .unwrap_or_default();
             let encrypted = root
@@ -978,8 +989,7 @@ pub async fn download_file(
     let uploaded_at = root
         .get(&txn, "uploaded_at")
         .and_then(|v| yrs_to_json(v.to_json(&txn)).as_i64())
-        .map(|ts| chrono::DateTime::from_timestamp(ts, 0))
-        .flatten()
+        .and_then(|ts| chrono::DateTime::from_timestamp(ts, 0))
         .map(|dt| dt.to_rfc3339())
         .unwrap_or_default();
 

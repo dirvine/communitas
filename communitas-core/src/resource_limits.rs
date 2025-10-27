@@ -171,26 +171,26 @@ impl ResourceLimits {
 
     /// Enforce upload rate limit
     pub fn enforce_upload_rate(&self, current_mbps: f64) -> ResourceLimitResult<()> {
-        if let Some(max) = self.max_upload_rate_mbps {
-            if current_mbps > max {
-                return Err(ResourceLimitError::UploadRateExceeded {
-                    current: current_mbps,
-                    max,
-                });
-            }
+        if let Some(max) = self.max_upload_rate_mbps
+            && current_mbps > max
+        {
+            return Err(ResourceLimitError::UploadRateExceeded {
+                current: current_mbps,
+                max,
+            });
         }
         Ok(())
     }
 
     /// Enforce download rate limit
     pub fn enforce_download_rate(&self, current_mbps: f64) -> ResourceLimitResult<()> {
-        if let Some(max) = self.max_download_rate_mbps {
-            if current_mbps > max {
-                return Err(ResourceLimitError::DownloadRateExceeded {
-                    current: current_mbps,
-                    max,
-                });
-            }
+        if let Some(max) = self.max_download_rate_mbps
+            && current_mbps > max
+        {
+            return Err(ResourceLimitError::DownloadRateExceeded {
+                current: current_mbps,
+                max,
+            });
         }
         Ok(())
     }

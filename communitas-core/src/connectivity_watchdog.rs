@@ -71,11 +71,6 @@ impl ConnectivityWatchdog {
         }
     }
 
-    /// Create watchdog with default configuration
-    pub fn default() -> Self {
-        Self::new(WatchdogConfig::default())
-    }
-
     /// Check if system is in local-only mode
     pub fn is_local_only_mode(&self) -> bool {
         self.local_only_mode.load(Ordering::Acquire)
@@ -192,6 +187,12 @@ impl ConnectivityWatchdog {
     /// Force exit local-only mode (for testing)
     pub fn force_online(&self) {
         self.local_only_mode.store(false, Ordering::Release);
+    }
+}
+
+impl Default for ConnectivityWatchdog {
+    fn default() -> Self {
+        Self::new(WatchdogConfig::default())
     }
 }
 

@@ -255,8 +255,13 @@ impl CrdtManager {
             )));
         }
 
-        // Load the document (error if it doesn't exist)
-        let doc = self.load_document(doc_id).await?;
+        // Load the document, or create new ONLY if DocumentNotFound
+        // Propagate all other errors (filesystem, corruption, etc.) to prevent data loss
+        let doc = match self.load_document(doc_id).await {
+            Ok(doc) => doc,
+            Err(CrdtError::DocumentNotFound(_)) => Doc::new(),
+            Err(e) => return Err(e),
+        };
 
         // Decode and apply the update
         let update = Update::decode_v1(update_bytes)
@@ -305,8 +310,13 @@ impl CrdtManager {
             }
         }
 
-        // Load existing document (error if it doesn't exist)
-        let doc = self.load_document(doc_id).await?;
+        // Load existing document, or create new ONLY if DocumentNotFound
+        // Propagate all other errors to prevent data loss
+        let doc = match self.load_document(doc_id).await {
+            Ok(doc) => doc,
+            Err(CrdtError::DocumentNotFound(_)) => Doc::new(),
+            Err(e) => return Err(e),
+        };
 
         // Apply all updates
         for update_bytes in updates {

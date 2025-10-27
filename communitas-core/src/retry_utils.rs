@@ -51,7 +51,7 @@ impl BackoffConfig {
         let max_ms = self.max.as_millis() as u64;
 
         std::iter::from_fn(move || {
-            let delay = Duration::from_millis(current);
+            let _delay = Duration::from_millis(current);
             current = (current as f64 * self.multiplier) as u64;
             if current > max_ms {
                 current = max_ms;
@@ -67,6 +67,7 @@ impl BackoffConfig {
 pub type RetryResult<T> = Result<T, anyhow::Error>;
 
 /// Retry an async operation with exponential backoff
+#[allow(unused_mut)] // FnMut requires mut parameter for Retry::spawn
 pub async fn retry_with_backoff<F, Fut, T>(mut operation: F, config: RetryConfig) -> RetryResult<T>
 where
     F: FnMut() -> Fut,
@@ -210,7 +211,8 @@ mod tests {
         )
         .await;
 
-        assert_eq!(result, Ok("Success"));
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "Success");
         assert_eq!(attempts.load(Ordering::SeqCst), 3);
     }
 
@@ -222,17 +224,20 @@ mod tests {
         let config = RetryConfig {
             initial_delay: Duration::from_millis(10),
             max_delay: Duration::from_millis(50),
-            max_attempts: 3,
-            jitter: false,
+            max_retries: 3,
+            backoff_multiplier: 2.0,
         };
 
-        let result = retry_with_backoff(config, || {
-            let attempts = attempts_clone.clone();
-            async move {
-                attempts.fetch_add(1, Ordering::SeqCst);
-                Err::<(), _>("Always fails")
-            }
-        })
+        let result = retry_with_backoff(
+            || {
+                let attempts = attempts_clone.clone();
+                async move {
+                    attempts.fetch_add(1, Ordering::SeqCst);
+                    Err::<(), _>(anyhow::anyhow!("Always fails"))
+                }
+            },
+            config,
+        )
         .await;
 
         assert!(result.is_err());
@@ -243,14 +248,14 @@ mod tests {
     fn test_retry_config_presets() {
         let fast = RetryConfig::fast();
         assert_eq!(fast.initial_delay, Duration::from_millis(50));
-        assert_eq!(fast.max_attempts, 5);
+        assert_eq!(fast.max_retries, 5);
 
         let slow = RetryConfig::slow();
         assert_eq!(slow.initial_delay, Duration::from_secs(1));
-        assert_eq!(slow.max_attempts, 15);
+        assert_eq!(slow.max_retries, 15);
 
         let critical = RetryConfig::critical();
-        assert_eq!(critical.max_attempts, 20);
+        assert_eq!(critical.max_retries, 20);
     }
 
     #[tokio::test]
@@ -261,8 +266,8 @@ mod tests {
         let config = RetryConfig {
             initial_delay: Duration::from_millis(10),
             max_delay: Duration::from_millis(50),
-            max_attempts: 3,
-            jitter: false,
+            max_retries: 3,
+            backoff_multiplier: 2.0,
         };
 
         let result = retry_dial("test-peer", config, || {
@@ -270,7 +275,7 @@ mod tests {
             async move {
                 let count = attempts.fetch_add(1, Ordering::SeqCst);
                 if count < 1 {
-                    Err("Connection refused")
+                    Err(anyhow::anyhow!("Connection refused"))
                 } else {
                     Ok(())
                 }

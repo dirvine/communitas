@@ -110,6 +110,7 @@ impl BridgeState {
     }
 
     /// Get core context reference (returns error if not initialized)
+    #[allow(dead_code)]
     pub async fn get_core(&self) -> Result<tokio::sync::RwLockReadGuard<'_, Option<CoreContext>>> {
         Ok(self.core.read().await)
     }
@@ -120,6 +121,7 @@ impl BridgeState {
     }
 
     /// Start P2P networking for initialized core
+    #[allow(dead_code)]
     pub async fn start_networking(&self, preferred_port: Option<u16>) -> Result<(String, String)> {
         let mut core_guard = self.core.write().await;
         let core = core_guard

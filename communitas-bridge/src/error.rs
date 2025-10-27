@@ -11,6 +11,7 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 pub enum BridgeError {
     #[error("P2P networking error: {0}")]
+    #[allow(dead_code)]
     Network(String),
 
     #[error("Command execution failed: {0}")]
@@ -23,6 +24,7 @@ pub enum BridgeError {
     Serialization(#[from] serde_json::Error),
 
     #[error("Internal server error: {0}")]
+    #[allow(dead_code)]
     Internal(String),
 }
 

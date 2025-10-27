@@ -98,8 +98,7 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            target
-          key: linux-cargo-v2-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('communitas-desktop/Cargo.toml') }}
+          key: linux-cargo-v3-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable

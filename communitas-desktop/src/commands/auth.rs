@@ -20,11 +20,17 @@ pub struct AppState {
     pub auth_service: Arc<RwLock<Option<AuthService>>>,
 }
 
-impl AppState {
-    pub fn new() -> Self {
+impl Default for AppState {
+    fn default() -> Self {
         Self {
             auth_service: Arc::new(RwLock::new(None)),
         }
+    }
+}
+
+impl AppState {
+    pub fn new() -> Self {
+        Self::default()
     }
 }
 

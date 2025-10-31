@@ -550,13 +550,13 @@ mod tests {
         assert!(
             validator
                 .validate_four_words("hello_world_test_network")
-                .is_err()
-        ); // Underscores
+                .is_ok()
+        ); // Underscores get converted to dashes
         assert!(
             validator
                 .validate_four_words("hello world test network")
-                .is_err()
-        ); // Spaces
+                .is_ok()
+        ); // Spaces get converted to dashes
         assert!(validator.validate_four_words("").is_err()); // Empty
         assert!(
             validator

@@ -76,6 +76,17 @@ impl MessageService {
         content: MessageContent,
         reply_to_id: Option<String>,
     ) -> MessageServiceResult<CRDTMessage> {
+        // Validate that message has content (text or attachments)
+        // Allow attachment-only messages (e.g., files/images without caption)
+        let has_text = !content.text.trim().is_empty();
+        let has_attachments = content.attachments.as_ref().is_some_and(|a| !a.is_empty());
+
+        if !has_text && !has_attachments {
+            return Err(MessageServiceError::SyncError(
+                "Message must have text or attachments".to_string(),
+            ));
+        }
+
         self.message_sync
             .send_message(entity_id, entity_type, content, reply_to_id)
             .await

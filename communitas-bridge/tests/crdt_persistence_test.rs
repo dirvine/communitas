@@ -5,7 +5,7 @@
 use communitas_core::legacy_crdt::EntityType;
 use std::time::Duration;
 use tokio::time::sleep;
-use yrs::{Doc, Map, Transact};
+use yrs::{Map, Transact};
 
 /// Test that data written to CRDT storage persists across bridge restarts
 #[tokio::test]

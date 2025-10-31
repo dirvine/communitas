@@ -4,6 +4,7 @@
 //! side effects, and security enforcement.
 
 #[cfg(test)]
+#[allow(unused_variables, clippy::useless_vec, clippy::let_unit_value)] // Placeholder tests
 mod tests {
     use tempfile::TempDir;
 

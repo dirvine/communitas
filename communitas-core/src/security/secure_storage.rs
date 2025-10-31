@@ -9,6 +9,7 @@
 use super::input_validation::InputValidator;
 use super::rate_limiter::RateLimiter;
 use anyhow::{Context, Result};
+use keyring::Entry;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
@@ -36,43 +37,92 @@ impl SecureStorageManager {
     pub async fn store_derived_key(
         &self,
         key_id: &str,
-        _key_data: &str,
+        key_data: &str,
         _metadata: &SecureKeyMetadata,
     ) -> Result<()> {
-        // For now, just log - actual keyring implementation would go here
-        info!("Would store key {} for user {}", key_id, self.user_id);
+        let entry = Entry::new(&self.user_id, key_id).context("Failed to create keyring entry")?;
+
+        entry
+            .set_password(key_data)
+            .context("Failed to store derived key in keyring")?;
+
+        info!("Stored derived key {} for user {}", key_id, self.user_id);
         Ok(())
     }
 
-    pub async fn get_derived_key(&self, _key_id: &str) -> Result<(String, SecureKeyMetadata)> {
-        // For now, return a dummy response - actual keyring implementation would go here
+    pub async fn get_derived_key(&self, key_id: &str) -> Result<(String, SecureKeyMetadata)> {
+        let entry = Entry::new(&self.user_id, key_id).context("Failed to create keyring entry")?;
+
+        let key_data = entry
+            .get_password()
+            .context("Failed to retrieve derived key from keyring")?;
+
         let metadata = SecureKeyMetadata {
             created_at: chrono::Utc::now(),
             key_type: "derived".to_string(),
             user_id: self.user_id.clone(),
         };
-        Ok(("dummy_key".to_string(), metadata))
+
+        Ok((key_data, metadata))
     }
 
-    pub async fn store_encryption_keys(&self, _master_key: &str, _key_pair: &str) -> Result<()> {
-        // For now, just log - actual keyring implementation would go here
-        info!("Would store encryption keys for user {}", self.user_id);
+    pub async fn store_encryption_keys(&self, master_key: &str, key_pair: &str) -> Result<()> {
+        let master_entry =
+            Entry::new(&self.user_id, "master_key").context("Failed to create master key entry")?;
+
+        let pair_entry =
+            Entry::new(&self.user_id, "key_pair").context("Failed to create key pair entry")?;
+
+        master_entry
+            .set_password(master_key)
+            .context("Failed to store master key in keyring")?;
+
+        pair_entry
+            .set_password(key_pair)
+            .context("Failed to store key pair in keyring")?;
+
+        info!("Stored encryption keys for user {}", self.user_id);
         Ok(())
     }
 
     pub async fn get_encryption_keys(&self) -> Result<(String, String)> {
-        // For now, return dummy keys - actual keyring implementation would go here
-        Ok(("dummy_master".to_string(), "dummy_pair".to_string()))
+        let master_entry =
+            Entry::new(&self.user_id, "master_key").context("Failed to create master key entry")?;
+
+        let pair_entry =
+            Entry::new(&self.user_id, "key_pair").context("Failed to create key pair entry")?;
+
+        let master_key = master_entry
+            .get_password()
+            .context("Failed to retrieve master key from keyring")?;
+
+        let key_pair = pair_entry
+            .get_password()
+            .context("Failed to retrieve key pair from keyring")?;
+
+        Ok((master_key, key_pair))
     }
 
     pub fn is_available() -> bool {
-        // Check if keyring is available
-        true
+        // Test keyring availability by attempting to create a test entry
+        Entry::new("test", "availability").is_ok()
     }
 
     pub async fn delete_all_keys(&self) -> Result<()> {
-        // For now, just log - actual keyring implementation would go here
-        info!("Would delete all keys for user {}", self.user_id);
+        // Delete known keys - note: keyring doesn't have delete_password,
+        // so we'll overwrite with empty data
+        let keys_to_delete = ["master_key", "key_pair"];
+
+        for key_name in &keys_to_delete {
+            if let Ok(entry) = Entry::new(&self.user_id, key_name)
+                && let Err(e) = entry.set_password("")
+            {
+                // Log but don't fail if key doesn't exist
+                warn!("Failed to clear key {}: {:?}", key_name, e);
+            }
+        }
+
+        info!("Cleared all keys for user {}", self.user_id);
         Ok(())
     }
 

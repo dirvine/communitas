@@ -263,7 +263,9 @@ impl ResourceLimitsConfig {
     pub fn to_core_limits(&self) -> communitas_core::ResourceLimits {
         let config = communitas_core::resource_limits::ResourceLimitsConfig {
             max_peer_connections: self.max_peer_connections,
+            max_relay_connections: 3,
             max_memory_mb: self.max_memory_mb,
+            crdt_document_limit_mb: 50,
             connection_timeout_secs: self.connection_timeout_secs,
             anti_entropy_max_interval_secs: 300,
             max_upload_rate_mbps: self.upload_rate_limit_mbps,

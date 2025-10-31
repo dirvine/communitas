@@ -14,11 +14,14 @@ use thiserror::Error;
 /// Resource limit errors
 #[derive(Error, Debug)]
 pub enum ResourceLimitError {
-    #[error("Peer connection limit exceeded: {current}/{max}")]
-    PeerLimitExceeded { current: usize, max: usize },
+    #[error("Peer connection limit exceeded: {current}/{limit}")]
+    PeerLimitExceeded { current: usize, limit: usize },
 
-    #[error("Memory limit exceeded: {current}MB/{max}MB")]
-    MemoryLimitExceeded { current: usize, max: usize },
+    #[error("Memory limit exceeded: {current}MB/{limit_mb}MB")]
+    MemoryLimitExceeded { current: usize, limit_mb: usize },
+
+    #[error("Document size too large: {size_mb}MB/{limit_mb}MB")]
+    DocumentTooLarge { size_mb: usize, limit_mb: usize },
 
     #[error("Upload rate limit exceeded: {current:.2}Mbps/{max:.2}Mbps")]
     UploadRateExceeded { current: f64, max: f64 },
@@ -39,8 +42,14 @@ pub struct ResourceLimitsConfig {
     /// Maximum number of concurrent peer connections
     pub max_peer_connections: usize,
 
+    /// Maximum number of relay connections
+    pub max_relay_connections: usize,
+
     /// Maximum memory usage in megabytes
     pub max_memory_mb: usize,
+
+    /// Maximum CRDT document size in megabytes
+    pub crdt_document_limit_mb: usize,
 
     /// Connection timeout in seconds
     pub connection_timeout_secs: u64,
@@ -61,7 +70,9 @@ impl Default for ResourceLimitsConfig {
     fn default() -> Self {
         Self {
             max_peer_connections: 50,
+            max_relay_connections: 3,
             max_memory_mb: 2048,
+            crdt_document_limit_mb: 50,
             connection_timeout_secs: 30,
             anti_entropy_max_interval_secs: 300,
             max_upload_rate_mbps: None,
@@ -88,12 +99,14 @@ pub struct ResourceUsage {
 /// - Excessive sync intervals
 #[derive(Debug, Clone)]
 pub struct ResourceLimits {
-    max_peer_connections: usize,
-    max_memory_mb: usize,
-    connection_timeout: Duration,
-    anti_entropy_max_interval: Duration,
-    max_upload_rate_mbps: Option<f64>,
-    max_download_rate_mbps: Option<f64>,
+    pub max_peer_connections: usize,
+    pub max_relay_connections: usize,
+    pub max_memory_mb: usize,
+    pub crdt_document_limit_mb: usize,
+    pub connection_timeout: Duration,
+    pub anti_entropy_max_interval: Duration,
+    pub upload_rate_limit_mbps: Option<u64>,
+    pub download_rate_limit_mbps: Option<u64>,
 }
 
 impl Default for ResourceLimits {
@@ -107,42 +120,42 @@ impl ResourceLimits {
     pub fn from_config(config: ResourceLimitsConfig) -> Self {
         Self {
             max_peer_connections: config.max_peer_connections,
+            max_relay_connections: config.max_relay_connections,
             max_memory_mb: config.max_memory_mb,
+            crdt_document_limit_mb: config.crdt_document_limit_mb,
             connection_timeout: Duration::from_secs(config.connection_timeout_secs),
             anti_entropy_max_interval: Duration::from_secs(config.anti_entropy_max_interval_secs),
-            max_upload_rate_mbps: config.max_upload_rate_mbps.map(|r| r as f64),
-            max_download_rate_mbps: config.max_download_rate_mbps.map(|r| r as f64),
+            upload_rate_limit_mbps: config.max_upload_rate_mbps,
+            download_rate_limit_mbps: config.max_download_rate_mbps,
         }
     }
 
-    /// Get maximum peer connections
-    pub fn max_peer_connections(&self) -> usize {
-        self.max_peer_connections
+    /// Create low-resource preset for constrained devices
+    pub fn low_resource() -> Self {
+        Self::from_config(ResourceLimitsConfig {
+            max_peer_connections: 20,
+            max_relay_connections: 1,
+            max_memory_mb: 512,
+            crdt_document_limit_mb: 10,
+            connection_timeout_secs: 15,
+            anti_entropy_max_interval_secs: 600, // 10 min
+            max_upload_rate_mbps: Some(5),
+            max_download_rate_mbps: Some(20),
+        })
     }
 
-    /// Get maximum memory in MB
-    pub fn max_memory_mb(&self) -> usize {
-        self.max_memory_mb
-    }
-
-    /// Get connection timeout
-    pub fn connection_timeout(&self) -> Duration {
-        self.connection_timeout
-    }
-
-    /// Get anti-entropy maximum interval
-    pub fn anti_entropy_max_interval(&self) -> Duration {
-        self.anti_entropy_max_interval
-    }
-
-    /// Set maximum peer connections (for adaptive limits)
-    pub fn set_max_peer_connections(&mut self, max: usize) {
-        self.max_peer_connections = max;
-    }
-
-    /// Set maximum memory (for adaptive limits)
-    pub fn set_max_memory_mb(&mut self, max: usize) {
-        self.max_memory_mb = max;
+    /// Create high-performance preset for powerful devices
+    pub fn high_performance() -> Self {
+        Self::from_config(ResourceLimitsConfig {
+            max_peer_connections: 200,
+            max_relay_connections: 10,
+            max_memory_mb: 8192,
+            crdt_document_limit_mb: 200,
+            connection_timeout_secs: 60,
+            anti_entropy_max_interval_secs: 60, // 1 min
+            max_upload_rate_mbps: None,
+            max_download_rate_mbps: None,
+        })
     }
 
     /// Enforce peer connection limit
@@ -150,7 +163,7 @@ impl ResourceLimits {
         if current >= self.max_peer_connections {
             Err(ResourceLimitError::PeerLimitExceeded {
                 current,
-                max: self.max_peer_connections,
+                limit: self.max_peer_connections,
             })
         } else {
             Ok(())
@@ -162,36 +175,106 @@ impl ResourceLimits {
         if current_mb > self.max_memory_mb {
             Err(ResourceLimitError::MemoryLimitExceeded {
                 current: current_mb,
-                max: self.max_memory_mb,
+                limit_mb: self.max_memory_mb,
             })
         } else {
             Ok(())
         }
     }
 
+    /// Enforce relay connection limit
+    pub fn enforce_relay_limit(&self, current: usize) -> ResourceLimitResult<()> {
+        if current >= self.max_relay_connections {
+            Err(ResourceLimitError::PeerLimitExceeded {
+                current,
+                limit: self.max_relay_connections,
+            })
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Enforce CRDT document size limit
+    pub fn enforce_document_limit(&self, size_mb: usize) -> ResourceLimitResult<()> {
+        if size_mb > self.crdt_document_limit_mb {
+            Err(ResourceLimitError::DocumentTooLarge {
+                size_mb,
+                limit_mb: self.crdt_document_limit_mb,
+            })
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Check memory usage against limit
+    pub fn check_memory_usage(&self, current_mb: usize) -> ResourceLimitResult<()> {
+        self.enforce_memory_limit(current_mb)
+    }
+
     /// Enforce upload rate limit
     pub fn enforce_upload_rate(&self, current_mbps: f64) -> ResourceLimitResult<()> {
-        if let Some(max) = self.max_upload_rate_mbps
-            && current_mbps > max
-        {
-            return Err(ResourceLimitError::UploadRateExceeded {
-                current: current_mbps,
-                max,
-            });
+        if let Some(max) = self.upload_rate_limit_mbps {
+            let max_f64 = max as f64;
+            if current_mbps > max_f64 {
+                return Err(ResourceLimitError::UploadRateExceeded {
+                    current: current_mbps,
+                    max: max_f64,
+                });
+            }
         }
         Ok(())
     }
 
     /// Enforce download rate limit
     pub fn enforce_download_rate(&self, current_mbps: f64) -> ResourceLimitResult<()> {
-        if let Some(max) = self.max_download_rate_mbps
-            && current_mbps > max
-        {
-            return Err(ResourceLimitError::DownloadRateExceeded {
-                current: current_mbps,
-                max,
+        if let Some(max) = self.download_rate_limit_mbps {
+            let max_f64 = max as f64;
+            if current_mbps > max_f64 {
+                return Err(ResourceLimitError::DownloadRateExceeded {
+                    current: current_mbps,
+                    max: max_f64,
+                });
+            }
+        }
+        Ok(())
+    }
+
+    /// Convert upload rate limit to bytes per second
+    pub fn upload_rate_bytes_per_sec(&self) -> Option<u64> {
+        self.upload_rate_limit_mbps.map(|mbps| mbps * 125_000)
+    }
+
+    /// Convert download rate limit to bytes per second
+    pub fn download_rate_bytes_per_sec(&self) -> Option<u64> {
+        self.download_rate_limit_mbps.map(|mbps| mbps * 125_000)
+    }
+
+    /// Validate configuration for consistency
+    pub fn validate(&self) -> ResourceLimitResult<()> {
+        // Peer connections must be positive
+        if self.max_peer_connections == 0 {
+            return Err(ResourceLimitError::PeerLimitExceeded {
+                current: 0,
+                limit: 0,
             });
         }
+
+        // Memory must be positive
+        if self.max_memory_mb == 0 {
+            return Err(ResourceLimitError::MemoryLimitExceeded {
+                current: 0,
+                limit_mb: 0,
+            });
+        }
+
+        // Document limit should not exceed memory limit
+        if self.crdt_document_limit_mb > self.max_memory_mb {
+            return Err(ResourceLimitError::MemoryLimitExceeded {
+                current: self.crdt_document_limit_mb,
+                limit_mb: self.max_memory_mb,
+            });
+        }
+
         Ok(())
     }
 
@@ -233,7 +316,9 @@ mod tests {
     fn test_zero_limits() {
         let config = ResourceLimitsConfig {
             max_peer_connections: 0,
+            max_relay_connections: 0,
             max_memory_mb: 0,
+            crdt_document_limit_mb: 0,
             connection_timeout_secs: 1,
             anti_entropy_max_interval_secs: 1,
             max_upload_rate_mbps: None,

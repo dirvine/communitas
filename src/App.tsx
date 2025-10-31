@@ -10,6 +10,7 @@ import { darkTheme as modernDarkTheme } from './styles/theme'
 // Modern Shell - The only UI we need
 import { ModernShellPrototypeScreen } from './components/prototype/ModernShellPrototype'
 import { SitesDemo } from './components/SitesDemo'
+import { ViewerPage } from './components/websites/ViewerPage'
 
 // Contexts needed for ModernShell
 import { AuthProvider } from './components/auth'
@@ -55,6 +56,7 @@ function AppContent() {
                   <Route path="/" element={<ModernShellPrototypeScreen />} />
                   <Route path="/prototype/modern-shell" element={<ModernShellPrototypeScreen />} />
                   <Route path="/sites-demo" element={<SitesDemo />} />
+                  <Route path="/viewer" element={<ViewerPage />} />
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
               </EntityDirectoryProvider>

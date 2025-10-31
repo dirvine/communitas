@@ -14,17 +14,19 @@ use std::time::Duration;
 fn test_default_resource_limits() {
     let limits = ResourceLimits::default();
 
-    assert_eq!(limits.max_peer_connections(), 50);
-    assert_eq!(limits.max_memory_mb(), 2048);
-    assert_eq!(limits.connection_timeout(), Duration::from_secs(30));
-    assert_eq!(limits.anti_entropy_max_interval(), Duration::from_secs(300));
+    assert_eq!(limits.max_peer_connections, 50);
+    assert_eq!(limits.max_memory_mb, 2048);
+    assert_eq!(limits.connection_timeout, Duration::from_secs(30));
+    assert_eq!(limits.anti_entropy_max_interval, Duration::from_secs(300));
 }
 
 #[test]
 fn test_custom_resource_limits() {
     let config = ResourceLimitsConfig {
         max_peer_connections: 100,
+        max_relay_connections: 5,
         max_memory_mb: 4096,
+        crdt_document_limit_mb: 100,
         connection_timeout_secs: 60,
         anti_entropy_max_interval_secs: 600,
         max_upload_rate_mbps: Some(10),
@@ -33,9 +35,9 @@ fn test_custom_resource_limits() {
 
     let limits = ResourceLimits::from_config(config);
 
-    assert_eq!(limits.max_peer_connections(), 100);
-    assert_eq!(limits.max_memory_mb(), 4096);
-    assert_eq!(limits.connection_timeout(), Duration::from_secs(60));
+    assert_eq!(limits.max_peer_connections, 100);
+    assert_eq!(limits.max_memory_mb, 4096);
+    assert_eq!(limits.connection_timeout, Duration::from_secs(60));
 }
 
 #[test]
@@ -104,7 +106,9 @@ fn test_enforce_memory_limit_exceeded() {
 fn test_enforce_bandwidth_limit() {
     let config = ResourceLimitsConfig {
         max_peer_connections: 50,
+        max_relay_connections: 3,
         max_memory_mb: 2048,
+        crdt_document_limit_mb: 50,
         connection_timeout_secs: 30,
         anti_entropy_max_interval_secs: 300,
         max_upload_rate_mbps: Some(10),
@@ -156,7 +160,9 @@ fn test_check_all_limits() {
 fn test_load_from_toml() {
     let toml_str = r#"
 max_peer_connections = 75
+max_relay_connections = 5
 max_memory_mb = 3072
+crdt_document_limit_mb = 75
 connection_timeout_secs = 45
 anti_entropy_max_interval_secs = 450
 max_upload_rate_mbps = 15
@@ -166,20 +172,21 @@ max_download_rate_mbps = 75
     let config: ResourceLimitsConfig = toml::from_str(toml_str).expect("Parse TOML");
     let limits = ResourceLimits::from_config(config);
 
-    assert_eq!(limits.max_peer_connections(), 75);
-    assert_eq!(limits.max_memory_mb(), 3072);
-    assert_eq!(limits.connection_timeout(), Duration::from_secs(45));
+    assert_eq!(limits.max_peer_connections, 75);
+    assert_eq!(limits.max_memory_mb, 3072);
+    assert_eq!(limits.connection_timeout, Duration::from_secs(45));
 }
 
 #[test]
 fn test_adaptive_limits() {
     let mut limits = ResourceLimits::default();
 
-    limits.set_max_peer_connections(100);
-    assert_eq!(limits.max_peer_connections(), 100);
+    // Direct field access for adaptive limits
+    limits.max_peer_connections = 100;
+    assert_eq!(limits.max_peer_connections, 100);
 
-    limits.set_max_memory_mb(4096);
-    assert_eq!(limits.max_memory_mb(), 4096);
+    limits.max_memory_mb = 4096;
+    assert_eq!(limits.max_memory_mb, 4096);
 }
 
 #[tokio::test]

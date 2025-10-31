@@ -8,4 +8,6 @@
 //!
 //! Provides reusable test fixtures and mock implementations for testing.
 
+pub mod test_harness;
+pub mod test_helpers;
 pub mod webrtc_fixtures;

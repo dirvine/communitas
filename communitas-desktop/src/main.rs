@@ -314,6 +314,7 @@ async fn main() -> anyhow::Result<()> {
             gossip_commands::gossip_get_favourite_contacts,
             gossip_commands::gossip_replicate_to_favourites,
             gossip_commands::gossip_recover_from_favourite,
+            gossip_commands::gossip_name_resolve,
             gossip_commands::gossip_site_publish,
             gossip_commands::gossip_site_fetch,
             gossip_commands::gossip_site_list,

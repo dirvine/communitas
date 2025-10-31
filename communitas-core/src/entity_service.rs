@@ -350,7 +350,7 @@ impl EntityService {
 
         // Save document
         self.crdt_manager
-            .save_document(&doc_id, "entity", entity_id, &doc)
+            .save_document(&doc_id, entity_type.as_str(), entity_id, &doc)
             .await?;
 
         Ok(())
@@ -410,7 +410,7 @@ impl EntityService {
 
         // Save document
         self.crdt_manager
-            .save_document(&doc_id, "entity", entity_id, &doc)
+            .save_document(&doc_id, entity_type.as_str(), entity_id, &doc)
             .await?;
 
         Ok(())

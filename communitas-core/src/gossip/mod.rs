@@ -28,30 +28,40 @@
 // Gossip is now the default networking layer (no longer feature-gated)
 
 pub mod backup;
+pub mod block_cache;
 pub mod boot;
 pub mod context;
 pub mod coordinator;
 pub mod discovery;
+pub mod name_record;
 pub mod peer_cache;
 pub mod port_manager;
 pub mod presence;
 pub mod rendezvous;
+pub mod signed_provider;
 pub mod sites;
+pub mod sites_dispatcher;
+pub mod sites_listener;
 pub mod telemetry;
+pub mod transport_types;
 
 // Re-export key types
 pub use backup::BackupManager;
+pub use block_cache::{BlockCache, CacheStats};
 pub use boot::GossipBootSequence;
 pub use context::GossipContext;
 pub use coordinator::CoordinatorClient;
 pub use discovery::{FoafDiscovery, IntroducerConfig, cold_start_discovery};
+pub use name_record::{NameRecord, NameRegistry};
 pub use peer_cache::{NatClass, PeerCache, PeerCacheEntry};
 pub use port_manager::PortManager;
 pub use presence::PresenceWrapper;
 pub use rendezvous::RendezvousClient;
 pub use saorsa_gossip_coordinator::{CoordinatorRoles, NatClass as CoordinatorNatClass};
 pub use saorsa_gossip_rendezvous::{Capability, ProviderSummary};
+pub use signed_provider::{CollectorStats, ProviderCollector, ProviderRateLimiter};
 pub use sites::{
     Block, MAX_BLOCK_SIZE, SiteFetcher, SiteId, SiteManifest, SitePublisher, SiteRequest,
-    SiteResponse, chunk_content,
+    SiteResponse, SitesWire, chunk_content,
 };
+pub use sites_listener::SitesListener;

@@ -10,8 +10,8 @@
 //! without DNS or HTTP, using ML-DSA signed manifests and gossip-based discovery.
 //!
 //! ## Architecture (per SPEC2.md §5)
-//! - Site Identity (SID): ML-DSA public key
-//! - Manifest: ML-DSA signed, content-addressed blocks
+//! - Site Identity (SID): ML-DSA-65 public key (1952 bytes)
+//! - Manifest: ML-DSA-65 signed (3309 byte signatures), content-addressed blocks
 //! - Publishing: Chunk assets, gossip Provider Summaries to SITE_ADVERT shard
 //! - Fetching: Subscribe to shards, score providers, fetch over QUIC
 //!
@@ -24,12 +24,15 @@ use crate::gossip::rendezvous::RendezvousClient;
 use anyhow::Result;
 use blake3;
 use bytes::Bytes;
-use saorsa_gossip_transport::{GossipTransport, StreamType};
+use fips204::traits::{SerDes, Signer, Verifier};
+use saorsa_gossip_transport::StreamType;
 use saorsa_gossip_types::PeerId;
+use saorsa_pqc::ml_dsa_65::{PrivateKey, PublicKey};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tracing::debug;
 
 /// Maximum block size (512KB per SPEC2.md §5.3)
 pub const MAX_BLOCK_SIZE: usize = 512 * 1024;
@@ -51,6 +54,18 @@ pub enum SiteResponse {
     Block(Block),
     /// Error response
     Error(String),
+}
+
+/// Wire protocol envelope for request/response correlation
+///
+/// Wraps SiteRequest/SiteResponse with a correlation ID to match requests with responses
+/// when multiple components share the same transport.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum SitesWire {
+    /// Request with correlation ID
+    Request { id: u64, body: SiteRequest },
+    /// Response with correlation ID (matches request id)
+    Response { id: u64, body: SiteResponse },
 }
 
 /// Content-addressed block
@@ -87,36 +102,58 @@ pub fn chunk_content(content: &[u8], chunk_size: usize) -> Vec<Block> {
         .collect()
 }
 
-/// Site Identifier (SID) - ML-DSA public key
+/// Site Identifier (SID) - BLAKE3 hash of ML-DSA-65 public key
+///
+/// For efficiency, we use a 32-byte BLAKE3 hash of the ML-DSA-65 public key
+/// for routing and discovery. The full public key is stored in the SiteManifest
+/// for signature verification.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct SiteId {
-    /// ML-DSA public key bytes (32 bytes)
-    pub key: [u8; 32],
+    /// BLAKE3 hash of ML-DSA-65 public key (32 bytes)
+    pub hash: [u8; 32],
 }
 
 impl SiteId {
-    /// Create a new SiteId from ML-DSA public key
-    pub fn new(key: [u8; 32]) -> Self {
-        Self { key }
+    /// Create a new SiteId from BLAKE3 hash
+    pub fn new(hash: [u8; 32]) -> Self {
+        Self { hash }
     }
 
-    /// Get the key bytes
+    /// Create SiteId from ML-DSA-65 PublicKey (hashes it)
+    pub fn from_public_key(pk: &PublicKey) -> Self {
+        let pk_bytes = pk.clone().into_bytes();
+        let hash = blake3::hash(&pk_bytes);
+        Self { hash: hash.into() }
+    }
+
+    /// Get the hash bytes (for rendezvous shard routing)
     pub fn as_bytes(&self) -> &[u8; 32] {
-        &self.key
+        &self.hash
+    }
+
+    /// Get the hash for use with rendezvous client
+    pub fn to_target_id(&self) -> [u8; 32] {
+        self.hash
     }
 }
 
-/// Site Manifest - ML-DSA signed content manifest
+/// Site Manifest - ML-DSA-65 signed content manifest
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SiteManifest {
     /// Protocol version
     pub version: u8,
 
-    /// Site identifier (ML-DSA public key)
+    /// Site identifier (BLAKE3 hash of public key)
     pub site_id: SiteId,
 
-    /// Manifest version (incrementing)
+    /// Full ML-DSA-65 public key for signature verification (1952 bytes)
+    pub public_key: Vec<u8>,
+
+    /// Manifest version (incrementing, prevents rollback)
     pub manifest_version: u64,
+
+    /// Timestamp (Unix milliseconds, prevents replay)
+    pub timestamp: u64,
 
     /// Root block hash (BLAKE3)
     pub root_hash: [u8; 32],
@@ -124,13 +161,18 @@ pub struct SiteManifest {
     /// Block map: path -> block_hash
     pub blocks: Vec<(String, [u8; 32])>,
 
-    /// ML-DSA signature over all fields except signature
+    /// ML-DSA-65 signature over all fields except signature (3309 bytes)
     pub signature: Vec<u8>,
 }
 
 impl SiteManifest {
     /// Create a new unsigned manifest
-    pub fn new(site_id: SiteId, manifest_version: u64, blocks: Vec<(String, [u8; 32])>) -> Self {
+    pub fn new(
+        site_id: SiteId,
+        public_key: &PublicKey,
+        manifest_version: u64,
+        blocks: Vec<(String, [u8; 32])>,
+    ) -> Self {
         // Compute root hash from all block hashes
         let mut hasher = blake3::Hasher::new();
         for (path, hash) in &blocks {
@@ -139,10 +181,18 @@ impl SiteManifest {
         }
         let root_hash = hasher.finalize();
 
+        // Get current timestamp
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_else(|_| std::time::Duration::from_secs(0))
+            .as_millis() as u64;
+
         Self {
             version: 1,
             site_id,
+            public_key: public_key.clone().into_bytes().to_vec(),
             manifest_version,
+            timestamp,
             root_hash: root_hash.into(),
             blocks,
             signature: vec![],
@@ -153,8 +203,10 @@ impl SiteManifest {
     pub fn to_sign_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
         bytes.push(self.version);
-        bytes.extend_from_slice(&self.site_id.key);
+        bytes.extend_from_slice(&self.site_id.hash);
+        bytes.extend_from_slice(&self.public_key);
         bytes.extend_from_slice(&self.manifest_version.to_le_bytes());
+        bytes.extend_from_slice(&self.timestamp.to_le_bytes());
         bytes.extend_from_slice(&self.root_hash);
 
         for (path, hash) in &self.blocks {
@@ -165,20 +217,89 @@ impl SiteManifest {
         bytes
     }
 
-    /// Sign the manifest (placeholder for ML-DSA)
-    pub fn sign(&mut self, _secret_key: &[u8]) {
-        // TODO: Implement ML-DSA signing when saorsa-pqc is integrated
-        // For now, use BLAKE3 hash as placeholder signature
-        let sign_bytes = self.to_sign_bytes();
-        let sig_hash = blake3::hash(&sign_bytes);
-        self.signature = sig_hash.as_bytes().to_vec();
+    /// Sign the manifest with ML-DSA-65
+    ///
+    /// # Arguments
+    /// * `signing_key` - ML-DSA-65 private key for signing
+    ///
+    /// # Errors
+    /// Returns error if signing fails
+    pub fn sign(&mut self, signing_key: &PrivateKey) -> Result<()> {
+        let message = self.to_sign_bytes();
+        let signature = signing_key
+            .try_sign(&message, &[]) // Empty context as per FIPS 204
+            .map_err(|e| anyhow::anyhow!("ML-DSA-65 signing failed: {}", e))?;
+
+        self.signature = signature.to_vec();
+        Ok(())
     }
 
-    /// Verify signature (placeholder for ML-DSA)
-    pub fn verify(&self, _public_key: &[u8]) -> bool {
-        // TODO: Implement ML-DSA verification when saorsa-pqc is integrated
-        // For now, just verify signature is not empty
-        !self.signature.is_empty()
+    /// Verify ML-DSA-65 signature using embedded public key
+    ///
+    /// # Returns
+    /// Ok(()) if signature is valid and not expired, Err otherwise
+    pub fn verify(&self) -> Result<()> {
+        // Public key must be exactly 1952 bytes for ML-DSA-65
+        if self.public_key.len() != 1952 {
+            anyhow::bail!(
+                "Invalid public key size: expected 1952, got {}",
+                self.public_key.len()
+            );
+        }
+
+        // Verify public key matches site_id
+        let pk_hash = blake3::hash(&self.public_key);
+        if pk_hash.as_bytes() != &self.site_id.hash {
+            anyhow::bail!("Public key does not match site_id");
+        }
+
+        // Deserialize public key
+        let pk_array: [u8; 1952] = self
+            .public_key
+            .as_slice()
+            .try_into()
+            .map_err(|_| anyhow::anyhow!("Public key is not 2592 bytes"))?;
+        let public_key = PublicKey::try_from_bytes(pk_array)
+            .map_err(|e| anyhow::anyhow!("Invalid public key: {}", e))?;
+
+        // Signature must be exactly 3309 bytes for ML-DSA-65
+        if self.signature.len() != 3309 {
+            anyhow::bail!(
+                "Invalid signature size: expected 3309, got {}",
+                self.signature.len()
+            );
+        }
+
+        // Convert signature to fixed-size array
+        let sig_array: [u8; 3309] = self
+            .signature
+            .as_slice()
+            .try_into()
+            .map_err(|_| anyhow::anyhow!("Failed to convert signature to array"))?;
+
+        // Verify the signature
+        let message = self.to_sign_bytes();
+        if !public_key.verify(&message, &sig_array, &[]) {
+            anyhow::bail!("Signature verification failed");
+        }
+
+        // Check timestamp is not too far in the future (prevent future-dated manifests)
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_else(|_| std::time::Duration::from_secs(0))
+            .as_millis() as u64;
+
+        // Allow up to 5 minutes clock skew
+        if self.timestamp > now + (5 * 60 * 1000) {
+            anyhow::bail!("Manifest timestamp is too far in the future");
+        }
+
+        Ok(())
+    }
+
+    /// Check if this manifest is newer than another (prevents rollback)
+    pub fn is_newer_than(&self, other: &SiteManifest) -> bool {
+        self.manifest_version > other.manifest_version
     }
 }
 
@@ -188,18 +309,34 @@ pub struct SitePublisher {
     site_id: SiteId,
 
     /// Block storage (hash -> block)
+    /// In-memory for now, will be replaced by BlockCache
     blocks: Arc<RwLock<HashMap<[u8; 32], Block>>>,
+
+    /// Persistent block cache (optional, enables offline serving)
+    #[allow(dead_code)]
+    block_cache: Option<Arc<super::block_cache::BlockCache>>,
 
     /// Current manifest
     manifest: Arc<RwLock<Option<SiteManifest>>>,
 }
 
 impl SitePublisher {
-    /// Create a new site publisher
+    /// Create a new site publisher without persistent cache
     pub fn new(site_id: SiteId) -> Self {
         Self {
             site_id,
             blocks: Arc::new(RwLock::new(HashMap::new())),
+            block_cache: None,
+            manifest: Arc::new(RwLock::new(None)),
+        }
+    }
+
+    /// Create a new site publisher with persistent cache
+    pub fn with_cache(site_id: SiteId, cache: Arc<super::block_cache::BlockCache>) -> Self {
+        Self {
+            site_id,
+            blocks: Arc::new(RwLock::new(HashMap::new())),
+            block_cache: Some(cache),
             manifest: Arc::new(RwLock::new(None)),
         }
     }
@@ -213,10 +350,15 @@ impl SitePublisher {
             vec![Block::new(content)]
         };
 
-        // Store blocks
+        // Store blocks in both memory and persistent cache
         let mut blocks = self.blocks.write().await;
         for block in &chunks {
             blocks.insert(block.hash, block.clone());
+
+            // Also store in persistent cache if available (pinned for published content)
+            if let Some(cache) = &self.block_cache {
+                cache.store(block.clone(), true).await?;
+            }
         }
 
         // Return the first block hash (for single-block assets this is the only hash)
@@ -224,12 +366,18 @@ impl SitePublisher {
     }
 
     /// Build manifest from added assets
+    ///
+    /// # Arguments
+    /// * `public_key` - ML-DSA-65 public key for this site
+    /// * `version` - Manifest version (must be monotonically increasing)
+    /// * `asset_paths` - List of (path, block_hash) tuples
     pub async fn build_manifest(
         &self,
+        public_key: &PublicKey,
         version: u64,
         asset_paths: Vec<(String, [u8; 32])>,
     ) -> Result<SiteManifest> {
-        let manifest = SiteManifest::new(self.site_id.clone(), version, asset_paths);
+        let manifest = SiteManifest::new(self.site_id.clone(), public_key, version, asset_paths);
 
         // Store manifest
         let mut current_manifest = self.manifest.write().await;
@@ -248,6 +396,20 @@ impl SitePublisher {
     pub async fn get_manifest(&self) -> Option<SiteManifest> {
         let manifest = self.manifest.read().await;
         manifest.clone()
+    }
+
+    /// Update stored manifest (e.g., after signing)
+    ///
+    /// Used to update the manifest after signing it externally.
+    /// Validates that the manifest belongs to this publisher.
+    pub async fn set_manifest(&self, manifest: SiteManifest) -> Result<()> {
+        if manifest.site_id != self.site_id {
+            anyhow::bail!("Manifest site_id does not match publisher");
+        }
+
+        let mut current = self.manifest.write().await;
+        *current = Some(manifest);
+        Ok(())
     }
 
     /// Handle a site request and return response bytes
@@ -294,42 +456,214 @@ impl SitePublisher {
     }
 }
 
+/// RAII guard for dispatcher channel cleanup
+///
+/// Ensures response channel is unregistered on ALL paths (success or error)
+struct DispatcherGuard {
+    dispatcher: Arc<super::sites_dispatcher::SitesDispatcher>,
+    request_id: u64,
+    rx: tokio::sync::mpsc::Receiver<SiteResponse>,
+}
+
+impl Drop for DispatcherGuard {
+    fn drop(&mut self) {
+        // Spawn cleanup task (can't await in Drop)
+        let dispatcher = self.dispatcher.clone();
+        let request_id = self.request_id;
+        tokio::spawn(async move {
+            dispatcher.unregister_response_channel(request_id).await;
+        });
+    }
+}
+
 /// Site Fetcher - Fetches sites from the network
 pub struct SiteFetcher {
     /// Rendezvous client for provider discovery
     rendezvous: Arc<RendezvousClient>,
 
-    /// Transport layer for QUIC operations
-    transport: Arc<RwLock<Box<dyn GossipTransport>>>,
+    /// Transport layer for QUIC operations (shared with SitesListener)
+    transport: super::transport_types::SharedTransport,
 
-    /// Fetched blocks cache (hash -> block)
+    /// Sites dispatcher for coordinated message routing (optional - for production)
+    /// When set, uses dispatcher channels instead of direct transport receive
+    dispatcher: Option<Arc<super::sites_dispatcher::SitesDispatcher>>,
+
+    /// Fetched blocks cache (hash -> block) - in-memory
     blocks: Arc<RwLock<HashMap<[u8; 32], Block>>>,
 
-    /// Fetched manifests cache (site_id -> manifest)
+    /// Persistent block cache (optional, enables offline viewing)
+    #[allow(dead_code)]
+    block_cache: Option<Arc<super::block_cache::BlockCache>>,
+
+    /// Fetched manifests cache (site_id -> manifest) - in-memory
     manifests: Arc<RwLock<HashMap<SiteId, SiteManifest>>>,
+
+    /// Correlation ID counter for request/response matching
+    next_request_id: Arc<RwLock<u64>>,
 }
 
 impl SiteFetcher {
-    /// Create a new site fetcher
+    /// Create a new site fetcher with shared transport (recommended)
+    ///
+    /// Use this with the dedicated Sites transport for production.
+    pub fn new_with_shared_transport(
+        rendezvous: Arc<RendezvousClient>,
+        transport: super::transport_types::SharedTransport,
+    ) -> Self {
+        Self {
+            rendezvous,
+            transport,
+            dispatcher: None, // Set via set_dispatcher() after construction
+            blocks: Arc::new(RwLock::new(HashMap::new())),
+            block_cache: None,
+            manifests: Arc::new(RwLock::new(HashMap::new())),
+            next_request_id: Arc::new(RwLock::new(1)),
+        }
+    }
+
+    /// Set the Sites dispatcher (must be called before fetching in production)
+    pub fn set_dispatcher(&mut self, dispatcher: Arc<super::sites_dispatcher::SitesDispatcher>) {
+        self.dispatcher = Some(dispatcher);
+    }
+
+    /// Create a new site fetcher (for tests, creates dummy transport)
+    ///
+    /// Note: This creates an unbound transport that won't work for real network fetching.
+    /// Use new_with_shared_transport() with a bound Sites transport for production.
     pub fn new(rendezvous: Arc<RendezvousClient>) -> Self {
-        let transport = rendezvous.get_transport();
+        // Create dummy transport for backward compatibility with tests
+        let dummy_config = saorsa_gossip_transport::TransportConfig::default();
+        let dummy_qt = saorsa_gossip_transport::QuicTransport::new(dummy_config);
+        let transport: super::transport_types::SharedTransport = Arc::new(dummy_qt);
 
         Self {
             rendezvous,
             transport,
+            dispatcher: None, // For backward compat with tests
             blocks: Arc::new(RwLock::new(HashMap::new())),
+            block_cache: None,
             manifests: Arc::new(RwLock::new(HashMap::new())),
+            next_request_id: Arc::new(RwLock::new(1)),
         }
+    }
+
+    /// Allocate a new request ID for correlation
+    async fn next_id(&self) -> u64 {
+        let mut id_lock = self.next_request_id.write().await;
+        let id = *id_lock;
+        *id_lock += 1;
+        id
+    }
+
+    /// Send a request and receive correlated response using SitesWire envelope
+    ///
+    /// If dispatcher is set (production), uses dispatcher channels.
+    /// Otherwise falls back to direct transport receive (tests only).
+    ///
+    /// Ensures channel cleanup on ALL paths (success or error) via RAII guard.
+    async fn request_response(
+        &self,
+        request: SiteRequest,
+        provider: PeerId,
+    ) -> Result<SiteResponse> {
+        // Allocate correlation ID
+        let request_id = self.next_id().await;
+
+        // Wrap in SitesWire envelope
+        let wire_request = SitesWire::Request {
+            id: request_id,
+            body: request,
+        };
+
+        // Serialize request (before registering channel to avoid leak on error)
+        let request_bytes = bincode::serialize(&wire_request)
+            .map_err(|e| anyhow::anyhow!("Failed to serialize request: {}", e))?;
+
+        // If we have a dispatcher, register for response before sending
+        // Create cleanup guard to ensure unregister happens on ALL paths
+        let dispatcher_guard = if let Some(ref dispatcher) = self.dispatcher {
+            let rx = dispatcher.register_response_channel(request_id).await;
+            Some(DispatcherGuard {
+                dispatcher: dispatcher.clone(),
+                request_id,
+                rx,
+            })
+        } else {
+            None
+        };
+
+        // Send the request
+        debug!(
+            "Sending Sites request {} to peer {:?}",
+            request_id, provider
+        );
+        self.transport
+            .send_to_peer(provider, StreamType::Bulk, Bytes::from(request_bytes))
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to send request: {}", e))?;
+        debug!("Sites request {} sent successfully", request_id);
+
+        // Receive response
+        let response = if let Some(mut guard) = dispatcher_guard {
+            // Production path: wait for dispatcher to route the response
+            debug!("Waiting for Sites response {} via dispatcher", request_id);
+            let response = guard
+                .rx
+                .recv()
+                .await
+                .ok_or_else(|| anyhow::anyhow!("Dispatcher dropped response channel"))?;
+            debug!("Received Sites response {} via dispatcher", request_id);
+
+            // Guard will auto-cleanup on drop (both success and error paths)
+            response
+        } else {
+            // Test/fallback path: receive directly from transport
+            // This will ONLY work if there's no listener competing for messages!
+            loop {
+                let (_peer, stream_type, response_bytes) =
+                    self.transport
+                        .receive_message()
+                        .await
+                        .map_err(|e| anyhow::anyhow!("Failed to receive response: {}", e))?;
+
+                if stream_type != StreamType::Bulk {
+                    continue; // Skip non-Bulk messages
+                }
+
+                // Try to deserialize as SitesWire
+                let wire_msg: SitesWire = match bincode::deserialize(&response_bytes) {
+                    Ok(msg) => msg,
+                    Err(_) => continue, // Not a Sites message, skip
+                };
+
+                // Check if this is a Response with our correlation ID
+                match wire_msg {
+                    SitesWire::Response { id, body } if id == request_id => {
+                        // This is our response!
+                        break body;
+                    }
+                    _ => {
+                        // Not our response, keep waiting
+                        continue;
+                    }
+                }
+            }
+        };
+
+        // Note: Cleanup happens automatically via DispatcherGuard::drop()
+        // No manual unregister needed - guard ensures cleanup on ALL paths
+
+        Ok(response)
     }
 
     /// Start discovering providers for a site
     pub async fn start_discovery(&self, site_id: &SiteId) -> Result<()> {
         // Subscribe to SITE_ADVERT shard for this site
-        self.rendezvous.subscribe_to_shard(&site_id.key).await?;
+        self.rendezvous.subscribe_to_shard(&site_id.hash).await?;
 
         // Start collecting provider summaries
         self.rendezvous
-            .start_collecting_for_target(site_id.key)
+            .start_collecting_for_target(site_id.hash)
             .await?;
 
         Ok(())
@@ -340,7 +674,9 @@ impl SiteFetcher {
         &self,
         site_id: &SiteId,
     ) -> Vec<saorsa_gossip_rendezvous::ProviderSummary> {
-        self.rendezvous.get_providers_for_target(&site_id.key).await
+        self.rendezvous
+            .get_providers_for_target(&site_id.hash)
+            .await
     }
 
     /// Fetch a block from network via QUIC
@@ -353,40 +689,11 @@ impl SiteFetcher {
             }
         }
 
-        // Create request
+        // Create request and send with correlation ID
         let request = SiteRequest::GetBlock { hash: *hash };
-        let request_bytes = bincode::serialize(&request)
-            .map_err(|e| anyhow::anyhow!("Failed to serialize request: {}", e))?;
+        let response = self.request_response(request, provider).await?;
 
-        // Send request on Bulk stream
-        self.transport
-            .read()
-            .await
-            .send_to_peer(provider, StreamType::Bulk, Bytes::from(request_bytes))
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to send request: {}", e))?;
-
-        // Receive response on Bulk stream
-        let (_peer, stream_type, response_bytes) = self
-            .transport
-            .read()
-            .await
-            .receive_message()
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to receive response: {}", e))?;
-
-        if stream_type != StreamType::Bulk {
-            return Err(anyhow::anyhow!(
-                "Wrong stream type: expected Bulk, got {:?}",
-                stream_type
-            ));
-        }
-
-        // Deserialize response
-        let response: SiteResponse = bincode::deserialize(&response_bytes)
-            .map_err(|e| anyhow::anyhow!("Failed to deserialize response: {}", e))?;
-
-        // Extract block
+        // Extract block from response
         match response {
             SiteResponse::Block(block) => {
                 // Verify hash
@@ -415,50 +722,31 @@ impl SiteFetcher {
             }
         }
 
-        // Create request
+        // Create request and send with correlation ID
         let request = SiteRequest::GetManifest {
             site_id: site_id.clone(),
         };
-        let request_bytes = bincode::serialize(&request)
-            .map_err(|e| anyhow::anyhow!("Failed to serialize request: {}", e))?;
+        let response = self.request_response(request, provider).await?;
 
-        // Send request on Bulk stream
-        self.transport
-            .read()
-            .await
-            .send_to_peer(provider, StreamType::Bulk, Bytes::from(request_bytes))
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to send request: {}", e))?;
-
-        // Receive response on Bulk stream
-        let (_peer, stream_type, response_bytes) = self
-            .transport
-            .read()
-            .await
-            .receive_message()
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to receive response: {}", e))?;
-
-        if stream_type != StreamType::Bulk {
-            return Err(anyhow::anyhow!(
-                "Wrong stream type: expected Bulk, got {:?}",
-                stream_type
-            ));
-        }
-
-        // Deserialize response
-        let response: SiteResponse = bincode::deserialize(&response_bytes)
-            .map_err(|e| anyhow::anyhow!("Failed to deserialize response: {}", e))?;
-
-        // Extract manifest
+        // Extract manifest from response
         match response {
             SiteResponse::Manifest(manifest) => {
-                // Verify site ID matches
+                // CRITICAL: Verify ML-DSA-65 signature BEFORE caching or returning!
+                // This prevents malicious/compromised providers from serving forged content.
+                manifest.verify().map_err(|e| {
+                    anyhow::anyhow!("Manifest signature verification failed: {}", e)
+                })?;
+
+                // Verify site ID matches what we requested
                 if &manifest.site_id != site_id {
-                    return Err(anyhow::anyhow!("Site ID mismatch"));
+                    return Err(anyhow::anyhow!(
+                        "Site ID mismatch: expected {:?}, got {:?}",
+                        site_id,
+                        manifest.site_id
+                    ));
                 }
 
-                // Cache
+                // Only cache AFTER all verification succeeds
                 let mut manifests = self.manifests.write().await;
                 manifests.insert(site_id.clone(), manifest.clone());
 
@@ -485,9 +773,12 @@ impl SiteFetcher {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rand::SeedableRng;
+    use rand_chacha::ChaCha20Rng;
     use saorsa_gossip_pubsub::PubSub as PubSubTrait;
     use saorsa_gossip_transport::{GossipTransport, QuicTransport, TransportConfig};
     use saorsa_gossip_types::PeerId;
+    use saorsa_pqc::ml_dsa_65::try_keygen_with_rng;
 
     fn create_test_peer_id(seed: u8) -> PeerId {
         let mut bytes = [0u8; 32];
@@ -518,31 +809,40 @@ mod tests {
         RendezvousClient::new(peer_id, transport, pubsub)
     }
 
+    /// Generate a deterministic test keypair from a seed
+    fn generate_test_keypair(seed: u64) -> (PrivateKey, PublicKey) {
+        let mut rng = ChaCha20Rng::seed_from_u64(seed);
+        let (pk, sk) = try_keygen_with_rng(&mut rng).expect("Failed to generate test keypair");
+        (sk, pk)
+    }
+
     #[test]
     fn test_site_id_creation() {
         let key = [42u8; 32];
         let site_id = SiteId::new(key);
 
         assert_eq!(site_id.as_bytes(), &key);
-        assert_eq!(site_id.key, key);
+        assert_eq!(site_id.hash, key);
     }
 
     #[test]
     fn test_site_manifest_structure() {
-        // RED: This will pass immediately as we're just testing structure
-        let site_id = SiteId::new([1u8; 32]);
-        let manifest = SiteManifest {
-            version: 1,
-            site_id: site_id.clone(),
-            manifest_version: 1,
-            root_hash: [0u8; 32],
-            blocks: vec![("index.html".to_string(), [2u8; 32])],
-            signature: vec![],
-        };
+        let (_sk, pk) = generate_test_keypair(1);
+        let site_id = SiteId::from_public_key(&pk);
+        let blocks = vec![
+            ("index.html".to_string(), [2u8; 32]),
+            ("style.css".to_string(), [3u8; 32]),
+        ];
+
+        let manifest = SiteManifest::new(site_id.clone(), &pk, 1, blocks.clone());
 
         assert_eq!(manifest.version, 1);
         assert_eq!(manifest.site_id, site_id);
-        assert_eq!(manifest.blocks.len(), 1);
+        assert_eq!(manifest.manifest_version, 1);
+        assert_eq!(manifest.blocks, blocks);
+        assert_eq!(manifest.signature.len(), 0); // Unsigned initially
+        assert_ne!(manifest.root_hash, [0u8; 32]); // Should have computed root hash
+        assert_eq!(manifest.public_key.len(), 1952); // ML-DSA-65 public key size
     }
 
     #[test]
@@ -666,7 +966,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_build_manifest() {
-        let site_id = SiteId::new([1u8; 32]);
+        let (_sk, pk) = generate_test_keypair(1);
+        let site_id = SiteId::from_public_key(&pk);
         let publisher = SitePublisher::new(site_id.clone());
 
         // Add assets
@@ -685,7 +986,7 @@ mod tests {
             ("style.css".to_string(), style_hash),
         ];
         let manifest = publisher
-            .build_manifest(1, asset_paths.clone())
+            .build_manifest(&pk, 1, asset_paths.clone())
             .await
             .unwrap();
 
@@ -702,34 +1003,37 @@ mod tests {
 
     #[test]
     fn test_manifest_signing() {
-        let site_id = SiteId::new([1u8; 32]);
+        let (sk, pk) = generate_test_keypair(1);
+        let site_id = SiteId::from_public_key(&pk);
         let blocks = vec![("index.html".to_string(), [2u8; 32])];
-        let mut manifest = SiteManifest::new(site_id, 1, blocks);
+        let mut manifest = SiteManifest::new(site_id, &pk, 1, blocks);
 
         // Initially unsigned
         assert_eq!(manifest.signature.len(), 0);
 
         // Sign manifest
-        let secret_key = [3u8; 32];
-        manifest.sign(&secret_key);
+        manifest.sign(&sk).expect("Failed to sign manifest");
 
-        // Should have signature
-        assert!(!manifest.signature.is_empty());
-        assert!(manifest.verify(&[4u8; 32]));
+        // Should have signature (ML-DSA-65 signatures are 3309 bytes)
+        assert_eq!(manifest.signature.len(), 3309);
+
+        // Verify signature
+        manifest.verify().expect("Signature verification failed");
     }
 
     #[test]
     fn test_manifest_root_hash_deterministic() {
-        let site_id = SiteId::new([1u8; 32]);
+        let (_sk, pk) = generate_test_keypair(1);
+        let site_id = SiteId::from_public_key(&pk);
         let blocks = vec![
             ("index.html".to_string(), [2u8; 32]),
             ("style.css".to_string(), [3u8; 32]),
         ];
 
-        let manifest1 = SiteManifest::new(site_id.clone(), 1, blocks.clone());
-        let manifest2 = SiteManifest::new(site_id, 1, blocks);
+        let manifest1 = SiteManifest::new(site_id.clone(), &pk, 1, blocks.clone());
+        let manifest2 = SiteManifest::new(site_id, &pk, 1, blocks);
 
-        // Same blocks should produce same root hash
+        // Same blocks should produce same root hash (timestamps will differ, but root hash is deterministic)
         assert_eq!(manifest1.root_hash, manifest2.root_hash);
     }
 
@@ -788,9 +1092,10 @@ mod tests {
         let fetcher = SiteFetcher::new(rendezvous);
 
         // Cache a manifest
-        let site_id = SiteId::new([2u8; 32]);
+        let (_sk, pk) = generate_test_keypair(2);
+        let site_id = SiteId::from_public_key(&pk);
         let blocks = vec![("index.html".to_string(), [3u8; 32])];
-        let manifest = SiteManifest::new(site_id.clone(), 1, blocks);
+        let manifest = SiteManifest::new(site_id.clone(), &pk, 1, blocks);
 
         fetcher.cache_manifest(manifest.clone()).await;
 
@@ -852,8 +1157,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_publisher_serve_manifest_request() {
-        // RED: Test that publisher can serve manifest requests
-        let site_id = SiteId::new([1u8; 32]);
+        let (_sk, pk) = generate_test_keypair(1);
+        let site_id = SiteId::from_public_key(&pk);
         let publisher = SitePublisher::new(site_id.clone());
 
         // Add assets and build manifest
@@ -862,7 +1167,7 @@ mod tests {
             .await
             .unwrap();
         let manifest = publisher
-            .build_manifest(1, vec![("index.html".to_string(), hash)])
+            .build_manifest(&pk, 1, vec![("index.html".to_string(), hash)])
             .await
             .unwrap();
 
@@ -887,5 +1192,124 @@ mod tests {
             }
             _ => panic!("Expected Manifest response"),
         }
+    }
+
+    /// End-to-end integration test: Publisher serves content, Fetcher retrieves it
+    ///
+    /// This test validates the complete pipeline:
+    /// 1. Create SitePublisher with signed content
+    /// 2. SitePublisher.handle_request() processes GetManifest/GetBlock
+    /// 3. Responses are properly serialized
+    /// 4. Manifest signature verifies
+    /// 5. Block hashes verify
+    #[tokio::test]
+    async fn test_end_to_end_site_serving() {
+        // Setup: Generate keypair and create site
+        let (sk, pk) = generate_test_keypair(42);
+        let site_id = SiteId::from_public_key(&pk);
+        let publisher = Arc::new(SitePublisher::new(site_id.clone()));
+
+        // Step 1: Publisher creates content
+        let html_content = b"<html><body><h1>Hello, Saorsa Sites!</h1></body></html>".to_vec();
+        let css_content = b"body { font-family: sans-serif; }".to_vec();
+
+        let html_hash = publisher
+            .add_asset("index.html".to_string(), html_content.clone())
+            .await
+            .unwrap();
+
+        let css_hash = publisher
+            .add_asset("style.css".to_string(), css_content.clone())
+            .await
+            .unwrap();
+
+        // Step 2: Build and sign manifest
+        let asset_paths = vec![
+            ("index.html".to_string(), html_hash),
+            ("style.css".to_string(), css_hash),
+        ];
+
+        let mut manifest = publisher
+            .build_manifest(&pk, 1, asset_paths.clone())
+            .await
+            .unwrap();
+
+        // Sign the manifest with ML-DSA
+        manifest.sign(&sk).expect("Failed to sign manifest");
+
+        // Verify signature works
+        manifest.verify().expect("Signature verification failed");
+
+        // Store signed manifest back in publisher
+        {
+            let mut current_manifest = publisher.manifest.write().await;
+            *current_manifest = Some(manifest.clone());
+        }
+
+        // Step 3: Simulate fetcher requesting manifest
+        let manifest_request = SiteRequest::GetManifest {
+            site_id: site_id.clone(),
+        };
+        let manifest_request_bytes = bincode::serialize(&manifest_request).unwrap();
+
+        let manifest_response_bytes = publisher
+            .handle_request(Bytes::from(manifest_request_bytes))
+            .await
+            .unwrap();
+
+        let manifest_response: SiteResponse =
+            bincode::deserialize(&manifest_response_bytes).unwrap();
+
+        // Step 4: Verify manifest response
+        let fetched_manifest = match manifest_response {
+            SiteResponse::Manifest(m) => m,
+            _ => panic!("Expected Manifest response"),
+        };
+
+        assert_eq!(fetched_manifest.site_id, site_id);
+        assert_eq!(fetched_manifest.manifest_version, 1);
+        assert_eq!(fetched_manifest.blocks.len(), 2);
+        assert_eq!(fetched_manifest.root_hash, manifest.root_hash);
+
+        // Verify signature on fetched manifest
+        fetched_manifest
+            .verify()
+            .expect("Fetched manifest signature verification failed");
+
+        // Step 5: Fetch blocks
+        for (path, hash) in &fetched_manifest.blocks {
+            let block_request = SiteRequest::GetBlock { hash: *hash };
+            let block_request_bytes = bincode::serialize(&block_request).unwrap();
+
+            let block_response_bytes = publisher
+                .handle_request(Bytes::from(block_request_bytes))
+                .await
+                .unwrap();
+
+            let block_response: SiteResponse = bincode::deserialize(&block_response_bytes).unwrap();
+
+            let fetched_block = match block_response {
+                SiteResponse::Block(b) => b,
+                _ => panic!("Expected Block response"),
+            };
+
+            // Verify block hash
+            assert!(fetched_block.verify(), "Block hash verification failed");
+            assert_eq!(fetched_block.hash, *hash);
+
+            // Verify content
+            if path == "index.html" {
+                assert_eq!(fetched_block.content, html_content);
+            } else if path == "style.css" {
+                assert_eq!(fetched_block.content, css_content);
+            }
+        }
+
+        // Success! Full pipeline works:
+        // ✓ Publisher created content
+        // ✓ Manifest signed with ML-DSA
+        // ✓ Manifest fetched and signature verified
+        // ✓ Blocks fetched and hashes verified
+        // ✓ Content matches original
     }
 }

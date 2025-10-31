@@ -411,6 +411,38 @@ pub async fn gossip_recover_from_favourite(
 
 // ===== Saorsa Sites Commands (SPEC2.md §5 - Rendezvous Protocol) =====
 
+/// Resolve four-words to SiteId
+///
+/// Uses NameRegistry to resolve human-memorable four-word addresses to cryptographic SiteIds.
+///
+/// # Arguments
+/// * `four_words` - Four-word address (e.g., "ocean-forest-moon-star")
+///
+/// # Returns
+/// * `Ok(Some(hex_string))` - SiteId as hex string if found
+/// * `Ok(None)` - Name not registered
+/// * `Err` - Internal error
+#[tauri::command]
+pub async fn gossip_name_resolve(
+    state: tauri::State<'_, GossipState>,
+    four_words: String,
+) -> Result<Option<String>, String> {
+    let guard = state.read().await;
+    let ctx = guard.as_ref().ok_or("GossipContext not initialized")?;
+
+    // Access the NameRegistry from GossipContext
+    let name_registry = ctx
+        .name_registry
+        .as_ref()
+        .ok_or("NameRegistry not initialized")?;
+
+    // Resolve four-words to SiteId
+    match name_registry.resolve(&four_words).await {
+        Some(site_id) => Ok(Some(hex::encode(site_id.as_bytes()))),
+        None => Ok(None),
+    }
+}
+
 /// Publish a site with assets
 
 #[tauri::command]
@@ -441,11 +473,29 @@ pub async fn gossip_site_publish(
         asset_paths.push((asset.path, hash));
     }
 
+    // Get ML-DSA-65 signing keys from GossipContext
+    // This converts from saorsa_gossip_identity types to saorsa_pqc types
+    let (public_key, private_key) = ctx
+        .get_sites_signing_keys()
+        .map_err(|e| format!("Failed to get signing keys: {}", e))?;
+
     // Build manifest with version 1 and collected asset paths
-    let manifest = publisher
-        .build_manifest(1, asset_paths)
+    let mut manifest = publisher
+        .build_manifest(&public_key, 1, asset_paths)
         .await
         .map_err(|e| format!("Failed to build manifest: {}", e))?;
+
+    // Sign the manifest with ML-DSA-65
+    // CRITICAL: Must sign before storing - fetchers will verify the signature!
+    manifest
+        .sign(&private_key)
+        .map_err(|e| format!("Failed to sign manifest: {}", e))?;
+
+    // Store the signed manifest
+    publisher
+        .set_manifest(manifest.clone())
+        .await
+        .map_err(|e| format!("Failed to store manifest: {}", e))?;
 
     // Return site_id as hex
     Ok(hex::encode(manifest.site_id.as_bytes()))

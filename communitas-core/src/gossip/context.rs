@@ -88,6 +88,16 @@ pub struct GossipContext {
     /// Site fetcher for discovering and fetching sites
     pub site_fetcher: Option<Arc<super::sites::SiteFetcher>>,
 
+    /// Sites protocol listener (routes incoming requests to publisher)
+    pub sites_listener: Option<Arc<super::sites_listener::SitesListener>>,
+
+    /// Sites listener task handle
+    #[allow(dead_code)]
+    sites_listener_handle: Option<tokio::task::JoinHandle<()>>,
+
+    /// Name registry for DNS-free name resolution (four-words → SiteId)
+    pub name_registry: Option<Arc<super::name_record::NameRegistry>>,
+
     /// Local peer ID
     pub peer_id: PeerId,
 
@@ -257,7 +267,63 @@ impl GossipContext {
         let site_publisher = Arc::new(super::sites::SitePublisher::new(site_id));
 
         // Create SiteFetcher with transport access via rendezvous
-        let site_fetcher = Arc::new(super::sites::SiteFetcher::new(rendezvous.clone()));
+        // 13. Sites protocol uses DEDICATED transport (separate from main gossip)
+        // CRITICAL: Main transport is shared by Membership, PubSub, Presence.
+        // Sites needs its own transport to avoid conflicts.
+        //
+        // BOTH SitesListener AND SiteFetcher will share this dedicated Sites transport.
+        let (sites_listener, site_fetcher) = {
+            // Create and bind dedicated transport for Sites protocol
+            let sites_config = saorsa_gossip_transport::TransportConfig::default();
+            let sites_transport =
+                Arc::new(saorsa_gossip_transport::QuicTransport::new(sites_config));
+
+            // Bind Sites transport to a port (offset from main port to avoid conflict)
+            if let Some(main_port) = listen_port {
+                let sites_port = main_port + 1; // Main on 5000, Sites on 5001
+                let local_ip = local_ip_address::local_ip()
+                    .context("Failed to get local IP for Sites transport")?;
+                let sites_addr = std::net::SocketAddr::new(local_ip, sites_port);
+
+                info!("Binding Sites transport to {}", sites_addr);
+                sites_transport
+                    .listen(sites_addr)
+                    .await
+                    .context("Failed to bind Sites transport")?;
+            }
+
+            // Convert to SharedTransport for clean sharing
+            let sites_shared: super::transport_types::SharedTransport = sites_transport.clone();
+
+            // Create SitesListener with Sites transport
+            let listener = Arc::new(super::sites_listener::SitesListener::new(
+                sites_shared.clone(),
+                Some(site_publisher.clone()),
+            ));
+
+            // Create SiteFetcher with SAME Sites transport
+            let mut fetcher = super::sites::SiteFetcher::new_with_shared_transport(
+                rendezvous.clone(),
+                sites_shared.clone(),
+            );
+
+            // Create SitesDispatcher to coordinate listener and fetcher
+            let dispatcher = Arc::new(super::sites_dispatcher::SitesDispatcher::new(
+                sites_transport.clone(),
+                listener.clone(),
+            ));
+
+            // Wire fetcher to use dispatcher for response routing
+            fetcher.set_dispatcher(dispatcher.clone());
+            let fetcher = Arc::new(fetcher);
+
+            // Start dispatcher's receive loop (single loop, no race conditions)
+            let handle = dispatcher.clone().start();
+
+            tracing::info!("Sites dispatcher started with listener and fetcher");
+
+            ((listener, handle), fetcher)
+        };
 
         // 14. Initialize connectivity watchdog (Phase 2 TDD - MESH_CAPABILITIES.md §3.2)
         let watchdog_config = WatchdogConfig::default();
@@ -287,6 +353,9 @@ impl GossipContext {
             rendezvous,
             site_publisher: Some(site_publisher),
             site_fetcher: Some(site_fetcher),
+            sites_listener: Some(sites_listener.0),
+            sites_listener_handle: Some(sites_listener.1),
+            name_registry: Some(Arc::new(super::name_record::NameRegistry::new())),
             peer_id,
             watchdog,
             resource_limits,
@@ -301,6 +370,62 @@ impl GossipContext {
     /// Get four-word address
     pub fn four_words(&self) -> &str {
         &self.four_words
+    }
+
+    /// Get ML-DSA-65 keypair for Sites protocol (signing manifests and name records)
+    ///
+    /// Converts from saorsa_gossip_identity types to saorsa_pqc::ml_dsa_65 types
+    /// required by SiteManifest.sign() and NameRecord.sign().
+    ///
+    /// # Returns
+    /// (PublicKey, PrivateKey) compatible with Sites signing operations
+    pub fn get_sites_signing_keys(
+        &self,
+    ) -> Result<(
+        saorsa_pqc::ml_dsa_65::PublicKey,
+        saorsa_pqc::ml_dsa_65::PrivateKey,
+    )> {
+        use fips204::traits::SerDes;
+
+        let kp = self.identity.key_pair();
+
+        // Get public key bytes (ML-DSA-65 public key is 1952 bytes)
+        let pub_bytes = kp.public_key();
+        let pk_array: [u8; 1952] = pub_bytes.try_into().map_err(|_| {
+            anyhow::anyhow!(
+                "Public key should be 1952 bytes for ML-DSA-65, got {}",
+                pub_bytes.len()
+            )
+        })?;
+        let public_key = saorsa_pqc::ml_dsa_65::PublicKey::try_from_bytes(pk_array)
+            .map_err(|e| anyhow::anyhow!("Failed to parse public key: {}", e))?;
+
+        // Get secret key using typed method
+        let secret_key_typed = kp
+            .get_secret_key_typed()
+            .map_err(|e| anyhow::anyhow!("Failed to get typed secret key: {}", e))?;
+
+        // The secret_key_typed is saorsa_pqc::pqc::types::MlDsaSecretKey
+        // We need saorsa_pqc::ml_dsa_65::PrivateKey
+        // Get bytes and convert (ML-DSA-65 secret key is 4032 bytes)
+        let sk_bytes = secret_key_typed.as_bytes();
+        let sk_array: [u8; 4032] = sk_bytes
+            .try_into()
+            .map_err(|_| anyhow::anyhow!("Secret key should be 4032 bytes for ML-DSA-65"))?;
+        let private_key = saorsa_pqc::ml_dsa_65::PrivateKey::try_from_bytes(sk_array)
+            .map_err(|e| anyhow::anyhow!("Failed to parse private key: {}", e))?;
+
+        Ok((public_key, private_key))
+    }
+
+    /// Get the raw identity MlDsaKeyPair for ProviderSummary signing
+    pub fn get_identity_keypair(&self) -> &saorsa_gossip_identity::MlDsaKeyPair {
+        self.identity.key_pair()
+    }
+
+    /// Get the identity reference for direct access
+    pub fn identity(&self) -> &Identity {
+        &self.identity
     }
 
     /// Check if WAN (wide-area network) operations should be attempted
@@ -747,6 +872,29 @@ impl GossipContext {
         let online_peers = presence.get_online_peers(topic_id).await;
 
         Ok(online_peers)
+    }
+
+    /// Establish peer routing for Sites transport
+    ///
+    /// The Sites protocol uses a dedicated transport that needs its own peer routing.
+    /// This method primes the Sites transport's peer routing table by sending a dummy message.
+    pub async fn establish_sites_peer_routing(&self, peer_id: PeerId) -> Result<()> {
+        if let Some(ref listener) = self.sites_listener {
+            // Send empty ping to establish route in Sites transport
+            listener
+                .transport()
+                .send_to_peer(
+                    peer_id,
+                    saorsa_gossip_transport::StreamType::Bulk,
+                    bytes::Bytes::from_static(b""),
+                )
+                .await
+                .context("Failed to establish Sites peer routing")?;
+            debug!("Established Sites peer routing to {:?}", peer_id);
+        } else {
+            warn!("Sites listener not available - cannot establish peer routing");
+        }
+        Ok(())
     }
 }
 

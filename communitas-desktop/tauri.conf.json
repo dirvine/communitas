@@ -4,9 +4,9 @@
   "version": "0.1.17",
   "identifier": "com.saorsalabs.communitas",
   "build": {
-    "beforeDevCommand": "npm run build && npm run dev:frontend",
+    "beforeDevCommand": "cd .. && npm run build && npm run dev:frontend",
     "devUrl": "http://localhost:5173",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "cd .. && npm run build",
     "frontendDist": "../dist"
   },
   "app": {

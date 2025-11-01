@@ -18,7 +18,7 @@ jobs:
         env:
           TAG_REF: ${{ github.ref }}
         with:
-          github-token: ${{ secrets.GH_RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const tag = process.env.TAG_REF.replace('refs/tags/','');
             const owner = context.repo.owner;

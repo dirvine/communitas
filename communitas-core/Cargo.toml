@@ -97,6 +97,10 @@ dirs = "5.0"
 # Secure storage (platform-specific)
 keyring = "3.2"
 
+# Windows-specific dependencies
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_Security_Credentials"] }
+
 # Local dependencies
 
 

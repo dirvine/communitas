@@ -88,4 +88,5 @@ jobs:
           TAURI_UPDATER_PUBKEY: ${{ secrets.TAURI_UPDATER_PUBKEY }}
         with:
           releaseId: ${{ inputs.release_id }}
-          args: -c communitas-desktop/tauri.conf.json ${{ matrix.args }}
+          projectPath: communitas-desktop
+          args: ${{ matrix.args }}

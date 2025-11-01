@@ -96,11 +96,10 @@ jobs:
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: communitas-desktop -> target
+          workspaces: . -> target
 
       - name: Build Tauri app
-        run: |
-          cd communitas-desktop && npm run tauri build
+        run: npm run tauri:build
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}

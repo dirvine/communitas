@@ -103,7 +103,7 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         with:
           releaseId: ${{ needs.create-release.outputs.release_id }}
-          tauriScript: npm run tauri -- -c communitas-desktop/tauri.conf.json
+          args: -c communitas-desktop/tauri.conf.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}

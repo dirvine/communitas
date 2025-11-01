@@ -99,9 +99,8 @@ jobs:
           workspaces: communitas-desktop -> target
 
       - name: Build Tauri app
-        working-directory: ./communitas-desktop
         run: |
-          npm run tauri build
+          cd communitas-desktop && npm run tauri build
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}

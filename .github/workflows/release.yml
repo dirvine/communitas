@@ -67,6 +67,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Get version
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -95,14 +99,23 @@ jobs:
           workspaces: communitas-desktop -> target
 
       - name: Build Tauri app
-        uses: tauri-apps/tauri-action@v0.5
+        working-directory: ./communitas-desktop
+        run: |
+          npm run tauri build
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        with:
-          releaseId: ${{ needs.create-release.outputs.release_id }}
-          projectPath: ./communitas-desktop
+
+      - name: Upload Release Assets
+        run: |
+          # Upload built artifacts to release
+          # Find all built Tauri bundles
+          for file in $(find communitas-desktop/target/release/bundle -type f \( -name "*.deb" -o -name "*.AppImage" -o -name "*.dmg" -o -name "*.app.tar.gz" -o -name "*.msi" \)); do
+            gh release upload v${{ steps.get_version.outputs.VERSION }} "$file" --clobber
+          done
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   publish-release:
     needs: [create-release, build-tauri]

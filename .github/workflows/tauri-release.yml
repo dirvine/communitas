@@ -73,10 +73,10 @@ jobs:
       - name: Build frontend
         run: npm run build
 
-      - name: Build Tauri App
+      - name: Build Tauri App  
         working-directory: communitas-desktop
         run: |
-          cargo tauri build ${{ matrix.args }}
+          npx tauri build ${{ matrix.args }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}

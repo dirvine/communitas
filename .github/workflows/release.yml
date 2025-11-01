@@ -1,9 +1,11 @@
-name: Release
+name: Release (DEPRECATED - Use release-headless.yml)
 
 on:
-  push:
-    tags:
-      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Manual release trigger (prefer release-headless.yml)'
+        required: false
 
 env:
   CARGO_TERM_COLOR: always

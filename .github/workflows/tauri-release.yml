@@ -1,14 +1,16 @@
-name: Tauri Desktop Release
+name: Tauri Desktop Release (Reusable)
 
 on:
-  push:
-    tags:
-      - 'v*'
-  workflow_dispatch:
+  workflow_call:
     inputs:
-      version:
-        description: 'Version to release'
+      release_id:
+        description: 'GitHub release ID to attach artifacts to'
+        required: true
+        type: string
+      tag:
+        description: 'Version tag'
         required: false
+        type: string
 
 permissions:
   contents: write
@@ -68,30 +70,22 @@ jobs:
       - name: Install frontend dependencies
         run: npm install
 
+      - name: Build frontend
+        run: npm run build
+
       - name: Build Tauri App
         uses: tauri-apps/tauri-action@v0
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          # Map secrets to Tauri config environment variables
           TAURI_MACOS_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           TAURI_WINDOWS_CERTIFICATE_THUMBPRINT: ${{ secrets.WINDOWS_CERTIFICATE_THUMBPRINT }}
           TAURI_UPDATER_PUBKEY: ${{ secrets.TAURI_UPDATER_PUBKEY }}
         with:
-          args: ${{ matrix.args }}
-
-  publish-release:
-    needs: build-tauri
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Publish release
-        run: |
-          echo "Tauri desktop app builds completed successfully!"
-          echo "Note: Release publishing is handled by the release-headless.yml workflow"
+          releaseId: ${{ inputs.release_id }}
+          args: -c communitas-desktop/tauri.conf.json ${{ matrix.args }}

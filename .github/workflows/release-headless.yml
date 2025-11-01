@@ -11,6 +11,10 @@ on:
         required: false
         default: 'latest'
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: write
 
@@ -204,11 +208,21 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GH_RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
 
+  build-desktop:
+    permissions:
+      contents: write
+    needs: create-release
+    uses: ./.github/workflows/tauri-release.yml
+    secrets: inherit
+    with:
+      release_id: ${{ needs.create-release.outputs.release_id }}
+      tag: ${{ needs.create-release.outputs.version }}
+
   publish-release:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     permissions:
       contents: write
-    needs: [create-release, build-linux, build-macos]
+    needs: [create-release, build-linux, build-macos, build-desktop]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

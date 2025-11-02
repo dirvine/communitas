@@ -97,9 +97,10 @@ jobs:
 
       - name: Find and upload artifacts to release
         if: inputs.release_id != ''
+        working-directory: communitas-desktop
         run: |
-          cd communitas-desktop/target/release/bundle
-          find . -type f \( -name "*.deb" -o -name "*.AppImage" -o -name "*.dmg" -o -name "*.app" -o -name "*.msi" -o -name "*.exe" \) -exec echo "Found: {}" \;
+          cd target/release/bundle
+          find . -type f \( -name "*.deb" -o -name "*.AppImage" -o -name "*.dmg" -o -name "*.app*" -o -name "*.msi" -o -name "*.exe" -o -name "*.sig" \) -exec echo "Found: {}" \;
         shell: bash
       
       - name: Upload Linux artifacts
@@ -121,6 +122,7 @@ jobs:
           files: |
             communitas-desktop/target/release/bundle/dmg/*.dmg
             communitas-desktop/target/release/bundle/macos/*.app.tar.gz
+            communitas-desktop/target/release/bundle/macos/*.app.tar.gz.sig
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

@@ -76,9 +76,6 @@
           "args": true
         }
       ]
-    },
-    "updater": {
-      "active": false
     }
   }
 }

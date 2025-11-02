@@ -1484,6 +1484,7 @@ dependencies = [
  "url",
  "uuid",
  "validator",
+ "windows-sys 0.59.0",
  "yrs",
  "zeroize",
 ]

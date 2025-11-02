@@ -43,6 +43,9 @@ jobs:
         with:
           targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2.0.0" --locked
+
       - name: Install dependencies (Ubuntu)
         if: matrix.platform == 'ubuntu-22.04'
         run: |
@@ -75,7 +78,7 @@ jobs:
 
       - name: Build Tauri App (unsigned for testing)
         run: |
-          cd communitas-desktop && npx tauri build ${{ matrix.args }}
+          cd communitas-desktop && cargo tauri build ${{ matrix.args }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Code signing temporarily disabled for testing

@@ -77,9 +77,8 @@ jobs:
         run: npm run build
 
       - name: Build Tauri App (unsigned for testing)
-        shell: bash
         run: |
-          cd communitas-desktop && cargo tauri build ${{ matrix.args }}
+          cargo tauri build --manifest-path communitas-desktop/Cargo.toml ${{ matrix.args }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Code signing temporarily disabled for testing

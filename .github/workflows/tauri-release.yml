@@ -77,8 +77,9 @@ jobs:
         run: npm run build
 
       - name: Build Tauri App
+        working-directory: communitas-desktop
         run: |
-          cargo tauri build --manifest-path communitas-desktop/Cargo.toml ${{ matrix.args }}
+          cargo tauri build ${{ matrix.args }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Updater signing (REQUIRED for auto-updates)

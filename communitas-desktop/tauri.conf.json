@@ -59,12 +59,12 @@
       "exceptionDomain": null,
       "frameworks": [],
       "providerShortName": null,
-      "signingIdentity": "$TAURI_MACOS_SIGNING_IDENTITY"
+      "signingIdentity": null
     },
     "windows": {
-      "certificateThumbprint": "$TAURI_WINDOWS_CERTIFICATE_THUMBPRINT",
+      "certificateThumbprint": null,
       "digestAlgorithm": "sha256",
-      "timestampUrl": "http://timestamp.digicert.com"
+      "timestampUrl": ""
     }
   },
   "plugins": {

@@ -78,12 +78,7 @@
       ]
     },
     "updater": {
-      "active": true,
-      "endpoints": [
-        "https://github.com/dirvine/communitas/releases/latest/download/latest.json"
-      ],
-      "dialog": true,
-      "pubkey": "$TAURI_UPDATER_PUBKEY"
+      "active": false
     }
   }
 }

@@ -122,13 +122,14 @@ jobs:
 
       - name: Upload macOS artifacts
         if: inputs.release_id != '' && matrix.platform == 'macos-latest'
+        working-directory: communitas-desktop
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ inputs.tag }}
           files: |
-            communitas-desktop/target/universal-apple-darwin/release/bundle/dmg/*.dmg
-            communitas-desktop/target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz
-            communitas-desktop/target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz.sig
+            target/universal-apple-darwin/release/bundle/dmg/*.dmg
+            target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz
+            target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz.sig
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

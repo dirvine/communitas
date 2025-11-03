@@ -95,10 +95,18 @@ jobs:
           # TAURI_MACOS_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           # TAURI_WINDOWS_CERTIFICATE_THUMBPRINT: ${{ secrets.WINDOWS_CERTIFICATE_THUMBPRINT }}
 
-      - name: Find and upload artifacts to release
+      - name: Find artifacts
         if: inputs.release_id != ''
         run: |
-          find communitas-desktop/target -type f \( -name "*.deb" -o -name "*.AppImage" -o -name "*.dmg" -o -name "*.app.tar.gz*" -o -name "*.msi" -o -name "*.exe" -o -name "*.sig" \) -exec echo "Found: {}" \;
+          echo "Searching for artifacts..."
+          if [ -d "communitas-desktop/target/universal-apple-darwin" ]; then
+            echo "Universal build detected"
+            find communitas-desktop/target/universal-apple-darwin/release/bundle -type f 2>/dev/null || true
+          fi
+          if [ -d "communitas-desktop/target/release" ]; then
+            echo "Standard build detected"
+            find communitas-desktop/target/release/bundle -type f 2>/dev/null || true
+          fi
         shell: bash
       
       - name: Upload Linux artifacts

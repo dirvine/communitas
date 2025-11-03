@@ -95,18 +95,15 @@ jobs:
           # TAURI_MACOS_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           # TAURI_WINDOWS_CERTIFICATE_THUMBPRINT: ${{ secrets.WINDOWS_CERTIFICATE_THUMBPRINT }}
 
-      - name: Find artifacts
+      - name: List artifacts for debugging
         if: inputs.release_id != ''
         run: |
-          echo "Searching for artifacts..."
-          if [ -d "communitas-desktop/target/universal-apple-darwin" ]; then
-            echo "Universal build detected"
-            find communitas-desktop/target/universal-apple-darwin/release/bundle -type f 2>/dev/null || true
-          fi
-          if [ -d "communitas-desktop/target/release" ]; then
-            echo "Standard build detected"
-            find communitas-desktop/target/release/bundle -type f 2>/dev/null || true
-          fi
+          echo "=== Listing all bundle files ==="
+          ls -la communitas-desktop/target/*/release/bundle/*/ 2>/dev/null || true
+          ls -la communitas-desktop/target/release/bundle/*/ 2>/dev/null || true
+          echo "=== Checking specific patterns ==="
+          ls -la communitas-desktop/target/universal-apple-darwin/release/bundle/dmg/ 2>/dev/null || echo "No dmg dir"
+          ls -la communitas-desktop/target/universal-apple-darwin/release/bundle/macos/ 2>/dev/null || echo "No macos dir"
         shell: bash
       
       - name: Upload Linux artifacts

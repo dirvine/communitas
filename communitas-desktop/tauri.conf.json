@@ -59,7 +59,7 @@
       "exceptionDomain": null,
       "frameworks": [],
       "providerShortName": null,
-      "signingIdentity": null
+      "signingIdentity": "$TAURI_SIGNING_IDENTITY"
     },
     "windows": {
       "certificateThumbprint": null,

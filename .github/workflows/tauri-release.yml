@@ -60,7 +60,12 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev \
             libsoup-3.0-dev \
-            pkg-config
+            pkg-config \
+            appstream \
+            desktop-file-utils \
+            patchelf \
+            zsync \
+            squashfs-tools
           sudo apt-get install -y libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev \
             || sudo apt-get install -y libwebkit2gtk-4.0-dev libjavascriptcoregtk-4.0-dev
 
@@ -84,9 +89,9 @@ jobs:
         run: npm run build
 
       - name: Build Tauri App
-        working-directory: communitas-desktop
         run: |
-          cargo tauri build ${{ matrix.args }}
+          CARGO_TARGET_DIR=$GITHUB_WORKSPACE/target \
+          cargo --manifest-path communitas-desktop/Cargo.toml tauri build ${{ matrix.args }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Updater signing (REQUIRED for auto-updates)
@@ -121,8 +126,8 @@ jobs:
         with:
           tag_name: ${{ inputs.tag }}
           files: |
-            communitas-desktop/target/release/bundle/deb/*.deb
-            communitas-desktop/target/release/bundle/appimage/*.AppImage
+            target/release/bundle/deb/*.deb
+            target/release/bundle/appimage/*.AppImage
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

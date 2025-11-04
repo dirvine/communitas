@@ -7,7 +7,6 @@ members = [
     "communitas-bridge",  # Enabled for browser testing
     "communitas-tui", "communitas-p2p-test",
 ]
-default-members = ["communitas-desktop"]
 
 [workspace.package]
 version = "0.1.20"

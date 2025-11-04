@@ -105,7 +105,7 @@ jobs:
         shell: bash
         run: |
           cd communitas-desktop
-          cargo tauri build ${{ matrix.args }} --verbose
+          cargo tauri build --verbose -- -p communitas ${{ matrix.args }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Updater signing (REQUIRED for auto-updates)

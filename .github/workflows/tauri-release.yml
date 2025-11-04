@@ -99,7 +99,7 @@ jobs:
         shell: bash
         run: |
           cd communitas-desktop
-          cargo fetch --locked
+          cargo fetch
 
       - name: Build Tauri App
         shell: bash

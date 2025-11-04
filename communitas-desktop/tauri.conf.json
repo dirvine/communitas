@@ -58,8 +58,7 @@
       "entitlements": "Communitas.entitlements",
       "exceptionDomain": null,
       "frameworks": [],
-      "providerShortName": null,
-      "signingIdentity": "$TAURI_SIGNING_IDENTITY"
+      "providerShortName": null
     },
     "windows": {
       "certificateThumbprint": null,

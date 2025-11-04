@@ -88,6 +88,21 @@ jobs:
       - name: Build frontend
         run: npm run build
 
+      - name: Diagnostic - Check environment
+        shell: bash
+        run: |
+          echo "=== Rust/Cargo Versions ==="
+          rustc -Vv
+          cargo -V
+          cargo tauri -V
+          echo "=== Workspace Detection ==="
+          cd communitas-desktop
+          cargo locate-project --workspace
+          echo "=== Package Metadata ==="
+          cargo metadata --no-deps --format-version 1 | jq '.packages[] | select(.name=="communitas") | {name, edition, manifest_path}'
+          echo "=== Quick Check ==="
+          cargo check --lib 2>&1 | head -20
+
       - name: Build Tauri App
         shell: bash
         run: |

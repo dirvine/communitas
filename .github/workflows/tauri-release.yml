@@ -98,12 +98,13 @@ jobs:
       - name: List artifacts for debugging
         if: inputs.release_id != ''
         run: |
-          echo "=== Listing all bundle files ==="
-          ls -la communitas-desktop/target/*/release/bundle/*/ 2>/dev/null || true
-          ls -la communitas-desktop/target/release/bundle/*/ 2>/dev/null || true
-          echo "=== Checking specific patterns ==="
-          ls -la communitas-desktop/target/universal-apple-darwin/release/bundle/dmg/ 2>/dev/null || echo "No dmg dir"
-          ls -la communitas-desktop/target/universal-apple-darwin/release/bundle/macos/ 2>/dev/null || echo "No macos dir"
+          echo "=== Listing from repo root ==="
+          ls -la target/*/release/bundle/*/ 2>/dev/null || echo "No target/ in root"
+          echo "=== Listing from communitas-desktop ==="
+          ls -la communitas-desktop/target/*/release/bundle/*/ 2>/dev/null || echo "No target/ in communitas-desktop"
+          echo "=== Checking universal-apple-darwin (root) ==="
+          ls -la target/universal-apple-darwin/release/bundle/dmg/ 2>/dev/null || echo "No dmg in root target/"
+          ls -la target/universal-apple-darwin/release/bundle/macos/ 2>/dev/null || echo "No macos in root target/"
         shell: bash
       
       - name: Upload Linux artifacts

@@ -88,26 +88,24 @@ jobs:
       - name: Build frontend
         run: npm run build
 
-      - name: Diagnostic - Check environment
+      - name: Clean Cargo cache
         shell: bash
         run: |
-          echo "=== Rust/Cargo Versions ==="
-          rustc -Vv
-          cargo -V
-          cargo tauri -V
-          echo "=== Workspace Detection ==="
+          echo "Cleaning Cargo artifacts..."
+          rm -rf target
+          cd communitas-desktop && cargo clean
+
+      - name: Fetch dependencies explicitly
+        shell: bash
+        run: |
           cd communitas-desktop
-          cargo locate-project --workspace
-          echo "=== Package Metadata ==="
-          cargo metadata --no-deps --format-version 1 | jq '.packages[] | select(.name=="communitas") | {name, edition, manifest_path}'
-          echo "=== Quick Check ==="
-          cargo check --lib 2>&1 | head -20
+          cargo fetch --locked
 
       - name: Build Tauri App
         shell: bash
         run: |
           cd communitas-desktop
-          cargo tauri build ${{ matrix.args }}
+          cargo tauri build ${{ matrix.args }} --verbose
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Updater signing (REQUIRED for auto-updates)

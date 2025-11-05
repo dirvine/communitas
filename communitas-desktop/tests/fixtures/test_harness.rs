@@ -9,8 +9,8 @@
 //! Provides `TestFixture` and builder utilities for creating test environments
 //! with CoreContext, AppState, and temporary storage.
 
-use communitas_desktop::commands::auth::AppState;
 use communitas_core::{CoreContext, types::DeviceType};
+use communitas_desktop::commands::auth::AppState;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;

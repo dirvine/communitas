@@ -186,10 +186,14 @@ jobs:
       - name: Check Rust code formatting
         run: cargo fmt --check --all
 
+      - name: Build dependencies
+        run: cargo check --workspace --all-features
+
       - name: Run Clippy (security lints)
         run: |
           # Run clippy on library and binary targets only (excluding tests where unwrap/expect are allowed per CLAUDE.md)
-          cargo clippy --workspace --lib --bins --all-features -- \
+          # Note: Using --workspace instead of --lib --bins to avoid dependency resolution issues
+          cargo clippy --workspace --all-features -- \
             -D warnings \
             -D clippy::unwrap_used \
             -D clippy::expect_used \

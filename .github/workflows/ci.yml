@@ -109,6 +109,9 @@ jobs:
       - name: Rust fmt check
         run: cargo fmt --all -- --check
 
+      - name: Build dependencies
+        run: cargo check --workspace --all-features
+
       - name: Rust clippy policy
         run: |
           # Run clippy with practical checks

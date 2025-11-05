@@ -5,6 +5,7 @@
 // Tracks performance metrics, errors, and usage statistics for observability
 
 use serde::{Deserialize, Serialize};
+use serde_json;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};

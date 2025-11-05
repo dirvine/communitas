@@ -8,12 +8,11 @@
 fn main() {
     // WORKAROUND: tauri-build 2.5.1 expects DEP_TAURI_DEV env var
     // This should be set by tauri's build script, but it doesn't propagate
-    // to build dependencies. Setting directly is safe in build.rs single-threaded context.
-    // Remove this when tauri-build 2.9+ is published to crates.io.
-    // Note: unsafe required but this is safe - build.rs is single-threaded
-    unsafe {
-        std::env::set_var("DEP_TAURI_DEV", "false");
-    }
+    // to build dependencies. Using cargo:rustc-env instead of unsafe std::env::set_var
+    // to avoid potential issues in CI environments.
+    // Note: tauri-build versions follow different numbering than main tauri crate.
+    // Latest tauri-build is 2.5.1 (as of 2025-11-05), not synchronized with tauri 2.9.x
+    println!("cargo:rustc-env=DEP_TAURI_DEV=false");
 
     tauri_build::build();
 }

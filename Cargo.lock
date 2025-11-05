@@ -1351,50 +1351,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "communitas-desktop"
-version = "0.1.20"
-dependencies = [
- "anyhow",
- "base64 0.22.1",
- "blake3",
- "chrono",
- "communitas-core",
- "dirs 5.0.1",
- "four-word-networking",
- "hex",
- "lazy_static",
- "libsql",
- "mime_guess",
- "once_cell",
- "rand 0.8.5",
- "rustls 0.23.34",
- "rustls-pemfile",
- "saorsa-gossip-identity",
- "saorsa-gossip-membership",
- "saorsa-gossip-pubsub",
- "saorsa-gossip-transport",
- "saorsa-gossip-types",
- "saorsa-webrtc-codecs",
- "saorsa-webrtc-core",
- "security-framework 2.11.1",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-dialog",
- "tauri-plugin-log",
- "tauri-plugin-updater",
- "tempfile",
- "thiserror 1.0.69",
- "tokio",
- "toml 0.8.2",
- "tracing",
- "tracing-subscriber",
- "uuid",
- "yrs",
-]
-
-[[package]]
 name = "communitas-bridge"
 version = "0.1.20"
 dependencies = [
@@ -1487,6 +1443,50 @@ dependencies = [
  "windows-sys 0.59.0",
  "yrs",
  "zeroize",
+]
+
+[[package]]
+name = "communitas-desktop"
+version = "0.1.20"
+dependencies = [
+ "anyhow",
+ "base64 0.22.1",
+ "blake3",
+ "chrono",
+ "communitas-core",
+ "dirs 5.0.1",
+ "four-word-networking",
+ "hex",
+ "lazy_static",
+ "libsql",
+ "mime_guess",
+ "once_cell",
+ "rand 0.8.5",
+ "rustls 0.23.34",
+ "rustls-pemfile",
+ "saorsa-gossip-identity",
+ "saorsa-gossip-membership",
+ "saorsa-gossip-pubsub",
+ "saorsa-gossip-transport",
+ "saorsa-gossip-types",
+ "saorsa-webrtc-codecs",
+ "saorsa-webrtc-core",
+ "security-framework 2.11.1",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-dialog",
+ "tauri-plugin-log",
+ "tauri-plugin-updater",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+ "toml 0.8.2",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+ "yrs",
 ]
 
 [[package]]

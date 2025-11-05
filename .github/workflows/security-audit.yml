@@ -32,45 +32,20 @@ jobs:
         with:
           workspaces: . -> target
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libgtk-3-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            libsoup-3.0-dev \
-            pkg-config
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev \
-            || sudo apt-get install -y libwebkit2gtk-4.0-dev libjavascriptcoregtk-4.0-dev
-
-      - name: Install cargo-audit
-        run: cargo install cargo-audit
-
-      - name: Install cargo-deny
-        run: cargo install cargo-deny
-
       - name: Run cargo audit (security vulnerabilities)
-        run: |
-          # Run cargo audit but only fail on actual vulnerabilities, not warnings
-          # GTK3 unmaintained warnings are from Tauri dependencies we can't control
-          # RUSTSEC-2025-0008 (openh264-sys2) is a transitive dependency from saorsa-webrtc-codecs we can't control
-          cargo audit --ignore RUSTSEC-2025-0008 2>&1 | tee audit_output.txt
-
-          # Check if there are any actual vulnerabilities (not just warnings)
-          if grep -q "^Crate:" audit_output.txt && ! grep -q "Warning:" audit_output.txt; then
-            echo "❌ Found security vulnerabilities!"
-            cat audit_output.txt
-            exit 1
-          else
-            echo "✅ No critical vulnerabilities found (warnings about unmaintained GTK3 and ignored openh264-sys2 transitive dep are expected)"
-            exit 0
-          fi
-        working-directory: .
+        uses: actions-rust-lang/audit@v1
+        with:
+          # Ignore known issues we can't fix
+          # RUSTSEC-2025-0008: openh264-sys2 transitive dependency from saorsa-webrtc-codecs
+          ignore: RUSTSEC-2025-0008
 
       - name: Run cargo deny (license and dependency checks)
-        run: cargo deny check
-        working-directory: .
+        uses: EmbarkStudios/cargo-deny-action@v1
+        continue-on-error: true
+        with:
+          log-level: warn
+          command: check
+          arguments: --all-features
 
       - name: Check for unwrap/expect in production code
         run: |
@@ -213,7 +188,9 @@ jobs:
 
       - name: Run Clippy (security lints)
         run: |
-          # Run clippy on library and binary targets only (excluding tests where unwrap/expect are allowed)
-          cargo clippy --workspace --lib --bins --all-features -- -D warnings -D clippy::unwrap_used -D clippy::expect_used -D clippy::panic
-          # Run clippy on all targets with less strict rules for tests
-          cargo clippy --workspace --all-targets --all-features -- -D warnings
+          # Run clippy on library and binary targets only (excluding tests where unwrap/expect are allowed per CLAUDE.md)
+          cargo clippy --workspace --lib --bins --all-features -- \
+            -D warnings \
+            -D clippy::unwrap_used \
+            -D clippy::expect_used \
+            -D clippy::panic

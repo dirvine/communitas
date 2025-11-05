@@ -6,12 +6,14 @@
 // <https://www.gnu.org/licenses/agpl-3.0.html>
 
 fn main() {
-    // WORKAROUND: tauri-build 2.5.1 expects cargo:dev instruction
+    // WORKAROUND: tauri-build 2.5.1 expects DEP_TAURI_DEV env var
     // This should be set by tauri's build script, but it doesn't propagate
-    // to build dependencies. Emit the instruction directly to avoid the check.
-    // Note: tauri-build versions follow different numbering than main tauri crate.
-    // Latest tauri-build is 2.5.1 (as of 2025-11-05), not synchronized with tauri 2.9.x
-    println!("cargo:dev=false");
+    // to build dependencies. Setting directly is safe in build.rs single-threaded context.
+    // Remove this when tauri-build is updated with better env var propagation.
+    // Note: unsafe required but this is safe - build.rs is single-threaded
+    unsafe {
+        std::env::set_var("DEP_TAURI_DEV", "false");
+    }
 
     tauri_build::build();
 }

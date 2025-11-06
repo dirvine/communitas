@@ -92,18 +92,16 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev \
             || sudo apt-get install -y libwebkit2gtk-4.0-dev libjavascriptcoregtk-4.0-dev
 
-      - name: Cache Cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-          key: linux-cargo-v5-${{ hashFiles('**/Cargo.lock') }}
-
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: . -> target
+          cache-on-failure: false
 
       - name: Rust fmt check
         run: cargo fmt --all -- --check
@@ -135,13 +133,12 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
-      - name: Cache Cargo
-        uses: actions/cache@v4
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-          key: headless-v5-${{ matrix.os }}-${{ hashFiles('**/Cargo.lock') }}
+          workspaces: . -> target
+          cache-on-failure: false
+          shared-key: headless-${{ matrix.os }}
       - name: Build headless (Unix)
         if: runner.os != 'Windows'
         run: |
@@ -201,13 +198,12 @@ jobs:
             || sudo apt-get install -y libwebkit2gtk-4.0-dev libjavascriptcoregtk-4.0-dev
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
-      - name: Cache Cargo
-        uses: actions/cache@v4
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-          key: desktop-v5-${{ matrix.os }}-${{ hashFiles('**/Cargo.lock') }}
+          workspaces: . -> target
+          cache-on-failure: false
+          shared-key: desktop-${{ matrix.os }}
       - name: Build desktop (Unix)
         if: runner.os != 'Windows'
         run: |

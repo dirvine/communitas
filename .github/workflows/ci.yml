@@ -98,8 +98,7 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            target
-          key: linux-cargo-v4-${{ hashFiles('**/Cargo.lock') }}
+          key: linux-cargo-v5-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
@@ -142,8 +141,7 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            target
-          key: headless-v4-${{ matrix.os }}-${{ hashFiles('**/Cargo.lock') }}
+          key: headless-v5-${{ matrix.os }}-${{ hashFiles('**/Cargo.lock') }}
       - name: Build headless (Unix)
         if: runner.os != 'Windows'
         run: |
@@ -209,8 +207,7 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            target
-          key: desktop-v4-${{ matrix.os }}-${{ hashFiles('**/Cargo.lock') }}
+          key: desktop-v5-${{ matrix.os }}-${{ hashFiles('**/Cargo.lock') }}
       - name: Build desktop (Unix)
         if: runner.os != 'Windows'
         run: |

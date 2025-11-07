@@ -454,7 +454,7 @@ async fn test_foaf_cycle_detection() {
 #[tokio::test]
 async fn test_introducer_node_connection() {
     // GIVEN: Introducer node address with mock transport
-    let config = IntroducerConfig {
+    let _config = IntroducerConfig {
         addresses: vec!["127.0.0.1:9000".to_string()],
         timeout_secs: 10,
     };

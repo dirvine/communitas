@@ -149,7 +149,7 @@ async fn test_missing_range_repair() {
         );
 
         // Repair: sync again
-        let repair_result = sync_b
+        let _repair_result = sync_b
             .handle_sync_response(messages_a)
             .await
             .expect("repair failed");

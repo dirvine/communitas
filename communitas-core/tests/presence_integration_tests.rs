@@ -48,7 +48,7 @@ async fn test_advertise_and_discover() {
     // WHEN: Node A advertises presence
     let presence_a = {
         let node = node_a.read().await;
-        node.presence.as_ref().expect("presence not initialized")
+        node.presence.as_ref().expect("presence not initialized").clone()
     };
 
     let four_words_a = node_a.read().await.four_words.clone();
@@ -70,9 +70,9 @@ async fn test_advertise_and_discover() {
     }
 
     // THEN: Node B should discover Node A via presence
-    let presence_b = {
+    let _presence_b = {
         let node = node_b.read().await;
-        node.presence.as_ref().expect("presence not initialized")
+        node.presence.as_ref().expect("presence not initialized").clone()
     };
 
     tokio::time::sleep(Duration::from_millis(500)).await;
@@ -114,7 +114,7 @@ async fn test_presence_ttl_expiry() {
     // WHEN: Node A advertises with 1 second TTL
     let presence_a = {
         let node = node_a.read().await;
-        node.presence.as_ref().expect("presence not initialized")
+        node.presence.as_ref().expect("presence not initialized").clone()
     };
 
     let four_words_a = node_a.read().await.four_words.clone();
@@ -174,7 +174,7 @@ async fn test_multi_group_presence() {
     // Advertise in both groups
     let presence_a = {
         let node = node_a.read().await;
-        node.presence.as_ref().expect("presence not initialized")
+        node.presence.as_ref().expect("presence not initialized").clone()
     };
 
     let four_words_a = node_a.read().await.four_words.clone();

@@ -15,7 +15,6 @@ mod network_test_utils;
 use communitas_core::gossip::SiteId;
 use network_test_utils::{TestMetrics, TestNode};
 use std::time::Instant;
-use tracing_subscriber;
 
 /// Initialize tracing for tests
 fn init_tracing() {

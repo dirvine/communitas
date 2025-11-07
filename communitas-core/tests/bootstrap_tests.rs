@@ -34,7 +34,7 @@ async fn test_bootstrap_connection() {
     let harness = TestHarness::new(3).await.expect("harness creation failed");
 
     // Node 0 is bootstrap
-    let bootstrap_addrs = vec![
+    let _bootstrap_addrs = vec![
         harness
             .get_node(0)
             .await
@@ -65,7 +65,7 @@ async fn test_multiple_bootstrap_nodes() {
 
     // Nodes 0 and 1 are bootstraps
     let bootstrap_addrs = harness.get_bootstrap_addrs().await;
-    let bootstrap_list = vec![bootstrap_addrs[0].clone(), bootstrap_addrs[1].clone()];
+    let _bootstrap_list = vec![bootstrap_addrs[0].clone(), bootstrap_addrs[1].clone()];
 
     // WHEN: One bootstrap fails
     harness
@@ -79,15 +79,17 @@ async fn test_multiple_bootstrap_nodes() {
     // THEN: Nodes should connect via second bootstrap
     tokio::time::sleep(Duration::from_secs(2)).await;
 
-    let network = harness.network.read().await;
-    assert!(
-        network.are_connected(1, 2).await,
-        "Should connect via backup bootstrap"
-    );
-    assert!(
-        network.are_connected(1, 3).await,
-        "Should connect via backup bootstrap"
-    );
+    {
+        let network = harness.network.read().await;
+        assert!(
+            network.are_connected(1, 2).await,
+            "Should connect via backup bootstrap"
+        );
+        assert!(
+            network.are_connected(1, 3).await,
+            "Should connect via backup bootstrap"
+        );
+    } // network guard dropped here
 
     harness.cleanup().await.expect("cleanup failed");
 }
@@ -98,7 +100,7 @@ async fn test_bootstrap_fallback_unreachable() {
     // GIVEN: Bootstrap address that doesn't respond
     let harness = TestHarness::new(1).await.expect("harness creation failed");
 
-    let bad_bootstrap = vec!["192.0.2.1:9000".to_string()]; // TEST-NET address
+    let _bad_bootstrap = vec!["192.0.2.1:9000".to_string()]; // TEST-NET address
 
     // WHEN: Node tries to connect with unreachable bootstrap
     // TODO: Configure node with bad_bootstrap
@@ -156,7 +158,7 @@ async fn test_empty_bootstrap_config() {
     // GIVEN: Node with empty bootstrap list
     let harness = TestHarness::new(1).await.expect("harness creation failed");
 
-    let empty_bootstrap: Vec<String> = vec![];
+    let _empty_bootstrap: Vec<String> = vec![];
 
     // WHEN: Node attempts discovery with empty config
     // TODO: Configure with empty_bootstrap

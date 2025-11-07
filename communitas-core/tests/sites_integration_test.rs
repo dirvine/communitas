@@ -173,7 +173,7 @@ async fn test_block_hash_detects_corruption() {
 /// Test concurrent asset addition
 #[tokio::test]
 async fn test_concurrent_asset_addition() {
-    let (sk, pk) = generate_test_keypair(4);
+    let (_sk, pk) = generate_test_keypair(4);
     let site_id = SiteId::from_public_key(&pk);
     let publisher = Arc::new(SitePublisher::new(site_id));
 

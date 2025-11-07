@@ -168,18 +168,17 @@ pub async fn core_mls_process_message(
 
     // For now, create a placeholder MlsMessage from the raw data
     // TODO: Replace with proper MlsMessage deserialization when type is available
+    // TODO: Implement proper ML-DSA signature generation
+    // SECURITY: Current implementation uses zero signature, production code requires real signatures
+    let zero_signature = DebugMlDsaSignature::default(); // Use default if available, otherwise we need proper API
+
     let message = MlsMessage::Application(ApplicationMessage {
         epoch: 0,
         sender: MemberId::generate(),
         generation: 0,
         sequence: 0,
         ciphertext: message_data.clone(),
-        signature: {
-            // Create a placeholder signature using unsafe code for compilation
-            // This is a temporary workaround until we have proper MLS signature API
-            #[allow(invalid_value)]
-            unsafe { std::mem::MaybeUninit::<DebugMlDsaSignature>::zeroed().assume_init() }
-        },
+        signature: zero_signature,
     });
 
     let processed = client

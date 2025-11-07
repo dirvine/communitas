@@ -179,10 +179,12 @@ max_download_rate_mbps = 75
 
 #[test]
 fn test_adaptive_limits() {
-    let mut limits = ResourceLimits::default();
+    let mut limits = ResourceLimits {
+        max_peer_connections: 100,
+        ..Default::default()
+    };
 
     // Direct field access for adaptive limits
-    limits.max_peer_connections = 100;
     assert_eq!(limits.max_peer_connections, 100);
 
     limits.max_memory_mb = 4096;

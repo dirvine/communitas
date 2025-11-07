@@ -4,10 +4,8 @@
 //
 // Provides infrastructure for testing Sites protocol over real QUIC networks
 
-use bytes::Bytes;
-use communitas_core::gossip::{GossipContext, SiteId, SiteManifest, SitePublisher};
-use saorsa_gossip_transport::GossipTransport;
-use std::net::{SocketAddr, TcpListener};
+use communitas_core::gossip::{GossipContext, SiteId, SiteManifest};
+use std::net::TcpListener;
 use std::sync::Arc;
 use std::time::Instant;
 use tracing::{info, warn};

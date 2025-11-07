@@ -12,15 +12,14 @@
 use communitas_core::crdt::EntityType;
 use communitas_core::crdt_manager::CrdtManager;
 use communitas_core::entity_service::EntityService;
-use std::path::PathBuf;
 use tempfile::TempDir;
 
 async fn setup_test_environment() -> (TempDir, EntityService) {
     let temp_dir = TempDir::new().unwrap();
     let storage_path = temp_dir.path().to_path_buf();
 
-    let crdt_manager = CrdtManager::new(storage_path);
-    let entity_service = EntityService::new(crdt_manager);
+    let crdt_manager = CrdtManager::new(storage_path).await.unwrap();
+    let entity_service = EntityService::new(std::sync::Arc::new(crdt_manager));
 
     (temp_dir, entity_service)
 }
@@ -30,45 +29,55 @@ async fn test_remove_member_from_group() {
     let (_temp, service) = setup_test_environment().await;
 
     // Create group
-    let group_id = "test-group-123";
-    service
-        .create_entity(EntityType::Group, group_id, "Test Group")
+    let created_group = service
+        .create_entity(
+            "Test Group".to_string(),
+            EntityType::Group,
+            Some("A test group".to_string()),
+            "admin-user".to_string(),
+            vec![],
+        )
         .await
         .unwrap();
+    let group_id = created_group.id;
 
     // Add member
     service
-        .add_member(EntityType::Group, group_id, "member-four-words", "member")
+        .add_member(EntityType::Group, &group_id, "member-four-words", "member")
         .await
         .unwrap();
 
-    // Verify member exists
+    // Verify member exists (creator + added member = 2 total)
     let members_before = service
-        .list_members(EntityType::Group, group_id)
+        .list_members(EntityType::Group, &group_id)
         .await
         .unwrap();
-    assert_eq!(members_before.len(), 1);
-    assert!(!members_before[0].deleted);
+    assert_eq!(members_before.len(), 2, "Should have creator + added member");
+    let added_member = members_before.iter().find(|m| m.member_id == "member-four-words");
+    assert!(added_member.is_some(), "Added member should exist");
+    assert!(!added_member.unwrap().deleted, "Added member should not be deleted");
 
     // Remove member
     service
         .remove_member(
             EntityType::Group,
-            group_id,
+            &group_id,
             "member-four-words",
             "admin-user",
         )
         .await
         .unwrap();
 
-    // Verify member marked as deleted (tombstone)
+    // Verify member marked as deleted (tombstone) - creator + tombstone = 2 total
     let members_after = service
-        .list_members(EntityType::Group, group_id)
+        .list_members(EntityType::Group, &group_id)
         .await
         .unwrap();
-    assert_eq!(members_after.len(), 1);
+    assert_eq!(members_after.len(), 2, "Should have creator + tombstone");
+    let removed_member = members_after.iter().find(|m| m.member_id == "member-four-words");
+    assert!(removed_member.is_some(), "Removed member should exist as tombstone");
     assert!(
-        members_after[0].deleted,
+        removed_member.unwrap().deleted,
         "Member should be marked as deleted (tombstone)"
     );
 }
@@ -77,190 +86,245 @@ async fn test_remove_member_from_group() {
 async fn test_remove_member_from_organization() {
     let (_temp, service) = setup_test_environment().await;
 
-    let org_id = "test-org-456";
-    service
-        .create_entity(EntityType::Organisation, org_id, "Test Org")
+    // Create organization and capture its ID
+    let created_org = service
+        .create_entity(
+            "Test Org".to_string(),
+            EntityType::Organisation,
+            None,
+            "admin-user".to_string(),
+            vec![],
+        )
         .await
         .unwrap();
+    let org_id = created_org.id;
+
     service
         .add_member(
             EntityType::Organisation,
-            org_id,
+            &org_id,
             "member-four-words",
             "member",
         )
         .await
         .unwrap();
 
+    // Should have creator + added member = 2 total
     let members_before = service
-        .list_members(EntityType::Organisation, org_id)
+        .list_members(EntityType::Organisation, &org_id)
         .await
         .unwrap();
-    assert_eq!(members_before.len(), 1);
+    assert_eq!(members_before.len(), 2, "Should have creator + added member");
 
     service
         .remove_member(
             EntityType::Organisation,
-            org_id,
+            &org_id,
             "member-four-words",
             "admin-user",
         )
         .await
         .unwrap();
 
+    // Should have creator + tombstone = 2 total
     let members_after = service
-        .list_members(EntityType::Organisation, org_id)
+        .list_members(EntityType::Organisation, &org_id)
         .await
         .unwrap();
-    assert!(members_after[0].deleted);
+    assert_eq!(members_after.len(), 2, "Should have creator + tombstone");
+    let removed_member = members_after.iter().find(|m| m.member_id == "member-four-words");
+    assert!(removed_member.is_some(), "Removed member should exist as tombstone");
+    assert!(removed_member.unwrap().deleted);
 }
 
 #[tokio::test]
 async fn test_remove_member_from_channel() {
     let (_temp, service) = setup_test_environment().await;
 
-    let channel_id = "test-channel-789";
-    service
-        .create_entity(EntityType::Channel, channel_id, "Test Channel")
+    // Create channel and capture its ID
+    let created_channel = service
+        .create_entity(
+            "Test Channel".to_string(),
+            EntityType::Channel,
+            None,
+            "admin-user".to_string(),
+            vec![],
+        )
         .await
         .unwrap();
+    let channel_id = created_channel.id;
+
     service
         .add_member(
             EntityType::Channel,
-            channel_id,
+            &channel_id,
             "member-four-words",
             "member",
         )
         .await
         .unwrap();
 
+    // Should have creator + added member = 2 total
     let members_before = service
-        .list_members(EntityType::Channel, channel_id)
+        .list_members(EntityType::Channel, &channel_id)
         .await
         .unwrap();
-    assert_eq!(members_before.len(), 1);
+    assert_eq!(members_before.len(), 2, "Should have creator + added member");
 
     service
         .remove_member(
             EntityType::Channel,
-            channel_id,
+            &channel_id,
             "member-four-words",
             "admin-user",
         )
         .await
         .unwrap();
 
+    // Should have creator + tombstone = 2 total
     let members_after = service
-        .list_members(EntityType::Channel, channel_id)
+        .list_members(EntityType::Channel, &channel_id)
         .await
         .unwrap();
-    assert!(members_after[0].deleted);
+    assert_eq!(members_after.len(), 2, "Should have creator + tombstone");
+    let removed_member = members_after.iter().find(|m| m.member_id == "member-four-words");
+    assert!(removed_member.is_some(), "Removed member should exist as tombstone");
+    assert!(removed_member.unwrap().deleted);
 }
 
 #[tokio::test]
 async fn test_remove_member_from_project() {
     let (_temp, service) = setup_test_environment().await;
 
-    let project_id = "test-project-101";
-    service
-        .create_entity(EntityType::Project, project_id, "Test Project")
+    // Create project and capture its ID
+    let created_project = service
+        .create_entity(
+            "Test Project".to_string(),
+            EntityType::Project,
+            None,
+            "admin-user".to_string(),
+            vec![],
+        )
         .await
         .unwrap();
+    let project_id = created_project.id;
+
     service
         .add_member(
             EntityType::Project,
-            project_id,
+            &project_id,
             "member-four-words",
             "member",
         )
         .await
         .unwrap();
 
+    // Should have creator + added member = 2 total
     let members_before = service
-        .list_members(EntityType::Project, project_id)
+        .list_members(EntityType::Project, &project_id)
         .await
         .unwrap();
-    assert_eq!(members_before.len(), 1);
+    assert_eq!(members_before.len(), 2, "Should have creator + added member");
 
     service
         .remove_member(
             EntityType::Project,
-            project_id,
+            &project_id,
             "member-four-words",
             "admin-user",
         )
         .await
         .unwrap();
 
+    // Should have creator + tombstone = 2 total
     let members_after = service
-        .list_members(EntityType::Project, project_id)
+        .list_members(EntityType::Project, &project_id)
         .await
         .unwrap();
-    assert!(members_after[0].deleted);
+    assert_eq!(members_after.len(), 2, "Should have creator + tombstone");
+    let removed_member = members_after.iter().find(|m| m.member_id == "member-four-words");
+    assert!(removed_member.is_some(), "Removed member should exist as tombstone");
+    assert!(removed_member.unwrap().deleted);
 }
 
 #[tokio::test]
 async fn test_remove_multiple_members_from_group() {
     let (_temp, service) = setup_test_environment().await;
 
-    let group_id = "multi-member-group";
-    service
-        .create_entity(EntityType::Group, group_id, "Multi Member Group")
+    // Create group and capture its ID
+    let created_group = service
+        .create_entity(
+            "Multi Member Group".to_string(),
+            EntityType::Group,
+            None,
+            "admin-user".to_string(),
+            vec![],
+        )
         .await
         .unwrap();
+    let group_id = created_group.id;
 
     // Add multiple members
     service
-        .add_member(EntityType::Group, group_id, "member-1", "member")
+        .add_member(EntityType::Group, &group_id, "member-1", "member")
         .await
         .unwrap();
     service
-        .add_member(EntityType::Group, group_id, "member-2", "admin")
+        .add_member(EntityType::Group, &group_id, "member-2", "admin")
         .await
         .unwrap();
     service
-        .add_member(EntityType::Group, group_id, "member-3", "member")
+        .add_member(EntityType::Group, &group_id, "member-3", "member")
         .await
         .unwrap();
 
+    // Should have creator + 3 added members = 4 total
     let members_before = service
-        .list_members(EntityType::Group, group_id)
+        .list_members(EntityType::Group, &group_id)
         .await
         .unwrap();
-    assert_eq!(members_before.len(), 3);
+    assert_eq!(members_before.len(), 4, "Should have creator + 3 added members");
 
     // Remove one member
     service
-        .remove_member(EntityType::Group, group_id, "member-2", "owner")
+        .remove_member(EntityType::Group, &group_id, "member-2", "owner")
         .await
         .unwrap();
 
+    // Should have creator + 2 active + 1 tombstone = 4 total
     let members_after = service
-        .list_members(EntityType::Group, group_id)
+        .list_members(EntityType::Group, &group_id)
         .await
         .unwrap();
-    assert_eq!(members_after.len(), 3); // Tombstone still in list
+    assert_eq!(members_after.len(), 4, "Should have creator + 2 active + 1 tombstone");
 
     let deleted_count = members_after.iter().filter(|m| m.deleted).count();
-    assert_eq!(deleted_count, 1);
+    assert_eq!(deleted_count, 1, "Should have 1 deleted member (tombstone)");
 
     let active_count = members_after.iter().filter(|m| !m.deleted).count();
-    assert_eq!(active_count, 2);
+    assert_eq!(active_count, 3, "Should have 3 active members (creator + 2 added)");
 }
 
 #[tokio::test]
 async fn test_cannot_remove_nonexistent_member() {
     let (_temp, service) = setup_test_environment().await;
 
-    let group_id = "empty-group";
-    service
-        .create_entity(EntityType::Group, group_id, "Empty Group")
+    // Create group and capture its ID
+    let created_group = service
+        .create_entity(
+            "Empty Group".to_string(),
+            EntityType::Group,
+            None,
+            "admin-user".to_string(),
+            vec![],
+        )
         .await
         .unwrap();
+    let group_id = created_group.id;
 
     // Try to remove member that doesn't exist
     let result = service
-        .remove_member(EntityType::Group, group_id, "nonexistent-member", "admin")
+        .remove_member(EntityType::Group, &group_id, "nonexistent-member", "admin")
         .await;
 
     assert!(
@@ -273,28 +337,38 @@ async fn test_cannot_remove_nonexistent_member() {
 async fn test_remove_preserves_tombstone_for_sync() {
     let (_temp, service) = setup_test_environment().await;
 
-    let group_id = "tombstone-test";
-    service
-        .create_entity(EntityType::Group, group_id, "Tombstone Test")
+    // Create group and capture its ID
+    let created_group = service
+        .create_entity(
+            "Tombstone Test".to_string(),
+            EntityType::Group,
+            None,
+            "admin-user".to_string(),
+            vec![],
+        )
         .await
         .unwrap();
+    let group_id = created_group.id;
+
     service
-        .add_member(EntityType::Group, group_id, "member-to-remove", "member")
+        .add_member(EntityType::Group, &group_id, "member-to-remove", "member")
         .await
         .unwrap();
 
     // Remove member
     service
-        .remove_member(EntityType::Group, group_id, "member-to-remove", "admin")
+        .remove_member(EntityType::Group, &group_id, "member-to-remove", "admin")
         .await
         .unwrap();
 
-    // Member should still exist as tombstone for CRDT sync
+    // Member should still exist as tombstone for CRDT sync (creator + tombstone = 2 total)
     let members = service
-        .list_members(EntityType::Group, group_id)
+        .list_members(EntityType::Group, &group_id)
         .await
         .unwrap();
-    assert_eq!(members.len(), 1, "Tombstone should remain for CRDT sync");
-    assert_eq!(members[0].member_id, "member-to-remove");
-    assert!(members[0].deleted, "Should be marked as deleted");
+    assert_eq!(members.len(), 2, "Should have creator + tombstone for CRDT sync");
+    let removed_member = members.iter().find(|m| m.member_id == "member-to-remove");
+    assert!(removed_member.is_some(), "Tombstone should remain for CRDT sync");
+    assert_eq!(removed_member.unwrap().member_id, "member-to-remove");
+    assert!(removed_member.unwrap().deleted, "Should be marked as deleted");
 }

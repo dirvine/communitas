@@ -3,7 +3,7 @@
 //! Tests real QUIC connection handling, handshake, reconnection,
 //! SPKI pinning, and network resilience.
 
-use communitas_core::test_harness::{LinkPolicy, TestHarness};
+use communitas_core::test_harness::TestHarness;
 use std::time::Duration;
 
 // ============================================================================
@@ -23,17 +23,19 @@ async fn test_handshake_success() {
         .expect("nodes should connect");
 
     // THEN: All nodes should be mutually connected
-    let network = harness.network.read().await;
-    for i in 0..3 {
-        for j in (i + 1)..3 {
-            assert!(
-                network.are_connected(i, j).await,
-                "Nodes {} and {} should be connected",
-                i,
-                j
-            );
+    {
+        let network = harness.network.read().await;
+        for i in 0..3 {
+            for j in (i + 1)..3 {
+                assert!(
+                    network.are_connected(i, j).await,
+                    "Nodes {} and {} should be connected",
+                    i,
+                    j
+                );
+            }
         }
-    }
+    } // network guard dropped here
 
     harness.cleanup().await.expect("cleanup failed");
 }
@@ -45,7 +47,7 @@ async fn test_spki_pinning_reject() {
     let harness = TestHarness::new(2).await.expect("harness creation failed");
 
     // Get node A and configure SPKI pinning
-    let node_a = harness.get_node(0).await.expect("node A not found");
+    let _node_a = harness.get_node(0).await.expect("node A not found");
     // TODO: Call sync_set_quic_pinned_spki on node A with wrong SPKI
 
     // WHEN: Node B tries to connect (with different SPKI)
@@ -54,9 +56,11 @@ async fn test_spki_pinning_reject() {
     // THEN: Connection should be rejected
     tokio::time::sleep(Duration::from_secs(2)).await;
 
-    let network = harness.network.read().await;
-    // Connection should fail due to SPKI mismatch
-    // TODO: Verify connection was rejected
+    {
+        let _network = harness.network.read().await;
+        // Connection should fail due to SPKI mismatch
+        // TODO: Verify connection was rejected
+    } // network guard dropped here
 
     harness.cleanup().await.expect("cleanup failed");
 }
@@ -139,11 +143,13 @@ async fn test_connection_with_packet_loss() {
         .expect("connection should succeed despite packet loss");
 
     // THEN: Connection should eventually succeed (QUIC retries)
-    let network = harness.network.read().await;
-    assert!(
-        network.are_connected(0, 1).await,
-        "QUIC should handle packet loss with retries"
-    );
+    {
+        let network = harness.network.read().await;
+        assert!(
+            network.are_connected(0, 1).await,
+            "QUIC should handle packet loss with retries"
+        );
+    } // network guard dropped here
 
     harness.cleanup().await.expect("cleanup failed");
 }
@@ -166,17 +172,19 @@ async fn test_mesh_5_nodes() {
         .expect("mesh should form");
 
     // THEN: Every pair should be connected
-    let network = harness.network.read().await;
-    for i in 0..5 {
-        for j in (i + 1)..5 {
-            assert!(
-                network.are_connected(i, j).await,
-                "Nodes {} and {} should be connected in mesh",
-                i,
-                j
-            );
+    {
+        let network = harness.network.read().await;
+        for i in 0..5 {
+            for j in (i + 1)..5 {
+                assert!(
+                    network.are_connected(i, j).await,
+                    "Nodes {} and {} should be connected in mesh",
+                    i,
+                    j
+                );
+            }
         }
-    }
+    } // network guard dropped here
 
     harness.cleanup().await.expect("cleanup failed");
 }
@@ -195,26 +203,28 @@ async fn test_star_topology() {
         .expect("star should form");
 
     // THEN: Hub should be connected to all, spokes not to each other
-    let network = harness.network.read().await;
+    {
+        let network = harness.network.read().await;
 
-    // Hub to spokes
-    for i in 1..5 {
+        // Hub to spokes
+        for i in 1..5 {
+            assert!(
+                network.are_connected(0, i).await,
+                "Hub should be connected to spoke {}",
+                i
+            );
+        }
+
+        // Spokes not connected to each other
         assert!(
-            network.are_connected(0, i).await,
-            "Hub should be connected to spoke {}",
-            i
+            !network.are_connected(1, 2).await,
+            "Spokes should not be connected"
         );
-    }
-
-    // Spokes not connected to each other
-    assert!(
-        !network.are_connected(1, 2).await,
-        "Spokes should not be connected"
-    );
-    assert!(
-        !network.are_connected(3, 4).await,
-        "Spokes should not be connected"
-    );
+        assert!(
+            !network.are_connected(3, 4).await,
+            "Spokes should not be connected"
+        );
+    } // network guard dropped here
 
     harness.cleanup().await.expect("cleanup failed");
 }
@@ -233,20 +243,22 @@ async fn test_line_topology() {
         .expect("line should form");
 
     // THEN: Adjacent nodes connected, non-adjacent not
-    let network = harness.network.read().await;
+    {
+        let network = harness.network.read().await;
 
-    assert!(network.are_connected(0, 1).await, "0-1 should be connected");
-    assert!(network.are_connected(1, 2).await, "1-2 should be connected");
-    assert!(network.are_connected(2, 3).await, "2-3 should be connected");
+        assert!(network.are_connected(0, 1).await, "0-1 should be connected");
+        assert!(network.are_connected(1, 2).await, "1-2 should be connected");
+        assert!(network.are_connected(2, 3).await, "2-3 should be connected");
 
-    assert!(
-        !network.are_connected(0, 2).await,
-        "0-2 should not be connected"
-    );
-    assert!(
-        !network.are_connected(0, 3).await,
-        "0-3 should not be connected"
-    );
+        assert!(
+            !network.are_connected(0, 2).await,
+            "0-2 should not be connected"
+        );
+        assert!(
+            !network.are_connected(0, 3).await,
+            "0-3 should not be connected"
+        );
+    } // network guard dropped here
 
     harness.cleanup().await.expect("cleanup failed");
 }
@@ -318,10 +330,12 @@ async fn test_cascading_failure() {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // THEN: Network splits into [0-1] and [3-4]
-    let network = harness.network.read().await;
-    assert!(network.are_connected(0, 1).await);
-    assert!(network.are_connected(3, 4).await);
-    assert!(!network.are_connected(1, 3).await, "Should be partitioned");
+    {
+        let network = harness.network.read().await;
+        assert!(network.are_connected(0, 1).await);
+        assert!(network.are_connected(3, 4).await);
+        assert!(!network.are_connected(1, 3).await, "Should be partitioned");
+    } // network guard dropped here
 
     harness.cleanup().await.expect("cleanup failed");
 }
@@ -378,11 +392,13 @@ async fn test_flapping_connection() {
     }
 
     // THEN: Connection should remain stable after flapping
-    let network = harness.network.read().await;
-    assert!(
-        network.are_connected(0, 1).await,
-        "Connection should survive flapping"
-    );
+    {
+        let network = harness.network.read().await;
+        assert!(
+            network.are_connected(0, 1).await,
+            "Connection should survive flapping"
+        );
+    } // network guard dropped here
 
     harness.cleanup().await.expect("cleanup failed");
 }

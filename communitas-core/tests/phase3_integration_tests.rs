@@ -9,7 +9,7 @@
 // - Config-based limit loading
 
 use communitas_core::{
-    ConnectivityWatchdog, GossipContext, ResourceLimitError, ResourceLimits, WatchdogConfig,
+    ConnectivityWatchdog, ResourceLimitError, ResourceLimits, WatchdogConfig,
 };
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -236,8 +236,8 @@ async fn test_concurrent_retries_use_jitter() {
     let config = RetryConfig {
         initial_delay: Duration::from_millis(100),
         max_delay: Duration::from_millis(500),
-        max_attempts: 3,
-        jitter: true,
+        max_retries: 3,
+        backoff_multiplier: 2.0,
     };
 
     let start_times = Arc::new(tokio::sync::Mutex::new(Vec::new()));
@@ -252,7 +252,7 @@ async fn test_concurrent_retries_use_jitter() {
             let start = Instant::now();
             times.lock().await.push(start);
 
-            let _ = retry_with_backoff(config, || async { Err::<(), _>("Fail") }).await;
+            let _ = retry_with_backoff(|| async { Err::<(), _>(anyhow::anyhow!("Fail")) }, config).await;
         });
 
         handles.push(handle);

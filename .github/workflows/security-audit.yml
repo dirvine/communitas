@@ -17,6 +17,9 @@ jobs:
   security-audit:
     name: Security Audit
     runs-on: ubuntu-latest
+    env:
+      # Required by tauri-build for dependency resolution
+      DEP_TAURI_DEV: "false"
 
     steps:
       - name: Checkout code

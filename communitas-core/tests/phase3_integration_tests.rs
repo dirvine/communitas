@@ -8,9 +8,7 @@
 // - Local-only mode dial decisions
 // - Config-based limit loading
 
-use communitas_core::{
-    ConnectivityWatchdog, ResourceLimitError, ResourceLimits, WatchdogConfig,
-};
+use communitas_core::{ConnectivityWatchdog, ResourceLimitError, ResourceLimits, WatchdogConfig};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Duration;
@@ -252,7 +250,8 @@ async fn test_concurrent_retries_use_jitter() {
             let start = Instant::now();
             times.lock().await.push(start);
 
-            let _ = retry_with_backoff(|| async { Err::<(), _>(anyhow::anyhow!("Fail")) }, config).await;
+            let _ = retry_with_backoff(|| async { Err::<(), _>(anyhow::anyhow!("Fail")) }, config)
+                .await;
         });
 
         handles.push(handle);

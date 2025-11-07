@@ -52,10 +52,19 @@ async fn test_remove_member_from_group() {
         .list_members(EntityType::Group, &group_id)
         .await
         .unwrap();
-    assert_eq!(members_before.len(), 2, "Should have creator + added member");
-    let added_member = members_before.iter().find(|m| m.member_id == "member-four-words");
+    assert_eq!(
+        members_before.len(),
+        2,
+        "Should have creator + added member"
+    );
+    let added_member = members_before
+        .iter()
+        .find(|m| m.member_id == "member-four-words");
     assert!(added_member.is_some(), "Added member should exist");
-    assert!(!added_member.unwrap().deleted, "Added member should not be deleted");
+    assert!(
+        !added_member.unwrap().deleted,
+        "Added member should not be deleted"
+    );
 
     // Remove member
     service
@@ -74,8 +83,13 @@ async fn test_remove_member_from_group() {
         .await
         .unwrap();
     assert_eq!(members_after.len(), 2, "Should have creator + tombstone");
-    let removed_member = members_after.iter().find(|m| m.member_id == "member-four-words");
-    assert!(removed_member.is_some(), "Removed member should exist as tombstone");
+    let removed_member = members_after
+        .iter()
+        .find(|m| m.member_id == "member-four-words");
+    assert!(
+        removed_member.is_some(),
+        "Removed member should exist as tombstone"
+    );
     assert!(
         removed_member.unwrap().deleted,
         "Member should be marked as deleted (tombstone)"
@@ -114,7 +128,11 @@ async fn test_remove_member_from_organization() {
         .list_members(EntityType::Organisation, &org_id)
         .await
         .unwrap();
-    assert_eq!(members_before.len(), 2, "Should have creator + added member");
+    assert_eq!(
+        members_before.len(),
+        2,
+        "Should have creator + added member"
+    );
 
     service
         .remove_member(
@@ -132,8 +150,13 @@ async fn test_remove_member_from_organization() {
         .await
         .unwrap();
     assert_eq!(members_after.len(), 2, "Should have creator + tombstone");
-    let removed_member = members_after.iter().find(|m| m.member_id == "member-four-words");
-    assert!(removed_member.is_some(), "Removed member should exist as tombstone");
+    let removed_member = members_after
+        .iter()
+        .find(|m| m.member_id == "member-four-words");
+    assert!(
+        removed_member.is_some(),
+        "Removed member should exist as tombstone"
+    );
     assert!(removed_member.unwrap().deleted);
 }
 
@@ -169,7 +192,11 @@ async fn test_remove_member_from_channel() {
         .list_members(EntityType::Channel, &channel_id)
         .await
         .unwrap();
-    assert_eq!(members_before.len(), 2, "Should have creator + added member");
+    assert_eq!(
+        members_before.len(),
+        2,
+        "Should have creator + added member"
+    );
 
     service
         .remove_member(
@@ -187,8 +214,13 @@ async fn test_remove_member_from_channel() {
         .await
         .unwrap();
     assert_eq!(members_after.len(), 2, "Should have creator + tombstone");
-    let removed_member = members_after.iter().find(|m| m.member_id == "member-four-words");
-    assert!(removed_member.is_some(), "Removed member should exist as tombstone");
+    let removed_member = members_after
+        .iter()
+        .find(|m| m.member_id == "member-four-words");
+    assert!(
+        removed_member.is_some(),
+        "Removed member should exist as tombstone"
+    );
     assert!(removed_member.unwrap().deleted);
 }
 
@@ -224,7 +256,11 @@ async fn test_remove_member_from_project() {
         .list_members(EntityType::Project, &project_id)
         .await
         .unwrap();
-    assert_eq!(members_before.len(), 2, "Should have creator + added member");
+    assert_eq!(
+        members_before.len(),
+        2,
+        "Should have creator + added member"
+    );
 
     service
         .remove_member(
@@ -242,8 +278,13 @@ async fn test_remove_member_from_project() {
         .await
         .unwrap();
     assert_eq!(members_after.len(), 2, "Should have creator + tombstone");
-    let removed_member = members_after.iter().find(|m| m.member_id == "member-four-words");
-    assert!(removed_member.is_some(), "Removed member should exist as tombstone");
+    let removed_member = members_after
+        .iter()
+        .find(|m| m.member_id == "member-four-words");
+    assert!(
+        removed_member.is_some(),
+        "Removed member should exist as tombstone"
+    );
     assert!(removed_member.unwrap().deleted);
 }
 
@@ -283,7 +324,11 @@ async fn test_remove_multiple_members_from_group() {
         .list_members(EntityType::Group, &group_id)
         .await
         .unwrap();
-    assert_eq!(members_before.len(), 4, "Should have creator + 3 added members");
+    assert_eq!(
+        members_before.len(),
+        4,
+        "Should have creator + 3 added members"
+    );
 
     // Remove one member
     service
@@ -296,13 +341,20 @@ async fn test_remove_multiple_members_from_group() {
         .list_members(EntityType::Group, &group_id)
         .await
         .unwrap();
-    assert_eq!(members_after.len(), 4, "Should have creator + 2 active + 1 tombstone");
+    assert_eq!(
+        members_after.len(),
+        4,
+        "Should have creator + 2 active + 1 tombstone"
+    );
 
     let deleted_count = members_after.iter().filter(|m| m.deleted).count();
     assert_eq!(deleted_count, 1, "Should have 1 deleted member (tombstone)");
 
     let active_count = members_after.iter().filter(|m| !m.deleted).count();
-    assert_eq!(active_count, 3, "Should have 3 active members (creator + 2 added)");
+    assert_eq!(
+        active_count, 3,
+        "Should have 3 active members (creator + 2 added)"
+    );
 }
 
 #[tokio::test]
@@ -366,9 +418,19 @@ async fn test_remove_preserves_tombstone_for_sync() {
         .list_members(EntityType::Group, &group_id)
         .await
         .unwrap();
-    assert_eq!(members.len(), 2, "Should have creator + tombstone for CRDT sync");
+    assert_eq!(
+        members.len(),
+        2,
+        "Should have creator + tombstone for CRDT sync"
+    );
     let removed_member = members.iter().find(|m| m.member_id == "member-to-remove");
-    assert!(removed_member.is_some(), "Tombstone should remain for CRDT sync");
+    assert!(
+        removed_member.is_some(),
+        "Tombstone should remain for CRDT sync"
+    );
     assert_eq!(removed_member.unwrap().member_id, "member-to-remove");
-    assert!(removed_member.unwrap().deleted, "Should be marked as deleted");
+    assert!(
+        removed_member.unwrap().deleted,
+        "Should be marked as deleted"
+    );
 }

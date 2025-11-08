@@ -4,9 +4,18 @@ import type { MediaConstraints, CallEvent, CallEventType, MediaDevice } from '..
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 
-// Get mocked functions (they're already mocked by vitest config)
-const mockInvoke = invoke as ReturnType<typeof vi.fn>;
-const mockListen = listen as ReturnType<typeof vi.fn>;
+// Mock the Tauri API modules
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: vi.fn(),
+}));
+
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: vi.fn(),
+}));
+
+// Get mocked functions
+const mockInvoke = vi.mocked(invoke);
+const mockListen = vi.mocked(listen);
 
 describe('WebRTCService', () => {
   let service: WebRTCService;

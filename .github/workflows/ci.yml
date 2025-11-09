@@ -182,6 +182,9 @@ jobs:
     name: Desktop Build (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     needs: rust-checks
+    env:
+      # Required by tauri-build for dependency resolution
+      DEP_TAURI_DEV: "false"
     strategy:
       fail-fast: false
       matrix:

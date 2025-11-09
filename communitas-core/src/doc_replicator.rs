@@ -184,10 +184,10 @@ impl DocReplicator {
         }
         debug!("Step 4: Done storing encryption key");
 
-        // Initialize storage based on mode
-        // TEMP FIX: Skip initial save to avoid blocking on empty document
-        // The document will be saved on first edit via insert_text
-        debug!("Skipping initial save for empty document (will save on first edit)");
+        // Initialize storage based on mode - save empty document to all applicable storages
+        debug!("Saving document to storage");
+        self.update_storage(&doc_id).await?;
+        debug!("Done saving document");
 
         info!("Document '{}' created with ID {}", name, doc_id);
 

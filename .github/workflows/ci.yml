@@ -68,58 +68,61 @@ jobs:
           name: coverage-html
           path: coverage
 
-  rust-checks:
-    name: Rust Checks
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
+    rust-checks:
+      name: Rust Checks
+      runs-on: ubuntu-latest
+      timeout-minutes: 30
+      steps:
+        - uses: actions/checkout@v4
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            curl \
-            wget \
-            file \
-            libssl-dev \
-            pkg-config \
-            libgtk-3-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            libsoup-3.0-dev
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev \
-            || sudo apt-get install -y libwebkit2gtk-4.0-dev libjavascriptcoregtk-4.0-dev
+        - name: Install system dependencies
+          run: |
+            sudo apt-get update
+            sudo apt-get install -y \
+              build-essential \
+              curl \
+              wget \
+              file \
+              libssl-dev \
+              pkg-config \
+              libgtk-3-dev \
+              libayatana-appindicator3-dev \
+              librsvg2-dev \
+              libsoup-3.0-dev
+            sudo apt-get install -y libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev \
+              || sudo apt-get install -y libwebkit2gtk-4.0-dev libjavascriptcoregtk-4.0-dev
 
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
+        - name: Set up Rust
+          uses: dtolnay/rust-toolchain@stable
+          with:
+            components: rustfmt, clippy
 
-      - name: Rust Cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: . -> target
-          cache-on-failure: false
+        - name: Rust Cache
+          uses: Swatinem/rust-cache@v2
+          with:
+            workspaces: . -> target
+            cache-on-failure: false
 
-      - name: Rust fmt check
-        run: cargo fmt --all -- --check
+        - name: Rust fmt check
+          run: cargo fmt --all -- --check
 
-      - name: Build dependencies
-        run: cargo check --workspace --all-features
+        - name: Rust audit
+          run: cargo install cargo-audit && cargo audit
 
-      - name: Rust clippy policy
-        run: |
-          # Run clippy with practical checks
-          # Note: unwrap_used/expect_used excluded - too restrictive for test code,
-          # better caught in code review per CLAUDE.md policy
-          cargo clippy --workspace --all-features -- \
-            -D clippy::panic \
-            -D clippy::todo \
-            -D clippy::unimplemented \
-            -D clippy::print_stdout \
-            -D clippy::print_stderr
+        - name: Build dependencies
+          run: cargo check --workspace --all-features
+
+        - name: Rust clippy policy
+          run: |
+            # Run clippy with practical checks
+            # Note: unwrap_used/expect_used excluded - too restrictive for test code,
+            # better caught in code review per CLAUDE.md policy
+            cargo clippy --workspace --all-features -- \
+              -D clippy::panic \
+              -D clippy::todo \
+              -D clippy::unimplemented \
+              -D clippy::print_stdout \
+              -D clippy::print_stderr
 
   headless-build:
     name: Headless Build (${{ matrix.os }})

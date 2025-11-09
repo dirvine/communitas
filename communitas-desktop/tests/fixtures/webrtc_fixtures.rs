@@ -8,8 +8,7 @@
 //!
 //! Provides mock implementations and test utilities for WebRTC command testing.
 
-use communitas_core::gossip::GossipContext;
-use communitas_core::webrtc::{CallEvent, CallId, CommunitasIdentity, MediaConstraints, MediaType};
+use communitas_core::webrtc::{CallEvent, CallId, CommunitasIdentity, MediaConstraints};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tokio::sync::broadcast;
@@ -505,7 +504,7 @@ pub mod constraints {
 
     /// Full multimedia constraints (audio + video + screen)
     pub fn full_multimedia() -> MediaConstraints {
-        let mut constraints = MediaConstraints::video_call();
+        let constraints = MediaConstraints::video_call();
         // Note: Actual implementation would need to add screen share
         // This is a placeholder for testing
         constraints
@@ -550,4 +549,10 @@ mod tests {
         assert!(video.has_audio());
         assert!(video.has_video());
     }
+}
+
+#[allow(dead_code)]
+pub mod unused_fixtures {
+    // Placeholder for potentially unused test fixtures
+    // These can be removed or implemented as needed
 }

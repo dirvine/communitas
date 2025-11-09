@@ -85,20 +85,17 @@ regex = "1.10"
 lazy_static = "1.4"
 validator = { version = "0.20", features = ["derive"] }
 local-ip-address = "0.6"
+dirs = "5.0"
+keyring = "3.2"
+tempfile = "3.0"
 
-# Security: Force update openh264-sys2 to fix RUSTSEC-2025-0008
-openh264-sys2 = "0.9.0"
+
 
 # Compression
 flate2 = "1.0"
 
 # File operations
 mime_guess = "2.0"
-tempfile = "3.0"
-dirs = "5.0"
-
-# Secure storage (platform-specific)
-keyring = "3.2"
 
 # Windows-specific dependencies
 [target.'cfg(target_os = "windows")'.dependencies]
@@ -113,3 +110,9 @@ tokio-test = "0.4"
 tempfile = "3.0"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 rustls = { version = "0.23", features = ["ring"] }
+libfuzzer-sys = "0.4"
+# Fuzzing binary commented out - fuzz directory needs to be created
+# [[bin]]
+# name = "fuzz_crdt_sync"
+# path = "fuzz/fuzz_targets/crdt_sync.rs"
+

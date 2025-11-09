@@ -916,7 +916,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_apply_update_requires_existing_doc() {
+    async fn test_apply_update_creates_new_doc() {
         let temp_dir = tempdir().expect("temp dir");
         let storage_path = temp_dir.path();
 
@@ -930,15 +930,28 @@ mod tests {
             .transact()
             .encode_state_as_update_v1(&yrs::StateVector::default());
 
-        // Should fail: document doesn't exist
+        // Should succeed: document doesn't exist but will be auto-created
         let result = manager
             .apply_update("channel:ch-1:doc", &update_bytes)
             .await;
-        assert!(matches!(result, Err(CrdtError::DocumentNotFound(_))));
+        assert!(
+            result.is_ok(),
+            "Expected success when applying update to non-existent document"
+        );
+
+        // Verify document was created and contains the data
+        let loaded_doc = manager
+            .load_document("channel:ch-1:doc")
+            .await
+            .expect("load created doc");
+        let value = CrdtManager::get_map_value::<String>(&loaded_doc, "field")
+            .expect("get field")
+            .expect("field should exist");
+        assert_eq!(value, "value");
     }
 
     #[tokio::test]
-    async fn test_merge_updates_requires_existing_doc() {
+    async fn test_merge_updates_creates_new_doc() {
         let temp_dir = tempdir().expect("temp dir");
         let storage_path = temp_dir.path();
 
@@ -952,11 +965,24 @@ mod tests {
             .transact()
             .encode_state_as_update_v1(&yrs::StateVector::default());
 
-        // Should fail: document doesn't exist
+        // Should succeed: document doesn't exist but will be auto-created
         let result = manager
             .merge_updates("channel:ch-1:doc", vec![update_bytes])
             .await;
-        assert!(matches!(result, Err(CrdtError::DocumentNotFound(_))));
+        assert!(
+            result.is_ok(),
+            "Expected success when merging updates to non-existent document"
+        );
+
+        // Verify document was created and contains the data
+        let loaded_doc = manager
+            .load_document("channel:ch-1:doc")
+            .await
+            .expect("load created doc");
+        let value = CrdtManager::get_map_value::<String>(&loaded_doc, "field")
+            .expect("get field")
+            .expect("field should exist");
+        assert_eq!(value, "value");
     }
 
     #[tokio::test]

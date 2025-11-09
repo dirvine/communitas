@@ -248,7 +248,8 @@ jobs:
             libgstreamer1.0-dev \
             libgstreamer-plugins-base1.0-dev \
             libnotify-dev \
-            libxtst-dev
+            libxtst-dev \
+            || true
           # Fallback if 4.1 not available
           sudo apt-get install -y libwebkit2gtk-4.0-dev libjavascriptcoregtk-4.0-dev || true
 
@@ -281,7 +282,7 @@ jobs:
         run: npm run build
 
       - name: Build Tauri app
-        run: npm run tauri build
+        run: npx @tauri-apps/cli build
         env:
           TAURI_ARCH: ${{ matrix.target }}
           TAURI_PLATFORM: ${{ matrix.os }}

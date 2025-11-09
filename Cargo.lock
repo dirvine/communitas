@@ -1463,7 +1463,6 @@ dependencies = [
  "libsql",
  "mime_guess",
  "once_cell",
- "openh264-sys2 0.9.0",
  "rand 0.8.5",
  "rustls 0.23.35",
  "rustls-pemfile",

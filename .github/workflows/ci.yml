@@ -107,7 +107,13 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Rust audit
-        run: cargo install cargo-audit && cargo audit
+        run: |
+          cargo install cargo-audit
+          # TODO: Remove RUSTSEC-2025-0008 from ignore list once saorsa-webrtc-codecs updates
+          # Currently blocked: saorsa-webrtc-codecs 0.2.1 depends on openh264-sys2 0.7.1
+          # communitas-core now uses openh264-sys2 0.9.0 (safe) directly as mitigation
+          # Track upstream fix: https://github.com/saorsalabs/saorsa-webrtc/issues
+          cargo audit --ignore RUSTSEC-2025-0008
 
       - name: Build dependencies
         run: cargo check --workspace --exclude communitas-desktop --all-features

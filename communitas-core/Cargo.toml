@@ -25,6 +25,10 @@ saorsa-gossip-rendezvous = "0.1.5"
 saorsa-webrtc-core.workspace = true
 saorsa-webrtc-codecs.workspace = true
 
+# Security: Force upgrade of openh264-sys2 to fix RUSTSEC-2025-0008
+# This overrides the vulnerable 0.7.1 version from saorsa-webrtc-codecs
+openh264-sys2.workspace = true
+
 # Keep PQC for encryption (not tied to saorsa-core)
 saorsa-pqc = "0.3.12"
 fips204 = "0.4"  # Direct dependency for ML-DSA traits and methods

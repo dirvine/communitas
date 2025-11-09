@@ -1405,6 +1405,7 @@ dependencies = [
  "log",
  "mime_guess",
  "once_cell",
+ "openh264-sys2 0.9.0",
  "pbkdf2",
  "proptest",
  "pulldown-cmark",
@@ -1462,6 +1463,7 @@ dependencies = [
  "libsql",
  "mime_guess",
  "once_cell",
+ "openh264-sys2 0.9.0",
  "rand 0.8.5",
  "rustls 0.23.35",
  "rustls-pemfile",
@@ -5614,7 +5616,7 @@ version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4e0b96c5808e7e5cf977056b4da08796895f993570b4a0ad658f90764c3c18fe"
 dependencies = [
- "openh264-sys2",
+ "openh264-sys2 0.7.1",
  "wide",
 ]
 
@@ -5623,6 +5625,17 @@ name = "openh264-sys2"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "881ad6de62993ff97a2cfbc63e5f127ecc930255718f9adc4c68c1dfeb308132"
+dependencies = [
+ "cc",
+ "nasm-rs",
+ "walkdir",
+]
+
+[[package]]
+name = "openh264-sys2"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c4a824aad95720f5f7ad1bb646d6815d5b7e2fd0e3c5c3b4ad3dfc29575f5381"
 dependencies = [
  "cc",
  "nasm-rs",

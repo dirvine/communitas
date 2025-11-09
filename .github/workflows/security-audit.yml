@@ -203,13 +203,13 @@ jobs:
         run: cargo fmt --check --all
 
       - name: Build dependencies
-        run: cargo check --workspace --all-features
+        run: cargo check --workspace --exclude communitas-desktop --all-features
 
       - name: Run Clippy (security lints)
         run: |
           # Run clippy on library and binary targets only (excluding tests where unwrap/expect are allowed per CLAUDE.md)
-          # Note: Using --workspace instead of --lib --bins to avoid dependency resolution issues
-          cargo clippy --workspace --all-features -- \
+          # Note: Excluding communitas-desktop as it requires Tauri build environment
+          cargo clippy --workspace --exclude communitas-desktop --all-features -- \
             -D warnings \
             -D clippy::unwrap_used \
             -D clippy::expect_used \

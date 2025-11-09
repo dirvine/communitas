@@ -48,7 +48,8 @@
     "test:playwright:ui": "playwright test --ui",
     "test:playwright:chrome": "playwright test --project=chromium --headed --channel=chrome",
     "test:playwright:ui:chrome": "playwright test --ui --project=chromium --channel=chrome",
-    "playwright:open:chrome": "playwright open http://localhost:1420 --channel=chrome"
+    "playwright:open:chrome": "playwright open http://localhost:1420 --channel=chrome",
+    "lint": "eslint src/**/*.ts{,x} --max-warnings 0"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

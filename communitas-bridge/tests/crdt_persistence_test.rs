@@ -62,7 +62,6 @@ async fn test_crdt_persistence_across_restart() {
         } // Transaction explicitly drops here
 
         // Drop root reference before saving
-        drop(root);
 
         core.crdt_manager
             .save_document(
@@ -93,10 +92,9 @@ async fn test_crdt_persistence_across_restart() {
         }
 
         // Drop root reference before saving
-        drop(root);
 
         let path_hash = hex::encode(blake3::hash("/test/file.txt".as_bytes()).as_bytes());
-        let doc_id = format!("{}:private:{}", saved_channel_id, path_hash);
+        let doc_id = format!("file:{}:private:{}", saved_channel_id, path_hash);
 
         core.crdt_manager
             .save_document(&doc_id, "file", &saved_channel_id, &file_doc)
@@ -161,7 +159,7 @@ async fn test_crdt_persistence_across_restart() {
 
         // Verify file exists
         let path_hash = hex::encode(blake3::hash("/test/file.txt".as_bytes()).as_bytes());
-        let doc_id = format!("{}:private:{}", saved_channel_id, path_hash);
+        let doc_id = format!("file:{}:private:{}", saved_channel_id, path_hash);
 
         let file_doc = core
             .crdt_manager

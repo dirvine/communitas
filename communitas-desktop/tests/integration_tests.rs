@@ -71,7 +71,6 @@ async fn test_core_initialize_with_custom_identity() {
 #[tokio::test]
 async fn test_core_initialize_invalid_four_words() {
     use communitas_core::{CoreContext, types::DeviceType};
-    use std::path::PathBuf;
 
     // GIVEN: Invalid four-word format (only 2 words)
     let invalid_four_words = "ocean-forest"; // Only 2 words

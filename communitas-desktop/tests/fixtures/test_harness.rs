@@ -19,6 +19,7 @@ use tokio::sync::RwLock;
 
 /// Configuration for test fixtures
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct TestConfig {
     /// Enable gossip networking (false for offline tests)
     pub enable_networking: bool,
@@ -78,6 +79,7 @@ pub struct TestFixture {
     pub config: TestConfig,
 }
 
+#[allow(dead_code)]
 impl TestFixture {
     /// Create a minimal test fixture with just temp directory
     ///

@@ -56,9 +56,7 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": [
-      "config/production-network.toml"
-    ],
+    "resources": [],
     "macOS": {
       "entitlements": "Communitas.entitlements",
       "exceptionDomain": null,

@@ -47,9 +47,7 @@ saorsa-gossip-pubsub = { workspace = true }
 saorsa-webrtc-core = { workspace = true }
 saorsa-webrtc-codecs = { workspace = true }
 
-# Security: Force upgrade of openh264-sys2 to fix RUSTSEC-2025-0008
-# This overrides the vulnerable 0.7.1 version from saorsa-webrtc-codecs
-openh264-sys2 = { workspace = true }
+# Security: openh264-sys2 0.9.0 forced via communitas-core dependency (RUSTSEC-2025-0008 mitigation)
 
 # CRDT and Database
 yrs = { version = "0.19", features = ["sync"] }

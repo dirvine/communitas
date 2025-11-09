@@ -131,55 +131,79 @@ jobs:
             -D clippy::print_stderr
 
   headless-build:
-    name: Headless Build (${{ matrix.os }})
+    name: Headless Build & Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     needs: rust-checks
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, macos-latest, windows-latest]
+        include:
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            suffix: ""
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            suffix: ""
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            suffix: ".exe"
     steps:
       - uses: actions/checkout@v4
+
+      - name: Setup MSVC (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: microsoft/setup-msbuild@v2
+
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: . -> target
           cache-on-failure: false
-          shared-key: headless-${{ matrix.os }}
-      - name: Build headless (Unix)
-        if: runner.os != 'Windows'
+          shared-key: headless-${{ matrix.os }}-${{ matrix.target }}
+
+      - name: Build headless
+        run: cargo build --release -p communitas-headless --target ${{ matrix.target }}
+
+      - name: Smoke test (Unix)
+        if: matrix.os != 'windows-latest'
         run: |
-          cargo build --release -p communitas-headless
-      - name: Build headless (Windows)
-        if: runner.os == 'Windows'
+          target/release/communitas-headless --help >/dev/null
+          target/release/communitas-headless --version || true
+
+      - name: Smoke test (Windows)
+        if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          cargo build --release -p communitas-headless
-      - name: Smoke (Unix)
-        if: runner.os != 'Windows'
-        run: |
-          ./target/release/communitas-headless --help >/dev/null
-          ./target/release/communitas-headless --version || true
-      - name: Smoke (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          ./target/release/communitas-headless.exe --help | Out-Null
-          ./target/release/communitas-headless.exe --version
+          target/release/communitas-headless.exe --help | Out-Null
+          target/release/communitas-headless.exe --version
+
       - name: Show binary info (Unix)
-        if: runner.os != 'Windows'
+        if: matrix.os != 'windows-latest'
         run: |
           file target/release/communitas-headless || true
+          ldd target/release/communitas-headless | grep 'not found' && { echo 'Missing runtime deps'; exit 1; } || true
+
       - name: Show binary info (Windows)
-        if: runner.os == 'Windows'
+        if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
           Get-Item target/release/communitas-headless.exe | Format-List Length,LastWriteTime
+          # Basic dep check (Windows doesn't have ldd equivalent in CI)
+
+      - name: Upload headless binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: communitas-headless-${{ matrix.os }}-${{ github.sha }}
+          path: target/release/communitas-headless${{ matrix.suffix }}
+          retention-days: 7
 
   desktop-build:
-    name: Desktop Build (${{ matrix.os }})
+    name: Desktop Build & Bundle (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     needs: rust-checks
     env:
@@ -188,11 +212,23 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, macos-latest, windows-latest]
+        include:
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            suffix: ""
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            suffix: ""
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            suffix: ".exe"
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Shallow clones should be disabled for a better npm dependency resolution
+
       - name: Install dependencies (GTK/WebKit) [Linux]
-        if: runner.os == 'Linux'
+        if: matrix.os == 'ubuntu-22.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -205,38 +241,78 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev \
             libsoup-3.0-dev \
-            pkg-config
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev \
-            || sudo apt-get install -y libwebkit2gtk-4.0-dev libjavascriptcoregtk-4.0-dev
+            pkg-config \
+            libwebkit2gtk-4.1-dev \
+            libjavascriptcoregtk-4.1-dev \
+            libappindicator3-dev \
+            libgstreamer1.0-dev \
+            libgstreamer-plugins-base1.0-dev \
+            libnotify-dev \
+            libxtst-dev
+          # Fallback if 4.1 not available
+          sudo apt-get install -y libwebkit2gtk-4.0-dev libjavascriptcoregtk-4.0-dev || true
+
+      - name: Setup MSVC (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: microsoft/setup-msbuild@v2
+
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: . -> target
           cache-on-failure: false
-          shared-key: desktop-${{ matrix.os }}
-      - name: Build desktop (Unix)
-        if: runner.os != 'Windows'
+          shared-key: desktop-${{ matrix.os }}-${{ matrix.target }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Build Tauri app
+        run: npm run tauri build
+        env:
+          TAURI_ARCH: ${{ matrix.target }}
+          TAURI_PLATFORM: ${{ matrix.os }}
+
+      - name: Inspect bundle (Linux)
+        if: matrix.os == 'ubuntu-22.04'
         run: |
-          cargo build --release -p communitas-desktop
-      - name: Build desktop (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          cargo build --release -p communitas-desktop
-      - name: Inspect desktop (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          file target/release/communitas-desktop || true
+          find target/release/bundle -name "*.deb" -o -name "*.AppImage" | head -5
+          # Check for missing deps in the binary
           ldd target/release/communitas-desktop | grep 'not found' && { echo 'Missing runtime deps'; exit 1; } || true
-      - name: Inspect desktop (macOS)
-        if: runner.os == 'macOS'
+
+      - name: Inspect bundle (macOS)
+        if: matrix.os == 'macos-latest'
         run: |
-          file target/release/communitas-desktop || true
+          find target/release/bundle -name "*.dmg" -o -name "*.app" | head -5
           otool -L target/release/communitas-desktop || true
-      - name: Inspect desktop (Windows)
-        if: runner.os == 'Windows'
+
+      - name: Inspect bundle (Windows)
+        if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          Get-Item target/release/communitas-desktop.exe | Format-List Length,LastWriteTime
+          Get-ChildItem -Path target/release/bundle -Recurse -Include *.msi,*.exe | Select-Object Name, Length, LastWriteTime | Format-Table
+          # Check binary size
+          (Get-Item target/release/communitas-desktop.exe).Length | Out-String
+
+      - name: Upload artifacts (success)
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: communitas-desktop-${{ matrix.os }}-${{ github.sha }}
+          path: |
+            target/release/bundle/
+            src-tauri/target/release/
+          retention-days: 7

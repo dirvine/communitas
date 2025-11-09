@@ -1,12 +1,12 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Communitas",
-  "version": "0.1.17",
+  "version": "0.1.20",
   "identifier": "com.saorsalabs.communitas",
   "build": {
-    "beforeDevCommand": "npm run build && npm run dev:frontend",
+    "beforeDevCommand": "npm run dev:frontend",
     "devUrl": "http://localhost:5173",
-    "beforeBuildCommand": "",
+    "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -21,7 +21,7 @@
         "resizable": true,
         "fullscreen": false,
         "center": true,
-        "devtools": false
+        "devtools": true
       }
     ],
     "security": {
@@ -37,7 +37,9 @@
             "dialog:allow-message",
             "dialog:allow-confirm",
             "dialog:allow-open",
-            "dialog:allow-save"
+            "dialog:allow-save",
+            "shell:allow-execute",
+            "fs:allow-all"
           ]
         }
       ]
@@ -54,16 +56,32 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "resources": [
+      "config/production-network.toml"
+    ],
     "macOS": {
       "entitlements": "Communitas.entitlements",
       "exceptionDomain": null,
       "frameworks": [],
-      "providerShortName": null
+      "providerShortName": null,
+      "minimumSystemVersion": "10.15"
     },
     "windows": {
       "certificateThumbprint": null,
       "digestAlgorithm": "sha256",
-      "timestampUrl": ""
+      "timestampUrl": "",
+      "minWindowsVersion": "10.0.17763.0"
+    },
+    "linux": {
+      "desktop": {
+        "startupNotifyIcon": "icons/icon.png"
+      },
+      "category": "Network",
+      "deb": {
+        "depends": [
+          "libwebkit2gtk-4.0-37"
+        ]
+      }
     }
   },
   "plugins": {

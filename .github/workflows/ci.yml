@@ -172,34 +172,34 @@ jobs:
       - name: Smoke test (Unix)
         if: matrix.os != 'windows-latest'
         run: |
-          target/release/communitas-headless --help >/dev/null
-          target/release/communitas-headless --version || true
+          target/${{ matrix.target }}/release/communitas-headless --help >/dev/null
+          target/${{ matrix.target }}/release/communitas-headless --version || true
 
       - name: Smoke test (Windows)
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          target/release/communitas-headless.exe --help | Out-Null
-          target/release/communitas-headless.exe --version
+          target/${{ matrix.target }}/release/communitas-headless.exe --help | Out-Null
+          target/${{ matrix.target }}/release/communitas-headless.exe --version
 
       - name: Show binary info (Unix)
         if: matrix.os != 'windows-latest'
         run: |
-          file target/release/communitas-headless || true
-          ldd target/release/communitas-headless | grep 'not found' && { echo 'Missing runtime deps'; exit 1; } || true
+          file target/${{ matrix.target }}/release/communitas-headless || true
+          ldd target/${{ matrix.target }}/release/communitas-headless | grep 'not found' && { echo 'Missing runtime deps'; exit 1; } || true
 
       - name: Show binary info (Windows)
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          Get-Item target/release/communitas-headless.exe | Format-List Length,LastWriteTime
+          Get-Item target/${{ matrix.target }}/release/communitas-headless.exe | Format-List Length,LastWriteTime
           # Basic dep check (Windows doesn't have ldd equivalent in CI)
 
       - name: Upload headless binary
         uses: actions/upload-artifact@v4
         with:
           name: communitas-headless-${{ matrix.os }}-${{ github.sha }}
-          path: target/release/communitas-headless${{ matrix.suffix }}
+          path: target/${{ matrix.target }}/release/communitas-headless${{ matrix.suffix }}
           retention-days: 7
 
   desktop-build:
@@ -284,6 +284,7 @@ jobs:
       - name: Build Tauri app
         run: npx @tauri-apps/cli build
         env:
+          DEP_TAURI_DEV: "false"
           TAURI_ARCH: ${{ matrix.target }}
           TAURI_PLATFORM: ${{ matrix.os }}
 

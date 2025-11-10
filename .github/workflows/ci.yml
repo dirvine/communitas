@@ -282,7 +282,7 @@ jobs:
         run: npm run build
 
       - name: Build Tauri app
-        run: cd communitas-desktop && npx @tauri-apps/cli build
+        run: npx @tauri-apps/cli build --tauri-path communitas-desktop
 
       - name: Inspect bundle (Linux)
         if: matrix.os == 'ubuntu-22.04'

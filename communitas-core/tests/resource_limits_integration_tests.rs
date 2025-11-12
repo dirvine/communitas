@@ -140,20 +140,25 @@ fn test_bandwidth_conversion() {
 #[test]
 fn test_validation_catches_invalid_configs() {
     // Zero peers is invalid
-    let mut limits = ResourceLimits::default();
-    limits.max_peer_connections = 0;
+    let limits = ResourceLimits {
+        max_peer_connections: 0,
+        ..Default::default()
+    };
     assert!(limits.validate().is_err());
 
     // Zero memory is invalid
-    limits = ResourceLimits::default();
-    limits.max_memory_mb = 0;
+    let limits = ResourceLimits {
+        max_memory_mb: 0,
+        ..Default::default()
+    };
     assert!(limits.validate().is_err());
 
     // Document limit exceeding memory is invalid
-    limits = ResourceLimits::default();
-    limits.crdt_document_limit_mb = 3000; // Greater than max_memory_mb (2048)
-    let result = limits.validate();
-    assert!(result.is_err());
+    let limits = ResourceLimits {
+        crdt_document_limit_mb: 3000, // Greater than max_memory_mb (2048)
+        ..Default::default()
+    };
+    assert!(limits.validate().is_err());
 }
 
 /// Test that default configuration is valid

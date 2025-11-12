@@ -37,9 +37,7 @@
             "dialog:allow-message",
             "dialog:allow-confirm",
             "dialog:allow-open",
-            "dialog:allow-save",
-            "shell:allow-execute",
-            "fs:allow-all"
+            "dialog:allow-save"
           ]
         }
       ]

@@ -34,15 +34,13 @@ async fn test_bootstrap_connection() {
     let harness = TestHarness::new(3).await.expect("harness creation failed");
 
     // Node 0 is bootstrap
-    let _bootstrap_addrs = [
-        harness
-            .get_node(0)
-            .await
-            .expect("node 0 not found")
-            .read()
-            .await
-            .bootstrap_addr(),
-    ];
+    let _bootstrap_addrs = [harness
+        .get_node(0)
+        .await
+        .expect("node 0 not found")
+        .read()
+        .await
+        .bootstrap_addr()];
 
     // WHEN: Nodes 1 and 2 connect via bootstrap
     // TODO: Configure nodes 1 and 2 to use bootstrap_addrs

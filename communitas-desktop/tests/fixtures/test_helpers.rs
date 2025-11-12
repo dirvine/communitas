@@ -65,8 +65,14 @@ pub fn test_id(base: &str) -> String {
 
 #[allow(dead_code)]
 /// Generate random test channel name
+#[cfg(test)]
 pub fn test_channel_name() -> String {
-    test_id("test-channel")
+    "test-channel-1".to_string()
+}
+
+#[cfg(test)]
+pub fn test_group_name() -> String {
+    "test-group-1".to_string()
 }
 
 #[allow(dead_code)]

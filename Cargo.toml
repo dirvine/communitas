@@ -89,6 +89,9 @@ yrs = { version = "0.19", features = ["sync"] }
 # This is a transitive dependency via saorsa-webrtc-codecs
 openh264-sys2 = "0.9.0"
 
+# Force openh264 version to avoid vulnerable dependency
+openh264 = "0.8.0"
+
 [profile.release]
 opt-level = 3
 lto = "thin"

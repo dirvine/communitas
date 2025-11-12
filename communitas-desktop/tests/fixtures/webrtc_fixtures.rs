@@ -15,17 +15,14 @@ use tokio::sync::broadcast;
 
 /// Mock state for WebRTC service testing
 #[derive(Debug, Clone)]
+#[cfg(test)]
 pub struct MockState {
     /// Active calls indexed by call ID
     pub active_calls: HashMap<String, MockCall>,
-    /// Call events that have been emitted
-    pub emitted_events: Vec<CallEvent<CommunitasIdentity>>,
     /// Device state
     pub devices: Vec<MockDevice>,
     /// Whether the service is initialized
     pub is_initialized: bool,
-    /// Simulated errors for testing
-    pub error_mode: Option<MockError>,
 }
 
 impl Default for MockState {
@@ -470,12 +467,18 @@ pub fn create_default_devices() -> Vec<MockDevice> {
 /// Test identities for multi-peer scenarios
 ///
 /// Generates valid four-word addresses for testing
+#[cfg(test)]
 pub fn test_identities() -> Vec<String> {
     vec![
-        communitas_core::identity::generate_id_words().expect("generate identity 1"),
-        communitas_core::identity::generate_id_words().expect("generate identity 2"),
-        communitas_core::identity::generate_id_words().expect("generate identity 3"),
+        "ocean-forest-moon-star".to_string(),
+        "river-mountain-cloud-tree".to_string(),
+        "sunshine-rainbow-breeze-flower".to_string(),
     ]
+}
+
+#[cfg(test)]
+pub fn test_identity() -> String {
+    "ocean-forest-moon-star".to_string()
 }
 
 /// Get a single valid test identity

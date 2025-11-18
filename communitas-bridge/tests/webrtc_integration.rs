@@ -4,7 +4,7 @@ mod tests {
     // from the bridge server. Current test imports are failing because WebRtcBridge
     // is not exported from the communitas_bridge crate.
 
-    #[test]
+    #[tokio::test]
     async fn test_bridge_placeholder() {
         // Placeholder test to maintain test structure
         assert!(true);

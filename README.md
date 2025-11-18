@@ -1,8 +1,19 @@
-# Communitas — Partition-Tolerant Collaboration Platform
+# Communitas — The Unstoppable Collaboration Platform
 
-> **Quantum-secure P2P networking with catastrophic failure resistance and CRDT-based partition tolerance.**
+> **A partition-tolerant, post-quantum secure, peer-to-peer collaboration network that works when the internet doesn't.**
 
-Communitas is a partition-tolerant collaboration platform designed to maintain operation through network degradation, regional internet failures, and complete infrastructure collapse. Built with post-quantum cryptography (ML-DSA, ML-KEM), CRDT-based eventual consistency, and multi-layer network resilience, the system ensures continuous peer-to-peer communication regardless of global connectivity state.
+## Why Communitas?
+
+Most modern collaboration tools (Slack, Discord, Google Docs) rely on a fragile assumption: **that you always have a perfect connection to a central server.** If the internet goes down, or a cable is cut, or a server outage occurs, you stop working.
+
+**Communitas is different.** It flips the model:
+
+1.  **Internet-Optional**: It prioritizes **local-first** connectivity. If the global internet fails, Communitas automatically switches to your local LAN, mesh network, or direct device-to-device links. Teams in the same building can keep chatting and editing documents even if the outside world is cut off.
+2.  **Post-Quantum Security**: We don't just use standard encryption. We use **NIST-standard Post-Quantum Cryptography** (ML-DSA, ML-KEM) to protect your identity and data against future threats that could break today's encryption.
+3.  **True Peer-to-Peer**: There are no central servers to hack, subpoena, or crash. **You are the server.** Your data lives on your device and syncs directly with your peers.
+4.  **Conflict-Free**: Using advanced **CRDTs (Conflict-free Replicated Data Types)**, you can edit documents offline or on a split network, and they will mathematically merge perfectly when you reconnect—no "merge conflicts" or lost work.
+
+---
 
 ## Network Resilience Architecture
 

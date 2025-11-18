@@ -1,10 +1,25 @@
 # Communitas Desktop
 
-Native desktop application for Communitas - the local-first, post-quantum collaboration platform.
+**The native interface for the Communitas network.**
 
-## Overview
+Communitas Desktop is more than just a chat app—it's a full P2P node that turns your computer into a sovereign server for your data.
 
-Communitas Desktop is a Tauri v2-based native application that brings secure, decentralized collaboration to Windows, macOS, and Linux. Built on React with a Rust backend, it provides a beautiful UI for messaging, file sharing, voice/video calling, and web publishing using human-verifiable Four-Word addressing.
+## Why a Desktop App?
+
+To achieve **true peer-to-peer resilience**, we cannot rely on a web browser served by a central website. The Communitas Desktop app bundles the entire network stack, database, and cryptographic engine into a single native binary. This ensures:
+
+*   **You own the runtime**: No one can change the code out from under you.
+*   **Local-First Performance**: Your data is stored locally on your disk, not fetched from a cloud API.
+*   **Hardware Access**: Direct access to LAN broadcasting, Bluetooth (future), and raw TCP/UDP sockets for mesh networking.
+
+## How It Works
+
+Unlike traditional apps (Client → Server), Communitas Desktop works differently:
+
+1.  **The "Engine" is Inside**: The app runs a hidden background service (the "Core") written in high-performance Rust. This Core handles all encryption, networking, and database operations.
+2.  **Direct Connection**: When you send a message, your app looks for the recipient directly on your LAN or the internet. If found, it delivers the message point-to-point.
+3.  **Gossip Protocol**: If the recipient is offline, your message is encrypted and "gossiped" to other peers, who store it encrypted until the recipient comes online.
+4.  **CRDT Database**: Every document or chat is a "Conflict-free Replicated Data Type". You can edit offline, and when you reconnect, your changes merge mathematically with everyone else's.
 
 ## Features
 

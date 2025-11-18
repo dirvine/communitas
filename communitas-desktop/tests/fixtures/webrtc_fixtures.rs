@@ -19,10 +19,14 @@ use tokio::sync::broadcast;
 pub struct MockState {
     /// Active calls indexed by call ID
     pub active_calls: HashMap<String, MockCall>,
+    /// Emitted call events
+    pub emitted_events: Vec<CallEvent<CommunitasIdentity>>,
     /// Device state
     pub devices: Vec<MockDevice>,
     /// Whether the service is initialized
     pub is_initialized: bool,
+    /// Error mode for testing
+    pub error_mode: Option<MockError>,
 }
 
 impl Default for MockState {
@@ -481,10 +485,7 @@ pub fn test_identity() -> String {
     "ocean-forest-moon-star".to_string()
 }
 
-/// Get a single valid test identity
-pub fn test_identity() -> String {
-    communitas_core::identity::generate_id_words().expect("generate test identity")
-}
+
 
 /// Test media constraints helpers
 pub mod constraints {

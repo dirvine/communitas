@@ -75,8 +75,6 @@ pub fn test_group_name() -> String {
     "test-group-1".to_string()
 }
 
-
-
 #[allow(dead_code)]
 /// Create a test channel and return its ID
 ///
@@ -370,8 +368,6 @@ pub async fn assert_message_in_channel(
         ))
     }
 }
-
-
 
 #[cfg(test)]
 mod tests {

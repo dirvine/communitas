@@ -485,8 +485,6 @@ pub fn test_identity() -> String {
     "ocean-forest-moon-star".to_string()
 }
 
-
-
 /// Test media constraints helpers
 pub mod constraints {
     use communitas_core::webrtc::MediaConstraints;

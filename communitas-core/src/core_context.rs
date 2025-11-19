@@ -18,18 +18,18 @@
 //! saorsa_core-based CoreContext with a simpler saorsa-gossip + four-word-networking
 //! based architecture.
 
-use crate::identity_to_seed;
+use crate::keystore::Keystore;
 use crate::message_sync::MessageSyncService;
 use crate::types::{DeviceType, UserProfile};
+use blake3;
 use fips204::traits::{SerDes, Signer, Verifier};
-use rand_chacha::ChaCha8Rng;
-use rand_chacha::rand_core::SeedableRng;
+use rand::rngs::OsRng;
 use saorsa_pqc::ml_dsa_87::{PrivateKey, PublicKey, try_keygen_with_rng};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tracing::info;
+use tracing::{info, warn};
 
 /// Centralized context for the Communitas application
 ///
@@ -160,24 +160,64 @@ impl CoreContext {
             ));
         }
 
-        // Derive deterministic 32-byte seed from four-word identity
-        let seed = identity_to_seed(&four_words)
-            .map_err(|e| format!("Failed to derive seed from identity: {}", e))?;
-
-        // Create seeded RNG for deterministic keypair generation
-        let mut rng = ChaCha8Rng::from_seed(seed);
-
-        // Generate ML-DSA-87 (Level 5 security) post-quantum keypair from seed
-        let (public_key, signing_key) = try_keygen_with_rng(&mut rng)
-            .map_err(|e| format!("Failed to generate ML-DSA-87 keypair: {}", e))?;
+        // Initialize keystore for secure key management
+        let keystore = Keystore::new();
+        
+        // Use four-word identity as hex identifier for keystore lookups
+        let id_hex = blake3::hash(four_words.as_bytes()).to_hex().to_string();
+        
+        // Try to load existing ML-DSA keys from secure keystore
+        let (public_key, signing_key) = match keystore.load_mldsa_keys(&id_hex) {
+            Ok((pk_bytes, sk_bytes)) => {
+                info!(
+                    "Loaded existing ML-DSA-87 keypair for identity '{}' from keystore",
+                    four_words
+                );
+                
+                // Deserialize keys from stored bytes
+                let public_key = PublicKey::try_from_bytes(
+                    pk_bytes.as_slice().try_into()
+                        .map_err(|_| "Invalid public key length in keystore".to_string())?
+                ).map_err(|e| format!("Failed to deserialize public key: {}", e))?;
+                
+                let signing_key = PrivateKey::try_from_bytes(
+                    sk_bytes.as_slice().try_into()
+                        .map_err(|_| "Invalid signing key length in keystore".to_string())?
+                ).map_err(|e| format!("Failed to deserialize signing key: {}", e))?;
+                
+                (public_key, signing_key)
+            }
+            Err(_) => {
+                // No existing keys - generate new ones using cryptographically secure RNG
+                info!(
+                    "Generating new ML-DSA-87 keypair for identity '{}' using CSPRNG",
+                    four_words
+                );
+                
+                let mut rng = OsRng;
+                let (public_key, signing_key) = try_keygen_with_rng(&mut rng)
+                    .map_err(|e| format!("Failed to generate ML-DSA-87 keypair: {}", e))?;
+                
+                // Store keys securely in platform keychain
+                let pk_bytes = public_key.clone().into_bytes();
+                let sk_bytes = signing_key.clone().into_bytes();
+                
+                keystore.save_mldsa_keys(&id_hex, &pk_bytes, &sk_bytes)
+                    .map_err(|e| {
+                        warn!("Failed to save keys to keystore: {}. Keys will not persist.", e);
+                        e
+                    })?;
+                
+                info!(
+                    "Saved ML-DSA-87 keypair to secure keystore (Level 5 PQC security)"
+                );
+                
+                (public_key, signing_key)
+            }
+        };
 
         // Get public key bytes for UserProfile
         let pubkey_bytes = public_key.clone().into_bytes();
-
-        info!(
-            "Generated ML-DSA-87 keypair from identity '{}' (Level 5 PQC security)",
-            four_words
-        );
 
         // Create storage directory if it doesn't exist
         if !storage_dir.exists() {

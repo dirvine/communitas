@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { setupFakeMediaDevices } from './utils';
+import { setupFakeMediaDevices } from '../../utils/tauri-helpers';
 
 test.describe.serial('P2P and CRDT E2E', () => {
   test.beforeEach(async ({ page }) => {

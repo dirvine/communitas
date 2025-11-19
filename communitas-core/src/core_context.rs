@@ -162,10 +162,10 @@ impl CoreContext {
 
         // Initialize keystore for secure key management
         let keystore = Keystore::new();
-        
+
         // Use four-word identity as hex identifier for keystore lookups
         let id_hex = blake3::hash(four_words.as_bytes()).to_hex().to_string();
-        
+
         // Try to load existing ML-DSA keys from secure keystore
         let (public_key, signing_key) = match keystore.load_mldsa_keys(&id_hex) {
             Ok((pk_bytes, sk_bytes)) => {
@@ -173,18 +173,24 @@ impl CoreContext {
                     "Loaded existing ML-DSA-87 keypair for identity '{}' from keystore",
                     four_words
                 );
-                
+
                 // Deserialize keys from stored bytes
                 let public_key = PublicKey::try_from_bytes(
-                    pk_bytes.as_slice().try_into()
-                        .map_err(|_| "Invalid public key length in keystore".to_string())?
-                ).map_err(|e| format!("Failed to deserialize public key: {}", e))?;
-                
+                    pk_bytes
+                        .as_slice()
+                        .try_into()
+                        .map_err(|_| "Invalid public key length in keystore".to_string())?,
+                )
+                .map_err(|e| format!("Failed to deserialize public key: {}", e))?;
+
                 let signing_key = PrivateKey::try_from_bytes(
-                    sk_bytes.as_slice().try_into()
-                        .map_err(|_| "Invalid signing key length in keystore".to_string())?
-                ).map_err(|e| format!("Failed to deserialize signing key: {}", e))?;
-                
+                    sk_bytes
+                        .as_slice()
+                        .try_into()
+                        .map_err(|_| "Invalid signing key length in keystore".to_string())?,
+                )
+                .map_err(|e| format!("Failed to deserialize signing key: {}", e))?;
+
                 (public_key, signing_key)
             }
             Err(_) => {
@@ -193,25 +199,27 @@ impl CoreContext {
                     "Generating new ML-DSA-87 keypair for identity '{}' using CSPRNG",
                     four_words
                 );
-                
+
                 let mut rng = OsRng;
                 let (public_key, signing_key) = try_keygen_with_rng(&mut rng)
                     .map_err(|e| format!("Failed to generate ML-DSA-87 keypair: {}", e))?;
-                
+
                 // Store keys securely in platform keychain
                 let pk_bytes = public_key.clone().into_bytes();
                 let sk_bytes = signing_key.clone().into_bytes();
-                
-                keystore.save_mldsa_keys(&id_hex, &pk_bytes, &sk_bytes)
+
+                keystore
+                    .save_mldsa_keys(&id_hex, &pk_bytes, &sk_bytes)
                     .map_err(|e| {
-                        warn!("Failed to save keys to keystore: {}. Keys will not persist.", e);
+                        warn!(
+                            "Failed to save keys to keystore: {}. Keys will not persist.",
+                            e
+                        );
                         e
                     })?;
-                
-                info!(
-                    "Saved ML-DSA-87 keypair to secure keystore (Level 5 PQC security)"
-                );
-                
+
+                info!("Saved ML-DSA-87 keypair to secure keystore (Level 5 PQC security)");
+
                 (public_key, signing_key)
             }
         };

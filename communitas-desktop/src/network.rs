@@ -111,11 +111,11 @@ pub async fn connect_via_four_words(
             }
             Err(e) => {
                 tracing::error!("Failed to connect to peer via CoreContext: {}", e);
-                
+
                 // Record error in runtime state - do NOT set connected=true on failure
                 let mut runtime = runtime_state.write().await;
                 runtime.last_error = Some(format!("Failed to connect: {}", e));
-                
+
                 // Add to bootstrap list for future retry attempts
                 if !runtime
                     .bootstrap_nodes
@@ -125,7 +125,7 @@ pub async fn connect_via_four_words(
                     runtime.bootstrap_nodes.push(normalized.clone());
                     info!(target: "network", "Added {} to bootstrap list for retry", normalized);
                 }
-                
+
                 return Ok(false);
             }
         }

@@ -10,7 +10,8 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 use clap::Parser;
 // TODO: Re-enable when bootstrap_integration is available in communitas-core
 // use communitas_core::bootstrap_integration::{BootstrapConfig, EnhancedBootstrapManager};
-use ed25519_dalek::SigningKey as Ed25519SecretKey;
+// Cryptography module with real ML-DSA-87 implementation
+mod crypto;
 use four_word_networking::FourWordAdaptiveEncoder;
 use once_cell::sync::Lazy;
 use rand::RngCore;

@@ -4,7 +4,7 @@ use serde::Serialize;
 use std::sync::Arc;
 use tauri::State;
 use tokio::sync::RwLock;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 #[derive(Debug, Default)]
 pub struct NetworkRuntime {
@@ -111,34 +111,35 @@ pub async fn connect_via_four_words(
             }
             Err(e) => {
                 tracing::error!("Failed to connect to peer via CoreContext: {}", e);
-                // Fall through to legacy behavior
+                
+                // Record error in runtime state - do NOT set connected=true on failure
+                let mut runtime = runtime_state.write().await;
+                runtime.last_error = Some(format!("Failed to connect: {}", e));
+                
+                // Add to bootstrap list for future retry attempts
+                if !runtime
+                    .bootstrap_nodes
+                    .iter()
+                    .any(|node| node == &normalized)
+                {
+                    runtime.bootstrap_nodes.push(normalized.clone());
+                    info!(target: "network", "Added {} to bootstrap list for retry", normalized);
+                }
+                
+                return Ok(false);
             }
         }
     }
     drop(core_guard);
 
-    // Fallback: legacy behavior (add to bootstrap list only)
+    // No CoreContext available - cannot establish connection
     {
         let mut runtime = runtime_state.write().await;
-        if !runtime
-            .bootstrap_nodes
-            .iter()
-            .any(|node| node == &normalized)
-        {
-            runtime.bootstrap_nodes.push(normalized.clone());
-        }
-
-        runtime.connected = true;
-        runtime.peers = runtime.peers.max(1);
-        runtime
-            .endpoint_four_words
-            .get_or_insert_with(|| format!("{}-relay", normalized));
-        runtime.last_error = None;
-        info!(target: "network", "Added to bootstrap list (legacy): {}", normalized);
+        runtime.last_error = Some("CoreContext not initialized".to_string());
+        warn!(target: "network", "Cannot connect without initialized CoreContext");
     }
 
-    sync_user_four_words(&runtime_state, &core_state).await;
-    Ok(true)
+    Ok(false)
 }
 
 #[tauri::command]

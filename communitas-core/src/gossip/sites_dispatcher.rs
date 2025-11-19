@@ -84,8 +84,15 @@ impl SitesDispatcher {
                                 }
                             }
                             Err(e) => {
-                                warn!("Sites transport receive error: {}", e);
-                                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                                let err_str = e.to_string();
+                                if err_str.contains("No messages available") {
+                                    // This is likely a timeout or empty queue in the transport layer
+                                    // Just sleep and retry without spamming logs
+                                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                                } else {
+                                    warn!("Sites transport receive error: {}", e);
+                                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                                }
                             }
                         }
                     }

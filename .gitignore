@@ -168,6 +168,15 @@ debug_app.html
 .worktrees/
 communitas-desktop/keystore/*.identity
 
+# Backup files
+*.bak
+*.bak2
+*.bak3
+
+# Keystore artifacts (SECURITY: Never commit identity keystores)
+communitas-core/keystore/*
+!communitas-core/keystore/.gitkeep
+
 # Test data directories
 communitas-bridge/test-bridge-instance*/
 communitas-bridge/test-*/

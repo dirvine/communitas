@@ -19,7 +19,9 @@ communitas-core = { version = "0.1.20", path = "../communitas-core" }
 
 # Networking - use published crate with wildcard address fix
 ant-quic = "^0.8.17"
-# Removed: saorsa-core and saorsa-pqc - using stub implementations
+# Post-Quantum Cryptography
+saorsa-pqc = "0.3.12"
+fips204 = "0.4"
 four-word-networking = "2.6"
 rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs"] }
 
@@ -53,7 +55,9 @@ base64 = "0.22"
 uuid = { version = "1", features = ["v4", "v7", "serde"] }
 rand = "0.8"
 hex = "0.4"
-ed25519-dalek = "2"
+blake3 = "1.0"
+zeroize = "1.7"
+keyring = "3.2"
 
 # Self-update functionality
 self_update = "0.41"

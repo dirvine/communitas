@@ -21,11 +21,11 @@
         "resizable": true,
         "fullscreen": false,
         "center": true,
-        "devtools": true
+        "devtools": false
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: filesystem:; connect-src 'self' ws: wss:; font-src 'self' data:; media-src 'self' blob: filesystem:;",
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: filesystem:; connect-src 'self' ws: wss:; font-src 'self' data:; media-src 'self' blob: filesystem:;",
       "capabilities": [
         {
           "identifier": "main-capability",
@@ -76,15 +76,6 @@
     }
   },
   "plugins": {
-    "shell": {
-      "scope": [
-        {
-          "name": "bin/*",
-          "cmd": "bin/*",
-          "args": true
-        }
-      ]
-    },
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDNDRjcyMjVGOTkxNkVEOUIKUldTYjdSYVpYeUwzUEZEeXdsbHdPckd5QzFJaTdJVXR5RzNOV012RmpJenAvWUJPalBDc1RvZDUK",
       "endpoints": [

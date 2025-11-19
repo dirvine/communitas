@@ -21,7 +21,7 @@ Communitas implements a hierarchical resilience model spanning process-local to 
 
 - **Partition Tolerance**: Groups may fragment into isolated subnetworks and automatically reconverge when connectivity restores
 - **CRDT Synchronization**: Conflict-free replicated data types ensure eventual consistency across network partitions without coordination
-- **Post-Quantum Security**: ML-DSA-65 signatures and ML-KEM-768 key exchange provide quantum-resistant cryptographic verification
+- **Post-Quantum Security**: ML-DSA-87/ML-DSA-65 signatures and ML-KEM-768 key exchange provide quantum-resistant cryptographic verification
 - **Multi-Transport Discovery**: Operates across loopback, LAN broadcast, NAT-traversed WAN, and direct public IP without central coordination
 - **Catastrophic Failure Recovery**: System continues operation in local-only mode during global infrastructure failures, automatically resuming WAN operations upon restoration
 
@@ -72,7 +72,8 @@ cargo test
 - **Resource Limit Enforcement**: Configurable peer connection limits (default: 50), memory caps (2GB), and connection timeouts prevent resource exhaustion
 
 ### **Cryptographic Security (Post-Quantum)**
-- **ML-DSA-65 Signatures**: NIST FIPS 204 quantum-resistant digital signatures for identity verification
+- **ML-DSA-87 Signatures**: NIST FIPS 204 quantum-resistant digital signatures for user identity (192-bit quantum security, Level 5)
+- **ML-DSA-65 Signatures**: NIST FIPS 204 signatures for site/gossip identity (128-bit quantum security, Level 3)
 - **ML-KEM-768 Key Exchange**: NIST FIPS 203 quantum-resistant key encapsulation for session establishment
 - **ChaCha20-Poly1305 AEAD**: Authenticated encryption for all data at rest and in transit
 - **Four-Word Addressing**: Human-memorable cryptographic identifiers (e.g., `ocean-blue-eagle-star`) solving Zooko's Triangle
@@ -93,7 +94,7 @@ cargo test
 - **No Single Point of Failure**: Operates without bootstrap nodes after initial peer cache seeding
 
 ### **Entity-Based Collaboration**
-- **👤 Individuals**: Personal identity with ML-DSA keypairs, encrypted local storage
+- **👤 Individuals**: Personal identity with ML-DSA-87 keypairs, encrypted local storage
 - **👥 Groups**: CRDT-synchronized shared state, partition-tolerant membership
 - **🏢 Organizations**: Multi-channel hierarchy with admin delegation
 - **📁 Projects**: Version-controlled workspaces with conflict-free document merging
@@ -253,7 +254,7 @@ const entity = await findEntity("ocean-blue-eagle-star");
 ## **🔐 Security & Cryptographic Guarantees**
 
 ### **Post-Quantum Cryptographic Primitives**
-- **NIST FIPS 204 (ML-DSA-65)**: Module-Lattice-Based Digital Signature Algorithm with 128-bit quantum security level
+- **NIST FIPS 204 (ML-DSA-87/65)**: Module-Lattice-Based Digital Signature Algorithm with 192-bit (user) and 128-bit (site) quantum security levels
 - **NIST FIPS 203 (ML-KEM-768)**: Module-Lattice-Based Key Encapsulation Mechanism with 192-bit classical security
 - **ChaCha20-Poly1305**: Authenticated encryption with associated data (AEAD) for session encryption
 - **BLAKE3**: Cryptographic hash function for content addressing and integrity verification

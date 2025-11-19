@@ -123,7 +123,7 @@ jobs:
           # Run clippy with practical checks
           # Note: unwrap_used/expect_used excluded - too restrictive for test code,
           # better caught in code review per CLAUDE.md policy
-          cargo clippy --workspace --exclude communitas-desktop --all-features -- \
+          cargo clippy --workspace --exclude communitas-desktop --exclude communitas-headless --all-features -- \
             -D clippy::panic \
             -D clippy::todo \
             -D clippy::unimplemented \

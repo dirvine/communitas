@@ -12,6 +12,8 @@ use clap::Parser;
 // use communitas_core::bootstrap_integration::{BootstrapConfig, EnhancedBootstrapManager};
 // Cryptography module with real ML-DSA-87 implementation
 mod crypto;
+// Ed25519 for QUIC transport layer (ant-quic requirement)
+use ed25519_dalek::SigningKey as Ed25519SecretKey;
 use four_word_networking::FourWordAdaptiveEncoder;
 use once_cell::sync::Lazy;
 use rand::RngCore;
@@ -464,8 +466,9 @@ struct IdentityMaterial {
     ml_dsa_secret: Vec<u8>,
     ml_kem_public: Vec<u8>,
     ml_kem_secret: Vec<u8>,
-    ed25519_public: Vec<u8>,
-    ed25519_secret: Vec<u8>,
+    // ML-DSA-87 keys for transport layer (replacing Ed25519)
+    mldsa87_public: Vec<u8>,
+    mldsa87_secret: Vec<u8>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -475,8 +478,9 @@ struct StoredIdentity {
     ml_dsa_secret: String,
     ml_kem_public: String,
     ml_kem_secret: String,
-    ed25519_public: String,
-    ed25519_secret: String,
+    // ML-DSA-87 keys for transport layer (replacing Ed25519)
+    mldsa87_public: String,
+    mldsa87_secret: String,
 }
 
 impl StoredIdentity {
@@ -487,8 +491,8 @@ impl StoredIdentity {
             ml_dsa_secret,
             ml_kem_public,
             ml_kem_secret,
-            ed25519_public,
-            ed25519_secret,
+            mldsa87_public,
+            mldsa87_secret,
         } = self;
 
         let canonical = canonicalize_four_words(&four_words)?;
@@ -505,12 +509,12 @@ impl StoredIdentity {
         let ml_kem_secret = BASE64
             .decode(ml_kem_secret)
             .context("Failed to decode stored ML-KEM secret key")?;
-        let ed25519_public = BASE64
-            .decode(ed25519_public)
-            .context("Failed to decode stored Ed25519 public key")?;
-        let ed25519_secret = BASE64
-            .decode(ed25519_secret)
-            .context("Failed to decode stored Ed25519 secret key")?;
+        let mldsa87_public = BASE64
+            .decode(mldsa87_public)
+            .context("Failed to decode stored ML-DSA-87 public key")?;
+        let mldsa87_secret = BASE64
+            .decode(mldsa87_secret)
+            .context("Failed to decode stored ML-DSA-87 secret key")?;
 
         MlDsaPublicKey::try_from_bytes(&ml_dsa_public)
             .map_err(|e| anyhow!("Invalid ML-DSA public key in identity store: {}", e))?;
@@ -521,20 +525,17 @@ impl StoredIdentity {
         MlKemSecretKey::try_from_bytes(&ml_kem_secret)
             .map_err(|e| anyhow!("Invalid ML-KEM secret key in identity store: {}", e))?;
 
-        if ed25519_public.len() != 32 {
-            return Err(anyhow!("Stored Ed25519 public key must be 32 bytes"));
-        }
-        if ed25519_secret.len() != 32 {
-            return Err(anyhow!("Stored Ed25519 secret key must be 32 bytes"));
-        }
-        let secret_seed: [u8; 32] = ed25519_secret
-            .as_slice()
-            .try_into()
-            .map_err(|_| anyhow!("Stored Ed25519 secret key must be 32 bytes"))?;
-        let signing = Ed25519SecretKey::from_bytes(&secret_seed);
-        if signing.verifying_key().to_bytes().as_slice() != ed25519_public.as_slice() {
+        // Validate ML-DSA-87 transport keys
+        if mldsa87_public.len() != 2592 {
             return Err(anyhow!(
-                "Stored Ed25519 public key does not match secret key"
+                "Stored ML-DSA-87 public key must be 2592 bytes, got {}",
+                mldsa87_public.len()
+            ));
+        }
+        if mldsa87_secret.len() != 4896 {
+            return Err(anyhow!(
+                "Stored ML-DSA-87 secret key must be 4896 bytes, got {}",
+                mldsa87_secret.len()
             ));
         }
 
@@ -544,8 +545,8 @@ impl StoredIdentity {
             ml_dsa_secret,
             ml_kem_public,
             ml_kem_secret,
-            ed25519_public,
-            ed25519_secret,
+            mldsa87_public,
+            mldsa87_secret,
         })
     }
 }
@@ -597,8 +598,8 @@ async fn persist_identity_to_disk(path: &Path, material: &IdentityMaterial) -> R
         ml_dsa_secret: BASE64.encode(&material.ml_dsa_secret),
         ml_kem_public: BASE64.encode(&material.ml_kem_public),
         ml_kem_secret: BASE64.encode(&material.ml_kem_secret),
-        ed25519_public: BASE64.encode(&material.ed25519_public),
-        ed25519_secret: BASE64.encode(&material.ed25519_secret),
+        mldsa87_public: BASE64.encode(&material.mldsa87_public),
+        mldsa87_secret: BASE64.encode(&material.mldsa87_secret),
     };
     let serialized = serde_json::to_vec_pretty(&stored)
         .context("Failed to serialize identity for persistence")?;
@@ -675,9 +676,9 @@ async fn setup_identity(config: &Config) -> Result<IdentityMaterial> {
             let (ml_kem_public, ml_kem_secret) = try_kem_keygen_with_rng(&mut OsRng)
                 .map_err(|e| anyhow!("Failed to generate ML-KEM keypair: {}", e))?;
 
-            let mut rng = OsRng;
-            let ed25519_secret = Ed25519SecretKey::generate(&mut rng);
-            let ed25519_public = ed25519_secret.verifying_key();
+            // Generate ML-DSA-87 transport keys using crypto module
+            let (mldsa87_public, mldsa87_secret) = crypto::generate_mldsa87_keypair()
+                .context("Failed to generate ML-DSA-87 transport keys")?;
 
             let material = IdentityMaterial {
                 four_words,
@@ -685,8 +686,8 @@ async fn setup_identity(config: &Config) -> Result<IdentityMaterial> {
                 ml_dsa_secret: ml_dsa_secret.as_bytes().to_vec(),
                 ml_kem_public: ml_kem_public.as_bytes().to_vec(),
                 ml_kem_secret: ml_kem_secret.as_bytes().to_vec(),
-                ed25519_public: ed25519_public.to_bytes().to_vec(),
-                ed25519_secret: ed25519_secret.to_bytes().to_vec(),
+                mldsa87_public,
+                mldsa87_secret,
             };
 
             persist_identity_to_disk(&identity_path, &material).await?;

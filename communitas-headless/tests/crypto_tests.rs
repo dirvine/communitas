@@ -7,13 +7,13 @@ mod crypto;
 #[test]
 #[ignore] // Will be enabled after implementation
 fn test_keygen_produces_valid_mldsa87_keys() {
-    // Should generate 2592-byte public key, 4627-byte private key
+    // Should generate 2592-byte public key, 4896-byte private key
     let result = crypto::generate_mldsa87_keypair();
     assert!(result.is_ok(), "Key generation should succeed");
 
     let (pk, sk) = result.unwrap();
     assert_eq!(pk.len(), 2592, "ML-DSA-87 public key should be 2592 bytes");
-    assert_eq!(sk.len(), 4627, "ML-DSA-87 private key should be 4627 bytes");
+    assert_eq!(sk.len(), 4896, "ML-DSA-87 private key should be 4896 bytes");
 
     // Keys should not be all zeros
     assert!(
@@ -53,11 +53,11 @@ fn test_sign_verify_roundtrip() {
     let message = b"test message for ML-DSA-87 signature";
     let signature = crypto::sign_mldsa87(&sk, message).expect("Signing failed");
 
-    // Signature should be 4595 bytes for ML-DSA-87
+    // Signature should be 4627 bytes for ML-DSA-87
     assert_eq!(
         signature.len(),
-        4595,
-        "ML-DSA-87 signature should be 4595 bytes"
+        4627,
+        "ML-DSA-87 signature should be 4627 bytes"
     );
 
     // Verify signature
@@ -171,5 +171,5 @@ fn test_key_zeroization_on_drop() {
     // Load again to verify persistence
     let (loaded_pk, loaded_sk) = crypto::load_keys_from_keystore(identity).expect("Load failed");
     assert_eq!(loaded_pk.len(), 2592);
-    assert_eq!(loaded_sk.len(), 4627);
+    assert_eq!(loaded_sk.len(), 4896);
 }

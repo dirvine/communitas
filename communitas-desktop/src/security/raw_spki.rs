@@ -125,4 +125,92 @@ impl RawSpkiState {
     pub fn _get(&self) -> Option<[u8; 32]> {
         self.pinned_key
     }
+
+    #[allow(dead_code)]
+    pub fn set_pinned_key(&mut self, key: Vec<u8>, algorithm: String) {
+        // For now, only support 32-byte keys (Ed25519)
+        // TODO: Update to Vec<u8> to support variable-length PQC keys
+        if key.len() == 32 {
+            let mut arr = [0u8; 32];
+            arr.copy_from_slice(&key);
+            self.pinned_key = Some(arr);
+            self.fingerprint = Some(calculate_fingerprint(&arr));
+        }
+        // Store algorithm for future use
+        let _ = algorithm; // Will use when we support variable-length keys
+    }
+}
+
+// Placeholder types and functions for PQC SPKI parser (to be implemented)
+#[allow(dead_code)]
+pub struct ParsedSpki {
+    pub algorithm_name: String,
+    pub key_bytes: Vec<u8>,
+}
+
+#[allow(dead_code)]
+pub fn parse_spki_any_algorithm(_spki: &[u8]) -> Result<ParsedSpki, String> {
+    Err("PQC SPKI parser not yet implemented - see REMAINING_PRODUCTION_BLOCKERS.md".into())
+}
+
+#[allow(dead_code)]
+pub fn calculate_key_fingerprint(key: &[u8]) -> String {
+    let mut hasher = Hasher::new();
+    hasher.update(key);
+    let hash = hasher.finalize();
+    hex::encode(&hash.as_bytes()[..16])
+}
+
+#[allow(dead_code)]
+pub fn compare_keys(key1: &[u8], alg1: &str, key2: &[u8], alg2: &str) -> bool {
+    alg1 == alg2 && key1 == key2
+}
+
+#[allow(dead_code)]
+pub fn parse_raw_or_spki(_data: &[u8]) -> Result<ParsedSpki, String> {
+    Err("Not yet implemented".into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Test vectors for different algorithm types
+    fn generate_test_ed25519_spki() -> Vec<u8> {
+        // Real Ed25519 SPKI structure (44 bytes total)
+        let mut spki = vec![
+            0x30, 0x2a, // SEQUENCE, 42 bytes
+            0x30, 0x05, // SEQUENCE (algorithm), 5 bytes
+            0x06, 0x03, 0x2b, 0x65, 0x70, // OID 1.3.101.112 (Ed25519)
+            0x03, 0x21, 0x00, // BIT STRING, 33 bytes
+        ];
+        spki.extend_from_slice(&[0x42; 32]);
+        spki
+    }
+
+    #[test]
+    fn test_current_ed25519_parser_works() {
+        let spki = generate_test_ed25519_spki();
+        let result = extract_key_from_spki(&spki);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), [0x42; 32]);
+    }
+
+    #[test]
+    fn test_fingerprint_calculation() {
+        let key = [0x42; 32];
+        let fp = calculate_fingerprint(&key);
+        assert!(!fp.is_empty());
+        assert!(hex::decode(&fp).is_ok());
+    }
+
+    #[test]
+    #[ignore] // Will pass after PQC implementation
+    fn test_parse_pqc_spki_placeholder() {
+        // Placeholder test - will be implemented with real PQC SPKI parser
+        let mock_spki = vec![0x30; 100];
+        let result = parse_spki_any_algorithm(&mock_spki);
+        // Currently returns error (not implemented)
+        assert!(result.is_err());
+    }
 }

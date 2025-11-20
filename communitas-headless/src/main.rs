@@ -853,6 +853,8 @@ async fn connect_to_peer(addr_str: String) -> Result<()> {
     }
 }
 
+use communitas_core::{CoreContext, types::DeviceType};
+
 async fn run_node(args: Args) -> Result<()> {
     // Self-update mode: do not start services
     if args.self_update {
@@ -1004,26 +1006,6 @@ async fn run_node(args: Args) -> Result<()> {
         .await
         .context("Failed to create storage directory")?;
 
-    // TODO: Re-enable when bootstrap_integration is available in communitas-core
-    // Initialize bootstrap manager using saorsa-core
-    // let bootstrap_config = BootstrapConfig {
-    //     max_contacts: 5000,
-    //     default_nodes: config.bootstrap_nodes.clone(),
-    //     auto_discovery: true,
-    //     cache_dir: config.storage.base_dir.join("bootstrap"),
-    //     quality_threshold: 0.3,
-    // };
-
-    // let bootstrap_manager = EnhancedBootstrapManager::new(bootstrap_config)
-    //     .await
-    //     .context("Failed to initialize bootstrap manager")?;
-
-    // {
-    //     let mut manager_guard = BOOTSTRAP_MANAGER.write().await;
-    //     *manager_guard = Some(Arc::new(bootstrap_manager));
-    // }
-    info!("Initialized bootstrap manager with saorsa-core");
-
     // Setup identity
     let identity_material = setup_identity(&config).await?;
     let identity = identity_material.four_words.clone();
@@ -1036,123 +1018,33 @@ async fn run_node(args: Args) -> Result<()> {
     }
     info!("Node identity: {}", identity);
 
-    // Removed: DHT client initialization - saorsa-core removed
-    info!(
-        "Skipping DHT initialization (saorsa-core removed) - {} bootstrap nodes configured",
-        config.bootstrap_nodes.len()
-    );
+    // Initialize CoreContext (Full Gossip Node)
+    let mut context = CoreContext::initialize(
+        identity.clone(),
+        config.identity.clone().unwrap_or_else(|| "Headless Node".to_string()),
+        sanitize_instance_id(&instance_id),
+        DeviceType::Headless,
+        config.storage.base_dir.clone(),
+    )
+    .await
+    .map_err(|e| anyhow::anyhow!("Failed to initialize CoreContext: {}", e))?;
+
+    // Start networking
+    // Use first listen address port as preferred port if available
+    // Note: CoreContext handles port allocation logic
+    let preferred_port = config.network.listen_addrs.first().map(|a| a.port()).filter(|&p| p > 0);
+    let connection_identity = context.start_networking(preferred_port).await
+        .map_err(|e| anyhow::anyhow!("Failed to start networking: {}", e))?;
+    
+    info!("Gossip networking started. Connection identity: {}", connection_identity);
+
+    // Connect to bootstrap nodes
     for bootstrap in &config.bootstrap_nodes {
-        let trimmed = bootstrap.trim();
-        match decode_four_word_seed(trimmed) {
-            Ok(Some(addr)) => info!("  Bootstrap node: {} -> {}", trimmed, addr),
-            Ok(None) => info!("  Bootstrap node: {}", trimmed),
-            Err(e) => warn!(
-                "  Bootstrap node {} looks like a four-word identity but could not be decoded: {}",
-                trimmed, e
-            ),
-        }
-    }
-
-    // Stub: DHT client removed - saorsa-core dependency eliminated
-    // let dht_client = Arc::new(DhtClient::new().map_err(|e| anyhow::anyhow!("DHT init failed: {}", e))?);
-    info!("DHT client stubbed (saorsa-core removed)");
-
-    // Load cached peers and connect to them first
-    let mut seen_resolved_addrs: HashSet<SocketAddr> = HashSet::new();
-    let mut seen_unresolved: HashSet<String> = HashSet::new();
-    let mut all_bootstrap_nodes: Vec<String> = Vec::new();
-
-    for bootstrap in &config.bootstrap_nodes {
-        let trimmed = bootstrap.trim();
-        let trimmed_owned = trimmed.to_string();
-        match canonical_seed_addr(&trimmed_owned) {
-            Ok(Some(addr)) => {
-                if seen_resolved_addrs.insert(addr) {
-                    all_bootstrap_nodes.push(trimmed_owned);
-                }
-            }
-            Ok(None) => {
-                if seen_unresolved.insert(trimmed_owned.clone()) {
-                    all_bootstrap_nodes.push(trimmed_owned);
-                }
-            }
-            Err(_) => {} // Skip invalid
-        }
-    }
-
-    // Start listeners
-    let mut self_addrs = HashSet::new();
-    for addr in &config.network.listen_addrs {
-        // Start QUIC delta server
-        match start_quic_delta_server(
-            *addr,
-            config.storage.base_dir.clone(),
-            &identity_material.mldsa87_secret,
-        ).await {
-            Ok(actual_addr) => {
-                info!("Started QUIC listener on {}", actual_addr);
-                // If we bound to random port (port 0), we can now add the ACTUAL address to self_addrs
-                // This improves self-connection filtering.
-                self_addrs.insert(actual_addr);
-            }
-            Err(e) => {
-                 error!("Failed to start QUIC listener on {}: {}", addr, e);
-            }
-        }
-
-
-        if addr.port() == 0 && addr.ip().is_unspecified() {
-            // If we bound to random port, we need to find out what it is.
-            // But start_quic_delta_server logs it.
-            // We can also guess/enumerate interfaces
-            if let Ok(interfaces) = local_ip_address::list_afinet_netifas() {
-                for (_name, ip) in interfaces {
-                    self_addrs.insert(SocketAddr::new(ip, addr.port()));
-                }
-            }
+        if let Err(e) = context.connect_to_peer(bootstrap).await {
+            warn!("Failed to add bootstrap node {}: {}", bootstrap, e);
         } else {
-            // Specific address - use as-is
-            self_addrs.insert(*addr);
+            info!("Added bootstrap node: {}", bootstrap);
         }
-    }
-
-    // Filter bootstrap nodes to exclude self-addresses
-    let filtered_bootstrap_nodes: Vec<String> = all_bootstrap_nodes
-        .iter()
-        .filter(|addr_str| {
-            // Try to resolve to SocketAddr and check if it matches our listen addresses
-            if let Ok(Some(socket_addr)) = canonical_seed_addr(addr_str) {
-                let is_self = self_addrs.contains(&socket_addr);
-                if is_self {
-                    info!(
-                        "Filtering out self-address: {} (resolved to {})",
-                        addr_str, socket_addr
-                    );
-                }
-                !is_self
-            } else {
-                // If we can't resolve it, keep it (might be a DNS name or four-word that resolves differently)
-                true
-            }
-        })
-        .cloned()
-        .collect();
-
-    // Connect to bootstrap nodes (excluding self, after listeners are ready)
-    if !filtered_bootstrap_nodes.is_empty() {
-        info!(
-            "Connecting to {} bootstrap/cached nodes (filtered {} self-addresses)...",
-            filtered_bootstrap_nodes.len(),
-            all_bootstrap_nodes.len() - filtered_bootstrap_nodes.len()
-        );
-        for bootstrap_addr in &filtered_bootstrap_nodes {
-            match connect_to_peer(bootstrap_addr.clone()).await {
-                Ok(_) => info!("✓ Connected to peer: {}", bootstrap_addr),
-                Err(e) => warn!("Failed to connect to {}: {}", bootstrap_addr, e),
-            }
-        }
-    } else {
-        info!("No external bootstrap nodes to connect to (all addresses are self)");
     }
 
     // Start health/metrics endpoint if enabled
@@ -1161,44 +1053,19 @@ async fn run_node(args: Args) -> Result<()> {
         info!("Metrics endpoint started on {}", args.metrics_addr);
     }
 
-    // TODO: Re-enable when communitas_container is available
-    // Optionally start a background delta generator (very simple demo)
-    // if std::env::var("COMMUNITAS_GENERATE_DELTAS").is_ok() {
-    //     tokio::spawn(async move {
-    //         use communitas_container as cc;
-    //         use uuid::Uuid;
-    //         loop {
-    //             let ts = chrono::Utc::now().timestamp();
-    //             let post = cc::Post {
-    //                 id: Uuid::new_v4(),
-    //                 author: b"server".to_vec(),
-    //                 ts,
-    //                 body_md: format!("# Server note\nGenerated at {}", ts),
-    //             };
-    //             let op = cc::Op::Append { post };
-    //             {
-    //                 let mut w = OP_LOG.write().await;
-    //                 w.push(op);
-    //             }
-    //             tokio::time::sleep(std::time::Duration::from_secs(10)).await;
-    //         }
-    //     });
-    //     info!("Delta generator enabled via COMMUNITAS_GENERATE_DELTAS");
-    // }
-
     // Main event loop
-    info!("Communitas node started successfully");
+    info!("Communitas headless node started successfully");
     info!("Press Ctrl+C to shutdown");
+
+    // Keep context alive
+    let _context_guard = context;
 
     // Wait for shutdown signal
     signal::ctrl_c().await?;
     info!("Shutdown signal received");
 
-    // Graceful shutdown
+    // Graceful shutdown handled by Drop of CoreContext and other structs
     info!("Performing graceful shutdown...");
-
-    // Bootstrap cache is automatically saved by saorsa-core
-    info!("Bootstrap cache will be saved automatically by saorsa-core");
 
     // Close all active connections
     if let Ok(mut conns) = ACTIVE_CONNECTIONS.try_write() {

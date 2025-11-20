@@ -111,13 +111,38 @@ npx chrome-devtools-mcp@latest --browserUrl http://127.0.0.1:5173/
 This setup exposes DOM traversal, screenshot capture, and scripted JavaScript execution through MCP without any Tauri-specific plugins or local socket servers.
 
 
-## 9. Reference Library
-- Low-level API details: `AGENTS_API.md` (same directory).
-- saorsa-core references: see `communitas-core/src/` and `COMMUNITAS_ARCHITECTURE.md`.
-- Deployment & bootstrap specifics: `finalise/` docs, `bootstrap.toml.template`, `deployment/` scripts.
-- Chrome DevTools MCP usage: see `CLAUDE.md` for inspector workflow.
-
-Keep this file updated when:
-- saorsa-gossip packages are bumped,
-- new Tauri commands are surfaced,
-- workspace layout shifts (e.g., once `apps/communitas` fully replaces `src/`),
+### 9. Production Bootstrap & Deployment
+4: 
+5: **Headless Bootstrap Deployment**
+6: The network is currently bootstrapped by two Digital Ocean droplets:
+7: 
+8: - **Node 1 (Bootstrap Seed)**: `138.197.29.195` (NYC3)
+9:   - Identity: `ocean-forest-moon-star`
+10:   - QUIC: `0.0.0.0:4433`
+11:   - Metrics: `127.0.0.1:9600` (SSH tunnel to view)
+12:   - Config: `/root/config.toml`
+13: 
+14: - **Node 2 (Peer)**: `167.71.188.131` (NYC3)
+15:   - Identity: `chase-solid-alpha-vatican` (Generated)
+16:   - QUIC: `0.0.0.0:4434`
+17:   - Metrics: `127.0.0.1:9601`
+18:   - Bootstraps from Node 1.
+19: 
+20: **Deployment Steps**:
+21: 1. SSH into droplet: `ssh root@138.197.29.195`
+22: 2. Update code: `cd communitas && git pull origin main`
+23: 3. Build: `source $HOME/.cargo/env && cargo build --release -p communitas-headless`
+24: 4. Config: Ensure `config.toml` has correct `bootstrap_nodes` and `listen_addrs`.
+25: 5. Run: `nohup ./target/release/communitas-headless --config /root/config.toml --metrics > headless.log 2>&1 &`
+26: 
+27: ## 10. Reference Library
+28: - Low-level API details: `AGENTS_API.md` (same directory).
+29: - saorsa-core references: see `communitas-core/src/` and `COMMUNITAS_ARCHITECTURE.md`.
+30: - Deployment & bootstrap specifics: `finalise/` docs, `bootstrap.toml.template`, `deployment/` scripts.
+31: - Chrome DevTools MCP usage: see `CLAUDE.md` for inspector workflow.
+32: 
+33: Keep this file updated when:
+34: - saorsa-gossip packages are bumped,
+35: - new Tauri commands are surfaced,
+36: - workspace layout shifts (e.g., once `apps/communitas` fully replaces `src/`),
+37: - deployment infrastructure changes.

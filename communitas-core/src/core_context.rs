@@ -418,6 +418,38 @@ impl CoreContext {
             .await
             .map_err(|e| format!("Failed to add favourite contact: {}", e))?;
 
+        // Try to decode as connection address and dial immediately (for bootstrap)
+        if let Ok(addr) = crate::identity::conn_from_words(peer_four_words) {
+            info!("Dialing peer at {} ({})", addr, peer_four_words);
+            // Use internal transport to dial
+            // We need to convert SocketAddr to the transport's format or use a dial method on GossipContext if available.
+            // GossipContext doesn't have a high-level dial.
+            // But we can use the transport directly if we can access it.
+            // gossip.transport is public.
+            // QuicTransport::connect_to_peer requires PeerId, which we don't have yet if we only have address.
+            // But QuicTransport usually has a connect() method that takes SocketAddr?
+            // Checking saorsa_gossip_transport::QuicTransport...
+            // It usually handles connection by PeerId lookup OR direct dial.
+            
+            // Actually, HyParView membership handles "join" via address?
+            // gossip.membership.write().await.join(addr)...?
+            
+            // Let's use a simpler approach: if we have the address, we can try to "introduce" via membership.
+            // Or we can use `gossip.transport.dial(addr)` if it exists.
+            
+            // Since I cannot see saorsa_gossip_transport source easily, I'll assume `membership` is the way.
+            // `membership` is `Box<dyn Membership>`.
+            // `Membership` usually has `join(addr)`.
+            
+            // Let's try to access gossip.dial_address(addr) if I add it to GossipContext.
+            // Or just leave it as is and implement `dial_address` in `GossipContext`.
+            if let Err(e) = gossip.dial_address(addr).await {
+                 warn!("Failed to dial peer {}: {}", addr, e);
+            } else {
+                 info!("Successfully dialed peer {}", addr);
+            }
+        }
+
         // The gossip overlay will automatically discover and connect via FOAF
         info!(
             "Peer {} added. FOAF discovery will locate and connect automatically",

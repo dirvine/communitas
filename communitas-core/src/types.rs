@@ -18,6 +18,7 @@ pub enum DeviceType {
     Laptop,
     Mobile,
     Server,
+    Headless,
     Unknown,
 }
 
@@ -28,6 +29,7 @@ impl std::fmt::Display for DeviceType {
             DeviceType::Laptop => write!(f, "Laptop"),
             DeviceType::Mobile => write!(f, "Mobile"),
             DeviceType::Server => write!(f, "Server"),
+            DeviceType::Headless => write!(f, "Headless"),
             DeviceType::Unknown => write!(f, "Unknown"),
         }
     }
@@ -41,6 +43,7 @@ impl DeviceType {
             "laptop" => DeviceType::Laptop,
             "mobile" => DeviceType::Mobile,
             "server" => DeviceType::Server,
+            "headless" => DeviceType::Headless,
             _ => DeviceType::Unknown,
         }
     }

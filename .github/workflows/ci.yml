@@ -116,14 +116,14 @@ jobs:
           cargo audit --ignore RUSTSEC-2025-0008
 
       - name: Build dependencies
-        run: cargo check --workspace --exclude communitas-desktop --exclude communitas-headless --all-features
+        run: cargo check --workspace --exclude communitas-desktop --all-features
 
       - name: Rust clippy policy
         run: |
           # Run clippy with practical checks
           # Note: unwrap_used/expect_used excluded - too restrictive for test code,
           # better caught in code review per CLAUDE.md policy
-          cargo clippy --workspace --exclude communitas-desktop --exclude communitas-headless --all-features -- \
+          cargo clippy --workspace --exclude communitas-desktop --all-features -- \
             -D clippy::panic \
             -D clippy::todo \
             -D clippy::unimplemented \

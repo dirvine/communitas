@@ -17,7 +17,7 @@ const KEYRING_SERVICE: &str = "communitas-headless";
 ///
 /// Returns (public_key_bytes, private_key_bytes)
 /// - Public key: 2592 bytes
-/// - Private key: 4627 bytes
+/// - Private key: 4896 bytes
 pub fn generate_mldsa87_keypair() -> Result<(Vec<u8>, Vec<u8>)> {
     let mut rng = OsRng;
 
@@ -38,12 +38,12 @@ pub fn generate_mldsa87_keypair() -> Result<(Vec<u8>, Vec<u8>)> {
 
 /// Sign a message with ML-DSA-87 private key
 ///
-/// Returns signature bytes (4595 bytes for ML-DSA-87)
+/// Returns signature bytes (4627 bytes for ML-DSA-87)
 pub fn sign_mldsa87(sk: &[u8], message: &[u8]) -> Result<Vec<u8>> {
     // Deserialize private key
-    let sk_array: [u8; 4627] = sk.try_into().map_err(|_| {
+    let sk_array: [u8; 4896] = sk.try_into().map_err(|_| {
         anyhow::anyhow!(
-            "Invalid private key length: expected 4627 bytes, got {}",
+            "Invalid private key length: expected 4896 bytes, got {}",
             sk.len()
         )
     })?;
@@ -75,21 +75,15 @@ pub fn verify_mldsa87(pk: &[u8], message: &[u8], signature: &[u8]) -> Result<boo
         .map_err(|e| anyhow::anyhow!("Failed to deserialize ML-DSA-87 public key: {}", e))?;
 
     // Deserialize signature
-    let sig_array: [u8; 4595] = signature.try_into().map_err(|_| {
+    let sig_array: [u8; 4627] = signature.try_into().map_err(|_| {
         anyhow::anyhow!(
-            "Invalid signature length: expected 4595 bytes, got {}",
+            "Invalid signature length: expected 4627 bytes, got {}",
             signature.len()
         )
     })?;
 
-    let sig = saorsa_pqc::ml_dsa_87::Signature::try_from_bytes(sig_array)
-        .map_err(|e| anyhow::anyhow!("Failed to deserialize ML-DSA-87 signature: {}", e))?;
-
-    // Verify signature
-    match public_key.try_verify(message, &sig, &[]) {
-        Ok(()) => Ok(true),
-        Err(_) => Ok(false),
-    }
+    // Verify signature - returns bool directly
+    Ok(public_key.verify(message, &sig_array, &[]))
 }
 
 /// Save ML-DSA-87 keys to platform keychain
@@ -161,9 +155,9 @@ pub fn load_keys_from_keystore(identity: &str) -> Result<(Vec<u8>, Vec<u8>)> {
     if pk.len() != 2592 {
         anyhow::bail!("Invalid public key length: expected 2592, got {}", pk.len());
     }
-    if sk.len() != 4627 {
+    if sk.len() != 4896 {
         anyhow::bail!(
-            "Invalid private key length: expected 4627, got {}",
+            "Invalid private key length: expected 4896, got {}",
             sk.len()
         );
     }
@@ -216,7 +210,7 @@ mod tests {
 
         let (pk, sk) = result.unwrap();
         assert_eq!(pk.len(), 2592);
-        assert_eq!(sk.len(), 4627);
+        assert_eq!(sk.len(), 4896);
     }
 
     #[test]
@@ -225,7 +219,7 @@ mod tests {
         let message = b"test message";
 
         let signature = sign_mldsa87(&sk, message).unwrap();
-        assert_eq!(signature.len(), 4595);
+        assert_eq!(signature.len(), 4627);
 
         let verified = verify_mldsa87(&pk, message, &signature).unwrap();
         assert!(verified);

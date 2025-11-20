@@ -58,6 +58,9 @@ hex = "0.4"
 blake3 = "1.0"
 zeroize = "1.7"
 keyring = "3.2"
+# Ed25519 for QUIC transport layer (ant-quic requirement)
+# Application-layer identity uses ML-DSA-87 from crypto module
+ed25519-dalek = "2"
 
 # Self-update functionality
 self_update = "0.41"

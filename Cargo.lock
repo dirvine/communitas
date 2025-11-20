@@ -1503,6 +1503,7 @@ dependencies = [
  "clap",
  "communitas-core",
  "dirs 5.0.1",
+ "ed25519-dalek",
  "fips204",
  "four-word-networking",
  "hex",

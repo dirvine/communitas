@@ -5,7 +5,7 @@
 mod crypto;
 
 #[test]
-#[ignore] // Will be enabled after implementation
+// #[ignore] // Will be enabled after implementation
 fn test_keygen_produces_valid_mldsa87_keys() {
     // Should generate 2592-byte public key, 4896-byte private key
     let result = crypto::generate_mldsa87_keypair();
@@ -27,7 +27,7 @@ fn test_keygen_produces_valid_mldsa87_keys() {
 }
 
 #[test]
-#[ignore]
+// #[ignore]
 fn test_keys_are_unique() {
     // Multiple key generation calls should produce different keys
     let result1 = crypto::generate_mldsa87_keypair();
@@ -44,7 +44,7 @@ fn test_keys_are_unique() {
 }
 
 #[test]
-#[ignore]
+// #[ignore]
 fn test_sign_verify_roundtrip() {
     // Generate keys
     let (pk, sk) = crypto::generate_mldsa87_keypair().expect("Key generation failed");
@@ -67,7 +67,7 @@ fn test_sign_verify_roundtrip() {
 }
 
 #[test]
-#[ignore]
+// #[ignore]
 fn test_verify_fails_with_wrong_message() {
     let (pk, sk) = crypto::generate_mldsa87_keypair().expect("Key generation failed");
 
@@ -86,7 +86,7 @@ fn test_verify_fails_with_wrong_message() {
 }
 
 #[test]
-#[ignore]
+// #[ignore]
 fn test_verify_fails_with_wrong_key() {
     let (pk1, sk1) = crypto::generate_mldsa87_keypair().expect("Key generation failed");
     let (pk2, _sk2) = crypto::generate_mldsa87_keypair().expect("Key generation failed");
@@ -105,7 +105,7 @@ fn test_verify_fails_with_wrong_key() {
 }
 
 #[test]
-#[ignore]
+// #[ignore]
 fn test_keystore_persistence() {
     let identity = "test-headless-node-alpha";
     let (pk, sk) = crypto::generate_mldsa87_keypair().expect("Key generation failed");
@@ -123,7 +123,7 @@ fn test_keystore_persistence() {
 }
 
 #[test]
-#[ignore]
+// #[ignore]
 fn test_keystore_roundtrip_with_signing() {
     let identity = "test-headless-node-beta";
 
@@ -153,7 +153,7 @@ fn test_keystore_load_nonexistent_identity() {
 }
 
 #[test]
-#[ignore]
+// #[ignore]
 fn test_key_zeroization_on_drop() {
     // This test ensures sensitive key material is zeroized
     // when dropped (security requirement)

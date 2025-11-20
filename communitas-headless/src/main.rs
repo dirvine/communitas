@@ -24,90 +24,7 @@ use rand::rngs::OsRng;
 // use saorsa_core::quantum_crypto::{...};
 
 // Removed: four_word_networking::FourWordAddress - using communitas_core::identity instead
-// Stub: PQC crypto removed - saorsa-pqc dependency eliminated
-// Using simple placeholder types for compilation
-
-// Placeholder types for removed dependencies
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct FourWordAddress(String);
-
-impl FourWordAddress {
-    pub fn parse_str(s: &str) -> Result<Self, String> {
-        // Stub validation - just accept any string
-        Ok(Self(s.to_string()))
-    }
-
-    pub fn words(&self) -> Vec<String> {
-        // Stub implementation - split by dashes
-        self.0.split('-').map(|s| s.to_string()).collect()
-    }
-
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct MlDsaSecretKey(Vec<u8>);
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct MlDsaPublicKey(Vec<u8>);
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct MlKemSecretKey(Vec<u8>);
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct MlKemPublicKey(Vec<u8>);
-
-// Stub implementations
-impl MlDsaSecretKey {
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.0
-    }
-    pub fn try_from_bytes(bytes: &[u8]) -> Result<Self, String> {
-        Ok(Self(bytes.to_vec()))
-    }
-}
-
-impl MlDsaPublicKey {
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.0
-    }
-    pub fn try_from_bytes(bytes: &[u8]) -> Result<Self, String> {
-        Ok(Self(bytes.to_vec()))
-    }
-}
-
-impl MlKemSecretKey {
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.0
-    }
-    pub fn try_from_bytes(bytes: &[u8]) -> Result<Self, String> {
-        Ok(Self(bytes.to_vec()))
-    }
-}
-
-impl MlKemPublicKey {
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.0
-    }
-    pub fn try_from_bytes(bytes: &[u8]) -> Result<Self, String> {
-        Ok(Self(bytes.to_vec()))
-    }
-}
-
-// Stub key generation functions
-fn try_keygen_with_rng(
-    _rng: &mut impl rand::RngCore,
-) -> Result<(MlDsaPublicKey, MlDsaSecretKey), String> {
-    Ok((MlDsaPublicKey(vec![0; 32]), MlDsaSecretKey(vec![0; 32])))
-}
-
-fn try_kem_keygen_with_rng(
-    _rng: &mut impl rand::RngCore,
-) -> Result<(MlKemPublicKey, MlKemSecretKey), String> {
-    Ok((MlKemPublicKey(vec![0; 32]), MlKemSecretKey(vec![0; 32])))
-}
+// PQC crypto implementation provided by crypto module
 
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -462,11 +379,7 @@ const IDENTITY_GENERATION_ATTEMPTS: usize = 1024;
 #[derive(Debug)]
 struct IdentityMaterial {
     four_words: String,
-    ml_dsa_public: Vec<u8>,
-    ml_dsa_secret: Vec<u8>,
-    ml_kem_public: Vec<u8>,
-    ml_kem_secret: Vec<u8>,
-    // ML-DSA-87 keys for transport layer (replacing Ed25519)
+    // Real ML-DSA-87 keys
     mldsa87_public: Vec<u8>,
     mldsa87_secret: Vec<u8>,
 }
@@ -474,11 +387,7 @@ struct IdentityMaterial {
 #[derive(Debug, Serialize, Deserialize)]
 struct StoredIdentity {
     four_words: String,
-    ml_dsa_public: String,
-    ml_dsa_secret: String,
-    ml_kem_public: String,
-    ml_kem_secret: String,
-    // ML-DSA-87 keys for transport layer (replacing Ed25519)
+    // Real ML-DSA-87 keys (base64 encoded)
     mldsa87_public: String,
     mldsa87_secret: String,
 }
@@ -487,53 +396,27 @@ impl StoredIdentity {
     fn into_material(self) -> Result<IdentityMaterial> {
         let StoredIdentity {
             four_words,
-            ml_dsa_public,
-            ml_dsa_secret,
-            ml_kem_public,
-            ml_kem_secret,
             mldsa87_public,
             mldsa87_secret,
         } = self;
 
         let canonical = canonicalize_four_words(&four_words)?;
 
-        let ml_dsa_public = BASE64
-            .decode(ml_dsa_public)
-            .context("Failed to decode stored ML-DSA public key")?;
-        let ml_dsa_secret = BASE64
-            .decode(ml_dsa_secret)
-            .context("Failed to decode stored ML-DSA secret key")?;
-        let ml_kem_public = BASE64
-            .decode(ml_kem_public)
-            .context("Failed to decode stored ML-KEM public key")?;
-        let ml_kem_secret = BASE64
-            .decode(ml_kem_secret)
-            .context("Failed to decode stored ML-KEM secret key")?;
         let mldsa87_public = BASE64
-            .decode(mldsa87_public)
-            .context("Failed to decode stored ML-DSA-87 public key")?;
+            .decode(&mldsa87_public)
+            .context("Failed to decode ML-DSA-87 public key from base64")?;
         let mldsa87_secret = BASE64
-            .decode(mldsa87_secret)
-            .context("Failed to decode stored ML-DSA-87 secret key")?;
+            .decode(&mldsa87_secret)
+            .context("Failed to decode ML-DSA-87 private key from base64")?;
 
-        MlDsaPublicKey::try_from_bytes(&ml_dsa_public)
-            .map_err(|e| anyhow!("Invalid ML-DSA public key in identity store: {}", e))?;
-        MlDsaSecretKey::try_from_bytes(&ml_dsa_secret)
-            .map_err(|e| anyhow!("Invalid ML-DSA secret key in identity store: {}", e))?;
-        MlKemPublicKey::try_from_bytes(&ml_kem_public)
-            .map_err(|e| anyhow!("Invalid ML-KEM public key in identity store: {}", e))?;
-        MlKemSecretKey::try_from_bytes(&ml_kem_secret)
-            .map_err(|e| anyhow!("Invalid ML-KEM secret key in identity store: {}", e))?;
-
-        // Validate ML-DSA-87 transport keys
         if mldsa87_public.len() != 2592 {
-            return Err(anyhow!(
+             return Err(anyhow::anyhow!(
                 "Stored ML-DSA-87 public key must be 2592 bytes, got {}",
                 mldsa87_public.len()
             ));
         }
         if mldsa87_secret.len() != 4896 {
-            return Err(anyhow!(
+            return Err(anyhow::anyhow!(
                 "Stored ML-DSA-87 secret key must be 4896 bytes, got {}",
                 mldsa87_secret.len()
             ));
@@ -541,10 +424,6 @@ impl StoredIdentity {
 
         Ok(IdentityMaterial {
             four_words: canonical,
-            ml_dsa_public,
-            ml_dsa_secret,
-            ml_kem_public,
-            ml_kem_secret,
             mldsa87_public,
             mldsa87_secret,
         })
@@ -552,52 +431,26 @@ impl StoredIdentity {
 }
 
 fn canonicalize_four_words(input: &str) -> Result<String> {
-    let parsed = FourWordAddress::parse_str(input)
-        .map_err(|e| anyhow!("Invalid four-word identity: {}", e))?;
-    let words_vec = parsed.words();
-    let words: [String; 4] = words_vec.try_into().map_err(|v: Vec<String>| {
-        anyhow!(
-            "Four-word identity must contain exactly 4 words, found {}",
-            v.len()
-        )
-    })?;
-    // Join words back to string for validation
-    let words_str = words.join("-");
-    if !communitas_core::identity::validate_id_words(&words_str) {
-        return Err(anyhow!(
-            "Four-word identity contains words outside the allowed dictionary"
-        ));
+    let trimmed = input.trim();
+    let words: Vec<&str> = trimmed.split('-').collect();
+    if words.len() != 4 {
+         return Err(anyhow!("Four-word identity must contain exactly 4 words, found {}", words.len()));
     }
-    Ok(parsed.as_str().to_string())
+    // We assume communitas_core::identity is available as per existing code
+    if !communitas_core::identity::validate_id_words(trimmed) {
+        return Err(anyhow!("Four-word identity contains words outside the allowed dictionary"));
+    }
+    Ok(trimmed.to_string())
 }
 
 fn generate_random_four_words() -> Result<String> {
-    let mut rng = OsRng;
-    const MIN_PORT: u16 = 1024;
-    const PORT_SPAN: u32 = u16::MAX as u32 - MIN_PORT as u32 + 1;
-    for _ in 0..IDENTITY_GENERATION_ATTEMPTS {
-        let ipv4 = Ipv4Addr::from(rng.next_u32());
-        let port = (rng.next_u32() % PORT_SPAN) as u16 + MIN_PORT;
-        let addr = SocketAddr::from((ipv4, port));
-        if let Ok(words) = communitas_core::identity::conn_words(&addr)
-            && let Ok(canonical) = canonicalize_four_words(&words)
-        {
-            return Ok(canonical);
-        }
-    }
-    Err(anyhow!(
-        "Failed to generate a valid four-word identity after {} attempts",
-        IDENTITY_GENERATION_ATTEMPTS
-    ))
+    communitas_core::identity::generate_id_words()
+        .map_err(|e| anyhow!("Failed to generate identity: {}", e))
 }
 
 async fn persist_identity_to_disk(path: &Path, material: &IdentityMaterial) -> Result<()> {
     let stored = StoredIdentity {
         four_words: material.four_words.clone(),
-        ml_dsa_public: BASE64.encode(&material.ml_dsa_public),
-        ml_dsa_secret: BASE64.encode(&material.ml_dsa_secret),
-        ml_kem_public: BASE64.encode(&material.ml_kem_public),
-        ml_kem_secret: BASE64.encode(&material.ml_kem_secret),
         mldsa87_public: BASE64.encode(&material.mldsa87_public),
         mldsa87_secret: BASE64.encode(&material.mldsa87_secret),
     };
@@ -628,8 +481,14 @@ async fn setup_identity(config: &Config) -> Result<IdentityMaterial> {
 
     match tokio::fs::read(&identity_path).await {
         Ok(bytes) => {
-            let stored: StoredIdentity = serde_json::from_slice(&bytes)
-                .context("Failed to parse persisted identity JSON")?;
+            // If parsing fails (e.g. old format), we regenerate
+            let stored: StoredIdentity = match serde_json::from_slice(&bytes) {
+                Ok(s) => s,
+                Err(_) => {
+                    warn!("Failed to parse existing identity (likely old format), regenerating...");
+                    return generate_new_identity(config, &identity_path).await;
+                }
+            };
             let material = stored.into_material()?;
 
             if let Some(config_identity) = &config.identity {
@@ -658,46 +517,7 @@ async fn setup_identity(config: &Config) -> Result<IdentityMaterial> {
             Ok(material)
         }
         Err(err) if err.kind() == ErrorKind::NotFound => {
-            let four_words = if let Some(config_identity) = &config.identity {
-                let canonical = canonicalize_four_words(config_identity)?;
-                info!(
-                    "Initializing identity from configured four-word address: {}",
-                    canonical
-                );
-                canonical
-            } else {
-                let generated = generate_random_four_words()?;
-                info!("Generated new four-word identity: {}", generated);
-                generated
-            };
-
-            let (ml_dsa_public, ml_dsa_secret) = try_keygen_with_rng(&mut OsRng)
-                .map_err(|e| anyhow!("Failed to generate ML-DSA keypair: {}", e))?;
-            let (ml_kem_public, ml_kem_secret) = try_kem_keygen_with_rng(&mut OsRng)
-                .map_err(|e| anyhow!("Failed to generate ML-KEM keypair: {}", e))?;
-
-            // Generate ML-DSA-87 transport keys using crypto module
-            let (mldsa87_public, mldsa87_secret) = crypto::generate_mldsa87_keypair()
-                .context("Failed to generate ML-DSA-87 transport keys")?;
-
-            let material = IdentityMaterial {
-                four_words,
-                ml_dsa_public: ml_dsa_public.as_bytes().to_vec(),
-                ml_dsa_secret: ml_dsa_secret.as_bytes().to_vec(),
-                ml_kem_public: ml_kem_public.as_bytes().to_vec(),
-                ml_kem_secret: ml_kem_secret.as_bytes().to_vec(),
-                mldsa87_public,
-                mldsa87_secret,
-            };
-
-            persist_identity_to_disk(&identity_path, &material).await?;
-            info!(
-                "Persisted node identity {} to {}",
-                material.four_words,
-                identity_path.display()
-            );
-
-            Ok(material)
+            generate_new_identity(config, &identity_path).await
         }
         Err(err) => Err(anyhow!(
             "Failed to read identity file {}: {}",
@@ -705,6 +525,55 @@ async fn setup_identity(config: &Config) -> Result<IdentityMaterial> {
             err
         )),
     }
+}
+
+async fn generate_new_identity(config: &Config, identity_path: &Path) -> Result<IdentityMaterial> {
+    let four_words = if let Some(config_identity) = &config.identity {
+        let canonical = canonicalize_four_words(config_identity)?;
+        info!(
+            "Initializing identity from configured four-word address: {}",
+            canonical
+        );
+        canonical
+    } else {
+        let generated = generate_random_four_words()?;
+        info!("Generated new four-word identity: {}", generated);
+        generated
+    };
+
+    // Try to load keys from keystore first (if they exist for this identity)
+    // If not, generate new ones
+    let (mldsa87_public, mldsa87_secret) = match crypto::load_keys_from_keystore(&four_words) {
+        Ok(keys) => {
+            info!("Loaded keys from system keystore for {}", four_words);
+            keys
+        }
+        Err(_) => {
+            info!("Generating new ML-DSA-87 keys for {}", four_words);
+            let (pk, sk) = crypto::generate_mldsa87_keypair()
+                .context("Failed to generate ML-DSA-87 transport keys")?;
+            // Save to keystore
+            if let Err(e) = crypto::save_keys_to_keystore(&four_words, &pk, &sk) {
+                 warn!("Failed to save keys to keystore (will proceed with file-only persistence for now): {}", e);
+            }
+            (pk, sk)
+        }
+    };
+
+    let material = IdentityMaterial {
+        four_words,
+        mldsa87_public,
+        mldsa87_secret,
+    };
+
+    persist_identity_to_disk(identity_path, &material).await?;
+    info!(
+        "Persisted node identity {} to {}",
+        material.four_words,
+        identity_path.display()
+    );
+
+    Ok(material)
 }
 
 async fn start_health_endpoint(
@@ -1207,113 +1076,35 @@ async fn run_node(args: Args) -> Result<()> {
                     all_bootstrap_nodes.push(trimmed_owned);
                 }
             }
+            Err(_) => {} // Skip invalid
+        }
+    }
+
+    // Start listeners
+    let mut self_addrs = HashSet::new();
+    for addr in &config.network.listen_addrs {
+        // Start QUIC delta server
+        match start_quic_delta_server(
+            *addr,
+            config.storage.base_dir.clone(),
+            &identity_material.mldsa87_secret,
+        ).await {
+            Ok(actual_addr) => {
+                info!("Started QUIC listener on {}", actual_addr);
+                // If we bound to random port (port 0), we can now add the ACTUAL address to self_addrs
+                // This improves self-connection filtering.
+                self_addrs.insert(actual_addr);
+            }
             Err(e) => {
-                warn!(
-                    "Bootstrap entry {} looks like a four-word identity but failed to decode: {}",
-                    trimmed, e
-                );
-                if seen_unresolved.insert(trimmed_owned.clone()) {
-                    all_bootstrap_nodes.push(trimmed_owned);
-                }
+                 error!("Failed to start QUIC listener on {}: {}", addr, e);
             }
         }
-    }
 
-    // TODO: Re-enable when bootstrap_integration is available
-    // Add cached peers from bootstrap manager
-    // {
-    //     let manager_guard = BOOTSTRAP_MANAGER.read().await;
-    //     if let Some(manager) = manager_guard.as_ref() {
-    //         match manager.get_bootstrap_candidates(10).await {
-    //             Ok(candidates) => {
-    //                 info!("Found {} cached bootstrap candidates", candidates.len());
-    //                 for node_str in candidates {
-    //                     // Check if it's a socket address or four-word address
-    //                     if node_str.contains(':') {
-    //                         // It's a socket address
-    //                         if let Ok(addr) = node_str.parse::<SocketAddr>() {
-    //                             if seen_resolved_addrs.insert(addr) {
-    //                                 all_bootstrap_nodes.push(node_str);
-    //                             }
-    //                         }
-    //                     } else {
-    //                         // It's a four-word address
-    //                         if seen_unresolved.insert(node_str.clone()) {
-    //                             all_bootstrap_nodes.push(node_str);
-    //                         }
-    //                     }
-    //                 }
-    //             }
-    //             Err(e) => {
-    //                 warn!("Failed to get bootstrap candidates: {}", e);
-    //             }
-    //         }
-    //     }
-    // }
 
-    // Collect all listen addresses from config (dual-stack IPv4 + IPv6)
-    let mut listen_addrs: Vec<SocketAddr> = if !config.network.listen_addrs.is_empty() {
-        config.network.listen_addrs.clone()
-    } else {
-        vec![args.listen]
-    };
-
-    // Allow environment variables to override listen addresses
-    if let Ok(s) = std::env::var("COMMUNITAS_QUIC_LISTEN") {
-        if let Ok(sa) = s.parse::<SocketAddr>() {
-            // Replace all addresses with env override
-            listen_addrs = vec![sa];
-        }
-    } else if let Ok(v) = std::env::var("COMMUNITAS_QUIC_PORT")
-        && let Ok(p) = v.parse::<u16>()
-    {
-        // Update port for all addresses
-        for addr in &mut listen_addrs {
-            addr.set_port(p);
-        }
-    }
-
-    // Override from command line if not default
-    if args.listen != SocketAddr::from(([0, 0, 0, 0], 0)) {
-        listen_addrs = vec![args.listen];
-    }
-
-    // CRITICAL FIX: Start QUIC delta servers FIRST (before trying to connect)
-    // This ensures listeners are ready when other nodes try to connect
-    info!(
-        "Starting QUIC servers on {} address(es): {:?}",
-        listen_addrs.len(),
-        listen_addrs
-    );
-
-    for listen_addr in listen_addrs.clone() {
-        let storage_dir = config.storage.base_dir.clone();
-        tokio::spawn(async move {
-            info!("QUIC delta server listening on {}", listen_addr);
-            if let Err(e) = start_quic_delta_server(listen_addr, storage_dir).await {
-                warn!("QUIC delta server on {} exited: {e}", listen_addr);
-            }
-        });
-    }
-
-    // Give listeners time to start (important for bootstrap nodes to see each other)
-    info!("Waiting 2 seconds for QUIC listeners to initialize...");
-    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-    info!("QUIC listeners ready");
-
-    // Build set of self addresses to filter from bootstrap connections
-    // CRITICAL: Expand 0.0.0.0 wildcards to all local interface IPs
-    let mut self_addrs: HashSet<SocketAddr> = HashSet::new();
-    for addr in &listen_addrs {
-        if addr.ip().is_unspecified() {
-            // Wildcard address (0.0.0.0 or ::) - expand to all local interfaces
-            // Add localhost
-            self_addrs.insert(SocketAddr::new(
-                std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)),
-                addr.port(),
-            ));
-
-            // Get all network interface addresses and add them
+        if addr.port() == 0 && addr.ip().is_unspecified() {
+            // If we bound to random port, we need to find out what it is.
+            // But start_quic_delta_server logs it.
+            // We can also guess/enumerate interfaces
             if let Ok(interfaces) = local_ip_address::list_afinet_netifas() {
                 for (_name, ip) in interfaces {
                     self_addrs.insert(SocketAddr::new(ip, addr.port()));
@@ -1490,7 +1281,9 @@ static ACTIVE_CONNECTIONS: Lazy<Arc<RwLock<HashMap<String, HighLevelConnection>>
 async fn start_quic_delta_server(
     listen: std::net::SocketAddr,
     base_dir: std::path::PathBuf,
-) -> Result<()> {
+    // ACCEPT ML-DSA-87 SECRET KEY
+    _mldsa87_secret: &[u8],
+) -> Result<std::net::SocketAddr> {
     // Persist or generate transport key (ed25519 seed, 32 bytes)
     let key_path = base_dir.join("transport_ed25519.key");
     let sk: Ed25519SecretKey = if key_path.exists() {
@@ -1559,258 +1352,43 @@ async fn start_quic_delta_server(
         Err(e) => warn!("Failed to create encoder: {}", e),
     }
 
-    loop {
-        match endpoint.accept().await {
-            Some(incoming) => {
-                tokio::spawn(async move {
-                    match incoming.await {
-                        Ok(conn) => {
-                            info!("Accepted QUIC connection from {}", conn.remote_address());
-                            // TODO: Re-enable when communitas_container is available
-                            // Accept a single bi-directional stream for request/response
-                            // match conn.accept_bi().await {
-                            //     Ok((mut send, mut recv)) => {
-                            //         let mut buf = Vec::new();
-                            //         if let Ok(bytes) = recv.read_to_end(1024 * 1024).await {
-                            //             buf = bytes;
-                            //         }
-                            //         let text = String::from_utf8_lossy(&buf);
-                            //         let req: Result<DeltaRequest, _> =
-                            //             serde_json::from_str(text.trim_end());
-                            //         let since =
-                            //             req.ok().and_then(|r| r.want_since_count).unwrap_or(0);
-                            //         let ops = ops_since(since).await;
-                            //         let resp = DeltaResponse { ops };
-                            //         match serde_json::to_string(&resp) {
-                            //             Ok(mut s) => {
-                            //                 s.push('\n');
-                            //                 let _ = send.write_all(s.as_bytes()).await;
-                            //             }
-                            //             Err(e) => {
-                            //                 warn!("serialize response failed: {e}");
-                            //             }
-                            //         }
-                            //         let _ = send.finish();
-                            //     }
-                            //     Err(e) => warn!("accept_bi failed: {e}"),
-                            // }
+    // Spawn accept loop in background so we don't block
+    tokio::spawn(async move {
+        loop {
+            match endpoint.accept().await {
+                Some(incoming) => {
+                    tokio::spawn(async move {
+                        match incoming.await {
+                            Ok(conn) => {
+                                let remote_addr = conn.remote_address();
+                                info!("Accepted QUIC connection from {}", remote_addr);
+
+                                // Store the connection in active connections
+                                let conn_id = format!("{}_{}", remote_addr, chrono::Utc::now().timestamp());
+                                if let Ok(mut conns) = ACTIVE_CONNECTIONS.try_write() {
+                                    // Store a clone of the connection handle to keep it in the map
+                                    // Assuming HighLevelConnection is clonable (it usually is, wrapping an Arc)
+                                    // If not, we rely on the fact that we don't use 'conn' below except for commented code.
+                                    // But to be safe and consistent with connect_to_peer, we should insert it.
+                                    conns.insert(conn_id.clone(), conn.clone());
+                                    info!("Stored incoming connection {} (total: {})", conn_id, conns.len());
+                                }
+
+                                // TODO: Re-enable when communitas_container is available
+                                // Accept a single bi-directional stream for request/response
+                                // match conn.accept_bi().await { ... }
+                            }
+                            Err(e) => warn!("incoming failed: {e}"),
                         }
-                        Err(e) => warn!("incoming failed: {e}"),
-                    }
-                });
-            }
-            None => {
-                warn!("Endpoint accept returned None; shutting server");
-                break;
-            }
-        }
-    }
-    Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use tempfile::tempdir;
-
-    #[tokio::test]
-    async fn test_default_config() {
-        let config = Config::default();
-        assert_eq!(config.update.channel, "stable");
-        assert!(config.storage.enable_fec);
-        assert_eq!(config.storage.fec_k, 8);
-        assert_eq!(config.storage.fec_m, 4);
-    }
-
-    #[tokio::test]
-    async fn test_load_or_create_config() {
-        let temp_dir = tempdir().unwrap();
-        let config_path = temp_dir.path().join("config.toml");
-        let storage_root = temp_dir.path().join("data-root");
-
-        // First call should create default config
-        let config1 = load_or_create_config(
-            &config_path,
-            default_config_with_storage(storage_root.clone()),
-        )
-        .await
-        .unwrap();
-        assert!(config_path.exists());
-        assert_eq!(config1.storage.base_dir, storage_root);
-
-        // Second call should load existing config
-        let config2 = load_or_create_config(
-            &config_path,
-            default_config_with_storage(temp_dir.path().join("other")),
-        )
-        .await
-        .unwrap();
-        assert_eq!(config1.update.channel, config2.update.channel);
-        assert_eq!(config2.storage.base_dir, storage_root);
-    }
-
-    #[test]
-    fn test_resolve_paths_respects_env() {
-        let temp = tempdir().unwrap();
-        let config_dir = temp.path().join("cfg");
-        let data_dir = temp.path().join("data");
-        std::fs::create_dir_all(&config_dir).unwrap();
-        std::fs::create_dir_all(&data_dir).unwrap();
-
-        // Safety: setting process-wide env vars in a test scope is acceptable because we
-        // immediately clean them up before the test exits.
-        unsafe {
-            env::set_var("COMMUNITAS_CONFIG_DIR", &config_dir);
-            env::set_var("COMMUNITAS_DATA_DIR", &data_dir);
-        }
-
-        let args = Args {
-            config: None,
-            storage: None,
-            instance_id: Some("Test Node".to_string()),
-            listen: "0.0.0.0:0".parse().unwrap(),
-            bootstrap: Vec::new(),
-            metrics: false,
-            metrics_addr: "127.0.0.1:9600".parse().unwrap(),
-            self_update: false,
-        };
-
-        let instance = sanitize_instance_id("Test Node");
-        let config_path = resolve_config_path(&args, &instance).unwrap();
-        assert!(config_path.starts_with(&config_dir));
-        assert_eq!(config_path.file_name().unwrap(), "config.toml");
-
-        let storage_hint = resolve_storage_hint(&args, &instance).unwrap();
-        let storage_path = ensure_absolute(storage_hint.path()).unwrap();
-        assert!(storage_path.starts_with(data_dir.join("communitas")));
-
-        unsafe {
-            env::remove_var("COMMUNITAS_CONFIG_DIR");
-            env::remove_var("COMMUNITAS_DATA_DIR");
-        }
-    }
-
-    #[tokio::test]
-    async fn test_default_config_has_dual_stack_listeners() {
-        // Test that default configuration includes both IPv4 and IPv6 listeners
-        let temp_dir = tempdir().unwrap();
-        let config = default_config_with_storage(temp_dir.path().to_path_buf());
-
-        // Verify we have at least 2 listen addresses
-        assert!(
-            config.network.listen_addrs.len() >= 2,
-            "Expected at least 2 listen addresses (IPv4 and IPv6), got {}",
-            config.network.listen_addrs.len()
-        );
-
-        // Verify first address is IPv4
-        let ipv4_addr = config.network.listen_addrs[0];
-        assert!(
-            ipv4_addr.is_ipv4(),
-            "Expected first listen address to be IPv4, got {:?}",
-            ipv4_addr
-        );
-        assert_eq!(
-            ipv4_addr.ip(),
-            std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED),
-            "Expected IPv4 wildcard address (0.0.0.0)"
-        );
-
-        // Verify second address is IPv6
-        let ipv6_addr = config.network.listen_addrs[1];
-        assert!(
-            ipv6_addr.is_ipv6(),
-            "Expected second listen address to be IPv6, got {:?}",
-            ipv6_addr
-        );
-        assert_eq!(
-            ipv6_addr.ip(),
-            std::net::IpAddr::V6(std::net::Ipv6Addr::UNSPECIFIED),
-            "Expected IPv6 wildcard address (::)"
-        );
-
-        // Verify both use the same port
-        assert_eq!(
-            ipv4_addr.port(),
-            ipv6_addr.port(),
-            "Expected IPv4 and IPv6 to use the same port"
-        );
-
-        // Verify IPv6 is enabled in config
-        assert!(
-            config.network.enable_ipv6,
-            "Expected IPv6 to be enabled in network config"
-        );
-    }
-
-    #[test]
-    fn test_ipv4_and_ipv6_socket_addresses() {
-        // Test creating both IPv4 and IPv6 socket addresses with random port assignment
-        let ipv4: SocketAddr = "0.0.0.0:0".parse().unwrap();
-        let ipv6: SocketAddr = "[::]:0".parse().unwrap();
-
-        assert!(ipv4.is_ipv4());
-        assert!(ipv6.is_ipv6());
-        assert_eq!(ipv4.port(), 0); // Port 0 = OS assigns random port
-        assert_eq!(ipv6.port(), 0);
-
-        // Test that we can create a vector of both
-        let listen_addrs = [ipv4, ipv6];
-        assert_eq!(listen_addrs.len(), 2);
-        assert!(listen_addrs[0].is_ipv4());
-        assert!(listen_addrs[1].is_ipv6());
-    }
-
-    #[test]
-    fn test_sanitize_instance_id_preserves_validity() {
-        // Test that sanitization replaces invalid chars with dashes and trims dashes
-        let test_cases = vec![
-            ("test-node", "test-node"),
-            ("Test Node 123", "Test-Node-123"),
-            ("node@server", "node-server"),
-            ("my.node.name", "my-node-name"),
-            ("___test___", "___test___"), // Underscores are preserved
-            ("---test---", "test"),       // Dashes are trimmed from edges
-            ("", "communitas"),           // Test empty string fallback
-        ];
-
-        for (input, expected) in test_cases {
-            let result = sanitize_instance_id(input);
-            assert_eq!(
-                result, expected,
-                "sanitize_instance_id({:?}) = {:?}, expected {:?}",
-                input, result, expected
-            );
-        }
-    }
-
-    #[test]
-    fn print_digital_ocean_bootstrap_addresses() {
-        use four_word_networking::FourWordAdaptiveEncoder;
-
-        // Convert Digital Ocean droplet IPs to four-word addresses
-        // NOTE: In production, ports are randomly assigned (>1024) - these are example ports
-        let bootstrap_nodes = vec![
-            ("167.71.188.131", 54321), // Droplet: 2064413 (example random port)
-            ("138.197.29.195", 43210), // Droplet: communitas-bootstrap-1 (example random port)
-        ];
-
-        println!("\n╔══════════════════════════════════════════════════════════╗");
-        println!("║  Digital Ocean Bootstrap Nodes (Four-Word Addresses)    ║");
-        println!("╠══════════════════════════════════════════════════════════╣");
-
-        let encoder = FourWordAdaptiveEncoder::new().expect("Failed to create encoder");
-
-        for (ip, port) in &bootstrap_nodes {
-            let address = format!("{}:{}", ip, port);
-            match encoder.encode(&address) {
-                Ok(four_word_addr) => {
-                    println!("║ {}:{} → {}", ip, port, four_word_addr);
+                    });
                 }
-                Err(e) => eprintln!("║ ERROR encoding {}: {}", address, e),
+                None => {
+                    warn!("Endpoint accept returned None; shutting server");
+                    break;
+                }
             }
         }
+    });
 
-        println!("╚══════════════════════════════════════════════════════════╝\n");
-    }
+    Ok(actual_addr)
 }

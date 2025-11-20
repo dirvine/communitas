@@ -896,6 +896,18 @@ impl GossipContext {
         }
         Ok(())
     }
+
+    /// Establish a connection to a specific address (bootstrap)
+    pub async fn dial_address(&self, addr: std::net::SocketAddr) -> Result<()> {
+        // Use membership to join the network via this peer
+        // We assume this is a bootstrap node
+        // HyParView join(addr)
+        let mut membership = self.membership.write().await;
+        // Convert to four-word address for membership join
+        let seed = crate::conn_words(&addr).map_err(|e| anyhow::anyhow!("Failed to encode addr: {}", e))?;
+        membership.join(vec![seed]).await.map_err(|e| anyhow::anyhow!("Failed to join via {}: {}", addr, e))?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]

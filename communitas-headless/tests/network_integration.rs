@@ -132,18 +132,21 @@ jitter_secs = 0
     let monitor_a = LogMonitor::new(stdout_a, "Node A");
 
     // Wait for Node A to start and get its address
-    let log_line = monitor_a.wait_for("Started QUIC listener on", Duration::from_secs(10))
+    // Look for "Gossip networking started on IP:PORT"
+    let log_line = monitor_a.wait_for("Gossip networking started on", Duration::from_secs(10))
         .expect("Timed out waiting for Node A to start");
         
     // Parse address
+    // Format: ... Gossip networking started on 127.0.0.1:54321 (identity words)
     let mut address_a = String::new();
-    if let Some(idx) = log_line.find("127.0.0.1:") {
-        let rest = &log_line[idx..];
+    if let Some(idx) = log_line.find("on ") {
+        let rest = &log_line[idx + 3..]; // Skip "on "
         if let Some(end) = rest.find(' ') {
             address_a = rest[..end].to_string();
         } else {
             address_a = rest.to_string();
         }
+        // Clean up any trailing punctuation if any
         address_a = address_a.trim_matches(|c| c == ')' || c == ',').to_string();
     }
     

@@ -159,9 +159,11 @@ impl GossipContext {
 
         // 2b. Bind transport to specified port
         if let Some(port) = listen_port {
-            let local_ip = local_ip_address::local_ip()
-                .context("Failed to get local IP address for transport binding")?;
-            let bind_addr = std::net::SocketAddr::new(local_ip, port);
+            // Use 0.0.0.0 to bind to all interfaces (required for multi-homed servers like DigitalOcean)
+            let bind_addr = std::net::SocketAddr::new(
+                std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)),
+                port
+            );
 
             info!("Binding transport to {}", bind_addr);
             transport

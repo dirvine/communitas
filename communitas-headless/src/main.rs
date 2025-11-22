@@ -580,6 +580,7 @@ async fn start_health_endpoint(
     addr: SocketAddr,
     // Removed: _dht_client - saorsa-core removed
     // _dht_client: Arc<saorsa_core::messaging::DhtClient>,
+    gossip: Option<Arc<communitas_core::GossipContext>>,
 ) -> Result<()> {
     use warp::Filter;
     use warp::cors;
@@ -596,11 +597,21 @@ async fn start_health_endpoint(
     });
 
     let metrics = warp::path("metrics").map(move || {
-        // Get actual peer count from active connections
-        let peer_count = ACTIVE_CONNECTIONS
-            .try_read()
-            .map(|conns| conns.len())
-            .unwrap_or(0);
+        // Get actual peer count from gossip membership
+        let peer_count = if let Some(g) = &gossip {
+            // We need to access membership. But membership is RwLock<Box<dyn Membership>>.
+            // We can't easily get active_view len without async lock.
+            // Warp filters are synchronous closures unless we use and_then/async.
+            // For simplicity, we'll skip accurate count or try_read if possible.
+            // Arc<RwLock<...>>.try_read() is non-blocking.
+            if let Ok(guard) = g.membership.try_read() {
+                guard.active_view().len()
+            } else {
+                0
+            }
+        } else {
+            0
+        };
 
         format!(
             "# HELP communitas_peers_connected Number of connected peers\n\
@@ -1049,7 +1060,8 @@ async fn run_node(args: Args) -> Result<()> {
 
     // Start health/metrics endpoint if enabled
     if args.metrics {
-        start_health_endpoint(args.metrics_addr).await?;
+        let ctx_clone = context.gossip.clone();
+        start_health_endpoint(args.metrics_addr, ctx_clone).await?;
         info!("Metrics endpoint started on {}", args.metrics_addr);
     }
 

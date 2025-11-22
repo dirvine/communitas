@@ -596,29 +596,24 @@ async fn start_health_endpoint(
         }))
     });
 
-    let metrics = warp::path("metrics").map(move || {
-        // Get actual peer count from gossip membership
-        let peer_count = if let Some(g) = &gossip {
-            // We need to access membership. But membership is RwLock<Box<dyn Membership>>.
-            // We can't easily get active_view len without async lock.
-            // Warp filters are synchronous closures unless we use and_then/async.
-            // For simplicity, we'll skip accurate count or try_read if possible.
-            // Arc<RwLock<...>>.try_read() is non-blocking.
-            if let Ok(guard) = g.membership.try_read() {
-                guard.active_view().len()
+    let metrics = warp::path("metrics").and(warp::get()).then(move || {
+        let gossip = gossip.clone();
+        async move {
+            let peer_count = if let Some(g) = gossip {
+                g.membership.read().await.active_view().len()
             } else {
                 0
-            }
-        } else {
-            0
-        };
+            };
 
-        format!(
-            "# HELP communitas_peers_connected Number of connected peers\n\
-             # TYPE communitas_peers_connected gauge\n\
-             communitas_peers_connected {}\n",
-            peer_count
-        )
+            let response = format!(
+                "# HELP communitas_peers_connected Number of connected peers\n\
+                 # TYPE communitas_peers_connected gauge\n\
+                 communitas_peers_connected {}\n",
+                peer_count
+            );
+            
+            warp::reply::html(response)
+        }
     });
 
     // Add authentication endpoints

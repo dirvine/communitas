@@ -134,7 +134,8 @@ impl GossipBootSequence {
             config.addresses.len()
         );
 
-        match super::discovery::cold_start_discovery(config, &self.context.transport).await {
+        let transport_ref = self.context.transport.as_ref();
+        match super::discovery::cold_start_discovery(config, transport_ref).await {
             Ok(introducers) => {
                 info!("Connected to {} introducer(s)", introducers.len());
                 Ok(())

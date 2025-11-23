@@ -21,7 +21,7 @@ use saorsa_gossip_identity::Identity;
 use saorsa_gossip_membership::Membership;
 use saorsa_gossip_presence::PresenceManager; // Actual exports
 use saorsa_gossip_pubsub::PubSub;
-use saorsa_gossip_transport::{GossipTransport, QuicTransport, StreamType};
+use saorsa_gossip_transport::{AntQuicTransport, AntQuicTransportConfig, EndpointRole, GossipTransport, StreamType};
 use saorsa_gossip_types::{PeerId, TopicId};
 use saorsa_pqc::symmetric::{ChaCha20Poly1305Cipher, SymmetricKey};
 use std::collections::HashMap;
@@ -65,7 +65,7 @@ pub struct GossipContext {
     pub anti_entropy: Arc<AntiEntropyManager<OrSet<Vec<u8>>>>,
 
     /// Transport layer (QUIC via ant-quic)
-    pub transport: Arc<QuicTransport>,
+    pub transport: Arc<AntQuicTransport>,
 
     /// Pub/sub layer (Plumtree broadcast)
     pub pubsub: Arc<RwLock<Box<dyn PubSub>>>,
@@ -152,9 +152,17 @@ impl GossipContext {
         let peer_id = identity.peer_id();
         debug!("Loaded identity, peer_id: {:?}", peer_id);
 
-        // 2. Initialize QUIC transport
-        let config = saorsa_gossip_transport::TransportConfig::default();
-        let transport = QuicTransport::new(config);
+        // 2. Initialize QUIC transport (AntQuicTransport)
+        // Default config with allow_any_key enabled for P2P mesh
+        let transport_config = AntQuicTransportConfig::new(
+            "0.0.0.0:0".parse().unwrap(), // Will be rebound later
+            saorsa_gossip_transport::EndpointRole::Client, // Default role, updated by listen()
+            vec![], // Bootstrap nodes added later
+        ).with_allow_any_key(true);
+
+        let transport = AntQuicTransport::with_config(transport_config, None)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to create AntQuicTransport: {}", e))?;
         let transport = Arc::new(transport);
 
         // 2b. Bind transport to specified port
@@ -166,11 +174,46 @@ impl GossipContext {
             );
 
             info!("Binding transport to {}", bind_addr);
-            transport
-                .listen(bind_addr)
-                .await
-                .context("Failed to bind transport to specified address")?;
+            // AntQuicTransport binds on creation if address is provided, but we can re-bind or check.
+            // Actually AntQuicTransport::new takes bind_addr.
+            // We should create it with the correct address if known.
+            // If listen_port is Some, we should use it in creation.
+            // But the `start_networking` method handles port allocation via PortManager and then re-initializes transport?
+            // No, `start_networking` in `CoreContext` creates a NEW `GossipContext` which creates transport.
+            // This `initialize` method is for `GossipContext`.
+            
+            // However, `GossipContext::initialize` takes `listen_port`.
+            // So we can use it here.
+            
+            // Note: `transport.listen(addr)` in AntQuicTransport might be a no-op if already bound, or might fail.
+            // QuicP2PNode usually binds once.
+            // Let's check if we should reconstruct transport with correct port.
+            
+            // If we use the correct port in `new`, we don't need to call `listen` again?
+            // `AntQuicTransport::listen` implementation says: "Ant-QUIC node is listening (handled by QuicP2PNode)".
+            
+            // So we should construct with the correct port here.
         }
+        
+        // Re-create transport with correct port if provided
+        let bind_port = listen_port.unwrap_or(0);
+        let bind_addr = std::net::SocketAddr::new(
+             std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)),
+             bind_port
+        );
+        
+        let transport_config = AntQuicTransportConfig::new(
+            bind_addr,
+            saorsa_gossip_transport::EndpointRole::Client, // Or Bootstrap/Server if we knew
+            vec![], 
+        ).with_allow_any_key(true);
+        
+        let transport = AntQuicTransport::with_config(transport_config, None)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to create AntQuicTransport: {}", e))?;
+        let transport = Arc::new(transport);
+        
+        // No need to call listen() for AntQuicTransport as it binds on creation.
 
         // 3. Create membership layer (will be started in boot sequence)
         // HyParView parameters: active_degree (3-7), passive_degree (3x active)

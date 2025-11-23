@@ -10,16 +10,16 @@ description = "Core business logic for Communitas - PQC collaboration with virtu
 
 [dependencies]
 # Saorsa Gossip - P2P networking layer (required, no longer optional)
-saorsa-gossip-types = "0.1.8"
-saorsa-gossip-identity = "0.1.8"
-saorsa-gossip-crdt-sync = "0.1.8"
-saorsa-gossip-groups = "0.1.8"
-saorsa-gossip-presence = "0.1.8"
-saorsa-gossip-transport = "0.1.8"
-saorsa-gossip-membership = "0.1.8"
-saorsa-gossip-pubsub = "0.1.8"
-saorsa-gossip-coordinator = "0.1.8"
-saorsa-gossip-rendezvous = "0.1.8"
+saorsa-gossip-types = { git = "https://github.com/dirvine/saorsa-gossip", branch = "main" }
+saorsa-gossip-identity = { git = "https://github.com/dirvine/saorsa-gossip", branch = "main" }
+saorsa-gossip-crdt-sync = { git = "https://github.com/dirvine/saorsa-gossip", branch = "main" }
+saorsa-gossip-groups = { git = "https://github.com/dirvine/saorsa-gossip", branch = "main" }
+saorsa-gossip-presence = { git = "https://github.com/dirvine/saorsa-gossip", branch = "main" }
+saorsa-gossip-transport = { git = "https://github.com/dirvine/saorsa-gossip", branch = "main" }
+saorsa-gossip-membership = { git = "https://github.com/dirvine/saorsa-gossip", branch = "main" }
+saorsa-gossip-pubsub = { git = "https://github.com/dirvine/saorsa-gossip", branch = "main" }
+saorsa-gossip-coordinator = { git = "https://github.com/dirvine/saorsa-gossip", branch = "main" }
+saorsa-gossip-rendezvous = { git = "https://github.com/dirvine/saorsa-gossip", branch = "main" }
 
 # Real-time multimedia (WebRTC over QUIC) - Using core library
 saorsa-webrtc-core.workspace = true

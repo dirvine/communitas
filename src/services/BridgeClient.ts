@@ -175,6 +175,31 @@ class BridgeClient {
   }
 
   /**
+   * Start networking
+   */
+  async startNetworking(): Promise<{ connection_identity: string; listen_address: string }> {
+    const response = await fetch(`${this.baseUrl}/api/network/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}'
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to start networking: ${response.statusText}`);
+    }
+
+    return response.json();
+  }
+
+  async getConnectionInfo(): Promise<{ four_word_id: string; is_listening: boolean; listen_addr: string; peer_count: number }> {
+    const response = await fetch(`${this.baseUrl}/api/network/connection-info`);
+    if (!response.ok) {
+      throw new Error(`Failed to get connection info: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  /**
    * Get list of connected peers
    */
   async getConnectedPeers(): Promise<{ peers: any[] }> {

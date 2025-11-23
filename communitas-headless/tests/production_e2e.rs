@@ -3,11 +3,20 @@ use communitas_core::crdt::EntityType;
 use communitas_core::CoreContext;
 use std::time::Duration;
 use tokio::time::sleep;
+use std::net::SocketAddr;
 
-const DO_BOOTSTRAP_NODE: &str = "ocean-forest-moon-star";
+const DO_BOOTSTRAP_IP: &str = "138.197.29.195:4433";
 
 #[tokio::test]
 async fn test_production_network_gossip_sync() {
+    // Initialize crypto provider
+    let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+
+    // Calculate DO Node connection identity
+    let do_addr: SocketAddr = DO_BOOTSTRAP_IP.parse().unwrap();
+    let do_conn_id = communitas_core::identity::conn_words(&do_addr).unwrap();
+    println!("DO Bootstrap Connection Identity: {}", do_conn_id);
+
     // 1. Setup Alice
     let temp_dir_alice = tempfile::tempdir().unwrap();
     let alice_identity = communitas_core::identity::generate_id_words().unwrap();
@@ -27,11 +36,26 @@ async fn test_production_network_gossip_sync() {
     let alice_conn = alice.start_networking(None).await.expect("Failed to start networking for Alice");
     println!("Alice connected as {}", alice_conn);
 
-    // Connect Alice to DO
-    alice.connect_to_peer(DO_BOOTSTRAP_NODE).await.expect("Alice failed to connect to DO");
+    // Connect Alice to DO using Connection Identity (which triggers dial)
+    alice.connect_to_peer(&do_conn_id).await.expect("Alice failed to connect to DO");
     
     // Wait for connection stability
     sleep(Duration::from_secs(5)).await;
+
+    // Monitor DO Node Metrics
+    tokio::spawn(async {
+        let client = reqwest::Client::new();
+        loop {
+            if let Ok(resp) = client.get("http://138.197.29.195:9600/metrics").send().await {
+                if let Ok(text) = resp.text().await {
+                    if let Some(line) = text.lines().find(|l| l.contains("communitas_peers_connected")) {
+                        println!("DO Node Metrics: {}", line);
+                    }
+                }
+            }
+            sleep(Duration::from_secs(5)).await;
+        }
+    });
 
     // 2. Setup Bob
     let temp_dir_bob = tempfile::tempdir().unwrap();
@@ -53,7 +77,7 @@ async fn test_production_network_gossip_sync() {
     println!("Bob connected as {}", bob_conn);
 
     // Connect Bob to DO
-    bob.connect_to_peer(DO_BOOTSTRAP_NODE).await.expect("Bob failed to connect to DO");
+    bob.connect_to_peer(&do_conn_id).await.expect("Bob failed to connect to DO");
 
     // Wait for connection stability
     sleep(Duration::from_secs(5)).await;

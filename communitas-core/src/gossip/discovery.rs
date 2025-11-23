@@ -271,10 +271,12 @@ impl Default for IntroducerConfig {
     }
 }
 
+use saorsa_gossip_transport::GossipTransport;
+
 /// Cold start discovery using introducer nodes
 pub async fn cold_start_discovery(
     config: IntroducerConfig,
-    _transport: &saorsa_gossip_transport::QuicTransport,
+    _transport: &dyn GossipTransport,
 ) -> Result<Vec<String>> {
     if config.addresses.is_empty() {
         warn!("No introducer nodes configured for cold start");

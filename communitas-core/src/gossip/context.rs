@@ -21,7 +21,7 @@ use saorsa_gossip_identity::Identity;
 use saorsa_gossip_membership::Membership;
 use saorsa_gossip_presence::PresenceManager; // Actual exports
 use saorsa_gossip_pubsub::PubSub;
-use saorsa_gossip_transport::{AntQuicTransport, AntQuicTransportConfig, EndpointRole, GossipTransport, StreamType};
+use saorsa_gossip_transport::{AntQuicTransport, AntQuicTransportConfig, GossipTransport, StreamType};
 use saorsa_gossip_types::{PeerId, TopicId};
 use saorsa_pqc::symmetric::{ChaCha20Poly1305Cipher, SymmetricKey};
 use std::collections::HashMap;
@@ -154,16 +154,17 @@ impl GossipContext {
 
         // 2. Initialize QUIC transport (AntQuicTransport)
         // Default config with allow_any_key enabled for P2P mesh
+        // Use Bootstrap role to allow starting without upstream bootstrap nodes
         let transport_config = AntQuicTransportConfig::new(
-            "0.0.0.0:0".parse().unwrap(), // Will be rebound later
-            saorsa_gossip_transport::EndpointRole::Client, // Default role, updated by listen()
-            vec![], // Bootstrap nodes added later
+            "0.0.0.0:0".parse().unwrap(),
+            saorsa_gossip_transport::EndpointRole::Bootstrap,
+            vec![], 
         ).with_allow_any_key(true);
 
         let transport = AntQuicTransport::with_config(transport_config, None)
             .await
             .map_err(|e| anyhow::anyhow!("Failed to create AntQuicTransport: {}", e))?;
-        let transport = Arc::new(transport);
+        let _transport = Arc::new(transport);
 
         // 2b. Bind transport to specified port
         if let Some(port) = listen_port {
@@ -204,7 +205,7 @@ impl GossipContext {
         
         let transport_config = AntQuicTransportConfig::new(
             bind_addr,
-            saorsa_gossip_transport::EndpointRole::Client, // Or Bootstrap/Server if we knew
+            saorsa_gossip_transport::EndpointRole::Bootstrap,
             vec![], 
         ).with_allow_any_key(true);
         
@@ -947,7 +948,7 @@ impl GossipContext {
         // Use membership to join the network via this peer
         // We assume this is a bootstrap node
         // HyParView join(addr)
-        let mut membership = self.membership.write().await;
+        let membership = self.membership.read().await;
         // Convert to four-word address for membership join
         let seed = crate::conn_words(&addr).map_err(|e| anyhow::anyhow!("Failed to encode addr: {}", e))?;
         membership.join(vec![seed]).await.map_err(|e| anyhow::anyhow!("Failed to join via {}: {}", addr, e))?;

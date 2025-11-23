@@ -69,6 +69,14 @@ Content-Type: application/json
 GET /api/core/status
 ```
 
+#### Start Networking
+```http
+POST /api/network/start
+Content-Type: application/json
+
+{}
+```
+
 ### Channel Operations
 
 #### Create Channel

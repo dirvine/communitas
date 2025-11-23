@@ -63,6 +63,7 @@ fn create_router(state: Arc<BridgeState>) -> Router {
             get(handlers::get_thread_messages),
         )
         // P2P network connections
+        .route("/api/network/start", post(handlers::start_networking))
         .route(
             "/api/network/connection-info",
             get(handlers::get_network_connection_info),

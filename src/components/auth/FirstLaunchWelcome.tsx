@@ -1,15 +1,15 @@
 import {
-    ArrowBack as ArrowBackIcon, CheckCircle as CheckCircleIcon, Fingerprint as FingerprintIcon,
-    Lock as LockIcon, Refresh as RefreshIcon, Security as SecurityIcon, Visibility,
-    VisibilityOff
+  ArrowBack as ArrowBackIcon, CheckCircle as CheckCircleIcon, Fingerprint as FingerprintIcon,
+  Lock as LockIcon, Refresh as RefreshIcon, Security as SecurityIcon, Visibility,
+  VisibilityOff
 } from '@mui/icons-material';
 import {
-    Alert, alpha, Box, Button, Card,
-    CardContent, Chip, Dialog, DialogActions, DialogContent, FormControl, FormControlLabel, IconButton,
-    InputAdornment,
-    LinearProgress,
-    Radio,
-    RadioGroup, TextField, Typography
+  Alert, alpha, Box, Button, Card,
+  CardContent, Chip, Dialog, DialogActions, DialogContent, FormControl, FormControlLabel, IconButton,
+  InputAdornment,
+  LinearProgress,
+  Radio,
+  RadioGroup, TextField, Typography
 } from '@mui/material';
 import { invoke } from '@tauri-apps/api/core';
 import React, { useEffect, useState } from 'react';
@@ -119,6 +119,12 @@ export const FirstLaunchWelcome: React.FC<FirstLaunchWelcomeProps> = ({ open, on
 
   // Step handlers
   const handleGenerateIdentity = async () => {
+    // If we already have an identity (e.g. from bridge), don't regenerate
+    if (fourWords) {
+      setCurrentStep('generate');
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
@@ -231,6 +237,19 @@ export const FirstLaunchWelcome: React.FC<FirstLaunchWelcomeProps> = ({ open, on
     }
   };
 
+  // Check for existing bridge session
+  useEffect(() => {
+    if (!isTauriApp() && open) {
+      bridgeClient.getConnectionInfo().then(info => {
+        if (info.four_word_id && info.four_word_id !== 'not-available') {
+          console.log('Found existing bridge session:', info.four_word_id);
+          setFourWords(info.four_word_id);
+          // If we have a session, we might want to skip generation step or pre-fill
+        }
+      }).catch(err => console.warn('Failed to check bridge status:', err));
+    }
+  }, [open]);
+
   const handleCreateIdentity = async () => {
     setLoading(true);
     setError(null);
@@ -238,13 +257,28 @@ export const FirstLaunchWelcome: React.FC<FirstLaunchWelcomeProps> = ({ open, on
     try {
       // In browser mode, initialize bridge server
       if (!isTauriApp()) {
-        console.log('🌐 Browser mode: Initializing via bridge server');
-        await bridgeClient.initialize({
-          four_words: fourWords,
-          display_name: displayName,
-          device_name: 'Browser'
-        });
-        console.log('✅ Bridge initialization successful');
+        console.log('🌐 Browser mode: Checking bridge state');
+
+        // Check if we are already initialized with this identity
+        const info = await bridgeClient.getConnectionInfo().catch(() => null);
+        const alreadyInitialized = info && info.four_word_id === fourWords;
+
+        if (!alreadyInitialized) {
+          console.log('🌐 Initializing bridge server...');
+          await bridgeClient.initialize({
+            four_words: fourWords,
+            display_name: displayName,
+            device_name: 'Browser'
+          });
+          console.log('✅ Bridge initialization successful');
+        } else {
+          console.log('✅ Bridge already initialized with this identity');
+        }
+
+        // Always ensure networking is started
+        console.log('🌐 Starting networking...');
+        await bridgeClient.startNetworking();
+        console.log('✅ Networking started');
       }
 
       // Create vault with user's chosen password (works in both modes)
@@ -663,7 +697,7 @@ export const FirstLaunchWelcome: React.FC<FirstLaunchWelcomeProps> = ({ open, on
   };
 
   return (
-    <Dialog open={open} maxWidth="sm" fullWidth onClose={() => {}} disableEscapeKeyDown>
+    <Dialog open={open} maxWidth="sm" fullWidth onClose={() => { }} disableEscapeKeyDown>
       <DialogContent sx={{ p: 4, minHeight: 400 }}>
         {error && (
           <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>

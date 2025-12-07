@@ -21,7 +21,9 @@ use saorsa_gossip_identity::Identity;
 use saorsa_gossip_membership::Membership;
 use saorsa_gossip_presence::PresenceManager; // Actual exports
 use saorsa_gossip_pubsub::PubSub;
-use saorsa_gossip_transport::{AntQuicTransport, AntQuicTransportConfig, GossipTransport, StreamType};
+use saorsa_gossip_transport::{
+    AntQuicTransport, AntQuicTransportConfig, GossipTransport, StreamType,
+};
 use saorsa_gossip_types::{PeerId, TopicId};
 use saorsa_pqc::symmetric::{ChaCha20Poly1305Cipher, SymmetricKey};
 use std::collections::HashMap;
@@ -173,7 +175,7 @@ impl GossipContext {
             // Use 0.0.0.0 to bind to all interfaces (required for multi-homed servers like DigitalOcean)
             let bind_addr = std::net::SocketAddr::new(
                 std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)),
-                port
+                port,
             );
 
             info!("Binding transport to {}", bind_addr);
@@ -184,38 +186,39 @@ impl GossipContext {
             // But the `start_networking` method handles port allocation via PortManager and then re-initializes transport?
             // No, `start_networking` in `CoreContext` creates a NEW `GossipContext` which creates transport.
             // This `initialize` method is for `GossipContext`.
-            
+
             // However, `GossipContext::initialize` takes `listen_port`.
             // So we can use it here.
-            
+
             // Note: `transport.listen(addr)` in AntQuicTransport might be a no-op if already bound, or might fail.
             // QuicP2PNode usually binds once.
             // Let's check if we should reconstruct transport with correct port.
-            
+
             // If we use the correct port in `new`, we don't need to call `listen` again?
             // `AntQuicTransport::listen` implementation says: "Ant-QUIC node is listening (handled by QuicP2PNode)".
-            
+
             // So we should construct with the correct port here.
         }
-        
+
         // Re-create transport with correct port if provided
         let bind_port = listen_port.unwrap_or(0);
         let bind_addr = std::net::SocketAddr::new(
-             std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)),
-             bind_port
+            std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)),
+            bind_port,
         );
-        
+
         let transport_config = AntQuicTransportConfig::new(
             bind_addr,
             saorsa_gossip_transport::EndpointRole::Bootstrap,
-            vec![], 
-        ).with_allow_any_key(true);
-        
+            vec![],
+        )
+        .with_allow_any_key(true);
+
         let transport = AntQuicTransport::with_config(transport_config, None)
             .await
             .map_err(|e| anyhow::anyhow!("Failed to create AntQuicTransport: {}", e))?;
         let transport = Arc::new(transport);
-        
+
         // No need to call listen() for AntQuicTransport as it binds on creation.
 
         // 3. Create membership layer (will be started in boot sequence)
@@ -952,8 +955,12 @@ impl GossipContext {
         // HyParView join(addr)
         let membership = self.membership.read().await;
         // Convert to four-word address for membership join
-        let seed = crate::conn_words(&addr).map_err(|e| anyhow::anyhow!("Failed to encode addr: {}", e))?;
-        membership.join(vec![seed]).await.map_err(|e| anyhow::anyhow!("Failed to join via {}: {}", addr, e))?;
+        let seed = crate::conn_words(&addr)
+            .map_err(|e| anyhow::anyhow!("Failed to encode addr: {}", e))?;
+        membership
+            .join(vec![seed])
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to join via {}: {}", addr, e))?;
         Ok(())
     }
 }

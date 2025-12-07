@@ -234,6 +234,7 @@ pub struct SendMessageRequest {
     content: String,
     #[allow(dead_code)]
     reply_to_id: Option<String>,
+    #[allow(dead_code)]
     recipients: Vec<String>, // Four-word addresses
 }
 
@@ -352,7 +353,7 @@ pub async fn get_thread_messages(
     Path(_thread_id): Path<String>,
 ) -> BridgeResult<Json<Value>> {
     let core_guard = _state.core.read().await;
-    let core = core_guard
+    let _core = core_guard
         .as_ref()
         .ok_or_else(|| BridgeError::CommandFailed("Core not initialized".to_string()))?;
 

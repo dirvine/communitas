@@ -16,7 +16,7 @@ mod crypto;
 use ed25519_dalek::SigningKey as Ed25519SecretKey;
 use four_word_networking::FourWordAdaptiveEncoder;
 use once_cell::sync::Lazy;
-use rand::RngCore;
+// use rand::RngCore; // Unused
 use rand::rngs::OsRng;
 // Removed: saorsa-core imports - replaced with saorsa-pqc and four-word-networking
 // use saorsa_core::address::NetworkAddress;
@@ -31,7 +31,7 @@ use std::collections::{HashMap, HashSet};
 use std::convert::TryInto;
 use std::env;
 use std::io::ErrorKind;
-use std::net::{Ipv4Addr, SocketAddr};
+use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use tokio::signal;
@@ -200,13 +200,16 @@ fn default_config_with_storage(base_dir: PathBuf) -> Config {
     Config {
         identity: None,
         bootstrap_nodes: vec![
-            // Digital Ocean NYC3 Bootstrap Nodes (v0.1.18+ random ports)
-            // Droplet: 2064413, IPv4: 167.71.188.131, IPv6: 2604:a880:800:14:0:1:db7c:c000
-            // NOTE: Ports are randomly assigned - check node logs for actual four-word address
-            // Example placeholders - update with actual addresses from node logs
-            "bless-lava-jeffrey-parking:54321".to_string(),
-            // Droplet: communitas-bootstrap-1, IPv4: 138.197.29.195, IPv6: 2604:a880:800:14:0:1:db7c:b000
-            "bless-route-evaporate-lunch:43210".to_string(),
+            // Digital Ocean NYC3 Bootstrap Nodes
+            // NOTE: Use IP:port format for reliability. Four-word user identities cannot be
+            // decoded to IP addresses - they're one-way hashed. Only connection-identity
+            // format (encoded via conn_words()) can be decoded back.
+            //
+            // Droplet: 2064413, IPv4: 167.71.188.131
+            // Port is dynamically assigned - update from node logs
+            "167.71.188.131:50000".to_string(),
+            // Droplet: communitas-bootstrap-1, IPv4: 138.197.29.195
+            "138.197.29.195:50000".to_string(),
         ],
         storage: StorageConfig {
             base_dir,
@@ -374,6 +377,7 @@ async fn save_config(path: &Path, config: &Config) -> Result<()> {
 
 const IDENTITY_DIR_NAME: &str = "identity";
 const IDENTITY_FILE_NAME: &str = "identity.json";
+#[allow(dead_code)]
 const IDENTITY_GENERATION_ATTEMPTS: usize = 1024;
 
 #[derive(Debug)]
@@ -410,7 +414,7 @@ impl StoredIdentity {
             .context("Failed to decode ML-DSA-87 private key from base64")?;
 
         if mldsa87_public.len() != 2592 {
-             return Err(anyhow::anyhow!(
+            return Err(anyhow::anyhow!(
                 "Stored ML-DSA-87 public key must be 2592 bytes, got {}",
                 mldsa87_public.len()
             ));
@@ -434,11 +438,16 @@ fn canonicalize_four_words(input: &str) -> Result<String> {
     let trimmed = input.trim();
     let words: Vec<&str> = trimmed.split('-').collect();
     if words.len() != 4 {
-         return Err(anyhow!("Four-word identity must contain exactly 4 words, found {}", words.len()));
+        return Err(anyhow!(
+            "Four-word identity must contain exactly 4 words, found {}",
+            words.len()
+        ));
     }
     // We assume communitas_core::identity is available as per existing code
     if !communitas_core::identity::validate_id_words(trimmed) {
-        return Err(anyhow!("Four-word identity contains words outside the allowed dictionary"));
+        return Err(anyhow!(
+            "Four-word identity contains words outside the allowed dictionary"
+        ));
     }
     Ok(trimmed.to_string())
 }
@@ -554,7 +563,10 @@ async fn generate_new_identity(config: &Config, identity_path: &Path) -> Result<
                 .context("Failed to generate ML-DSA-87 transport keys")?;
             // Save to keystore
             if let Err(e) = crypto::save_keys_to_keystore(&four_words, &pk, &sk) {
-                 warn!("Failed to save keys to keystore (will proceed with file-only persistence for now): {}", e);
+                warn!(
+                    "Failed to save keys to keystore (will proceed with file-only persistence for now): {}",
+                    e
+                );
             }
             (pk, sk)
         }
@@ -611,7 +623,7 @@ async fn start_health_endpoint(
                  communitas_peers_connected {}\n",
                 peer_count
             );
-            
+
             warp::reply::html(response)
         }
     });
@@ -765,6 +777,7 @@ fn canonical_seed_addr(seed: &str) -> Result<Option<SocketAddr>> {
 }
 
 /// Connect to a peer using QUIC
+#[allow(dead_code)]
 async fn connect_to_peer(addr_str: String) -> Result<()> {
     use std::net::ToSocketAddrs;
 
@@ -1027,7 +1040,10 @@ async fn run_node(args: Args) -> Result<()> {
     // Initialize CoreContext (Full Gossip Node)
     let mut context = CoreContext::initialize(
         identity.clone(),
-        config.identity.clone().unwrap_or_else(|| "Headless Node".to_string()),
+        config
+            .identity
+            .clone()
+            .unwrap_or_else(|| "Headless Node".to_string()),
         sanitize_instance_id(&instance_id),
         DeviceType::Headless,
         config.storage.base_dir.clone(),
@@ -1036,13 +1052,29 @@ async fn run_node(args: Args) -> Result<()> {
     .map_err(|e| anyhow::anyhow!("Failed to initialize CoreContext: {}", e))?;
 
     // Start networking
-    // Use first listen address port as preferred port if available
+    // Use CLI --listen port first, then config listen_addrs, then random
     // Note: CoreContext handles port allocation logic
-    let preferred_port = config.network.listen_addrs.first().map(|a| a.port()).filter(|&p| p > 0);
-    let connection_identity = context.start_networking(preferred_port).await
+    let preferred_port = if args.listen.port() > 0 {
+        // CLI --listen argument takes precedence
+        Some(args.listen.port())
+    } else {
+        // Fall back to config file listen addresses
+        config
+            .network
+            .listen_addrs
+            .first()
+            .map(|a| a.port())
+            .filter(|&p| p > 0)
+    };
+    let connection_identity = context
+        .start_networking(preferred_port)
+        .await
         .map_err(|e| anyhow::anyhow!("Failed to start networking: {}", e))?;
-    
-    info!("Gossip networking started. Connection identity: {}", connection_identity);
+
+    info!(
+        "Gossip networking started. Connection identity: {}",
+        connection_identity
+    );
 
     // Connect to bootstrap nodes
     for bootstrap in &config.bootstrap_nodes {
@@ -1152,6 +1184,7 @@ static ACTIVE_CONNECTIONS: Lazy<Arc<RwLock<HashMap<String, HighLevelConnection>>
 //     r[count as usize..].to_vec()
 // }
 
+#[allow(dead_code)]
 async fn start_quic_delta_server(
     listen: std::net::SocketAddr,
     base_dir: std::path::PathBuf,
@@ -1238,14 +1271,19 @@ async fn start_quic_delta_server(
                                 info!("Accepted QUIC connection from {}", remote_addr);
 
                                 // Store the connection in active connections
-                                let conn_id = format!("{}_{}", remote_addr, chrono::Utc::now().timestamp());
+                                let conn_id =
+                                    format!("{}_{}", remote_addr, chrono::Utc::now().timestamp());
                                 if let Ok(mut conns) = ACTIVE_CONNECTIONS.try_write() {
                                     // Store a clone of the connection handle to keep it in the map
                                     // Assuming HighLevelConnection is clonable (it usually is, wrapping an Arc)
                                     // If not, we rely on the fact that we don't use 'conn' below except for commented code.
                                     // But to be safe and consistent with connect_to_peer, we should insert it.
                                     conns.insert(conn_id.clone(), conn.clone());
-                                    info!("Stored incoming connection {} (total: {})", conn_id, conns.len());
+                                    info!(
+                                        "Stored incoming connection {} (total: {})",
+                                        conn_id,
+                                        conns.len()
+                                    );
                                 }
 
                                 // TODO: Re-enable when communitas_container is available

@@ -1,8 +1,8 @@
-use std::process::{Command, Stdio};
-use std::time::{Duration, Instant};
-use std::thread;
 use std::io::{BufRead, BufReader};
+use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::{Duration, Instant};
 
 fn build_binary() -> std::path::PathBuf {
     let status = Command::new("cargo")
@@ -10,7 +10,7 @@ fn build_binary() -> std::path::PathBuf {
         .status()
         .expect("Failed to build binary");
     assert!(status.success());
-    
+
     let cwd = std::env::current_dir().unwrap();
     // println!("Current directory: {:?}", cwd);
 
@@ -26,7 +26,7 @@ fn build_binary() -> std::path::PathBuf {
             return path.canonicalize().unwrap();
         }
     }
-    
+
     panic!("Could not find communitas-headless binary in target/debug");
 }
 
@@ -39,7 +39,7 @@ impl LogMonitor {
     fn new(child_stdout: std::process::ChildStdout, prefix: &'static str) -> Self {
         let logs = Arc::new(Mutex::new(Vec::new()));
         let logs_clone = logs.clone();
-        
+
         thread::spawn(move || {
             let reader = BufReader::new(child_stdout);
             for line in reader.lines() {
@@ -49,7 +49,7 @@ impl LogMonitor {
                 }
             }
         });
-        
+
         Self { logs }
     }
 
@@ -77,7 +77,7 @@ fn test_two_nodes_connection() {
     thread::sleep(Duration::from_secs(1)); // Wait for kill
 
     let binary = build_binary();
-    
+
     // Create temp dirs for nodes
     let temp_dir = std::env::temp_dir().join("communitas-integration-test");
     let _ = std::fs::remove_dir_all(&temp_dir); // Clean up previous
@@ -116,12 +116,17 @@ jitter_secs = 0
 
     // Start Node A
     let mut node_a = Command::new(&binary)
-        .arg("--config").arg(&config_a_path)
-        .arg("--instance-id").arg("node-a")
-        .arg("--storage").arg(dir_a.join("data"))
-        .arg("--listen").arg("127.0.0.1:0") // CLI overrides config
+        .arg("--config")
+        .arg(&config_a_path)
+        .arg("--instance-id")
+        .arg("node-a")
+        .arg("--storage")
+        .arg(dir_a.join("data"))
+        .arg("--listen")
+        .arg("127.0.0.1:0") // CLI overrides config
         .arg("--metrics")
-        .arg("--metrics-addr").arg("127.0.0.1:9601")
+        .arg("--metrics-addr")
+        .arg("127.0.0.1:9601")
         .env("RUST_LOG", "info")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -133,9 +138,10 @@ jitter_secs = 0
 
     // Wait for Node A to start and get its address
     // Look for "Gossip networking started on IP:PORT"
-    let log_line = monitor_a.wait_for("Gossip networking started on", Duration::from_secs(10))
+    let log_line = monitor_a
+        .wait_for("Gossip networking started on", Duration::from_secs(10))
         .expect("Timed out waiting for Node A to start");
-        
+
     // Parse address
     // Format: ... Gossip networking started on 127.0.0.1:54321 (identity words)
     let mut address_a = String::new();
@@ -149,7 +155,7 @@ jitter_secs = 0
         // Clean up any trailing punctuation if any
         address_a = address_a.trim_matches(|c| c == ')' || c == ',').to_string();
     }
-    
+
     println!("Node A started at {}", address_a);
     assert!(!address_a.is_empty());
 
@@ -182,13 +188,19 @@ jitter_secs = 0
 
     // Start Node B, bootstrapping from Node A
     let mut node_b = Command::new(&binary)
-        .arg("--config").arg(&config_b_path)
-        .arg("--instance-id").arg("node-b")
-        .arg("--storage").arg(dir_b.join("data"))
-        .arg("--listen").arg("127.0.0.1:0")
+        .arg("--config")
+        .arg(&config_b_path)
+        .arg("--instance-id")
+        .arg("node-b")
+        .arg("--storage")
+        .arg(dir_b.join("data"))
+        .arg("--listen")
+        .arg("127.0.0.1:0")
         .arg("--metrics")
-        .arg("--metrics-addr").arg("127.0.0.1:9602")
-        .arg("--bootstrap").arg(&address_a)
+        .arg("--metrics-addr")
+        .arg("127.0.0.1:9602")
+        .arg("--bootstrap")
+        .arg(&address_a)
         .env("RUST_LOG", "info")
         .stdout(Stdio::piped())
         .spawn()
@@ -198,7 +210,8 @@ jitter_secs = 0
     let monitor_b = LogMonitor::new(stdout_b, "Node B");
 
     // Wait for Node B to connect to Node A
-    monitor_b.wait_for("Connected to peer", Duration::from_secs(10))
+    monitor_b
+        .wait_for("Connected to peer", Duration::from_secs(10))
         .expect("Node B failed to connect to Node A");
 
     // Give some time for connection to stabilize and metrics to update

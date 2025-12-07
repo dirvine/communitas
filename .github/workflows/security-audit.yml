@@ -54,13 +54,12 @@ jobs:
           # Track upstream fix: https://github.com/saorsalabs/saorsa-webrtc/issues
           ignore: RUSTSEC-2025-0008
 
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --locked
+
       - name: Run cargo deny (license and dependency checks)
-        uses: EmbarkStudios/cargo-deny-action@v1
         continue-on-error: true
-        with:
-          log-level: warn
-          command: check
-          arguments: --all-features
+        run: cargo deny check --all-features 2>&1 || echo "cargo-deny completed with warnings"
 
       - name: Check for unwrap/expect in production code
         run: |

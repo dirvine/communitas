@@ -25,6 +25,7 @@ use saorsa_gossip_transport::{AntQuicTransport, AntQuicTransportConfig, GossipTr
 use saorsa_gossip_types::{PeerId, TopicId};
 use saorsa_pqc::symmetric::{ChaCha20Poly1305Cipher, SymmetricKey};
 use std::collections::HashMap;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
@@ -156,10 +157,11 @@ impl GossipContext {
         // Default config with allow_any_key enabled for P2P mesh
         // Use Bootstrap role to allow starting without upstream bootstrap nodes
         let transport_config = AntQuicTransportConfig::new(
-            "0.0.0.0:0".parse().unwrap(),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0),
             saorsa_gossip_transport::EndpointRole::Bootstrap,
-            vec![], 
-        ).with_allow_any_key(true);
+            vec![],
+        )
+        .with_allow_any_key(true);
 
         let transport = AntQuicTransport::with_config(transport_config, None)
             .await

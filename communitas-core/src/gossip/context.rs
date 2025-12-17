@@ -27,7 +27,6 @@ use saorsa_gossip_transport::{
 use saorsa_gossip_types::{PeerId, TopicId};
 use saorsa_pqc::symmetric::{ChaCha20Poly1305Cipher, SymmetricKey};
 use std::collections::HashMap;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
@@ -162,51 +161,8 @@ impl GossipContext {
         debug!("Loaded identity, peer_id: {:?}", peer_id);
 
         // 2. Initialize QUIC transport (AntQuicTransport)
-        // Default config with allow_any_key enabled for P2P mesh
+        // Use listen_port if provided, otherwise bind to port 0 (OS-assigned)
         // Use Bootstrap role to allow starting without upstream bootstrap nodes
-        let transport_config = AntQuicTransportConfig::new(
-            SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0),
-            saorsa_gossip_transport::EndpointRole::Bootstrap,
-            vec![],
-        )
-        .with_allow_any_key(true);
-
-        let transport = AntQuicTransport::with_config(transport_config, None)
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to create AntQuicTransport: {}", e))?;
-        let _transport = Arc::new(transport);
-
-        // 2b. Bind transport to specified port
-        if let Some(port) = listen_port {
-            // Use 0.0.0.0 to bind to all interfaces (required for multi-homed servers like DigitalOcean)
-            let bind_addr = std::net::SocketAddr::new(
-                std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)),
-                port,
-            );
-
-            info!("Binding transport to {}", bind_addr);
-            // AntQuicTransport binds on creation if address is provided, but we can re-bind or check.
-            // Actually AntQuicTransport::new takes bind_addr.
-            // We should create it with the correct address if known.
-            // If listen_port is Some, we should use it in creation.
-            // But the `start_networking` method handles port allocation via PortManager and then re-initializes transport?
-            // No, `start_networking` in `CoreContext` creates a NEW `GossipContext` which creates transport.
-            // This `initialize` method is for `GossipContext`.
-
-            // However, `GossipContext::initialize` takes `listen_port`.
-            // So we can use it here.
-
-            // Note: `transport.listen(addr)` in AntQuicTransport might be a no-op if already bound, or might fail.
-            // QuicP2PNode usually binds once.
-            // Let's check if we should reconstruct transport with correct port.
-
-            // If we use the correct port in `new`, we don't need to call `listen` again?
-            // `AntQuicTransport::listen` implementation says: "Ant-QUIC node is listening (handled by QuicP2PNode)".
-
-            // So we should construct with the correct port here.
-        }
-
-        // Re-create transport with correct port if provided
         let bind_port = listen_port.unwrap_or(0);
         let bind_addr = std::net::SocketAddr::new(
             std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)),

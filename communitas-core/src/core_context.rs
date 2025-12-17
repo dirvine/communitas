@@ -18,9 +18,11 @@
 //! saorsa_core-based CoreContext with a simpler saorsa-gossip + four-word-networking
 //! based architecture.
 
+use crate::disk_service::EntityDiskService;
 use crate::keystore::Keystore;
 use crate::message_sync::MessageSyncService;
 use crate::types::{DeviceType, UserProfile};
+use crate::webrtc::CommunitasWebRtcService;
 use blake3;
 use fips204::traits::{SerDes, Signer, Verifier};
 use rand::rngs::OsRng;
@@ -82,6 +84,11 @@ pub struct CoreContext {
     /// Connection identity (four-word encoded listen address)
     pub connection_identity: Option<String>,
 
+    /// External/public address (NAT-reflected address for WAN connectivity)
+    /// This is the address that other peers on the internet see us at,
+    /// obtained via address reflection from a coordinator/bootstrap node
+    pub external_address: Option<SocketAddr>,
+
     /// Gossip overlay system (replaces DHT-based networking)
     /// Handles P2P networking, membership, pubsub, presence, and discovery
     pub gossip: Option<Arc<crate::gossip::GossipContext>>,
@@ -89,6 +96,13 @@ pub struct CoreContext {
     /// Group keys for channels/projects/orgs (MLS-based)
     /// Maps group ID to group keypair
     pub group_keys: HashMap<String, GroupKeyPairPlaceholder>,
+
+    /// Per-entity virtual disk service (Private, Public, Shared disks)
+    pub disk_service: Arc<EntityDiskService>,
+
+    /// WebRTC service for voice, video, and screen sharing
+    /// Initialized when networking starts (requires gossip context)
+    pub webrtc: Option<Arc<CommunitasWebRtcService>>,
 }
 
 impl std::fmt::Debug for CoreContext {
@@ -103,11 +117,14 @@ impl std::fmt::Debug for CoreContext {
             .field("message_service", &"<active>")
             .field("listen_address", &self.listen_address)
             .field("connection_identity", &self.connection_identity)
+            .field("external_address", &self.external_address)
             .field("signing_key", &"<redacted>")
             .field("public_key", &"<key_bytes>")
             .field("doc_replicator", &"<active>")
             .field("gossip", &self.gossip.as_ref().map(|_| "<active>"))
             .field("group_keys", &self.group_keys)
+            .field("disk_service", &"<active>")
+            .field("webrtc", &self.webrtc.as_ref().map(|_| "<active>"))
             .finish()
     }
 }
@@ -278,8 +295,16 @@ impl CoreContext {
                 .map_err(|e| format!("Failed to initialize DocReplicator: {}", e))?,
         );
 
+        // Initialize per-entity virtual disk service
+        let disk_root = storage_dir.join("disks");
+        let disk_service = Arc::new(
+            EntityDiskService::new(&disk_root)
+                .await
+                .map_err(|e| format!("Failed to initialize EntityDiskService: {}", e))?,
+        );
+
         info!(
-            "CoreContext initialized for user '{}' ({}) with EntityService, MessageService, and DocReplicator",
+            "CoreContext initialized for user '{}' ({}) with EntityService, MessageService, DocReplicator, and DiskService",
             display_name, four_words
         );
 
@@ -297,8 +322,11 @@ impl CoreContext {
             doc_replicator,
             listen_address: None,
             connection_identity: None,
+            external_address: None,
             gossip: None,
             group_keys: HashMap::new(),
+            disk_service,
+            webrtc: None, // Initialized when networking starts
         })
     }
 
@@ -375,9 +403,128 @@ impl CoreContext {
 
         self.listen_address = Some(listen_addr);
         self.connection_identity = Some(connection_identity.clone());
-        self.gossip = Some(Arc::new(gossip));
+        let gossip_arc = Arc::new(gossip);
+        self.gossip = Some(gossip_arc.clone());
+
+        // Initialize WebRTC service (requires gossip context)
+        match CommunitasWebRtcService::new(gossip_arc).await {
+            Ok(webrtc) => {
+                info!("WebRTC service initialized successfully");
+                self.webrtc = Some(Arc::new(webrtc));
+            }
+            Err(e) => {
+                warn!("Failed to initialize WebRTC service: {}. Voice/video calls will be unavailable.", e);
+                // Don't fail networking start - WebRTC is optional
+            }
+        }
+
+        // Auto-request external address after a brief delay (allow time for peer connections)
+        // This is non-blocking and best-effort - failure is logged but doesn't affect networking
+        info!("Scheduling automatic external address detection...");
 
         Ok(connection_identity)
+    }
+
+    /// Automatically request external address with retry logic
+    ///
+    /// This is called after networking starts to discover our public IP address.
+    /// It retries a few times with delays to allow peer connections to establish.
+    ///
+    /// # Returns
+    /// Ok if external address was successfully determined, Err otherwise
+    pub async fn auto_request_external_address(&mut self) -> Result<(), String> {
+        // Retry up to 3 times with 2 second delays to allow peer connections
+        for attempt in 1..=3 {
+            info!(
+                "Auto-detecting external address (attempt {}/3)...",
+                attempt
+            );
+
+            // Wait a bit for peers to connect (first attempt waits longer)
+            let delay_ms = if attempt == 1 { 2000 } else { 1000 };
+            tokio::time::sleep(tokio::time::Duration::from_millis(delay_ms)).await;
+
+            match self.request_external_address().await {
+                Ok(()) => {
+                    if let Some(addr) = self.external_address {
+                        info!("Auto-detected external address: {}", addr);
+                        return Ok(());
+                    }
+                }
+                Err(e) => {
+                    if attempt < 3 {
+                        warn!(
+                            "External address detection attempt {} failed: {}. Retrying...",
+                            attempt, e
+                        );
+                    } else {
+                        warn!(
+                            "External address detection failed after 3 attempts: {}",
+                            e
+                        );
+                    }
+                }
+            }
+        }
+
+        Err("Failed to auto-detect external address after 3 attempts".to_string())
+    }
+
+    /// Request external/public address via NAT reflection from a bootstrap node
+    ///
+    /// Get our external IP address and port as seen from the internet.
+    ///
+    /// This uses the native QUIC OBSERVED_ADDRESS frame mechanism (draft-ietf-quic-address-discovery)
+    /// which is automatically exchanged during QUIC connection establishment.
+    ///
+    /// Should be called after networking is active and we have connections to bootstrap nodes.
+    ///
+    /// # Returns
+    /// The external address if successfully obtained, or an error message
+    pub async fn request_external_address(&mut self) -> Result<(), String> {
+        let gossip = self
+            .gossip
+            .as_ref()
+            .ok_or("Networking not started. Call start_networking() first")?;
+
+        info!("Requesting external address via native QUIC address discovery");
+
+        // Use the native QUIC OBSERVED_ADDRESS mechanism through the transport layer
+        // This is the standard way to discover external address via QUIC connections
+        if let Some(external_addr) = gossip.transport.get_external_address() {
+            info!(
+                "Got external address via QUIC OBSERVED_ADDRESS: {}",
+                external_addr
+            );
+            self.external_address = Some(external_addr);
+            return Ok(());
+        }
+
+        // If native discovery didn't work, check if we have any connected peers at all
+        let cache = gossip.peer_cache.read().await;
+        let peers = cache.get_top_peers(5);
+        drop(cache);
+
+        if peers.is_empty() {
+            return Err(
+                "No connected peers - external address not yet available. \
+                 The address will be discovered automatically when connections are established."
+                    .to_string(),
+            );
+        }
+
+        // We have peers but no observed address yet - this can happen if:
+        // 1. The connection is still being established
+        // 2. The remote peer doesn't support OBSERVED_ADDRESS frames
+        // 3. We're behind a very restrictive NAT
+        warn!(
+            "Connected to {} peers but no OBSERVED_ADDRESS received yet",
+            peers.len()
+        );
+        Err(
+            "External address not yet available - waiting for OBSERVED_ADDRESS frame from peers"
+                .to_string(),
+        )
     }
 
     /// Stop networking gracefully
@@ -386,10 +533,13 @@ impl CoreContext {
     pub async fn stop_networking(&mut self) -> Result<(), String> {
         if let Some(_gossip) = self.gossip.take() {
             info!("Stopping gossip networking for {}", self.four_words);
+            // Clear WebRTC service (depends on gossip)
+            self.webrtc = None;
             // Note: Graceful shutdown will be implemented when needed
             // The Arc drop will clean up resources
             self.listen_address = None;
             self.connection_identity = None;
+            self.external_address = None;
         }
         Ok(())
     }

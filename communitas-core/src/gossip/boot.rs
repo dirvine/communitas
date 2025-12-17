@@ -16,6 +16,8 @@
 
 use super::context::GossipContext;
 use anyhow::{Context, Result};
+use bytes::Bytes;
+use saorsa_gossip_transport::{GossipTransport, StreamType};
 use std::sync::Arc;
 use tracing::{debug, info, warn};
 
@@ -105,9 +107,14 @@ impl GossipBootSequence {
     async fn use_introducer_nodes(&self) -> Result<()> {
         // SPEC.md §3: Keep a small optional introducer list for cold start only
         // Load bootstrap nodes from production config
+        //
+        // NOTE: Use IP:port format directly. The four-word-networking crate CAN encode/decode
+        // IPs via conn_words(), but the previous values were USER identities (random dictionary
+        // words hashed one-way to seeds), NOT connection identities (encoded IPs).
+        // User identities cannot be decoded back to IP addresses.
         let bootstrap_nodes = vec![
-            "bless-lava-jeffrey-parking:443".to_string(), // 167.71.188.131 - Digital Ocean Droplet 1
-            "bless-route-evaporate-lunch:443".to_string(), // 138.197.29.195 - Digital Ocean Droplet 2
+            "167.71.188.131:50000".to_string(), // Digital Ocean Droplet 1 (2064413)
+            "138.197.29.195:50000".to_string(), // Digital Ocean Droplet 2 (communitas-bootstrap-1)
         ];
 
         // Seed peer cache with bootstrap nodes for fast boot
@@ -198,10 +205,12 @@ impl GossipBootSequence {
         let retry_config = RetryConfig::default();
         let four_words_str = four_words.to_string();
         let discovery = self.context.discovery.clone();
+        let anti_entropy = self.context.anti_entropy.clone();
 
         retry_dial(four_words, retry_config, || {
             let four_words = four_words_str.clone();
             let discovery = discovery.clone();
+            let anti_entropy = anti_entropy.clone();
             async move {
                 // Use FOAF discovery to find contact
                 match discovery.find_contact(&four_words).await {
@@ -210,6 +219,9 @@ impl GossipBootSequence {
                             "Found contact {} via FOAF discovery: {:?}",
                             four_words, peer_id
                         );
+                        // Register peer for CRDT anti-entropy sync
+                        anti_entropy.add_peer(peer_id).await;
+                        info!("Registered peer {:?} for CRDT sync", peer_id);
                         // TODO: Actual dial using transport with peer_id
                         Ok(())
                     }
@@ -301,19 +313,119 @@ impl GossipBootSequence {
             let anti_entropy = self.context.anti_entropy.clone();
 
             anti_entropy
-                .start(move |peer_id, _delta| {
+                .start(move |peer_id, delta| {
                     let transport = transport.clone();
                     Box::pin(async move {
-                        // Send delta to peer via transport
-                        // TODO: Implement actual delta transmission
-                        debug!("Would send CRDT delta to peer {:?}", peer_id);
-                        let _ = transport; // Use transport to avoid warning
+                        // Serialize delta using bincode for wire transmission
+                        let delta_bytes = bincode::serialize(&delta).map_err(|e| {
+                            anyhow::anyhow!("Failed to serialize CRDT delta: {}", e)
+                        })?;
+
+                        // Send delta to peer via transport using Bulk stream
+                        transport
+                            .send_to_peer(peer_id, StreamType::Bulk, Bytes::from(delta_bytes))
+                            .await
+                            .map_err(|e| {
+                                anyhow::anyhow!("Failed to send CRDT delta to {:?}: {}", peer_id, e)
+                            })?;
+
+                        info!(
+                            "Sent CRDT delta ({} bytes) to peer {:?}",
+                            delta.added.len() + delta.removed.len(),
+                            peer_id
+                        );
                         Ok(())
                     })
                 })
                 .await
                 .context("Failed to start CRDT anti-entropy")?;
             info!("CRDT anti-entropy active (60s interval, delta-based sync)");
+        }
+
+        // Start membership-to-anti-entropy peer sync (30 second interval)
+        // This ensures ALL connected peers (incoming AND outgoing) are registered for CRDT sync
+        {
+            let membership = Arc::clone(&self.context.membership);
+            let anti_entropy = Arc::clone(&self.context.anti_entropy);
+
+            tokio::spawn(async move {
+                info!("Starting membership peer sync task (30s interval)");
+                let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(30));
+
+                loop {
+                    interval.tick().await;
+
+                    // Get all active peers from membership layer (both incoming and outgoing)
+                    let membership_guard = membership.read().await;
+                    let active_peers = membership_guard.active_view();
+                    drop(membership_guard);
+
+                    if active_peers.is_empty() {
+                        debug!("No active peers in membership view");
+                        continue;
+                    }
+
+                    // Register all active peers for CRDT anti-entropy sync
+                    let mut registered = 0;
+                    for peer_id in active_peers {
+                        anti_entropy.add_peer(peer_id).await;
+                        registered += 1;
+                    }
+
+                    if registered > 0 {
+                        info!(
+                            "Synced {} membership peers to anti-entropy registry",
+                            registered
+                        );
+                    }
+                }
+            });
+            info!("Membership peer sync task active (30s interval)");
+        }
+
+        // Start transport-to-anti-entropy peer sync (5 second interval)
+        // This ensures ALL transport-level connections are registered for CRDT sync,
+        // not just membership peers. Critical for bootstrap nodes that receive
+        // direct connections from clients.
+        {
+            let transport = Arc::clone(&self.context.transport);
+            let anti_entropy = Arc::clone(&self.context.anti_entropy);
+
+            tokio::spawn(async move {
+                info!("Starting transport peer sync task (5s interval)");
+                let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(5));
+
+                loop {
+                    interval.tick().await;
+
+                    // Get all connected peers from transport layer (includes direct connections)
+                    let connected = transport.connected_peers().await;
+
+                    if connected.is_empty() {
+                        debug!("No connected peers in transport layer");
+                        continue;
+                    }
+
+                    // Register all connected peers for CRDT anti-entropy sync
+                    let mut registered = 0;
+                    for (peer_id, addr) in connected {
+                        anti_entropy.add_peer(peer_id).await;
+                        registered += 1;
+                        debug!(
+                            "Registered transport peer {:?} ({}) for CRDT sync",
+                            peer_id, addr
+                        );
+                    }
+
+                    if registered > 0 {
+                        info!(
+                            "Synced {} transport peers to anti-entropy registry",
+                            registered
+                        );
+                    }
+                }
+            });
+            info!("Transport peer sync task active (5s interval)");
         }
 
         Ok(())

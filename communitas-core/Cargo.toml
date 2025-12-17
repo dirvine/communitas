@@ -10,16 +10,17 @@ description = "Core business logic for Communitas - PQC collaboration with virtu
 
 [dependencies]
 # Saorsa Gossip - P2P networking layer (required, no longer optional)
-saorsa-gossip-types = { git = "https://github.com/dirvine/saorsa-gossip", branch = "main" }
-saorsa-gossip-identity = { git = "https://github.com/dirvine/saorsa-gossip", branch = "main" }
-saorsa-gossip-crdt-sync = { git = "https://github.com/dirvine/saorsa-gossip", branch = "main" }
-saorsa-gossip-groups = { git = "https://github.com/dirvine/saorsa-gossip", branch = "main" }
-saorsa-gossip-presence = { git = "https://github.com/dirvine/saorsa-gossip", branch = "main" }
-saorsa-gossip-transport = { git = "https://github.com/dirvine/saorsa-gossip", branch = "main" }
-saorsa-gossip-membership = { git = "https://github.com/dirvine/saorsa-gossip", branch = "main" }
-saorsa-gossip-pubsub = { git = "https://github.com/dirvine/saorsa-gossip", branch = "main" }
-saorsa-gossip-coordinator = { git = "https://github.com/dirvine/saorsa-gossip", branch = "main" }
-saorsa-gossip-rendezvous = { git = "https://github.com/dirvine/saorsa-gossip", branch = "main" }
+# Using workspace path dependencies for local development with dial_bootstrap fix
+saorsa-gossip-types.workspace = true
+saorsa-gossip-identity.workspace = true
+saorsa-gossip-crdt-sync.workspace = true
+saorsa-gossip-groups.workspace = true
+saorsa-gossip-presence.workspace = true
+saorsa-gossip-transport.workspace = true
+saorsa-gossip-membership.workspace = true
+saorsa-gossip-pubsub.workspace = true
+saorsa-gossip-coordinator.workspace = true
+saorsa-gossip-rendezvous.workspace = true
 
 # Real-time multimedia (WebRTC over QUIC) - Using core library
 saorsa-webrtc-core.workspace = true

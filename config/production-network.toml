@@ -12,10 +12,13 @@ protocol_version = "1.0"
 [bootstrap]
 # Production bootstrap nodes for initial peer discovery
 # These should be stable, publicly accessible nodes
+# NOTE: Use IP:port format directly. The four-word-networking crate can encode/decode
+# IPs, but the previous values were user identities (random words), not connection
+# identities (encoded IPs from conn_words()). Direct IP format is clearer.
 nodes = [
-  # Primary bootstrap nodes (DigitalOcean droplets - dual-stack IPv4/IPv6)
-  "bless-lava-jeffrey-parking:443",      # 167.71.188.131 - Droplet 1
-  "bless-route-evaporate-lunch:443",     # 138.197.29.195 - Droplet 2
+  # Primary bootstrap nodes (DigitalOcean droplets)
+  "167.71.188.131:50000",      # Droplet 2064413
+  "138.197.29.195:50000",      # communitas-bootstrap-1
 ]
 
 # Bootstrap node verification
@@ -158,8 +161,8 @@ peer_timeout_seconds = 10
 [environments.production]
 # Production-specific settings
 bootstrap.nodes = [
-  "bless-lava-jeffrey-parking:443",      # 167.71.188.131 - Droplet 1
-  "bless-route-evaporate-lunch:443",     # 138.197.29.195 - Droplet 2
+  "167.71.188.131:50000",      # Droplet 2064413
+  "138.197.29.195:50000",      # communitas-bootstrap-1
 ]
 
 [environments.staging]

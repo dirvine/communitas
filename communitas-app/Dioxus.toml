@@ -1,0 +1,45 @@
+# Dioxus Configuration for Communitas
+# Cross-platform build configuration for desktop, mobile, and web
+
+[application]
+name = "Communitas"
+out_dir = "dist"
+asset_dir = "assets"
+default_platform = "desktop"
+
+[web.app]
+title = "Communitas - P2P Collaboration"
+
+[web.watcher]
+reload_html = true
+watch_path = ["src", "assets"]
+
+[bundle]
+identifier = "com.saorsalabs.communitas"
+publisher = "Saorsa Labs"
+icon = [
+    "icons/32x32.png",
+    "icons/128x128.png",
+    "icons/128x128@2x.png",
+    "icons/icon.icns",
+    "icons/icon.ico",
+]
+resources = ["assets/**/*"]
+copyright = "Copyright 2025 Saorsa Labs"
+category = "Productivity"
+short_description = "Decentralized P2P collaboration platform"
+long_description = """
+Communitas is a local-first, decentralized collaboration platform that combines
+the features of WhatsApp, Dropbox, Zoom, and Slack into one secure application.
+Features include four-word identities, end-to-end encryption, virtual disks,
+and offline-first operation.
+"""
+
+[bundle.macos]
+minimum_system_version = "10.15"
+frameworks = []
+exception_domain = "localhost"
+
+[bundle.linux]
+depends = []
+rpm_depends = []

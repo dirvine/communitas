@@ -9,6 +9,7 @@ This playbook is for anyone (human or AI) automating Communitas. It captures the
 - `communitas-desktop/` – Tauri v2 desktop crate. The only place we expose IPC commands (see `src/core_commands.rs`, `core_groups.rs`, `core_cmds.rs`, `container.rs`, `sync.rs`, `security/raw_spki.rs`).
  - `communitas-core/` – Shared Rust library. `CoreContext` wires saorsa-gossip networking components together (replacing saorsa-core), persists PQC identities to the platform keyring, and caches group signing keys.
 - `communitas-headless/` – Headless QUIC node with self-update, bootstrap, and metrics support. Ideal for CI smoke checks and autonomous seeders. Pass `--instance-id`, `--config`, and `--storage` (or set the matching `COMMUNITAS_*` env vars) when running more than one node so each instance keeps its own config and data roots.
+- `communitas-swift/` – Native iOS/macOS client implementation using UniFFI bindings to `communitas-core`. See `IMPLEMENTATION_SPEC.md` for the roadmap.
 
 - `src/` – Legacy React SPA still compiled for regression coverage. Tests under `src/**/__tests__` remain part of CI; do not delete until the migration completes.
 

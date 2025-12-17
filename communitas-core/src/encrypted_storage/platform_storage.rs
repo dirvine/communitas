@@ -241,14 +241,11 @@ impl PlatformStorage {
             .unwrap_or("unknown")
             .to_string();
 
-        // Try to get display name from identity file
-        let identity_path = vault_path.join("identity.enc");
-        let display_name = if identity_path.exists() {
-            // Would need to decrypt to get actual display name
-            // For now, use placeholder
-            format!("User ({})", four_words)
-        } else {
+        // Get display name from metadata, fallback to four_words if not stored
+        let display_name = if metadata.display_name.is_empty() {
             four_words.clone()
+        } else {
+            metadata.display_name.clone()
         };
 
         // Calculate vault size
@@ -364,6 +361,9 @@ impl PlatformStorage {
 struct VaultMetadata {
     pub created_at: u64,
     pub last_accessed: u64,
+    /// Display name stored unencrypted for vault listing
+    #[serde(default)]
+    pub display_name: String,
 }
 
 #[cfg(test)]

@@ -273,6 +273,50 @@ impl Default for IntroducerConfig {
 
 use saorsa_gossip_transport::GossipTransport;
 
+/// Parse an address that may be either a direct socket address (IP:port)
+/// or a four-word encoded address (words:port or words with encoded port)
+fn parse_introducer_address(address: &str) -> Result<std::net::SocketAddr> {
+    // First, try parsing as a direct socket address (e.g., "192.168.1.1:443")
+    if let Ok(addr) = address.parse::<std::net::SocketAddr>() {
+        return Ok(addr);
+    }
+
+    // Try parsing as four-word format using conn_from_words from identity module
+    // Handle both "word-word-word-word:port" and "word word word word" formats
+    match crate::identity::conn_from_words(address) {
+        Ok(addr) => Ok(addr),
+        Err(e) => {
+            // If the address has :port suffix, try stripping it and decoding the words part
+            if let Some((words_part, port_str)) = address.rsplit_once(':')
+                && let Ok(port) = port_str.parse::<u16>()
+            {
+                // Try decoding just the words part
+                match crate::identity::conn_from_words(words_part) {
+                    Ok(mut addr) => {
+                        // Replace the port with the explicit one
+                        addr.set_port(port);
+                        return Ok(addr);
+                    }
+                    Err(_) => {
+                        // Try with dashes converted to spaces for the encoder
+                        let words_with_spaces = words_part.replace('-', " ");
+                        if let Ok(mut addr) = crate::identity::conn_from_words(&words_with_spaces) {
+                            addr.set_port(port);
+                            return Ok(addr);
+                        }
+                    }
+                }
+            }
+
+            Err(anyhow::anyhow!(
+                "Failed to parse address '{}': not a valid socket address or four-word format: {}",
+                address,
+                e
+            ))
+        }
+    }
+}
+
 /// Cold start discovery using introducer nodes
 pub async fn cold_start_discovery(
     config: IntroducerConfig,
@@ -288,17 +332,12 @@ pub async fn cold_start_discovery(
     for introducer in &config.addresses {
         info!("Connecting to introducer: {}", introducer);
 
-        // TODO: Implement actual introducer protocol
-        // For now, just parse the address and attempt to resolve to PeerId
-        // In production, introducers would respond with a list of known peers
-
-        // Parse the socket address
-        match introducer.parse::<std::net::SocketAddr>() {
+        // Parse the socket address (supports both IP:port and four-word formats)
+        match parse_introducer_address(introducer) {
             Ok(addr) => {
-                // TODO: Generate or lookup PeerId for this address
-                // For now, just store the address as a string
-                info!("Parsed introducer address: {}", addr);
-                connected_introducers.push(introducer.clone());
+                info!("Parsed introducer address '{}' -> {}", introducer, addr);
+                // Store the resolved IP:port format for consistency
+                connected_introducers.push(addr.to_string());
             }
             Err(e) => {
                 warn!("Failed to parse introducer address {}: {}", introducer, e);

@@ -770,6 +770,26 @@ fn get_vault_directory() -> PathBuf {
             .join("communitas")
             .join("vaults")
     }
+
+    #[cfg(target_os = "ios")]
+    {
+        // On iOS, use the app's document directory
+        dirs::document_dir()
+            .unwrap_or_else(|| PathBuf::from("/var/mobile/Containers/Data/Application"))
+            .join("communitas")
+            .join("vaults")
+    }
+
+    #[cfg(not(any(
+        target_os = "macos",
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "ios"
+    )))]
+    {
+        // Fallback for other platforms
+        PathBuf::from("/tmp").join("communitas").join("vaults")
+    }
 }
 
 /// Generate a cryptographically secure salt

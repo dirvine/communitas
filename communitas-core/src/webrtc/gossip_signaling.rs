@@ -63,6 +63,9 @@ pub struct GossipSignalingTransport {
 
     /// Message receive queue (from PubSub subscriptions)
     message_queue: Arc<RwLock<Vec<(CommunitasIdentity, SignalingMessage)>>>,
+
+    /// Flag to indicate if message processing is active
+    is_processing: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl GossipSignalingTransport {
@@ -77,6 +80,7 @@ impl GossipSignalingTransport {
             gossip,
             local_identity,
             message_queue: Arc::new(RwLock::new(Vec::new())),
+            is_processing: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         })
     }
 
@@ -92,8 +96,18 @@ impl GossipSignalingTransport {
     /// Subscribe to signaling messages for the local peer
     ///
     /// This should be called once during initialization to start receiving
-    /// incoming signaling messages.
+    /// incoming signaling messages. Spawns a background task that processes
+    /// incoming messages and adds them to the message queue.
     pub async fn subscribe_to_signaling(&self) -> Result<()> {
+        // Prevent duplicate subscriptions
+        if self
+            .is_processing
+            .swap(true, std::sync::atomic::Ordering::SeqCst)
+        {
+            debug!("Already subscribed to signaling topic");
+            return Ok(());
+        }
+
         let topic = self.peer_topic(&self.local_identity);
 
         info!(
@@ -103,29 +117,80 @@ impl GossipSignalingTransport {
 
         let pubsub = self.gossip.pubsub.read().await;
 
-        // Subscribe returns a receiver (not async)
-        let _rx = pubsub.subscribe(topic);
+        // Subscribe returns a receiver for incoming messages
+        let mut rx = pubsub.subscribe(topic);
+        drop(pubsub); // Release lock before spawning task
 
         debug!("Subscribed to topic: {:?}", topic);
+
+        // Clone Arcs for the background task
+        let message_queue = self.message_queue.clone();
+        let is_processing = self.is_processing.clone();
+        let local_identity = self.local_identity.clone();
+
+        // Spawn background task to process incoming messages
+        tokio::spawn(async move {
+            debug!("Started signaling message processor for {}", local_identity);
+
+            while is_processing.load(std::sync::atomic::Ordering::SeqCst) {
+                // Try to receive a message with a timeout to allow checking is_processing
+                match tokio::time::timeout(tokio::time::Duration::from_millis(100), rx.recv()).await
+                {
+                    Ok(Some((_peer_id, bytes))) => {
+                        // Deserialize the message payload
+                        match serde_json::from_slice::<(CommunitasIdentity, SignalingMessage)>(
+                            &bytes,
+                        ) {
+                            Ok((sender, message)) => {
+                                debug!("Received signaling message from {}: {:?}", sender, message);
+
+                                // Add to message queue
+                                let mut queue = message_queue.write().await;
+                                queue.push((sender, message));
+                            }
+                            Err(e) => {
+                                warn!("Failed to deserialize signaling message: {}", e);
+                            }
+                        }
+                    }
+                    Ok(None) => {
+                        // Channel closed
+                        debug!("Signaling channel closed for {}", local_identity);
+                        break;
+                    }
+                    Err(_) => {
+                        // Timeout - continue loop to check is_processing
+                        continue;
+                    }
+                }
+            }
+
+            debug!("Stopped signaling message processor for {}", local_identity);
+        });
 
         Ok(())
     }
 
+    /// Stop processing incoming signaling messages
+    ///
+    /// Signals the background task to stop. Should be called when shutting down.
+    pub fn stop_processing(&self) {
+        self.is_processing
+            .store(false, std::sync::atomic::Ordering::SeqCst);
+        debug!("Signaled signaling processor to stop");
+    }
+
     /// Process incoming signaling messages from PubSub
     ///
-    /// NOTE: This is a placeholder implementation. In production, this would
-    /// be replaced with a background task that listens on the PubSub receiver
-    /// and processes messages as they arrive.
+    /// This method is now a no-op since messages are processed by the background
+    /// task started by `subscribe_to_signaling()`. The messages are automatically
+    /// added to the message queue as they arrive.
     ///
-    /// TODO: Implement proper message processing using the receiver from subscribe()
+    /// This method is kept for API compatibility and may be useful for triggering
+    /// immediate processing in the future.
     pub async fn process_incoming_messages(&self) -> Result<()> {
-        // This is a placeholder - actual implementation would involve:
-        // 1. Storing the receiver from subscribe() in the struct
-        // 2. Running a background task that listens on the receiver
-        // 3. Deserializing and queuing incoming messages
-        //
-        // For now, we return Ok since there's no way to poll the receiver
-        // without restructuring the entire approach.
+        // Messages are now processed by the background task started in subscribe_to_signaling()
+        // This method exists for API compatibility
         Ok(())
     }
 }

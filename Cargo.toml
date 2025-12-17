@@ -5,7 +5,8 @@ members = [
     "communitas-desktop",
     "communitas-headless",  # Re-enabled for dual-stack IPv4/IPv6 support
     "communitas-bridge",  # Enabled for browser testing
-    "communitas-tui", "communitas-p2p-test",
+    "communitas-tui", "communitas-p2p-test", "communitas-bindings",
+    "communitas-app",  # Cross-platform Dioxus app (macOS/Linux first)
 ]
 
 [workspace.package]
@@ -23,20 +24,20 @@ saorsa-mls = "0.1.5"
 saorsa-rsps = "0.2.0"
 saorsa-pqc = "0.3.12"
 
-# Saorsa Gossip ecosystem (published crates from crates.io)
-saorsa-gossip-types = "0.1.9"
-saorsa-gossip-identity = "0.1.9"
-saorsa-gossip-crdt-sync = "0.1.9"
-saorsa-gossip-groups = "0.1.9"
-saorsa-gossip-presence = "0.1.9"
-saorsa-gossip-transport = "0.1.9"
-saorsa-gossip-membership = "0.1.9"
-saorsa-gossip-pubsub = "0.1.9"
-saorsa-gossip-coordinator = "0.1.9"
-saorsa-gossip-rendezvous = "0.1.9"
-# New testing infrastructure (optional)
-saorsa-gossip-simulator = "0.1.8"
-saorsa-gossip-load-test = "0.1.8"
+# Saorsa Gossip ecosystem (published v0.1.10 with native NAT traversal via OBSERVED_ADDRESS)
+saorsa-gossip-types = "0.1.10"
+saorsa-gossip-identity = "0.1.10"
+saorsa-gossip-crdt-sync = "0.1.10"
+saorsa-gossip-groups = "0.1.10"
+saorsa-gossip-presence = "0.1.10"
+saorsa-gossip-transport = "0.1.10"
+saorsa-gossip-membership = "0.1.10"
+saorsa-gossip-pubsub = "0.1.10"
+saorsa-gossip-coordinator = "0.1.10"
+saorsa-gossip-rendezvous = "0.1.10"
+# Testing infrastructure
+saorsa-gossip-simulator = "0.1.10"
+saorsa-gossip-load-test = "0.1.10"
 
 # Real-time multimedia (WebRTC over QUIC) - Updated to 0.2.0
 # Note: saorsa-webrtc-tauri omitted (requires Tauri 1.5, we use Tauri 2.x)
@@ -44,7 +45,7 @@ saorsa-webrtc-core = "0.2.1"
 saorsa-webrtc-codecs = "0.2.1"
 
 # Networking
-ant-quic = "0.8.17"
+ant-quic = "0.10.5"
 four-word-networking = "2.6"
 
 # Async runtime

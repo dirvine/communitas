@@ -1,0 +1,67 @@
+# Communitas App - Cross-Platform Dioxus Application
+#
+# A polished, professional Dioxus application for the Communitas P2P collaboration platform.
+# Targets: macOS, Linux, Windows (deferred), iOS, Android
+
+[package]
+name = "communitas-app"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Cross-platform Dioxus UI for Communitas P2P collaboration"
+
+[[bin]]
+name = "communitas-app"
+path = "src/main.rs"
+
+[dependencies]
+# Direct core integration (no FFI overhead!)
+communitas-core = { path = "../communitas-core" }
+
+# Dioxus 0.7 with router
+dioxus = { version = "0.7", features = ["router"] }
+
+# Shared with communitas-core (workspace dependencies)
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+four-word-networking = { workspace = true }
+
+# Additional dependencies for app
+dirs = "5.0"  # Platform directories for storage
+rand = { workspace = true }  # For random word generation
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# Desktop/mobile specific
+tokio = { workspace = true, features = ["full"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+# Web-specific
+wasm-bindgen = "0.2"
+web-sys = { version = "0.3", features = ["Window", "Storage"] }
+
+[features]
+default = ["desktop"]
+desktop = ["dioxus/desktop"]
+mobile = ["dioxus/mobile"]
+web = ["dioxus/web"]
+bundle = []  # Windows console hiding
+
+[lints.rust]
+# Enforce no-panic policy in production code
+unsafe_code = "forbid"
+
+[lints.clippy]
+# Strict production code policy (allow in tests via cfg)
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"

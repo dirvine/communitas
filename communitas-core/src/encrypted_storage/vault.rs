@@ -36,6 +36,9 @@ pub struct VaultMetadata {
     pub total_size: u64,
     pub entry_count: usize,
     pub checksum: Vec<u8>, // BLAKE3 hash of vault contents
+    /// Display name stored unencrypted for vault listing without needing to decrypt
+    #[serde(default)]
+    pub display_name: String,
 }
 
 /// Individual encrypted entry in the vault
@@ -99,6 +102,7 @@ impl EncryptedVault {
             total_size: 0,
             entry_count: 0,
             checksum: vec![],
+            display_name: display_name.clone(),
         };
 
         // Save metadata

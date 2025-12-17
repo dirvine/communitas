@@ -2,11 +2,11 @@
 resolver = "2"
 members = [
     "communitas-core",
-    "communitas-desktop",
-    "communitas-headless",  # Re-enabled for dual-stack IPv4/IPv6 support
-    "communitas-bridge",  # Enabled for browser testing
-    "communitas-tui", "communitas-p2p-test", "communitas-bindings",
-    "communitas-app",  # Cross-platform Dioxus app (macOS/Linux first)
+    "communitas-headless",  # Bootstrap nodes
+    "communitas-bridge",    # HTTP bridge for testing
+    "communitas-tui",
+    "communitas-p2p-test",
+    "communitas-bindings",  # Swift/UniFFI bindings
 ]
 
 [workspace.package]

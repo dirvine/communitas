@@ -36,6 +36,9 @@ use tracing::{debug, info, warn};
 // Phase 2 TDD: Import resilience modules
 use crate::{ConnectivityWatchdog, ResourceLimits, WatchdogConfig};
 
+// Contact storage for endpoint tracking
+use super::contact_storage::{ContactRecord, ContactStore};
+
 /// Centralized context for the gossip overlay system
 ///
 /// This replaces CoreContext's DHT-based discovery with a gossip-based
@@ -109,6 +112,9 @@ pub struct GossipContext {
 
     /// Resource limits for connection/memory management (Phase 2 TDD)
     pub resource_limits: Arc<ResourceLimits>,
+
+    /// Contact store for endpoint tracking (per SPEC2.md contact management)
+    pub contact_store: ContactStore,
 }
 
 impl GossipContext {
@@ -410,6 +416,7 @@ impl GossipContext {
             peer_id,
             watchdog,
             resource_limits,
+            contact_store: ContactStore::new(),
         })
     }
 
@@ -713,6 +720,49 @@ impl GossipContext {
     }
 
     // ========================================================================
+    // Contact Linking API - Local-Only / Network-Linked
+    // ========================================================================
+
+    /// Create a local-only contact (not linked to network identity)
+    pub async fn create_local_contact(
+        &self,
+        display_name: String,
+    ) -> Result<crate::gossip::contact_storage::ContactRecord> {
+        let contact = crate::gossip::contact_storage::ContactRecord::new_local(display_name);
+        self.contact_store
+            .add(contact.clone())
+            .await
+            .context("Failed to add local contact")?;
+        Ok(contact)
+    }
+
+    /// Link a local-only contact to a network identity
+    pub async fn link_contact(
+        &self,
+        contact_id: &str,
+        four_words: &str,
+    ) -> Result<crate::gossip::contact_storage::ContactRecord> {
+        let contact = self
+            .contact_store
+            .link_contact(contact_id, four_words)
+            .await
+            .context("Failed to link contact")?;
+        Ok(contact)
+    }
+
+    /// Get all local-only contacts
+    pub async fn get_local_only_contacts(
+        &self,
+    ) -> Vec<crate::gossip::contact_storage::ContactRecord> {
+        self.contact_store.local_only().await
+    }
+
+    /// Get all network-linked contacts
+    pub async fn get_linked_contacts(&self) -> Vec<crate::gossip::contact_storage::ContactRecord> {
+        self.contact_store.network_linked().await
+    }
+
+    // ========================================================================
     // Messaging API - Plumtree pub/sub
     // ========================================================================
 
@@ -961,6 +1011,120 @@ impl GossipContext {
             .join(vec![seed])
             .await
             .map_err(|e| anyhow::anyhow!("Failed to join via {}: {}", addr, e))?;
+        Ok(())
+    }
+
+    // ========================================================================
+    // Contact Store API - Endpoint tracking for reconnection
+    // ========================================================================
+
+    /// Publish a direct message to a recipient's DM topic
+    ///
+    /// Creates a topic based on the recipient's four-word address and
+    /// publishes the message via the gossip pubsub layer.
+    pub async fn publish_dm(&self, recipient_four_words: &str, message: Vec<u8>) -> Result<()> {
+        // Create a DM topic ID from the recipient's four-word address
+        // DM topics use format: "dm:{four_words}"
+        let dm_topic_str = format!("dm:{}", recipient_four_words);
+        let topic_id = TopicId::from_entity(&dm_topic_str)?;
+
+        // Publish via pubsub
+        let pubsub = self.pubsub.write().await;
+        pubsub.publish(topic_id, message.into()).await?;
+
+        debug!("Published DM to {}", recipient_four_words);
+        Ok(())
+    }
+
+    /// Get all contact records from the contact store
+    pub async fn get_all_contact_records(&self) -> Vec<ContactRecord> {
+        self.contact_store.all().await
+    }
+
+    /// Get the valid endpoint for a contact
+    ///
+    /// Returns the endpoint if it exists and is valid (not stale, not too many failures)
+    pub async fn get_contact_endpoint(
+        &self,
+        four_words: &str,
+    ) -> Option<std::net::SocketAddr> {
+        let contact = self.contact_store.get(four_words).await?;
+        contact.get_valid_endpoint()
+    }
+
+    /// Update the endpoint for a contact
+    ///
+    /// Creates the contact if it doesn't exist.
+    pub async fn update_contact_endpoint(
+        &self,
+        four_words: &str,
+        addr: &std::net::SocketAddr,
+    ) -> Result<()> {
+        // Check if contact exists
+        if self.contact_store.exists(four_words).await {
+            self.contact_store
+                .update_endpoint(four_words, addr)
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to update endpoint: {}", e))?;
+        } else {
+            // Create new contact with endpoint
+            let mut contact = ContactRecord::new(four_words.to_string());
+            contact
+                .update_endpoint(addr)
+                .map_err(|e| anyhow::anyhow!("Failed to set endpoint: {}", e))?;
+            self.contact_store
+                .add(contact)
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to add contact: {}", e))?;
+        }
+
+        info!("Updated endpoint for contact {} to {}", four_words, addr);
+        Ok(())
+    }
+
+    /// Record a successful connection to a contact
+    ///
+    /// Updates the endpoint and resets failure count.
+    /// Creates the contact if it doesn't exist.
+    pub async fn record_contact_success(
+        &self,
+        four_words: &str,
+        addr: std::net::SocketAddr,
+    ) -> Result<()> {
+        if self.contact_store.exists(four_words).await {
+            self.contact_store
+                .record_success(four_words, addr)
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to record success: {}", e))?;
+        } else {
+            // Create new contact with successful connection
+            let mut contact = ContactRecord::new(four_words.to_string());
+            contact.record_success(addr);
+            self.contact_store
+                .add(contact)
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to add contact: {}", e))?;
+        }
+
+        debug!("Recorded successful connection to {} at {}", four_words, addr);
+        Ok(())
+    }
+
+    /// Record a connection failure to a contact
+    ///
+    /// Increments the failure count. After too many failures, the endpoint
+    /// will be skipped in get_contact_endpoint().
+    pub async fn record_contact_failure(&self, four_words: &str) -> Result<()> {
+        if !self.contact_store.exists(four_words).await {
+            return Err(anyhow::anyhow!("Contact not found: {}", four_words));
+        }
+
+        self.contact_store
+            .record_failure(four_words)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to record failure: {}", e))?;
+
+        debug!("Recorded connection failure to {}", four_words);
         Ok(())
     }
 }

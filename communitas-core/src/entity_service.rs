@@ -37,6 +37,74 @@ pub struct Entity {
     pub members: Vec<String>, // Four-word addresses of members
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_org_id: Option<String>, // Links child entities (channel/group/project) to parent organization
+    /// Network four-word identity if this entity is linked to the P2P network
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub network_four_words: Option<String>,
+    /// True if this is a local-only placeholder (no network identity yet)
+    #[serde(default)]
+    pub is_local_only: bool,
+    /// Timestamp when entity was linked to a network identity
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub linked_at: Option<i64>,
+    /// Timestamp of last successful sync with network peer
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_sync_at: Option<i64>,
+}
+
+impl Entity {
+    /// Create a new local-only entity (placeholder without network identity)
+    pub fn new_local(
+        name: String,
+        entity_type: EntityType,
+        description: Option<String>,
+        created_by: String,
+    ) -> Self {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+
+        Self {
+            id: uuid::Uuid::new_v4().to_string(),
+            name,
+            entity_type,
+            description,
+            created_by,
+            created_at: now,
+            members: vec![],
+            parent_org_id: None,
+            network_four_words: None,
+            is_local_only: true,
+            linked_at: None,
+            last_sync_at: None,
+        }
+    }
+
+    /// Check if this entity is linked to a network identity
+    pub fn is_linked(&self) -> bool {
+        self.network_four_words.is_some() && !self.is_local_only
+    }
+
+    /// Link this entity to a network identity
+    pub fn link_to_network(&mut self, four_words: String) {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+
+        self.network_four_words = Some(four_words);
+        self.is_local_only = false;
+        self.linked_at = Some(now);
+    }
+
+    /// Update the last sync timestamp
+    pub fn mark_synced(&mut self) {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        self.last_sync_at = Some(now);
+    }
 }
 
 /// Member information
@@ -121,6 +189,11 @@ impl EntityService {
             created_at: now,
             members: initial_members.clone(),
             parent_org_id: None,
+            // Default to network-linked for backward compatibility
+            network_four_words: None,
+            is_local_only: false,
+            linked_at: None,
+            last_sync_at: None,
         };
 
         // Save entity metadata
@@ -140,7 +213,6 @@ impl EntityService {
         // Update entity with actual members list (including creator)
         let entity_with_members = Entity {
             members: all_members,
-            parent_org_id: None,
             ..entity
         };
 
@@ -184,6 +256,14 @@ impl EntityService {
 
         let parent_org_id = CrdtManager::get_map_string(&metadata_map, &txn, "parent_org_id");
 
+        // Read new local-only/network-linked fields
+        let network_four_words =
+            CrdtManager::get_map_string(&metadata_map, &txn, "network_four_words");
+        let is_local_only =
+            CrdtManager::get_map_bool(&metadata_map, &txn, "is_local_only").unwrap_or(false);
+        let linked_at = CrdtManager::get_map_i64(&metadata_map, &txn, "linked_at");
+        let last_sync_at = CrdtManager::get_map_i64(&metadata_map, &txn, "last_sync_at");
+
         // Get members list
         let members = self
             .list_members(entity_type, entity_id)
@@ -202,6 +282,10 @@ impl EntityService {
             created_at,
             members,
             parent_org_id,
+            network_four_words,
+            is_local_only,
+            linked_at,
+            last_sync_at,
         })
     }
 
@@ -610,6 +694,26 @@ impl EntityService {
                     parent_org_id,
                 );
             }
+
+            // Save local-only/network-linked fields
+            if let Some(network_four_words) = &entity.network_four_words {
+                CrdtManager::set_map_string(
+                    &metadata_map,
+                    &mut txn,
+                    "network_four_words",
+                    network_four_words,
+                );
+            }
+
+            CrdtManager::set_map_bool(&metadata_map, &mut txn, "is_local_only", entity.is_local_only);
+
+            if let Some(linked_at) = entity.linked_at {
+                CrdtManager::set_map_i64(&metadata_map, &mut txn, "linked_at", linked_at);
+            }
+
+            if let Some(last_sync_at) = entity.last_sync_at {
+                CrdtManager::set_map_i64(&metadata_map, &mut txn, "last_sync_at", last_sync_at);
+            }
         }
 
         self.crdt_manager
@@ -617,6 +721,48 @@ impl EntityService {
             .await?;
 
         Ok(())
+    }
+
+    /// Create a new local-only entity (no network identity)
+    pub async fn create_local_entity(
+        &self,
+        name: String,
+        entity_type: EntityType,
+        description: Option<String>,
+        created_by: String,
+    ) -> EntityServiceResult<Entity> {
+        let entity = Entity::new_local(name, entity_type, description, created_by);
+
+        // Save entity metadata
+        self.save_entity(&entity).await?;
+
+        Ok(entity)
+    }
+
+    /// Link an existing entity to a network identity
+    pub async fn link_entity_to_network(
+        &self,
+        entity_id: &str,
+        four_words: &str,
+    ) -> EntityServiceResult<Entity> {
+        // Load existing entity
+        let mut entity = self.get_entity(entity_id).await?;
+
+        // Link to network
+        entity.link_to_network(four_words.to_string());
+
+        // Save updated entity
+        self.save_entity(&entity).await?;
+
+        Ok(entity)
+    }
+
+    /// Update entity sync timestamp
+    pub async fn mark_entity_synced(&self, entity_id: &str) -> EntityServiceResult<Entity> {
+        let mut entity = self.get_entity(entity_id).await?;
+        entity.mark_synced();
+        self.save_entity(&entity).await?;
+        Ok(entity)
     }
 }
 

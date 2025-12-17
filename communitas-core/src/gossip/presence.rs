@@ -36,6 +36,8 @@ pub struct PresenceInfo {
     pub status: PresenceStatus,
     pub last_seen: Option<DateTime<Utc>>,
     pub shared_groups: Vec<String>, // Group IDs where we've seen this peer
+    pub four_words: Option<String>, // Four-word identity if known
+    pub last_endpoint: Option<std::net::SocketAddr>, // Last known endpoint for direct dial
 }
 
 /// Presence manager wrapping saorsa-gossip-presence::PresenceManager
@@ -86,21 +88,71 @@ impl PresenceWrapper {
     ///
     /// Per SPEC.md §3: Use Presence::find instead of DHT lookup
     ///
-    /// TODO: This requires extending saorsa-gossip-presence::PresenceManager with:
-    /// - `get_groups() -> Vec<TopicId>` - List all joined topics
-    /// - `get_group_presence(topic) -> HashMap<PeerId, PresenceRecord>` - Get presence records for a topic
-    /// - `PresenceRecord` needs to include four_words metadata
-    ///
-    /// For now, this is a placeholder that returns None
-    pub async fn find(&self, _four_words: &str) -> Option<PeerId> {
-        // TODO: Implement once PresenceManager API is extended
-        // See FOAF_DISCOVERY_IMPLEMENTATION.md for details
+    /// Searches all joined groups for a peer broadcasting the specified
+    /// four-word identity in their presence beacon.
+    pub async fn find(&self, four_words: &str) -> Option<PeerId> {
+        // First check our local cache
+        if let Some(info) = self.get_by_four_words(four_words).await
+            && info.status == PresenceStatus::Online
+        {
+            return Some(info.peer_id);
+        }
+
+        // Query the underlying presence service for presence records across all groups
+        let presence_guard = self.presence_service.read().await;
+
+        // Get all joined groups
+        let groups = presence_guard.get_groups().await;
+
+        // Search for four_words in presence records across all groups
+        for topic_id in groups {
+            let presence_records = presence_guard.get_group_presence(topic_id).await;
+
+            // Check each presence record for matching four_words
+            for (peer_id, record) in presence_records {
+                // Skip expired beacons
+                if record.is_expired() {
+                    continue;
+                }
+
+                if let Some(fw) = &record.four_words
+                    && fw == four_words
+                {
+                    // Update our cache for faster future lookups
+                    drop(presence_guard); // Release read lock before acquiring write lock
+                    self.update_from_beacon_with_endpoint(
+                        peer_id,
+                        hex::encode(topic_id.as_bytes()),
+                        Some(four_words.to_string()),
+                        None, // We don't have the endpoint here
+                    )
+                    .await;
+                    return Some(peer_id);
+                }
+            }
+        }
+
         None
     }
 
     /// Update presence cache from beacon
     #[allow(dead_code)] // Will be called from FOAF discovery protocol
     async fn update_from_beacon(&self, peer_id: PeerId, group_id: String) {
+        self.update_from_beacon_with_endpoint(peer_id, group_id, None, None)
+            .await;
+    }
+
+    /// Update presence cache from beacon with endpoint tracking
+    ///
+    /// Call this when receiving a presence beacon to track both presence status
+    /// and the peer's endpoint for direct reconnection.
+    pub async fn update_from_beacon_with_endpoint(
+        &self,
+        peer_id: PeerId,
+        group_id: String,
+        four_words: Option<String>,
+        endpoint: Option<std::net::SocketAddr>,
+    ) {
         let mut cache = self.cache.write().await;
 
         cache
@@ -111,13 +163,38 @@ impl PresenceWrapper {
                 if !info.shared_groups.contains(&group_id) {
                     info.shared_groups.push(group_id.clone());
                 }
+                // Update four_words if provided
+                if four_words.is_some() {
+                    info.four_words = four_words.clone();
+                }
+                // Update endpoint if provided
+                if endpoint.is_some() {
+                    info.last_endpoint = endpoint;
+                }
             })
             .or_insert(PresenceInfo {
                 peer_id,
                 status: PresenceStatus::Online,
                 last_seen: Some(Utc::now()),
                 shared_groups: vec![group_id],
+                four_words,
+                last_endpoint: endpoint,
             });
+    }
+
+    /// Get the last known endpoint for a peer
+    pub async fn get_peer_endpoint(&self, peer_id: PeerId) -> Option<std::net::SocketAddr> {
+        let cache = self.cache.read().await;
+        cache.get(&peer_id).and_then(|info| info.last_endpoint)
+    }
+
+    /// Get presence info for peers by their four-word identity
+    pub async fn get_by_four_words(&self, four_words: &str) -> Option<PresenceInfo> {
+        let cache = self.cache.read().await;
+        cache
+            .values()
+            .find(|info| info.four_words.as_deref() == Some(four_words))
+            .cloned()
     }
 
     /// Clean up expired presence entries (TTL: 10-15 minutes)

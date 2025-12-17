@@ -1,0 +1,4 @@
+module communitas_bindingsFFI {
+    header "communitas_bindingsFFI.h"
+    export *
+}

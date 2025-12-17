@@ -32,6 +32,7 @@ pub mod connectivity_watchdog; // Internet collapse detection (MESH_CAPABILITIES
 pub mod core_context;
 pub mod crdt; // New pure CRDT infrastructure
 pub mod crdt_manager;
+pub mod disk_service; // Per-entity virtual disk management
 pub mod legacy_crdt; // Legacy vector clock CRDT (to be phased out)
 // pub mod dht_identity; // Removed: DHT not used in RC1b (gossip-based architecture)
 // pub mod dht_schemas; // Removed: DHT not used in RC1b (gossip-based architecture)
@@ -39,6 +40,7 @@ pub mod doc_replicator;
 pub mod encrypted_storage;
 pub mod entity_service;
 pub mod error;
+pub mod linking_service;
 pub mod identity;
 pub mod keystore;
 pub mod message_service;
@@ -67,8 +69,10 @@ pub use connectivity_watchdog::{ConnectivityWatchdog, WatchdogConfig};
 pub use core_context::CoreContext;
 pub use crdt_manager::{CrdtError, CrdtManager, CrdtResult};
 pub use entity_service::{
-    CascadeRemovalResult, EntityService, EntityServiceError, EntityServiceResult,
+    CascadeRemovalResult, Entity, EntityService, EntityServiceError, EntityServiceResult,
 };
+pub use legacy_crdt::EntityType;
+pub use linking_service::{LinkingError, LinkingResult, LinkingService, SyncResult};
 pub use error::{AppError, AppResult as Result};
 pub use message_service::{MessageService, MessageServiceError, MessageServiceResult};
 pub use resource_limits::{ResourceLimitError, ResourceLimits};
@@ -76,11 +80,14 @@ pub use retry_utils::{RetryConfig, retry_dial, retry_with_backoff};
 pub use services::CoreServices;
 pub use validation::{InputType, ValidationError, ValidationService};
 
-// Re-export gossip context (now default, no longer feature-gated)
-pub use gossip::GossipContext;
+// Re-export gossip context and presence types (now default, no longer feature-gated)
+pub use gossip::{GossipContext, PresenceInfo, PresenceStatus, PresenceWrapper};
 
 // Re-export identity helpers for convenience
 pub use identity::{
     IdentityError, IdentityResult, conn_from_words, conn_words, generate_id_words,
     identity_to_seed, validate_id_words,
 };
+
+// Re-export disk service types
+pub use disk_service::{DiskStats, DiskType, EntityDiskService, FileInfo};

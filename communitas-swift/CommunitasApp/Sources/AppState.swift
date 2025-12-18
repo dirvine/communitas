@@ -159,6 +159,53 @@ public struct ContactItem: Identifiable, Hashable, Codable {
     }
 }
 
+// MARK: - Kanban Types
+
+public struct KanbanCard: Identifiable, Codable, Hashable {
+    public let id: String
+    public var title: String
+    public var cardDescription: String?
+    public var column: String
+    public var assignee: String?
+    public var priority: Int  // 0 = low, 1 = normal, 2 = high
+    public let createdAt: Date
+    public var updatedAt: Date
+    public var sortOrder: Int  // For ordering within column
+    public var commentCount: Int  // Number of comments on this card
+
+    public init(
+        id: String = UUID().uuidString,
+        title: String,
+        cardDescription: String? = nil,
+        column: String = "backlog",
+        assignee: String? = nil,
+        priority: Int = 1,
+        createdAt: Date = Date(),
+        updatedAt: Date = Date(),
+        sortOrder: Int = 0,
+        commentCount: Int = 0
+    ) {
+        self.id = id
+        self.title = title
+        self.cardDescription = cardDescription
+        self.column = column
+        self.assignee = assignee
+        self.priority = priority
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.sortOrder = sortOrder
+        self.commentCount = commentCount
+    }
+
+    public static func == (lhs: KanbanCard, rhs: KanbanCard) -> Bool {
+        lhs.id == rhs.id
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
+}
+
 // MARK: - Network Configuration
 
 public struct NetworkConfig {
@@ -184,7 +231,14 @@ public class AppState: ObservableObject {
     @Published public var files: [String: [FileItem]] = [:]
     @Published public var documents: [String: [DocumentItem]] = [:]
     @Published public var contacts: [ContactItem] = []
+    @Published public var kanbanCards: [String: [KanbanCard]] = [:]
     @Published public var isPresenceActive: Bool = false
+
+    // MARK: - Kanban Board Tracking (Rust backend)
+    /// Maps entity/project ID to Kanban board ID
+    private var kanbanBoardIds: [String: String] = [:]
+    /// Maps board ID to column name -> column ID
+    private var kanbanColumnMappings: [String: [String: String]] = [:]
     @Published public var connectionIdentity: String?
     @Published public var bootstrapAddress: String = NetworkConfig.defaultBootstrapAddress
 
@@ -949,6 +1003,339 @@ public class AppState: ObservableObject {
     /// Get document by ID
     public func getDocument(id: String, entityId: String) -> DocumentItem? {
         return documents[entityId]?.first { $0.id == id }
+    }
+
+    // MARK: - Kanban Methods (Rust Backend)
+
+    /// Default column definitions for new boards
+    private static let defaultColumns: [(name: String, color: String)] = [
+        ("backlog", "#6B7280"),      // Gray
+        ("todo", "#3B82F6"),         // Blue
+        ("in_progress", "#F59E0B"),  // Amber
+        ("review", "#8B5CF6"),       // Purple
+        ("done", "#10B981")          // Green
+    ]
+
+    /// Ensure a Kanban board exists for an entity, creating one if needed
+    /// Returns the board ID
+    private func ensureKanbanBoard(for entityId: String) -> String? {
+        // Check if we already have a board ID cached
+        if let boardId = kanbanBoardIds[entityId] {
+            return boardId
+        }
+
+        guard let client = client else {
+            print("[Communitas] Cannot create Kanban board: client not initialized")
+            return nil
+        }
+
+        do {
+            // Create a new board for this entity
+            let boardId = try client.kanbanCreateBoard(
+                projectId: entityId,
+                name: "Board",
+                description: nil
+            )
+
+            // Add default columns
+            var columnMapping: [String: String] = [:]
+            for column in Self.defaultColumns {
+                let columnId = try client.kanbanAddColumn(
+                    boardId: boardId,
+                    name: column.name,
+                    color: column.color,
+                    wipLimit: nil
+                )
+                columnMapping[column.name] = columnId
+            }
+
+            // Cache the board ID and column mappings
+            kanbanBoardIds[entityId] = boardId
+            kanbanColumnMappings[boardId] = columnMapping
+
+            print("[Communitas] Created Kanban board '\(boardId)' with \(columnMapping.count) columns for entity \(entityId)")
+            return boardId
+        } catch {
+            print("[Communitas] Error creating Kanban board for \(entityId): \(error)")
+            return nil
+        }
+    }
+
+    /// Get column ID for a column name, ensuring board exists
+    private func getColumnId(for columnName: String, boardId: String) -> String? {
+        return kanbanColumnMappings[boardId]?[columnName]
+    }
+
+    /// Load column mappings for a board from the Rust backend
+    private func loadColumnMappings(for boardId: String) {
+        guard let client = client else { return }
+
+        do {
+            let board = try client.kanbanGetBoard(boardId: boardId)
+            var mapping: [String: String] = [:]
+            for column in board.columns {
+                mapping[column.name] = column.id
+            }
+            kanbanColumnMappings[boardId] = mapping
+        } catch {
+            print("[Communitas] Error loading column mappings: \(error)")
+        }
+    }
+
+    /// Load Kanban cards for an entity from Rust backend
+    public func loadKanbanCards(for entityId: String) {
+        guard let boardId = ensureKanbanBoard(for: entityId) else {
+            kanbanCards[entityId] = []
+            return
+        }
+
+        // Ensure we have column mappings
+        if kanbanColumnMappings[boardId] == nil {
+            loadColumnMappings(for: boardId)
+        }
+
+        guard let client = client else {
+            kanbanCards[entityId] = []
+            return
+        }
+
+        do {
+            let swiftCards = try client.kanbanListCards(boardId: boardId, columnId: nil)
+
+            // Convert SwiftKanbanCard to KanbanCard with column name lookup
+            let cards: [KanbanCard] = swiftCards.compactMap { card in
+                // Find column name from ID
+                let columnName = kanbanColumnMappings[boardId]?.first { $0.value == card.columnId }?.key ?? "backlog"
+
+                return KanbanCard(
+                    id: card.id,
+                    title: card.title,
+                    cardDescription: card.description.isEmpty ? nil : card.description,
+                    column: columnName,
+                    assignee: card.assigneeIds.first,
+                    priority: 1,  // Default priority (Rust backend uses state machine instead)
+                    createdAt: Date(timeIntervalSince1970: Double(card.createdAt) / 1000.0),
+                    updatedAt: Date(timeIntervalSince1970: Double(card.updatedAt) / 1000.0),
+                    sortOrder: Int(card.position),
+                    commentCount: Int(card.commentCount)
+                )
+            }
+
+            kanbanCards[entityId] = cards.sorted { $0.sortOrder < $1.sortOrder }
+            print("[Communitas] Loaded \(cards.count) Kanban cards from Rust backend for entity \(entityId)")
+        } catch {
+            print("[Communitas] Error loading Kanban cards for \(entityId): \(error)")
+            kanbanCards[entityId] = []
+        }
+    }
+
+    /// Get Kanban cards for an entity
+    public func getKanbanCards(for entityId: String) -> [KanbanCard] {
+        return kanbanCards[entityId] ?? []
+    }
+
+    /// Create a new Kanban card using Rust backend
+    public func createKanbanCard(in entityId: String, title: String, column: String, description: String? = nil) {
+        guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+
+        guard let boardId = ensureKanbanBoard(for: entityId),
+              let columnId = getColumnId(for: column, boardId: boardId),
+              let client = client else {
+            print("[Communitas] Cannot create card: board or column not found")
+            return
+        }
+
+        do {
+            let cardId = try client.kanbanCreateCard(
+                boardId: boardId,
+                columnId: columnId,
+                title: title.trimmingCharacters(in: .whitespacesAndNewlines),
+                description: description
+            )
+
+            print("[Communitas] Created Kanban card '\(title)' (id: \(cardId)) in column '\(column)' for entity \(entityId)")
+
+            // Reload cards to include the new one
+            loadKanbanCards(for: entityId)
+        } catch {
+            print("[Communitas] Error creating Kanban card: \(error)")
+            errorMessage = "Failed to create card: \(error.localizedDescription)"
+        }
+    }
+
+    /// Move a Kanban card to a new column using Rust backend
+    public func moveKanbanCard(cardId: String, entityId: String, toColumn: String) {
+        guard let boardId = kanbanBoardIds[entityId],
+              let columnId = getColumnId(for: toColumn, boardId: boardId),
+              let client = client else {
+            print("[Communitas] Cannot move card: board or column not found")
+            return
+        }
+
+        // Find target position (end of column)
+        let cardsInColumn = (kanbanCards[entityId] ?? []).filter { $0.column == toColumn }
+        let position = UInt32(cardsInColumn.count)
+
+        do {
+            try client.kanbanMoveCard(
+                boardId: boardId,
+                cardId: cardId,
+                toColumnId: columnId,
+                position: position
+            )
+
+            print("[Communitas] Moved card '\(cardId)' to column '\(toColumn)'")
+
+            // Reload cards to reflect the change
+            loadKanbanCards(for: entityId)
+        } catch {
+            print("[Communitas] Error moving Kanban card: \(error)")
+            errorMessage = "Failed to move card: \(error.localizedDescription)"
+        }
+    }
+
+    /// Update a Kanban card using Rust backend
+    public func updateKanbanCard(cardId: String, entityId: String, title: String? = nil, description: String? = nil, priority: Int? = nil) {
+        guard let boardId = kanbanBoardIds[entityId],
+              let client = client else {
+            print("[Communitas] Cannot update card: board not found")
+            return
+        }
+
+        do {
+            try client.kanbanUpdateCard(
+                boardId: boardId,
+                cardId: cardId,
+                title: title,
+                description: description
+            )
+
+            print("[Communitas] Updated Kanban card '\(cardId)'")
+
+            // Reload cards to reflect the change
+            loadKanbanCards(for: entityId)
+        } catch {
+            print("[Communitas] Error updating Kanban card: \(error)")
+            errorMessage = "Failed to update card: \(error.localizedDescription)"
+        }
+    }
+
+    /// Delete a Kanban card using Rust backend
+    public func deleteKanbanCard(cardId: String, entityId: String) {
+        guard let boardId = kanbanBoardIds[entityId],
+              let client = client else {
+            print("[Communitas] Cannot delete card: board not found")
+            return
+        }
+
+        let cardTitle = kanbanCards[entityId]?.first { $0.id == cardId }?.title ?? "unknown"
+
+        do {
+            try client.kanbanDeleteCard(boardId: boardId, cardId: cardId)
+
+            print("[Communitas] Deleted Kanban card '\(cardTitle)'")
+
+            // Reload cards to reflect the change
+            loadKanbanCards(for: entityId)
+        } catch {
+            print("[Communitas] Error deleting Kanban card: \(error)")
+            errorMessage = "Failed to delete card: \(error.localizedDescription)"
+        }
+    }
+
+    /// Get cards for a specific column
+    public func getKanbanCards(for entityId: String, column: String) -> [KanbanCard] {
+        return (kanbanCards[entityId] ?? [])
+            .filter { $0.column == column }
+            .sorted { $0.sortOrder < $1.sortOrder }
+    }
+
+    /// Get card count per column for an entity
+    public func getKanbanColumnCounts(for entityId: String) -> [String: Int] {
+        let cards = kanbanCards[entityId] ?? []
+        var counts: [String: Int] = [:]
+        for card in cards {
+            counts[card.column, default: 0] += 1
+        }
+        return counts
+    }
+
+    /// Get CRDT sync update for a Kanban board
+    public func getKanbanSyncUpdate(for entityId: String) -> Data? {
+        guard let boardId = kanbanBoardIds[entityId],
+              let client = client else {
+            return nil
+        }
+
+        do {
+            let data = try client.kanbanGetSyncUpdate(boardId: boardId)
+            return data
+        } catch {
+            print("[Communitas] Error getting Kanban sync update: \(error)")
+            return nil
+        }
+    }
+
+    /// Apply a CRDT sync update to a Kanban board
+    public func applyKanbanSyncUpdate(for entityId: String, update: Data) {
+        guard let boardId = kanbanBoardIds[entityId],
+              let client = client else {
+            return
+        }
+
+        do {
+            try client.kanbanApplySyncUpdate(boardId: boardId, update: update)
+            // Reload cards after sync
+            loadKanbanCards(for: entityId)
+            print("[Communitas] Applied Kanban sync update for entity \(entityId)")
+        } catch {
+            print("[Communitas] Error applying Kanban sync update: \(error)")
+        }
+    }
+
+    // MARK: - Card Discussion Methods
+
+    /// Load comments for a card
+    public func loadCardComments(boardId: String, cardId: String) -> [SwiftKanbanComment] {
+        guard let client = client else {
+            return []
+        }
+
+        do {
+            let comments = try client.kanbanListComments(boardId: boardId, cardId: cardId)
+            return comments
+        } catch {
+            print("[Communitas] Error loading comments for card \(cardId): \(error)")
+            return []
+        }
+    }
+
+    /// Add a comment to a card
+    public func addCardComment(boardId: String, cardId: String, content: String, replyToId: String? = nil) -> String? {
+        guard let client = client else {
+            errorMessage = "Not initialized"
+            return nil
+        }
+
+        do {
+            let commentId = try client.kanbanAddComment(
+                boardId: boardId,
+                cardId: cardId,
+                content: content,
+                replyToId: replyToId
+            )
+            print("[Communitas] Added comment '\(commentId)' to card \(cardId)")
+            return commentId
+        } catch {
+            print("[Communitas] Error adding comment: \(error)")
+            errorMessage = "Failed to add comment: \(error.localizedDescription)"
+            return nil
+        }
+    }
+
+    /// Get board ID for an entity (helper for card discussions)
+    public func getBoardId(for entityId: String) -> String? {
+        return kanbanBoardIds[entityId]
     }
 
     // MARK: - P2P Networking Methods

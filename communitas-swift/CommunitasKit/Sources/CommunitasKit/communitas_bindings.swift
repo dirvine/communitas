@@ -988,6 +988,71 @@ public protocol CommunitasClientProtocol : AnyObject {
     func isNetworkingActive()  -> Bool
     
     /**
+     * Add a column to a board
+     */
+    func kanbanAddColumn(boardId: String, name: String, color: String?, wipLimit: UInt32?) throws  -> String
+    
+    /**
+     * Add a comment to a card
+     */
+    func kanbanAddComment(boardId: String, cardId: String, content: String, replyToId: String?) throws  -> String
+    
+    /**
+     * Apply a CRDT sync update to a board
+     */
+    func kanbanApplySyncUpdate(boardId: String, update: Data) throws 
+    
+    /**
+     * Create a new Kanban board for a project
+     */
+    func kanbanCreateBoard(projectId: String, name: String, description: String?) throws  -> String
+    
+    /**
+     * Create a card in a column
+     */
+    func kanbanCreateCard(boardId: String, columnId: String, title: String, description: String?) throws  -> String
+    
+    /**
+     * Delete a card
+     */
+    func kanbanDeleteCard(boardId: String, cardId: String) throws 
+    
+    /**
+     * Get a Kanban board by ID
+     */
+    func kanbanGetBoard(boardId: String) throws  -> SwiftKanbanBoard
+    
+    /**
+     * Get a card by ID
+     */
+    func kanbanGetCard(boardId: String, cardId: String) throws  -> SwiftKanbanCard
+    
+    /**
+     * Get CRDT sync update for a board
+     */
+    func kanbanGetSyncUpdate(boardId: String) throws  -> Data
+    
+    /**
+     * List all cards in a board (optionally filter by column)
+     */
+    func kanbanListCards(boardId: String, columnId: String?) throws  -> [SwiftKanbanCard]
+    
+    /**
+     * List all comments on a card
+     */
+    func kanbanListComments(boardId: String, cardId: String) throws  -> [SwiftKanbanComment]
+    
+    /**
+     * Move a card to a different column or position
+     */
+    func kanbanMoveCard(boardId: String, cardId: String, toColumnId: String, position: UInt32) throws 
+    
+    /**
+     * Update a card's title and/or description
+     */
+    func kanbanUpdateCard(boardId: String, cardId: String, title: String?, description: String?) throws 
+    
+    /**
      * Get direct messages with a peer
      */
     func messageGetDirect(peerFourWords: String) throws  -> [SwiftMessage]
@@ -2066,6 +2131,167 @@ open func isNetworkingActive() -> Bool {
     uniffi_communitas_bindings_fn_method_communitasclient_is_networking_active(self.uniffiClonePointer(),$0
     )
 })
+}
+    
+    /**
+     * Add a column to a board
+     */
+open func kanbanAddColumn(boardId: String, name: String, color: String?, wipLimit: UInt32?)throws  -> String {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeClientError.lift) {
+    uniffi_communitas_bindings_fn_method_communitasclient_kanban_add_column(self.uniffiClonePointer(),
+        FfiConverterString.lower(boardId),
+        FfiConverterString.lower(name),
+        FfiConverterOptionString.lower(color),
+        FfiConverterOptionUInt32.lower(wipLimit),$0
+    )
+})
+}
+    
+    /**
+     * Add a comment to a card
+     */
+open func kanbanAddComment(boardId: String, cardId: String, content: String, replyToId: String?)throws  -> String {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeClientError.lift) {
+    uniffi_communitas_bindings_fn_method_communitasclient_kanban_add_comment(self.uniffiClonePointer(),
+        FfiConverterString.lower(boardId),
+        FfiConverterString.lower(cardId),
+        FfiConverterString.lower(content),
+        FfiConverterOptionString.lower(replyToId),$0
+    )
+})
+}
+    
+    /**
+     * Apply a CRDT sync update to a board
+     */
+open func kanbanApplySyncUpdate(boardId: String, update: Data)throws  {try rustCallWithError(FfiConverterTypeClientError.lift) {
+    uniffi_communitas_bindings_fn_method_communitasclient_kanban_apply_sync_update(self.uniffiClonePointer(),
+        FfiConverterString.lower(boardId),
+        FfiConverterData.lower(update),$0
+    )
+}
+}
+    
+    /**
+     * Create a new Kanban board for a project
+     */
+open func kanbanCreateBoard(projectId: String, name: String, description: String?)throws  -> String {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeClientError.lift) {
+    uniffi_communitas_bindings_fn_method_communitasclient_kanban_create_board(self.uniffiClonePointer(),
+        FfiConverterString.lower(projectId),
+        FfiConverterString.lower(name),
+        FfiConverterOptionString.lower(description),$0
+    )
+})
+}
+    
+    /**
+     * Create a card in a column
+     */
+open func kanbanCreateCard(boardId: String, columnId: String, title: String, description: String?)throws  -> String {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeClientError.lift) {
+    uniffi_communitas_bindings_fn_method_communitasclient_kanban_create_card(self.uniffiClonePointer(),
+        FfiConverterString.lower(boardId),
+        FfiConverterString.lower(columnId),
+        FfiConverterString.lower(title),
+        FfiConverterOptionString.lower(description),$0
+    )
+})
+}
+    
+    /**
+     * Delete a card
+     */
+open func kanbanDeleteCard(boardId: String, cardId: String)throws  {try rustCallWithError(FfiConverterTypeClientError.lift) {
+    uniffi_communitas_bindings_fn_method_communitasclient_kanban_delete_card(self.uniffiClonePointer(),
+        FfiConverterString.lower(boardId),
+        FfiConverterString.lower(cardId),$0
+    )
+}
+}
+    
+    /**
+     * Get a Kanban board by ID
+     */
+open func kanbanGetBoard(boardId: String)throws  -> SwiftKanbanBoard {
+    return try  FfiConverterTypeSwiftKanbanBoard.lift(try rustCallWithError(FfiConverterTypeClientError.lift) {
+    uniffi_communitas_bindings_fn_method_communitasclient_kanban_get_board(self.uniffiClonePointer(),
+        FfiConverterString.lower(boardId),$0
+    )
+})
+}
+    
+    /**
+     * Get a card by ID
+     */
+open func kanbanGetCard(boardId: String, cardId: String)throws  -> SwiftKanbanCard {
+    return try  FfiConverterTypeSwiftKanbanCard.lift(try rustCallWithError(FfiConverterTypeClientError.lift) {
+    uniffi_communitas_bindings_fn_method_communitasclient_kanban_get_card(self.uniffiClonePointer(),
+        FfiConverterString.lower(boardId),
+        FfiConverterString.lower(cardId),$0
+    )
+})
+}
+    
+    /**
+     * Get CRDT sync update for a board
+     */
+open func kanbanGetSyncUpdate(boardId: String)throws  -> Data {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeClientError.lift) {
+    uniffi_communitas_bindings_fn_method_communitasclient_kanban_get_sync_update(self.uniffiClonePointer(),
+        FfiConverterString.lower(boardId),$0
+    )
+})
+}
+    
+    /**
+     * List all cards in a board (optionally filter by column)
+     */
+open func kanbanListCards(boardId: String, columnId: String?)throws  -> [SwiftKanbanCard] {
+    return try  FfiConverterSequenceTypeSwiftKanbanCard.lift(try rustCallWithError(FfiConverterTypeClientError.lift) {
+    uniffi_communitas_bindings_fn_method_communitasclient_kanban_list_cards(self.uniffiClonePointer(),
+        FfiConverterString.lower(boardId),
+        FfiConverterOptionString.lower(columnId),$0
+    )
+})
+}
+    
+    /**
+     * List all comments on a card
+     */
+open func kanbanListComments(boardId: String, cardId: String)throws  -> [SwiftKanbanComment] {
+    return try  FfiConverterSequenceTypeSwiftKanbanComment.lift(try rustCallWithError(FfiConverterTypeClientError.lift) {
+    uniffi_communitas_bindings_fn_method_communitasclient_kanban_list_comments(self.uniffiClonePointer(),
+        FfiConverterString.lower(boardId),
+        FfiConverterString.lower(cardId),$0
+    )
+})
+}
+    
+    /**
+     * Move a card to a different column or position
+     */
+open func kanbanMoveCard(boardId: String, cardId: String, toColumnId: String, position: UInt32)throws  {try rustCallWithError(FfiConverterTypeClientError.lift) {
+    uniffi_communitas_bindings_fn_method_communitasclient_kanban_move_card(self.uniffiClonePointer(),
+        FfiConverterString.lower(boardId),
+        FfiConverterString.lower(cardId),
+        FfiConverterString.lower(toColumnId),
+        FfiConverterUInt32.lower(position),$0
+    )
+}
+}
+    
+    /**
+     * Update a card's title and/or description
+     */
+open func kanbanUpdateCard(boardId: String, cardId: String, title: String?, description: String?)throws  {try rustCallWithError(FfiConverterTypeClientError.lift) {
+    uniffi_communitas_bindings_fn_method_communitasclient_kanban_update_card(self.uniffiClonePointer(),
+        FfiConverterString.lower(boardId),
+        FfiConverterString.lower(cardId),
+        FfiConverterOptionString.lower(title),
+        FfiConverterOptionString.lower(description),$0
+    )
+}
 }
     
     /**
@@ -3335,6 +3561,470 @@ public func FfiConverterTypeSwiftFileInfo_lift(_ buf: RustBuffer) throws -> Swif
 #endif
 public func FfiConverterTypeSwiftFileInfo_lower(_ value: SwiftFileInfo) -> RustBuffer {
     return FfiConverterTypeSwiftFileInfo.lower(value)
+}
+
+
+public struct SwiftKanbanBoard {
+    public var id: String
+    public var name: String
+    public var description: String?
+    public var projectId: String
+    public var createdBy: String
+    public var createdAt: Int64
+    public var columns: [SwiftKanbanColumn]
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: String, name: String, description: String?, projectId: String, createdBy: String, createdAt: Int64, columns: [SwiftKanbanColumn]) {
+        self.id = id
+        self.name = name
+        self.description = description
+        self.projectId = projectId
+        self.createdBy = createdBy
+        self.createdAt = createdAt
+        self.columns = columns
+    }
+}
+
+
+
+extension SwiftKanbanBoard: Equatable, Hashable {
+    public static func ==(lhs: SwiftKanbanBoard, rhs: SwiftKanbanBoard) -> Bool {
+        if lhs.id != rhs.id {
+            return false
+        }
+        if lhs.name != rhs.name {
+            return false
+        }
+        if lhs.description != rhs.description {
+            return false
+        }
+        if lhs.projectId != rhs.projectId {
+            return false
+        }
+        if lhs.createdBy != rhs.createdBy {
+            return false
+        }
+        if lhs.createdAt != rhs.createdAt {
+            return false
+        }
+        if lhs.columns != rhs.columns {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+        hasher.combine(name)
+        hasher.combine(description)
+        hasher.combine(projectId)
+        hasher.combine(createdBy)
+        hasher.combine(createdAt)
+        hasher.combine(columns)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSwiftKanbanBoard: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftKanbanBoard {
+        return
+            try SwiftKanbanBoard(
+                id: FfiConverterString.read(from: &buf), 
+                name: FfiConverterString.read(from: &buf), 
+                description: FfiConverterOptionString.read(from: &buf), 
+                projectId: FfiConverterString.read(from: &buf), 
+                createdBy: FfiConverterString.read(from: &buf), 
+                createdAt: FfiConverterInt64.read(from: &buf), 
+                columns: FfiConverterSequenceTypeSwiftKanbanColumn.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SwiftKanbanBoard, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterOptionString.write(value.description, into: &buf)
+        FfiConverterString.write(value.projectId, into: &buf)
+        FfiConverterString.write(value.createdBy, into: &buf)
+        FfiConverterInt64.write(value.createdAt, into: &buf)
+        FfiConverterSequenceTypeSwiftKanbanColumn.write(value.columns, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSwiftKanbanBoard_lift(_ buf: RustBuffer) throws -> SwiftKanbanBoard {
+    return try FfiConverterTypeSwiftKanbanBoard.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSwiftKanbanBoard_lower(_ value: SwiftKanbanBoard) -> RustBuffer {
+    return FfiConverterTypeSwiftKanbanBoard.lower(value)
+}
+
+
+public struct SwiftKanbanCard {
+    public var id: String
+    public var boardId: String
+    public var columnId: String
+    public var title: String
+    public var description: String
+    public var position: UInt32
+    public var state: SwiftKanbanCardState
+    public var createdBy: String
+    public var createdAt: Int64
+    public var updatedAt: Int64
+    public var dueDate: Int64?
+    public var assigneeIds: [String]
+    public var tagIds: [String]
+    public var commentCount: UInt32
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: String, boardId: String, columnId: String, title: String, description: String, position: UInt32, state: SwiftKanbanCardState, createdBy: String, createdAt: Int64, updatedAt: Int64, dueDate: Int64?, assigneeIds: [String], tagIds: [String], commentCount: UInt32) {
+        self.id = id
+        self.boardId = boardId
+        self.columnId = columnId
+        self.title = title
+        self.description = description
+        self.position = position
+        self.state = state
+        self.createdBy = createdBy
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.dueDate = dueDate
+        self.assigneeIds = assigneeIds
+        self.tagIds = tagIds
+        self.commentCount = commentCount
+    }
+}
+
+
+
+extension SwiftKanbanCard: Equatable, Hashable {
+    public static func ==(lhs: SwiftKanbanCard, rhs: SwiftKanbanCard) -> Bool {
+        if lhs.id != rhs.id {
+            return false
+        }
+        if lhs.boardId != rhs.boardId {
+            return false
+        }
+        if lhs.columnId != rhs.columnId {
+            return false
+        }
+        if lhs.title != rhs.title {
+            return false
+        }
+        if lhs.description != rhs.description {
+            return false
+        }
+        if lhs.position != rhs.position {
+            return false
+        }
+        if lhs.state != rhs.state {
+            return false
+        }
+        if lhs.createdBy != rhs.createdBy {
+            return false
+        }
+        if lhs.createdAt != rhs.createdAt {
+            return false
+        }
+        if lhs.updatedAt != rhs.updatedAt {
+            return false
+        }
+        if lhs.dueDate != rhs.dueDate {
+            return false
+        }
+        if lhs.assigneeIds != rhs.assigneeIds {
+            return false
+        }
+        if lhs.tagIds != rhs.tagIds {
+            return false
+        }
+        if lhs.commentCount != rhs.commentCount {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+        hasher.combine(boardId)
+        hasher.combine(columnId)
+        hasher.combine(title)
+        hasher.combine(description)
+        hasher.combine(position)
+        hasher.combine(state)
+        hasher.combine(createdBy)
+        hasher.combine(createdAt)
+        hasher.combine(updatedAt)
+        hasher.combine(dueDate)
+        hasher.combine(assigneeIds)
+        hasher.combine(tagIds)
+        hasher.combine(commentCount)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSwiftKanbanCard: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftKanbanCard {
+        return
+            try SwiftKanbanCard(
+                id: FfiConverterString.read(from: &buf), 
+                boardId: FfiConverterString.read(from: &buf), 
+                columnId: FfiConverterString.read(from: &buf), 
+                title: FfiConverterString.read(from: &buf), 
+                description: FfiConverterString.read(from: &buf), 
+                position: FfiConverterUInt32.read(from: &buf), 
+                state: FfiConverterTypeSwiftKanbanCardState.read(from: &buf), 
+                createdBy: FfiConverterString.read(from: &buf), 
+                createdAt: FfiConverterInt64.read(from: &buf), 
+                updatedAt: FfiConverterInt64.read(from: &buf), 
+                dueDate: FfiConverterOptionInt64.read(from: &buf), 
+                assigneeIds: FfiConverterSequenceString.read(from: &buf), 
+                tagIds: FfiConverterSequenceString.read(from: &buf), 
+                commentCount: FfiConverterUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SwiftKanbanCard, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterString.write(value.boardId, into: &buf)
+        FfiConverterString.write(value.columnId, into: &buf)
+        FfiConverterString.write(value.title, into: &buf)
+        FfiConverterString.write(value.description, into: &buf)
+        FfiConverterUInt32.write(value.position, into: &buf)
+        FfiConverterTypeSwiftKanbanCardState.write(value.state, into: &buf)
+        FfiConverterString.write(value.createdBy, into: &buf)
+        FfiConverterInt64.write(value.createdAt, into: &buf)
+        FfiConverterInt64.write(value.updatedAt, into: &buf)
+        FfiConverterOptionInt64.write(value.dueDate, into: &buf)
+        FfiConverterSequenceString.write(value.assigneeIds, into: &buf)
+        FfiConverterSequenceString.write(value.tagIds, into: &buf)
+        FfiConverterUInt32.write(value.commentCount, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSwiftKanbanCard_lift(_ buf: RustBuffer) throws -> SwiftKanbanCard {
+    return try FfiConverterTypeSwiftKanbanCard.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSwiftKanbanCard_lower(_ value: SwiftKanbanCard) -> RustBuffer {
+    return FfiConverterTypeSwiftKanbanCard.lower(value)
+}
+
+
+public struct SwiftKanbanColumn {
+    public var id: String
+    public var boardId: String
+    public var name: String
+    public var position: UInt32
+    public var color: String?
+    public var wipLimit: UInt32?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: String, boardId: String, name: String, position: UInt32, color: String?, wipLimit: UInt32?) {
+        self.id = id
+        self.boardId = boardId
+        self.name = name
+        self.position = position
+        self.color = color
+        self.wipLimit = wipLimit
+    }
+}
+
+
+
+extension SwiftKanbanColumn: Equatable, Hashable {
+    public static func ==(lhs: SwiftKanbanColumn, rhs: SwiftKanbanColumn) -> Bool {
+        if lhs.id != rhs.id {
+            return false
+        }
+        if lhs.boardId != rhs.boardId {
+            return false
+        }
+        if lhs.name != rhs.name {
+            return false
+        }
+        if lhs.position != rhs.position {
+            return false
+        }
+        if lhs.color != rhs.color {
+            return false
+        }
+        if lhs.wipLimit != rhs.wipLimit {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+        hasher.combine(boardId)
+        hasher.combine(name)
+        hasher.combine(position)
+        hasher.combine(color)
+        hasher.combine(wipLimit)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSwiftKanbanColumn: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftKanbanColumn {
+        return
+            try SwiftKanbanColumn(
+                id: FfiConverterString.read(from: &buf), 
+                boardId: FfiConverterString.read(from: &buf), 
+                name: FfiConverterString.read(from: &buf), 
+                position: FfiConverterUInt32.read(from: &buf), 
+                color: FfiConverterOptionString.read(from: &buf), 
+                wipLimit: FfiConverterOptionUInt32.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SwiftKanbanColumn, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterString.write(value.boardId, into: &buf)
+        FfiConverterString.write(value.name, into: &buf)
+        FfiConverterUInt32.write(value.position, into: &buf)
+        FfiConverterOptionString.write(value.color, into: &buf)
+        FfiConverterOptionUInt32.write(value.wipLimit, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSwiftKanbanColumn_lift(_ buf: RustBuffer) throws -> SwiftKanbanColumn {
+    return try FfiConverterTypeSwiftKanbanColumn.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSwiftKanbanColumn_lower(_ value: SwiftKanbanColumn) -> RustBuffer {
+    return FfiConverterTypeSwiftKanbanColumn.lower(value)
+}
+
+
+public struct SwiftKanbanComment {
+    public var id: String
+    public var cardId: String
+    public var authorId: String
+    public var content: String
+    public var createdAt: Int64
+    public var replyToId: String?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: String, cardId: String, authorId: String, content: String, createdAt: Int64, replyToId: String?) {
+        self.id = id
+        self.cardId = cardId
+        self.authorId = authorId
+        self.content = content
+        self.createdAt = createdAt
+        self.replyToId = replyToId
+    }
+}
+
+
+
+extension SwiftKanbanComment: Equatable, Hashable {
+    public static func ==(lhs: SwiftKanbanComment, rhs: SwiftKanbanComment) -> Bool {
+        if lhs.id != rhs.id {
+            return false
+        }
+        if lhs.cardId != rhs.cardId {
+            return false
+        }
+        if lhs.authorId != rhs.authorId {
+            return false
+        }
+        if lhs.content != rhs.content {
+            return false
+        }
+        if lhs.createdAt != rhs.createdAt {
+            return false
+        }
+        if lhs.replyToId != rhs.replyToId {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+        hasher.combine(cardId)
+        hasher.combine(authorId)
+        hasher.combine(content)
+        hasher.combine(createdAt)
+        hasher.combine(replyToId)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSwiftKanbanComment: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftKanbanComment {
+        return
+            try SwiftKanbanComment(
+                id: FfiConverterString.read(from: &buf), 
+                cardId: FfiConverterString.read(from: &buf), 
+                authorId: FfiConverterString.read(from: &buf), 
+                content: FfiConverterString.read(from: &buf), 
+                createdAt: FfiConverterInt64.read(from: &buf), 
+                replyToId: FfiConverterOptionString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SwiftKanbanComment, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterString.write(value.cardId, into: &buf)
+        FfiConverterString.write(value.authorId, into: &buf)
+        FfiConverterString.write(value.content, into: &buf)
+        FfiConverterInt64.write(value.createdAt, into: &buf)
+        FfiConverterOptionString.write(value.replyToId, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSwiftKanbanComment_lift(_ buf: RustBuffer) throws -> SwiftKanbanComment {
+    return try FfiConverterTypeSwiftKanbanComment.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSwiftKanbanComment_lower(_ value: SwiftKanbanComment) -> RustBuffer {
+    return FfiConverterTypeSwiftKanbanComment.lower(value)
 }
 
 
@@ -5073,6 +5763,84 @@ extension SwiftEntityType: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
+public enum SwiftKanbanCardState {
+    
+    case `open`
+    case closed
+    case postponed
+    case archived
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSwiftKanbanCardState: FfiConverterRustBuffer {
+    typealias SwiftType = SwiftKanbanCardState
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftKanbanCardState {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .`open`
+        
+        case 2: return .closed
+        
+        case 3: return .postponed
+        
+        case 4: return .archived
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: SwiftKanbanCardState, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .`open`:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .closed:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .postponed:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .archived:
+            writeInt(&buf, Int32(4))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSwiftKanbanCardState_lift(_ buf: RustBuffer) throws -> SwiftKanbanCardState {
+    return try FfiConverterTypeSwiftKanbanCardState.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSwiftKanbanCardState_lower(_ value: SwiftKanbanCardState) -> RustBuffer {
+    return FfiConverterTypeSwiftKanbanCardState.lower(value)
+}
+
+
+
+extension SwiftKanbanCardState: Equatable, Hashable {}
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 public enum SwiftPresenceStatus {
     
     case online
@@ -5483,6 +6251,81 @@ fileprivate struct FfiConverterSequenceTypeSwiftEntity: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeSwiftEntity.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeSwiftKanbanCard: FfiConverterRustBuffer {
+    typealias SwiftType = [SwiftKanbanCard]
+
+    public static func write(_ value: [SwiftKanbanCard], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeSwiftKanbanCard.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [SwiftKanbanCard] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [SwiftKanbanCard]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeSwiftKanbanCard.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeSwiftKanbanColumn: FfiConverterRustBuffer {
+    typealias SwiftType = [SwiftKanbanColumn]
+
+    public static func write(_ value: [SwiftKanbanColumn], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeSwiftKanbanColumn.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [SwiftKanbanColumn] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [SwiftKanbanColumn]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeSwiftKanbanColumn.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeSwiftKanbanComment: FfiConverterRustBuffer {
+    typealias SwiftType = [SwiftKanbanComment]
+
+    public static func write(_ value: [SwiftKanbanComment], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeSwiftKanbanComment.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [SwiftKanbanComment] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [SwiftKanbanComment]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeSwiftKanbanComment.read(from: &buf))
         }
         return seq
     }
@@ -5910,6 +6753,45 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_communitas_bindings_checksum_method_communitasclient_is_networking_active() != 53310) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_communitas_bindings_checksum_method_communitasclient_kanban_add_column() != 33551) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_communitas_bindings_checksum_method_communitasclient_kanban_add_comment() != 38124) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_communitas_bindings_checksum_method_communitasclient_kanban_apply_sync_update() != 59911) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_communitas_bindings_checksum_method_communitasclient_kanban_create_board() != 38249) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_communitas_bindings_checksum_method_communitasclient_kanban_create_card() != 47436) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_communitas_bindings_checksum_method_communitasclient_kanban_delete_card() != 11385) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_communitas_bindings_checksum_method_communitasclient_kanban_get_board() != 35010) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_communitas_bindings_checksum_method_communitasclient_kanban_get_card() != 44078) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_communitas_bindings_checksum_method_communitasclient_kanban_get_sync_update() != 45429) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_communitas_bindings_checksum_method_communitasclient_kanban_list_cards() != 6562) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_communitas_bindings_checksum_method_communitasclient_kanban_list_comments() != 5481) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_communitas_bindings_checksum_method_communitasclient_kanban_move_card() != 5221) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_communitas_bindings_checksum_method_communitasclient_kanban_update_card() != 30935) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_communitas_bindings_checksum_method_communitasclient_message_get_direct() != 13496) {

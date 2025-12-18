@@ -1101,6 +1101,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "communitas-core",
+ "communitas-kanban",
  "once_cell",
  "serde",
  "serde_json",

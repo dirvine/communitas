@@ -97,16 +97,25 @@ struct SidebarView: View {
 
     @State private var expandedOrgs: Set<String> = []
     @State private var expandedSections: Set<String> = ["organisations", "personal"]
-    @State private var showingCreateSheet = false
     @State private var createContext: CreateContext?
     @State private var showingAddContact = false
 
-    enum CreateContext {
+    enum CreateContext: Identifiable {
         case organisation
         case project(parentOrgId: String)
         case channel(parentOrgId: String)
         case group(parentOrgId: String?)
         case personal
+
+        var id: String {
+            switch self {
+            case .organisation: return "organisation"
+            case .project(let parentId): return "project-\(parentId)"
+            case .channel(let parentId): return "channel-\(parentId)"
+            case .group(let parentId): return "group-\(parentId ?? "personal")"
+            case .personal: return "personal"
+            }
+        }
     }
 
     var organisations: [OrganisationNode] {
@@ -156,15 +165,12 @@ struct SidebarView: View {
                                 },
                                 onCreateProject: {
                                     createContext = .project(parentOrgId: node.id)
-                                    showingCreateSheet = true
                                 },
                                 onCreateChannel: {
                                     createContext = .channel(parentOrgId: node.id)
-                                    showingCreateSheet = true
                                 },
                                 onCreateGroup: {
                                     createContext = .group(parentOrgId: node.id)
-                                    showingCreateSheet = true
                                 }
                             )
                         }
@@ -173,7 +179,6 @@ struct SidebarView: View {
                     // Add Organisation button
                     Button {
                         createContext = .organisation
-                        showingCreateSheet = true
                     } label: {
                         Label("New Organisation", systemImage: "plus.circle")
                             .foregroundColor(.blue)
@@ -187,7 +192,6 @@ struct SidebarView: View {
                         Spacer()
                         Button {
                             createContext = .organisation
-                            showingCreateSheet = true
                         } label: {
                             Image(systemName: "plus.circle.fill")
                                 .foregroundColor(.blue)
@@ -225,7 +229,6 @@ struct SidebarView: View {
 
                         Button {
                             createContext = .group(parentOrgId: nil)
-                            showingCreateSheet = true
                         } label: {
                             Label("New Group", systemImage: "plus.circle")
                                 .font(.caption)
@@ -244,7 +247,6 @@ struct SidebarView: View {
                                 .foregroundColor(.secondary)
                             Button {
                                 createContext = .group(parentOrgId: nil)
-                                showingCreateSheet = true
                             } label: {
                                 Image(systemName: "plus.circle.fill")
                                     .font(.caption)
@@ -306,12 +308,10 @@ struct SidebarView: View {
             }
         }
         .listStyle(.sidebar)
-        .sheet(isPresented: $showingCreateSheet) {
-            if let context = createContext {
-                CreateEntitySheet(context: context) { name, description, type, networkFourWords in
-                    createEntity(name: name, description: description, type: type, context: context, networkFourWords: networkFourWords)
-                    showingCreateSheet = false
-                }
+        .sheet(item: $createContext) { context in
+            CreateEntitySheet(context: context) { name, description, type, networkFourWords in
+                createEntity(name: name, description: description, type: type, context: context, networkFourWords: networkFourWords)
+                createContext = nil  // Dismiss by clearing the item
             }
         }
         .onAppear {

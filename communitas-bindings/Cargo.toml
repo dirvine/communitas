@@ -9,6 +9,7 @@ name = "communitas_bindings"
 
 [dependencies]
 communitas-core = { path = "../communitas-core" }
+communitas-kanban = { path = "../communitas-kanban" }
 uniffi = { version = "0.28", features = ["tokio"] }
 tokio = { version = "1.39", features = ["full"] }
 thiserror = "2.0"

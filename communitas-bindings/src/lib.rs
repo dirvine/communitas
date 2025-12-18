@@ -454,6 +454,132 @@ pub struct SwiftSyncState {
 }
 
 // ============================================================================
+// Kanban Types
+// ============================================================================
+
+#[derive(Debug, Clone, Copy, uniffi::Enum)]
+pub enum SwiftKanbanCardState {
+    Open,
+    Closed,
+    Postponed,
+    Archived,
+}
+
+impl From<communitas_kanban::CardState> for SwiftKanbanCardState {
+    fn from(s: communitas_kanban::CardState) -> Self {
+        match s {
+            communitas_kanban::CardState::Open => SwiftKanbanCardState::Open,
+            communitas_kanban::CardState::Closed => SwiftKanbanCardState::Closed,
+            communitas_kanban::CardState::Postponed => SwiftKanbanCardState::Postponed,
+            communitas_kanban::CardState::Archived => SwiftKanbanCardState::Archived,
+        }
+    }
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct SwiftKanbanBoard {
+    pub id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub project_id: String,
+    pub created_by: String,
+    pub created_at: i64,
+    pub columns: Vec<SwiftKanbanColumn>,
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct SwiftKanbanColumn {
+    pub id: String,
+    pub board_id: String,
+    pub name: String,
+    pub position: u32,
+    pub color: Option<String>,
+    pub wip_limit: Option<u32>,
+}
+
+impl From<&communitas_kanban::Column> for SwiftKanbanColumn {
+    fn from(c: &communitas_kanban::Column) -> Self {
+        Self {
+            id: c.id.clone(),
+            board_id: c.board_id.clone(),
+            name: c.name.clone(),
+            position: c.position,
+            color: c.color.clone(),
+            wip_limit: c.wip_limit,
+        }
+    }
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct SwiftKanbanCard {
+    pub id: String,
+    pub board_id: String,
+    pub column_id: String,
+    pub title: String,
+    pub description: String,
+    pub position: u32,
+    pub state: SwiftKanbanCardState,
+    pub created_by: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub due_date: Option<i64>,
+    pub assignee_ids: Vec<String>,
+    pub tag_ids: Vec<String>,
+    pub comment_count: u32,
+}
+
+impl SwiftKanbanCard {
+    /// Create a SwiftKanbanCard from a kanban Card with the comment count
+    pub fn from_with_count(c: &communitas_kanban::Card, comment_count: u32) -> Self {
+        Self {
+            id: c.id.clone(),
+            board_id: c.board_id.clone(),
+            column_id: c.column_id.clone(),
+            title: c.title.clone(),
+            description: c.description.clone(),
+            position: c.position,
+            state: c.state.into(),
+            created_by: c.created_by.clone(),
+            created_at: c.created_at,
+            updated_at: c.updated_at,
+            due_date: c.due_date,
+            assignee_ids: c.assignee_ids.clone(),
+            tag_ids: c.tag_ids.clone(),
+            comment_count,
+        }
+    }
+}
+
+impl From<&communitas_kanban::Card> for SwiftKanbanCard {
+    fn from(c: &communitas_kanban::Card) -> Self {
+        Self::from_with_count(c, 0)
+    }
+}
+
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct SwiftKanbanComment {
+    pub id: String,
+    pub card_id: String,
+    pub author_id: String,
+    pub content: String,
+    pub created_at: i64,
+    pub reply_to_id: Option<String>,
+}
+
+impl From<&communitas_kanban::Comment> for SwiftKanbanComment {
+    fn from(c: &communitas_kanban::Comment) -> Self {
+        Self {
+            id: c.id.clone(),
+            card_id: c.card_id.clone(),
+            author_id: c.author_id.clone(),
+            content: c.content.clone(),
+            created_at: c.created_at,
+            reply_to_id: c.reply_to_id.clone(),
+        }
+    }
+}
+
+// ============================================================================
 // WebRTC Types
 // ============================================================================
 
@@ -2177,7 +2303,7 @@ impl CommunitasClient {
             let mut ctx = self.inner.write().await;
             ctx.request_external_address()
                 .await
-                .map_err(|e| ClientError::NetworkError(e))
+                .map_err(ClientError::NetworkError)
         })
     }
 
@@ -2191,7 +2317,7 @@ impl CommunitasClient {
             let mut ctx = self.inner.write().await;
             ctx.auto_request_external_address()
                 .await
-                .map_err(|e| ClientError::NetworkError(e))
+                .map_err(ClientError::NetworkError)
         })
     }
 
@@ -2316,6 +2442,299 @@ impl CommunitasClient {
                     device_name: None,
                 })
                 .collect())
+        })
+    }
+
+    // ========================================================================
+    // Kanban Sub-Client Methods
+    // ========================================================================
+
+    /// Create a new Kanban board for a project
+    pub fn kanban_create_board(
+        &self,
+        project_id: String,
+        name: String,
+        _description: Option<String>,
+    ) -> Result<String, ClientError> {
+        block_on(async {
+            let ctx = self.inner.read().await;
+
+            let settings = communitas_kanban::BoardSettings::all_features();
+            let board = ctx
+                .kanban_service
+                .create_board(&project_id, name, Some(settings))
+                .map_err(|e| ClientError::StorageError(e.to_string()))?;
+
+            Ok(board.id)
+        })
+    }
+
+    /// Get a Kanban board by ID
+    pub fn kanban_get_board(&self, board_id: String) -> Result<SwiftKanbanBoard, ClientError> {
+        block_on(async {
+            let ctx = self.inner.read().await;
+
+            let board = ctx
+                .kanban_service
+                .get_board(&board_id)
+                .map_err(|e| ClientError::StorageError(e.to_string()))?;
+
+            let columns = ctx
+                .kanban_service
+                .list_columns(&board_id)
+                .map_err(|e| ClientError::StorageError(e.to_string()))?;
+
+            Ok(SwiftKanbanBoard {
+                id: board.id,
+                name: board.name,
+                description: board.description,
+                project_id: board.project_id,
+                created_by: board.created_by,
+                created_at: board.created_at,
+                columns: columns.iter().map(SwiftKanbanColumn::from).collect(),
+            })
+        })
+    }
+
+    /// Add a column to a board
+    pub fn kanban_add_column(
+        &self,
+        board_id: String,
+        name: String,
+        _color: Option<String>,
+        _wip_limit: Option<u32>,
+    ) -> Result<String, ClientError> {
+        block_on(async {
+            let ctx = self.inner.read().await;
+
+            // Note: color and wip_limit can be set via update_column method
+            let column = ctx
+                .kanban_service
+                .add_column(&board_id, name, None)
+                .map_err(|e| ClientError::StorageError(e.to_string()))?;
+
+            Ok(column.id)
+        })
+    }
+
+    /// Create a card in a column
+    pub fn kanban_create_card(
+        &self,
+        board_id: String,
+        column_id: String,
+        title: String,
+        description: Option<String>,
+    ) -> Result<String, ClientError> {
+        block_on(async {
+            let ctx = self.inner.read().await;
+
+            let card = ctx
+                .kanban_service
+                .create_card(&board_id, &column_id, title, description)
+                .map_err(|e| ClientError::StorageError(e.to_string()))?;
+
+            Ok(card.id)
+        })
+    }
+
+    /// Move a card to a different column or position
+    pub fn kanban_move_card(
+        &self,
+        board_id: String,
+        card_id: String,
+        to_column_id: String,
+        position: u32,
+    ) -> Result<(), ClientError> {
+        block_on(async {
+            let ctx = self.inner.read().await;
+
+            ctx.kanban_service
+                .move_card(&board_id, &card_id, &to_column_id, position)
+                .map_err(|e| ClientError::StorageError(e.to_string()))?;
+
+            Ok(())
+        })
+    }
+
+    /// Update a card's title and/or description
+    pub fn kanban_update_card(
+        &self,
+        board_id: String,
+        card_id: String,
+        title: Option<String>,
+        description: Option<String>,
+    ) -> Result<(), ClientError> {
+        block_on(async {
+            let ctx = self.inner.read().await;
+
+            let update = communitas_kanban::CardUpdate {
+                title,
+                description,
+                ..Default::default()
+            };
+
+            ctx.kanban_service
+                .update_card(&board_id, &card_id, update)
+                .map_err(|e| ClientError::StorageError(e.to_string()))?;
+
+            Ok(())
+        })
+    }
+
+    /// Delete a card
+    pub fn kanban_delete_card(
+        &self,
+        board_id: String,
+        card_id: String,
+    ) -> Result<(), ClientError> {
+        block_on(async {
+            let ctx = self.inner.read().await;
+
+            ctx.kanban_service
+                .delete_card(&board_id, &card_id)
+                .map_err(|e| ClientError::StorageError(e.to_string()))?;
+
+            Ok(())
+        })
+    }
+
+    /// Get a card by ID
+    pub fn kanban_get_card(
+        &self,
+        board_id: String,
+        card_id: String,
+    ) -> Result<SwiftKanbanCard, ClientError> {
+        block_on(async {
+            let ctx = self.inner.read().await;
+
+            let card = ctx
+                .kanban_service
+                .get_card(&board_id, &card_id)
+                .map_err(|e| ClientError::StorageError(e.to_string()))?;
+
+            // Get comment count for this card
+            let comment_count = ctx
+                .kanban_service
+                .list_comments(&board_id, &card_id)
+                .map(|comments| comments.len() as u32)
+                .unwrap_or(0);
+
+            Ok(SwiftKanbanCard::from_with_count(&card, comment_count))
+        })
+    }
+
+    /// List all cards in a board (optionally filter by column)
+    pub fn kanban_list_cards(
+        &self,
+        board_id: String,
+        column_id: Option<String>,
+    ) -> Result<Vec<SwiftKanbanCard>, ClientError> {
+        block_on(async {
+            let ctx = self.inner.read().await;
+
+            let cards = if let Some(col_id) = column_id {
+                ctx.kanban_service
+                    .list_cards_in_column(&board_id, &col_id)
+                    .map_err(|e| ClientError::StorageError(e.to_string()))?
+            } else {
+                // List all cards by iterating columns
+                let columns = ctx
+                    .kanban_service
+                    .list_columns(&board_id)
+                    .map_err(|e| ClientError::StorageError(e.to_string()))?;
+
+                let mut all_cards = Vec::new();
+                for col in &columns {
+                    if let Ok(cards) = ctx.kanban_service.list_cards_in_column(&board_id, &col.id) {
+                        all_cards.extend(cards);
+                    }
+                }
+                all_cards
+            };
+
+            // Map cards with comment counts
+            let swift_cards: Vec<SwiftKanbanCard> = cards
+                .iter()
+                .map(|card| {
+                    let comment_count = ctx
+                        .kanban_service
+                        .list_comments(&board_id, &card.id)
+                        .map(|comments| comments.len() as u32)
+                        .unwrap_or(0);
+                    SwiftKanbanCard::from_with_count(card, comment_count)
+                })
+                .collect();
+
+            Ok(swift_cards)
+        })
+    }
+
+    /// Add a comment to a card
+    pub fn kanban_add_comment(
+        &self,
+        board_id: String,
+        card_id: String,
+        content: String,
+        reply_to_id: Option<String>,
+    ) -> Result<String, ClientError> {
+        block_on(async {
+            let ctx = self.inner.read().await;
+
+            let comment = ctx
+                .kanban_service
+                .add_comment(&board_id, &card_id, content, reply_to_id)
+                .map_err(|e| ClientError::StorageError(e.to_string()))?;
+
+            Ok(comment.id)
+        })
+    }
+
+    /// List all comments on a card
+    pub fn kanban_list_comments(
+        &self,
+        board_id: String,
+        card_id: String,
+    ) -> Result<Vec<SwiftKanbanComment>, ClientError> {
+        block_on(async {
+            let ctx = self.inner.read().await;
+
+            let comments = ctx
+                .kanban_service
+                .list_comments(&board_id, &card_id)
+                .map_err(|e| ClientError::StorageError(e.to_string()))?;
+
+            Ok(comments.iter().map(SwiftKanbanComment::from).collect())
+        })
+    }
+
+    /// Get CRDT sync update for a board
+    pub fn kanban_get_sync_update(&self, board_id: String) -> Result<Vec<u8>, ClientError> {
+        block_on(async {
+            let ctx = self.inner.read().await;
+
+            let update = ctx
+                .kanban_service
+                .get_full_update(&board_id)
+                .map_err(|e| ClientError::StorageError(e.to_string()))?;
+
+            Ok(update)
+        })
+    }
+
+    /// Apply a CRDT sync update to a board
+    pub fn kanban_apply_sync_update(
+        &self,
+        board_id: String,
+        update: Vec<u8>,
+    ) -> Result<(), ClientError> {
+        block_on(async {
+            let ctx = self.inner.read().await;
+
+            ctx.kanban_service
+                .apply_update(&board_id, &update)
+                .map_err(|e| ClientError::StorageError(e.to_string()))?;
+
+            Ok(())
         })
     }
 

@@ -312,6 +312,7 @@ struct EntityDetailPane: View {
     @State private var selectedTab: DetailTab = .chat
 
     enum DetailTab: String, CaseIterable {
+        case board = "Board"      // Kanban board for projects
         case chat = "Chat"
         case drive = "Drive"
         case documents = "Documents"
@@ -319,11 +320,21 @@ struct EntityDetailPane: View {
 
         var icon: String {
             switch self {
+            case .board: return "square.grid.2x2.fill"
             case .chat: return "bubble.left.and.bubble.right.fill"
             case .drive: return "externaldrive.fill"
             case .documents: return "doc.text.fill"
             case .details: return "info.circle.fill"
             }
+        }
+    }
+
+    // Only show Board tab for projects
+    var availableTabs: [DetailTab] {
+        if entity.entityType == .project {
+            return [.board, .chat, .drive, .documents, .details]
+        } else {
+            return [.chat, .drive, .documents, .details]
         }
     }
 
@@ -368,9 +379,9 @@ struct EntityDetailPane: View {
             .padding()
             .background(Color.gray.opacity(0.05))
 
-            // Tab picker
+            // Tab picker - show only available tabs for this entity type
             Picker("View", selection: $selectedTab) {
-                ForEach(DetailTab.allCases, id: \.self) { tab in
+                ForEach(availableTabs, id: \.self) { tab in
                     Label(tab.rawValue, systemImage: tab.icon)
                         .tag(tab)
                 }
@@ -384,6 +395,8 @@ struct EntityDetailPane: View {
             // Tab content
             Group {
                 switch selectedTab {
+                case .board:
+                    EmbeddedKanbanBoardView(entity: entity)
                 case .chat:
                     EmbeddedChatView(entity: entity)
                 case .drive:
@@ -396,8 +409,14 @@ struct EntityDetailPane: View {
             }
         }
         .onChange(of: entity.id) {
-            // Reset to chat when entity changes
-            selectedTab = .chat
+            // Reset to appropriate default tab when entity changes
+            selectedTab = entity.entityType == .project ? .board : .chat
+        }
+        .onAppear {
+            // Set default tab based on entity type
+            if entity.entityType == .project && selectedTab == .chat {
+                selectedTab = .board
+            }
         }
     }
 
@@ -701,6 +720,359 @@ struct EmbeddedDocumentsView: View {
                     .environmentObject(state)
             }
         }
+    }
+}
+
+// MARK: - Embedded Kanban Board View
+
+struct EmbeddedKanbanBoardView: View {
+    @EnvironmentObject var state: AppState
+    let entity: SwiftEntity
+    @State private var showingCreateCard = false
+    @State private var newCardTitle = ""
+    @State private var selectedColumn: KanbanColumn = .todo
+
+    enum KanbanColumn: String, CaseIterable {
+        case backlog = "Backlog"
+        case todo = "To Do"
+        case inProgress = "In Progress"
+        case review = "Review"
+        case done = "Done"
+
+        var color: Color {
+            switch self {
+            case .backlog: return .gray
+            case .todo: return .blue
+            case .inProgress: return .orange
+            case .review: return .purple
+            case .done: return .green
+            }
+        }
+
+        var icon: String {
+            switch self {
+            case .backlog: return "tray.fill"
+            case .todo: return "circle"
+            case .inProgress: return "arrow.right.circle.fill"
+            case .review: return "eye.fill"
+            case .done: return "checkmark.circle.fill"
+            }
+        }
+    }
+
+    var cards: [KanbanCard] {
+        state.getKanbanCards(for: entity.id)
+    }
+
+    func cardsFor(column: KanbanColumn) -> [KanbanCard] {
+        cards.filter { $0.column == column.rawValue }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Board header with add card button
+            HStack {
+                Image(systemName: "square.grid.2x2.fill")
+                    .foregroundColor(.blue)
+                Text("\(cards.count) cards")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Spacer()
+                Button {
+                    showingCreateCard = true
+                } label: {
+                    Label("Add Card", systemImage: "plus.rectangle.fill")
+                        .font(.caption)
+                }
+                .buttonStyle(.bordered)
+            }
+            .padding()
+            .background(Color.gray.opacity(0.05))
+
+            Divider()
+
+            if cards.isEmpty {
+                // Empty state
+                VStack(spacing: 16) {
+                    Spacer()
+                    Image(systemName: "square.grid.2x2")
+                        .font(.system(size: 48))
+                        .foregroundColor(.secondary)
+                    Text("No cards yet")
+                        .font(.headline)
+                        .foregroundColor(.secondary)
+                    Text("Add cards to organize your project tasks")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Button {
+                        showingCreateCard = true
+                    } label: {
+                        Label("Add First Card", systemImage: "plus")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    Spacer()
+                }
+            } else {
+                // Kanban board with columns
+                ScrollView(.horizontal, showsIndicators: true) {
+                    HStack(alignment: .top, spacing: 16) {
+                        ForEach(KanbanColumn.allCases, id: \.self) { column in
+                            KanbanColumnView(
+                                column: column,
+                                cards: cardsFor(column: column),
+                                entityId: entity.id,
+                                onMoveCard: { card, newColumn in
+                                    state.moveKanbanCard(cardId: card.id, entityId: entity.id, toColumn: newColumn)
+                                },
+                                onAddCard: {
+                                    selectedColumn = column
+                                    showingCreateCard = true
+                                },
+                                onDeleteCard: { card in
+                                    state.deleteKanbanCard(cardId: card.id, entityId: entity.id)
+                                },
+                                onCardDrop: { cardId, targetColumn in
+                                    state.moveKanbanCard(cardId: cardId, entityId: entity.id, toColumn: targetColumn.rawValue)
+                                }
+                            )
+                        }
+                    }
+                    .padding()
+                }
+            }
+        }
+        .onAppear {
+            state.loadKanbanCards(for: entity.id)
+        }
+        .alert("New Card", isPresented: $showingCreateCard) {
+            TextField("Card title", text: $newCardTitle)
+            Picker("Column", selection: $selectedColumn) {
+                ForEach(KanbanColumn.allCases, id: \.self) { column in
+                    Text(column.rawValue).tag(column)
+                }
+            }
+            Button("Cancel", role: .cancel) { newCardTitle = "" }
+            Button("Create") {
+                if !newCardTitle.isEmpty {
+                    state.createKanbanCard(
+                        in: entity.id,
+                        title: newCardTitle,
+                        column: selectedColumn.rawValue
+                    )
+                    newCardTitle = ""
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Kanban Column View
+
+struct KanbanColumnView: View {
+    let column: EmbeddedKanbanBoardView.KanbanColumn
+    let cards: [KanbanCard]
+    let entityId: String
+    let onMoveCard: (KanbanCard, String) -> Void
+    let onAddCard: () -> Void
+    let onDeleteCard: (KanbanCard) -> Void
+    let onCardDrop: (String, EmbeddedKanbanBoardView.KanbanColumn) -> Void
+    @State private var isTargeted = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // Column header
+            HStack {
+                Image(systemName: column.icon)
+                    .foregroundColor(column.color)
+                Text(column.rawValue)
+                    .font(.headline)
+                    .foregroundColor(.primary)
+                Spacer()
+                Text("\(cards.count)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 2)
+                    .background(Color.gray.opacity(0.2))
+                    .cornerRadius(8)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(column.color.opacity(0.1))
+            .cornerRadius(8)
+
+            // Cards
+            ScrollView {
+                LazyVStack(spacing: 8) {
+                    ForEach(cards) { card in
+                        KanbanCardView(
+                            card: card,
+                            currentColumn: column,
+                            entityId: entityId,
+                            onMove: { newColumn in
+                                onMoveCard(card, newColumn)
+                            },
+                            onDelete: {
+                                onDeleteCard(card)
+                            }
+                        )
+                    }
+                }
+            }
+
+            // Add card button at bottom
+            Button(action: onAddCard) {
+                HStack {
+                    Image(systemName: "plus")
+                        .font(.caption)
+                    Text("Add card")
+                        .font(.caption)
+                }
+                .foregroundColor(.secondary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+                .background(Color.gray.opacity(0.1))
+                .cornerRadius(8)
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(width: 250)
+        .padding(12)
+        .background(isTargeted ? column.color.opacity(0.15) : Color.gray.opacity(0.05))
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(isTargeted ? column.color : Color.clear, lineWidth: 2)
+        )
+        .dropDestination(for: String.self) { droppedItems, _ in
+            guard let cardId = droppedItems.first else { return false }
+            onCardDrop(cardId, column)
+            return true
+        } isTargeted: { targeted in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isTargeted = targeted
+            }
+        }
+    }
+}
+
+// MARK: - Kanban Card View
+
+struct KanbanCardView: View {
+    @EnvironmentObject var state: AppState
+    let card: KanbanCard
+    let currentColumn: EmbeddedKanbanBoardView.KanbanColumn
+    let entityId: String
+    let onMove: (String) -> Void
+    let onDelete: () -> Void
+    @State private var isHovered = false
+    @State private var showDetailSheet = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(card.title)
+                .font(.subheadline)
+                .fontWeight(.medium)
+                .lineLimit(3)
+
+            if let description = card.cardDescription, !description.isEmpty {
+                Text(description)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .lineLimit(2)
+            }
+
+            HStack {
+                Text(formatDate(card.createdAt))
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                Spacer()
+                // Comment count badge
+                if card.commentCount > 0 {
+                    HStack(spacing: 2) {
+                        Image(systemName: "bubble.left")
+                            .font(.caption2)
+                        Text("\(card.commentCount)")
+                            .font(.caption2)
+                    }
+                    .foregroundColor(.secondary)
+                }
+                if let assignee = card.assignee {
+                    Text(shortFourWords(assignee))
+                        .font(.caption2)
+                        .foregroundColor(.blue)
+                }
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.windowBackgroundColor))
+        .cornerRadius(8)
+        .shadow(color: Color.black.opacity(isHovered ? 0.15 : 0.05), radius: isHovered ? 4 : 2)
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isHovered = hovering
+            }
+        }
+        .onTapGesture {
+            showDetailSheet = true
+        }
+        .draggable(card.id) {
+            // Drag preview
+            VStack(alignment: .leading, spacing: 8) {
+                Text(card.title)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .lineLimit(2)
+            }
+            .padding(12)
+            .frame(width: 220)
+            .background(Color(.windowBackgroundColor))
+            .cornerRadius(8)
+            .shadow(color: Color.black.opacity(0.2), radius: 8)
+        }
+        .contextMenu {
+            // Move to column menu
+            Menu("Move to") {
+                ForEach(EmbeddedKanbanBoardView.KanbanColumn.allCases, id: \.self) { column in
+                    if column != currentColumn {
+                        Button {
+                            onMove(column.rawValue)
+                        } label: {
+                            Label(column.rawValue, systemImage: column.icon)
+                        }
+                    }
+                }
+            }
+            Divider()
+            Button(role: .destructive) {
+                onDelete()
+            } label: {
+                Label("Delete Card", systemImage: "trash")
+            }
+        }
+        .sheet(isPresented: $showDetailSheet) {
+            CardDetailSheet(
+                card: card,
+                entityId: entityId,
+                isPresented: $showDetailSheet
+            )
+            .environmentObject(state)
+        }
+    }
+
+    private func formatDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        return formatter.string(from: date)
+    }
+
+    private func shortFourWords(_ fourWords: String) -> String {
+        let words = fourWords.split(separator: "-")
+        if words.count >= 2 {
+            return "\(words[0]) \(words[1])"
+        }
+        return fourWords.replacingOccurrences(of: "-", with: " ")
     }
 }
 
@@ -2658,6 +3030,298 @@ struct NetworkSettingsView: View {
         .onAppear {
             bootstrapAddress = state.bootstrapAddress
         }
+    }
+}
+
+// MARK: - Card Detail Sheet
+
+struct CardDetailSheet: View {
+    @EnvironmentObject var state: AppState
+    let card: KanbanCard
+    let entityId: String
+    @Binding var isPresented: Bool
+
+    @State private var comments: [SwiftKanbanComment] = []
+    @State private var newCommentText: String = ""
+    @State private var replyingTo: SwiftKanbanComment?
+    @State private var isLoading = false
+
+    var boardId: String? {
+        state.getBoardId(for: entityId)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Header
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(card.title)
+                        .font(.headline)
+                    Text(card.column)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 2)
+                        .background(Color.blue.opacity(0.1))
+                        .cornerRadius(4)
+                }
+                Spacer()
+                Button {
+                    isPresented = false
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title2)
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding()
+            .background(Color.gray.opacity(0.05))
+
+            Divider()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    // Description section
+                    if let description = card.cardDescription, !description.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Description")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.secondary)
+                            Text(description)
+                                .font(.body)
+                        }
+                        .padding(.horizontal)
+                        .padding(.top, 12)
+                    }
+
+                    // Discussion section
+                    CardDiscussionSection(
+                        comments: comments,
+                        onReply: { comment in
+                            replyingTo = comment
+                        }
+                    )
+                    .padding(.horizontal)
+                }
+            }
+
+            Divider()
+
+            // Comment composer at bottom
+            CommentComposer(
+                text: $newCommentText,
+                replyingTo: $replyingTo,
+                onSend: addComment
+            )
+        }
+        .frame(minWidth: 450, idealWidth: 500, minHeight: 400, idealHeight: 600)
+        .onAppear {
+            loadComments()
+        }
+    }
+
+    private func loadComments() {
+        guard let boardId = boardId else { return }
+        isLoading = true
+        comments = state.loadCardComments(boardId: boardId, cardId: card.id)
+        isLoading = false
+    }
+
+    private func addComment() {
+        guard !newCommentText.isEmpty, let boardId = boardId else { return }
+        let replyToId = replyingTo?.id
+        if state.addCardComment(
+            boardId: boardId,
+            cardId: card.id,
+            content: newCommentText,
+            replyToId: replyToId
+        ) != nil {
+            newCommentText = ""
+            replyingTo = nil
+            loadComments()
+        }
+    }
+}
+
+// MARK: - Card Discussion Section
+
+struct CardDiscussionSection: View {
+    let comments: [SwiftKanbanComment]
+    let onReply: (SwiftKanbanComment) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Discussion")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.secondary)
+                if !comments.isEmpty {
+                    Text("(\(comments.count))")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .padding(.top, 8)
+
+            if comments.isEmpty {
+                VStack(spacing: 8) {
+                    Image(systemName: "bubble.left.and.bubble.right")
+                        .font(.largeTitle)
+                        .foregroundColor(.secondary.opacity(0.5))
+                    Text("No comments yet")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    Text("Start the discussion!")
+                        .font(.caption)
+                        .foregroundColor(.secondary.opacity(0.7))
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 24)
+            } else {
+                ForEach(comments, id: \.id) { comment in
+                    CommentBubble(
+                        comment: comment,
+                        onReply: { onReply(comment) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Comment Bubble
+
+struct CommentBubble: View {
+    let comment: SwiftKanbanComment
+    let onReply: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            // Header with author and time
+            HStack {
+                Text(shortAuthorName(comment.authorId))
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.primary)
+                Spacer()
+                Text(formatTimestamp(comment.createdAt))
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+
+            // Reply indicator
+            if let replyToId = comment.replyToId, !replyToId.isEmpty {
+                HStack(spacing: 4) {
+                    Image(systemName: "arrowshape.turn.up.left.fill")
+                        .font(.caption2)
+                    Text("Reply")
+                        .font(.caption2)
+                }
+                .foregroundColor(.secondary.opacity(0.7))
+            }
+
+            // Comment content
+            Text(comment.content)
+                .font(.body)
+                .foregroundColor(.primary)
+
+            // Reply button
+            Button(action: onReply) {
+                HStack(spacing: 4) {
+                    Image(systemName: "arrowshape.turn.up.left")
+                        .font(.caption2)
+                    Text("Reply")
+                        .font(.caption2)
+                }
+                .foregroundColor(.accentColor)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(10)
+        .background(Color.gray.opacity(0.08))
+        .cornerRadius(8)
+    }
+
+    private func shortAuthorName(_ fourWords: String) -> String {
+        let words = fourWords.split(separator: "-")
+        if words.count >= 2 {
+            return "\(words[0].capitalized) \(words[1].capitalized)"
+        }
+        return fourWords.replacingOccurrences(of: "-", with: " ").capitalized
+    }
+
+    private func formatTimestamp(_ timestamp: Int64) -> String {
+        let date = Date(timeIntervalSince1970: Double(timestamp) / 1000.0)
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .abbreviated
+        return formatter.localizedString(for: date, relativeTo: Date())
+    }
+}
+
+// MARK: - Comment Composer
+
+struct CommentComposer: View {
+    @Binding var text: String
+    @Binding var replyingTo: SwiftKanbanComment?
+    let onSend: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Reply indicator
+            if let replying = replyingTo {
+                HStack {
+                    Image(systemName: "arrowshape.turn.up.left.fill")
+                        .font(.caption)
+                        .foregroundColor(.accentColor)
+                    Text("Replying to \(shortAuthorName(replying.authorId))")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Button {
+                        replyingTo = nil
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Color.accentColor.opacity(0.1))
+            }
+
+            HStack(spacing: 8) {
+                TextField("Add a comment...", text: $text)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit {
+                        if !text.isEmpty {
+                            onSend()
+                        }
+                    }
+
+                Button(action: onSend) {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .font(.title2)
+                        .foregroundColor(text.isEmpty ? .secondary : .accentColor)
+                }
+                .buttonStyle(.plain)
+                .disabled(text.isEmpty)
+            }
+            .padding(12)
+        }
+        .background(Color.gray.opacity(0.05))
+    }
+
+    private func shortAuthorName(_ fourWords: String) -> String {
+        let words = fourWords.split(separator: "-")
+        if words.count >= 2 {
+            return "\(words[0].capitalized) \(words[1].capitalized)"
+        }
+        return fourWords.replacingOccurrences(of: "-", with: " ").capitalized
     }
 }
 

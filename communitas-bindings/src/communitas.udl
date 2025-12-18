@@ -50,6 +50,13 @@ enum SwiftStorageMode {
     "Both",
 };
 
+enum SwiftKanbanCardState {
+    "Open",
+    "Closed",
+    "Postponed",
+    "Archived",
+};
+
 // ============================================================================
 // Record Types (Data Structures)
 // ============================================================================
@@ -163,6 +170,51 @@ dictionary SwiftStorageStats {
     u64 total_bytes;
     u64 used_bytes;
     u32 file_count;
+};
+
+dictionary SwiftKanbanBoard {
+    string id;
+    string name;
+    string? description;
+    string project_id;
+    string created_by;
+    i64 created_at;
+    sequence<SwiftKanbanColumn> columns;
+};
+
+dictionary SwiftKanbanColumn {
+    string id;
+    string board_id;
+    string name;
+    u32 position;
+    string? color;
+    u32? wip_limit;
+};
+
+dictionary SwiftKanbanCard {
+    string id;
+    string board_id;
+    string column_id;
+    string title;
+    string description;
+    u32 position;
+    SwiftKanbanCardState state;
+    string created_by;
+    i64 created_at;
+    i64 updated_at;
+    i64? due_date;
+    sequence<string> assignee_ids;
+    sequence<string> tag_ids;
+    u32 comment_count;
+};
+
+dictionary SwiftKanbanComment {
+    string id;
+    string card_id;
+    string author_id;
+    string content;
+    i64 created_at;
+    string? reply_to_id;
 };
 
 dictionary SwiftSyncState {
@@ -381,4 +433,60 @@ interface CommunitasClient {
 
     [Throws=ClientError]
     sequence<SwiftPresenceInfo> presence_get_online_in_entity(string entity_id);
+
+    // ========================================================================
+    // Kanban Sub-Client Methods (12 methods)
+    // ========================================================================
+
+    /// Create a new Kanban board for a project
+    [Throws=ClientError]
+    string kanban_create_board(string project_id, string name, string? description);
+
+    /// Get a Kanban board by ID
+    [Throws=ClientError]
+    SwiftKanbanBoard kanban_get_board(string board_id);
+
+    /// Add a column to a board
+    [Throws=ClientError]
+    string kanban_add_column(string board_id, string name, string? color, u32? wip_limit);
+
+    /// Create a card in a column
+    [Throws=ClientError]
+    string kanban_create_card(string board_id, string column_id, string title, string? description);
+
+    /// Move a card to a different column or position
+    [Throws=ClientError]
+    void kanban_move_card(string board_id, string card_id, string to_column_id, u32 position);
+
+    /// Update a card's title and/or description
+    [Throws=ClientError]
+    void kanban_update_card(string board_id, string card_id, string? title, string? description);
+
+    /// Delete a card
+    [Throws=ClientError]
+    void kanban_delete_card(string board_id, string card_id);
+
+    /// Get a card by ID
+    [Throws=ClientError]
+    SwiftKanbanCard kanban_get_card(string board_id, string card_id);
+
+    /// List all cards in a board (optionally filter by column)
+    [Throws=ClientError]
+    sequence<SwiftKanbanCard> kanban_list_cards(string board_id, string? column_id);
+
+    /// Add a comment to a card
+    [Throws=ClientError]
+    string kanban_add_comment(string board_id, string card_id, string content, string? reply_to_id);
+
+    /// List all comments on a card
+    [Throws=ClientError]
+    sequence<SwiftKanbanComment> kanban_list_comments(string board_id, string card_id);
+
+    /// Get CRDT sync update for a board
+    [Throws=ClientError]
+    sequence<u8> kanban_get_sync_update(string board_id);
+
+    /// Apply a CRDT sync update to a board
+    [Throws=ClientError]
+    void kanban_apply_sync_update(string board_id, sequence<u8> update);
 };

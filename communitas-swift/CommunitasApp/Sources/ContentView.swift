@@ -5,6 +5,22 @@ import CommunitasKit
 // Async FFI issue resolved by using tokio runtime with block_on wrappers
 // AppState, types, and ActiveView routing are now in AppState.swift
 
+// MARK: - View Extension for Conditional Modifiers (Phase 3)
+
+extension View {
+    /// Conditionally applies a transformation to the view.
+    ///
+    /// Used for permission-aware UI where modifiers like `.draggable()` should only
+    /// be applied when the user has edit permissions.
+    @ViewBuilder
+    func `if`<Content: View>(_ condition: Bool, transform: (Self) -> Content) -> some View {
+        if condition {
+            transform(self)
+        } else {
+            self
+        }
+    }
+}
 
 public struct ContentView: View {
     @EnvironmentObject var state: AppState
@@ -732,6 +748,16 @@ struct EmbeddedKanbanBoardView: View {
     @State private var newCardTitle = ""
     @State private var selectedColumn: KanbanColumn = .todo
 
+    /// Check if user can edit Kanban boards in this entity (Phase 3 permissions)
+    var canEdit: Bool {
+        state.canEdit(entityId: entity.id, resource: .kanbanBoards)
+    }
+
+    /// Check if user can view Kanban boards in this entity
+    var canView: Bool {
+        state.canView(entityId: entity.id, resource: .kanbanBoards)
+    }
+
     enum KanbanColumn: String, CaseIterable {
         case backlog = "Backlog"
         case todo = "To Do"
@@ -777,14 +803,30 @@ struct EmbeddedKanbanBoardView: View {
                 Text("\(cards.count) cards")
                     .font(.caption)
                     .foregroundColor(.secondary)
-                Spacer()
-                Button {
-                    showingCreateCard = true
-                } label: {
-                    Label("Add Card", systemImage: "plus.rectangle.fill")
-                        .font(.caption)
+
+                // Permission indicator (Phase 3)
+                if !canEdit && canView {
+                    Text("Read-only")
+                        .font(.caption2)
+                        .foregroundColor(.orange)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.orange.opacity(0.15))
+                        .cornerRadius(4)
                 }
-                .buttonStyle(.bordered)
+
+                Spacer()
+
+                // Only show Add Card button if user can edit
+                if canEdit {
+                    Button {
+                        showingCreateCard = true
+                    } label: {
+                        Label("Add Card", systemImage: "plus.rectangle.fill")
+                            .font(.caption)
+                    }
+                    .buttonStyle(.bordered)
+                }
             }
             .padding()
             .background(Color.gray.opacity(0.05))
@@ -801,15 +843,18 @@ struct EmbeddedKanbanBoardView: View {
                     Text("No cards yet")
                         .font(.headline)
                         .foregroundColor(.secondary)
-                    Text("Add cards to organize your project tasks")
+                    Text(canEdit ? "Add cards to organize your project tasks" : "No cards have been created yet")
                         .font(.caption)
                         .foregroundColor(.secondary)
-                    Button {
-                        showingCreateCard = true
-                    } label: {
-                        Label("Add First Card", systemImage: "plus")
+                    // Only show add button if user can edit
+                    if canEdit {
+                        Button {
+                            showingCreateCard = true
+                        } label: {
+                            Label("Add First Card", systemImage: "plus")
+                        }
+                        .buttonStyle(.borderedProminent)
                     }
-                    .buttonStyle(.borderedProminent)
                     Spacer()
                 }
             } else {
@@ -821,6 +866,7 @@ struct EmbeddedKanbanBoardView: View {
                                 column: column,
                                 cards: cardsFor(column: column),
                                 entityId: entity.id,
+                                canEdit: canEdit,
                                 onMoveCard: { card, newColumn in
                                     state.moveKanbanCard(cardId: card.id, entityId: entity.id, toColumn: newColumn)
                                 },
@@ -872,6 +918,7 @@ struct KanbanColumnView: View {
     let column: EmbeddedKanbanBoardView.KanbanColumn
     let cards: [KanbanCard]
     let entityId: String
+    let canEdit: Bool  // Phase 3: Permission-aware UI
     let onMoveCard: (KanbanCard, String) -> Void
     let onAddCard: () -> Void
     let onDeleteCard: (KanbanCard) -> Void
@@ -909,6 +956,7 @@ struct KanbanColumnView: View {
                             card: card,
                             currentColumn: column,
                             entityId: entityId,
+                            canEdit: canEdit,
                             onMove: { newColumn in
                                 onMoveCard(card, newColumn)
                             },
@@ -920,21 +968,23 @@ struct KanbanColumnView: View {
                 }
             }
 
-            // Add card button at bottom
-            Button(action: onAddCard) {
-                HStack {
-                    Image(systemName: "plus")
-                        .font(.caption)
-                    Text("Add card")
-                        .font(.caption)
+            // Add card button at bottom (only if user can edit)
+            if canEdit {
+                Button(action: onAddCard) {
+                    HStack {
+                        Image(systemName: "plus")
+                            .font(.caption)
+                        Text("Add card")
+                            .font(.caption)
+                    }
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                    .background(Color.gray.opacity(0.1))
+                    .cornerRadius(8)
                 }
-                .foregroundColor(.secondary)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
-                .background(Color.gray.opacity(0.1))
-                .cornerRadius(8)
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
         }
         .frame(width: 250)
         .padding(12)
@@ -945,12 +995,14 @@ struct KanbanColumnView: View {
                 .stroke(isTargeted ? column.color : Color.clear, lineWidth: 2)
         )
         .dropDestination(for: String.self) { droppedItems, _ in
-            guard let cardId = droppedItems.first else { return false }
+            // Only accept drops if user can edit (Phase 3 permissions)
+            guard canEdit, let cardId = droppedItems.first else { return false }
             onCardDrop(cardId, column)
             return true
         } isTargeted: { targeted in
+            // Only show targeting feedback if user can edit
             withAnimation(.easeInOut(duration: 0.15)) {
-                isTargeted = targeted
+                isTargeted = canEdit && targeted
             }
         }
     }
@@ -963,6 +1015,7 @@ struct KanbanCardView: View {
     let card: KanbanCard
     let currentColumn: EmbeddedKanbanBoardView.KanbanColumn
     let entityId: String
+    let canEdit: Bool  // Phase 3: Permission-aware UI
     let onMove: (String) -> Void
     let onDelete: () -> Void
     @State private var isHovered = false
@@ -1017,38 +1070,55 @@ struct KanbanCardView: View {
         .onTapGesture {
             showDetailSheet = true
         }
-        .draggable(card.id) {
-            // Drag preview
-            VStack(alignment: .leading, spacing: 8) {
-                Text(card.title)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .lineLimit(2)
+        // Phase 3: Only allow dragging if user can edit
+        .if(canEdit) { view in
+            view.draggable(card.id) {
+                // Drag preview
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(card.title)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .lineLimit(2)
+                }
+                .padding(12)
+                .frame(width: 220)
+                .background(Color(.windowBackgroundColor))
+                .cornerRadius(8)
+                .shadow(color: Color.black.opacity(0.2), radius: 8)
             }
-            .padding(12)
-            .frame(width: 220)
-            .background(Color(.windowBackgroundColor))
-            .cornerRadius(8)
-            .shadow(color: Color.black.opacity(0.2), radius: 8)
         }
         .contextMenu {
-            // Move to column menu
-            Menu("Move to") {
-                ForEach(EmbeddedKanbanBoardView.KanbanColumn.allCases, id: \.self) { column in
-                    if column != currentColumn {
-                        Button {
-                            onMove(column.rawValue)
-                        } label: {
-                            Label(column.rawValue, systemImage: column.icon)
+            // View details option (always available)
+            Button {
+                showDetailSheet = true
+            } label: {
+                Label("View Details", systemImage: "doc.text")
+            }
+
+            // Phase 3: Only show edit options if user can edit
+            if canEdit {
+                Divider()
+
+                // Move to column menu
+                Menu("Move to") {
+                    ForEach(EmbeddedKanbanBoardView.KanbanColumn.allCases, id: \.self) { column in
+                        if column != currentColumn {
+                            Button {
+                                onMove(column.rawValue)
+                            } label: {
+                                Label(column.rawValue, systemImage: column.icon)
+                            }
                         }
                     }
                 }
-            }
-            Divider()
-            Button(role: .destructive) {
-                onDelete()
-            } label: {
-                Label("Delete Card", systemImage: "trash")
+
+                Divider()
+
+                Button(role: .destructive) {
+                    onDelete()
+                } label: {
+                    Label("Delete Card", systemImage: "trash")
+                }
             }
         }
         .sheet(isPresented: $showDetailSheet) {

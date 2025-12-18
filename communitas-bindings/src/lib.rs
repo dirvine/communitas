@@ -580,6 +580,98 @@ impl From<&communitas_kanban::Comment> for SwiftKanbanComment {
 }
 
 // ============================================================================
+// Permission Types (Phase 3: Granular Per-Resource Permissions)
+// ============================================================================
+
+/// Access level for a resource type
+///
+/// Ordered from most restrictive to least restrictive:
+/// NotVisible < ReadOnly < Edit
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum SwiftAccessLevel {
+    /// Resource is hidden from the member
+    NotVisible,
+    /// Member can view but not modify
+    ReadOnly,
+    /// Member has full read/write access
+    Edit,
+}
+
+impl From<communitas_core::permissions::AccessLevel> for SwiftAccessLevel {
+    fn from(level: communitas_core::permissions::AccessLevel) -> Self {
+        match level {
+            communitas_core::permissions::AccessLevel::NotVisible => SwiftAccessLevel::NotVisible,
+            communitas_core::permissions::AccessLevel::ReadOnly => SwiftAccessLevel::ReadOnly,
+            communitas_core::permissions::AccessLevel::Edit => SwiftAccessLevel::Edit,
+        }
+    }
+}
+
+impl From<SwiftAccessLevel> for communitas_core::permissions::AccessLevel {
+    fn from(level: SwiftAccessLevel) -> Self {
+        match level {
+            SwiftAccessLevel::NotVisible => communitas_core::permissions::AccessLevel::NotVisible,
+            SwiftAccessLevel::ReadOnly => communitas_core::permissions::AccessLevel::ReadOnly,
+            SwiftAccessLevel::Edit => communitas_core::permissions::AccessLevel::Edit,
+        }
+    }
+}
+
+/// Types of resources that can have permissions
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum SwiftResourceType {
+    /// Chat messages, threads, reactions
+    Messages,
+    /// Collaborative documents (CRDT)
+    Documents,
+    /// Kanban boards (project-only)
+    KanbanBoards,
+    /// Files in entity storage
+    Files,
+    /// Member list and roles
+    Members,
+    /// Entity settings and configuration
+    Settings,
+}
+
+impl From<communitas_core::permissions::ResourceType> for SwiftResourceType {
+    fn from(rt: communitas_core::permissions::ResourceType) -> Self {
+        match rt {
+            communitas_core::permissions::ResourceType::Messages => SwiftResourceType::Messages,
+            communitas_core::permissions::ResourceType::Documents => SwiftResourceType::Documents,
+            communitas_core::permissions::ResourceType::KanbanBoards => {
+                SwiftResourceType::KanbanBoards
+            }
+            communitas_core::permissions::ResourceType::Files => SwiftResourceType::Files,
+            communitas_core::permissions::ResourceType::Members => SwiftResourceType::Members,
+            communitas_core::permissions::ResourceType::Settings => SwiftResourceType::Settings,
+        }
+    }
+}
+
+impl From<SwiftResourceType> for communitas_core::permissions::ResourceType {
+    fn from(rt: SwiftResourceType) -> Self {
+        match rt {
+            SwiftResourceType::Messages => communitas_core::permissions::ResourceType::Messages,
+            SwiftResourceType::Documents => communitas_core::permissions::ResourceType::Documents,
+            SwiftResourceType::KanbanBoards => {
+                communitas_core::permissions::ResourceType::KanbanBoards
+            }
+            SwiftResourceType::Files => communitas_core::permissions::ResourceType::Files,
+            SwiftResourceType::Members => communitas_core::permissions::ResourceType::Members,
+            SwiftResourceType::Settings => communitas_core::permissions::ResourceType::Settings,
+        }
+    }
+}
+
+/// A single permission entry (resource type + access level)
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct SwiftMemberPermission {
+    pub resource_type: SwiftResourceType,
+    pub access_level: SwiftAccessLevel,
+}
+
+// ============================================================================
 // WebRTC Types
 // ============================================================================
 
@@ -2449,6 +2541,33 @@ impl CommunitasClient {
     // Kanban Sub-Client Methods
     // ========================================================================
 
+    /// Helper: Check permission for kanban operations on a project
+    fn check_kanban_permission(
+        &self,
+        project_id: &str,
+        required: SwiftAccessLevel,
+    ) -> Result<(), ClientError> {
+        let can_access = self.permission_can_access(
+            project_id.to_string(),
+            SwiftResourceType::KanbanBoards,
+            required,
+        )?;
+
+        if !can_access {
+            let level_name = match required {
+                SwiftAccessLevel::NotVisible => "access",
+                SwiftAccessLevel::ReadOnly => "view",
+                SwiftAccessLevel::Edit => "edit",
+            };
+            return Err(ClientError::AuthError(format!(
+                "Insufficient permission to {} Kanban boards in this project",
+                level_name
+            )));
+        }
+
+        Ok(())
+    }
+
     /// Create a new Kanban board for a project
     pub fn kanban_create_board(
         &self,
@@ -2456,6 +2575,9 @@ impl CommunitasClient {
         name: String,
         _description: Option<String>,
     ) -> Result<String, ClientError> {
+        // Check permission: Edit required to create boards
+        self.check_kanban_permission(&project_id, SwiftAccessLevel::Edit)?;
+
         block_on(async {
             let ctx = self.inner.read().await;
 
@@ -2479,6 +2601,11 @@ impl CommunitasClient {
                 .get_board(&board_id)
                 .map_err(|e| ClientError::StorageError(e.to_string()))?;
 
+            // Check permission: ReadOnly required to view boards
+            drop(ctx); // Release read lock before permission check
+            self.check_kanban_permission(&board.project_id, SwiftAccessLevel::ReadOnly)?;
+
+            let ctx = self.inner.read().await;
             let columns = ctx
                 .kanban_service
                 .list_columns(&board_id)
@@ -2504,6 +2631,19 @@ impl CommunitasClient {
         _color: Option<String>,
         _wip_limit: Option<u32>,
     ) -> Result<String, ClientError> {
+        // First, get the board to find its project_id
+        let project_id = block_on(async {
+            let ctx = self.inner.read().await;
+            let board = ctx
+                .kanban_service
+                .get_board(&board_id)
+                .map_err(|e| ClientError::StorageError(e.to_string()))?;
+            Ok::<_, ClientError>(board.project_id)
+        })?;
+
+        // Check permission: Edit required to add columns
+        self.check_kanban_permission(&project_id, SwiftAccessLevel::Edit)?;
+
         block_on(async {
             let ctx = self.inner.read().await;
 
@@ -2525,6 +2665,19 @@ impl CommunitasClient {
         title: String,
         description: Option<String>,
     ) -> Result<String, ClientError> {
+        // First, get the board to find its project_id
+        let project_id = block_on(async {
+            let ctx = self.inner.read().await;
+            let board = ctx
+                .kanban_service
+                .get_board(&board_id)
+                .map_err(|e| ClientError::StorageError(e.to_string()))?;
+            Ok::<_, ClientError>(board.project_id)
+        })?;
+
+        // Check permission: Edit required to create cards
+        self.check_kanban_permission(&project_id, SwiftAccessLevel::Edit)?;
+
         block_on(async {
             let ctx = self.inner.read().await;
 
@@ -2545,6 +2698,19 @@ impl CommunitasClient {
         to_column_id: String,
         position: u32,
     ) -> Result<(), ClientError> {
+        // First, get the board to find its project_id
+        let project_id = block_on(async {
+            let ctx = self.inner.read().await;
+            let board = ctx
+                .kanban_service
+                .get_board(&board_id)
+                .map_err(|e| ClientError::StorageError(e.to_string()))?;
+            Ok::<_, ClientError>(board.project_id)
+        })?;
+
+        // Check permission: Edit required to move cards
+        self.check_kanban_permission(&project_id, SwiftAccessLevel::Edit)?;
+
         block_on(async {
             let ctx = self.inner.read().await;
 
@@ -2564,6 +2730,19 @@ impl CommunitasClient {
         title: Option<String>,
         description: Option<String>,
     ) -> Result<(), ClientError> {
+        // First, get the board to find its project_id
+        let project_id = block_on(async {
+            let ctx = self.inner.read().await;
+            let board = ctx
+                .kanban_service
+                .get_board(&board_id)
+                .map_err(|e| ClientError::StorageError(e.to_string()))?;
+            Ok::<_, ClientError>(board.project_id)
+        })?;
+
+        // Check permission: Edit required to update cards
+        self.check_kanban_permission(&project_id, SwiftAccessLevel::Edit)?;
+
         block_on(async {
             let ctx = self.inner.read().await;
 
@@ -2587,6 +2766,19 @@ impl CommunitasClient {
         board_id: String,
         card_id: String,
     ) -> Result<(), ClientError> {
+        // First, get the board to find its project_id
+        let project_id = block_on(async {
+            let ctx = self.inner.read().await;
+            let board = ctx
+                .kanban_service
+                .get_board(&board_id)
+                .map_err(|e| ClientError::StorageError(e.to_string()))?;
+            Ok::<_, ClientError>(board.project_id)
+        })?;
+
+        // Check permission: Edit required to delete cards
+        self.check_kanban_permission(&project_id, SwiftAccessLevel::Edit)?;
+
         block_on(async {
             let ctx = self.inner.read().await;
 
@@ -2677,6 +2869,19 @@ impl CommunitasClient {
         content: String,
         reply_to_id: Option<String>,
     ) -> Result<String, ClientError> {
+        // First, get the board to find its project_id
+        let project_id = block_on(async {
+            let ctx = self.inner.read().await;
+            let board = ctx
+                .kanban_service
+                .get_board(&board_id)
+                .map_err(|e| ClientError::StorageError(e.to_string()))?;
+            Ok::<_, ClientError>(board.project_id)
+        })?;
+
+        // Check permission: Edit required to add comments
+        self.check_kanban_permission(&project_id, SwiftAccessLevel::Edit)?;
+
         block_on(async {
             let ctx = self.inner.read().await;
 
@@ -2931,6 +3136,461 @@ impl CommunitasClient {
                 .map_err(|e| ClientError::StorageError(e.to_string()))?;
 
             Ok(SwiftDiskFileInfo::from(info))
+        })
+    }
+
+    // ========================================================================
+    // Permission Sub-Client Methods (Phase 3: Granular Per-Resource Permissions)
+    // ========================================================================
+
+    /// Get effective permission level for current user on a resource in an entity
+    ///
+    /// Combines role-based defaults with any member-specific overrides.
+    pub fn permission_get_effective(
+        &self,
+        entity_id: String,
+        resource_type: SwiftResourceType,
+    ) -> Result<SwiftAccessLevel, ClientError> {
+        block_on(async {
+            let ctx = self.inner.read().await;
+
+            // Get the current user's four_words
+            let user_fw = &ctx.profile.id_fw;
+
+            // Get the entity first
+            let entity = ctx
+                .entity_service
+                .get_entity(&entity_id)
+                .await
+                .map_err(|e| ClientError::EntityError(e.to_string()))?;
+
+            // Get the member list with full info (including roles)
+            let members = ctx
+                .entity_service
+                .list_members(entity.entity_type, &entity_id)
+                .await
+                .map_err(|e| ClientError::EntityError(e.to_string()))?;
+
+            // Find the member's role
+            let role = members
+                .iter()
+                .find(|m| m.member_id == *user_fw)
+                .map(|m| m.role.as_str())
+                .unwrap_or("guest");
+
+            // Get role defaults
+            let defaults = communitas_core::permissions::role_defaults(role);
+            let rt: communitas_core::permissions::ResourceType = resource_type.into();
+
+            // Return the permission from defaults (no overrides stored yet)
+            let access = defaults
+                .get(&rt)
+                .copied()
+                .unwrap_or(communitas_core::permissions::AccessLevel::NotVisible);
+
+            Ok(access.into())
+        })
+    }
+
+    /// Check if current user can perform an action requiring a specific access level
+    ///
+    /// Returns true if the user's effective permission is >= the required level.
+    pub fn permission_can_access(
+        &self,
+        entity_id: String,
+        resource_type: SwiftResourceType,
+        required_level: SwiftAccessLevel,
+    ) -> Result<bool, ClientError> {
+        let effective = self.permission_get_effective(entity_id, resource_type)?;
+
+        // Compare access levels using the Ord implementation
+        let effective_core: communitas_core::permissions::AccessLevel = effective.into();
+        let required_core: communitas_core::permissions::AccessLevel = required_level.into();
+
+        Ok(effective_core.allows(required_core))
+    }
+
+    /// Check if current user can view a resource (requires ReadOnly or Edit)
+    pub fn permission_can_view(
+        &self,
+        entity_id: String,
+        resource_type: SwiftResourceType,
+    ) -> Result<bool, ClientError> {
+        self.permission_can_access(entity_id, resource_type, SwiftAccessLevel::ReadOnly)
+    }
+
+    /// Check if current user can edit a resource (requires Edit level)
+    pub fn permission_can_edit(
+        &self,
+        entity_id: String,
+        resource_type: SwiftResourceType,
+    ) -> Result<bool, ClientError> {
+        self.permission_can_access(entity_id, resource_type, SwiftAccessLevel::Edit)
+    }
+
+    /// Set permission override for a member (requires admin/owner role)
+    ///
+    /// This overrides the member's role-based default for the specific resource.
+    pub fn permission_set_member_override(
+        &self,
+        entity_id: String,
+        member_four_words: String,
+        resource_type: SwiftResourceType,
+        level: SwiftAccessLevel,
+    ) -> Result<(), ClientError> {
+        block_on(async {
+            let ctx = self.inner.read().await;
+
+            // Get the entity first
+            let user_fw = &ctx.profile.id_fw;
+            let entity = ctx
+                .entity_service
+                .get_entity(&entity_id)
+                .await
+                .map_err(|e| ClientError::EntityError(e.to_string()))?;
+
+            // Get the member list with full info (including roles)
+            let members = ctx
+                .entity_service
+                .list_members(entity.entity_type, &entity_id)
+                .await
+                .map_err(|e| ClientError::EntityError(e.to_string()))?;
+
+            // Find the current user's role
+            let user_role = members
+                .iter()
+                .find(|m| m.member_id == *user_fw)
+                .map(|m| m.role.as_str())
+                .unwrap_or("guest");
+
+            // Only owner and admin can modify permissions
+            if user_role != "owner" && user_role != "admin" {
+                return Err(ClientError::AuthError(
+                    "Only owners and admins can modify member permissions".into(),
+                ));
+            }
+
+            // Verify target member exists
+            if !members.iter().any(|m| m.member_id == member_four_words) {
+                return Err(ClientError::NotFound(format!(
+                    "Member {} not found in entity",
+                    member_four_words
+                )));
+            }
+
+            // Store override in CRDT entity metadata
+            let core_resource: communitas_core::permissions::ResourceType = resource_type.into();
+            let core_level: communitas_core::permissions::AccessLevel = level.into();
+
+            ctx.entity_service
+                .set_permission_override(
+                    entity.entity_type,
+                    &entity_id,
+                    &member_four_words,
+                    core_resource.as_str(),
+                    core_level.as_str(),
+                )
+                .await
+                .map_err(|e| ClientError::EntityError(e.to_string()))?;
+
+            tracing::info!(
+                entity_id = %entity_id,
+                member = %member_four_words,
+                resource = ?resource_type,
+                level = ?level,
+                "Permission override set in CRDT"
+            );
+
+            Ok(())
+        })
+    }
+
+    /// Remove a permission override for a member, reverting to role default
+    pub fn permission_remove_member_override(
+        &self,
+        entity_id: String,
+        member_four_words: String,
+        resource_type: SwiftResourceType,
+    ) -> Result<(), ClientError> {
+        block_on(async {
+            let ctx = self.inner.read().await;
+
+            // Get the entity first
+            let user_fw = &ctx.profile.id_fw;
+            let entity = ctx
+                .entity_service
+                .get_entity(&entity_id)
+                .await
+                .map_err(|e| ClientError::EntityError(e.to_string()))?;
+
+            // Get the member list with full info (including roles)
+            let members = ctx
+                .entity_service
+                .list_members(entity.entity_type, &entity_id)
+                .await
+                .map_err(|e| ClientError::EntityError(e.to_string()))?;
+
+            // Find the current user's role
+            let user_role = members
+                .iter()
+                .find(|m| m.member_id == *user_fw)
+                .map(|m| m.role.as_str())
+                .unwrap_or("guest");
+
+            if user_role != "owner" && user_role != "admin" {
+                return Err(ClientError::AuthError(
+                    "Only owners and admins can modify member permissions".into(),
+                ));
+            }
+
+            // Remove override from CRDT entity metadata
+            let core_resource: communitas_core::permissions::ResourceType = resource_type.into();
+
+            ctx.entity_service
+                .remove_permission_override(
+                    entity.entity_type,
+                    &entity_id,
+                    &member_four_words,
+                    core_resource.as_str(),
+                )
+                .await
+                .map_err(|e| ClientError::EntityError(e.to_string()))?;
+
+            tracing::info!(
+                entity_id = %entity_id,
+                member = %member_four_words,
+                resource = ?resource_type,
+                "Permission override removed from CRDT"
+            );
+
+            Ok(())
+        })
+    }
+
+    /// Get all permission overrides for a specific member
+    pub fn permission_get_member_overrides(
+        &self,
+        entity_id: String,
+        member_four_words: String,
+    ) -> Result<Vec<SwiftMemberPermission>, ClientError> {
+        block_on(async {
+            let ctx = self.inner.read().await;
+
+            // Get the entity first
+            let entity = ctx
+                .entity_service
+                .get_entity(&entity_id)
+                .await
+                .map_err(|e| ClientError::EntityError(e.to_string()))?;
+
+            // Get the member list with full info
+            let members = ctx
+                .entity_service
+                .list_members(entity.entity_type, &entity_id)
+                .await
+                .map_err(|e| ClientError::EntityError(e.to_string()))?;
+
+            // Verify member exists
+            if !members.iter().any(|m| m.member_id == member_four_words) {
+                return Err(ClientError::NotFound(format!(
+                    "Member {} not found in entity",
+                    member_four_words
+                )));
+            }
+
+            // Load overrides from CRDT entity metadata
+            let overrides = ctx
+                .entity_service
+                .get_permission_overrides(entity.entity_type, &entity_id, &member_four_words)
+                .await
+                .map_err(|e| ClientError::EntityError(e.to_string()))?;
+
+            // Convert to SwiftMemberPermission list
+            let permissions: Vec<SwiftMemberPermission> = overrides
+                .into_iter()
+                .filter_map(|(resource_str, access_str)| {
+                    let resource: communitas_core::permissions::ResourceType =
+                        resource_str.parse().ok()?;
+                    let access: communitas_core::permissions::AccessLevel =
+                        access_str.parse().ok()?;
+                    Some(SwiftMemberPermission {
+                        resource_type: resource.into(),
+                        access_level: access.into(),
+                    })
+                })
+                .collect();
+
+            Ok(permissions)
+        })
+    }
+
+    /// Get the role of a member in an entity
+    pub fn permission_get_member_role(
+        &self,
+        entity_id: String,
+        member_four_words: String,
+    ) -> Result<String, ClientError> {
+        block_on(async {
+            let ctx = self.inner.read().await;
+
+            // Get the entity first
+            let entity = ctx
+                .entity_service
+                .get_entity(&entity_id)
+                .await
+                .map_err(|e| ClientError::EntityError(e.to_string()))?;
+
+            // Get the member list with full info (including roles)
+            let members = ctx
+                .entity_service
+                .list_members(entity.entity_type, &entity_id)
+                .await
+                .map_err(|e| ClientError::EntityError(e.to_string()))?;
+
+            let role = members
+                .iter()
+                .find(|m| m.member_id == member_four_words)
+                .map(|m| m.role.clone())
+                .ok_or_else(|| {
+                    ClientError::NotFound(format!(
+                        "Member {} not found in entity",
+                        member_four_words
+                    ))
+                })?;
+
+            Ok(role)
+        })
+    }
+
+    /// Set the role of a member in an entity (requires admin/owner)
+    pub fn permission_set_member_role(
+        &self,
+        entity_id: String,
+        member_four_words: String,
+        role: String,
+    ) -> Result<(), ClientError> {
+        block_on(async {
+            let ctx = self.inner.read().await;
+
+            // Get the entity first
+            let user_fw = &ctx.profile.id_fw;
+            let entity = ctx
+                .entity_service
+                .get_entity(&entity_id)
+                .await
+                .map_err(|e| ClientError::EntityError(e.to_string()))?;
+
+            // Get the member list with full info (including roles)
+            let members = ctx
+                .entity_service
+                .list_members(entity.entity_type, &entity_id)
+                .await
+                .map_err(|e| ClientError::EntityError(e.to_string()))?;
+
+            // Find the current user's role
+            let user_role = members
+                .iter()
+                .find(|m| m.member_id == *user_fw)
+                .map(|m| m.role.as_str())
+                .unwrap_or("guest");
+
+            if user_role != "owner" && user_role != "admin" {
+                return Err(ClientError::AuthError(
+                    "Only owners and admins can change member roles".into(),
+                ));
+            }
+
+            // Validate role is a known standard role
+            if !communitas_core::permissions::is_standard_role(&role) {
+                return Err(ClientError::EntityError(format!(
+                    "Unknown role '{}'. Valid roles: {:?}",
+                    role,
+                    communitas_core::permissions::standard_roles()
+                )));
+            }
+
+            // Update role in CRDT entity
+            ctx.entity_service
+                .set_member_role(entity.entity_type, &entity_id, &member_four_words, &role)
+                .await
+                .map_err(|e| ClientError::EntityError(e.to_string()))?;
+
+            tracing::info!(
+                entity_id = %entity_id,
+                member = %member_four_words,
+                new_role = %role,
+                "Member role changed in CRDT"
+            );
+
+            Ok(())
+        })
+    }
+
+    /// Get all permissions (defaults + overrides) for a member as a list
+    pub fn permission_get_all_for_member(
+        &self,
+        entity_id: String,
+        member_four_words: String,
+    ) -> Result<Vec<SwiftMemberPermission>, ClientError> {
+        block_on(async {
+            let ctx = self.inner.read().await;
+
+            // Get the entity first
+            let entity = ctx
+                .entity_service
+                .get_entity(&entity_id)
+                .await
+                .map_err(|e| ClientError::EntityError(e.to_string()))?;
+
+            // Get the member list with full info (including roles)
+            let members = ctx
+                .entity_service
+                .list_members(entity.entity_type, &entity_id)
+                .await
+                .map_err(|e| ClientError::EntityError(e.to_string()))?;
+
+            let role = members
+                .iter()
+                .find(|m| m.member_id == member_four_words)
+                .map(|m| m.role.as_str())
+                .ok_or_else(|| {
+                    ClientError::NotFound(format!(
+                        "Member {} not found in entity",
+                        member_four_words
+                    ))
+                })?;
+
+            // Get defaults for the role
+            let mut permissions_map = communitas_core::permissions::role_defaults(role);
+
+            // Load overrides from CRDT storage and merge
+            let overrides = ctx
+                .entity_service
+                .get_permission_overrides(entity.entity_type, &entity_id, &member_four_words)
+                .await
+                .map_err(|e| ClientError::EntityError(e.to_string()))?;
+
+            // Apply overrides to defaults
+            for (resource_str, access_str) in overrides {
+                if let Ok(resource) = resource_str.parse::<communitas_core::permissions::ResourceType>()
+                {
+                    if let Ok(access) = access_str.parse::<communitas_core::permissions::AccessLevel>()
+                    {
+                        permissions_map.insert(resource, access);
+                    }
+                }
+            }
+
+            // Convert to SwiftMemberPermission list
+            let permissions: Vec<SwiftMemberPermission> = permissions_map
+                .into_iter()
+                .map(|(rt, level)| SwiftMemberPermission {
+                    resource_type: rt.into(),
+                    access_level: level.into(),
+                })
+                .collect();
+
+            Ok(permissions)
         })
     }
 

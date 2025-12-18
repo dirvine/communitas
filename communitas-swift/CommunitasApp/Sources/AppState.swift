@@ -1840,6 +1840,142 @@ public class AppState: ObservableObject {
         return client?.gossipGetBoundPort()
     }
 
+    // MARK: - Permission Methods (Phase 3: Granular Permissions)
+
+    /// Check if the current user can view a resource type in an entity
+    ///
+    /// Returns true if the user has at least ReadOnly permission level.
+    public func canView(entityId: String, resource: SwiftResourceType) -> Bool {
+        guard let client = client else { return false }
+        do {
+            return try client.permissionCanView(entityId: entityId, resourceType: resource)
+        } catch {
+            print("[Communitas] Permission check failed: \(error)")
+            return false
+        }
+    }
+
+    /// Check if the current user can edit a resource type in an entity
+    ///
+    /// Returns true if the user has Edit permission level.
+    public func canEdit(entityId: String, resource: SwiftResourceType) -> Bool {
+        guard let client = client else { return false }
+        do {
+            return try client.permissionCanEdit(entityId: entityId, resourceType: resource)
+        } catch {
+            print("[Communitas] Permission check failed: \(error)")
+            return false
+        }
+    }
+
+    /// Get the effective permission level for a resource in an entity
+    ///
+    /// Returns the computed permission level combining role defaults and any overrides.
+    public func getEffectivePermission(entityId: String, resource: SwiftResourceType) -> SwiftAccessLevel {
+        guard let client = client else { return .notVisible }
+        do {
+            return try client.permissionGetEffective(entityId: entityId, resourceType: resource)
+        } catch {
+            print("[Communitas] Permission check failed: \(error)")
+            return .notVisible
+        }
+    }
+
+    /// Check if current user can access a resource with a required permission level
+    public func canAccess(entityId: String, resource: SwiftResourceType, required: SwiftAccessLevel) -> Bool {
+        guard let client = client else { return false }
+        do {
+            return try client.permissionCanAccess(entityId: entityId, resourceType: resource, requiredLevel: required)
+        } catch {
+            print("[Communitas] Permission check failed: \(error)")
+            return false
+        }
+    }
+
+    /// Get the current user's role in an entity
+    public func getMemberRole(entityId: String, memberFourWords: String) -> String? {
+        guard let client = client else { return nil }
+        do {
+            return try client.permissionGetMemberRole(entityId: entityId, memberFourWords: memberFourWords)
+        } catch {
+            print("[Communitas] Failed to get member role: \(error)")
+            return nil
+        }
+    }
+
+    /// Set a member's role in an entity (requires admin/owner)
+    public func setMemberRole(entityId: String, memberFourWords: String, role: String) {
+        guard let client = client else {
+            errorMessage = "Not initialized"
+            showError = true
+            return
+        }
+        do {
+            try client.permissionSetMemberRole(entityId: entityId, memberFourWords: memberFourWords, role: role)
+            print("[Communitas] Set role '\(role)' for member \(memberFourWords)")
+        } catch {
+            print("[Communitas] Failed to set member role: \(error)")
+            errorMessage = "Failed to set member role: \(error.localizedDescription)"
+            showError = true
+        }
+    }
+
+    /// Set a permission override for a member (requires admin/owner)
+    public func setPermissionOverride(entityId: String, memberFourWords: String, resource: SwiftResourceType, level: SwiftAccessLevel) {
+        guard let client = client else {
+            errorMessage = "Not initialized"
+            showError = true
+            return
+        }
+        do {
+            try client.permissionSetMemberOverride(entityId: entityId, memberFourWords: memberFourWords, resourceType: resource, level: level)
+            print("[Communitas] Set permission override for \(memberFourWords): \(resource) = \(level)")
+        } catch {
+            print("[Communitas] Failed to set permission override: \(error)")
+            errorMessage = "Failed to set permission: \(error.localizedDescription)"
+            showError = true
+        }
+    }
+
+    /// Remove a permission override for a member
+    public func removePermissionOverride(entityId: String, memberFourWords: String, resource: SwiftResourceType) {
+        guard let client = client else {
+            errorMessage = "Not initialized"
+            showError = true
+            return
+        }
+        do {
+            try client.permissionRemoveMemberOverride(entityId: entityId, memberFourWords: memberFourWords, resourceType: resource)
+            print("[Communitas] Removed permission override for \(memberFourWords): \(resource)")
+        } catch {
+            print("[Communitas] Failed to remove permission override: \(error)")
+            errorMessage = "Failed to remove permission: \(error.localizedDescription)"
+            showError = true
+        }
+    }
+
+    /// Get all permission overrides for a member
+    public func getMemberPermissionOverrides(entityId: String, memberFourWords: String) -> [SwiftMemberPermission] {
+        guard let client = client else { return [] }
+        do {
+            return try client.permissionGetMemberOverrides(entityId: entityId, memberFourWords: memberFourWords)
+        } catch {
+            print("[Communitas] Failed to get permission overrides: \(error)")
+            return []
+        }
+    }
+
+    /// Get all permissions for a member (role defaults + overrides)
+    public func getAllMemberPermissions(entityId: String, memberFourWords: String) -> [SwiftMemberPermission] {
+        guard let client = client else { return [] }
+        do {
+            return try client.permissionGetAllForMember(entityId: entityId, memberFourWords: memberFourWords)
+        } catch {
+            print("[Communitas] Failed to get all member permissions: \(error)")
+            return []
+        }
+    }
+
     /// Get comprehensive network information
     public func getNetworkInfo() -> (
         isActive: Bool,

@@ -45,6 +45,7 @@ pub mod keystore;
 pub mod linking_service;
 pub mod message_service;
 pub mod message_sync;
+pub mod permissions; // Granular per-resource permission system
 // pub mod messaging; // TODO: Refactor in Sprint 3 for gossip pubsub
 pub mod presence_service;
 pub mod resource_limits; // Resource management and limits (MESH_CAPABILITIES.md §8.3)
@@ -91,3 +92,6 @@ pub use identity::{
 
 // Re-export disk service types
 pub use disk_service::{DiskStats, DiskType, EntityDiskService, FileInfo};
+
+// Re-export permissions system types
+pub use permissions::{AccessLevel, MemberPermissions, ResourceType, role_defaults};

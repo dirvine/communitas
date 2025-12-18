@@ -194,3 +194,10 @@ communitas-swift/CommunitasApp/.build/
 communitas-swift/*.app/
 communitas-swift/CommunitasBindings.xcframework/
 communitas-swift/Frameworks/
+
+# Removed web/desktop components (legacy)
+communitas-desktop/
+communitas-app/
+mcp-desktop-control/
+playwright-report/
+public/

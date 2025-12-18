@@ -7,6 +7,7 @@ members = [
     "communitas-tui",
     "communitas-p2p-test",
     "communitas-bindings",  # Swift/UniFFI bindings
+    "communitas-kanban",    # CRDT-based Kanban system
 ]
 
 [workspace.package]

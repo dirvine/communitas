@@ -705,7 +705,12 @@ impl EntityService {
                 );
             }
 
-            CrdtManager::set_map_bool(&metadata_map, &mut txn, "is_local_only", entity.is_local_only);
+            CrdtManager::set_map_bool(
+                &metadata_map,
+                &mut txn,
+                "is_local_only",
+                entity.is_local_only,
+            );
 
             if let Some(linked_at) = entity.linked_at {
                 CrdtManager::set_map_i64(&metadata_map, &mut txn, "linked_at", linked_at);

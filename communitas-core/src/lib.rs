@@ -40,9 +40,9 @@ pub mod doc_replicator;
 pub mod encrypted_storage;
 pub mod entity_service;
 pub mod error;
-pub mod linking_service;
 pub mod identity;
 pub mod keystore;
+pub mod linking_service;
 pub mod message_service;
 pub mod message_sync;
 // pub mod messaging; // TODO: Refactor in Sprint 3 for gossip pubsub
@@ -71,9 +71,9 @@ pub use crdt_manager::{CrdtError, CrdtManager, CrdtResult};
 pub use entity_service::{
     CascadeRemovalResult, Entity, EntityService, EntityServiceError, EntityServiceResult,
 };
+pub use error::{AppError, AppResult as Result};
 pub use legacy_crdt::EntityType;
 pub use linking_service::{LinkingError, LinkingResult, LinkingService, SyncResult};
-pub use error::{AppError, AppResult as Result};
 pub use message_service::{MessageService, MessageServiceError, MessageServiceResult};
 pub use resource_limits::{ResourceLimitError, ResourceLimits};
 pub use retry_utils::{RetryConfig, retry_dial, retry_with_backoff};

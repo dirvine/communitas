@@ -74,12 +74,7 @@ fn test_messaging_flow() {
 
     // Create a channel to send messages to (name, type, description, parent_id)
     let channel = client
-        .entity_create(
-            "General".to_string(),
-            SwiftEntityType::Channel,
-            None,
-            None,
-        )
+        .entity_create("General".to_string(), SwiftEntityType::Channel, None, None)
         .unwrap();
 
     // Send a message (entity_id, text, parent_id for thread)

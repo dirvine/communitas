@@ -102,12 +102,12 @@ flate2 = "1.0"
 # File operations
 mime_guess = "2.0"
 
+# Local dependencies
+communitas-kanban = { path = "../communitas-kanban" }
+
 # Windows-specific dependencies
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { version = "0.59", features = ["Win32_Security_Credentials"] }
-
-# Local dependencies
-
 
 [dev-dependencies]
 proptest = "1.4"

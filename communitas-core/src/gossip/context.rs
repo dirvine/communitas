@@ -1000,10 +1000,7 @@ impl GossipContext {
     /// Get the valid endpoint for a contact
     ///
     /// Returns the endpoint if it exists and is valid (not stale, not too many failures)
-    pub async fn get_contact_endpoint(
-        &self,
-        four_words: &str,
-    ) -> Option<std::net::SocketAddr> {
+    pub async fn get_contact_endpoint(&self, four_words: &str) -> Option<std::net::SocketAddr> {
         let contact = self.contact_store.get(four_words).await?;
         contact.get_valid_endpoint()
     }
@@ -1062,7 +1059,10 @@ impl GossipContext {
                 .map_err(|e| anyhow::anyhow!("Failed to add contact: {}", e))?;
         }
 
-        debug!("Recorded successful connection to {} at {}", four_words, addr);
+        debug!(
+            "Recorded successful connection to {} at {}",
+            four_words, addr
+        );
         Ok(())
     }
 

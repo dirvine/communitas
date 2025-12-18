@@ -1842,7 +1842,10 @@ impl CommunitasClient {
     // ========================================================================
 
     /// Create a local-only contact (not linked to network identity)
-    pub fn contact_create_local(&self, display_name: String) -> Result<SwiftContactInfo, ClientError> {
+    pub fn contact_create_local(
+        &self,
+        display_name: String,
+    ) -> Result<SwiftContactInfo, ClientError> {
         block_on(async {
             let ctx = self.inner.read().await;
 
@@ -2148,9 +2151,9 @@ impl CommunitasClient {
                 .unwrap_or(true);
 
             // Encode external address to four-word format if available
-            let external_address_words = ctx.external_address.and_then(|addr| {
-                communitas_core::conn_words(&addr).ok()
-            });
+            let external_address_words = ctx
+                .external_address
+                .and_then(|addr| communitas_core::conn_words(&addr).ok());
 
             SwiftNetworkInfo {
                 is_active: ctx.is_networking_active(),

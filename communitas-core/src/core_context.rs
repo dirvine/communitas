@@ -24,6 +24,7 @@ use crate::message_sync::MessageSyncService;
 use crate::types::{DeviceType, UserProfile};
 use crate::webrtc::CommunitasWebRtcService;
 use blake3;
+use communitas_kanban::KanbanService;
 use fips204::traits::{SerDes, Signer, Verifier};
 use rand::rngs::OsRng;
 use saorsa_pqc::ml_dsa_87::{PrivateKey, PublicKey, try_keygen_with_rng};
@@ -103,6 +104,10 @@ pub struct CoreContext {
     /// WebRTC service for voice, video, and screen sharing
     /// Initialized when networking starts (requires gossip context)
     pub webrtc: Option<Arc<CommunitasWebRtcService>>,
+
+    /// Kanban service for project management boards
+    /// CRDT-based, offline-first collaborative Kanban system
+    pub kanban_service: Arc<KanbanService>,
 }
 
 impl std::fmt::Debug for CoreContext {
@@ -125,6 +130,7 @@ impl std::fmt::Debug for CoreContext {
             .field("group_keys", &self.group_keys)
             .field("disk_service", &"<active>")
             .field("webrtc", &self.webrtc.as_ref().map(|_| "<active>"))
+            .field("kanban_service", &"<active>")
             .finish()
     }
 }
@@ -303,8 +309,11 @@ impl CoreContext {
                 .map_err(|e| format!("Failed to initialize EntityDiskService: {}", e))?,
         );
 
+        // Initialize Kanban service for project management boards
+        let kanban_service = Arc::new(KanbanService::new(four_words.clone()));
+
         info!(
-            "CoreContext initialized for user '{}' ({}) with EntityService, MessageService, DocReplicator, and DiskService",
+            "CoreContext initialized for user '{}' ({}) with EntityService, MessageService, DocReplicator, DiskService, and KanbanService",
             display_name, four_words
         );
 
@@ -327,6 +336,7 @@ impl CoreContext {
             group_keys: HashMap::new(),
             disk_service,
             webrtc: None, // Initialized when networking starts
+            kanban_service,
         })
     }
 
@@ -413,7 +423,10 @@ impl CoreContext {
                 self.webrtc = Some(Arc::new(webrtc));
             }
             Err(e) => {
-                warn!("Failed to initialize WebRTC service: {}. Voice/video calls will be unavailable.", e);
+                warn!(
+                    "Failed to initialize WebRTC service: {}. Voice/video calls will be unavailable.",
+                    e
+                );
                 // Don't fail networking start - WebRTC is optional
             }
         }
@@ -435,10 +448,7 @@ impl CoreContext {
     pub async fn auto_request_external_address(&mut self) -> Result<(), String> {
         // Retry up to 3 times with 2 second delays to allow peer connections
         for attempt in 1..=3 {
-            info!(
-                "Auto-detecting external address (attempt {}/3)...",
-                attempt
-            );
+            info!("Auto-detecting external address (attempt {}/3)...", attempt);
 
             // Wait a bit for peers to connect (first attempt waits longer)
             let delay_ms = if attempt == 1 { 2000 } else { 1000 };
@@ -458,10 +468,7 @@ impl CoreContext {
                             attempt, e
                         );
                     } else {
-                        warn!(
-                            "External address detection failed after 3 attempts: {}",
-                            e
-                        );
+                        warn!("External address detection failed after 3 attempts: {}", e);
                     }
                 }
             }
@@ -506,11 +513,9 @@ impl CoreContext {
         drop(cache);
 
         if peers.is_empty() {
-            return Err(
-                "No connected peers - external address not yet available. \
+            return Err("No connected peers - external address not yet available. \
                  The address will be discovered automatically when connections are established."
-                    .to_string(),
-            );
+                .to_string());
         }
 
         // We have peers but no observed address yet - this can happen if:

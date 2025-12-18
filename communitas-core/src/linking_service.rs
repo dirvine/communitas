@@ -17,7 +17,9 @@
 //! - Sync status tracking
 
 use crate::entity_service::{Entity, EntityService, EntityServiceError};
-use crate::gossip::contact_storage::{ContactRecord, ContactResult, ContactStore, ContactStorageError};
+use crate::gossip::contact_storage::{
+    ContactRecord, ContactResult, ContactStorageError, ContactStore,
+};
 use crate::identity::validate_id_words;
 use crate::security::input_validation::InputValidator;
 use std::sync::Arc;
@@ -148,11 +150,7 @@ impl LinkingService {
     ///
     /// # Returns
     /// The updated entity with network identity linked
-    pub async fn link_entity(
-        &self,
-        entity_id: &str,
-        four_words: &str,
-    ) -> LinkingResult<Entity> {
+    pub async fn link_entity(&self, entity_id: &str, four_words: &str) -> LinkingResult<Entity> {
         // Validate the four-word address
         let normalized = self.validate_four_words(four_words)?;
 
@@ -206,10 +204,7 @@ impl LinkingService {
         let entity_service = self.entity_service.read().await;
         let all_entities = entity_service.list_entities().await?;
 
-        Ok(all_entities
-            .into_iter()
-            .filter(|e| e.is_linked())
-            .collect())
+        Ok(all_entities.into_iter().filter(|e| e.is_linked()).collect())
     }
 
     /// Get all local-only contacts
@@ -273,10 +268,7 @@ impl LinkingService {
     }
 
     /// Create a local-only contact
-    pub async fn create_local_contact(
-        &self,
-        display_name: String,
-    ) -> ContactResult<ContactRecord> {
+    pub async fn create_local_contact(&self, display_name: String) -> ContactResult<ContactRecord> {
         let contact = ContactRecord::new_local(display_name);
         self.contact_store.add(contact.clone()).await?;
         Ok(contact)
@@ -321,12 +313,21 @@ mod tests {
         let _result = service.validate_four_words("hello-world-test-network");
         // This depends on dictionary - may or may not be valid
         // For format testing, we just check the sanitization works
-        assert!(service.validator.validate_four_words("hello-world-test-network").is_ok());
+        assert!(
+            service
+                .validator
+                .validate_four_words("hello-world-test-network")
+                .is_ok()
+        );
 
         // Invalid formats
         assert!(service.validate_four_words("only-three-words").is_err());
         assert!(service.validate_four_words("").is_err());
-        assert!(service.validate_four_words("too-many-words-here-now").is_err());
+        assert!(
+            service
+                .validate_four_words("too-many-words-here-now")
+                .is_err()
+        );
     }
 
     #[tokio::test]

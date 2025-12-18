@@ -769,6 +769,230 @@ impl EntityService {
         self.save_entity(&entity).await?;
         Ok(entity)
     }
+
+    // ========================================================================
+    // Permission Methods (Phase 3b: CRDT Persistence)
+    // ========================================================================
+
+    /// Set a permission override for a member
+    ///
+    /// Stores the override in the entity's CRDT document under the member's
+    /// permission_overrides map. This override takes precedence over role defaults.
+    pub async fn set_permission_override(
+        &self,
+        entity_type: EntityType,
+        entity_id: &str,
+        member_id: &str,
+        resource_type: &str,
+        access_level: &str,
+    ) -> EntityServiceResult<()> {
+        let doc_id = format!("{}:{}:core", entity_type.as_str(), entity_id);
+
+        // Load document
+        let doc = self
+            .crdt_manager
+            .load_document(&doc_id)
+            .await
+            .map_err(|_| EntityServiceError::NotFound(entity_id.to_string()))?;
+
+        let members_map = doc.get_or_insert_map("members");
+
+        // Check if member exists
+        {
+            let txn = doc.transact();
+            if CrdtManager::get_nested_map(&members_map, &txn, member_id).is_none() {
+                return Err(EntityServiceError::MemberNotFound(member_id.to_string()));
+            }
+        }
+
+        // Set the override
+        {
+            let mut txn = doc.transact_mut();
+            let member_data =
+                CrdtManager::get_or_create_nested_map(&members_map, &mut txn, member_id);
+            let overrides =
+                CrdtManager::get_or_create_nested_map(&member_data, &mut txn, "permission_overrides");
+
+            CrdtManager::set_map_string(&overrides, &mut txn, resource_type, access_level);
+        }
+
+        // Save document
+        self.crdt_manager
+            .save_document(&doc_id, entity_type.as_str(), entity_id, &doc)
+            .await?;
+
+        Ok(())
+    }
+
+    /// Remove a permission override for a member
+    ///
+    /// Removes the override, reverting to the member's role default for that resource.
+    pub async fn remove_permission_override(
+        &self,
+        entity_type: EntityType,
+        entity_id: &str,
+        member_id: &str,
+        resource_type: &str,
+    ) -> EntityServiceResult<()> {
+        let doc_id = format!("{}:{}:core", entity_type.as_str(), entity_id);
+
+        // Load document
+        let doc = self
+            .crdt_manager
+            .load_document(&doc_id)
+            .await
+            .map_err(|_| EntityServiceError::NotFound(entity_id.to_string()))?;
+
+        let members_map = doc.get_or_insert_map("members");
+
+        // Check if member exists
+        {
+            let txn = doc.transact();
+            if CrdtManager::get_nested_map(&members_map, &txn, member_id).is_none() {
+                return Err(EntityServiceError::MemberNotFound(member_id.to_string()));
+            }
+        }
+
+        // Remove the override
+        {
+            let mut txn = doc.transact_mut();
+
+            if let Some(member_data) = CrdtManager::get_nested_map(&members_map, &txn, member_id)
+                && let Some(overrides) =
+                    CrdtManager::get_nested_map(&member_data, &txn, "permission_overrides")
+            {
+                overrides.remove(&mut txn, resource_type);
+            }
+        }
+
+        // Save document
+        self.crdt_manager
+            .save_document(&doc_id, entity_type.as_str(), entity_id, &doc)
+            .await?;
+
+        Ok(())
+    }
+
+    /// Get all permission overrides for a member
+    ///
+    /// Returns a map of resource_type -> access_level for all overrides.
+    pub async fn get_permission_overrides(
+        &self,
+        entity_type: EntityType,
+        entity_id: &str,
+        member_id: &str,
+    ) -> EntityServiceResult<Vec<(String, String)>> {
+        let doc_id = format!("{}:{}:core", entity_type.as_str(), entity_id);
+
+        // Load document
+        let doc = self
+            .crdt_manager
+            .load_document(&doc_id)
+            .await
+            .map_err(|_| EntityServiceError::NotFound(entity_id.to_string()))?;
+
+        let members_map = doc.get_or_insert_map("members");
+
+        let txn = doc.transact();
+
+        // Check if member exists
+        let member_data = CrdtManager::get_nested_map(&members_map, &txn, member_id)
+            .ok_or_else(|| EntityServiceError::MemberNotFound(member_id.to_string()))?;
+
+        // Get overrides map
+        let mut overrides = Vec::new();
+        if let Some(overrides_map) =
+            CrdtManager::get_nested_map(&member_data, &txn, "permission_overrides")
+        {
+            for (key, _) in overrides_map.iter(&txn) {
+                let resource_type = key.to_string();
+                if let Some(access_level) =
+                    CrdtManager::get_map_string(&overrides_map, &txn, &resource_type)
+                {
+                    overrides.push((resource_type, access_level));
+                }
+            }
+        }
+
+        Ok(overrides)
+    }
+
+    /// Update a member's role
+    ///
+    /// Changes the member's role in the CRDT document. Note that this does not
+    /// clear existing permission overrides - they continue to take precedence.
+    pub async fn set_member_role(
+        &self,
+        entity_type: EntityType,
+        entity_id: &str,
+        member_id: &str,
+        new_role: &str,
+    ) -> EntityServiceResult<()> {
+        let doc_id = format!("{}:{}:core", entity_type.as_str(), entity_id);
+
+        // Load document
+        let doc = self
+            .crdt_manager
+            .load_document(&doc_id)
+            .await
+            .map_err(|_| EntityServiceError::NotFound(entity_id.to_string()))?;
+
+        let members_map = doc.get_or_insert_map("members");
+
+        // Check if member exists
+        {
+            let txn = doc.transact();
+            if CrdtManager::get_nested_map(&members_map, &txn, member_id).is_none() {
+                return Err(EntityServiceError::MemberNotFound(member_id.to_string()));
+            }
+        }
+
+        // Update the role
+        {
+            let mut txn = doc.transact_mut();
+            let member_data =
+                CrdtManager::get_or_create_nested_map(&members_map, &mut txn, member_id);
+
+            CrdtManager::set_map_string(&member_data, &mut txn, "role", new_role);
+        }
+
+        // Save document
+        self.crdt_manager
+            .save_document(&doc_id, entity_type.as_str(), entity_id, &doc)
+            .await?;
+
+        Ok(())
+    }
+
+    /// Get a member's role from the CRDT document
+    pub async fn get_member_role(
+        &self,
+        entity_type: EntityType,
+        entity_id: &str,
+        member_id: &str,
+    ) -> EntityServiceResult<String> {
+        let doc_id = format!("{}:{}:core", entity_type.as_str(), entity_id);
+
+        // Load document
+        let doc = self
+            .crdt_manager
+            .load_document(&doc_id)
+            .await
+            .map_err(|_| EntityServiceError::NotFound(entity_id.to_string()))?;
+
+        let members_map = doc.get_or_insert_map("members");
+        let txn = doc.transact();
+
+        // Get member data
+        let member_data = CrdtManager::get_nested_map(&members_map, &txn, member_id)
+            .ok_or_else(|| EntityServiceError::MemberNotFound(member_id.to_string()))?;
+
+        // Get role (default to "member" if not set)
+        let role = CrdtManager::get_map_string(&member_data, &txn, "role")
+            .unwrap_or_else(|| "member".to_string());
+
+        Ok(role)
+    }
 }
 
 #[cfg(test)]
@@ -975,5 +1199,534 @@ mod tests {
         assert!(members.iter().any(|m| m.member_id == "creator-id"));
         assert!(members.iter().any(|m| m.member_id == "member1"));
         assert!(members.iter().any(|m| m.member_id == "member2"));
+    }
+
+    // ========================================================================
+    // Permission Method Tests
+    // ========================================================================
+
+    #[tokio::test]
+    async fn test_set_permission_override() {
+        let service = create_test_service().await;
+
+        let entity = service
+            .create_entity(
+                "Test Group".to_string(),
+                EntityType::Group,
+                None,
+                "creator-id".to_string(),
+                vec!["member1".to_string()],
+            )
+            .await
+            .expect("Failed to create entity");
+
+        // Set permission override
+        service
+            .set_permission_override(
+                EntityType::Group,
+                &entity.id,
+                "member1",
+                "messages",
+                "edit",
+            )
+            .await
+            .expect("Failed to set permission override");
+
+        // Verify the override was saved
+        let overrides = service
+            .get_permission_overrides(EntityType::Group, &entity.id, "member1")
+            .await
+            .expect("Failed to get overrides");
+
+        assert_eq!(overrides.len(), 1);
+        assert!(overrides
+            .iter()
+            .any(|(k, v)| k == "messages" && v == "edit"));
+    }
+
+    #[tokio::test]
+    async fn test_set_multiple_permission_overrides() {
+        let service = create_test_service().await;
+
+        let entity = service
+            .create_entity(
+                "Test Group".to_string(),
+                EntityType::Group,
+                None,
+                "creator-id".to_string(),
+                vec!["member1".to_string()],
+            )
+            .await
+            .expect("Failed to create entity");
+
+        // Set multiple overrides
+        service
+            .set_permission_override(
+                EntityType::Group,
+                &entity.id,
+                "member1",
+                "messages",
+                "edit",
+            )
+            .await
+            .expect("Failed to set override 1");
+
+        service
+            .set_permission_override(
+                EntityType::Group,
+                &entity.id,
+                "member1",
+                "documents",
+                "read_only",
+            )
+            .await
+            .expect("Failed to set override 2");
+
+        service
+            .set_permission_override(
+                EntityType::Group,
+                &entity.id,
+                "member1",
+                "settings",
+                "not_visible",
+            )
+            .await
+            .expect("Failed to set override 3");
+
+        // Verify all overrides
+        let overrides = service
+            .get_permission_overrides(EntityType::Group, &entity.id, "member1")
+            .await
+            .expect("Failed to get overrides");
+
+        assert_eq!(overrides.len(), 3);
+        assert!(overrides
+            .iter()
+            .any(|(k, v)| k == "messages" && v == "edit"));
+        assert!(overrides
+            .iter()
+            .any(|(k, v)| k == "documents" && v == "read_only"));
+        assert!(overrides
+            .iter()
+            .any(|(k, v)| k == "settings" && v == "not_visible"));
+    }
+
+    #[tokio::test]
+    async fn test_set_permission_override_nonexistent_member() {
+        let service = create_test_service().await;
+
+        let entity = service
+            .create_entity(
+                "Test Group".to_string(),
+                EntityType::Group,
+                None,
+                "creator-id".to_string(),
+                vec![],
+            )
+            .await
+            .expect("Failed to create entity");
+
+        let result = service
+            .set_permission_override(
+                EntityType::Group,
+                &entity.id,
+                "nonexistent",
+                "messages",
+                "edit",
+            )
+            .await;
+
+        assert!(matches!(result, Err(EntityServiceError::MemberNotFound(_))));
+    }
+
+    #[tokio::test]
+    async fn test_remove_permission_override() {
+        let service = create_test_service().await;
+
+        let entity = service
+            .create_entity(
+                "Test Group".to_string(),
+                EntityType::Group,
+                None,
+                "creator-id".to_string(),
+                vec!["member1".to_string()],
+            )
+            .await
+            .expect("Failed to create entity");
+
+        // Set override
+        service
+            .set_permission_override(
+                EntityType::Group,
+                &entity.id,
+                "member1",
+                "messages",
+                "edit",
+            )
+            .await
+            .expect("Failed to set override");
+
+        // Verify it exists
+        let overrides = service
+            .get_permission_overrides(EntityType::Group, &entity.id, "member1")
+            .await
+            .expect("Failed to get overrides");
+        assert_eq!(overrides.len(), 1);
+
+        // Remove override
+        service
+            .remove_permission_override(EntityType::Group, &entity.id, "member1", "messages")
+            .await
+            .expect("Failed to remove override");
+
+        // Verify it's gone
+        let overrides = service
+            .get_permission_overrides(EntityType::Group, &entity.id, "member1")
+            .await
+            .expect("Failed to get overrides");
+        assert!(overrides.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_remove_permission_override_nonexistent_member() {
+        let service = create_test_service().await;
+
+        let entity = service
+            .create_entity(
+                "Test Group".to_string(),
+                EntityType::Group,
+                None,
+                "creator-id".to_string(),
+                vec![],
+            )
+            .await
+            .expect("Failed to create entity");
+
+        let result = service
+            .remove_permission_override(EntityType::Group, &entity.id, "nonexistent", "messages")
+            .await;
+
+        assert!(matches!(result, Err(EntityServiceError::MemberNotFound(_))));
+    }
+
+    #[tokio::test]
+    async fn test_get_permission_overrides_empty() {
+        let service = create_test_service().await;
+
+        let entity = service
+            .create_entity(
+                "Test Group".to_string(),
+                EntityType::Group,
+                None,
+                "creator-id".to_string(),
+                vec!["member1".to_string()],
+            )
+            .await
+            .expect("Failed to create entity");
+
+        // Get overrides (should be empty)
+        let overrides = service
+            .get_permission_overrides(EntityType::Group, &entity.id, "member1")
+            .await
+            .expect("Failed to get overrides");
+
+        assert!(overrides.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_get_permission_overrides_nonexistent_member() {
+        let service = create_test_service().await;
+
+        let entity = service
+            .create_entity(
+                "Test Group".to_string(),
+                EntityType::Group,
+                None,
+                "creator-id".to_string(),
+                vec![],
+            )
+            .await
+            .expect("Failed to create entity");
+
+        let result = service
+            .get_permission_overrides(EntityType::Group, &entity.id, "nonexistent")
+            .await;
+
+        assert!(matches!(result, Err(EntityServiceError::MemberNotFound(_))));
+    }
+
+    #[tokio::test]
+    async fn test_set_member_role() {
+        let service = create_test_service().await;
+
+        let entity = service
+            .create_entity(
+                "Test Group".to_string(),
+                EntityType::Group,
+                None,
+                "creator-id".to_string(),
+                vec!["member1".to_string()],
+            )
+            .await
+            .expect("Failed to create entity");
+
+        // Change role
+        service
+            .set_member_role(EntityType::Group, &entity.id, "member1", "admin")
+            .await
+            .expect("Failed to set role");
+
+        // Verify the role was changed
+        let role = service
+            .get_member_role(EntityType::Group, &entity.id, "member1")
+            .await
+            .expect("Failed to get role");
+
+        assert_eq!(role, "admin");
+    }
+
+    #[tokio::test]
+    async fn test_set_member_role_nonexistent_member() {
+        let service = create_test_service().await;
+
+        let entity = service
+            .create_entity(
+                "Test Group".to_string(),
+                EntityType::Group,
+                None,
+                "creator-id".to_string(),
+                vec![],
+            )
+            .await
+            .expect("Failed to create entity");
+
+        let result = service
+            .set_member_role(EntityType::Group, &entity.id, "nonexistent", "admin")
+            .await;
+
+        assert!(matches!(result, Err(EntityServiceError::MemberNotFound(_))));
+    }
+
+    #[tokio::test]
+    async fn test_get_member_role_default() {
+        let service = create_test_service().await;
+
+        let entity = service
+            .create_entity(
+                "Test Group".to_string(),
+                EntityType::Group,
+                None,
+                "creator-id".to_string(),
+                vec!["member1".to_string()],
+            )
+            .await
+            .expect("Failed to create entity");
+
+        // Get role (should default to "member")
+        let role = service
+            .get_member_role(EntityType::Group, &entity.id, "member1")
+            .await
+            .expect("Failed to get role");
+
+        assert_eq!(role, "member");
+    }
+
+    #[tokio::test]
+    async fn test_get_member_role_nonexistent_member() {
+        let service = create_test_service().await;
+
+        let entity = service
+            .create_entity(
+                "Test Group".to_string(),
+                EntityType::Group,
+                None,
+                "creator-id".to_string(),
+                vec![],
+            )
+            .await
+            .expect("Failed to create entity");
+
+        let result = service
+            .get_member_role(EntityType::Group, &entity.id, "nonexistent")
+            .await;
+
+        assert!(matches!(result, Err(EntityServiceError::MemberNotFound(_))));
+    }
+
+    #[tokio::test]
+    async fn test_permission_override_update() {
+        let service = create_test_service().await;
+
+        let entity = service
+            .create_entity(
+                "Test Group".to_string(),
+                EntityType::Group,
+                None,
+                "creator-id".to_string(),
+                vec!["member1".to_string()],
+            )
+            .await
+            .expect("Failed to create entity");
+
+        // Set initial override
+        service
+            .set_permission_override(
+                EntityType::Group,
+                &entity.id,
+                "member1",
+                "messages",
+                "read_only",
+            )
+            .await
+            .expect("Failed to set override");
+
+        // Update override
+        service
+            .set_permission_override(
+                EntityType::Group,
+                &entity.id,
+                "member1",
+                "messages",
+                "edit",
+            )
+            .await
+            .expect("Failed to update override");
+
+        // Verify only one override exists with updated value
+        let overrides = service
+            .get_permission_overrides(EntityType::Group, &entity.id, "member1")
+            .await
+            .expect("Failed to get overrides");
+
+        assert_eq!(overrides.len(), 1);
+        assert!(overrides
+            .iter()
+            .any(|(k, v)| k == "messages" && v == "edit"));
+    }
+
+    #[tokio::test]
+    async fn test_permission_persistence_across_operations() {
+        let service = create_test_service().await;
+
+        let entity = service
+            .create_entity(
+                "Test Group".to_string(),
+                EntityType::Group,
+                None,
+                "creator-id".to_string(),
+                vec!["member1".to_string()],
+            )
+            .await
+            .expect("Failed to create entity");
+
+        // Set permission override
+        service
+            .set_permission_override(
+                EntityType::Group,
+                &entity.id,
+                "member1",
+                "messages",
+                "edit",
+            )
+            .await
+            .expect("Failed to set override");
+
+        // Change role (should not clear overrides)
+        service
+            .set_member_role(EntityType::Group, &entity.id, "member1", "viewer")
+            .await
+            .expect("Failed to set role");
+
+        // Verify override still exists
+        let overrides = service
+            .get_permission_overrides(EntityType::Group, &entity.id, "member1")
+            .await
+            .expect("Failed to get overrides");
+
+        assert_eq!(overrides.len(), 1);
+        assert!(overrides
+            .iter()
+            .any(|(k, v)| k == "messages" && v == "edit"));
+
+        // Verify role was changed
+        let role = service
+            .get_member_role(EntityType::Group, &entity.id, "member1")
+            .await
+            .expect("Failed to get role");
+
+        assert_eq!(role, "viewer");
+    }
+
+    #[tokio::test]
+    async fn test_different_entity_types() {
+        let service = create_test_service().await;
+
+        // Create Project entity
+        let project = service
+            .create_entity(
+                "Test Project".to_string(),
+                EntityType::Project,
+                None,
+                "creator-id".to_string(),
+                vec!["member1".to_string()],
+            )
+            .await
+            .expect("Failed to create project");
+
+        // Create Channel entity
+        let channel = service
+            .create_entity(
+                "Test Channel".to_string(),
+                EntityType::Channel,
+                None,
+                "creator-id".to_string(),
+                vec!["member1".to_string()],
+            )
+            .await
+            .expect("Failed to create channel");
+
+        // Set different overrides for each
+        service
+            .set_permission_override(
+                EntityType::Project,
+                &project.id,
+                "member1",
+                "kanban_boards",
+                "edit",
+            )
+            .await
+            .expect("Failed to set project override");
+
+        service
+            .set_permission_override(
+                EntityType::Channel,
+                &channel.id,
+                "member1",
+                "messages",
+                "read_only",
+            )
+            .await
+            .expect("Failed to set channel override");
+
+        // Verify each entity has its own overrides
+        let project_overrides = service
+            .get_permission_overrides(EntityType::Project, &project.id, "member1")
+            .await
+            .expect("Failed to get project overrides");
+
+        let channel_overrides = service
+            .get_permission_overrides(EntityType::Channel, &channel.id, "member1")
+            .await
+            .expect("Failed to get channel overrides");
+
+        assert_eq!(project_overrides.len(), 1);
+        assert!(project_overrides
+            .iter()
+            .any(|(k, v)| k == "kanban_boards" && v == "edit"));
+
+        assert_eq!(channel_overrides.len(), 1);
+        assert!(channel_overrides
+            .iter()
+            .any(|(k, v)| k == "messages" && v == "read_only"));
     }
 }

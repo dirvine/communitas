@@ -617,6 +617,11 @@ public protocol CommunitasClientProtocol : AnyObject {
     func authVaultExists(fourWords: String) throws  -> Bool
     
     /**
+     * Helper: Check permission for kanban operations on a project
+     */
+    func checkKanbanPermission(projectId: String, required: SwiftAccessLevel) throws 
+    
+    /**
      * Create a local-only contact (not linked to network identity)
      */
     func contactCreateLocal(displayName: String) throws  -> SwiftContactInfo
@@ -1086,6 +1091,62 @@ public protocol CommunitasClientProtocol : AnyObject {
     func messageSendDirect(recipientFourWords: String, text: String) throws  -> String
     
     /**
+     * Check if current user can perform an action requiring a specific access level
+     *
+     * Returns true if the user's effective permission is >= the required level.
+     */
+    func permissionCanAccess(entityId: String, resourceType: SwiftResourceType, requiredLevel: SwiftAccessLevel) throws  -> Bool
+    
+    /**
+     * Check if current user can edit a resource (requires Edit level)
+     */
+    func permissionCanEdit(entityId: String, resourceType: SwiftResourceType) throws  -> Bool
+    
+    /**
+     * Check if current user can view a resource (requires ReadOnly or Edit)
+     */
+    func permissionCanView(entityId: String, resourceType: SwiftResourceType) throws  -> Bool
+    
+    /**
+     * Get all permissions (defaults + overrides) for a member as a list
+     */
+    func permissionGetAllForMember(entityId: String, memberFourWords: String) throws  -> [SwiftMemberPermission]
+    
+    /**
+     * Get effective permission level for current user on a resource in an entity
+     *
+     * Combines role-based defaults with any member-specific overrides.
+     */
+    func permissionGetEffective(entityId: String, resourceType: SwiftResourceType) throws  -> SwiftAccessLevel
+    
+    /**
+     * Get all permission overrides for a specific member
+     */
+    func permissionGetMemberOverrides(entityId: String, memberFourWords: String) throws  -> [SwiftMemberPermission]
+    
+    /**
+     * Get the role of a member in an entity
+     */
+    func permissionGetMemberRole(entityId: String, memberFourWords: String) throws  -> String
+    
+    /**
+     * Remove a permission override for a member, reverting to role default
+     */
+    func permissionRemoveMemberOverride(entityId: String, memberFourWords: String, resourceType: SwiftResourceType) throws 
+    
+    /**
+     * Set permission override for a member (requires admin/owner role)
+     *
+     * This overrides the member's role-based default for the specific resource.
+     */
+    func permissionSetMemberOverride(entityId: String, memberFourWords: String, resourceType: SwiftResourceType, level: SwiftAccessLevel) throws 
+    
+    /**
+     * Set the role of a member in an entity (requires admin/owner)
+     */
+    func permissionSetMemberRole(entityId: String, memberFourWords: String, role: String) throws 
+    
+    /**
      * Get online peers in an entity
      */
     func presenceGetOnlineInEntity(entityId: String) throws  -> [SwiftPresenceInfo]
@@ -1406,6 +1467,17 @@ open func authVaultExists(fourWords: String)throws  -> Bool {
         FfiConverterString.lower(fourWords),$0
     )
 })
+}
+    
+    /**
+     * Helper: Check permission for kanban operations on a project
+     */
+open func checkKanbanPermission(projectId: String, required: SwiftAccessLevel)throws  {try rustCallWithError(FfiConverterTypeClientError.lift) {
+    uniffi_communitas_bindings_fn_method_communitasclient_check_kanban_permission(self.uniffiClonePointer(),
+        FfiConverterString.lower(projectId),
+        FfiConverterTypeSwiftAccessLevel.lower(required),$0
+    )
+}
 }
     
     /**
@@ -2367,6 +2439,134 @@ open func messageSendDirect(recipientFourWords: String, text: String)throws  -> 
         FfiConverterString.lower(text),$0
     )
 })
+}
+    
+    /**
+     * Check if current user can perform an action requiring a specific access level
+     *
+     * Returns true if the user's effective permission is >= the required level.
+     */
+open func permissionCanAccess(entityId: String, resourceType: SwiftResourceType, requiredLevel: SwiftAccessLevel)throws  -> Bool {
+    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeClientError.lift) {
+    uniffi_communitas_bindings_fn_method_communitasclient_permission_can_access(self.uniffiClonePointer(),
+        FfiConverterString.lower(entityId),
+        FfiConverterTypeSwiftResourceType.lower(resourceType),
+        FfiConverterTypeSwiftAccessLevel.lower(requiredLevel),$0
+    )
+})
+}
+    
+    /**
+     * Check if current user can edit a resource (requires Edit level)
+     */
+open func permissionCanEdit(entityId: String, resourceType: SwiftResourceType)throws  -> Bool {
+    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeClientError.lift) {
+    uniffi_communitas_bindings_fn_method_communitasclient_permission_can_edit(self.uniffiClonePointer(),
+        FfiConverterString.lower(entityId),
+        FfiConverterTypeSwiftResourceType.lower(resourceType),$0
+    )
+})
+}
+    
+    /**
+     * Check if current user can view a resource (requires ReadOnly or Edit)
+     */
+open func permissionCanView(entityId: String, resourceType: SwiftResourceType)throws  -> Bool {
+    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeClientError.lift) {
+    uniffi_communitas_bindings_fn_method_communitasclient_permission_can_view(self.uniffiClonePointer(),
+        FfiConverterString.lower(entityId),
+        FfiConverterTypeSwiftResourceType.lower(resourceType),$0
+    )
+})
+}
+    
+    /**
+     * Get all permissions (defaults + overrides) for a member as a list
+     */
+open func permissionGetAllForMember(entityId: String, memberFourWords: String)throws  -> [SwiftMemberPermission] {
+    return try  FfiConverterSequenceTypeSwiftMemberPermission.lift(try rustCallWithError(FfiConverterTypeClientError.lift) {
+    uniffi_communitas_bindings_fn_method_communitasclient_permission_get_all_for_member(self.uniffiClonePointer(),
+        FfiConverterString.lower(entityId),
+        FfiConverterString.lower(memberFourWords),$0
+    )
+})
+}
+    
+    /**
+     * Get effective permission level for current user on a resource in an entity
+     *
+     * Combines role-based defaults with any member-specific overrides.
+     */
+open func permissionGetEffective(entityId: String, resourceType: SwiftResourceType)throws  -> SwiftAccessLevel {
+    return try  FfiConverterTypeSwiftAccessLevel.lift(try rustCallWithError(FfiConverterTypeClientError.lift) {
+    uniffi_communitas_bindings_fn_method_communitasclient_permission_get_effective(self.uniffiClonePointer(),
+        FfiConverterString.lower(entityId),
+        FfiConverterTypeSwiftResourceType.lower(resourceType),$0
+    )
+})
+}
+    
+    /**
+     * Get all permission overrides for a specific member
+     */
+open func permissionGetMemberOverrides(entityId: String, memberFourWords: String)throws  -> [SwiftMemberPermission] {
+    return try  FfiConverterSequenceTypeSwiftMemberPermission.lift(try rustCallWithError(FfiConverterTypeClientError.lift) {
+    uniffi_communitas_bindings_fn_method_communitasclient_permission_get_member_overrides(self.uniffiClonePointer(),
+        FfiConverterString.lower(entityId),
+        FfiConverterString.lower(memberFourWords),$0
+    )
+})
+}
+    
+    /**
+     * Get the role of a member in an entity
+     */
+open func permissionGetMemberRole(entityId: String, memberFourWords: String)throws  -> String {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeClientError.lift) {
+    uniffi_communitas_bindings_fn_method_communitasclient_permission_get_member_role(self.uniffiClonePointer(),
+        FfiConverterString.lower(entityId),
+        FfiConverterString.lower(memberFourWords),$0
+    )
+})
+}
+    
+    /**
+     * Remove a permission override for a member, reverting to role default
+     */
+open func permissionRemoveMemberOverride(entityId: String, memberFourWords: String, resourceType: SwiftResourceType)throws  {try rustCallWithError(FfiConverterTypeClientError.lift) {
+    uniffi_communitas_bindings_fn_method_communitasclient_permission_remove_member_override(self.uniffiClonePointer(),
+        FfiConverterString.lower(entityId),
+        FfiConverterString.lower(memberFourWords),
+        FfiConverterTypeSwiftResourceType.lower(resourceType),$0
+    )
+}
+}
+    
+    /**
+     * Set permission override for a member (requires admin/owner role)
+     *
+     * This overrides the member's role-based default for the specific resource.
+     */
+open func permissionSetMemberOverride(entityId: String, memberFourWords: String, resourceType: SwiftResourceType, level: SwiftAccessLevel)throws  {try rustCallWithError(FfiConverterTypeClientError.lift) {
+    uniffi_communitas_bindings_fn_method_communitasclient_permission_set_member_override(self.uniffiClonePointer(),
+        FfiConverterString.lower(entityId),
+        FfiConverterString.lower(memberFourWords),
+        FfiConverterTypeSwiftResourceType.lower(resourceType),
+        FfiConverterTypeSwiftAccessLevel.lower(level),$0
+    )
+}
+}
+    
+    /**
+     * Set the role of a member in an entity (requires admin/owner)
+     */
+open func permissionSetMemberRole(entityId: String, memberFourWords: String, role: String)throws  {try rustCallWithError(FfiConverterTypeClientError.lift) {
+    uniffi_communitas_bindings_fn_method_communitasclient_permission_set_member_role(self.uniffiClonePointer(),
+        FfiConverterString.lower(entityId),
+        FfiConverterString.lower(memberFourWords),
+        FfiConverterString.lower(role),$0
+    )
+}
 }
     
     /**
@@ -4286,6 +4486,75 @@ public func FfiConverterTypeSwiftMemberInfo_lower(_ value: SwiftMemberInfo) -> R
 }
 
 
+/**
+ * A single permission entry (resource type + access level)
+ */
+public struct SwiftMemberPermission {
+    public var resourceType: SwiftResourceType
+    public var accessLevel: SwiftAccessLevel
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(resourceType: SwiftResourceType, accessLevel: SwiftAccessLevel) {
+        self.resourceType = resourceType
+        self.accessLevel = accessLevel
+    }
+}
+
+
+
+extension SwiftMemberPermission: Equatable, Hashable {
+    public static func ==(lhs: SwiftMemberPermission, rhs: SwiftMemberPermission) -> Bool {
+        if lhs.resourceType != rhs.resourceType {
+            return false
+        }
+        if lhs.accessLevel != rhs.accessLevel {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(resourceType)
+        hasher.combine(accessLevel)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSwiftMemberPermission: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftMemberPermission {
+        return
+            try SwiftMemberPermission(
+                resourceType: FfiConverterTypeSwiftResourceType.read(from: &buf), 
+                accessLevel: FfiConverterTypeSwiftAccessLevel.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SwiftMemberPermission, into buf: inout [UInt8]) {
+        FfiConverterTypeSwiftResourceType.write(value.resourceType, into: &buf)
+        FfiConverterTypeSwiftAccessLevel.write(value.accessLevel, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSwiftMemberPermission_lift(_ buf: RustBuffer) throws -> SwiftMemberPermission {
+    return try FfiConverterTypeSwiftMemberPermission.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSwiftMemberPermission_lower(_ value: SwiftMemberPermission) -> RustBuffer {
+    return FfiConverterTypeSwiftMemberPermission.lower(value)
+}
+
+
 public struct SwiftMessage {
     public var id: String
     public var text: String
@@ -5435,6 +5704,92 @@ extension ClientError: Foundation.LocalizedError {
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
+ * Access level for a resource type
+ *
+ * Ordered from most restrictive to least restrictive:
+ * NotVisible < ReadOnly < Edit
+ */
+
+public enum SwiftAccessLevel {
+    
+    /**
+     * Resource is hidden from the member
+     */
+    case notVisible
+    /**
+     * Member can view but not modify
+     */
+    case readOnly
+    /**
+     * Member has full read/write access
+     */
+    case edit
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSwiftAccessLevel: FfiConverterRustBuffer {
+    typealias SwiftType = SwiftAccessLevel
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftAccessLevel {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .notVisible
+        
+        case 2: return .readOnly
+        
+        case 3: return .edit
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: SwiftAccessLevel, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .notVisible:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .readOnly:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .edit:
+            writeInt(&buf, Int32(3))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSwiftAccessLevel_lift(_ buf: RustBuffer) throws -> SwiftAccessLevel {
+    return try FfiConverterTypeSwiftAccessLevel.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSwiftAccessLevel_lower(_ value: SwiftAccessLevel) -> RustBuffer {
+    return FfiConverterTypeSwiftAccessLevel.lower(value)
+}
+
+
+
+extension SwiftAccessLevel: Equatable, Hashable {}
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
  * Events emitted during calls
  */
 
@@ -5918,6 +6273,119 @@ extension SwiftPresenceStatus: Equatable, Hashable {}
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Types of resources that can have permissions
+ */
+
+public enum SwiftResourceType {
+    
+    /**
+     * Chat messages, threads, reactions
+     */
+    case messages
+    /**
+     * Collaborative documents (CRDT)
+     */
+    case documents
+    /**
+     * Kanban boards (project-only)
+     */
+    case kanbanBoards
+    /**
+     * Files in entity storage
+     */
+    case files
+    /**
+     * Member list and roles
+     */
+    case members
+    /**
+     * Entity settings and configuration
+     */
+    case settings
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSwiftResourceType: FfiConverterRustBuffer {
+    typealias SwiftType = SwiftResourceType
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftResourceType {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .messages
+        
+        case 2: return .documents
+        
+        case 3: return .kanbanBoards
+        
+        case 4: return .files
+        
+        case 5: return .members
+        
+        case 6: return .settings
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: SwiftResourceType, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .messages:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .documents:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .kanbanBoards:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .files:
+            writeInt(&buf, Int32(4))
+        
+        
+        case .members:
+            writeInt(&buf, Int32(5))
+        
+        
+        case .settings:
+            writeInt(&buf, Int32(6))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSwiftResourceType_lift(_ buf: RustBuffer) throws -> SwiftResourceType {
+    return try FfiConverterTypeSwiftResourceType.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSwiftResourceType_lower(_ value: SwiftResourceType) -> RustBuffer {
+    return FfiConverterTypeSwiftResourceType.lower(value)
+}
+
+
+
+extension SwiftResourceType: Equatable, Hashable {}
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 
 public enum SwiftStorageMode {
     
@@ -6384,6 +6852,31 @@ fileprivate struct FfiConverterSequenceTypeSwiftMemberInfo: FfiConverterRustBuff
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeSwiftMemberPermission: FfiConverterRustBuffer {
+    typealias SwiftType = [SwiftMemberPermission]
+
+    public static func write(_ value: [SwiftMemberPermission], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeSwiftMemberPermission.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [SwiftMemberPermission] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [SwiftMemberPermission]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeSwiftMemberPermission.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeSwiftMessage: FfiConverterRustBuffer {
     typealias SwiftType = [SwiftMessage]
 
@@ -6576,6 +7069,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_communitas_bindings_checksum_method_communitasclient_auth_vault_exists() != 31257) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_communitas_bindings_checksum_method_communitasclient_check_kanban_permission() != 4177) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_communitas_bindings_checksum_method_communitasclient_contact_create_local() != 43666) {
@@ -6810,6 +7306,36 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_communitas_bindings_checksum_method_communitasclient_message_send_direct() != 2457) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_communitas_bindings_checksum_method_communitasclient_permission_can_access() != 1567) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_communitas_bindings_checksum_method_communitasclient_permission_can_edit() != 21935) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_communitas_bindings_checksum_method_communitasclient_permission_can_view() != 54870) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_communitas_bindings_checksum_method_communitasclient_permission_get_all_for_member() != 59953) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_communitas_bindings_checksum_method_communitasclient_permission_get_effective() != 57972) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_communitas_bindings_checksum_method_communitasclient_permission_get_member_overrides() != 63311) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_communitas_bindings_checksum_method_communitasclient_permission_get_member_role() != 11497) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_communitas_bindings_checksum_method_communitasclient_permission_remove_member_override() != 57893) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_communitas_bindings_checksum_method_communitasclient_permission_set_member_override() != 56430) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_communitas_bindings_checksum_method_communitasclient_permission_set_member_role() != 13169) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_communitas_bindings_checksum_method_communitasclient_presence_get_online_in_entity() != 23538) {

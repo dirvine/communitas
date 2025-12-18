@@ -58,6 +58,45 @@ enum SwiftKanbanCardState {
 };
 
 // ============================================================================
+// Permission Types (Phase 3: Granular Per-Resource Permissions)
+// ============================================================================
+
+/// Access level for a resource type
+///
+/// Ordered from most restrictive to least restrictive:
+/// NotVisible < ReadOnly < Edit
+enum SwiftAccessLevel {
+    /// Resource is hidden from the member
+    "NotVisible",
+    /// Member can view but not modify
+    "ReadOnly",
+    /// Member has full read/write access
+    "Edit",
+};
+
+/// Types of resources that can have permissions
+enum SwiftResourceType {
+    /// Chat messages, threads, reactions
+    "Messages",
+    /// Collaborative documents (CRDT)
+    "Documents",
+    /// Kanban boards (project-only)
+    "KanbanBoards",
+    /// Files in entity storage
+    "Files",
+    /// Member list and roles
+    "Members",
+    /// Entity settings and configuration
+    "Settings",
+};
+
+/// A single permission entry (resource type + access level)
+dictionary SwiftMemberPermission {
+    SwiftResourceType resource_type;
+    SwiftAccessLevel access_level;
+};
+
+// ============================================================================
 // Record Types (Data Structures)
 // ============================================================================
 
@@ -489,4 +528,54 @@ interface CommunitasClient {
     /// Apply a CRDT sync update to a board
     [Throws=ClientError]
     void kanban_apply_sync_update(string board_id, sequence<u8> update);
+
+    // ========================================================================
+    // Permission Sub-Client Methods (Phase 3: Granular Per-Resource Permissions)
+    // ========================================================================
+
+    /// Get effective permission level for current user on a resource in an entity
+    ///
+    /// Combines role-based defaults with any member-specific overrides.
+    [Throws=ClientError]
+    SwiftAccessLevel permission_get_effective(string entity_id, SwiftResourceType resource_type);
+
+    /// Check if current user can perform an action requiring a specific access level
+    ///
+    /// Returns true if the user's effective permission is >= the required level.
+    [Throws=ClientError]
+    boolean permission_can_access(string entity_id, SwiftResourceType resource_type, SwiftAccessLevel required_level);
+
+    /// Check if current user can view a resource (requires ReadOnly or Edit)
+    [Throws=ClientError]
+    boolean permission_can_view(string entity_id, SwiftResourceType resource_type);
+
+    /// Check if current user can edit a resource (requires Edit level)
+    [Throws=ClientError]
+    boolean permission_can_edit(string entity_id, SwiftResourceType resource_type);
+
+    /// Set permission override for a member (requires admin/owner role)
+    ///
+    /// This overrides the member's role-based default for the specific resource.
+    [Throws=ClientError]
+    void permission_set_member_override(string entity_id, string member_four_words, SwiftResourceType resource_type, SwiftAccessLevel level);
+
+    /// Remove a permission override for a member, reverting to role default
+    [Throws=ClientError]
+    void permission_remove_member_override(string entity_id, string member_four_words, SwiftResourceType resource_type);
+
+    /// Get all permission overrides for a specific member
+    [Throws=ClientError]
+    sequence<SwiftMemberPermission> permission_get_member_overrides(string entity_id, string member_four_words);
+
+    /// Get the role of a member in an entity
+    [Throws=ClientError]
+    string permission_get_member_role(string entity_id, string member_four_words);
+
+    /// Set the role of a member in an entity (requires admin/owner)
+    [Throws=ClientError]
+    void permission_set_member_role(string entity_id, string member_four_words, string role);
+
+    /// Get all permissions (defaults + overrides) for a member as a list
+    [Throws=ClientError]
+    sequence<SwiftMemberPermission> permission_get_all_for_member(string entity_id, string member_four_words);
 };

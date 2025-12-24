@@ -137,6 +137,26 @@ This architecture documentation is organized into the following sections:
   - Encryption policies
   - Threat model and mitigations
 
+### Architecture Decision Records (ADRs)
+
+For detailed rationale behind architectural decisions, see our ADRs:
+
+| ADR | Title | Description |
+|-----|-------|-------------|
+| [ADR-001](../adr/ADR-001-four-word-identity-system.md) | Four-Word Identity System | Human-readable decentralized addressing |
+| [ADR-002](../adr/ADR-002-local-first-architecture.md) | Local-First Architecture | Offline-capable with sync |
+| [ADR-003](../adr/ADR-003-yrs-crdt-synchronization.md) | Yrs CRDT Synchronization | Conflict-free collaborative data |
+| [ADR-004](../adr/ADR-004-entity-hierarchy-model.md) | Entity Hierarchy Model | Unified entity taxonomy |
+| [ADR-005](../adr/ADR-005-virtual-disk-architecture.md) | Virtual Disk Architecture | Per-entity file storage |
+| [ADR-006](../adr/ADR-006-post-quantum-cryptography.md) | Post-Quantum Cryptography | ML-DSA/ML-KEM pure PQC |
+| [ADR-007](../adr/ADR-007-gossip-overlay-networking.md) | Gossip Overlay Networking | P2P via HyParView/Plumtree/SWIM |
+| [ADR-008](../adr/ADR-008-event-driven-tombstone-pruning.md) | Event-Driven Tombstone Pruning | CRDT cleanup on sync |
+| [ADR-009](../adr/ADR-009-modular-crate-architecture.md) | Modular Crate Architecture | Cargo workspace structure |
+| [ADR-010](../adr/ADR-010-cross-organization-invites.md) | Cross-Organization Invites | Four-word invite system |
+| [ADR-011](../adr/ADR-011-encrypted-vault-storage.md) | Encrypted Vault Storage | Multi-layer local encryption |
+
+See the [ADR Index](../adr/README.md) for more details and templates for new ADRs.
+
 ## Key Concepts
 
 ### Four-Word Addresses
@@ -148,7 +168,7 @@ Every entity in Communitas has a four-word address (e.g., "ocean-forest-moon-sta
 - **Cryptographically Bound**: Derived from ML-DSA public keys
 - **Decentralized**: No central registry or DNS required
 
-See [Four-Word Addresses Guide](../guides/four-word-addresses.md) for details.
+See [ADR-001](../adr/ADR-001-four-word-identity-system.md) for complete design details.
 
 ### Entities
 
@@ -255,7 +275,7 @@ npm run build
 npm run tauri dev
 ```
 
-See [Getting Started Guide](../guides/getting-started.md) for complete setup instructions.
+See the main [README.md](../../README.md) for complete setup instructions.
 
 ## Deployment Options
 
@@ -281,7 +301,7 @@ Docker and Kubernetes for cloud deployment:
 - Horizontal Pod Autoscaling (HPA)
 - Prometheus metrics and health checks
 
-See [Operations Guide - Kubernetes Deployment](../operations/README.md#kubernetes-deployment)
+See the [communitas-headless](../../communitas-headless/README.md) crate for deployment details.
 
 ### Bootstrap Nodes
 Network infrastructure for peer discovery:
@@ -343,7 +363,7 @@ See [Security Architecture](security.md) for complete analysis.
 - Chrome DevTools MCP integration
 - End-to-end scenarios
 
-See [Testing Guide](../guides/testing.md) for complete strategy.
+See the main [README.md](../../README.md) for testing instructions.
 
 ## Future Roadmap
 
@@ -367,16 +387,14 @@ See [Testing Guide](../guides/testing.md) for complete strategy.
 
 ## Contributing
 
-See [Contributing Guide](../development/contributing.md) for how to contribute to Communitas.
+See [CONTRIBUTING.md](../../CONTRIBUTING.md) for how to contribute to Communitas.
 
 ## Resources
 
 ### Documentation
-- [Getting Started](../guides/getting-started.md) - Setup and first steps
-- [Authentication](../guides/authentication.md) - Login and security
-- [Four-Word Addresses](../guides/four-word-addresses.md) - Identity system
-- [Testing Guide](../guides/testing.md) - Test strategy
 - [API Reference](../api/) - Complete API documentation
+- [Architecture Decision Records](../adr/README.md) - Design decisions and rationale
+- [Main README](../../README.md) - Getting started and development workflow
 
 ### External Resources
 - [saorsa-core on crates.io](https://crates.io/crates/saorsa-core)

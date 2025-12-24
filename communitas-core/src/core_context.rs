@@ -108,6 +108,10 @@ pub struct CoreContext {
     /// Kanban service for project management boards
     /// CRDT-based, offline-first collaborative Kanban system
     pub kanban_service: Arc<KanbanService>,
+
+    /// Invite service for cross-organization collaboration
+    /// Handles four-word invite creation, acceptance, rejection, and revocation
+    pub invite_service: Arc<crate::invite_service::InviteService>,
 }
 
 impl std::fmt::Debug for CoreContext {
@@ -131,6 +135,7 @@ impl std::fmt::Debug for CoreContext {
             .field("disk_service", &"<active>")
             .field("webrtc", &self.webrtc.as_ref().map(|_| "<active>"))
             .field("kanban_service", &"<active>")
+            .field("invite_service", &"<active>")
             .finish()
     }
 }
@@ -312,8 +317,14 @@ impl CoreContext {
         // Initialize Kanban service for project management boards
         let kanban_service = Arc::new(KanbanService::new(four_words.clone()));
 
+        // Initialize Invite service for cross-organization collaboration
+        let invite_service = Arc::new(crate::invite_service::InviteService::new(
+            crdt_manager.clone(),
+            entity_service.clone(),
+        ));
+
         info!(
-            "CoreContext initialized for user '{}' ({}) with EntityService, MessageService, DocReplicator, DiskService, and KanbanService",
+            "CoreContext initialized for user '{}' ({}) with EntityService, MessageService, DocReplicator, DiskService, KanbanService, and InviteService",
             display_name, four_words
         );
 
@@ -337,6 +348,7 @@ impl CoreContext {
             disk_service,
             webrtc: None, // Initialized when networking starts
             kanban_service,
+            invite_service,
         })
     }
 

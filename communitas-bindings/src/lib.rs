@@ -69,6 +69,8 @@ pub enum ClientError {
     NotFound(String),
     #[error("WebRTC error: {0}")]
     WebRtcError(String),
+    #[error("Invite error: {0}")]
+    InviteError(String),
 }
 
 impl From<String> for ClientError {
@@ -275,6 +277,99 @@ impl From<PasskeyInfo> for SwiftPasskeyInfo {
             device_name: p.device_name,
             created_at: p.registered_at,
             last_used: p.last_used,
+        }
+    }
+}
+
+// ============================================================================
+// Invite Types (Cross-Organization Collaboration)
+// ============================================================================
+
+/// Invite status for cross-organization collaboration
+#[derive(Debug, Clone, uniffi::Enum)]
+pub enum SwiftInviteStatus {
+    /// Invite is pending a response
+    Pending,
+    /// Invite was accepted by the recipient
+    Accepted,
+    /// Invite was rejected by the recipient
+    Rejected,
+    /// Invite expired before any action was taken
+    Expired,
+    /// Invite was revoked by the creator or an admin
+    Revoked,
+}
+
+impl From<communitas_core::InviteStatus> for SwiftInviteStatus {
+    fn from(s: communitas_core::InviteStatus) -> Self {
+        use communitas_core::InviteStatus;
+        match s {
+            InviteStatus::Pending => SwiftInviteStatus::Pending,
+            InviteStatus::Accepted => SwiftInviteStatus::Accepted,
+            InviteStatus::Rejected => SwiftInviteStatus::Rejected,
+            InviteStatus::Expired => SwiftInviteStatus::Expired,
+            InviteStatus::Revoked => SwiftInviteStatus::Revoked,
+        }
+    }
+}
+
+impl From<SwiftInviteStatus> for communitas_core::InviteStatus {
+    fn from(s: SwiftInviteStatus) -> Self {
+        use communitas_core::InviteStatus;
+        match s {
+            SwiftInviteStatus::Pending => InviteStatus::Pending,
+            SwiftInviteStatus::Accepted => InviteStatus::Accepted,
+            SwiftInviteStatus::Rejected => InviteStatus::Rejected,
+            SwiftInviteStatus::Expired => InviteStatus::Expired,
+            SwiftInviteStatus::Revoked => InviteStatus::Revoked,
+        }
+    }
+}
+
+/// Invite for cross-organization collaboration
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct SwiftInvite {
+    /// Unique invite ID
+    pub id: String,
+    /// Type of entity this invite grants access to
+    pub entity_type: SwiftEntityType,
+    /// ID of the entity being joined
+    pub entity_id: String,
+    /// Four-word ID of the invite creator
+    pub creator_id: String,
+    /// Four-word ID of the intended recipient
+    pub recipient_id: String,
+    /// Role being offered (e.g., "member", "admin")
+    pub role: String,
+    /// Current status of the invite
+    pub status: SwiftInviteStatus,
+    /// When the invite was created (milliseconds since epoch)
+    pub created_at: i64,
+    /// When the invite expires (None = never expires)
+    pub expires_at: Option<i64>,
+    /// Optional message from the creator
+    pub message: Option<String>,
+    /// Four-word ID of who resolved the invite (if resolved)
+    pub resolved_by: Option<String>,
+    /// When the invite was resolved (if resolved)
+    pub resolved_at: Option<i64>,
+}
+
+impl From<communitas_core::Invite> for SwiftInvite {
+    fn from(i: communitas_core::Invite) -> Self {
+        Self {
+            id: i.id,
+            entity_type: i.entity_type.into(),
+            entity_id: i.entity_id,
+            creator_id: i.creator_id,
+            recipient_id: i.recipient_id,
+            role: i.role,
+            status: i.status.into(),
+            created_at: i.created_at,
+            expires_at: i.expires_at,
+            message: i.message,
+            resolved_by: i.resolved_by,
+            resolved_at: i.resolved_at,
         }
     }
 }
@@ -2940,6 +3035,211 @@ impl CommunitasClient {
                 .map_err(|e| ClientError::StorageError(e.to_string()))?;
 
             Ok(())
+        })
+    }
+
+    // ========================================================================
+    // Invite Sub-Client Methods (Cross-Organization Collaboration)
+    // ========================================================================
+
+    /// Create an invite for cross-organization collaboration
+    ///
+    /// Creates a new invite that allows a recipient to join an entity
+    /// (organisation, group, channel, or project) with a specified role.
+    ///
+    /// # Arguments
+    /// * `entity_type` - Type of entity to join
+    /// * `entity_id` - ID of the entity to join
+    /// * `recipient_id` - Four-word ID of the intended recipient
+    /// * `role` - Role to grant (e.g., "member", "admin", "owner")
+    /// * `message` - Optional message to include with the invite
+    /// * `expires_in_hours` - Optional hours until expiration (None = never expires)
+    ///
+    /// # Returns
+    /// The created invite
+    pub fn invite_create(
+        &self,
+        entity_type: SwiftEntityType,
+        entity_id: String,
+        recipient_id: String,
+        role: String,
+        message: Option<String>,
+        expires_in_hours: Option<u32>,
+    ) -> Result<SwiftInvite, ClientError> {
+        use communitas_core::InviteRequest;
+
+        block_on(async {
+            let ctx = self.inner.read().await;
+            let creator_id = ctx.four_words.clone();
+
+            // Build the invite request
+            // InviteRequest::new(recipient_id, entity_type, entity_id, role)
+            let mut request = InviteRequest::new(
+                &recipient_id,
+                entity_type.into(),
+                &entity_id,
+                &role,
+            );
+
+            if let Some(msg) = message {
+                request = request.with_message(msg);
+            }
+
+            if let Some(hours) = expires_in_hours {
+                request = request.with_expiration(hours);
+            }
+
+            let invite = ctx
+                .invite_service
+                .create_invite(&creator_id, request)
+                .await
+                .map_err(|e| ClientError::InviteError(e.to_string()))?;
+
+            Ok(invite.into())
+        })
+    }
+
+    /// Accept an invite to join an entity
+    ///
+    /// The current user accepts the invite and joins the entity.
+    /// Only the intended recipient can accept an invite.
+    ///
+    /// # Arguments
+    /// * `invite_id` - ID of the invite to accept
+    ///
+    /// # Returns
+    /// Ok if successfully accepted
+    pub fn invite_accept(&self, invite_id: String) -> Result<(), ClientError> {
+        block_on(async {
+            let ctx = self.inner.read().await;
+            let recipient_id = ctx.four_words.clone();
+
+            ctx.invite_service
+                .accept_invite(&recipient_id, &invite_id)
+                .await
+                .map_err(|e| ClientError::InviteError(e.to_string()))?;
+
+            Ok(())
+        })
+    }
+
+    /// Reject an invite
+    ///
+    /// The recipient rejects the invite to join an entity.
+    /// Only the intended recipient can reject an invite.
+    ///
+    /// # Arguments
+    /// * `invite_id` - ID of the invite to reject
+    ///
+    /// # Returns
+    /// Ok if successfully rejected
+    pub fn invite_reject(&self, invite_id: String) -> Result<(), ClientError> {
+        block_on(async {
+            let ctx = self.inner.read().await;
+            let recipient_id = ctx.four_words.clone();
+
+            ctx.invite_service
+                .reject_invite(&recipient_id, &invite_id)
+                .await
+                .map_err(|e| ClientError::InviteError(e.to_string()))?;
+
+            Ok(())
+        })
+    }
+
+    /// Revoke an invite
+    ///
+    /// The creator or an admin can revoke a pending invite.
+    ///
+    /// # Arguments
+    /// * `invite_id` - ID of the invite to revoke
+    ///
+    /// # Returns
+    /// Ok if successfully revoked
+    pub fn invite_revoke(&self, invite_id: String) -> Result<(), ClientError> {
+        block_on(async {
+            let ctx = self.inner.read().await;
+            let revoker_id = ctx.four_words.clone();
+
+            ctx.invite_service
+                .revoke_invite(&revoker_id, &invite_id)
+                .await
+                .map_err(|e| ClientError::InviteError(e.to_string()))?;
+
+            Ok(())
+        })
+    }
+
+    /// Get an invite by ID
+    ///
+    /// # Arguments
+    /// * `invite_id` - ID of the invite to retrieve
+    ///
+    /// # Returns
+    /// The invite if found
+    pub fn invite_get(&self, invite_id: String) -> Result<SwiftInvite, ClientError> {
+        block_on(async {
+            let ctx = self.inner.read().await;
+
+            let invite = ctx
+                .invite_service
+                .get_invite(&invite_id)
+                .await
+                .map_err(|e| ClientError::InviteError(e.to_string()))?;
+
+            Ok(invite.into())
+        })
+    }
+
+    /// List all pending invites for the current user
+    ///
+    /// Returns invites where the current user is the recipient
+    /// and the status is Pending.
+    ///
+    /// # Returns
+    /// List of pending invites for this user
+    pub fn invite_list_pending(&self) -> Result<Vec<SwiftInvite>, ClientError> {
+        block_on(async {
+            let ctx = self.inner.read().await;
+            let recipient_id = ctx.four_words.clone();
+
+            let invites = ctx
+                .invite_service
+                .list_pending_invites(&recipient_id)
+                .await
+                .map_err(|e| ClientError::InviteError(e.to_string()))?;
+
+            Ok(invites.into_iter().map(|i| i.into()).collect())
+        })
+    }
+
+    /// List all invites for an entity
+    ///
+    /// Returns all invites (pending, accepted, rejected, etc.) for the specified entity.
+    /// Useful for admins to see invite history.
+    ///
+    /// # Arguments
+    /// * `entity_type` - Type of entity
+    /// * `entity_id` - ID of the entity
+    ///
+    /// # Returns
+    /// List of all invites for this entity
+    pub fn invite_list_for_entity(
+        &self,
+        entity_type: SwiftEntityType,
+        entity_id: String,
+    ) -> Result<Vec<SwiftInvite>, ClientError> {
+        block_on(async {
+            let ctx = self.inner.read().await;
+            let requester_id = ctx.four_words.clone();
+
+            let invites = ctx
+                .invite_service
+                .list_entity_invites(&requester_id, entity_type.into(), &entity_id)
+                .await
+                .map_err(|e| ClientError::InviteError(e.to_string()))?;
+
+            Ok(invites.into_iter().map(|i| i.into()).collect())
         })
     }
 

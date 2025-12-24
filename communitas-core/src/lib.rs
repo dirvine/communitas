@@ -46,6 +46,8 @@ pub mod linking_service;
 pub mod message_service;
 pub mod message_sync;
 pub mod permissions; // Granular per-resource permission system
+pub mod invite; // Cross-organization collaboration via four-word invites
+pub mod invite_service; // Invite service with CRDT persistence
 // pub mod messaging; // TODO: Refactor in Sprint 3 for gossip pubsub
 pub mod presence_service;
 pub mod resource_limits; // Resource management and limits (MESH_CAPABILITIES.md §8.3)
@@ -95,3 +97,7 @@ pub use disk_service::{DiskStats, DiskType, EntityDiskService, FileInfo};
 
 // Re-export permissions system types
 pub use permissions::{AccessLevel, MemberPermissions, ResourceType, role_defaults};
+
+// Re-export invite system types for cross-organization collaboration
+pub use invite::{Invite, InviteStatus};
+pub use invite_service::{InviteRequest, InviteService, InviteServiceError, InviteServiceResult};

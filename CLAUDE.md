@@ -211,3 +211,68 @@ For detailed API documentation, see:
 - Test network and MCP integration available for development
 
 This architecture supports rapid development while maintaining production-quality standards for a secure, decentralized collaboration platform.
+
+---
+
+## 🚨 CRITICAL: Saorsa Network Infrastructure & Port Isolation
+
+### Infrastructure Documentation
+Full infrastructure documentation is available at: `docs/infrastructure/INFRASTRUCTURE.md`
+
+This includes:
+- All 9 VPS nodes across 3 cloud providers (DigitalOcean, Hetzner, Vultr)
+- Bootstrap node endpoints and IP addresses
+- Firewall configurations and SSH access
+- Systemd service templates
+
+### ⚠️ PORT ISOLATION - MANDATORY
+
+**Communitas uses UDP port range 11000-11999 exclusively.**
+
+| Service | UDP Port Range | Default | Description |
+|---------|----------------|---------|-------------|
+| ant-quic | 9000-9999 | 9000 | QUIC transport layer |
+| saorsa-node | 10000-10999 | 10000 | Core P2P network nodes |
+| **communitas** | **11000-11999** | **11000** | Collaboration platform nodes (THIS PROJECT) |
+
+### 🛑 DO NOT DISTURB OTHER NETWORKS
+
+When testing or developing communitas:
+
+1. **ONLY use ports 11000-11999** for communitas services
+2. **NEVER** kill processes on ports 9000-9999 or 10000-10999
+3. **NEVER** restart services outside our port range
+4. **NEVER** modify firewall rules for other port ranges
+
+```bash
+# ✅ CORRECT - communitas operations (within 11000-11999)
+cargo run -p communitas-headless -- --listen 0.0.0.0:11000
+cargo run -p communitas-headless -- --listen 0.0.0.0:11001  # Second instance OK
+ssh root@saorsa-2.saorsalabs.com "systemctl restart communitas-bootstrap"
+
+# ❌ WRONG - Would disrupt other networks
+ssh root@saorsa-2.saorsalabs.com "pkill -f ':9'"    # NEVER - matches ant-quic ports
+ssh root@saorsa-2.saorsalabs.com "pkill -f ':10'"   # NEVER - matches saorsa-node ports
+ssh root@saorsa-2.saorsalabs.com "systemctl restart ant-quic-bootstrap"  # NOT OUR SERVICE
+```
+
+### Bootstrap Endpoints (communitas)
+```
+saorsa-2.saorsalabs.com:11000  (NYC - 142.93.199.50)
+saorsa-3.saorsalabs.com:11000  (SFO - 147.182.234.192)
+```
+
+### Before Any VPS Operations
+1. Verify you're targeting port 11000 only
+2. Double-check service names contain "communitas"
+3. Never run broad `pkill` commands that could affect other services
+
+### Deploy New Binary
+```bash
+# Build release binary
+cargo build -p communitas-headless --release
+
+# Deploy to bootstrap node
+scp target/release/communitas-headless root@saorsa-2.saorsalabs.com:/opt/communitas/
+ssh root@saorsa-2.saorsalabs.com "systemctl restart communitas-bootstrap"
+```

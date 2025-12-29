@@ -1,0 +1,37 @@
+[package]
+name = "communitas-mcp"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+description = "MCP (Model Context Protocol) server for Communitas - enables AI agents to control the platform"
+
+[dependencies]
+# Core dependency - the headless app
+communitas-core = { path = "../communitas-core" }
+
+# Async runtime
+tokio = { workspace = true, features = ["full", "io-std"] }
+async-trait.workspace = true
+futures.workspace = true
+
+# JSON-RPC / Serialization
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+
+# Error handling
+anyhow.workspace = true
+thiserror.workspace = true
+
+# Logging
+tracing.workspace = true
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+
+# Utils
+uuid = { workspace = true, features = ["v4", "serde"] }
+chrono = { workspace = true, features = ["serde"] }
+
+[[bin]]
+name = "communitas-mcp"
+path = "src/main.rs"

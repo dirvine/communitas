@@ -1,0 +1,67 @@
+[package]
+name = "communitas-iced"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Cross-platform desktop GUI for Communitas using Iced"
+
+[[bin]]
+name = "communitas"
+path = "src/main.rs"
+
+[dependencies]
+# Iced 0.14 with features for full desktop app
+iced = { version = "0.14", features = [
+    "advanced",
+    "canvas",
+    "image",
+    "tokio",
+] }
+
+# Directories for default vault paths
+dirs = "5"
+
+# Core integration - direct Rust calls
+communitas-core = { path = "../communitas-core" }
+communitas-kanban = { path = "../communitas-kanban" }
+
+# Async runtime
+tokio.workspace = true
+
+# Error handling
+anyhow.workspace = true
+thiserror.workspace = true
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+
+# Logging
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+# Platform keyring
+keyring = "3"
+
+# Utils
+chrono.workspace = true
+uuid.workspace = true
+
+# Cryptography (for four-word identity)
+four-word-networking.workspace = true
+
+# WebRTC for voice/video calls
+saorsa-webrtc-core.workspace = true
+async-trait.workspace = true
+futures.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
+
+[features]
+default = []
+debug = []
+demo = []  # Auto-login with sample data for testing

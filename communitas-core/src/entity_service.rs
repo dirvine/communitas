@@ -557,12 +557,15 @@ impl EntityService {
                     let joined_at =
                         CrdtManager::get_map_i64(&member_data, &txn, "joined_at").unwrap_or(0);
 
-                    members.push(MemberInfo {
-                        member_id: member_id_str,
-                        role,
-                        joined_at,
-                        deleted,
-                    });
+                    // Only include active (non-deleted) members
+                    if !deleted {
+                        members.push(MemberInfo {
+                            member_id: member_id_str,
+                            role,
+                            joined_at,
+                            deleted,
+                        });
+                    }
                 }
             }
         }

@@ -1488,6 +1488,9 @@ impl CommunitasClient {
     // ========================================================================
 
     /// Send a message to an entity
+    ///
+    /// This stores the message locally AND publishes it via gossip pubsub
+    /// to all subscribers of the entity's topic.
     pub fn message_send(
         &self,
         entity_id: String,
@@ -1509,13 +1512,47 @@ impl CommunitasClient {
                 attachments: None,
             };
 
-            let msg = ctx
+            // Store the message locally (returns full CRDTMessage)
+            let message = ctx
                 .message_service
-                .send_message(entity_id, entity.entity_type, content, reply_to_id)
+                .send_message(
+                    entity_id.clone(),
+                    entity.entity_type,
+                    content,
+                    reply_to_id,
+                )
                 .await
                 .map_err(|e| ClientError::MessageError(e.to_string()))?;
 
-            Ok(msg.metadata.id)
+            let message_id = message.metadata.id.clone();
+
+            // Publish message via gossip pubsub to entity's topic
+            if let Some(gossip) = &ctx.gossip {
+                // Serialize the message to JSON for transmission
+                let message_bytes = serde_json::to_vec(&message).map_err(|e| {
+                    ClientError::MessageError(format!("Serialization error: {}", e))
+                })?;
+
+                // Publish to entity's topic
+                if let Err(e) = gossip.publish_to_entity(&entity_id, message_bytes).await {
+                    // Log the error but don't fail the operation - message is stored locally
+                    tracing::warn!(
+                        "Failed to publish to entity {}: {} (message stored locally)",
+                        entity_id,
+                        e
+                    );
+                } else {
+                    tracing::info!(
+                        "Published message to entity {} via pubsub (msg_id: {})",
+                        entity_id,
+                        message_id
+                    );
+                }
+            } else {
+                tracing::debug!("Gossip not active, message stored locally only");
+            }
+
+            Ok(message_id)
         })
     }
 

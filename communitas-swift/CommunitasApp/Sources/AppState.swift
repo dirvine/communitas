@@ -2051,3 +2051,60 @@ public class AppState: ObservableObject {
         activeView = .home
     }
 }
+
+// MARK: - Permission Checking Extensions
+
+extension AppState {
+    /// User role for a given entity
+    public enum UserRole: String {
+        case owner = "Owner"
+        case admin = "Admin"
+        case member = "Member"
+        case guest = "Guest"
+    }
+
+    /// Get the user's role for a specific entity
+    public func getUserRole(for entityId: String) -> UserRole {
+        guard let entity = entities.first(where: { $0.id == entityId }) else {
+            return .guest
+        }
+
+        if entity.createdBy == fourWords {
+            return .owner
+        }
+
+        if entity.members.contains(fourWords) {
+            return .member
+        }
+
+        return .guest
+    }
+
+    /// Check if user can edit an entity
+    public func canEdit(_ entity: SwiftEntity) -> Bool {
+        let role = getUserRole(for: entity.id)
+        return role == .owner || role == .admin
+    }
+
+    /// Check if user can create projects in an organization
+    public func canCreateProjects(in orgId: String) -> Bool {
+        let role = getUserRole(for: orgId)
+        return role == .owner || role == .admin
+    }
+
+    /// Check if user can manage members in an organization
+    public func canManageMembers(in orgId: String) -> Bool {
+        let role = getUserRole(for: orgId)
+        return role == .owner || role == .admin
+    }
+
+    /// Check if user owns an entity
+    public func isOwner(of entity: SwiftEntity) -> Bool {
+        return entity.createdBy == fourWords
+    }
+
+    /// Check if user is a member of an entity
+    public func isMember(of entity: SwiftEntity) -> Bool {
+        return entity.members.contains(fourWords)
+    }
+}

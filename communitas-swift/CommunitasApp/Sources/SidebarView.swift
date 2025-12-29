@@ -2,19 +2,176 @@ import SwiftUI
 import CommunitasKit
 import AppKit
 
+// MARK: - Permission-Aware View Modifiers
+
+extension View {
+    /// Conditionally applies modifiers based on entity permissions
+    @ViewBuilder
+    func ifCanEdit(_ entity: SwiftEntity, state: AppState, @ViewBuilder transform: (Self) -> some View) -> some View {
+        if state.canEdit(entity) {
+            transform(self)
+        } else {
+            self
+                .disabled(true)
+                .opacity(0.6)
+        }
+    }
+
+    /// Shows read-only indicator for non-editable content
+    @ViewBuilder
+    func readOnlyIfCannotEdit(_ entity: SwiftEntity, state: AppState) -> some View {
+        if state.canEdit(entity) {
+            self
+        } else {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 4) {
+                    Image(systemName: "lock.fill")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                    Text("Read-only")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+                self
+                    .disabled(true)
+                    .opacity(0.8)
+            }
+        }
+    }
+
+    /// Hides view if user doesn't have required permission
+    @ViewBuilder
+    func visibleIfCanEdit(_ entity: SwiftEntity, state: AppState) -> some View {
+        if state.canEdit(entity) {
+            self
+        }
+    }
+
+    /// Shows different content based on ownership
+    @ViewBuilder
+    func ownerOnly(_ entity: SwiftEntity, state: AppState, @ViewBuilder ownerContent: () -> some View) -> some View {
+        if state.isOwner(of: entity) {
+            ownerContent()
+        } else {
+            self
+        }
+    }
+}
+
 // MARK: - Sidebar Section Model
 
 enum SidebarSection: String, CaseIterable, Identifiable {
-    case organisations = "Organisations"
+    case myOrganizations = "My Organizations"
+    case myCommunities = "My Communities"
     case personal = "Personal"
+    case directMessages = "Direct Messages"
 
     var id: String { rawValue }
 
     var icon: String {
         switch self {
-        case .organisations: return "building.2.fill"
-        case .personal: return "person.fill"
+        case .myOrganizations: return "building.2.fill"
+        case .myCommunities: return "building.2"
+        case .personal: return "person.3.fill"
+        case .directMessages: return "message.fill"
         }
+    }
+    
+    var priority: Int {
+        switch self {
+        case .myOrganizations: return 1
+        case .myCommunities: return 2
+        case .personal: return 3
+        case .directMessages: return 4
+        }
+    }
+}
+
+// MARK: - User Role System
+
+enum UserRole: String, CaseIterable {
+    case owner = "Owner"
+    case admin = "Admin"
+    case member = "Member"
+    case guest = "Guest"
+    
+    var icon: String {
+        switch self {
+        case .owner: return "crown.fill"
+        case .admin: return "shield.fill"
+        case .member: return "person.fill"
+        case .guest: return "eye"
+        }
+    }
+    
+    var color: Color {
+        switch self {
+        case .owner: return .orange
+        case .admin: return .blue
+        case .member: return .gray
+        case .guest: return .secondary
+        }
+    }
+    
+    var priority: Int {
+        switch self {
+        case .owner: return 1
+        case .admin: return 2
+        case .member: return 3
+        case .guest: return 4
+        }
+    }
+}
+
+// MARK: - Enhanced Entity Model
+
+struct EnhancedEntity: Identifiable {
+    let id: String
+    let entity: SwiftEntity
+    let userRole: UserRole
+    let memberCount: Int
+    let isActive: Bool
+    let unreadCount: Int
+
+    init(entity: SwiftEntity, userFourWords: String) {
+        self.id = entity.id
+        self.entity = entity
+        self.memberCount = entity.members.count
+        self.isActive = true // TODO: Implement from presence
+        self.unreadCount = 0 // TODO: Implement from messaging
+
+        // Determine user role based on createdBy field
+        if entity.createdBy == userFourWords {
+            self.userRole = .owner
+        } else if entity.members.contains(userFourWords) {
+            self.userRole = .member
+        } else {
+            self.userRole = .guest
+        }
+    }
+}
+
+// MARK: - Role Badge Component
+
+struct RoleBadge: View {
+    let role: UserRole
+    var compact: Bool = false
+
+    var body: some View {
+        HStack(spacing: compact ? 2 : 4) {
+            Image(systemName: role.icon)
+                .font(compact ? .caption2 : .caption)
+            if !compact {
+                Text(role.rawValue)
+                    .font(.caption2)
+                    .fontWeight(.medium)
+            }
+        }
+        .foregroundColor(.white)
+        .padding(.horizontal, compact ? 4 : 6)
+        .padding(.vertical, compact ? 1 : 2)
+        .background(role.color)
+        .clipShape(Capsule())
     }
 }
 
@@ -96,7 +253,7 @@ struct SidebarView: View {
     @Binding var selectedSection: SidebarSection?
 
     @State private var expandedOrgs: Set<String> = []
-    @State private var expandedSections: Set<String> = ["organisations", "personal"]
+    @State private var expandedSections: Set<String> = ["myOrganizations", "myCommunities", "personal", "directMessages"]
     @State private var createContext: CreateContext?
     @State private var showingAddContact = false
 
@@ -118,91 +275,137 @@ struct SidebarView: View {
         }
     }
 
+    // MARK: - Categorization Logic
+
+    /// Organizations I own (createdBy == my fourWords)
+    var myOrganizations: [EnhancedEntity] {
+        state.entities
+            .filter { $0.entityType == .organisation && $0.createdBy == state.fourWords }
+            .map { EnhancedEntity(entity: $0, userFourWords: state.fourWords) }
+            .sorted { $0.entity.name < $1.entity.name }
+    }
+
+    /// Organizations I'm a member of (but don't own)
+    var myCommunities: [EnhancedEntity] {
+        state.entities
+            .filter { $0.entityType == .organisation && $0.createdBy != state.fourWords }
+            .map { EnhancedEntity(entity: $0, userFourWords: state.fourWords) }
+            .sorted { $0.entity.name < $1.entity.name }
+    }
+
+    /// Build OrganisationNode for an enhanced entity
+    func organisationNode(for enhanced: EnhancedEntity) -> OrganisationNode {
+        OrganisationNode(organisation: enhanced.entity, allEntities: state.entities)
+    }
+
+    /// Legacy: all organisations (for backward compatibility during transition)
     var organisations: [OrganisationNode] {
         let orgs = state.entities.filter { $0.entityType == .organisation }
         return orgs.map { OrganisationNode(organisation: $0, allEntities: state.entities) }
     }
 
+    /// Personal groups (not part of any organization)
     var personalGroups: [SwiftEntity] {
-        state.entities.filter { $0.entityType == .group && $0.parentOrgId == nil }
+        state.entities
+            .filter { $0.entityType == .group && $0.parentOrgId == nil }
+            .sorted { $0.name < $1.name }
     }
 
+    /// Direct message contacts (1:1 only)
+    var directMessages: [ContactItem] {
+        state.contacts
+            .filter { $0.fourWords != nil }
+            .sorted { ($0.displayName ?? "") < ($1.displayName ?? "") }
+    }
+
+    /// All contacts for legacy Personal section
     var personalContacts: [ContactItem] {
         state.contacts
     }
 
     var body: some View {
         List(selection: $selectedEntity) {
-            // MARK: - Organisations Section
+            // MARK: - My Organizations Section (Orgs I Own)
             Section {
                 DisclosureGroup(
                     isExpanded: Binding(
-                        get: { expandedSections.contains("organisations") },
-                        set: { if $0 { expandedSections.insert("organisations") } else { expandedSections.remove("organisations") } }
+                        get: { expandedSections.contains("myOrganizations") },
+                        set: { if $0 { expandedSections.insert("myOrganizations") } else { expandedSections.remove("myOrganizations") } }
                     )
                 ) {
-                    if organisations.isEmpty {
-                        HStack {
-                            Image(systemName: "building.2")
-                                .foregroundColor(.secondary)
-                            Text("No organisations yet")
-                                .foregroundColor(.secondary)
-                                .font(.caption)
-                        }
-                        .padding(.vertical, 4)
+                    if myOrganizations.isEmpty {
+                        emptyStateView(
+                            icon: "building.2",
+                            text: "No organizations created yet",
+                            actionLabel: "Create Organization",
+                            action: { createContext = .organisation }
+                        )
                     } else {
-                        ForEach(organisations) { node in
+                        ForEach(myOrganizations) { enhanced in
+                            let node = organisationNode(for: enhanced)
                             OrganisationRow(
                                 node: node,
                                 isExpanded: expandedOrgs.contains(node.id),
                                 selectedEntity: $selectedEntity,
-                                onToggleExpanded: {
-                                    if expandedOrgs.contains(node.id) {
-                                        expandedOrgs.remove(node.id)
-                                    } else {
-                                        expandedOrgs.insert(node.id)
-                                    }
-                                },
-                                onCreateProject: {
-                                    createContext = .project(parentOrgId: node.id)
-                                },
-                                onCreateChannel: {
-                                    createContext = .channel(parentOrgId: node.id)
-                                },
-                                onCreateGroup: {
-                                    createContext = .group(parentOrgId: node.id)
-                                }
+                                onToggleExpanded: { toggleOrgExpanded(node.id) },
+                                onCreateProject: { createContext = .project(parentOrgId: node.id) },
+                                onCreateChannel: { createContext = .channel(parentOrgId: node.id) },
+                                onCreateGroup: { createContext = .group(parentOrgId: node.id) }
                             )
                         }
                     }
-
-                    // Add Organisation button
-                    Button {
-                        createContext = .organisation
-                    } label: {
-                        Label("New Organisation", systemImage: "plus.circle")
-                            .foregroundColor(.blue)
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.vertical, 4)
                 } label: {
-                    HStack {
-                        Label("Organisations", systemImage: "building.2.fill")
-                            .font(.headline)
-                        Spacer()
-                        Button {
-                            createContext = .organisation
-                        } label: {
-                            Image(systemName: "plus.circle.fill")
-                                .foregroundColor(.blue)
-                        }
-                        .buttonStyle(.plain)
-                        .help("Add Organisation")
-                    }
+                    sectionHeader(
+                        title: "My Organizations",
+                        icon: "building.2.fill",
+                        count: myOrganizations.count,
+                        actionIcon: "plus.circle.fill",
+                        action: { createContext = .organisation }
+                    )
                 }
             }
 
-            // MARK: - Personal Section
+            // MARK: - My Communities Section (Orgs I'm a Member Of)
+            Section {
+                DisclosureGroup(
+                    isExpanded: Binding(
+                        get: { expandedSections.contains("myCommunities") },
+                        set: { if $0 { expandedSections.insert("myCommunities") } else { expandedSections.remove("myCommunities") } }
+                    )
+                ) {
+                    if myCommunities.isEmpty {
+                        emptyStateView(
+                            icon: "building.2",
+                            text: "No communities joined yet",
+                            actionLabel: nil,
+                            action: nil
+                        )
+                    } else {
+                        ForEach(myCommunities) { enhanced in
+                            let node = organisationNode(for: enhanced)
+                            OrganisationRow(
+                                node: node,
+                                isExpanded: expandedOrgs.contains(node.id),
+                                selectedEntity: $selectedEntity,
+                                onToggleExpanded: { toggleOrgExpanded(node.id) },
+                                onCreateProject: { createContext = .project(parentOrgId: node.id) },
+                                onCreateChannel: { createContext = .channel(parentOrgId: node.id) },
+                                onCreateGroup: { createContext = .group(parentOrgId: node.id) }
+                            )
+                        }
+                    }
+                } label: {
+                    sectionHeader(
+                        title: "My Communities",
+                        icon: "building.2",
+                        count: myCommunities.count,
+                        actionIcon: nil,
+                        action: nil
+                    )
+                }
+            }
+
+            // MARK: - Personal Section (Personal Groups)
             Section {
                 DisclosureGroup(
                     isExpanded: Binding(
@@ -210,104 +413,68 @@ struct SidebarView: View {
                         set: { if $0 { expandedSections.insert("personal") } else { expandedSections.remove("personal") } }
                     )
                 ) {
-                    // Personal Groups
-                    DisclosureGroup {
-                        if personalGroups.isEmpty {
-                            HStack {
-                                Image(systemName: "person.3")
-                                    .foregroundColor(.secondary)
-                                Text("No groups yet")
-                                    .foregroundColor(.secondary)
-                                    .font(.caption)
-                            }
-                            .padding(.vertical, 2)
-                        } else {
-                            ForEach(personalGroups, id: \.id) { group in
-                                EntityRow(entity: group, selectedEntity: $selectedEntity)
-                            }
-                        }
-
-                        Button {
-                            createContext = .group(parentOrgId: nil)
-                        } label: {
-                            Label("New Group", systemImage: "plus.circle")
-                                .font(.caption)
-                                .foregroundColor(.blue)
-                        }
-                        .buttonStyle(.plain)
-                        .padding(.vertical, 2)
-                    } label: {
-                        HStack {
-                            Image(systemName: "person.3.fill")
-                                .foregroundColor(.purple)
-                            Text("Groups")
-                            Spacer()
-                            Text("\(personalGroups.count)")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            Button {
-                                createContext = .group(parentOrgId: nil)
-                            } label: {
-                                Image(systemName: "plus.circle.fill")
-                                    .font(.caption)
-                                    .foregroundColor(.blue)
-                            }
-                            .buttonStyle(.plain)
-                            .help("Add Group")
-                        }
-                    }
-
-                    // Individuals (Contacts)
-                    DisclosureGroup {
-                        if personalContacts.isEmpty {
-                            HStack {
-                                Image(systemName: "person")
-                                    .foregroundColor(.secondary)
-                                Text(state.isNetworking ? "No contacts yet" : "Go online to see contacts")
-                                    .foregroundColor(.secondary)
-                                    .font(.caption)
-                            }
-                            .padding(.vertical, 2)
-                        } else {
-                            ForEach(personalContacts, id: \.id) { contact in
-                                ContactSidebarRow(contact: contact)
-                                    .contentShape(Rectangle())
-                                    .onTapGesture {
-                                        // Only open chat for contacts with network identity
-                                        if let contactFourWords = contact.fourWords {
-                                            state.openContactChat(fourWords: contactFourWords, displayName: contact.displayName)
-                                        }
-                                        // TODO: For local-only contacts, show linking sheet
-                                    }
-                            }
-                        }
-                    } label: {
-                        HStack {
-                            Image(systemName: "person.fill")
-                                .foregroundColor(.orange)
-                            Text("Individuals")
-                            Spacer()
-                            Text("\(personalContacts.count)")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            Button {
-                                showingAddContact = true
-                            } label: {
-                                Image(systemName: "plus.circle.fill")
-                                    .font(.caption)
-                                    .foregroundColor(.blue)
-                            }
-                            .buttonStyle(.plain)
-                            .help("Add Contact")
+                    if personalGroups.isEmpty {
+                        emptyStateView(
+                            icon: "person.3",
+                            text: "No personal groups yet",
+                            actionLabel: "Create Group",
+                            action: { createContext = .group(parentOrgId: nil) }
+                        )
+                    } else {
+                        ForEach(personalGroups, id: \.id) { group in
+                            EntityRow(entity: group, selectedEntity: $selectedEntity)
                         }
                     }
                 } label: {
-                    Label("Personal", systemImage: "person.fill")
-                        .font(.headline)
+                    sectionHeader(
+                        title: "Personal",
+                        icon: "person.3.fill",
+                        count: personalGroups.count,
+                        actionIcon: "plus.circle.fill",
+                        action: { createContext = .group(parentOrgId: nil) }
+                    )
+                }
+            }
+
+            // MARK: - Direct Messages Section (1:1 Contacts)
+            Section {
+                DisclosureGroup(
+                    isExpanded: Binding(
+                        get: { expandedSections.contains("directMessages") },
+                        set: { if $0 { expandedSections.insert("directMessages") } else { expandedSections.remove("directMessages") } }
+                    )
+                ) {
+                    if directMessages.isEmpty {
+                        emptyStateView(
+                            icon: "message",
+                            text: state.isNetworking ? "No contacts yet" : "Go online to see contacts",
+                            actionLabel: state.isNetworking ? "Add Contact" : nil,
+                            action: state.isNetworking ? { showingAddContact = true } : nil
+                        )
+                    } else {
+                        ForEach(directMessages, id: \.id) { contact in
+                            ContactSidebarRow(contact: contact)
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    if let fourWords = contact.fourWords {
+                                        state.openContactChat(fourWords: fourWords, displayName: contact.displayName)
+                                    }
+                                }
+                        }
+                    }
+                } label: {
+                    sectionHeader(
+                        title: "Direct Messages",
+                        icon: "message.fill",
+                        count: directMessages.count,
+                        actionIcon: state.isNetworking ? "plus.circle.fill" : nil,
+                        action: state.isNetworking ? { showingAddContact = true } : nil
+                    )
                 }
             }
         }
         .listStyle(.sidebar)
+        .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 350)
         .sheet(item: $createContext) { context in
             CreateEntitySheet(context: context) { name, description, type, networkFourWords in
                 createEntity(name: name, description: description, type: type, context: context, networkFourWords: networkFourWords)
@@ -331,6 +498,72 @@ struct SidebarView: View {
                 }
                 showingAddContact = false
             }
+        }
+    }
+
+    // MARK: - Helper Views
+
+    @ViewBuilder
+    private func sectionHeader(title: String, icon: String, count: Int, actionIcon: String?, action: (() -> Void)?) -> some View {
+        HStack {
+            Label(title, systemImage: icon)
+                .font(.headline)
+            Spacer()
+
+            if count > 0 {
+                Text("\(count)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(.secondary.opacity(0.2))
+                    .clipShape(Capsule())
+            }
+
+            if let actionIcon = actionIcon, let action = action {
+                Button(action: action) {
+                    Image(systemName: actionIcon)
+                        .foregroundColor(.blue)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func emptyStateView(icon: String, text: String, actionLabel: String?, action: (() -> Void)?) -> some View {
+        VStack(spacing: 8) {
+            HStack {
+                Image(systemName: icon)
+                    .foregroundColor(.secondary)
+                Text(text)
+                    .foregroundColor(.secondary)
+                    .font(.caption)
+                Spacer()
+            }
+
+            if let actionLabel = actionLabel, let action = action {
+                Button(action: action) {
+                    HStack {
+                        Image(systemName: "plus.circle")
+                            .font(.caption)
+                        Text(actionLabel)
+                            .font(.caption)
+                    }
+                    .foregroundColor(.blue)
+                }
+                .buttonStyle(.plain)
+                .padding(.vertical, 2)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func toggleOrgExpanded(_ orgId: String) {
+        if expandedOrgs.contains(orgId) {
+            expandedOrgs.remove(orgId)
+        } else {
+            expandedOrgs.insert(orgId)
         }
     }
 
@@ -568,7 +801,156 @@ struct OrganisationRow: View {
     }
 }
 
-// MARK: - Entity Row
+// MARK: - Enhanced Entity Row (with Role Badge)
+
+struct EnhancedEntityRow: View {
+    let entity: EnhancedEntity
+    @Binding var selectedEntity: SwiftEntity?
+
+    var isSelected: Bool {
+        selectedEntity?.id == entity.id
+    }
+
+    var body: some View {
+        Button {
+            selectedEntity = entity.entity
+        } label: {
+            HStack(spacing: 8) {
+                // Entity icon
+                Image(systemName: SidebarItem.iconFor(entity.entity.entityType))
+                    .font(.system(size: 14))
+                    .foregroundColor(colorFor(entity.entity.entityType))
+                    .frame(width: 16)
+
+                // Entity name
+                Text(entity.entity.name)
+                    .font(.body)
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+
+                Spacer()
+
+                // Role badge (for organizations)
+                if entity.entity.entityType == .organisation {
+                    RoleBadge(role: entity.userRole, compact: true)
+                }
+
+                // Member count
+                if entity.memberCount > 0 {
+                    Text("\(entity.memberCount)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                // Unread indicator
+                if entity.unreadCount > 0 {
+                    Text("\(entity.unreadCount)")
+                        .font(.caption2)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 1)
+                        .background(.red)
+                        .clipShape(Capsule())
+                }
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(isSelected ? Color.accentColor.opacity(0.2) : Color.clear)
+        )
+    }
+
+    private func colorFor(_ type: SwiftEntityType) -> Color {
+        switch type {
+        case .organisation: return .blue
+        case .project: return .yellow
+        case .channel: return .green
+        case .group: return .purple
+        case .person: return .orange
+        }
+    }
+}
+
+// MARK: - Direct Message Row
+
+struct DirectMessageRow: View {
+    let contact: ContactItem
+    @Binding var selectedContact: ContactItem?
+    let onTap: () -> Void
+
+    var isSelected: Bool {
+        selectedContact?.id == contact.id
+    }
+
+    var body: some View {
+        Button {
+            selectedContact = contact
+            onTap()
+        } label: {
+            HStack(spacing: 10) {
+                // Avatar with online indicator
+                ZStack(alignment: .bottomTrailing) {
+                    Circle()
+                        .fill(contact.isOnline ? .green.opacity(0.2) : .gray.opacity(0.2))
+                        .frame(width: 32, height: 32)
+                        .overlay(
+                            Image(systemName: "person.fill")
+                                .font(.system(size: 14))
+                                .foregroundColor(contact.isOnline ? .green : .gray)
+                        )
+
+                    // Online status dot
+                    Circle()
+                        .fill(contact.isOnline ? .green : .gray)
+                        .frame(width: 8, height: 8)
+                        .offset(x: 2, y: 2)
+                }
+
+                // Contact info
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(contact.displayName ?? "Unknown")
+                        .font(.body)
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
+
+                    if let fourWords = contact.fourWords {
+                        Text(shortFourWords(fourWords))
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+
+                Spacer()
+
+                // Favorite indicator
+                if contact.isFavourite {
+                    Image(systemName: "star.fill")
+                        .font(.caption)
+                        .foregroundColor(.yellow)
+                }
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(isSelected ? Color.accentColor.opacity(0.2) : Color.clear)
+        )
+    }
+
+    private func shortFourWords(_ fourWords: String) -> String {
+        let words = fourWords.split(separator: "-")
+        return words.map { String($0.prefix(3)) }.joined(separator: "-")
+    }
+}
+
+// MARK: - Entity Row (Legacy)
 
 struct EntityRow: View {
     let entity: SwiftEntity

@@ -28,10 +28,6 @@ thiserror.workspace = true
 tracing.workspace = true
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
-# Utils
-uuid = { workspace = true, features = ["v4", "serde"] }
-chrono = { workspace = true, features = ["serde"] }
-
 [[bin]]
 name = "communitas-mcp"
 path = "src/main.rs"

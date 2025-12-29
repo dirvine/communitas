@@ -16,6 +16,7 @@ use crate::protocol::{
 use crate::tools;
 use anyhow::Result;
 use communitas_core::app::CommunitasApp;
+use communitas_core::identity::generate_id_words;
 use serde_json::Value;
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -96,18 +97,11 @@ impl McpServer {
             params.client_info.name, params.client_info.version, params.protocol_version
         );
 
-        // Generate temporary identity for MCP session
+        // Generate temporary identity for MCP session using four-word-networking dictionary
         // TODO: Allow client to provide identity in params
-        let four_words = format!(
-            "mcp-{}-{}-{}",
-            params.client_info.name.to_lowercase().replace(' ', "-"),
-            uuid::Uuid::new_v4()
-                .to_string()
-                .split('-')
-                .next()
-                .unwrap_or("0000"),
-            "agent"
-        );
+        let four_words = generate_id_words().map_err(|e| {
+            JsonRpcError::internal_error(&format!("Failed to generate four-word identity: {}", e))
+        })?;
         let display_name = format!("MCP Agent ({})", params.client_info.name);
         let device_name = "mcp-server".to_string();
         let storage_dir = std::env::temp_dir()

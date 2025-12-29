@@ -815,12 +815,17 @@ mod tests {
     use super::*;
     use tempfile::TempDir;
 
-    #[tokio::test]
+    /// Use fewer PBKDF2 iterations in tests for speed (1000 vs 100,000 in production)
+    const TEST_PBKDF2_ITERATIONS: u32 = 1000;
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn test_vault_creation_and_login() {
         let temp_dir = TempDir::new().unwrap();
         let config = StorageConfig {
             vault_dir: temp_dir.path().to_path_buf(),
             use_keyring: false, // Disable for tests
+            pbkdf2_iterations: TEST_PBKDF2_ITERATIONS,
+            enable_fec: false, // Disable FEC for faster tests
             ..Default::default()
         };
 
@@ -853,12 +858,14 @@ mod tests {
         assert_eq!(retrieved, test_data);
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn test_password_only_login() {
         let temp_dir = TempDir::new().unwrap();
         let config = StorageConfig {
             vault_dir: temp_dir.path().to_path_buf(),
             use_keyring: false,
+            pbkdf2_iterations: TEST_PBKDF2_ITERATIONS,
+            enable_fec: false, // Disable FEC for faster tests
             ..Default::default()
         };
 
@@ -882,7 +889,7 @@ mod tests {
         assert_eq!(session.four_words, "river-mountain-sun-cloud");
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn test_fec_storage() {
         let temp_dir = TempDir::new().unwrap();
         let config = StorageConfig {
@@ -890,6 +897,7 @@ mod tests {
             use_keyring: false,
             enable_fec: true,
             fec_redundancy: 2.0, // 100% redundancy
+            pbkdf2_iterations: TEST_PBKDF2_ITERATIONS,
             ..Default::default()
         };
 

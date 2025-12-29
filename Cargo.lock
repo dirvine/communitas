@@ -1647,7 +1647,6 @@ version = "0.1.20"
 dependencies = [
  "anyhow",
  "async-trait",
- "chrono",
  "communitas-core",
  "futures",
  "serde",
@@ -1656,7 +1655,6 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
- "uuid",
 ]
 
 [[package]]

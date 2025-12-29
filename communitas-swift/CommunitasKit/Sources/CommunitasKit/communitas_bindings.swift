@@ -988,6 +988,103 @@ public protocol CommunitasClientProtocol : AnyObject {
     func gossipStop() throws 
     
     /**
+     * Accept an invite to join an entity
+     *
+     * The current user accepts the invite and joins the entity.
+     * Only the intended recipient can accept an invite.
+     *
+     * # Arguments
+     * * `invite_id` - ID of the invite to accept
+     *
+     * # Returns
+     * Ok if successfully accepted
+     */
+    func inviteAccept(inviteId: String) throws 
+    
+    /**
+     * Create an invite for cross-organization collaboration
+     *
+     * Creates a new invite that allows a recipient to join an entity
+     * (organisation, group, channel, or project) with a specified role.
+     *
+     * # Arguments
+     * * `entity_type` - Type of entity to join
+     * * `entity_id` - ID of the entity to join
+     * * `recipient_id` - Four-word ID of the intended recipient
+     * * `role` - Role to grant (e.g., "member", "admin", "owner")
+     * * `message` - Optional message to include with the invite
+     * * `expires_in_hours` - Optional hours until expiration (None = never expires)
+     *
+     * # Returns
+     * The created invite
+     */
+    func inviteCreate(entityType: SwiftEntityType, entityId: String, recipientId: String, role: String, message: String?, expiresInHours: UInt32?) throws  -> SwiftInvite
+    
+    /**
+     * Get an invite by ID
+     *
+     * # Arguments
+     * * `invite_id` - ID of the invite to retrieve
+     *
+     * # Returns
+     * The invite if found
+     */
+    func inviteGet(inviteId: String) throws  -> SwiftInvite
+    
+    /**
+     * List all invites for an entity
+     *
+     * Returns all invites (pending, accepted, rejected, etc.) for the specified entity.
+     * Useful for admins to see invite history.
+     *
+     * # Arguments
+     * * `entity_type` - Type of entity
+     * * `entity_id` - ID of the entity
+     *
+     * # Returns
+     * List of all invites for this entity
+     */
+    func inviteListForEntity(entityType: SwiftEntityType, entityId: String) throws  -> [SwiftInvite]
+    
+    /**
+     * List all pending invites for the current user
+     *
+     * Returns invites where the current user is the recipient
+     * and the status is Pending.
+     *
+     * # Returns
+     * List of pending invites for this user
+     */
+    func inviteListPending() throws  -> [SwiftInvite]
+    
+    /**
+     * Reject an invite
+     *
+     * The recipient rejects the invite to join an entity.
+     * Only the intended recipient can reject an invite.
+     *
+     * # Arguments
+     * * `invite_id` - ID of the invite to reject
+     *
+     * # Returns
+     * Ok if successfully rejected
+     */
+    func inviteReject(inviteId: String) throws 
+    
+    /**
+     * Revoke an invite
+     *
+     * The creator or an admin can revoke a pending invite.
+     *
+     * # Arguments
+     * * `invite_id` - ID of the invite to revoke
+     *
+     * # Returns
+     * Ok if successfully revoked
+     */
+    func inviteRevoke(inviteId: String) throws 
+    
+    /**
      * Check if networking is active
      */
     func isNetworkingActive()  -> Bool
@@ -1079,6 +1176,9 @@ public protocol CommunitasClientProtocol : AnyObject {
     
     /**
      * Send a message to an entity
+     *
+     * This stores the message locally AND publishes it via gossip pubsub
+     * to all subscribers of the entity's topic.
      */
     func messageSend(entityId: String, text: String, replyToId: String?) throws  -> String
     
@@ -2196,6 +2296,147 @@ open func gossipStop()throws  {try rustCallWithError(FfiConverterTypeClientError
 }
     
     /**
+     * Accept an invite to join an entity
+     *
+     * The current user accepts the invite and joins the entity.
+     * Only the intended recipient can accept an invite.
+     *
+     * # Arguments
+     * * `invite_id` - ID of the invite to accept
+     *
+     * # Returns
+     * Ok if successfully accepted
+     */
+open func inviteAccept(inviteId: String)throws  {try rustCallWithError(FfiConverterTypeClientError.lift) {
+    uniffi_communitas_bindings_fn_method_communitasclient_invite_accept(self.uniffiClonePointer(),
+        FfiConverterString.lower(inviteId),$0
+    )
+}
+}
+    
+    /**
+     * Create an invite for cross-organization collaboration
+     *
+     * Creates a new invite that allows a recipient to join an entity
+     * (organisation, group, channel, or project) with a specified role.
+     *
+     * # Arguments
+     * * `entity_type` - Type of entity to join
+     * * `entity_id` - ID of the entity to join
+     * * `recipient_id` - Four-word ID of the intended recipient
+     * * `role` - Role to grant (e.g., "member", "admin", "owner")
+     * * `message` - Optional message to include with the invite
+     * * `expires_in_hours` - Optional hours until expiration (None = never expires)
+     *
+     * # Returns
+     * The created invite
+     */
+open func inviteCreate(entityType: SwiftEntityType, entityId: String, recipientId: String, role: String, message: String?, expiresInHours: UInt32?)throws  -> SwiftInvite {
+    return try  FfiConverterTypeSwiftInvite.lift(try rustCallWithError(FfiConverterTypeClientError.lift) {
+    uniffi_communitas_bindings_fn_method_communitasclient_invite_create(self.uniffiClonePointer(),
+        FfiConverterTypeSwiftEntityType.lower(entityType),
+        FfiConverterString.lower(entityId),
+        FfiConverterString.lower(recipientId),
+        FfiConverterString.lower(role),
+        FfiConverterOptionString.lower(message),
+        FfiConverterOptionUInt32.lower(expiresInHours),$0
+    )
+})
+}
+    
+    /**
+     * Get an invite by ID
+     *
+     * # Arguments
+     * * `invite_id` - ID of the invite to retrieve
+     *
+     * # Returns
+     * The invite if found
+     */
+open func inviteGet(inviteId: String)throws  -> SwiftInvite {
+    return try  FfiConverterTypeSwiftInvite.lift(try rustCallWithError(FfiConverterTypeClientError.lift) {
+    uniffi_communitas_bindings_fn_method_communitasclient_invite_get(self.uniffiClonePointer(),
+        FfiConverterString.lower(inviteId),$0
+    )
+})
+}
+    
+    /**
+     * List all invites for an entity
+     *
+     * Returns all invites (pending, accepted, rejected, etc.) for the specified entity.
+     * Useful for admins to see invite history.
+     *
+     * # Arguments
+     * * `entity_type` - Type of entity
+     * * `entity_id` - ID of the entity
+     *
+     * # Returns
+     * List of all invites for this entity
+     */
+open func inviteListForEntity(entityType: SwiftEntityType, entityId: String)throws  -> [SwiftInvite] {
+    return try  FfiConverterSequenceTypeSwiftInvite.lift(try rustCallWithError(FfiConverterTypeClientError.lift) {
+    uniffi_communitas_bindings_fn_method_communitasclient_invite_list_for_entity(self.uniffiClonePointer(),
+        FfiConverterTypeSwiftEntityType.lower(entityType),
+        FfiConverterString.lower(entityId),$0
+    )
+})
+}
+    
+    /**
+     * List all pending invites for the current user
+     *
+     * Returns invites where the current user is the recipient
+     * and the status is Pending.
+     *
+     * # Returns
+     * List of pending invites for this user
+     */
+open func inviteListPending()throws  -> [SwiftInvite] {
+    return try  FfiConverterSequenceTypeSwiftInvite.lift(try rustCallWithError(FfiConverterTypeClientError.lift) {
+    uniffi_communitas_bindings_fn_method_communitasclient_invite_list_pending(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Reject an invite
+     *
+     * The recipient rejects the invite to join an entity.
+     * Only the intended recipient can reject an invite.
+     *
+     * # Arguments
+     * * `invite_id` - ID of the invite to reject
+     *
+     * # Returns
+     * Ok if successfully rejected
+     */
+open func inviteReject(inviteId: String)throws  {try rustCallWithError(FfiConverterTypeClientError.lift) {
+    uniffi_communitas_bindings_fn_method_communitasclient_invite_reject(self.uniffiClonePointer(),
+        FfiConverterString.lower(inviteId),$0
+    )
+}
+}
+    
+    /**
+     * Revoke an invite
+     *
+     * The creator or an admin can revoke a pending invite.
+     *
+     * # Arguments
+     * * `invite_id` - ID of the invite to revoke
+     *
+     * # Returns
+     * Ok if successfully revoked
+     */
+open func inviteRevoke(inviteId: String)throws  {try rustCallWithError(FfiConverterTypeClientError.lift) {
+    uniffi_communitas_bindings_fn_method_communitasclient_invite_revoke(self.uniffiClonePointer(),
+        FfiConverterString.lower(inviteId),$0
+    )
+}
+}
+    
+    /**
      * Check if networking is active
      */
 open func isNetworkingActive() -> Bool {
@@ -2415,6 +2656,9 @@ open func messageGetThread(entityId: String, parentMessageId: String)throws  -> 
     
     /**
      * Send a message to an entity
+     *
+     * This stores the message locally AND publishes it via gossip pubsub
+     * to all subscribers of the entity's topic.
      */
 open func messageSend(entityId: String, text: String, replyToId: String?)throws  -> String {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeClientError.lift) {
@@ -3761,6 +4005,227 @@ public func FfiConverterTypeSwiftFileInfo_lift(_ buf: RustBuffer) throws -> Swif
 #endif
 public func FfiConverterTypeSwiftFileInfo_lower(_ value: SwiftFileInfo) -> RustBuffer {
     return FfiConverterTypeSwiftFileInfo.lower(value)
+}
+
+
+/**
+ * Invite for cross-organization collaboration
+ */
+public struct SwiftInvite {
+    /**
+     * Unique invite ID
+     */
+    public var id: String
+    /**
+     * Type of entity this invite grants access to
+     */
+    public var entityType: SwiftEntityType
+    /**
+     * ID of the entity being joined
+     */
+    public var entityId: String
+    /**
+     * Four-word ID of the invite creator
+     */
+    public var creatorId: String
+    /**
+     * Four-word ID of the intended recipient
+     */
+    public var recipientId: String
+    /**
+     * Role being offered (e.g., "member", "admin")
+     */
+    public var role: String
+    /**
+     * Current status of the invite
+     */
+    public var status: SwiftInviteStatus
+    /**
+     * When the invite was created (milliseconds since epoch)
+     */
+    public var createdAt: Int64
+    /**
+     * When the invite expires (None = never expires)
+     */
+    public var expiresAt: Int64?
+    /**
+     * Optional message from the creator
+     */
+    public var message: String?
+    /**
+     * Four-word ID of who resolved the invite (if resolved)
+     */
+    public var resolvedBy: String?
+    /**
+     * When the invite was resolved (if resolved)
+     */
+    public var resolvedAt: Int64?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Unique invite ID
+         */id: String, 
+        /**
+         * Type of entity this invite grants access to
+         */entityType: SwiftEntityType, 
+        /**
+         * ID of the entity being joined
+         */entityId: String, 
+        /**
+         * Four-word ID of the invite creator
+         */creatorId: String, 
+        /**
+         * Four-word ID of the intended recipient
+         */recipientId: String, 
+        /**
+         * Role being offered (e.g., "member", "admin")
+         */role: String, 
+        /**
+         * Current status of the invite
+         */status: SwiftInviteStatus, 
+        /**
+         * When the invite was created (milliseconds since epoch)
+         */createdAt: Int64, 
+        /**
+         * When the invite expires (None = never expires)
+         */expiresAt: Int64?, 
+        /**
+         * Optional message from the creator
+         */message: String?, 
+        /**
+         * Four-word ID of who resolved the invite (if resolved)
+         */resolvedBy: String?, 
+        /**
+         * When the invite was resolved (if resolved)
+         */resolvedAt: Int64?) {
+        self.id = id
+        self.entityType = entityType
+        self.entityId = entityId
+        self.creatorId = creatorId
+        self.recipientId = recipientId
+        self.role = role
+        self.status = status
+        self.createdAt = createdAt
+        self.expiresAt = expiresAt
+        self.message = message
+        self.resolvedBy = resolvedBy
+        self.resolvedAt = resolvedAt
+    }
+}
+
+
+
+extension SwiftInvite: Equatable, Hashable {
+    public static func ==(lhs: SwiftInvite, rhs: SwiftInvite) -> Bool {
+        if lhs.id != rhs.id {
+            return false
+        }
+        if lhs.entityType != rhs.entityType {
+            return false
+        }
+        if lhs.entityId != rhs.entityId {
+            return false
+        }
+        if lhs.creatorId != rhs.creatorId {
+            return false
+        }
+        if lhs.recipientId != rhs.recipientId {
+            return false
+        }
+        if lhs.role != rhs.role {
+            return false
+        }
+        if lhs.status != rhs.status {
+            return false
+        }
+        if lhs.createdAt != rhs.createdAt {
+            return false
+        }
+        if lhs.expiresAt != rhs.expiresAt {
+            return false
+        }
+        if lhs.message != rhs.message {
+            return false
+        }
+        if lhs.resolvedBy != rhs.resolvedBy {
+            return false
+        }
+        if lhs.resolvedAt != rhs.resolvedAt {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+        hasher.combine(entityType)
+        hasher.combine(entityId)
+        hasher.combine(creatorId)
+        hasher.combine(recipientId)
+        hasher.combine(role)
+        hasher.combine(status)
+        hasher.combine(createdAt)
+        hasher.combine(expiresAt)
+        hasher.combine(message)
+        hasher.combine(resolvedBy)
+        hasher.combine(resolvedAt)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSwiftInvite: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftInvite {
+        return
+            try SwiftInvite(
+                id: FfiConverterString.read(from: &buf), 
+                entityType: FfiConverterTypeSwiftEntityType.read(from: &buf), 
+                entityId: FfiConverterString.read(from: &buf), 
+                creatorId: FfiConverterString.read(from: &buf), 
+                recipientId: FfiConverterString.read(from: &buf), 
+                role: FfiConverterString.read(from: &buf), 
+                status: FfiConverterTypeSwiftInviteStatus.read(from: &buf), 
+                createdAt: FfiConverterInt64.read(from: &buf), 
+                expiresAt: FfiConverterOptionInt64.read(from: &buf), 
+                message: FfiConverterOptionString.read(from: &buf), 
+                resolvedBy: FfiConverterOptionString.read(from: &buf), 
+                resolvedAt: FfiConverterOptionInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SwiftInvite, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.id, into: &buf)
+        FfiConverterTypeSwiftEntityType.write(value.entityType, into: &buf)
+        FfiConverterString.write(value.entityId, into: &buf)
+        FfiConverterString.write(value.creatorId, into: &buf)
+        FfiConverterString.write(value.recipientId, into: &buf)
+        FfiConverterString.write(value.role, into: &buf)
+        FfiConverterTypeSwiftInviteStatus.write(value.status, into: &buf)
+        FfiConverterInt64.write(value.createdAt, into: &buf)
+        FfiConverterOptionInt64.write(value.expiresAt, into: &buf)
+        FfiConverterOptionString.write(value.message, into: &buf)
+        FfiConverterOptionString.write(value.resolvedBy, into: &buf)
+        FfiConverterOptionInt64.write(value.resolvedAt, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSwiftInvite_lift(_ buf: RustBuffer) throws -> SwiftInvite {
+    return try FfiConverterTypeSwiftInvite.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSwiftInvite_lower(_ value: SwiftInvite) -> RustBuffer {
+    return FfiConverterTypeSwiftInvite.lower(value)
 }
 
 
@@ -5573,6 +6038,8 @@ public enum ClientError {
     )
     case WebRtcError(String
     )
+    case InviteError(String
+    )
 }
 
 
@@ -5620,6 +6087,9 @@ public struct FfiConverterTypeClientError: FfiConverterRustBuffer {
             try FfiConverterString.read(from: &buf)
             )
         case 11: return .WebRtcError(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 12: return .InviteError(
             try FfiConverterString.read(from: &buf)
             )
 
@@ -5686,6 +6156,11 @@ public struct FfiConverterTypeClientError: FfiConverterRustBuffer {
         
         case let .WebRtcError(v1):
             writeInt(&buf, Int32(11))
+            FfiConverterString.write(v1, into: &buf)
+            
+        
+        case let .InviteError(v1):
+            writeInt(&buf, Int32(12))
             FfiConverterString.write(v1, into: &buf)
             
         }
@@ -6112,6 +6587,109 @@ public func FfiConverterTypeSwiftEntityType_lower(_ value: SwiftEntityType) -> R
 
 
 extension SwiftEntityType: Equatable, Hashable {}
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Invite status for cross-organization collaboration
+ */
+
+public enum SwiftInviteStatus {
+    
+    /**
+     * Invite is pending a response
+     */
+    case pending
+    /**
+     * Invite was accepted by the recipient
+     */
+    case accepted
+    /**
+     * Invite was rejected by the recipient
+     */
+    case rejected
+    /**
+     * Invite expired before any action was taken
+     */
+    case expired
+    /**
+     * Invite was revoked by the creator or an admin
+     */
+    case revoked
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSwiftInviteStatus: FfiConverterRustBuffer {
+    typealias SwiftType = SwiftInviteStatus
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftInviteStatus {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .pending
+        
+        case 2: return .accepted
+        
+        case 3: return .rejected
+        
+        case 4: return .expired
+        
+        case 5: return .revoked
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: SwiftInviteStatus, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .pending:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .accepted:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .rejected:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .expired:
+            writeInt(&buf, Int32(4))
+        
+        
+        case .revoked:
+            writeInt(&buf, Int32(5))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSwiftInviteStatus_lift(_ buf: RustBuffer) throws -> SwiftInviteStatus {
+    return try FfiConverterTypeSwiftInviteStatus.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSwiftInviteStatus_lower(_ value: SwiftInviteStatus) -> RustBuffer {
+    return FfiConverterTypeSwiftInviteStatus.lower(value)
+}
+
+
+
+extension SwiftInviteStatus: Equatable, Hashable {}
 
 
 
@@ -6727,6 +7305,31 @@ fileprivate struct FfiConverterSequenceTypeSwiftEntity: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeSwiftInvite: FfiConverterRustBuffer {
+    typealias SwiftType = [SwiftInvite]
+
+    public static func write(_ value: [SwiftInvite], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeSwiftInvite.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [SwiftInvite] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [SwiftInvite]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeSwiftInvite.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeSwiftKanbanCard: FfiConverterRustBuffer {
     typealias SwiftType = [SwiftKanbanCard]
 
@@ -7248,6 +7851,27 @@ private var initializationResult: InitializationResult = {
     if (uniffi_communitas_bindings_checksum_method_communitasclient_gossip_stop() != 24130) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_communitas_bindings_checksum_method_communitasclient_invite_accept() != 9984) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_communitas_bindings_checksum_method_communitasclient_invite_create() != 46811) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_communitas_bindings_checksum_method_communitasclient_invite_get() != 12629) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_communitas_bindings_checksum_method_communitasclient_invite_list_for_entity() != 45739) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_communitas_bindings_checksum_method_communitasclient_invite_list_pending() != 43801) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_communitas_bindings_checksum_method_communitasclient_invite_reject() != 24202) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_communitas_bindings_checksum_method_communitasclient_invite_revoke() != 27058) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_communitas_bindings_checksum_method_communitasclient_is_networking_active() != 53310) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -7302,7 +7926,7 @@ private var initializationResult: InitializationResult = {
     if (uniffi_communitas_bindings_checksum_method_communitasclient_message_get_thread() != 38822) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_communitas_bindings_checksum_method_communitasclient_message_send() != 47185) {
+    if (uniffi_communitas_bindings_checksum_method_communitasclient_message_send() != 41676) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_communitas_bindings_checksum_method_communitasclient_message_send_direct() != 2457) {

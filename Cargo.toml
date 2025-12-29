@@ -8,6 +8,7 @@ members = [
     "communitas-p2p-test",
     "communitas-bindings",  # Swift/UniFFI bindings
     "communitas-kanban",    # CRDT-based Kanban system
+    "communitas-iced",      # Cross-platform Iced GUI
 ]
 
 [workspace.package]
@@ -26,6 +27,7 @@ saorsa-rsps = "0.2.0"
 saorsa-pqc = "0.3.12"
 
 # Saorsa Gossip ecosystem (published v0.1.10 with native NAT traversal via OBSERVED_ADDRESS)
+# TODO: Update to v0.1.11 when network is available (ant-quic 0.14.68, saorsa-gossip 0.1.11)
 saorsa-gossip-types = "0.1.10"
 saorsa-gossip-identity = "0.1.10"
 saorsa-gossip-crdt-sync = "0.1.10"

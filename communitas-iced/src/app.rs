@@ -20,7 +20,9 @@ use crate::state::{
     Entity, MemberRole, NetworkInfo, SidebarState, ThreadState,
 };
 use iced::widget::pane_grid;
-use iced::{keyboard, Task, Theme};
+#[cfg(feature = "demo")]
+use iced::keyboard;
+use iced::{Task, Theme};
 use std::collections::HashMap;
 use std::time::Duration;
 
@@ -817,9 +819,9 @@ impl CommunitasApp {
                         SidebarSection::DirectMessages,
                     ];
                     for section in &sections {
-                        let is_expanded = app.sidebar.is_section_expanded(section.clone());
+                        let is_expanded = app.sidebar.is_section_expanded(*section);
                         if is_expanded {
-                            app.sidebar.toggle_section(section.clone());
+                            app.sidebar.toggle_section(*section);
                             break;
                         }
                     }
@@ -1972,38 +1974,38 @@ impl CommunitasApp {
         {
             use crate::message::TestAction;
             subscriptions.push(keyboard::listen().filter_map(|event| {
-                if let keyboard::Event::KeyPressed { key, modifiers, .. } = event {
-                    if modifiers.command() {
-                        match key.as_ref() {
-                            keyboard::Key::Character("t") => {
-                                return Some(Message::TestAction(TestAction::SendTestMessage));
-                            }
-                            keyboard::Key::Character("1") => {
-                                return Some(Message::TestAction(TestAction::SwitchToHome));
-                            }
-                            keyboard::Key::Character("2") => {
-                                return Some(Message::TestAction(TestAction::SwitchToContactChat));
-                            }
-                            keyboard::Key::Character("3") => {
-                                return Some(Message::TestAction(TestAction::SwitchToChannelChat));
-                            }
-                            keyboard::Key::Character("4") => {
-                                return Some(Message::TestAction(TestAction::CreateOrganization));
-                            }
-                            keyboard::Key::Character("5") => {
-                                return Some(Message::TestAction(TestAction::CreateProject));
-                            }
-                            keyboard::Key::Character("6") => {
-                                return Some(Message::TestAction(TestAction::CreateGroup));
-                            }
-                            keyboard::Key::Character("7") => {
-                                return Some(Message::TestAction(TestAction::OpenNetworkPanel));
-                            }
-                            keyboard::Key::Character("8") => {
-                                return Some(Message::TestAction(TestAction::ToggleSidebarSection));
-                            }
-                            _ => {}
+                if let keyboard::Event::KeyPressed { key, modifiers, .. } = event
+                    && modifiers.command()
+                {
+                    match key.as_ref() {
+                        keyboard::Key::Character("t") => {
+                            return Some(Message::TestAction(TestAction::SendTestMessage));
                         }
+                        keyboard::Key::Character("1") => {
+                            return Some(Message::TestAction(TestAction::SwitchToHome));
+                        }
+                        keyboard::Key::Character("2") => {
+                            return Some(Message::TestAction(TestAction::SwitchToContactChat));
+                        }
+                        keyboard::Key::Character("3") => {
+                            return Some(Message::TestAction(TestAction::SwitchToChannelChat));
+                        }
+                        keyboard::Key::Character("4") => {
+                            return Some(Message::TestAction(TestAction::CreateOrganization));
+                        }
+                        keyboard::Key::Character("5") => {
+                            return Some(Message::TestAction(TestAction::CreateProject));
+                        }
+                        keyboard::Key::Character("6") => {
+                            return Some(Message::TestAction(TestAction::CreateGroup));
+                        }
+                        keyboard::Key::Character("7") => {
+                            return Some(Message::TestAction(TestAction::OpenNetworkPanel));
+                        }
+                        keyboard::Key::Character("8") => {
+                            return Some(Message::TestAction(TestAction::ToggleSidebarSection));
+                        }
+                        _ => {}
                     }
                 }
                 None

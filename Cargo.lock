@@ -1642,6 +1642,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "communitas-mcp"
+version = "0.1.20"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "communitas-core",
+ "futures",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
 name = "communitas-p2p-test"
 version = "0.1.20"
 dependencies = [

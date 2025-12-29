@@ -9,6 +9,7 @@ members = [
     "communitas-bindings",  # Swift/UniFFI bindings
     "communitas-kanban",    # CRDT-based Kanban system
     "communitas-iced",      # Cross-platform Iced GUI
+    "communitas-mcp",       # MCP server for AI agent control
 ]
 
 [workspace.package]

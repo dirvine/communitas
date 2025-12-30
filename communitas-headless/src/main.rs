@@ -46,10 +46,10 @@ use std::os::unix::fs::PermissionsExt;
 /// Try to self-update the binary using GitHub releases
 pub fn try_self_update() -> Result<Option<String>> {
     use self_update::cargo_crate_version;
-    let owner = std::env::var("COMMUNITAS_UPDATE_REPO_OWNER")
-        .unwrap_or_else(|_| "saorsa-labs".to_string());
-    let name = std::env::var("COMMUNITAS_UPDATE_REPO_NAME")
-        .unwrap_or_else(|_| "communitas".to_string());
+    let owner =
+        std::env::var("COMMUNITAS_UPDATE_REPO_OWNER").unwrap_or_else(|_| "saorsa-labs".to_string());
+    let name =
+        std::env::var("COMMUNITAS_UPDATE_REPO_NAME").unwrap_or_else(|_| "communitas".to_string());
 
     // Primary attempt
     let mut cfg = self_update::backends::github::Update::configure();

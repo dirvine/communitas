@@ -1515,12 +1515,7 @@ impl CommunitasClient {
             // Store the message locally (returns full CRDTMessage)
             let message = ctx
                 .message_service
-                .send_message(
-                    entity_id.clone(),
-                    entity.entity_type,
-                    content,
-                    reply_to_id,
-                )
+                .send_message(entity_id.clone(), entity.entity_type, content, reply_to_id)
                 .await
                 .map_err(|e| ClientError::MessageError(e.to_string()))?;
 
@@ -2893,11 +2888,7 @@ impl CommunitasClient {
     }
 
     /// Delete a card
-    pub fn kanban_delete_card(
-        &self,
-        board_id: String,
-        card_id: String,
-    ) -> Result<(), ClientError> {
+    pub fn kanban_delete_card(&self, board_id: String, card_id: String) -> Result<(), ClientError> {
         // First, get the board to find its project_id
         let project_id = block_on(async {
             let ctx = self.inner.read().await;
@@ -3111,12 +3102,8 @@ impl CommunitasClient {
 
             // Build the invite request
             // InviteRequest::new(recipient_id, entity_type, entity_id, role)
-            let mut request = InviteRequest::new(
-                &recipient_id,
-                entity_type.into(),
-                &entity_id,
-                &role,
-            );
+            let mut request =
+                InviteRequest::new(&recipient_id, entity_type.into(), &entity_id, &role);
 
             if let Some(msg) = message {
                 request = request.with_message(msg);
@@ -3909,9 +3896,11 @@ impl CommunitasClient {
 
             // Apply overrides to defaults
             for (resource_str, access_str) in overrides {
-                if let Ok(resource) = resource_str.parse::<communitas_core::permissions::ResourceType>()
+                if let Ok(resource) =
+                    resource_str.parse::<communitas_core::permissions::ResourceType>()
                 {
-                    if let Ok(access) = access_str.parse::<communitas_core::permissions::AccessLevel>()
+                    if let Ok(access) =
+                        access_str.parse::<communitas_core::permissions::AccessLevel>()
                     {
                         permissions_map.insert(resource, access);
                     }

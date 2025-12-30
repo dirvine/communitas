@@ -43,13 +43,13 @@ pub mod encrypted_storage;
 pub mod entity_service;
 pub mod error;
 pub mod identity;
+pub mod invite; // Cross-organization collaboration via four-word invites
+pub mod invite_service;
 pub mod keystore;
 pub mod linking_service;
 pub mod message_service;
 pub mod message_sync;
-pub mod permissions; // Granular per-resource permission system
-pub mod invite; // Cross-organization collaboration via four-word invites
-pub mod invite_service; // Invite service with CRDT persistence
+pub mod permissions; // Granular per-resource permission system // Invite service with CRDT persistence
 // pub mod messaging; // TODO: Refactor in Sprint 3 for gossip pubsub
 pub mod presence_service;
 pub mod resource_limits; // Resource management and limits (MESH_CAPABILITIES.md §8.3)

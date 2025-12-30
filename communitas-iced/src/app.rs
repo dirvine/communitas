@@ -20,9 +20,9 @@ use crate::state::{
     Entity, MemberRole, NetworkInfo, SidebarState, ThreadState,
 };
 use crate::update::{self, UpdateCheckResult, UpdateConfig, UpdateInfo, UpdateStatus};
-use iced::widget::pane_grid;
 #[cfg(feature = "demo")]
 use iced::keyboard;
+use iced::widget::pane_grid;
 use iced::{Task, Theme};
 use std::collections::HashMap;
 use std::time::Duration;
@@ -723,7 +723,10 @@ impl CommunitasApp {
                         },
                         author: app.four_words.clone(),
                         author_display_name: Some(app.display_name.clone()),
-                        text: format!("Test message sent at {}", chrono::Utc::now().format("%H:%M:%S")),
+                        text: format!(
+                            "Test message sent at {}",
+                            chrono::Utc::now().format("%H:%M:%S")
+                        ),
                         reply_to_id: None,
                         timestamp: chrono::Utc::now().timestamp(),
                         is_edited: false,
@@ -752,7 +755,11 @@ impl CommunitasApp {
                 }
                 TestAction::SwitchToChannelChat => {
                     tracing::info!("TestAction: SwitchToChannelChat");
-                    if let Some(entity) = app.entities.iter().find(|e| e.entity_type == crate::state::EntityType::Channel) {
+                    if let Some(entity) = app
+                        .entities
+                        .iter()
+                        .find(|e| e.entity_type == crate::state::EntityType::Channel)
+                    {
                         app.active_view = ActiveView::Chat {
                             entity_type: "Channel".to_string(),
                             entity_id: entity.id.clone(),
@@ -763,13 +770,20 @@ impl CommunitasApp {
                 TestAction::CreateOrganization => {
                     tracing::info!("TestAction: CreateOrganization");
                     use crate::state::{EntityType, MemberRole};
-                    let org_count = app.entities.iter().filter(|e| e.entity_type == EntityType::Organisation).count() + 1;
+                    let org_count = app
+                        .entities
+                        .iter()
+                        .filter(|e| e.entity_type == EntityType::Organisation)
+                        .count()
+                        + 1;
                     let org = Entity {
                         id: format!("org-test-{}", chrono::Utc::now().timestamp_millis()),
                         four_words: None,
                         entity_type: EntityType::Organisation,
                         name: format!("Test Org {}", org_count),
-                        description: Some("A test organization created via keyboard shortcut".to_string()),
+                        description: Some(
+                            "A test organization created via keyboard shortcut".to_string(),
+                        ),
                         parent_org_id: None,
                         role: MemberRole::Owner,
                         member_count: 1,
@@ -784,16 +798,25 @@ impl CommunitasApp {
                     tracing::info!("TestAction: CreateProject");
                     use crate::state::{EntityType, MemberRole};
                     // Find parent org for the project
-                    let parent_org_id = app.entities.iter()
+                    let parent_org_id = app
+                        .entities
+                        .iter()
                         .find(|e| e.entity_type == EntityType::Organisation)
                         .map(|e| e.id.clone());
-                    let proj_count = app.entities.iter().filter(|e| e.entity_type == EntityType::Project).count() + 1;
+                    let proj_count = app
+                        .entities
+                        .iter()
+                        .filter(|e| e.entity_type == EntityType::Project)
+                        .count()
+                        + 1;
                     let proj = Entity {
                         id: format!("proj-test-{}", chrono::Utc::now().timestamp_millis()),
                         four_words: None,
                         entity_type: EntityType::Project,
                         name: format!("Test Project {}", proj_count),
-                        description: Some("A test project created via keyboard shortcut".to_string()),
+                        description: Some(
+                            "A test project created via keyboard shortcut".to_string(),
+                        ),
                         parent_org_id,
                         role: MemberRole::Owner,
                         member_count: 1,
@@ -807,10 +830,17 @@ impl CommunitasApp {
                 TestAction::CreateGroup => {
                     tracing::info!("TestAction: CreateGroup");
                     use crate::state::{EntityType, MemberRole};
-                    let parent_org_id = app.entities.iter()
+                    let parent_org_id = app
+                        .entities
+                        .iter()
                         .find(|e| e.entity_type == EntityType::Organisation)
                         .map(|e| e.id.clone());
-                    let grp_count = app.entities.iter().filter(|e| e.entity_type == EntityType::Group).count() + 1;
+                    let grp_count = app
+                        .entities
+                        .iter()
+                        .filter(|e| e.entity_type == EntityType::Group)
+                        .count()
+                        + 1;
                     let group = Entity {
                         id: format!("grp-test-{}", chrono::Utc::now().timestamp_millis()),
                         four_words: None,
@@ -1217,8 +1247,7 @@ impl CommunitasApp {
                         && let Some(messages) = app.messages.get(entity_id)
                         && let Some(message) = messages.iter().find(|m| m.id == message_id)
                     {
-                        self.active_modal =
-                            Some(ModalType::DeleteMessageConfirm(message.clone()));
+                        self.active_modal = Some(ModalType::DeleteMessageConfirm(message.clone()));
                     }
                 }
                 ChatMessageEvent::ConfirmDeleteMessage(message_id) => {
@@ -1439,8 +1468,7 @@ impl CommunitasApp {
                     self.modal_form_state.card_description =
                         card.description.clone().unwrap_or_default();
                     self.modal_form_state.card_priority = card.priority;
-                    self.modal_form_state.card_assignee =
-                        card.assignee.clone().unwrap_or_default();
+                    self.modal_form_state.card_assignee = card.assignee.clone().unwrap_or_default();
                     self.modal_form_state.card_column = card.column.clone();
                     self.modal_form_state.editing_card_id = Some(card.id.clone());
                     self.active_modal = Some(ModalType::EditCard(card));
@@ -1449,7 +1477,8 @@ impl CommunitasApp {
                     // Update the card in state
                     if let Some(card_id) = self.modal_form_state.editing_card_id.take() {
                         let title = std::mem::take(&mut self.modal_form_state.card_title);
-                        let description = std::mem::take(&mut self.modal_form_state.card_description);
+                        let description =
+                            std::mem::take(&mut self.modal_form_state.card_description);
                         let priority = self.modal_form_state.card_priority;
                         let assignee = std::mem::take(&mut self.modal_form_state.card_assignee);
 
@@ -1815,8 +1844,7 @@ impl CommunitasApp {
                     && let Some(ModalType::CreateEntity(context)) = &self.active_modal
                 {
                     let name = std::mem::take(&mut self.modal_form_state.entity_name);
-                    let description =
-                        std::mem::take(&mut self.modal_form_state.entity_description);
+                    let description = std::mem::take(&mut self.modal_form_state.entity_description);
 
                     if !name.trim().is_empty() {
                         let mut entity = Entity::new(

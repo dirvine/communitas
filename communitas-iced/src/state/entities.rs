@@ -36,10 +36,10 @@ impl MemberRole {
     #[must_use]
     pub fn icon(&self) -> &'static str {
         match self {
-            Self::Owner => "👑",   // Crown
-            Self::Admin => "🛡️",   // Shield
-            Self::Member => "👤",  // Person
-            Self::Guest => "👁️",   // Eye
+            Self::Owner => "👑",  // Crown
+            Self::Admin => "🛡️",  // Shield
+            Self::Member => "👤", // Person
+            Self::Guest => "👁️",  // Eye
         }
     }
 
@@ -47,10 +47,10 @@ impl MemberRole {
     #[must_use]
     pub fn color(&self) -> iced::Color {
         match self {
-            Self::Owner => iced::Color::from_rgb(0.9, 0.6, 0.2),   // Orange/gold
-            Self::Admin => iced::Color::from_rgb(0.3, 0.5, 0.9),   // Blue
-            Self::Member => iced::Color::from_rgb(0.5, 0.5, 0.5),  // Gray
-            Self::Guest => iced::Color::from_rgb(0.6, 0.6, 0.7),   // Secondary gray
+            Self::Owner => iced::Color::from_rgb(0.9, 0.6, 0.2), // Orange/gold
+            Self::Admin => iced::Color::from_rgb(0.3, 0.5, 0.9), // Blue
+            Self::Member => iced::Color::from_rgb(0.5, 0.5, 0.5), // Gray
+            Self::Guest => iced::Color::from_rgb(0.6, 0.6, 0.7), // Secondary gray
         }
     }
 

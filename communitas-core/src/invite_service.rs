@@ -70,7 +70,10 @@ pub enum InviteServiceError {
     EntityNotFound(String),
 
     /// Member not found in entity.
-    MemberNotFound { entity_id: String, member_id: String },
+    MemberNotFound {
+        entity_id: String,
+        member_id: String,
+    },
 
     /// Invite not found.
     InviteNotFound(String),
@@ -88,10 +91,16 @@ pub enum InviteServiceError {
     AlreadyResolved(InviteStatus),
 
     /// Cannot grant a role higher than your own.
-    RoleEscalation { granter_role: String, target_role: String },
+    RoleEscalation {
+        granter_role: String,
+        target_role: String,
+    },
 
     /// Recipient is already a member.
-    AlreadyMember { entity_id: String, member_id: String },
+    AlreadyMember {
+        entity_id: String,
+        member_id: String,
+    },
 
     /// CRDT operation failed.
     CrdtError(String),
@@ -107,8 +116,15 @@ impl std::fmt::Display for InviteServiceError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::EntityNotFound(id) => write!(f, "entity not found: {}", id),
-            Self::MemberNotFound { entity_id, member_id } => {
-                write!(f, "member '{}' not found in entity '{}'", member_id, entity_id)
+            Self::MemberNotFound {
+                entity_id,
+                member_id,
+            } => {
+                write!(
+                    f,
+                    "member '{}' not found in entity '{}'",
+                    member_id, entity_id
+                )
             }
             Self::InviteNotFound(id) => write!(f, "invite not found: {}", id),
             Self::PermissionDenied(msg) => write!(f, "permission denied: {}", msg),
@@ -117,10 +133,20 @@ impl std::fmt::Display for InviteServiceError {
             Self::AlreadyResolved(status) => {
                 write!(f, "invite already resolved with status: {}", status)
             }
-            Self::RoleEscalation { granter_role, target_role } => {
-                write!(f, "cannot grant '{}' role when you have '{}' role", target_role, granter_role)
+            Self::RoleEscalation {
+                granter_role,
+                target_role,
+            } => {
+                write!(
+                    f,
+                    "cannot grant '{}' role when you have '{}' role",
+                    target_role, granter_role
+                )
             }
-            Self::AlreadyMember { entity_id, member_id } => {
+            Self::AlreadyMember {
+                entity_id,
+                member_id,
+            } => {
                 write!(f, "'{}' is already a member of '{}'", member_id, entity_id)
             }
             Self::CrdtError(msg) => write!(f, "CRDT error: {}", msg),
@@ -177,7 +203,10 @@ pub fn can_grant_role(granter_role: &str, target_role: &str) -> bool {
 /// Does not validate against the dictionary (that's done elsewhere).
 pub fn validate_four_words_format(identity: &str) -> bool {
     let parts: Vec<&str> = identity.split('-').collect();
-    parts.len() == 4 && parts.iter().all(|w| !w.is_empty() && w.chars().all(|c| c.is_alphabetic()))
+    parts.len() == 4
+        && parts
+            .iter()
+            .all(|w| !w.is_empty() && w.chars().all(|c| c.is_alphabetic()))
 }
 
 /// Service for managing collaboration invites.
@@ -207,10 +236,7 @@ pub struct InviteService {
 
 impl InviteService {
     /// Create a new invite service.
-    pub fn new(
-        crdt_manager: Arc<CrdtManager>,
-        entity_service: Arc<EntityService>,
-    ) -> Self {
+    pub fn new(crdt_manager: Arc<CrdtManager>, entity_service: Arc<EntityService>) -> Self {
         Self {
             crdt_manager,
             entity_service,
@@ -240,7 +266,9 @@ impl InviteService {
     ) -> InviteServiceResult<Invite> {
         // 1. Validate recipient format
         if !validate_four_words_format(&request.recipient_id) {
-            return Err(InviteServiceError::InvalidFourWords(request.recipient_id.clone()));
+            return Err(InviteServiceError::InvalidFourWords(
+                request.recipient_id.clone(),
+            ));
         }
 
         // 2. Get creator's permissions
@@ -265,7 +293,11 @@ impl InviteService {
 
         // 5. Check recipient is not already a member
         if self
-            .is_member(request.entity_type, &request.entity_id, &request.recipient_id)
+            .is_member(
+                request.entity_type,
+                &request.entity_id,
+                &request.recipient_id,
+            )
             .await
         {
             return Err(InviteServiceError::AlreadyMember {
@@ -452,7 +484,9 @@ impl InviteService {
     pub async fn get_invite(&self, invite_id: &str) -> InviteServiceResult<Invite> {
         // Check cache first
         {
-            let cache = self.invite_cache.read()
+            let cache = self
+                .invite_cache
+                .read()
                 .map_err(|_| InviteServiceError::CrdtError("cache lock poisoned".to_string()))?;
             if let Some(invite) = cache.get(invite_id) {
                 return Ok(invite.clone());
@@ -511,12 +545,7 @@ impl InviteService {
     }
 
     /// Check if someone is already a member of an entity.
-    async fn is_member(
-        &self,
-        entity_type: EntityType,
-        entity_id: &str,
-        member_id: &str,
-    ) -> bool {
+    async fn is_member(&self, entity_type: EntityType, entity_id: &str, member_id: &str) -> bool {
         self.entity_service
             .get_member_role(entity_type, entity_id, member_id)
             .await
@@ -527,14 +556,18 @@ impl InviteService {
     async fn store_invite(&self, invite: &Invite) -> InviteServiceResult<()> {
         // Store in cache
         {
-            let mut cache = self.invite_cache.write()
+            let mut cache = self
+                .invite_cache
+                .write()
                 .map_err(|_| InviteServiceError::CrdtError("cache lock poisoned".to_string()))?;
             cache.insert(invite.id.clone(), invite.clone());
         }
 
         // Update recipient index
         {
-            let mut index = self.recipient_index.write()
+            let mut index = self
+                .recipient_index
+                .write()
                 .map_err(|_| InviteServiceError::CrdtError("index lock poisoned".to_string()))?;
             index
                 .entry(invite.recipient_id.clone())
@@ -545,7 +578,9 @@ impl InviteService {
         // Update entity index
         {
             let entity_key = format!("{:?}:{}", invite.entity_type, invite.entity_id);
-            let mut index = self.entity_index.write()
+            let mut index = self
+                .entity_index
+                .write()
                 .map_err(|_| InviteServiceError::CrdtError("index lock poisoned".to_string()))?;
             index.entry(entity_key).or_default().push(invite.id.clone());
         }
@@ -558,7 +593,9 @@ impl InviteService {
     async fn update_invite(&self, invite: &Invite) -> InviteServiceResult<()> {
         // Update cache
         {
-            let mut cache = self.invite_cache.write()
+            let mut cache = self
+                .invite_cache
+                .write()
                 .map_err(|_| InviteServiceError::CrdtError("cache lock poisoned".to_string()))?;
             cache.insert(invite.id.clone(), invite.clone());
         }
@@ -590,8 +627,9 @@ impl InviteService {
         };
 
         // Serialize invite to JSON
-        let invite_json = serde_json::to_string(invite)
-            .map_err(|e| InviteServiceError::CrdtError(format!("Failed to serialize invite: {}", e)))?;
+        let invite_json = serde_json::to_string(invite).map_err(|e| {
+            InviteServiceError::CrdtError(format!("Failed to serialize invite: {}", e))
+        })?;
 
         // Store in YMap
         {
@@ -655,7 +693,9 @@ impl InviteService {
 
         // First check in-memory cache
         {
-            let cache = self.invite_cache.read()
+            let cache = self
+                .invite_cache
+                .read()
                 .map_err(|_| InviteServiceError::CrdtError("cache lock poisoned".to_string()))?;
             if let Some(invite) = cache.get(invite_id) {
                 return Ok(invite.clone());
@@ -683,7 +723,8 @@ impl InviteService {
         };
 
         // Load the entity document
-        let entity_doc = self.crdt_manager
+        let entity_doc = self
+            .crdt_manager
             .load_document(&entity_doc_id)
             .await
             .map_err(|e| InviteServiceError::CrdtError(e.to_string()))?;
@@ -696,8 +737,9 @@ impl InviteService {
             _ => return Err(InviteServiceError::InviteNotFound(invite_id.to_string())),
         };
 
-        let invite: Invite = serde_json::from_str(&invite_json)
-            .map_err(|e| InviteServiceError::CrdtError(format!("Failed to deserialize invite: {}", e)))?;
+        let invite: Invite = serde_json::from_str(&invite_json).map_err(|e| {
+            InviteServiceError::CrdtError(format!("Failed to deserialize invite: {}", e))
+        })?;
 
         Ok(invite)
     }
@@ -732,8 +774,12 @@ impl InviteService {
         let mut invites = Vec::new();
         for (key, value) in invites_map.iter(&txn) {
             if let yrs::Out::Any(yrs::Any::String(invite_json)) = value {
-                let invite: Invite = serde_json::from_str(invite_json.as_ref())
-                    .map_err(|e| InviteServiceError::CrdtError(format!("Failed to deserialize invite {}: {}", key, e)))?;
+                let invite: Invite = serde_json::from_str(invite_json.as_ref()).map_err(|e| {
+                    InviteServiceError::CrdtError(format!(
+                        "Failed to deserialize invite {}: {}",
+                        key, e
+                    ))
+                })?;
                 invites.push(invite);
             }
         }
@@ -766,8 +812,9 @@ impl InviteService {
         };
 
         // Serialize invite IDs to JSON array
-        let invite_ids_json = serde_json::to_string(invite_ids)
-            .map_err(|e| InviteServiceError::CrdtError(format!("Failed to serialize invite IDs: {}", e)))?;
+        let invite_ids_json = serde_json::to_string(invite_ids).map_err(|e| {
+            InviteServiceError::CrdtError(format!("Failed to serialize invite IDs: {}", e))
+        })?;
 
         // Store in YMap
         {
@@ -816,8 +863,9 @@ impl InviteService {
             _ => return Ok(Vec::new()),
         };
 
-        let invite_ids: Vec<String> = serde_json::from_str(&invite_ids_json)
-            .map_err(|e| InviteServiceError::CrdtError(format!("Failed to deserialize invite IDs: {}", e)))?;
+        let invite_ids: Vec<String> = serde_json::from_str(&invite_ids_json).map_err(|e| {
+            InviteServiceError::CrdtError(format!("Failed to deserialize invite IDs: {}", e))
+        })?;
 
         Ok(invite_ids)
     }
@@ -856,12 +904,16 @@ impl InviteService {
         status_filter: Option<InviteStatus>,
     ) -> InviteServiceResult<Vec<Invite>> {
         let invite_ids = {
-            let index = self.recipient_index.read()
+            let index = self
+                .recipient_index
+                .read()
                 .map_err(|_| InviteServiceError::CrdtError("index lock poisoned".to_string()))?;
             index.get(recipient_id).cloned().unwrap_or_default()
         };
 
-        let cache = self.invite_cache.read()
+        let cache = self
+            .invite_cache
+            .read()
             .map_err(|_| InviteServiceError::CrdtError("cache lock poisoned".to_string()))?;
         let mut result = Vec::new();
 
@@ -893,11 +945,16 @@ impl InviteService {
     ) -> InviteServiceResult<Vec<Invite>> {
         let entity_key = format!("{:?}:{}", entity_type, entity_id);
         let invite_ids = {
-            let index = self.entity_index.read().map_err(|_| InviteServiceError::CrdtError("lock poisoned".to_string()))?;
+            let index = self
+                .entity_index
+                .read()
+                .map_err(|_| InviteServiceError::CrdtError("lock poisoned".to_string()))?;
             index.get(&entity_key).cloned().unwrap_or_default()
         };
 
-        let cache = self.invite_cache.read()
+        let cache = self
+            .invite_cache
+            .read()
             .map_err(|_| InviteServiceError::CrdtError("cache lock poisoned".to_string()))?;
         let mut result = Vec::new();
 
@@ -932,7 +989,13 @@ mod tests {
             }
         }
 
-        fn add_member_sync(&self, entity_type: EntityType, entity_id: &str, member_id: &str, role: &str) {
+        fn add_member_sync(
+            &self,
+            entity_type: EntityType,
+            entity_id: &str,
+            member_id: &str,
+            role: &str,
+        ) {
             let entity_key = format!("{:?}:{}", entity_type, entity_id);
             let mut members = self.members.write().unwrap();
             members
@@ -941,7 +1004,12 @@ mod tests {
                 .insert(member_id.to_string(), role.to_string());
         }
 
-        fn get_role(&self, entity_type: EntityType, entity_id: &str, member_id: &str) -> Option<String> {
+        fn get_role(
+            &self,
+            entity_type: EntityType,
+            entity_id: &str,
+            member_id: &str,
+        ) -> Option<String> {
             let entity_key = format!("{:?}:{}", entity_type, entity_id);
             let members = self.members.read().unwrap();
             members
@@ -965,7 +1033,12 @@ mod tests {
                 .push((resource.to_string(), level.to_string()));
         }
 
-        fn get_overrides(&self, entity_type: EntityType, entity_id: &str, member_id: &str) -> Vec<(String, String)> {
+        fn get_overrides(
+            &self,
+            entity_type: EntityType,
+            entity_id: &str,
+            member_id: &str,
+        ) -> Vec<(String, String)> {
             let key = format!("{:?}:{}:{}", entity_type, entity_id, member_id);
             let overrides = self.permission_overrides.read().unwrap();
             overrides.get(&key).cloned().unwrap_or_default()
@@ -1073,14 +1146,20 @@ mod tests {
 
         let action_err = InviteActionError::AlreadyResolved(InviteStatus::Accepted);
         let service_err: InviteServiceError = action_err.into();
-        assert!(matches!(service_err, InviteServiceError::AlreadyResolved(InviteStatus::Accepted)));
+        assert!(matches!(
+            service_err,
+            InviteServiceError::AlreadyResolved(InviteStatus::Accepted)
+        ));
 
         let action_err = InviteActionError::NotRecipient {
             expected: "alice-a-b-c".to_string(),
             actual: "bob-d-e-f".to_string(),
         };
         let service_err: InviteServiceError = action_err.into();
-        assert!(matches!(service_err, InviteServiceError::PermissionDenied(_)));
+        assert!(matches!(
+            service_err,
+            InviteServiceError::PermissionDenied(_)
+        ));
     }
 
     // ============================================
@@ -1107,12 +1186,7 @@ mod tests {
     #[test]
     fn test_invite_request_new_accepts_string_types() {
         // Test with &str
-        let req1 = InviteRequest::new(
-            "alice-a-b-c",
-            EntityType::Group,
-            "group-1",
-            "viewer",
-        );
+        let req1 = InviteRequest::new("alice-a-b-c", EntityType::Group, "group-1", "viewer");
         assert_eq!(req1.recipient_id, "alice-a-b-c");
 
         // Test with String
@@ -1129,13 +1203,8 @@ mod tests {
 
     #[test]
     fn test_invite_request_with_message() {
-        let request = InviteRequest::new(
-            "alice-a-b-c",
-            EntityType::Project,
-            "proj-1",
-            "admin",
-        )
-        .with_message("Welcome to the team!");
+        let request = InviteRequest::new("alice-a-b-c", EntityType::Project, "proj-1", "admin")
+            .with_message("Welcome to the team!");
 
         assert_eq!(request.message, Some("Welcome to the team!".to_string()));
         // Other fields unchanged
@@ -1146,13 +1215,8 @@ mod tests {
 
     #[test]
     fn test_invite_request_with_expiration() {
-        let request = InviteRequest::new(
-            "bob-x-y-z",
-            EntityType::Organisation,
-            "org-1",
-            "member",
-        )
-        .with_expiration(48);
+        let request = InviteRequest::new("bob-x-y-z", EntityType::Organisation, "org-1", "member")
+            .with_expiration(48);
 
         assert_eq!(request.expires_in_hours, Some(48));
         // Other fields unchanged
@@ -1162,14 +1226,9 @@ mod tests {
 
     #[test]
     fn test_invite_request_builder_chaining() {
-        let request = InviteRequest::new(
-            "carol-m-n-o",
-            EntityType::Group,
-            "group-42",
-            "viewer",
-        )
-        .with_message("Join our group!")
-        .with_expiration(24);
+        let request = InviteRequest::new("carol-m-n-o", EntityType::Group, "group-42", "viewer")
+            .with_message("Join our group!")
+            .with_expiration(24);
 
         assert_eq!(request.recipient_id, "carol-m-n-o");
         assert_eq!(request.entity_type, EntityType::Group);
@@ -1207,12 +1266,7 @@ mod tests {
         ];
 
         for entity_type in entity_types {
-            let request = InviteRequest::new(
-                "test-a-b-c",
-                entity_type,
-                "entity-id",
-                "member",
-            );
+            let request = InviteRequest::new("test-a-b-c", entity_type, "entity-id", "member");
             assert_eq!(request.entity_type, entity_type);
         }
     }
@@ -1222,25 +1276,16 @@ mod tests {
         let roles = ["owner", "admin", "member", "viewer", "guest"];
 
         for role in roles {
-            let request = InviteRequest::new(
-                "test-a-b-c",
-                EntityType::Group,
-                "group-1",
-                role,
-            );
+            let request = InviteRequest::new("test-a-b-c", EntityType::Group, "group-1", role);
             assert_eq!(request.role, role);
         }
     }
 
     #[test]
     fn test_invite_request_empty_message_allowed() {
-        let request = InviteRequest::new(
-            "alice-a-b-c",
-            EntityType::Organisation,
-            "org-1",
-            "member",
-        )
-        .with_message("");
+        let request =
+            InviteRequest::new("alice-a-b-c", EntityType::Organisation, "org-1", "member")
+                .with_message("");
 
         assert_eq!(request.message, Some(String::new()));
     }
@@ -1248,13 +1293,8 @@ mod tests {
     #[test]
     fn test_invite_request_zero_expiration_allowed() {
         // Zero hours means immediate expiration (edge case)
-        let request = InviteRequest::new(
-            "alice-a-b-c",
-            EntityType::Group,
-            "group-1",
-            "viewer",
-        )
-        .with_expiration(0);
+        let request = InviteRequest::new("alice-a-b-c", EntityType::Group, "group-1", "viewer")
+            .with_expiration(0);
 
         assert_eq!(request.expires_in_hours, Some(0));
     }
@@ -1262,13 +1302,8 @@ mod tests {
     #[test]
     fn test_invite_request_long_expiration() {
         // 30 days in hours
-        let request = InviteRequest::new(
-            "alice-a-b-c",
-            EntityType::Project,
-            "proj-1",
-            "member",
-        )
-        .with_expiration(720);
+        let request = InviteRequest::new("alice-a-b-c", EntityType::Project, "proj-1", "member")
+            .with_expiration(720);
 
         assert_eq!(request.expires_in_hours, Some(720));
     }
@@ -1441,15 +1476,14 @@ mod tests {
             "admin", // Higher than member's role
         );
 
-        let result = invite_service
-            .create_invite(member_id, request)
-            .await;
+        let result = invite_service.create_invite(member_id, request).await;
 
         // Member with "member" role doesn't have Edit on Members, so expect PermissionDenied
         // not RoleEscalation (which only happens after permissions check passes)
         assert!(
             matches!(result, Err(InviteServiceError::PermissionDenied(_))),
-            "Expected PermissionDenied, got: {:?}", result
+            "Expected PermissionDenied, got: {:?}",
+            result
         );
     }
 
@@ -1485,13 +1519,12 @@ mod tests {
             "owner", // Higher than admin's role
         );
 
-        let result = invite_service
-            .create_invite(admin_id, request)
-            .await;
+        let result = invite_service.create_invite(admin_id, request).await;
 
         assert!(
             matches!(result, Err(InviteServiceError::RoleEscalation { .. })),
-            "Expected RoleEscalation, got: {:?}", result
+            "Expected RoleEscalation, got: {:?}",
+            result
         );
     }
 
@@ -1573,12 +1606,7 @@ mod tests {
 
         // Create invite
         let recipient_id = "alice-bob-carol-dave";
-        let request = InviteRequest::new(
-            recipient_id,
-            EntityType::Organisation,
-            &org.id,
-            "member",
-        );
+        let request = InviteRequest::new(recipient_id, EntityType::Organisation, &org.id, "member");
 
         let invite = invite_service
             .create_invite(creator_id, request)
@@ -1678,12 +1706,7 @@ mod tests {
 
         // Create invite
         let recipient_id = "alice-bob-carol-dave";
-        let request = InviteRequest::new(
-            recipient_id,
-            EntityType::Organisation,
-            &org.id,
-            "member",
-        );
+        let request = InviteRequest::new(recipient_id, EntityType::Organisation, &org.id, "member");
 
         let invite = invite_service
             .create_invite(creator_id, request)
@@ -1907,14 +1930,14 @@ mod tests {
             .expect("Failed to set role");
 
         // Create multiple invites to same org
-        let recipients = ["alice-bob-carol-dave", "bob-xyz-uvw-rst", "carol-mno-pqr-stu"];
+        let recipients = [
+            "alice-bob-carol-dave",
+            "bob-xyz-uvw-rst",
+            "carol-mno-pqr-stu",
+        ];
         for recipient_id in recipients {
-            let request = InviteRequest::new(
-                recipient_id,
-                EntityType::Organisation,
-                &org.id,
-                "member",
-            );
+            let request =
+                InviteRequest::new(recipient_id, EntityType::Organisation, &org.id, "member");
 
             invite_service
                 .create_invite(creator_id, request)
@@ -1964,16 +1987,10 @@ mod tests {
             .expect("Failed to add member");
 
         // Try to create invite for existing member
-        let request = InviteRequest::new(
-            existing_member,
-            EntityType::Organisation,
-            &org.id,
-            "member",
-        );
+        let request =
+            InviteRequest::new(existing_member, EntityType::Organisation, &org.id, "member");
 
-        let result = invite_service
-            .create_invite(creator_id, request)
-            .await;
+        let result = invite_service.create_invite(creator_id, request).await;
 
         assert!(matches!(
             result,
@@ -2006,14 +2023,9 @@ mod tests {
             .expect("Failed to set role");
 
         // 2. Create invite
-        let request = InviteRequest::new(
-            recipient_id,
-            EntityType::Organisation,
-            &org.id,
-            "member",
-        )
-        .with_message("Welcome!")
-        .with_expiration(24);
+        let request = InviteRequest::new(recipient_id, EntityType::Organisation, &org.id, "member")
+            .with_message("Welcome!")
+            .with_expiration(24);
 
         let invite = invite_service
             .create_invite(owner_id, request)
@@ -2083,8 +2095,7 @@ mod proptests {
 
     // Strategy for generating four-word identities
     fn four_word_identity() -> impl Strategy<Value = String> {
-        proptest::collection::vec("[a-z]{3,8}", 4)
-            .prop_map(|words| words.join("-"))
+        proptest::collection::vec("[a-z]{3,8}", 4).prop_map(|words| words.join("-"))
     }
 
     proptest! {
@@ -2230,8 +2241,7 @@ mod crdt_proptests {
 
     // Strategy for generating four-word identities
     fn four_word_identity() -> impl Strategy<Value = String> {
-        proptest::collection::vec("[a-z]{3,8}", 4)
-            .prop_map(|words| words.join("-"))
+        proptest::collection::vec("[a-z]{3,8}", 4).prop_map(|words| words.join("-"))
     }
 
     // Strategy for generating roles
@@ -2729,11 +2739,7 @@ mod crdt_storage_tests {
     }
 
     /// Helper to create a test invite.
-    fn create_test_invite(
-        recipient: &str,
-        entity_type: EntityType,
-        entity_id: &str,
-    ) -> Invite {
+    fn create_test_invite(recipient: &str, entity_type: EntityType, entity_id: &str) -> Invite {
         Invite::new(
             "alice-test-four-word".to_string(),
             recipient.to_string(),
@@ -2753,19 +2759,19 @@ mod crdt_storage_tests {
     async fn test_store_and_load_invite_from_crdt() {
         let (service, _temp_dir) = create_test_invite_service().await;
 
-        let invite = create_test_invite(
-            "bob-test-four-word",
-            EntityType::Organisation,
-            "org-123",
-        );
+        let invite = create_test_invite("bob-test-four-word", EntityType::Organisation, "org-123");
         let invite_id = invite.id.clone();
 
         // Store the invite in CRDT
-        service.store_invite_in_crdt(&invite).await
+        service
+            .store_invite_in_crdt(&invite)
+            .await
             .expect("failed to store invite");
 
         // Load it back from CRDT
-        let loaded = service.load_invite_from_crdt(&invite_id).await
+        let loaded = service
+            .load_invite_from_crdt(&invite_id)
+            .await
             .expect("failed to load invite");
 
         // Verify all fields
@@ -2787,25 +2793,21 @@ mod crdt_storage_tests {
 
         let result = service.load_invite_from_crdt("nonexistent-invite-id").await;
 
-        assert!(matches!(
-            result,
-            Err(InviteServiceError::InviteNotFound(_))
-        ));
+        assert!(matches!(result, Err(InviteServiceError::InviteNotFound(_))));
     }
 
     #[tokio::test]
     async fn test_store_invite_updates_existing() {
         let (service, _temp_dir) = create_test_invite_service().await;
 
-        let mut invite = create_test_invite(
-            "bob-test-four-word",
-            EntityType::Organisation,
-            "org-123",
-        );
+        let mut invite =
+            create_test_invite("bob-test-four-word", EntityType::Organisation, "org-123");
         let invite_id = invite.id.clone();
 
         // Store initial invite
-        service.store_invite_in_crdt(&invite).await
+        service
+            .store_invite_in_crdt(&invite)
+            .await
             .expect("failed to store invite");
 
         // Modify the invite (accept it)
@@ -2813,11 +2815,15 @@ mod crdt_storage_tests {
         invite.accept(&recipient).expect("failed to accept");
 
         // Store updated invite
-        service.store_invite_in_crdt(&invite).await
+        service
+            .store_invite_in_crdt(&invite)
+            .await
             .expect("failed to store updated invite");
 
         // Load and verify update was persisted
-        let loaded = service.load_invite_from_crdt(&invite_id).await
+        let loaded = service
+            .load_invite_from_crdt(&invite_id)
+            .await
             .expect("failed to load invite");
 
         assert_eq!(loaded.status, InviteStatus::Accepted);
@@ -2837,12 +2843,23 @@ mod crdt_storage_tests {
         let invite2 = create_test_invite("carol-four-five-six", entity_type, entity_id);
         let invite3 = create_test_invite("dave-seven-eight-nine", EntityType::Group, "group-789");
 
-        service.store_invite_in_crdt(&invite1).await.expect("store 1");
-        service.store_invite_in_crdt(&invite2).await.expect("store 2");
-        service.store_invite_in_crdt(&invite3).await.expect("store 3");
+        service
+            .store_invite_in_crdt(&invite1)
+            .await
+            .expect("store 1");
+        service
+            .store_invite_in_crdt(&invite2)
+            .await
+            .expect("store 2");
+        service
+            .store_invite_in_crdt(&invite3)
+            .await
+            .expect("store 3");
 
         // Load invites for the specific entity
-        let invites = service.load_invites_for_entity_from_crdt(entity_type, entity_id).await
+        let invites = service
+            .load_invites_for_entity_from_crdt(entity_type, entity_id)
+            .await
             .expect("failed to load entity invites");
 
         // Should only get the 2 invites for org-456
@@ -2858,10 +2875,10 @@ mod crdt_storage_tests {
     async fn test_load_invites_for_empty_entity_returns_empty_vec() {
         let (service, _temp_dir) = create_test_invite_service().await;
 
-        let invites = service.load_invites_for_entity_from_crdt(
-            EntityType::Organisation,
-            "nonexistent-entity",
-        ).await.expect("should return empty vec");
+        let invites = service
+            .load_invites_for_entity_from_crdt(EntityType::Organisation, "nonexistent-entity")
+            .await
+            .expect("should return empty vec");
 
         assert!(invites.is_empty());
     }
@@ -2878,20 +2895,19 @@ mod crdt_storage_tests {
             let crdt_manager = Arc::new(
                 CrdtManager::new(temp_dir.path())
                     .await
-                    .expect("failed to create CrdtManager")
+                    .expect("failed to create CrdtManager"),
             );
             let entity_service = create_test_entity_service(crdt_manager.clone());
             let service = InviteService::new(crdt_manager, entity_service);
 
-            let invite = create_test_invite(
-                "bob-test-four-word",
-                EntityType::Organisation,
-                "org-123",
-            );
+            let invite =
+                create_test_invite("bob-test-four-word", EntityType::Organisation, "org-123");
             invite_id = invite.id.clone();
             original_recipient = invite.recipient_id.clone();
 
-            service.store_invite_in_crdt(&invite).await
+            service
+                .store_invite_in_crdt(&invite)
+                .await
                 .expect("failed to store invite");
         }
 
@@ -2900,12 +2916,14 @@ mod crdt_storage_tests {
             let crdt_manager = Arc::new(
                 CrdtManager::new(temp_dir.path())
                     .await
-                    .expect("failed to create CrdtManager")
+                    .expect("failed to create CrdtManager"),
             );
             let entity_service = create_test_entity_service(crdt_manager.clone());
             let service = InviteService::new(crdt_manager, entity_service);
 
-            let loaded = service.load_invite_from_crdt(&invite_id).await
+            let loaded = service
+                .load_invite_from_crdt(&invite_id)
+                .await
                 .expect("failed to load invite after restart");
 
             assert_eq!(loaded.id, invite_id);
@@ -2919,42 +2937,45 @@ mod crdt_storage_tests {
         let (service, _temp_dir) = create_test_invite_service().await;
 
         // Store invites for different entity types
-        let org_invite = create_test_invite(
-            "bob-org-four-word",
-            EntityType::Organisation,
-            "org-123",
-        );
-        let group_invite = create_test_invite(
-            "carol-group-four-word",
-            EntityType::Group,
-            "group-456",
-        );
-        let project_invite = create_test_invite(
-            "dave-project-four-word",
-            EntityType::Project,
-            "project-789",
-        );
+        let org_invite =
+            create_test_invite("bob-org-four-word", EntityType::Organisation, "org-123");
+        let group_invite =
+            create_test_invite("carol-group-four-word", EntityType::Group, "group-456");
+        let project_invite =
+            create_test_invite("dave-project-four-word", EntityType::Project, "project-789");
 
-        service.store_invite_in_crdt(&org_invite).await.expect("store org");
-        service.store_invite_in_crdt(&group_invite).await.expect("store group");
-        service.store_invite_in_crdt(&project_invite).await.expect("store project");
+        service
+            .store_invite_in_crdt(&org_invite)
+            .await
+            .expect("store org");
+        service
+            .store_invite_in_crdt(&group_invite)
+            .await
+            .expect("store group");
+        service
+            .store_invite_in_crdt(&project_invite)
+            .await
+            .expect("store project");
 
         // Each entity should have exactly one invite
-        let org_invites = service.load_invites_for_entity_from_crdt(
-            EntityType::Organisation, "org-123"
-        ).await.expect("org invites");
+        let org_invites = service
+            .load_invites_for_entity_from_crdt(EntityType::Organisation, "org-123")
+            .await
+            .expect("org invites");
         assert_eq!(org_invites.len(), 1);
         assert_eq!(org_invites[0].id, org_invite.id);
 
-        let group_invites = service.load_invites_for_entity_from_crdt(
-            EntityType::Group, "group-456"
-        ).await.expect("group invites");
+        let group_invites = service
+            .load_invites_for_entity_from_crdt(EntityType::Group, "group-456")
+            .await
+            .expect("group invites");
         assert_eq!(group_invites.len(), 1);
         assert_eq!(group_invites[0].id, group_invite.id);
 
-        let project_invites = service.load_invites_for_entity_from_crdt(
-            EntityType::Project, "project-789"
-        ).await.expect("project invites");
+        let project_invites = service
+            .load_invites_for_entity_from_crdt(EntityType::Project, "project-789")
+            .await
+            .expect("project invites");
         assert_eq!(project_invites.len(), 1);
         assert_eq!(project_invites[0].id, project_invite.id);
     }
@@ -2999,10 +3020,14 @@ mod crdt_storage_tests {
             }
 
             let invite_id = invite.id.clone();
-            service.store_invite_in_crdt(&invite).await
+            service
+                .store_invite_in_crdt(&invite)
+                .await
                 .expect(&format!("store {} failed", status));
 
-            let loaded = service.load_invite_from_crdt(&invite_id).await
+            let loaded = service
+                .load_invite_from_crdt(&invite_id)
+                .await
                 .expect(&format!("load {} failed", status));
 
             assert_eq!(loaded.status, *status, "status mismatch for {}", status);
@@ -3022,7 +3047,7 @@ mod crdt_storage_tests {
             let crdt_manager = Arc::new(
                 CrdtManager::new(temp_dir.path())
                     .await
-                    .expect("failed to create CrdtManager")
+                    .expect("failed to create CrdtManager"),
             );
             let entity_service = create_test_entity_service(crdt_manager.clone());
             let service = InviteService::new(crdt_manager, entity_service);
@@ -3032,12 +3057,20 @@ mod crdt_storage_tests {
             invite1_id = invite1.id.clone();
             invite2_id = invite2.id.clone();
 
-            service.store_invite_in_crdt(&invite1).await.expect("store 1");
-            service.store_invite_in_crdt(&invite2).await.expect("store 2");
+            service
+                .store_invite_in_crdt(&invite1)
+                .await
+                .expect("store 1");
+            service
+                .store_invite_in_crdt(&invite2)
+                .await
+                .expect("store 2");
 
             // Also store in recipient index
-            service.store_recipient_index_in_crdt(recipient, &[invite1_id.clone(), invite2_id.clone()])
-                .await.expect("store index");
+            service
+                .store_recipient_index_in_crdt(recipient, &[invite1_id.clone(), invite2_id.clone()])
+                .await
+                .expect("store index");
         }
 
         // Second instance - verify index persisted
@@ -3045,12 +3078,13 @@ mod crdt_storage_tests {
             let crdt_manager = Arc::new(
                 CrdtManager::new(temp_dir.path())
                     .await
-                    .expect("failed to create CrdtManager")
+                    .expect("failed to create CrdtManager"),
             );
             let entity_service = create_test_entity_service(crdt_manager.clone());
             let service = InviteService::new(crdt_manager, entity_service);
 
-            let invite_ids = service.load_recipient_index_from_crdt(recipient)
+            let invite_ids = service
+                .load_recipient_index_from_crdt(recipient)
                 .await
                 .expect("load index");
 

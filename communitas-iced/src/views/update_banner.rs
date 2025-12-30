@@ -12,7 +12,7 @@
 use crate::message::{Message, UpdateMessage};
 use crate::theme::Palette;
 use crate::update::{UpdateInfo, UpdateStatus};
-use iced::widget::{button, container, row, text, Space};
+use iced::widget::{Space, button, container, row, text};
 use iced::{Alignment, Border, Element, Length, Theme};
 
 /// Render the update banner if an update is available.
@@ -38,27 +38,23 @@ fn view_available_banner(info: &UpdateInfo) -> Element<'_, Message> {
     .size(13)
     .color(Palette::TEXT_PRIMARY);
 
-    let update_button = button(
-        text("Update Now")
-            .size(12)
-            .color(Palette::DEEP_FOREST),
-    )
-    .padding([6, 12])
-    .style(|_t: &Theme, status: button::Status| {
-        let (bg, border) = match status {
-            button::Status::Active => (Palette::JADE, Palette::JADE),
-            button::Status::Hovered => (Palette::EMERALD, Palette::EMERALD),
-            button::Status::Pressed => (Palette::EMERALD, Palette::EMERALD),
-            button::Status::Disabled => (Palette::STONE, Palette::STONE),
-        };
-        button::Style {
-            background: Some(bg.into()),
-            text_color: Palette::DEEP_FOREST,
-            border: Border::default().rounded(6).color(border),
-            ..Default::default()
-        }
-    })
-    .on_press(Message::Update(UpdateMessage::DownloadUpdate));
+    let update_button = button(text("Update Now").size(12).color(Palette::DEEP_FOREST))
+        .padding([6, 12])
+        .style(|_t: &Theme, status: button::Status| {
+            let (bg, border) = match status {
+                button::Status::Active => (Palette::JADE, Palette::JADE),
+                button::Status::Hovered => (Palette::EMERALD, Palette::EMERALD),
+                button::Status::Pressed => (Palette::EMERALD, Palette::EMERALD),
+                button::Status::Disabled => (Palette::STONE, Palette::STONE),
+            };
+            button::Style {
+                background: Some(bg.into()),
+                text_color: Palette::DEEP_FOREST,
+                border: Border::default().rounded(6).color(border),
+                ..Default::default()
+            }
+        })
+        .on_press(Message::Update(UpdateMessage::DownloadUpdate));
 
     let later_button = button(text("Later").size(12).color(Palette::STONE))
         .padding([6, 12])

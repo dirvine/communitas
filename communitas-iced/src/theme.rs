@@ -24,81 +24,81 @@ impl Palette {
     // ═══════════════════════════════════════════════════════════════════════
 
     /// Deep forest - primary dark background (rich green-black)
-    pub const DEEP_FOREST: Color = Color::from_rgb(0.102, 0.141, 0.125);  // #1a241f
+    pub const DEEP_FOREST: Color = Color::from_rgb(0.102, 0.141, 0.125); // #1a241f
 
     /// Moss - secondary surface color (rich dark green)
-    pub const MOSS: Color = Color::from_rgb(0.176, 0.239, 0.212);  // #2d3d36
+    pub const MOSS: Color = Color::from_rgb(0.176, 0.239, 0.212); // #2d3d36
 
     /// Fern - elevated surface color
-    pub const FERN: Color = Color::from_rgb(0.224, 0.298, 0.263);  // #394c43
+    pub const FERN: Color = Color::from_rgb(0.224, 0.298, 0.263); // #394c43
 
     /// Lichen - subtle background variation
-    pub const LICHEN: Color = Color::from_rgb(0.278, 0.361, 0.317);  // #475c51
+    pub const LICHEN: Color = Color::from_rgb(0.278, 0.361, 0.317); // #475c51
 
     /// Sage - muted accent for secondary elements
-    pub const SAGE: Color = Color::from_rgb(0.502, 0.596, 0.541);  // #80988a
+    pub const SAGE: Color = Color::from_rgb(0.502, 0.596, 0.541); // #80988a
 
     /// Jade - primary accent color (vibrant, action-oriented)
-    pub const JADE: Color = Color::from_rgb(0.298, 0.686, 0.514);  // #4caf83
+    pub const JADE: Color = Color::from_rgb(0.298, 0.686, 0.514); // #4caf83
 
     /// Emerald - hover/active state for jade
-    pub const EMERALD: Color = Color::from_rgb(0.231, 0.784, 0.541);  // #3bc88a
+    pub const EMERALD: Color = Color::from_rgb(0.231, 0.784, 0.541); // #3bc88a
 
     /// Amber - notification/highlight accent
-    pub const AMBER: Color = Color::from_rgb(0.878, 0.698, 0.396);  // #e0b265
+    pub const AMBER: Color = Color::from_rgb(0.878, 0.698, 0.396); // #e0b265
 
     /// Cream - primary text on dark backgrounds
-    pub const CREAM: Color = Color::from_rgb(0.949, 0.933, 0.906);  // #f2eee7
+    pub const CREAM: Color = Color::from_rgb(0.949, 0.933, 0.906); // #f2eee7
 
     /// Warm white - brightest surface (for cards, inputs)
-    pub const WARM_WHITE: Color = Color::from_rgb(0.976, 0.965, 0.945);  // #f9f7f1
+    pub const WARM_WHITE: Color = Color::from_rgb(0.976, 0.965, 0.945); // #f9f7f1
 
     /// Stone - muted text color
-    pub const STONE: Color = Color::from_rgb(0.631, 0.604, 0.565);  // #a19a90
+    pub const STONE: Color = Color::from_rgb(0.631, 0.604, 0.565); // #a19a90
 
     /// Charcoal - text on light backgrounds
-    pub const CHARCOAL: Color = Color::from_rgb(0.176, 0.192, 0.180);  // #2d312e
+    pub const CHARCOAL: Color = Color::from_rgb(0.176, 0.192, 0.180); // #2d312e
 
     // ═══════════════════════════════════════════════════════════════════════
     // ENTITY TYPE COLORS - Distinctive colors for different entity types
     // ═══════════════════════════════════════════════════════════════════════
 
     /// Organisation entity - deep teal
-    pub const ORGANISATION: Color = Color::from_rgb(0.180, 0.545, 0.545);  // #2e8b8b
+    pub const ORGANISATION: Color = Color::from_rgb(0.180, 0.545, 0.545); // #2e8b8b
 
     /// Project entity - warm gold
-    pub const PROJECT: Color = Color::from_rgb(0.847, 0.647, 0.278);  // #d8a547
+    pub const PROJECT: Color = Color::from_rgb(0.847, 0.647, 0.278); // #d8a547
 
     /// Channel entity - vibrant jade (matches our accent)
-    pub const CHANNEL: Color = Color::from_rgb(0.298, 0.686, 0.514);  // #4caf83
+    pub const CHANNEL: Color = Color::from_rgb(0.298, 0.686, 0.514); // #4caf83
 
     /// Group entity - soft violet
-    pub const GROUP: Color = Color::from_rgb(0.557, 0.408, 0.647);  // #8e68a5
+    pub const GROUP: Color = Color::from_rgb(0.557, 0.408, 0.647); // #8e68a5
 
     /// Person/contact - warm coral
-    pub const PERSON: Color = Color::from_rgb(0.835, 0.475, 0.357);  // #d5795b
+    pub const PERSON: Color = Color::from_rgb(0.835, 0.475, 0.357); // #d5795b
 
     // ═══════════════════════════════════════════════════════════════════════
     // STATUS COLORS - Communication states
     // ═══════════════════════════════════════════════════════════════════════
 
     /// Online status - bright jade
-    pub const ONLINE: Color = Color::from_rgb(0.298, 0.784, 0.514);  // #4cc883
+    pub const ONLINE: Color = Color::from_rgb(0.298, 0.784, 0.514); // #4cc883
 
     /// Away status - soft amber
-    pub const AWAY: Color = Color::from_rgb(0.878, 0.698, 0.396);  // #e0b265
+    pub const AWAY: Color = Color::from_rgb(0.878, 0.698, 0.396); // #e0b265
 
     /// Offline status - muted sage
-    pub const OFFLINE: Color = Color::from_rgb(0.502, 0.545, 0.514);  // #808b83
+    pub const OFFLINE: Color = Color::from_rgb(0.502, 0.545, 0.514); // #808b83
 
     /// Error/danger - warm red (not harsh)
-    pub const ERROR: Color = Color::from_rgb(0.820, 0.341, 0.341);  // #d15757
+    pub const ERROR: Color = Color::from_rgb(0.820, 0.341, 0.341); // #d15757
 
     /// Success - matches our jade theme
-    pub const SUCCESS: Color = Color::from_rgb(0.298, 0.784, 0.514);  // #4cc883
+    pub const SUCCESS: Color = Color::from_rgb(0.298, 0.784, 0.514); // #4cc883
 
     /// Warning - amber
-    pub const WARNING: Color = Color::from_rgb(0.878, 0.698, 0.396);  // #e0b265
+    pub const WARNING: Color = Color::from_rgb(0.878, 0.698, 0.396); // #e0b265
 
     // ═══════════════════════════════════════════════════════════════════════
     // LAYOUT COLORS - Structural elements
@@ -278,7 +278,7 @@ pub fn kanban_column_style(color: Color) -> impl Fn(&Theme) -> container::Style 
 #[must_use]
 pub fn own_message_bubble(_theme: &Theme) -> container::Style {
     container::Style {
-        background: Some(Color::from_rgb(0.224, 0.376, 0.314).into()),  // Jade-tinted dark
+        background: Some(Color::from_rgb(0.224, 0.376, 0.314).into()), // Jade-tinted dark
         border: Border::default().rounded(16),
         text_color: Some(Palette::CREAM),
         ..Default::default()
@@ -300,7 +300,7 @@ pub fn other_message_bubble(_theme: &Theme) -> container::Style {
 #[must_use]
 pub fn own_message_bubble_light(_theme: &Theme) -> container::Style {
     container::Style {
-        background: Some(Color::from_rgb(0.878, 0.941, 0.906).into()),  // Soft jade tint
+        background: Some(Color::from_rgb(0.878, 0.941, 0.906).into()), // Soft jade tint
         border: Border::default().rounded(16),
         text_color: Some(Palette::CHARCOAL),
         ..Default::default()
@@ -311,7 +311,7 @@ pub fn own_message_bubble_light(_theme: &Theme) -> container::Style {
 #[must_use]
 pub fn other_message_bubble_light(_theme: &Theme) -> container::Style {
     container::Style {
-        background: Some(Color::from_rgb(0.933, 0.925, 0.910).into()),  // Warm cream
+        background: Some(Color::from_rgb(0.933, 0.925, 0.910).into()), // Warm cream
         border: Border::default().rounded(16),
         text_color: Some(Palette::CHARCOAL),
         ..Default::default()
@@ -582,7 +582,11 @@ pub fn ghost_button_dark(_theme: &Theme, status: button::Status) -> button::Styl
 
 /// Sidebar item button style.
 #[must_use]
-pub fn sidebar_item_button(_theme: &Theme, status: button::Status, is_selected: bool) -> button::Style {
+pub fn sidebar_item_button(
+    _theme: &Theme,
+    status: button::Status,
+    is_selected: bool,
+) -> button::Style {
     if is_selected {
         button::Style {
             background: Some(Color::from_rgba(0.298, 0.686, 0.514, 0.2).into()),
@@ -663,7 +667,7 @@ pub fn icon_button(_theme: &Theme, status: button::Status) -> button::Style {
     let base = button::Style {
         background: Some(Color::from_rgba(0.0, 0.0, 0.0, 0.05).into()),
         text_color: Palette::CHARCOAL,
-        border: Border::default().rounded(999),  // Circular
+        border: Border::default().rounded(999), // Circular
         shadow: Shadow::default(),
         ..Default::default()
     };
@@ -783,7 +787,7 @@ pub fn search_input_style(_theme: &Theme, status: text_input::Status) -> text_in
         border: Border {
             color: Color::TRANSPARENT,
             width: 0.0,
-            radius: 999.into(),  // Pill shape
+            radius: 999.into(), // Pill shape
         },
         icon: Palette::STONE,
         placeholder: Palette::STONE,
@@ -852,44 +856,64 @@ pub fn scrollbar_style(_theme: &Theme, status: scrollable::Status) -> scrollable
 
     match status {
         scrollable::Status::Active { .. } => base,
-        scrollable::Status::Hovered { is_vertical_scrollbar_hovered, is_horizontal_scrollbar_hovered, .. } => {
-            scrollable::Style {
-                vertical_rail: scrollable::Rail {
-                    scroller: scrollable::Scroller {
-                        background: if is_vertical_scrollbar_hovered { jade_scroller.into() } else { scroller_color.into() },
-                        border: Border::default().rounded(4),
+        scrollable::Status::Hovered {
+            is_vertical_scrollbar_hovered,
+            is_horizontal_scrollbar_hovered,
+            ..
+        } => scrollable::Style {
+            vertical_rail: scrollable::Rail {
+                scroller: scrollable::Scroller {
+                    background: if is_vertical_scrollbar_hovered {
+                        jade_scroller.into()
+                    } else {
+                        scroller_color.into()
                     },
-                    ..base.vertical_rail
+                    border: Border::default().rounded(4),
                 },
-                horizontal_rail: scrollable::Rail {
-                    scroller: scrollable::Scroller {
-                        background: if is_horizontal_scrollbar_hovered { jade_scroller.into() } else { scroller_color.into() },
-                        border: Border::default().rounded(4),
+                ..base.vertical_rail
+            },
+            horizontal_rail: scrollable::Rail {
+                scroller: scrollable::Scroller {
+                    background: if is_horizontal_scrollbar_hovered {
+                        jade_scroller.into()
+                    } else {
+                        scroller_color.into()
                     },
-                    ..base.horizontal_rail
+                    border: Border::default().rounded(4),
                 },
-                ..base
-            }
-        }
-        scrollable::Status::Dragged { is_vertical_scrollbar_dragged, is_horizontal_scrollbar_dragged, .. } => {
-            scrollable::Style {
-                vertical_rail: scrollable::Rail {
-                    scroller: scrollable::Scroller {
-                        background: if is_vertical_scrollbar_dragged { active_jade.into() } else { scroller_color.into() },
-                        border: Border::default().rounded(4),
+                ..base.horizontal_rail
+            },
+            ..base
+        },
+        scrollable::Status::Dragged {
+            is_vertical_scrollbar_dragged,
+            is_horizontal_scrollbar_dragged,
+            ..
+        } => scrollable::Style {
+            vertical_rail: scrollable::Rail {
+                scroller: scrollable::Scroller {
+                    background: if is_vertical_scrollbar_dragged {
+                        active_jade.into()
+                    } else {
+                        scroller_color.into()
                     },
-                    ..base.vertical_rail
+                    border: Border::default().rounded(4),
                 },
-                horizontal_rail: scrollable::Rail {
-                    scroller: scrollable::Scroller {
-                        background: if is_horizontal_scrollbar_dragged { active_jade.into() } else { scroller_color.into() },
-                        border: Border::default().rounded(4),
+                ..base.vertical_rail
+            },
+            horizontal_rail: scrollable::Rail {
+                scroller: scrollable::Scroller {
+                    background: if is_horizontal_scrollbar_dragged {
+                        active_jade.into()
+                    } else {
+                        scroller_color.into()
                     },
-                    ..base.horizontal_rail
+                    border: Border::default().rounded(4),
                 },
-                ..base
-            }
-        }
+                ..base.horizontal_rail
+            },
+            ..base
+        },
     }
 }
 
@@ -931,44 +955,64 @@ pub fn scrollbar_style_dark(_theme: &Theme, status: scrollable::Status) -> scrol
 
     match status {
         scrollable::Status::Active { .. } => base,
-        scrollable::Status::Hovered { is_vertical_scrollbar_hovered, is_horizontal_scrollbar_hovered, .. } => {
-            scrollable::Style {
-                vertical_rail: scrollable::Rail {
-                    scroller: scrollable::Scroller {
-                        background: if is_vertical_scrollbar_hovered { jade_scroller.into() } else { scroller_color.into() },
-                        border: Border::default().rounded(4),
+        scrollable::Status::Hovered {
+            is_vertical_scrollbar_hovered,
+            is_horizontal_scrollbar_hovered,
+            ..
+        } => scrollable::Style {
+            vertical_rail: scrollable::Rail {
+                scroller: scrollable::Scroller {
+                    background: if is_vertical_scrollbar_hovered {
+                        jade_scroller.into()
+                    } else {
+                        scroller_color.into()
                     },
-                    ..base.vertical_rail
+                    border: Border::default().rounded(4),
                 },
-                horizontal_rail: scrollable::Rail {
-                    scroller: scrollable::Scroller {
-                        background: if is_horizontal_scrollbar_hovered { jade_scroller.into() } else { scroller_color.into() },
-                        border: Border::default().rounded(4),
+                ..base.vertical_rail
+            },
+            horizontal_rail: scrollable::Rail {
+                scroller: scrollable::Scroller {
+                    background: if is_horizontal_scrollbar_hovered {
+                        jade_scroller.into()
+                    } else {
+                        scroller_color.into()
                     },
-                    ..base.horizontal_rail
+                    border: Border::default().rounded(4),
                 },
-                ..base
-            }
-        }
-        scrollable::Status::Dragged { is_vertical_scrollbar_dragged, is_horizontal_scrollbar_dragged, .. } => {
-            scrollable::Style {
-                vertical_rail: scrollable::Rail {
-                    scroller: scrollable::Scroller {
-                        background: if is_vertical_scrollbar_dragged { active_jade.into() } else { scroller_color.into() },
-                        border: Border::default().rounded(4),
+                ..base.horizontal_rail
+            },
+            ..base
+        },
+        scrollable::Status::Dragged {
+            is_vertical_scrollbar_dragged,
+            is_horizontal_scrollbar_dragged,
+            ..
+        } => scrollable::Style {
+            vertical_rail: scrollable::Rail {
+                scroller: scrollable::Scroller {
+                    background: if is_vertical_scrollbar_dragged {
+                        active_jade.into()
+                    } else {
+                        scroller_color.into()
                     },
-                    ..base.vertical_rail
+                    border: Border::default().rounded(4),
                 },
-                horizontal_rail: scrollable::Rail {
-                    scroller: scrollable::Scroller {
-                        background: if is_horizontal_scrollbar_dragged { active_jade.into() } else { scroller_color.into() },
-                        border: Border::default().rounded(4),
+                ..base.vertical_rail
+            },
+            horizontal_rail: scrollable::Rail {
+                scroller: scrollable::Scroller {
+                    background: if is_horizontal_scrollbar_dragged {
+                        active_jade.into()
+                    } else {
+                        scroller_color.into()
                     },
-                    ..base.horizontal_rail
+                    border: Border::default().rounded(4),
                 },
-                ..base
-            }
-        }
+                ..base.horizontal_rail
+            },
+            ..base
+        },
     }
 }
 
@@ -984,7 +1028,7 @@ pub fn status_indicator(status: crate::state::ContactStatus) -> container::Style
         border: Border {
             color: Color::from_rgba(1.0, 1.0, 1.0, 0.2),
             width: 1.0,
-            radius: 999.into(),  // Circular
+            radius: 999.into(), // Circular
         },
         shadow: Shadow {
             color: Color::from_rgba(status.color().r, status.color().g, status.color().b, 0.4),

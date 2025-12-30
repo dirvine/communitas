@@ -420,8 +420,7 @@ impl WebRtcManager {
             WebRtcUiEvent::Error { call_id, message } => {
                 error!("WebRTC error in call {call_id}: {message}");
                 if let Some(tx) = &self.event_tx {
-                    let _ =
-                        tx.unbounded_send(Message::Call(CallMessage::CallEnded(Some(message))));
+                    let _ = tx.unbounded_send(Message::Call(CallMessage::CallEnded(Some(message))));
                 }
             }
             WebRtcUiEvent::CallEnded { call_id, reason } => {

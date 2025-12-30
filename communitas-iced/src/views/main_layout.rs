@@ -16,14 +16,16 @@ use crate::message::{
     SidebarMessage, StorageMessage,
 };
 use crate::state::{
-    ActiveView, CallStatus, CardPriority, ChatMessage, ContactStatus, DetailTab, Entity, EntityType,
-    KanbanCard, KanbanColumn, MemberRole, SidebarSection,
+    ActiveView, CallStatus, CardPriority, ChatMessage, ContactStatus, DetailTab, Entity,
+    EntityType, KanbanCard, KanbanColumn, MemberRole, SidebarSection,
 };
 use crate::theme::{self, Palette};
 use crate::update::UpdateStatus;
 use crate::views::update_banner::view_update_banner;
 use iced::widget::pane_grid::{self, PaneGrid};
-use iced::widget::{Column, Row, Space, button, column, container, row, rule, scrollable, text, text_input};
+use iced::widget::{
+    Column, Row, Space, button, column, container, row, rule, scrollable, text, text_input,
+};
 use iced::{Alignment, Border, Color, Element, Length, Padding, Theme};
 
 /// Modal form state passed from the app to the view.
@@ -114,9 +116,7 @@ pub fn view_main<'a>(
 
 /// Render the profile header with the new design.
 fn view_profile_header(app_state: &AppState) -> Element<'_, Message> {
-    let identity_text = text(&app_state.four_words)
-        .size(11)
-        .color(Palette::STONE);
+    let identity_text = text(&app_state.four_words).size(11).color(Palette::STONE);
 
     let display_name = text(&app_state.display_name)
         .size(15)
@@ -143,7 +143,12 @@ fn view_profile_header(app_state: &AppState) -> Element<'_, Message> {
                 background: Some(network_indicator_color.into()),
                 border: Border::default().rounded(999),
                 shadow: iced::Shadow {
-                    color: Color::from_rgba(network_indicator_color.r, network_indicator_color.g, network_indicator_color.b, 0.4),
+                    color: Color::from_rgba(
+                        network_indicator_color.r,
+                        network_indicator_color.g,
+                        network_indicator_color.b,
+                        0.4
+                    ),
                     offset: iced::Vector::new(0.0, 0.0),
                     blur_radius: 6.0,
                 },
@@ -172,14 +177,17 @@ fn view_profile_header(app_state: &AppState) -> Element<'_, Message> {
     .align_y(Alignment::Center)
     .padding(Padding::from([12, 20]));
 
-    container(column![header_row, rule::horizontal(1).style(|_t: &Theme| rule::Style {
-        color: theme::DIVIDER_LIGHT,
-        radius: 0.into(),
-        fill_mode: rule::FillMode::Full,
-        snap: true,
-    })])
-        .style(theme::header_bar_style)
-        .into()
+    container(column![
+        header_row,
+        rule::horizontal(1).style(|_t: &Theme| rule::Style {
+            color: theme::DIVIDER_LIGHT,
+            radius: 0.into(),
+            fill_mode: rule::FillMode::Full,
+            snap: true,
+        })
+    ])
+    .style(theme::header_bar_style)
+    .into()
 }
 
 /// Render the sidebar with the forest theme.
@@ -202,7 +210,9 @@ fn view_sidebar(app_state: &AppState) -> Element<'_, Message> {
         let my_orgs: Vec<&Entity> = app_state
             .entities
             .iter()
-            .filter(|e| e.entity_type == crate::state::EntityType::Organisation && e.role.is_owner())
+            .filter(|e| {
+                e.entity_type == crate::state::EntityType::Organisation && e.role.is_owner()
+            })
             .collect();
 
         for org in my_orgs {
@@ -227,7 +237,9 @@ fn view_sidebar(app_state: &AppState) -> Element<'_, Message> {
         let communities: Vec<&Entity> = app_state
             .entities
             .iter()
-            .filter(|e| e.entity_type == crate::state::EntityType::Organisation && !e.role.is_owner())
+            .filter(|e| {
+                e.entity_type == crate::state::EntityType::Organisation && !e.role.is_owner()
+            })
             .collect();
 
         if communities.is_empty() {
@@ -329,12 +341,13 @@ fn view_sidebar(app_state: &AppState) -> Element<'_, Message> {
 
         // Sort: favorites first, then by name
         let mut sorted_contacts = filtered_contacts;
-        sorted_contacts.sort_by(|a, b| {
-            match (a.is_favorite, b.is_favorite) {
-                (true, false) => std::cmp::Ordering::Less,
-                (false, true) => std::cmp::Ordering::Greater,
-                _ => a.display_name.to_lowercase().cmp(&b.display_name.to_lowercase()),
-            }
+        sorted_contacts.sort_by(|a, b| match (a.is_favorite, b.is_favorite) {
+            (true, false) => std::cmp::Ordering::Less,
+            (false, true) => std::cmp::Ordering::Greater,
+            _ => a
+                .display_name
+                .to_lowercase()
+                .cmp(&b.display_name.to_lowercase()),
         });
 
         if sorted_contacts.is_empty() {
@@ -385,9 +398,7 @@ fn view_sidebar_section(
     let toggle_btn = button(
         row![
             text(arrow).size(12).color(Palette::SAGE),
-            text(title.to_uppercase())
-                .size(10)
-                .color(Palette::SAGE),
+            text(title.to_uppercase()).size(10).color(Palette::SAGE),
         ]
         .spacing(8)
         .align_y(Alignment::Center),
@@ -398,18 +409,16 @@ fn view_sidebar_section(
 
     // Add button based on section type
     let add_btn: Element<'_, Message> = match section {
-        SidebarSection::MyOrganizations => {
-            button(text("+").size(12).color(Palette::JADE))
-                .on_press(Message::Sidebar(SidebarMessage::CreateEntity(
-                    CreateEntityContext {
-                        parent_org_id: None,
-                        entity_type: EntityType::Organisation,
-                    },
-                )))
-                .style(theme::ghost_button_dark)
-                .padding(Padding::from([2, 6]))
-                .into()
-        }
+        SidebarSection::MyOrganizations => button(text("+").size(12).color(Palette::JADE))
+            .on_press(Message::Sidebar(SidebarMessage::CreateEntity(
+                CreateEntityContext {
+                    parent_org_id: None,
+                    entity_type: EntityType::Organisation,
+                },
+            )))
+            .style(theme::ghost_button_dark)
+            .padding(Padding::from([2, 6]))
+            .into(),
         SidebarSection::Personal => {
             button(text("+").size(12).color(Palette::JADE))
                 .on_press(Message::Sidebar(SidebarMessage::CreateEntity(
@@ -422,22 +431,18 @@ fn view_sidebar_section(
                 .padding(Padding::from([2, 6]))
                 .into()
         }
-        SidebarSection::DirectMessages => {
-            button(text("+").size(12).color(Palette::JADE))
-                .on_press(Message::Contact(ContactMessage::AddContactPressed))
-                .style(theme::ghost_button_dark)
-                .padding(Padding::from([2, 6]))
-                .into()
-        }
+        SidebarSection::DirectMessages => button(text("+").size(12).color(Palette::JADE))
+            .on_press(Message::Contact(ContactMessage::AddContactPressed))
+            .style(theme::ghost_button_dark)
+            .padding(Padding::from([2, 6]))
+            .into(),
         SidebarSection::MyCommunities => {
             // No add button for communities (user joins, doesn't create)
             Space::new().width(0).into()
         }
     };
 
-    row![toggle_btn, add_btn]
-        .align_y(Alignment::Center)
-        .into()
+    row![toggle_btn, add_btn].align_y(Alignment::Center).into()
 }
 
 /// Render an organization item with its children.
@@ -455,12 +460,18 @@ fn view_org_item<'a>(org: &'a Entity, app_state: &'a AppState) -> Element<'a, Me
         button(
             row![
                 text(arrow).size(12).color(Palette::SAGE),
-                container(Space::new().width(10).height(10)).style(move |_t: &Theme| container::Style {
-                    background: Some(color.into()),
-                    border: Border::default().rounded(3),
-                    ..Default::default()
+                container(Space::new().width(10).height(10)).style(move |_t: &Theme| {
+                    container::Style {
+                        background: Some(color.into()),
+                        border: Border::default().rounded(3),
+                        ..Default::default()
+                    }
                 }),
-                text(&org.name).size(14).color(if is_selected { Palette::JADE } else { Palette::CREAM }),
+                text(&org.name).size(14).color(if is_selected {
+                    Palette::JADE
+                } else {
+                    Palette::CREAM
+                }),
             ]
             .spacing(10)
             .align_y(Alignment::Center),
@@ -524,15 +535,17 @@ fn view_entity_item<'a>(
         text(icon).size(12).color(color).into(),
         text(&entity.name)
             .size(13)
-            .color(if is_selected { Palette::JADE } else { Palette::CREAM })
+            .color(if is_selected {
+                Palette::JADE
+            } else {
+                Palette::CREAM
+            })
             .into(),
     ];
 
     // Add role badge if not a regular member
     if role != MemberRole::Member {
-        row_content.push(
-            view_role_badge(role),
-        );
+        row_content.push(view_role_badge(role));
     }
 
     // Add read-only indicator for guests
@@ -584,22 +597,21 @@ fn view_role_badge(role: MemberRole) -> Element<'static, Message> {
     let badge_color = role.color();
     let label = role.short_label();
 
-    container(
-        text(label)
-            .size(9)
-            .color(Color::WHITE),
-    )
-    .padding(Padding::from([1, 4]))
-    .style(move |_t: &Theme| container::Style {
-        background: Some(badge_color.into()),
-        border: Border::default().rounded(3),
-        ..Default::default()
-    })
-    .into()
+    container(text(label).size(9).color(Color::WHITE))
+        .padding(Padding::from([1, 4]))
+        .style(move |_t: &Theme| container::Style {
+            background: Some(badge_color.into()),
+            border: Border::default().rounded(3),
+            ..Default::default()
+        })
+        .into()
 }
 
 /// Render a contact item with status indicator, favorite star, and local badge.
-fn view_contact_item<'a>(contact: &'a crate::state::Contact, app_state: &'a AppState) -> Element<'a, Message> {
+fn view_contact_item<'a>(
+    contact: &'a crate::state::Contact,
+    app_state: &'a AppState,
+) -> Element<'a, Message> {
     let status_color = match contact.status {
         ContactStatus::Online => Palette::ONLINE,
         ContactStatus::Away => Palette::AWAY,
@@ -612,7 +624,10 @@ fn view_contact_item<'a>(contact: &'a crate::state::Contact, app_state: &'a AppS
         contact.display_name.clone()
     };
 
-    let is_selected = contact.four_words.as_ref().is_some_and(|fw| app_state.sidebar.is_selected(fw));
+    let is_selected = contact
+        .four_words
+        .as_ref()
+        .is_some_and(|fw| app_state.sidebar.is_selected(fw));
     let contact_clone = contact.clone();
     let contact_for_detail = contact.clone();
     let contact_id_fav = contact.id.clone();
@@ -637,7 +652,11 @@ fn view_contact_item<'a>(contact: &'a crate::state::Contact, app_state: &'a AppS
         // Name
         text(display)
             .size(13)
-            .color(if is_selected { Palette::JADE } else { Palette::CREAM })
+            .color(if is_selected {
+                Palette::JADE
+            } else {
+                Palette::CREAM
+            })
             .into(),
     ];
 
@@ -665,17 +684,25 @@ fn view_contact_item<'a>(contact: &'a crate::state::Contact, app_state: &'a AppS
         Palette::STONE.scale_alpha(0.3)
     };
     row_content.push(
-        button(text(if is_favorite { "★" } else { "☆" }).size(14).color(star_color))
-            .on_press(Message::Contact(ContactMessage::ToggleFavorite(contact_id_fav)))
-            .style(theme::ghost_button_dark)
-            .padding(Padding::from([0, 4]))
-            .into(),
+        button(
+            text(if is_favorite { "★" } else { "☆" })
+                .size(14)
+                .color(star_color),
+        )
+        .on_press(Message::Contact(ContactMessage::ToggleFavorite(
+            contact_id_fav,
+        )))
+        .style(theme::ghost_button_dark)
+        .padding(Padding::from([0, 4]))
+        .into(),
     );
 
     // Info button to show detail
     row_content.push(
         button(text("i").size(10).color(Palette::STONE))
-            .on_press(Message::Contact(ContactMessage::ContactSelected(contact_for_detail)))
+            .on_press(Message::Contact(ContactMessage::ContactSelected(
+                contact_for_detail,
+            )))
             .style(theme::ghost_button_dark)
             .padding(Padding::from([2, 6]))
             .into(),
@@ -686,7 +713,9 @@ fn view_contact_item<'a>(contact: &'a crate::state::Contact, app_state: &'a AppS
             .spacing(8)
             .align_y(Alignment::Center),
     )
-    .on_press(Message::Sidebar(SidebarMessage::ContactClicked(contact_clone)))
+    .on_press(Message::Sidebar(SidebarMessage::ContactClicked(
+        contact_clone,
+    )))
     .style(move |t: &Theme, status| theme::sidebar_item_button(t, status, is_selected))
     .width(Length::Fill)
     .into()
@@ -723,9 +752,7 @@ fn view_home<'a>() -> Element<'a, Message> {
         .color(Palette::STONE);
 
     // Add a subtle decorative element
-    let icon = text("◈")
-        .size(48)
-        .color(Palette::JADE.scale_alpha(0.3));
+    let icon = text("◈").size(48).color(Palette::JADE.scale_alpha(0.3));
 
     container(
         column![
@@ -760,15 +787,12 @@ fn view_chat(
     let role = entity.map(|e| e.role).unwrap_or(MemberRole::Member);
 
     // Build header content
-    let mut header_content: Vec<Element<'static, Message>> = vec![
-        text(name).size(18).color(Palette::TEXT_PRIMARY).into(),
-    ];
+    let mut header_content: Vec<Element<'static, Message>> =
+        vec![text(name).size(18).color(Palette::TEXT_PRIMARY).into()];
 
     // Add role badge if not a regular member
     if role != MemberRole::Member {
-        header_content.push(
-            view_role_badge(role),
-        );
+        header_content.push(view_role_badge(role));
     }
 
     header_content.push(Space::new().width(Length::Fill).into());
@@ -794,27 +818,27 @@ fn view_chat(
 
     // Add read-only banner if applicable
     if is_read_only {
-        content_items.push(
-            view_read_only_banner(),
-        );
+        content_items.push(view_read_only_banner());
     }
 
     content_items.push(header.into());
     content_items.push(
-        rule::horizontal(1).style(|_t: &Theme| rule::Style {
-            color: theme::DIVIDER_LIGHT,
-            radius: 0.into(),
-            fill_mode: rule::FillMode::Full,
-            snap: true,
-        }).into(),
+        rule::horizontal(1)
+            .style(|_t: &Theme| rule::Style {
+                color: theme::DIVIDER_LIGHT,
+                radius: 0.into(),
+                fill_mode: rule::FillMode::Full,
+                snap: true,
+            })
+            .into(),
     );
     content_items.push(tab_content);
 
     container(column(content_items))
-    .width(Length::Fill)
-    .height(Length::Fill)
-    .style(theme::detail_container)
-    .into()
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .style(theme::detail_container)
+        .into()
 }
 
 /// Render a read-only banner for guests.
@@ -958,7 +982,10 @@ fn view_message_bubble(
             })
             .into()
     } else {
-        text(text_content).size(14).color(Palette::TEXT_PRIMARY).into()
+        text(text_content)
+            .size(14)
+            .color(Palette::TEXT_PRIMARY)
+            .into()
     };
 
     // Reactions display
@@ -980,9 +1007,12 @@ fn view_message_bubble(
                 };
 
                 button(
-                    row![text(emoji_display).size(12), text(format!(" {count}")).size(11).color(Palette::STONE)]
-                        .spacing(0)
-                        .align_y(Alignment::Center),
+                    row![
+                        text(emoji_display).size(12),
+                        text(format!(" {count}")).size(11).color(Palette::STONE)
+                    ]
+                    .spacing(0)
+                    .align_y(Alignment::Center),
                 )
                 .on_press(if has_reacted {
                     Message::Chat(ChatMessageEvent::RemoveReaction {
@@ -1040,7 +1070,9 @@ fn view_message_bubble(
     let actions: Element<'static, Message> = if is_own && !is_deleted {
         row![
             button(text("✏️").size(10))
-                .on_press(Message::Chat(ChatMessageEvent::StartEdit(msg_clone.clone())))
+                .on_press(Message::Chat(ChatMessageEvent::StartEdit(
+                    msg_clone.clone()
+                )))
                 .padding(Padding::from([2, 4]))
                 .style(theme::ghost_button),
             button(text("🗑️").size(10))
@@ -1057,9 +1089,10 @@ fn view_message_bubble(
     };
 
     // Combine header with actions
-    let header_row: Element<'static, Message> = row![header, Space::new().width(Length::Fill), actions]
-        .align_y(Alignment::Center)
-        .into();
+    let header_row: Element<'static, Message> =
+        row![header, Space::new().width(Length::Fill), actions]
+            .align_y(Alignment::Center)
+            .into();
 
     let bubble_content: Element<'static, Message> = column![
         header_row,
@@ -1241,19 +1274,13 @@ fn view_contact_chat(
         row![
             text(name).size(18).color(Palette::TEXT_PRIMARY),
             Space::new().width(Length::Fill),
-            button(
-                row![
-                    text("📞").size(14),
-                    text("Call").size(14),
-                ]
-                .spacing(6)
-            )
-            .on_press(Message::Call(CallMessage::Initiate {
-                four_words: fw,
-                has_video: false,
-            }))
-            .padding(Padding::from([8, 16]))
-            .style(theme::secondary_button),
+            button(row![text("📞").size(14), text("Call").size(14),].spacing(6))
+                .on_press(Message::Call(CallMessage::Initiate {
+                    four_words: fw,
+                    has_video: false,
+                }))
+                .padding(Padding::from([8, 16]))
+                .style(theme::secondary_button),
         ]
         .align_y(Alignment::Center)
         .padding(Padding::from([16, 20])),
@@ -1319,7 +1346,9 @@ fn view_call(app_state: &AppState) -> Element<'static, Message> {
 
         let controls_area = container(
             column![
-                row![device_selection,].spacing(16).align_y(Alignment::Center),
+                row![device_selection,]
+                    .spacing(16)
+                    .align_y(Alignment::Center),
                 Space::new().height(16),
                 row![
                     text(status_text).size(14).color(Palette::SAGE),
@@ -1350,10 +1379,7 @@ fn view_call(app_state: &AppState) -> Element<'static, Message> {
                 .height(Length::Fill)
                 .style(|_t: &Theme| container::Style {
                     background: Some(Palette::DEEP_FOREST.scale_alpha(0.9).into()),
-                    border: Border::default()
-                        .color(Palette::BORDER)
-                        .width(1)
-                        .rounded(0),
+                    border: Border::default().color(Palette::BORDER).width(1).rounded(0),
                     ..Default::default()
                 }),
         ];
@@ -1375,9 +1401,7 @@ fn view_call_participants(app_state: &AppState, peer_name: &str) -> Element<'sta
     let participants = &app_state.call_state.participants;
 
     let header = row![
-        text("Participants")
-            .size(14)
-            .color(Palette::TEXT_PRIMARY),
+        text("Participants").size(14).color(Palette::TEXT_PRIMARY),
         Space::new().width(Length::Fill),
         text(format!("{}", participants.len() + 1)) // +1 for self
             .size(12)
@@ -1406,18 +1430,32 @@ fn view_call_participants(app_state: &AppState, peer_name: &str) -> Element<'sta
         .spacing(2),
         Space::new().width(Length::Fill),
         row![
-            text(if app_state.call_state.active_call.as_ref().is_some_and(|c| c.is_audio_enabled) {
-                "🔊"
-            } else {
-                "🔇"
-            })
+            text(
+                if app_state
+                    .call_state
+                    .active_call
+                    .as_ref()
+                    .is_some_and(|c| c.is_audio_enabled)
+                {
+                    "🔊"
+                } else {
+                    "🔇"
+                }
+            )
             .size(12),
             Space::new().width(4),
-            text(if app_state.call_state.active_call.as_ref().is_some_and(|c| c.is_video_enabled) {
-                "📹"
-            } else {
-                "📷"
-            })
+            text(
+                if app_state
+                    .call_state
+                    .active_call
+                    .as_ref()
+                    .is_some_and(|c| c.is_video_enabled)
+                {
+                    "📹"
+                } else {
+                    "📷"
+                }
+            )
             .size(12),
         ]
         .spacing(4),
@@ -1441,7 +1479,12 @@ fn view_call_participants(app_state: &AppState, peer_name: &str) -> Element<'sta
         Space::new().width(8),
         column![text(peer_name_owned).size(13).color(Palette::TEXT_PRIMARY),].spacing(2),
         Space::new().width(Length::Fill),
-        row![text("🔊").size(12), Space::new().width(4), text("📹").size(12),].spacing(4),
+        row![
+            text("🔊").size(12),
+            Space::new().width(4),
+            text("📹").size(12),
+        ]
+        .spacing(4),
     ]
     .align_y(Alignment::Center)
     .padding(Padding::from([8, 16]));
@@ -1593,9 +1636,21 @@ fn truncate_text(s: &str, max_len: usize) -> String {
 
 /// Render call controls with improved button styling.
 fn view_call_controls(call: &crate::state::CallInfo) -> Element<'static, Message> {
-    let mute_label = if call.is_audio_enabled { "🔊" } else { "🔇" };
-    let video_label = if call.is_video_enabled { "📹" } else { "📷" };
-    let screen_label = if call.is_screen_sharing { "⏹" } else { "🖥" };
+    let mute_label = if call.is_audio_enabled {
+        "🔊"
+    } else {
+        "🔇"
+    };
+    let video_label = if call.is_video_enabled {
+        "📹"
+    } else {
+        "📷"
+    };
+    let screen_label = if call.is_screen_sharing {
+        "⏹"
+    } else {
+        "🖥"
+    };
 
     row![
         button(text(mute_label).size(20))
@@ -1647,24 +1702,18 @@ fn view_incoming_call_overlay(call: &crate::state::CallInfo) -> Element<'static,
     ]
     .align_x(Alignment::Center);
 
-    container(
-        container(content)
-            .padding(40)
-            .style(theme::modal_content),
-    )
-    .width(Length::Fill)
-    .height(Length::Fill)
-    .center_x(Length::Fill)
-    .center_y(Length::Fill)
-    .style(theme::modal_overlay)
-    .into()
+    container(container(content).padding(40).style(theme::modal_content))
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .center_x(Length::Fill)
+        .center_y(Length::Fill)
+        .style(theme::modal_overlay)
+        .into()
 }
 
 /// Render the network panel with improved design.
 fn view_network_panel(app_state: &AppState) -> Element<'static, Message> {
-    let header = text("Network Status")
-        .size(24)
-        .color(Palette::TEXT_PRIMARY);
+    let header = text("Network Status").size(24).color(Palette::TEXT_PRIMARY);
 
     let status = if app_state.network_info.is_networking {
         "Connected"
@@ -1683,10 +1732,12 @@ fn view_network_panel(app_state: &AppState) -> Element<'static, Message> {
         Space::new().width(8),
         container(
             row![
-                container(Space::new().width(8).height(8)).style(move |_t: &Theme| container::Style {
-                    background: Some(status_color.into()),
-                    border: Border::default().rounded(999),
-                    ..Default::default()
+                container(Space::new().width(8).height(8)).style(move |_t: &Theme| {
+                    container::Style {
+                        background: Some(status_color.into()),
+                        border: Border::default().rounded(999),
+                        ..Default::default()
+                    }
                 }),
                 text(status).size(14).color(status_color),
             ]
@@ -1727,10 +1778,12 @@ fn view_network_panel(app_state: &AppState) -> Element<'static, Message> {
             let endpoint = peer.endpoint.clone();
             container(
                 row![
-                    container(Space::new().width(8).height(8)).style(|_t: &Theme| container::Style {
-                        background: Some(Palette::ONLINE.into()),
-                        border: Border::default().rounded(999),
-                        ..Default::default()
+                    container(Space::new().width(8).height(8)).style(|_t: &Theme| {
+                        container::Style {
+                            background: Some(Palette::ONLINE.into()),
+                            border: Border::default().rounded(999),
+                            ..Default::default()
+                        }
                     }),
                     text(label).size(14).color(Palette::TEXT_PRIMARY),
                     Space::new().width(Length::Fill),
@@ -1750,13 +1803,9 @@ fn view_network_panel(app_state: &AppState) -> Element<'static, Message> {
         .collect();
 
     let peer_list: Element<'static, Message> = if peer_items.is_empty() {
-        container(
-            text("No peers connected")
-                .size(14)
-                .color(Palette::STONE),
-        )
-        .padding(16)
-        .into()
+        container(text("No peers connected").size(14).color(Palette::STONE))
+            .padding(16)
+            .into()
     } else {
         scrollable(column(peer_items).spacing(8))
             .height(200)
@@ -1784,10 +1833,12 @@ fn view_network_panel(app_state: &AppState) -> Element<'static, Message> {
 
             container(
                 row![
-                    container(Space::new().width(8).height(8)).style(move |_t: &Theme| container::Style {
-                        background: Some(status_color.into()),
-                        border: Border::default().rounded(999),
-                        ..Default::default()
+                    container(Space::new().width(8).height(8)).style(move |_t: &Theme| {
+                        container::Style {
+                            background: Some(status_color.into()),
+                            border: Border::default().rounded(999),
+                            ..Default::default()
+                        }
                     }),
                     text(name).size(14).color(Palette::TEXT_PRIMARY),
                     Space::new().width(Length::Fill),
@@ -1815,7 +1866,9 @@ fn view_network_panel(app_state: &AppState) -> Element<'static, Message> {
                 Space::new().height(32),
                 // Status card
                 container(
-                    column![status_row, listen_row, peers_row,].spacing(12).padding(20),
+                    column![status_row, listen_row, peers_row,]
+                        .spacing(12)
+                        .padding(20),
                 )
                 .style(theme::card_style)
                 .width(Length::Fill),
@@ -1842,7 +1895,11 @@ fn view_network_panel(app_state: &AppState) -> Element<'static, Message> {
 }
 
 /// Render the kanban board view.
-fn view_kanban_board(app_state: &AppState, entity_id: &str, is_read_only: bool) -> Element<'static, Message> {
+fn view_kanban_board(
+    app_state: &AppState,
+    entity_id: &str,
+    is_read_only: bool,
+) -> Element<'static, Message> {
     let columns = KanbanColumn::defaults();
     let cards = app_state.kanban_cards.get(entity_id);
     let entity_id_owned = entity_id.to_string();
@@ -1857,7 +1914,12 @@ fn view_kanban_board(app_state: &AppState, entity_id: &str, is_read_only: bool) 
 
             // Get cards for this column
             let column_cards: Vec<KanbanCard> = cards
-                .map(|c| c.iter().filter(|card| card.column == col_id).cloned().collect())
+                .map(|c| {
+                    c.iter()
+                        .filter(|card| card.column == col_id)
+                        .cloned()
+                        .collect()
+                })
                 .unwrap_or_default();
 
             let card_views: Vec<Element<'static, Message>> = column_cards
@@ -1873,7 +1935,7 @@ fn view_kanban_board(app_state: &AppState, entity_id: &str, is_read_only: bool) 
             } else {
                 button(text("+").size(14).color(Palette::JADE))
                     .on_press(Message::Kanban(KanbanMessage::CreateCardPressed(
-                        entity_id_for_col.clone()
+                        entity_id_for_col.clone(),
                     )))
                     .style(theme::ghost_button)
                     .padding(Padding::from([2, 8]))
@@ -1949,12 +2011,7 @@ fn view_kanban_card_owned(card: KanbanCard, _is_read_only: bool) -> Element<'sta
     if let Some(description) = desc
         && !description.is_empty()
     {
-        content.push(
-            text(description)
-                .size(12)
-                .color(Palette::STONE)
-                .into(),
-        );
+        content.push(text(description).size(12).color(Palette::STONE).into());
     }
 
     let mut footer_items: Vec<Element<'static, Message>> = Vec::new();
@@ -2070,10 +2127,8 @@ fn view_empty_documents() -> Element<'static, Message> {
 
 /// Render a list of documents.
 fn view_document_list(documents: Vec<Document>) -> Element<'static, Message> {
-    let items: Vec<Element<'static, Message>> = documents
-        .into_iter()
-        .map(view_document_row)
-        .collect();
+    let items: Vec<Element<'static, Message>> =
+        documents.into_iter().map(view_document_row).collect();
 
     scrollable(column(items).spacing(1).width(Length::Fill))
         .width(Length::Fill)
@@ -2094,9 +2149,7 @@ fn view_document_row(doc: Document) -> Element<'static, Message> {
                 .center_y(Length::Shrink),
             // Document info
             column![
-                text(doc.title)
-                    .size(14)
-                    .color(Palette::TEXT_PRIMARY),
+                text(doc.title).size(14).color(Palette::TEXT_PRIMARY),
                 text(format!("Modified {}", modified))
                     .size(11)
                     .color(Palette::STONE),
@@ -2176,9 +2229,7 @@ fn view_empty_drive() -> Element<'static, Message> {
         column![
             text("📁").size(48).color(Palette::STONE.scale_alpha(0.5)),
             Space::new().height(16),
-            text("No Files Yet")
-                .size(18)
-                .color(Palette::TEXT_PRIMARY),
+            text("No Files Yet").size(18).color(Palette::TEXT_PRIMARY),
             Space::new().height(8),
             text("Upload files or create folders to get started")
                 .size(14)
@@ -2197,18 +2248,13 @@ fn view_empty_drive() -> Element<'static, Message> {
 fn view_file_list(files: Vec<FileInfo>) -> Element<'static, Message> {
     // Sort folders first, then files by name
     let mut sorted = files;
-    sorted.sort_by(|a, b| {
-        match (a.is_folder, b.is_folder) {
-            (true, false) => std::cmp::Ordering::Less,
-            (false, true) => std::cmp::Ordering::Greater,
-            _ => a.name.cmp(&b.name),
-        }
+    sorted.sort_by(|a, b| match (a.is_folder, b.is_folder) {
+        (true, false) => std::cmp::Ordering::Less,
+        (false, true) => std::cmp::Ordering::Greater,
+        _ => a.name.cmp(&b.name),
     });
 
-    let items: Vec<Element<'static, Message>> = sorted
-        .into_iter()
-        .map(view_file_row)
-        .collect();
+    let items: Vec<Element<'static, Message>> = sorted.into_iter().map(view_file_row).collect();
 
     scrollable(column(items).spacing(1).width(Length::Fill))
         .width(Length::Fill)
@@ -2218,7 +2264,11 @@ fn view_file_list(files: Vec<FileInfo>) -> Element<'static, Message> {
 
 /// Render a single file or folder row.
 fn view_file_row(file: FileInfo) -> Element<'static, Message> {
-    let icon = if file.is_folder { "📁" } else { get_file_icon(&file.name) };
+    let icon = if file.is_folder {
+        "📁"
+    } else {
+        get_file_icon(&file.name)
+    };
     let size_str = if file.is_folder {
         String::new()
     } else {
@@ -2247,9 +2297,7 @@ fn view_file_row(file: FileInfo) -> Element<'static, Message> {
                 .center_y(Length::Shrink),
             // File info
             column![
-                text(file.name)
-                    .size(14)
-                    .color(Palette::TEXT_PRIMARY),
+                text(file.name).size(14).color(Palette::TEXT_PRIMARY),
                 text(detail_text).size(11).color(Palette::STONE),
             ]
             .spacing(2),
@@ -2411,8 +2459,16 @@ fn view_create_entity_modal<'a>(
         column![
             text("Type").size(12).color(Palette::STONE),
             row![
-                view_entity_type_button_static(EntityType::Channel, context.entity_type, parent_id.clone()),
-                view_entity_type_button_static(EntityType::Project, context.entity_type, parent_id.clone()),
+                view_entity_type_button_static(
+                    EntityType::Channel,
+                    context.entity_type,
+                    parent_id.clone()
+                ),
+                view_entity_type_button_static(
+                    EntityType::Project,
+                    context.entity_type,
+                    parent_id.clone()
+                ),
                 view_entity_type_button_static(EntityType::Group, context.entity_type, parent_id),
             ]
             .spacing(8)
@@ -2449,7 +2505,9 @@ fn view_create_entity_modal<'a>(
             .style(theme::input_style),
         Space::new().height(16),
         // Description input
-        text("Description (optional)").size(12).color(Palette::STONE),
+        text("Description (optional)")
+            .size(12)
+            .color(Palette::STONE),
         text_input("Enter description...", &modal_form_state.entity_description)
             .on_input(|s| Message::Modal(ModalMessage::EntityDescriptionChanged(s)))
             .padding(Padding::from([12, 16]))
@@ -2476,9 +2534,7 @@ fn view_create_entity_modal<'a>(
     .padding(24)
     .width(400);
 
-    container(content)
-        .style(theme::modal_content)
-        .into()
+    container(content).style(theme::modal_content).into()
 }
 
 /// Render an entity type selection button (static version).
@@ -2496,7 +2552,9 @@ fn view_entity_type_button_static(
     };
 
     button(text(label).size(12))
-        .on_press(Message::Sidebar(SidebarMessage::CreateEntity(context_clone)))
+        .on_press(Message::Sidebar(SidebarMessage::CreateEntity(
+            context_clone,
+        )))
         .style(move |t: &Theme, status| theme::tab_button(t, status, is_selected))
         .padding(Padding::from([6, 12]))
         .into()
@@ -2524,13 +2582,18 @@ fn view_add_contact_modal<'a>(modal_form_state: &'a ModalFormState) -> Element<'
         Space::new().height(16),
         // Four-word input
         text("Four-Word Address").size(12).color(Palette::STONE),
-        text_input("e.g., ocean-forest-moon-star", &modal_form_state.contact_four_words)
-            .on_input(|s| Message::Modal(ModalMessage::ContactFourWordsChanged(s)))
-            .padding(Padding::from([12, 16]))
-            .style(theme::input_style),
+        text_input(
+            "e.g., ocean-forest-moon-star",
+            &modal_form_state.contact_four_words
+        )
+        .on_input(|s| Message::Modal(ModalMessage::ContactFourWordsChanged(s)))
+        .padding(Padding::from([12, 16]))
+        .style(theme::input_style),
         Space::new().height(16),
         // Display name input
-        text("Display Name (optional)").size(12).color(Palette::STONE),
+        text("Display Name (optional)")
+            .size(12)
+            .color(Palette::STONE),
         text_input("Enter display name...", &modal_form_state.contact_name)
             .on_input(|s| Message::Modal(ModalMessage::ContactNameChanged(s)))
             .padding(Padding::from([12, 16]))
@@ -2557,9 +2620,7 @@ fn view_add_contact_modal<'a>(modal_form_state: &'a ModalFormState) -> Element<'
     .padding(24)
     .width(400);
 
-    container(content)
-        .style(theme::modal_content)
-        .into()
+    container(content).style(theme::modal_content).into()
 }
 
 /// Render the create card modal.
@@ -2590,7 +2651,9 @@ fn view_create_card_modal<'a>(
             .style(theme::input_style),
         Space::new().height(16),
         // Description input
-        text("Description (optional)").size(12).color(Palette::STONE),
+        text("Description (optional)")
+            .size(12)
+            .color(Palette::STONE),
         text_input("Enter description...", &modal_form_state.card_description)
             .on_input(|s| Message::Kanban(KanbanMessage::CardDescriptionChanged(s)))
             .padding(Padding::from([12, 16]))
@@ -2617,9 +2680,7 @@ fn view_create_card_modal<'a>(
     .padding(24)
     .width(400);
 
-    container(content)
-        .style(theme::modal_content)
-        .into()
+    container(content).style(theme::modal_content).into()
 }
 
 /// Render the card detail modal.
@@ -2627,7 +2688,10 @@ fn view_card_detail_modal(card: &KanbanCard, _app_state: &AppState) -> Element<'
     let title = card.title.clone();
     let description = card.description.clone().unwrap_or_default();
     let column_name = card.column.clone();
-    let assignee = card.assignee.clone().unwrap_or_else(|| "Unassigned".to_string());
+    let assignee = card
+        .assignee
+        .clone()
+        .unwrap_or_else(|| "Unassigned".to_string());
     let priority_color = card.priority.color();
     let priority_name = card.priority.display_name();
     let card_id = card.id.clone();
@@ -2635,19 +2699,27 @@ fn view_card_detail_modal(card: &KanbanCard, _app_state: &AppState) -> Element<'
     let card_id_for_delete = card.id.clone();
 
     let desc_display: Element<'static, Message> = if description.is_empty() {
-        text("No description").size(14).color(Palette::STONE.scale_alpha(0.5)).into()
+        text("No description")
+            .size(14)
+            .color(Palette::STONE.scale_alpha(0.5))
+            .into()
     } else {
-        text(description).size(14).color(Palette::TEXT_PRIMARY).into()
+        text(description)
+            .size(14)
+            .color(Palette::TEXT_PRIMARY)
+            .into()
     };
 
     let content = column![
         // Header with close button
         row![
             row![
-                container(Space::new().width(4).height(20)).style(move |_t: &Theme| container::Style {
-                    background: Some(priority_color.into()),
-                    border: Border::default().rounded(2),
-                    ..Default::default()
+                container(Space::new().width(4).height(20)).style(move |_t: &Theme| {
+                    container::Style {
+                        background: Some(priority_color.into()),
+                        border: Border::default().rounded(2),
+                        ..Default::default()
+                    }
                 }),
                 text(title).size(20).color(Palette::TEXT_PRIMARY),
             ]
@@ -2662,26 +2734,22 @@ fn view_card_detail_modal(card: &KanbanCard, _app_state: &AppState) -> Element<'
         // Column and Priority badges
         row![
             text("Column:").size(12).color(Palette::STONE),
-            container(
-                text(column_name.clone()).size(12).color(Palette::JADE)
-            )
-            .padding(Padding::from([4, 8]))
-            .style(|_t: &Theme| container::Style {
-                background: Some(Palette::JADE.scale_alpha(0.1).into()),
-                border: Border::default().rounded(4),
-                ..Default::default()
-            }),
+            container(text(column_name.clone()).size(12).color(Palette::JADE))
+                .padding(Padding::from([4, 8]))
+                .style(|_t: &Theme| container::Style {
+                    background: Some(Palette::JADE.scale_alpha(0.1).into()),
+                    border: Border::default().rounded(4),
+                    ..Default::default()
+                }),
             Space::new().width(16),
             text("Priority:").size(12).color(Palette::STONE),
-            container(
-                text(priority_name).size(12).color(Palette::TEXT_PRIMARY)
-            )
-            .padding(Padding::from([4, 8]))
-            .style(move |_t: &Theme| container::Style {
-                background: Some(priority_color.scale_alpha(0.15).into()),
-                border: Border::default().rounded(4),
-                ..Default::default()
-            }),
+            container(text(priority_name).size(12).color(Palette::TEXT_PRIMARY))
+                .padding(Padding::from([4, 8]))
+                .style(move |_t: &Theme| container::Style {
+                    background: Some(priority_color.scale_alpha(0.15).into()),
+                    border: Border::default().rounded(4),
+                    ..Default::default()
+                }),
         ]
         .spacing(8)
         .align_y(Alignment::Center),
@@ -2696,20 +2764,30 @@ fn view_card_detail_modal(card: &KanbanCard, _app_state: &AppState) -> Element<'
         // Description
         text("Description").size(12).color(Palette::STONE),
         container(desc_display)
-        .padding(12)
-        .width(Length::Fill)
-        .style(|_t: &Theme| container::Style {
-            background: Some(Color::from_rgba(0.0, 0.0, 0.0, 0.03).into()),
-            border: Border::default().rounded(8),
-            ..Default::default()
-        }),
+            .padding(12)
+            .width(Length::Fill)
+            .style(|_t: &Theme| container::Style {
+                background: Some(Color::from_rgba(0.0, 0.0, 0.0, 0.03).into()),
+                border: Border::default().rounded(8),
+                ..Default::default()
+            }),
         Space::new().height(24),
         // Move buttons
         text("Move to:").size(12).color(Palette::STONE),
         row![
-            view_move_column_button_static("backlog", "Backlog", column_name.clone(), card_id.clone()),
+            view_move_column_button_static(
+                "backlog",
+                "Backlog",
+                column_name.clone(),
+                card_id.clone()
+            ),
             view_move_column_button_static("todo", "To Do", column_name.clone(), card_id.clone()),
-            view_move_column_button_static("in_progress", "In Progress", column_name.clone(), card_id.clone()),
+            view_move_column_button_static(
+                "in_progress",
+                "In Progress",
+                column_name.clone(),
+                card_id.clone()
+            ),
             view_move_column_button_static("done", "Done", column_name, card_id),
         ]
         .spacing(8),
@@ -2721,7 +2799,9 @@ fn view_card_detail_modal(card: &KanbanCard, _app_state: &AppState) -> Element<'
                 .style(theme::primary_button)
                 .padding(Padding::from([10, 20])),
             button(text("Delete").size(14))
-                .on_press(Message::Kanban(KanbanMessage::DeleteCardPressed(card_id_for_delete)))
+                .on_press(Message::Kanban(KanbanMessage::DeleteCardPressed(
+                    card_id_for_delete
+                )))
                 .style(theme::danger_button)
                 .padding(Padding::from([10, 20])),
             Space::new().width(Length::Fill),
@@ -2736,9 +2816,7 @@ fn view_card_detail_modal(card: &KanbanCard, _app_state: &AppState) -> Element<'
     .padding(24)
     .width(500);
 
-    container(content)
-        .style(theme::modal_content)
-        .into()
+    container(content).style(theme::modal_content).into()
 }
 
 /// Render the edit card modal.
@@ -2750,28 +2828,26 @@ fn view_edit_card_modal<'a>(
     let card_title = card.title.clone();
 
     // Priority selector buttons
-    let priority_buttons: Element<'a, Message> = row(
-        CardPriority::all()
-            .into_iter()
-            .map(|p| {
-                let is_selected = modal_form_state.card_priority == p;
-                let color = p.color();
-                button(text(p.display_name()).size(12))
-                    .on_press(Message::Kanban(KanbanMessage::CardPriorityChanged(p)))
-                    .style(move |t: &Theme, status| {
-                        if is_selected {
-                            let mut style = theme::primary_button(t, status);
-                            style.background = Some(color.into());
-                            style
-                        } else {
-                            theme::secondary_button(t, status)
-                        }
-                    })
-                    .padding(Padding::from([6, 12]))
-                    .into()
-            })
-            .collect::<Vec<Element<'a, Message>>>(),
-    )
+    let priority_buttons: Element<'a, Message> = row(CardPriority::all()
+        .into_iter()
+        .map(|p| {
+            let is_selected = modal_form_state.card_priority == p;
+            let color = p.color();
+            button(text(p.display_name()).size(12))
+                .on_press(Message::Kanban(KanbanMessage::CardPriorityChanged(p)))
+                .style(move |t: &Theme, status| {
+                    if is_selected {
+                        let mut style = theme::primary_button(t, status);
+                        style.background = Some(color.into());
+                        style
+                    } else {
+                        theme::secondary_button(t, status)
+                    }
+                })
+                .padding(Padding::from([6, 12]))
+                .into()
+        })
+        .collect::<Vec<Element<'a, Message>>>())
     .spacing(8)
     .into();
 
@@ -2807,11 +2883,16 @@ fn view_edit_card_modal<'a>(
         priority_buttons,
         Space::new().height(16),
         // Assignee input
-        text("Assignee (four-word identity)").size(12).color(Palette::STONE),
-        text_input("e.g., ocean-forest-moon-star", &modal_form_state.card_assignee)
-            .on_input(|s| Message::Kanban(KanbanMessage::CardAssigneeChanged(s)))
-            .padding(Padding::from([12, 16]))
-            .style(theme::input_style),
+        text("Assignee (four-word identity)")
+            .size(12)
+            .color(Palette::STONE),
+        text_input(
+            "e.g., ocean-forest-moon-star",
+            &modal_form_state.card_assignee
+        )
+        .on_input(|s| Message::Kanban(KanbanMessage::CardAssigneeChanged(s)))
+        .padding(Padding::from([12, 16]))
+        .style(theme::input_style),
         Space::new().height(24),
         // Action buttons
         row![
@@ -2834,9 +2915,7 @@ fn view_edit_card_modal<'a>(
     .padding(24)
     .width(450);
 
-    container(content)
-        .style(theme::modal_content)
-        .into()
+    container(content).style(theme::modal_content).into()
 }
 
 /// Render the delete card confirmation modal.
@@ -2860,16 +2939,16 @@ fn view_delete_card_confirm_modal(card: &KanbanCard) -> Element<'static, Message
             .size(14)
             .color(Palette::TEXT_PRIMARY),
         Space::new().height(8),
-        container(
-            text(card_title).size(16).color(Palette::TEXT_PRIMARY)
-        )
-        .padding(12)
-        .width(Length::Fill)
-        .style(|_t: &Theme| container::Style {
-            background: Some(Palette::ERROR.scale_alpha(0.1).into()),
-            border: Border::default().rounded(8).color(Palette::ERROR.scale_alpha(0.3)),
-            ..Default::default()
-        }),
+        container(text(card_title).size(16).color(Palette::TEXT_PRIMARY))
+            .padding(12)
+            .width(Length::Fill)
+            .style(|_t: &Theme| container::Style {
+                background: Some(Palette::ERROR.scale_alpha(0.1).into()),
+                border: Border::default()
+                    .rounded(8)
+                    .color(Palette::ERROR.scale_alpha(0.3)),
+                ..Default::default()
+            }),
         Space::new().height(8),
         text("This action cannot be undone.")
             .size(12)
@@ -2892,9 +2971,7 @@ fn view_delete_card_confirm_modal(card: &KanbanCard) -> Element<'static, Message
     .padding(24)
     .width(400);
 
-    container(content)
-        .style(theme::modal_content)
-        .into()
+    container(content).style(theme::modal_content).into()
 }
 
 /// Render a move-to-column button (static version).
@@ -2948,9 +3025,7 @@ fn view_settings_modal() -> Element<'static, Message> {
     .padding(24)
     .width(400);
 
-    container(content)
-        .style(theme::modal_content)
-        .into()
+    container(content).style(theme::modal_content).into()
 }
 
 /// Render the linking modal.
@@ -2958,7 +3033,9 @@ fn view_linking_modal(entity_id: &str) -> Element<'static, Message> {
     let eid = entity_id.to_string();
     let content = column![
         row![
-            text("Link to Network").size(20).color(Palette::TEXT_PRIMARY),
+            text("Link to Network")
+                .size(20)
+                .color(Palette::TEXT_PRIMARY),
             Space::new().width(Length::Fill),
             button(text("×").size(20).color(Palette::STONE))
                 .on_press(Message::Modal(ModalMessage::Close))
@@ -2990,9 +3067,7 @@ fn view_linking_modal(entity_id: &str) -> Element<'static, Message> {
     .padding(24)
     .width(400);
 
-    container(content)
-        .style(theme::modal_content)
-        .into()
+    container(content).style(theme::modal_content).into()
 }
 
 /// Render the contact detail modal.
@@ -3041,12 +3116,23 @@ fn view_contact_detail_modal(contact: &crate::state::Contact) -> Element<'static
             row![
                 text(if is_favorite { "★" } else { "☆" })
                     .size(14)
-                    .color(if is_favorite { Palette::AMBER } else { Palette::STONE }),
-                text(if is_favorite { "Unfavorite" } else { "Favorite" }).size(14),
+                    .color(if is_favorite {
+                        Palette::AMBER
+                    } else {
+                        Palette::STONE
+                    }),
+                text(if is_favorite {
+                    "Unfavorite"
+                } else {
+                    "Favorite"
+                })
+                .size(14),
             ]
             .spacing(6),
         )
-        .on_press(Message::Contact(ContactMessage::ToggleFavorite(contact_id_fav)))
+        .on_press(Message::Contact(ContactMessage::ToggleFavorite(
+            contact_id_fav,
+        )))
         .style(theme::secondary_button)
         .padding(Padding::from([8, 16]))
         .into(),
@@ -3056,7 +3142,9 @@ fn view_contact_detail_modal(contact: &crate::state::Contact) -> Element<'static
     if is_local {
         actions.push(
             button(text("Link to Network").size(14))
-                .on_press(Message::Contact(ContactMessage::LinkToNetworkPressed(contact_id_link)))
+                .on_press(Message::Contact(ContactMessage::LinkToNetworkPressed(
+                    contact_id_link,
+                )))
                 .style(theme::primary_button)
                 .padding(Padding::from([8, 16]))
                 .into(),
@@ -3066,7 +3154,9 @@ fn view_contact_detail_modal(contact: &crate::state::Contact) -> Element<'static
     // Remove contact
     actions.push(
         button(text("Remove").size(14))
-            .on_press(Message::Contact(ContactMessage::RemoveContactPressed(contact_id_remove)))
+            .on_press(Message::Contact(ContactMessage::RemoveContactPressed(
+                contact_id_remove,
+            )))
             .style(theme::danger_button)
             .padding(Padding::from([8, 16]))
             .into(),
@@ -3075,7 +3165,9 @@ fn view_contact_detail_modal(contact: &crate::state::Contact) -> Element<'static
     let content = column![
         // Header
         row![
-            text("Contact Details").size(20).color(Palette::TEXT_PRIMARY),
+            text("Contact Details")
+                .size(20)
+                .color(Palette::TEXT_PRIMARY),
             Space::new().width(Length::Fill),
             button(text("×").size(20).color(Palette::STONE))
                 .on_press(Message::Contact(ContactMessage::CloseContactDetail))
@@ -3130,16 +3222,22 @@ fn view_contact_detail_modal(contact: &crate::state::Contact) -> Element<'static
             container(
                 text(if is_local { "Local" } else { "Network" })
                     .size(11)
-                    .color(if is_local { Palette::STONE } else { Palette::JADE })
+                    .color(if is_local {
+                        Palette::STONE
+                    } else {
+                        Palette::JADE
+                    })
             )
             .padding(Padding::from([2, 6]))
             .style(move |_t: &Theme| container::Style {
-                background: Some(if is_local {
-                    Palette::STONE.scale_alpha(0.2)
-                } else {
-                    Palette::JADE.scale_alpha(0.2)
-                }
-                .into()),
+                background: Some(
+                    if is_local {
+                        Palette::STONE.scale_alpha(0.2)
+                    } else {
+                        Palette::JADE.scale_alpha(0.2)
+                    }
+                    .into()
+                ),
                 border: Border::default().rounded(4),
                 ..Default::default()
             }),
@@ -3322,7 +3420,9 @@ fn view_delete_message_confirm_modal(message: &ChatMessage) -> Element<'static, 
                 .style(theme::secondary_button)
                 .padding(Padding::from([10, 20])),
             button(text("Delete Message").size(14))
-                .on_press(Message::Chat(ChatMessageEvent::ConfirmDeleteMessage(message_id)))
+                .on_press(Message::Chat(ChatMessageEvent::ConfirmDeleteMessage(
+                    message_id
+                )))
                 .style(theme::danger_button)
                 .padding(Padding::from([10, 20])),
         ]

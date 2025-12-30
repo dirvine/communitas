@@ -27,12 +27,12 @@
 //!
 //! Run with: RUST_MIN_STACK=16777216 cargo test -p communitas-headless --test infrastructure_e2e -- --nocapture
 
+use communitas_core::CoreContext;
 use communitas_core::crdt::EntityType;
 use communitas_core::disk_service::DiskType;
 use communitas_core::invite_service::InviteRequest;
 use communitas_core::legacy_crdt::MessageContent;
 use communitas_core::types::DeviceType;
-use communitas_core::CoreContext;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -223,10 +223,7 @@ fn generate_markdown_report(report: &TestReport) -> String {
     // Header
     md.push_str("# Communitas E2E Infrastructure Test Report\n\n");
     md.push_str(&format!("**Timestamp:** {}\n\n", report.timestamp));
-    md.push_str(&format!(
-        "**Duration:** {}ms\n\n",
-        report.total_duration_ms
-    ));
+    md.push_str(&format!("**Duration:** {}ms\n\n", report.total_duration_ms));
     md.push_str(&format!(
         "**Status:** {}\n\n",
         match report.overall_status {
@@ -406,8 +403,8 @@ async fn create_connected_node(
     let addr1: SocketAddr = BOOTSTRAP_1
         .parse()
         .map_err(|_| "Invalid bootstrap address")?;
-    let conn1 =
-        communitas_core::identity::conn_words(&addr1).map_err(|e| format!("conn_words: {:?}", e))?;
+    let conn1 = communitas_core::identity::conn_words(&addr1)
+        .map_err(|e| format!("conn_words: {:?}", e))?;
 
     let start = Instant::now();
     core_ctx
@@ -428,8 +425,8 @@ async fn create_connected_node(
     let addr2: SocketAddr = BOOTSTRAP_2
         .parse()
         .map_err(|_| "Invalid bootstrap address")?;
-    let conn2 =
-        communitas_core::identity::conn_words(&addr2).map_err(|e| format!("conn_words: {:?}", e))?;
+    let conn2 = communitas_core::identity::conn_words(&addr2)
+        .map_err(|e| format!("conn_words: {:?}", e))?;
 
     let start = Instant::now();
     core_ctx
@@ -451,8 +448,8 @@ async fn create_connected_node(
     let addr3: SocketAddr = VPS_TEST_1
         .parse()
         .map_err(|_| "Invalid VPS test 1 address")?;
-    let conn3 =
-        communitas_core::identity::conn_words(&addr3).map_err(|e| format!("conn_words: {:?}", e))?;
+    let conn3 = communitas_core::identity::conn_words(&addr3)
+        .map_err(|e| format!("conn_words: {:?}", e))?;
 
     let start = Instant::now();
     core_ctx
@@ -473,8 +470,8 @@ async fn create_connected_node(
     let addr4: SocketAddr = VPS_TEST_2
         .parse()
         .map_err(|_| "Invalid VPS test 2 address")?;
-    let conn4 =
-        communitas_core::identity::conn_words(&addr4).map_err(|e| format!("conn_words: {:?}", e))?;
+    let conn4 = communitas_core::identity::conn_words(&addr4)
+        .map_err(|e| format!("conn_words: {:?}", e))?;
 
     let start = Instant::now();
     core_ctx
@@ -658,9 +655,13 @@ async fn test_full_infrastructure() {
     let phase = "Phase 3: Invitations";
 
     // Invite Bob as admin
-    let bob_invite_request =
-        InviteRequest::new(bob_id.clone(), EntityType::Organisation, org.id.clone(), "admin")
-            .with_message("Welcome to SaorsaLabs, Bob! You'll be our admin.");
+    let bob_invite_request = InviteRequest::new(
+        bob_id.clone(),
+        EntityType::Organisation,
+        org.id.clone(),
+        "admin",
+    )
+    .with_message("Welcome to SaorsaLabs, Bob! You'll be our admin.");
     let start = Instant::now();
     let bob_invite = alice
         .invite_service
@@ -679,9 +680,13 @@ async fn test_full_infrastructure() {
     println!("✓ Invited Bob as admin: {}", bob_invite.id);
 
     // Invite Carol as member
-    let carol_invite_request =
-        InviteRequest::new(carol_id.clone(), EntityType::Organisation, org.id.clone(), "member")
-            .with_message("Join us, Carol!");
+    let carol_invite_request = InviteRequest::new(
+        carol_id.clone(),
+        EntityType::Organisation,
+        org.id.clone(),
+        "member",
+    )
+    .with_message("Join us, Carol!");
     let start = Instant::now();
     let carol_invite = alice
         .invite_service
@@ -700,9 +705,13 @@ async fn test_full_infrastructure() {
     println!("✓ Invited Carol as member: {}", carol_invite.id);
 
     // Invite Dave as member
-    let dave_invite_request =
-        InviteRequest::new(dave_id.clone(), EntityType::Organisation, org.id.clone(), "member")
-            .with_message("Welcome aboard, Dave!");
+    let dave_invite_request = InviteRequest::new(
+        dave_id.clone(),
+        EntityType::Organisation,
+        org.id.clone(),
+        "member",
+    )
+    .with_message("Welcome aboard, Dave!");
     let start = Instant::now();
     let dave_invite = alice
         .invite_service
@@ -1051,7 +1060,10 @@ async fn test_full_infrastructure() {
         None,
         Some(marketing_channel.id.clone()),
     );
-    println!("✓ Created #marketing (marketing team): {}", marketing_channel.id);
+    println!(
+        "✓ Created #marketing (marketing team): {}",
+        marketing_channel.id
+    );
 
     // #leadership - executives only (Alice, Bob)
     let start = Instant::now();
@@ -1075,7 +1087,10 @@ async fn test_full_infrastructure() {
         None,
         Some(leadership_channel.id.clone()),
     );
-    println!("✓ Created #leadership (execs only): {}", leadership_channel.id);
+    println!(
+        "✓ Created #leadership (execs only): {}",
+        leadership_channel.id
+    );
 
     // #random - for fun (everyone except Dave - testing partial membership)
     let start = Instant::now();
@@ -1163,7 +1178,11 @@ async fn test_full_infrastructure() {
         .await
         .expect("Failed to send Bob thread reply");
     // Sync Bob's reply to Alice's node
-    alice.message_service.receive_message(bob_reply.clone()).await.ok();
+    alice
+        .message_service
+        .receive_message(bob_reply.clone())
+        .await
+        .ok();
     let bob_reply_id = bob_reply.metadata.id.clone();
     ctx.record_result(
         "send_thread_reply(Bob:#general)",
@@ -1193,7 +1212,11 @@ async fn test_full_infrastructure() {
         .await
         .expect("Failed to send Carol thread reply");
     // Sync Carol's reply to Alice's node
-    alice.message_service.receive_message(carol_reply.clone()).await.ok();
+    alice
+        .message_service
+        .receive_message(carol_reply.clone())
+        .await
+        .ok();
     let carol_reply_id = carol_reply.metadata.id.clone();
     ctx.record_result(
         "send_thread_reply(Carol:#general)",
@@ -1223,7 +1246,11 @@ async fn test_full_infrastructure() {
         .await
         .expect("Failed to send Dave message");
     // Sync Dave's message to Alice's node for total message count
-    alice.message_service.receive_message(dave_msg.clone()).await.ok();
+    alice
+        .message_service
+        .receive_message(dave_msg.clone())
+        .await
+        .ok();
     ctx.record_result(
         "send_message(Dave:#general)",
         phase,
@@ -1360,7 +1387,10 @@ async fn test_full_infrastructure() {
         Some(format!("{} replies", thread_messages.len())),
     );
     // Thread should have Bob's and Carol's replies
-    assert!(thread_messages.len() >= 2, "Thread should have at least 2 replies");
+    assert!(
+        thread_messages.len() >= 2,
+        "Thread should have at least 2 replies"
+    );
     println!("\n📧 Thread verification:");
     println!("   Original message has {} replies", thread_messages.len());
 
@@ -1727,7 +1757,10 @@ async fn test_full_infrastructure() {
         .kanban_service
         .get_board(&sprint_board.id)
         .expect("Failed to get board");
-    let columns = alice.kanban_service.list_columns(&sprint_board.id).unwrap_or_default();
+    let columns = alice
+        .kanban_service
+        .list_columns(&sprint_board.id)
+        .unwrap_or_default();
     ctx.record_result(
         "get_board(Sprint 1)",
         phase,
@@ -2151,7 +2184,10 @@ async fn test_full_infrastructure() {
         3,
         "Leadership should now have 3 members"
     );
-    println!("  ✓ Leadership now has {} members", leadership_members.len());
+    println!(
+        "  ✓ Leadership now has {} members",
+        leadership_members.len()
+    );
 
     sleep(Duration::from_secs(2)).await;
 

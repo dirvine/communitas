@@ -15,7 +15,7 @@
 #![deny(clippy::panic)]
 
 use communitas_iced::app::CommunitasApp;
-use iced::{window, Size};
+use iced::{Size, window};
 
 /// Application entry point.
 fn main() -> iced::Result {

@@ -129,14 +129,14 @@ jobs:
 
       - name: Upload to release (Linux)
         if: env.ACT != 'true'
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            target/release/communitas-headless-x86_64-unknown-linux-gnu.tar.gz
-            target/release/communitas-tui-x86_64-unknown-linux-gnu.tar.gz
-            target/release/communitas-iced-x86_64-unknown-linux-gnu.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ needs.create-release.outputs.version }}" \
+            target/release/communitas-headless-x86_64-unknown-linux-gnu.tar.gz \
+            target/release/communitas-tui-x86_64-unknown-linux-gnu.tar.gz \
+            target/release/communitas-iced-x86_64-unknown-linux-gnu.tar.gz \
+            --clobber
 
   build-macos:
     permissions:
@@ -180,14 +180,14 @@ jobs:
 
       - name: Upload to release
         if: env.ACT != 'true'
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            target/universal-apple-darwin/communitas-headless-macos-universal.tar.gz
-            target/universal-apple-darwin/communitas-tui-macos-universal.tar.gz
-            target/universal-apple-darwin/communitas-iced-macos-universal.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ needs.create-release.outputs.version }}" \
+            target/universal-apple-darwin/communitas-headless-macos-universal.tar.gz \
+            target/universal-apple-darwin/communitas-tui-macos-universal.tar.gz \
+            target/universal-apple-darwin/communitas-iced-macos-universal.tar.gz \
+            --clobber
 
   build-windows:
     continue-on-error: true
@@ -215,28 +215,22 @@ jobs:
 
       - name: Upload to release
         if: env.ACT != 'true'
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            target/release/communitas-headless-windows-x86_64.zip
-            target/release/communitas-tui-windows-x86_64.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          gh release upload "${{ needs.create-release.outputs.version }}" \
+            target/release/communitas-headless-windows-x86_64.zip \
+            target/release/communitas-tui-windows-x86_64.zip \
+            --clobber
 
-  build-desktop:
-    permissions:
-      contents: write
-    needs: create-release
-    uses: ./.github/workflows/tauri-release.yml
-    secrets: inherit
-    with:
-      release_id: ${{ needs.create-release.outputs.release_id }}
-      tag: ${{ needs.create-release.outputs.version }}
+  # Note: build-desktop (Tauri) removed - project uses communitas-iced and communitas-swift instead
+  # Swift app builds are handled separately via communitas-swift workflows
 
   generate-appcast:
     permissions:
       contents: write
-    needs: [create-release, build-desktop]
+    needs: [create-release, build-macos]
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -332,7 +326,7 @@ jobs:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     permissions:
       contents: write
-    needs: [create-release, build-linux, build-macos, build-desktop, generate-appcast]
+    needs: [create-release, build-linux, build-macos, generate-appcast]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -264,7 +264,7 @@ See [Gossip Protocol](gossip-protocol.md) for details.
 ### Quick Start
 ```bash
 # Clone repository
-git clone https://github.com/dirvine/communitas.git
+git clone https://github.com/saorsa-labs/communitas.git
 cd communitas
 
 # Install dependencies
@@ -403,9 +403,9 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for how to contribute to Communitas
 - [ant-quic Transport](https://github.com/maidsafe/ant-quic)
 
 ### Community
-- [GitHub Repository](https://github.com/dirvine/communitas)
-- [GitHub Discussions](https://github.com/dirvine/communitas/discussions)
-- [Issue Tracker](https://github.com/dirvine/communitas/issues)
+- [GitHub Repository](https://github.com/saorsa-labs/communitas)
+- [GitHub Discussions](https://github.com/saorsa-labs/communitas/discussions)
+- [Issue Tracker](https://github.com/saorsa-labs/communitas/issues)
 - [Website](https://communitas.life)
 
 ---

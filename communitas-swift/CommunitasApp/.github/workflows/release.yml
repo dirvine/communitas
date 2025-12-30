@@ -1,0 +1,125 @@
+# Copyright (c) 2025 Saorsa Labs Limited
+# Dual-licensed under the AGPL-3.0-or-later and a commercial license.
+
+name: Release Build
+
+on:
+  release:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g., v0.1.0)'
+        required: true
+        type: string
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+
+jobs:
+  # Build headless binary for Linux x86_64
+  build-headless-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-action@stable
+
+      - name: Build headless binary
+        run: cargo build -p communitas-headless --release
+
+      - name: Upload headless binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: communitas-headless-linux-x86_64
+          path: target/release/communitas-headless
+
+  # Build Iced app for Linux x86_64
+  build-iced-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-dev libwayland-dev libxcb-render0-dev $
+            libxcb-shape0-dev libxcb-xfixes0-dev pkg-config
+
+      - name: Install Rust
+        uses: dtolnay/rust-action@stable
+
+      - name: Build Iced binary
+        run: cargo build -p communitas-iced --release
+
+      - name: Upload Iced binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: communitas-iced-linux-x86_64
+          path: target/release/communitas-iced
+
+  # Build Iced app for macOS (Universal binary)
+  build-iced-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-action@stable
+
+      - name: Add macOS targets
+        run: |
+          rustup target add x86_64-apple-darwin
+          rustup target add aarch64-apple-darwin
+
+      - name: Build for x86_64
+        run: cargo build -p communitas-iced --release --target x86_64-apple-darwin
+
+      - name: Build for aarch64
+        run: cargo build -p communitas-iced --release --target aarch64-apple-darwin
+
+      - name: Create universal binary
+        run: |
+          lipo -create $
+            target/x86_64-apple-darwin/release/communitas-iced $
+            target/aarch64-apple-darwin/release/communitas-iced $
+            -output communitas-iced-macos-universal
+
+      - name: Upload universal binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: communitas-iced-macos-universal
+          path: communitas-iced-macos-universal
+
+  # Upload all binaries to GitHub release
+  upload-release:
+    needs: [build-headless-linux, build-iced-linux, build-iced-macos]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare binaries
+        run: |
+          cd artifacts
+          # Rename and prepare for upload
+          mv communitas-headless-linux-x86_64/communitas-headless communitas-headless-linux-x86_64.bin
+          mv communitas-iced-linux-x86_64/communitas-iced communitas-iced-linux-x86_64.bin
+          mv communitas-iced-macos-universal/communitas-iced-macos-universal communitas-iced-macos-universal.bin
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            artifacts/communitas-headless-linux-x86_64.bin
+            artifacts/communitas-iced-linux-x86_64.bin
+            artifacts/communitas-iced-macos-universal.bin
+        env:
+          GITHUB_TOKEN: \${{ secrets.GITHUB_TOKEN }}

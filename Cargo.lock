@@ -1615,6 +1615,8 @@ dependencies = [
  "iced",
  "keyring",
  "saorsa-webrtc-core",
+ "self_update",
+ "semver",
  "serde",
  "serde_json",
  "tempfile",

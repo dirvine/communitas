@@ -53,19 +53,19 @@ jobs:
             "platforms": {
               "darwin-x86_64": {
                 "signature": "${DARWIN_X64_SIG:-}",
-                "url": "https://github.com/dirvine/communitas/releases/download/v${{ steps.get_version.outputs.VERSION }}/communitas_${{ steps.get_version.outputs.VERSION }}_x64.dmg"
+                "url": "https://github.com/saorsa-labs/communitas/releases/download/v${{ steps.get_version.outputs.VERSION }}/communitas_${{ steps.get_version.outputs.VERSION }}_x64.dmg"
               },
               "darwin-aarch64": {
                 "signature": "${DARWIN_ARM64_SIG:-}",
-                "url": "https://github.com/dirvine/communitas/releases/download/v${{ steps.get_version.outputs.VERSION }}/communitas_${{ steps.get_version.outputs.VERSION }}_aarch64.dmg"
+                "url": "https://github.com/saorsa-labs/communitas/releases/download/v${{ steps.get_version.outputs.VERSION }}/communitas_${{ steps.get_version.outputs.VERSION }}_aarch64.dmg"
               },
               "linux-x86_64": {
                 "signature": "${LINUX_X64_SIG:-}",
-                "url": "https://github.com/dirvine/communitas/releases/download/v${{ steps.get_version.outputs.VERSION }}/communitas_${{ steps.get_version.outputs.VERSION }}_amd64.AppImage"
+                "url": "https://github.com/saorsa-labs/communitas/releases/download/v${{ steps.get_version.outputs.VERSION }}/communitas_${{ steps.get_version.outputs.VERSION }}_amd64.AppImage"
               },
               "windows-x86_64": {
                 "signature": "${WINDOWS_X64_SIG:-}",
-                "url": "https://github.com/dirvine/communitas/releases/download/v${{ steps.get_version.outputs.VERSION }}/communitas_${{ steps.get_version.outputs.VERSION }}_x64_en-US.msi"
+                "url": "https://github.com/saorsa-labs/communitas/releases/download/v${{ steps.get_version.outputs.VERSION }}/communitas_${{ steps.get_version.outputs.VERSION }}_x64_en-US.msi"
               }
             }
           }

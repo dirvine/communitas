@@ -225,47 +225,31 @@ This includes:
 - Firewall configurations and SSH access
 - Systemd service templates
 
-### ⚠️ PORT ISOLATION - MANDATORY
+### Port Allocation
 
-**Communitas uses UDP port range 11000-11999 exclusively.**
-
-| Service | UDP Port Range | Default | Description |
-|---------|----------------|---------|-------------|
-| ant-quic | 9000-9999 | 9000 | QUIC transport layer |
-| saorsa-node | 10000-10999 | 10000 | Core P2P network nodes |
-| **communitas** | **11000-11999** | **11000** | Collaboration platform nodes (THIS PROJECT) |
-
-### 🛑 DO NOT DISTURB OTHER NETWORKS
-
-When testing or developing communitas:
-
-1. **ONLY use ports 11000-11999** for communitas services
-2. **NEVER** kill processes on ports 9000-9999 or 10000-10999
-3. **NEVER** restart services outside our port range
-4. **NEVER** modify firewall rules for other port ranges
+All P2P services use **dynamic port allocation** (bind to port 0). The OS assigns an available port automatically, preventing collisions between services.
 
 ```bash
-# ✅ CORRECT - communitas operations (within 11000-11999)
-cargo run -p communitas-headless -- --listen 0.0.0.0:11000
-cargo run -p communitas-headless -- --listen 0.0.0.0:11001  # Second instance OK
-ssh root@saorsa-2.saorsalabs.com "systemctl restart communitas-bootstrap"
+# Run communitas with dynamic port (recommended)
+cargo run -p communitas-headless -- --listen 0.0.0.0:0
 
-# ❌ WRONG - Would disrupt other networks
-ssh root@saorsa-2.saorsalabs.com "pkill -f ':9'"    # NEVER - matches ant-quic ports
-ssh root@saorsa-2.saorsalabs.com "pkill -f ':10'"   # NEVER - matches saorsa-node ports
-ssh root@saorsa-2.saorsalabs.com "systemctl restart ant-quic-bootstrap"  # NOT OUR SERVICE
+# Or with TUI mode
+cargo run -p communitas-headless -- --registry https://saorsa-1.saorsalabs.com
 ```
 
-### Bootstrap Endpoints (communitas)
-```
-saorsa-2.saorsalabs.com:11000  (NYC - 142.93.199.50)
-saorsa-3.saorsalabs.com:11000  (SFO - 147.182.234.192)
-```
+### Bootstrap Discovery
 
-### Before Any VPS Operations
-1. Verify you're targeting port 11000 only
-2. Double-check service names contain "communitas"
-3. Never run broad `pkill` commands that could affect other services
+Bootstrap nodes use dynamic ports. New nodes discover bootstrap addresses via:
+
+1. **Registry API**: `https://saorsa-1.saorsalabs.com/api/peers` returns active nodes with current addresses
+2. **Gossip**: Once connected to any peer, discover others via gossip protocol
+
+### VPS Operations
+
+When managing VPS nodes:
+- Services register with the registry after binding to their dynamic port
+- Use service names (e.g., `systemctl restart communitas-bootstrap`) not port-based targeting
+- The registry API provides current addresses of all active nodes
 
 ### Deploy New Binary
 ```bash

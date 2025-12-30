@@ -581,10 +581,7 @@ impl GossipContext {
                 }
             }
 
-            debug!(
-                "Entity message receiver task ended for {}",
-                entity_id_clone
-            );
+            debug!("Entity message receiver task ended for {}", entity_id_clone);
         });
 
         // Store the task handle

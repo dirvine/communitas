@@ -143,10 +143,7 @@ pub enum Command {
     },
 
     /// Remove a member from organization and all child entities (cascade)
-    RemoveOrganizationMember {
-        org_id: String,
-        member_id: String,
-    },
+    RemoveOrganizationMember { org_id: String, member_id: String },
 
     /// Set a member's role
     SetMemberRole {
@@ -349,10 +346,7 @@ pub enum Event {
     },
 
     /// Display name was updated
-    DisplayNameUpdated {
-        old_name: String,
-        new_name: String,
-    },
+    DisplayNameUpdated { old_name: String, new_name: String },
 
     // ========================================================================
     // Networking Events
@@ -373,7 +367,10 @@ pub enum Event {
     ExternalAddressDiscovered { address: String },
 
     /// Connection failed
-    ConnectionFailed { peer_four_words: String, reason: String },
+    ConnectionFailed {
+        peer_four_words: String,
+        reason: String,
+    },
 
     // ========================================================================
     // Entity Events
@@ -573,10 +570,7 @@ pub enum Event {
     // WebRTC Events
     // ========================================================================
     /// Call started
-    CallStarted {
-        call_id: String,
-        entity_id: String,
-    },
+    CallStarted { call_id: String, entity_id: String },
 
     /// Joined a call
     CallJoined { call_id: String },
@@ -600,10 +594,7 @@ pub enum Event {
     // Error Events
     // ========================================================================
     /// An error occurred while processing a command
-    CommandFailed {
-        command_type: String,
-        error: String,
-    },
+    CommandFailed { command_type: String, error: String },
 }
 
 // ============================================================================
@@ -1055,7 +1046,9 @@ mod tests {
         let deserialized: Command = serde_json::from_str(&json).unwrap();
 
         match deserialized {
-            Command::CreateEntity { name, entity_type, .. } => {
+            Command::CreateEntity {
+                name, entity_type, ..
+            } => {
                 assert_eq!(name, "Test Org");
                 assert_eq!(entity_type, EntityType::Organisation);
             }
@@ -1076,7 +1069,9 @@ mod tests {
         let deserialized: Event = serde_json::from_str(&json).unwrap();
 
         match deserialized {
-            Event::EntityCreated { entity_id, name, .. } => {
+            Event::EntityCreated {
+                entity_id, name, ..
+            } => {
                 assert_eq!(entity_id, "abc123");
                 assert_eq!(name, "Test Org");
             }

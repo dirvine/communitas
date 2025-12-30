@@ -280,8 +280,7 @@ pub fn skip_version(version: &str) -> Result<(), String> {
 
     // Ensure parent directory exists
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("Failed to create directory: {e}"))?;
+        std::fs::create_dir_all(parent).map_err(|e| format!("Failed to create directory: {e}"))?;
     }
 
     // Append version to file
@@ -292,8 +291,7 @@ pub fn skip_version(version: &str) -> Result<(), String> {
         .open(&path)
         .map_err(|e| format!("Failed to open skipped versions file: {e}"))?;
 
-    writeln!(file, "{version}")
-        .map_err(|e| format!("Failed to write skipped version: {e}"))?;
+    writeln!(file, "{version}").map_err(|e| format!("Failed to write skipped version: {e}"))?;
 
     Ok(())
 }
@@ -334,7 +332,10 @@ mod tests {
         match result {
             UpdateCheckResult::UpdateAvailable(info) => {
                 // Verify we got valid update info
-                assert!(!info.new_version.is_empty(), "new_version should not be empty");
+                assert!(
+                    !info.new_version.is_empty(),
+                    "new_version should not be empty"
+                );
                 assert_eq!(info.current_version, "0.0.1");
                 assert!(
                     info.new_version != "0.0.1",

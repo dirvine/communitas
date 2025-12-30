@@ -66,7 +66,7 @@ use crate::types::DeviceType;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::{broadcast, RwLock};
+use tokio::sync::{RwLock, broadcast};
 use tracing::{info, warn};
 use uuid::Uuid;
 
@@ -144,7 +144,9 @@ impl CommunitasApp {
                 // Already initialized in new()
                 Err(CommandError {
                     command_type,
-                    message: "App is already initialized. Create a new CommunitasApp instance instead.".to_string(),
+                    message:
+                        "App is already initialized. Create a new CommunitasApp instance instead."
+                            .to_string(),
                     code: "ALREADY_INITIALIZED".to_string(),
                 })
             }
@@ -176,13 +178,14 @@ impl CommunitasApp {
                     });
                 }
 
-                let connection_identity = ctx.start_networking(preferred_port).await.map_err(|e| {
-                    CommandError {
-                        command_type: command_type.clone(),
-                        message: e,
-                        code: "NETWORKING_START_FAILED".to_string(),
-                    }
-                })?;
+                let connection_identity =
+                    ctx.start_networking(preferred_port)
+                        .await
+                        .map_err(|e| CommandError {
+                            command_type: command_type.clone(),
+                            message: e,
+                            code: "NETWORKING_START_FAILED".to_string(),
+                        })?;
 
                 let listen_addr = ctx
                     .listen_address
@@ -427,10 +430,8 @@ impl CommunitasApp {
                         code: "REMOVE_ORG_MEMBER_FAILED".to_string(),
                     })?;
 
-                let removed_from: Vec<(EntityType, String)> = result
-                    .removed_in
-                    .into_iter()
-                    .collect();
+                let removed_from: Vec<(EntityType, String)> =
+                    result.removed_in.into_iter().collect();
 
                 let event = Event::OrganizationMemberRemoved {
                     org_id,
@@ -906,7 +907,12 @@ impl CommunitasApp {
                 let from_column_id = card.column_id.clone();
 
                 ctx.kanban_service
-                    .move_card(&board_id, &card_id, &target_column_id, position.unwrap_or(0))
+                    .move_card(
+                        &board_id,
+                        &card_id,
+                        &target_column_id,
+                        position.unwrap_or(0),
+                    )
                     .map_err(|e| CommandError {
                         command_type: command_type.clone(),
                         message: format!("{}", e),
@@ -1028,11 +1034,14 @@ impl CommunitasApp {
                     screen_share: false,
                 };
 
-                webrtc.accept_call(call_id_parsed, constraints).await.map_err(|e| CommandError {
-                    command_type: command_type.clone(),
-                    message: format!("{}", e),
-                    code: "JOIN_CALL_FAILED".to_string(),
-                })?;
+                webrtc
+                    .accept_call(call_id_parsed, constraints)
+                    .await
+                    .map_err(|e| CommandError {
+                        command_type: command_type.clone(),
+                        message: format!("{}", e),
+                        code: "JOIN_CALL_FAILED".to_string(),
+                    })?;
 
                 let event = Event::CallJoined { call_id };
                 self.broadcast_event(event.clone());
@@ -1055,11 +1064,14 @@ impl CommunitasApp {
                 })?;
                 let call_id_parsed = crate::webrtc::CallId(uuid);
 
-                webrtc.end_call(call_id_parsed).await.map_err(|e| CommandError {
-                    command_type: command_type.clone(),
-                    message: format!("{}", e),
-                    code: "LEAVE_CALL_FAILED".to_string(),
-                })?;
+                webrtc
+                    .end_call(call_id_parsed)
+                    .await
+                    .map_err(|e| CommandError {
+                        command_type: command_type.clone(),
+                        message: format!("{}", e),
+                        code: "LEAVE_CALL_FAILED".to_string(),
+                    })?;
 
                 let event = Event::CallLeft { call_id };
                 self.broadcast_event(event.clone());
@@ -1254,11 +1266,15 @@ impl CommunitasApp {
 
             Query::ListEntities => {
                 let ctx = self.context.read().await;
-                let entities = ctx.entity_service.list_entities().await.map_err(|e| QueryError {
-                    query_type: query_type.clone(),
-                    message: format!("{}", e),
-                    code: "LIST_ENTITIES_FAILED".to_string(),
-                })?;
+                let entities =
+                    ctx.entity_service
+                        .list_entities()
+                        .await
+                        .map_err(|e| QueryError {
+                            query_type: query_type.clone(),
+                            message: format!("{}", e),
+                            code: "LIST_ENTITIES_FAILED".to_string(),
+                        })?;
 
                 let responses: Vec<EntityResponse> =
                     entities.iter().map(entity_to_response).collect();
@@ -1267,15 +1283,15 @@ impl CommunitasApp {
 
             Query::ListEntitiesByType { entity_type } => {
                 let ctx = self.context.read().await;
-                let all_entities = ctx
-                    .entity_service
-                    .list_entities()
-                    .await
-                    .map_err(|e| QueryError {
-                        query_type: query_type.clone(),
-                        message: format!("{}", e),
-                        code: "LIST_BY_TYPE_FAILED".to_string(),
-                    })?;
+                let all_entities =
+                    ctx.entity_service
+                        .list_entities()
+                        .await
+                        .map_err(|e| QueryError {
+                            query_type: query_type.clone(),
+                            message: format!("{}", e),
+                            code: "LIST_BY_TYPE_FAILED".to_string(),
+                        })?;
 
                 // Filter by entity type
                 let entities: Vec<_> = all_entities
@@ -1290,15 +1306,15 @@ impl CommunitasApp {
 
             Query::ListChildEntities { org_id } => {
                 let ctx = self.context.read().await;
-                let all_entities = ctx
-                    .entity_service
-                    .list_entities()
-                    .await
-                    .map_err(|e| QueryError {
-                        query_type: query_type.clone(),
-                        message: format!("{}", e),
-                        code: "LIST_CHILDREN_FAILED".to_string(),
-                    })?;
+                let all_entities =
+                    ctx.entity_service
+                        .list_entities()
+                        .await
+                        .map_err(|e| QueryError {
+                            query_type: query_type.clone(),
+                            message: format!("{}", e),
+                            code: "LIST_CHILDREN_FAILED".to_string(),
+                        })?;
 
                 // Filter by parent organization
                 let entities: Vec<_> = all_entities
@@ -1380,8 +1396,14 @@ impl CommunitasApp {
                     .into_iter()
                     .map(|(res, lvl)| {
                         (
-                            serde_json::to_string(&res).unwrap_or_default().trim_matches('"').to_string(),
-                            serde_json::to_string(&lvl).unwrap_or_default().trim_matches('"').to_string(),
+                            serde_json::to_string(&res)
+                                .unwrap_or_default()
+                                .trim_matches('"')
+                                .to_string(),
+                            serde_json::to_string(&lvl)
+                                .unwrap_or_default()
+                                .trim_matches('"')
+                                .to_string(),
                         )
                     })
                     .collect();
@@ -1598,7 +1620,10 @@ impl CommunitasApp {
                 Ok(QueryResponse::FileList(responses))
             }
 
-            Query::GetDiskStats { entity_id, disk_type } => {
+            Query::GetDiskStats {
+                entity_id,
+                disk_type,
+            } => {
                 let ctx = self.context.read().await;
                 let disk_type_internal = disk_type_from_arg(disk_type);
 

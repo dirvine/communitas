@@ -813,8 +813,11 @@ impl EntityService {
             let mut txn = doc.transact_mut();
             let member_data =
                 CrdtManager::get_or_create_nested_map(&members_map, &mut txn, member_id);
-            let overrides =
-                CrdtManager::get_or_create_nested_map(&member_data, &mut txn, "permission_overrides");
+            let overrides = CrdtManager::get_or_create_nested_map(
+                &member_data,
+                &mut txn,
+                "permission_overrides",
+            );
 
             CrdtManager::set_map_string(&overrides, &mut txn, resource_type, access_level);
         }
@@ -1225,13 +1228,7 @@ mod tests {
 
         // Set permission override
         service
-            .set_permission_override(
-                EntityType::Group,
-                &entity.id,
-                "member1",
-                "messages",
-                "edit",
-            )
+            .set_permission_override(EntityType::Group, &entity.id, "member1", "messages", "edit")
             .await
             .expect("Failed to set permission override");
 
@@ -1242,9 +1239,11 @@ mod tests {
             .expect("Failed to get overrides");
 
         assert_eq!(overrides.len(), 1);
-        assert!(overrides
-            .iter()
-            .any(|(k, v)| k == "messages" && v == "edit"));
+        assert!(
+            overrides
+                .iter()
+                .any(|(k, v)| k == "messages" && v == "edit")
+        );
     }
 
     #[tokio::test]
@@ -1264,13 +1263,7 @@ mod tests {
 
         // Set multiple overrides
         service
-            .set_permission_override(
-                EntityType::Group,
-                &entity.id,
-                "member1",
-                "messages",
-                "edit",
-            )
+            .set_permission_override(EntityType::Group, &entity.id, "member1", "messages", "edit")
             .await
             .expect("Failed to set override 1");
 
@@ -1303,15 +1296,21 @@ mod tests {
             .expect("Failed to get overrides");
 
         assert_eq!(overrides.len(), 3);
-        assert!(overrides
-            .iter()
-            .any(|(k, v)| k == "messages" && v == "edit"));
-        assert!(overrides
-            .iter()
-            .any(|(k, v)| k == "documents" && v == "read_only"));
-        assert!(overrides
-            .iter()
-            .any(|(k, v)| k == "settings" && v == "not_visible"));
+        assert!(
+            overrides
+                .iter()
+                .any(|(k, v)| k == "messages" && v == "edit")
+        );
+        assert!(
+            overrides
+                .iter()
+                .any(|(k, v)| k == "documents" && v == "read_only")
+        );
+        assert!(
+            overrides
+                .iter()
+                .any(|(k, v)| k == "settings" && v == "not_visible")
+        );
     }
 
     #[tokio::test]
@@ -1359,13 +1358,7 @@ mod tests {
 
         // Set override
         service
-            .set_permission_override(
-                EntityType::Group,
-                &entity.id,
-                "member1",
-                "messages",
-                "edit",
-            )
+            .set_permission_override(EntityType::Group, &entity.id, "member1", "messages", "edit")
             .await
             .expect("Failed to set override");
 
@@ -1585,13 +1578,7 @@ mod tests {
 
         // Update override
         service
-            .set_permission_override(
-                EntityType::Group,
-                &entity.id,
-                "member1",
-                "messages",
-                "edit",
-            )
+            .set_permission_override(EntityType::Group, &entity.id, "member1", "messages", "edit")
             .await
             .expect("Failed to update override");
 
@@ -1602,9 +1589,11 @@ mod tests {
             .expect("Failed to get overrides");
 
         assert_eq!(overrides.len(), 1);
-        assert!(overrides
-            .iter()
-            .any(|(k, v)| k == "messages" && v == "edit"));
+        assert!(
+            overrides
+                .iter()
+                .any(|(k, v)| k == "messages" && v == "edit")
+        );
     }
 
     #[tokio::test]
@@ -1624,13 +1613,7 @@ mod tests {
 
         // Set permission override
         service
-            .set_permission_override(
-                EntityType::Group,
-                &entity.id,
-                "member1",
-                "messages",
-                "edit",
-            )
+            .set_permission_override(EntityType::Group, &entity.id, "member1", "messages", "edit")
             .await
             .expect("Failed to set override");
 
@@ -1647,9 +1630,11 @@ mod tests {
             .expect("Failed to get overrides");
 
         assert_eq!(overrides.len(), 1);
-        assert!(overrides
-            .iter()
-            .any(|(k, v)| k == "messages" && v == "edit"));
+        assert!(
+            overrides
+                .iter()
+                .any(|(k, v)| k == "messages" && v == "edit")
+        );
 
         // Verify role was changed
         let role = service
@@ -1723,13 +1708,17 @@ mod tests {
             .expect("Failed to get channel overrides");
 
         assert_eq!(project_overrides.len(), 1);
-        assert!(project_overrides
-            .iter()
-            .any(|(k, v)| k == "kanban_boards" && v == "edit"));
+        assert!(
+            project_overrides
+                .iter()
+                .any(|(k, v)| k == "kanban_boards" && v == "edit")
+        );
 
         assert_eq!(channel_overrides.len(), 1);
-        assert!(channel_overrides
-            .iter()
-            .any(|(k, v)| k == "messages" && v == "read_only"));
+        assert!(
+            channel_overrides
+                .iter()
+                .any(|(k, v)| k == "messages" && v == "read_only")
+        );
     }
 }

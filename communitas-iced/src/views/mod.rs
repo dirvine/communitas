@@ -13,5 +13,5 @@ pub mod main_layout;
 pub mod update_banner;
 
 pub use authentication::view_authentication;
-pub use main_layout::{view_main, ModalFormState};
+pub use main_layout::{ModalFormState, view_main};
 pub use update_banner::view_update_banner;

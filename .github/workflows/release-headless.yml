@@ -45,6 +45,48 @@ jobs:
           fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
+      - name: Delete existing draft releases for this version
+        if: env.ACT != 'true'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const version = '${{ steps.get-version.outputs.version }}'
+            console.log(`Checking for existing releases with tag: ${version}`)
+
+            // List all releases (including drafts)
+            const releases = await github.rest.repos.listReleases({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              per_page: 100
+            })
+
+            // Find and delete any releases with matching tag
+            for (const release of releases.data) {
+              if (release.tag_name === version) {
+                console.log(`Deleting existing release: ${release.name} (ID: ${release.id}, draft: ${release.draft})`)
+                await github.rest.repos.deleteRelease({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  release_id: release.id
+                })
+                console.log(`Deleted release ${release.id}`)
+              }
+            }
+
+            // Also try to delete the tag if it exists (for clean slate)
+            try {
+              await github.rest.git.deleteRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: `tags/${version}`
+              })
+              console.log(`Deleted existing tag: ${version}`)
+            } catch (e) {
+              // Tag may not exist or may have been created by the push that triggered this workflow
+              console.log(`Tag ${version} not deleted (may be the triggering tag): ${e.message}`)
+            }
+
       - name: Create release
         if: env.ACT != 'true'
         id: create-release
@@ -72,11 +114,12 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               tag_name: version,
-              name: 'Communitas Headless ' + version,
+              name: 'Communitas ' + version,
               body: releaseBody,
               draft: true,
               prerelease: false
             })
+            console.log(`Created release: ${data.name} (ID: ${data.id})`)
             return data.id
 
   build-linux:

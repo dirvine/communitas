@@ -38,7 +38,7 @@ Technical implementation verified through comprehensive integration testing (37 
 
 ### **Development Setup**
 ```bash
-git clone https://github.com/dirvine/communitas.git
+git clone https://github.com/saorsa-labs/communitas.git
 cd communitas
 npm install
 

@@ -118,6 +118,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Set activation policy to regular (foreground app)
         NSApp.setActivationPolicy(.regular)
 
+        // Initialize the update manager (triggers automatic update check)
+        Task { @MainActor in
+            _ = UpdateManager.shared
+        }
+
         // Setup the menu bar
         setupMenuBar()
 
@@ -150,6 +155,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         appMenuItem.submenu = appMenu
 
         appMenu.addItem(NSMenuItem(title: "About Communitas", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: ""))
+        appMenu.addItem(NSMenuItem.separator())
+
+        let checkForUpdatesItem = NSMenuItem(title: "Check for Updates...", action: #selector(checkForUpdatesMenuAction), keyEquivalent: "")
+        checkForUpdatesItem.target = self
+        appMenu.addItem(checkForUpdatesItem)
+
         appMenu.addItem(NSMenuItem.separator())
         appMenu.addItem(NSMenuItem(title: "Preferences...", action: nil, keyEquivalent: ","))
         appMenu.addItem(NSMenuItem.separator())
@@ -203,6 +214,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         NSApp.mainMenu = mainMenu
         NSApp.windowsMenu = windowMenu
+    }
+
+    // MARK: - Update Actions
+
+    @objc func checkForUpdatesMenuAction() {
+        Task { @MainActor in
+            UpdateManager.shared.checkForUpdates()
+        }
     }
 
     // MARK: - Window Management

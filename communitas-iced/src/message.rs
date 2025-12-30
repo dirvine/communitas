@@ -13,6 +13,7 @@ use crate::state::{
     ActiveView, CardPriority, ChatMessage, Contact, DetailTab, Entity, KanbanCard, PeerInfo,
     SidebarSection,
 };
+use crate::update::{UpdateCheckResult, UpdateInfo};
 use iced::widget::pane_grid;
 
 /// Root application message.
@@ -38,6 +39,8 @@ pub enum Message {
     Storage(StorageMessage),
     /// Modal messages.
     Modal(ModalMessage),
+    /// Update/self-update messages.
+    Update(UpdateMessage),
     /// Theme changed.
     ThemeChanged(iced::Theme),
     /// Periodic tick (for updates/animations).
@@ -486,4 +489,23 @@ pub enum CoreEvent {
     EntityUpdated(Entity),
     /// CRDT sync completed.
     SyncCompleted(String, usize),
+}
+
+/// Update/self-update messages.
+#[derive(Debug, Clone)]
+pub enum UpdateMessage {
+    /// Check for updates.
+    CheckForUpdates,
+    /// Result of update check.
+    UpdateCheckResult(UpdateCheckResult),
+    /// User clicked "Update Now".
+    DownloadUpdate,
+    /// Update download/install completed.
+    UpdateCompleted(Result<String, String>),
+    /// User dismissed the update notification.
+    DismissUpdate,
+    /// User chose to skip this version.
+    SkipVersion(String),
+    /// Show update available banner (after startup delay).
+    ShowUpdateBanner(UpdateInfo),
 }

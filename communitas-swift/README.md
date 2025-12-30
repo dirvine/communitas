@@ -1,6 +1,6 @@
 # Communitas Swift Client
 
-Native iOS and macOS client for the [Communitas](https://github.com/dirvine/communitas) collaboration platform.
+Native iOS and macOS client for the [Communitas](https://github.com/saorsa-labs/communitas) collaboration platform.
 
 ## Status
 

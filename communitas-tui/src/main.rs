@@ -31,7 +31,7 @@ use std::path::PathBuf;
 fn try_self_update() -> Result<Option<String>> {
     use self_update::cargo_crate_version;
     let owner =
-        std::env::var("COMMUNITAS_UPDATE_REPO_OWNER").unwrap_or_else(|_| "dirvine".to_string());
+        std::env::var("COMMUNITAS_UPDATE_REPO_OWNER").unwrap_or_else(|_| "saorsa-labs".to_string());
     let name =
         std::env::var("COMMUNITAS_UPDATE_REPO_NAME").unwrap_or_else(|_| "communitas".to_string());
 

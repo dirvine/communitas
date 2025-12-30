@@ -13,12 +13,13 @@ use crate::error::AppError;
 use crate::message::{
     AuthMessage, CallMessage, ChatMessageEvent, ContactMessage, KanbanMessage, LoginSuccess,
     Message, ModalMessage, ModalType, NavigationMessage, NetworkMessage, NetworkStartedInfo,
-    SidebarMessage, StorageMessage,
+    SidebarMessage, StorageMessage, UpdateMessage,
 };
 use crate::state::{
     ActiveView, AuthState, CallInfo, CallState, CallStatus, ChatMessage, Contact, DetailTab,
     Entity, MemberRole, NetworkInfo, SidebarState, ThreadState,
 };
+use crate::update::{self, UpdateCheckResult, UpdateConfig, UpdateInfo, UpdateStatus};
 use iced::widget::pane_grid;
 #[cfg(feature = "demo")]
 use iced::keyboard;
@@ -55,6 +56,12 @@ pub struct CommunitasApp {
     last_error: Option<AppError>,
     /// Modal form state.
     modal_form_state: crate::views::ModalFormState,
+    /// Update status.
+    update_status: UpdateStatus,
+    /// Update configuration.
+    update_config: UpdateConfig,
+    /// Available update info (if any).
+    available_update: Option<UpdateInfo>,
 }
 
 /// Application state after successful authentication.
@@ -149,6 +156,9 @@ impl CommunitasApp {
             active_modal: None,
             last_error: None,
             modal_form_state: crate::views::ModalFormState::default(),
+            update_status: UpdateStatus::default(),
+            update_config: UpdateConfig::default(),
+            available_update: None,
         };
 
         // Load available vaults on startup (skipped in demo mode since already logged in)
@@ -182,7 +192,19 @@ impl CommunitasApp {
             )
         };
 
-        (app, load_vaults)
+        // Check for updates 2 seconds after startup (silent background check)
+        let update_check_task = Task::perform(
+            async {
+                // Delay before checking for updates
+                tokio::time::sleep(Duration::from_secs(2)).await;
+            },
+            |()| Message::Update(UpdateMessage::CheckForUpdates),
+        );
+
+        // Batch startup tasks
+        let startup_tasks = Task::batch([load_vaults, update_check_task]);
+
+        (app, startup_tasks)
     }
 
     /// Create demo state with sample data for testing.
@@ -654,6 +676,7 @@ impl CommunitasApp {
             Message::Network(network_msg) => self.handle_network(network_msg),
             Message::Storage(storage_msg) => self.handle_storage(storage_msg),
             Message::Modal(modal_msg) => self.handle_modal(modal_msg),
+            Message::Update(update_msg) => self.handle_update(update_msg),
             Message::ThemeChanged(theme) => {
                 self.theme = theme;
                 Task::none()
@@ -1846,6 +1869,93 @@ impl CommunitasApp {
         Task::none()
     }
 
+    /// Handle update messages for self-update functionality.
+    fn handle_update(&mut self, msg: UpdateMessage) -> Task<Message> {
+        use crate::message::UpdateMessage;
+
+        match msg {
+            UpdateMessage::CheckForUpdates => {
+                self.update_status = UpdateStatus::Checking;
+                let config = self.update_config.clone();
+                Task::perform(
+                    async move { update::check_for_update(&config).await },
+                    |result| Message::Update(UpdateMessage::UpdateCheckResult(result)),
+                )
+            }
+            UpdateMessage::UpdateCheckResult(result) => {
+                match result {
+                    UpdateCheckResult::UpdateAvailable(info) => {
+                        // Check if user has skipped this version
+                        if update::is_version_skipped(&info.new_version) {
+                            self.update_status = UpdateStatus::Skipped(info.new_version);
+                            tracing::info!("Update available but version was skipped by user");
+                        } else {
+                            tracing::info!(
+                                "Update available: {} -> {}",
+                                info.current_version,
+                                info.new_version
+                            );
+                            self.update_status = UpdateStatus::Available(info.clone());
+                            self.available_update = Some(info);
+                        }
+                    }
+                    UpdateCheckResult::UpToDate => {
+                        tracing::debug!("Application is up to date");
+                        self.update_status = UpdateStatus::Idle;
+                    }
+                    UpdateCheckResult::Error(err) => {
+                        tracing::warn!("Update check failed: {}", err);
+                        self.update_status = UpdateStatus::Failed(err);
+                    }
+                }
+                Task::none()
+            }
+            UpdateMessage::DownloadUpdate => {
+                self.update_status = UpdateStatus::Downloading { progress: 0 };
+                let config = self.update_config.clone();
+                Task::perform(
+                    async move { update::perform_update(&config).await },
+                    |result| {
+                        Message::Update(UpdateMessage::UpdateCompleted(
+                            result.map(|r| r.new_version),
+                        ))
+                    },
+                )
+            }
+            UpdateMessage::UpdateCompleted(result) => {
+                match result {
+                    Ok(new_version) => {
+                        tracing::info!("Update completed successfully: {}", new_version);
+                        self.update_status = UpdateStatus::Completed { new_version };
+                    }
+                    Err(err) => {
+                        tracing::error!("Update failed: {}", err);
+                        self.update_status = UpdateStatus::Failed(err);
+                    }
+                }
+                Task::none()
+            }
+            UpdateMessage::DismissUpdate => {
+                self.update_status = UpdateStatus::Dismissed;
+                self.available_update = None;
+                Task::none()
+            }
+            UpdateMessage::SkipVersion(version) => {
+                if let Err(e) = update::skip_version(&version) {
+                    tracing::warn!("Failed to skip version: {}", e);
+                }
+                self.update_status = UpdateStatus::Skipped(version);
+                self.available_update = None;
+                Task::none()
+            }
+            UpdateMessage::ShowUpdateBanner(info) => {
+                self.update_status = UpdateStatus::Available(info.clone());
+                self.available_update = Some(info);
+                Task::none()
+            }
+        }
+    }
+
     /// Handle core events from the backend.
     fn handle_core_event(&mut self, event: crate::message::CoreEvent) -> Task<Message> {
         if let Some(ref mut app) = self.app_state {
@@ -1936,6 +2046,7 @@ impl CommunitasApp {
                     &self.panes,
                     self.active_modal.as_ref(),
                     &self.modal_form_state,
+                    &self.update_status,
                 )
             } else {
                 view_authentication(&self.auth_state)

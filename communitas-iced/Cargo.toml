@@ -9,7 +9,7 @@ homepage.workspace = true
 description = "Cross-platform desktop GUI for Communitas using Iced"
 
 [[bin]]
-name = "communitas"
+name = "communitas-iced"
 path = "src/main.rs"
 
 [dependencies]
@@ -49,6 +49,10 @@ keyring = "3"
 # Utils
 chrono.workspace = true
 uuid.workspace = true
+
+# Self-update from GitHub releases
+self_update = "0.41"
+semver = "1"
 
 # Cryptography (for four-word identity)
 four-word-networking.workspace = true

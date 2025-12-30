@@ -20,6 +20,8 @@ use crate::state::{
     KanbanCard, KanbanColumn, MemberRole, SidebarSection,
 };
 use crate::theme::{self, Palette};
+use crate::update::UpdateStatus;
+use crate::views::update_banner::view_update_banner;
 use iced::widget::pane_grid::{self, PaneGrid};
 use iced::widget::{Column, Row, Space, button, column, container, row, rule, scrollable, text, text_input};
 use iced::{Alignment, Border, Color, Element, Length, Padding, Theme};
@@ -56,6 +58,7 @@ pub fn view_main<'a>(
     panes: &'a pane_grid::State<PaneType>,
     active_modal: Option<&'a ModalType>,
     modal_form_state: &'a ModalFormState,
+    update_status: &'a UpdateStatus,
 ) -> Element<'a, Message> {
     let pane_grid = PaneGrid::new(panes, |_pane, pane_type, _is_maximized| {
         let content: Element<'a, Message> = match pane_type {
@@ -70,8 +73,16 @@ pub fn view_main<'a>(
     .height(Length::Fill)
     .on_resize(10, Message::PaneResized);
 
-    // Stack with profile header
-    let main_content = column![view_profile_header(app_state), pane_grid,];
+    // Build main content with optional update banner
+    let main_content = if let Some(update_banner) = view_update_banner(update_status) {
+        column![
+            view_profile_header(app_state),
+            container(update_banner).padding([8, 16]),
+            pane_grid,
+        ]
+    } else {
+        column![view_profile_header(app_state), pane_grid,]
+    };
 
     // Check for incoming calls first
     if let Some(ref incoming) = app_state.call_state.incoming_call {

@@ -37,8 +37,11 @@ jobs:
         run: |
           if [[ $GITHUB_REF == refs/tags/* ]]; then
             VERSION=${GITHUB_REF#refs/tags/}
+          elif [[ "${{ github.event.inputs.version }}" != "" && "${{ github.event.inputs.version }}" != "latest" ]]; then
+            VERSION="${{ github.event.inputs.version }}"
           else
-            VERSION="v$(node -p "require('./package.json').version")"
+            # Extract version from Cargo.toml
+            VERSION="v$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')"
           fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 

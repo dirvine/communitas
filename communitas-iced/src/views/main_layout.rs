@@ -592,15 +592,16 @@ fn view_entity_item<'a>(
         .into()
 }
 
-/// Render a role badge.
+/// Render a role badge with emoji icon (👑 Owner, 🛡️ Admin, 👁️ Guest).
+/// Member role is not displayed as a badge.
 fn view_role_badge(role: MemberRole) -> Element<'static, Message> {
     let badge_color = role.color();
-    let label = role.short_label();
+    let icon = role.icon();
 
-    container(text(label).size(9).color(Color::WHITE))
-        .padding(Padding::from([1, 4]))
+    container(text(icon).size(11))
+        .padding(Padding::from([1, 3]))
         .style(move |_t: &Theme| container::Style {
-            background: Some(badge_color.into()),
+            background: Some(badge_color.scale_alpha(0.2).into()),
             border: Border::default().rounded(3),
             ..Default::default()
         })

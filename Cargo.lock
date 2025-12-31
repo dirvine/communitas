@@ -1467,7 +1467,7 @@ dependencies = [
 
 [[package]]
 name = "communitas-bridge"
-version = "0.1.20"
+version = "0.1.53"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1493,7 +1493,7 @@ dependencies = [
 
 [[package]]
 name = "communitas-core"
-version = "0.1.20"
+version = "0.1.53"
 dependencies = [
  "ammonia",
  "anyhow",
@@ -1565,7 +1565,7 @@ dependencies = [
 
 [[package]]
 name = "communitas-headless"
-version = "0.1.20"
+version = "0.1.53"
 dependencies = [
  "ant-quic 0.8.17",
  "anyhow",
@@ -1602,7 +1602,7 @@ dependencies = [
 
 [[package]]
 name = "communitas-iced"
-version = "0.1.20"
+version = "0.1.53"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1629,7 +1629,7 @@ dependencies = [
 
 [[package]]
 name = "communitas-kanban"
-version = "0.1.20"
+version = "0.1.53"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1645,7 +1645,7 @@ dependencies = [
 
 [[package]]
 name = "communitas-mcp"
-version = "0.1.20"
+version = "0.1.53"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1661,7 +1661,7 @@ dependencies = [
 
 [[package]]
 name = "communitas-p2p-test"
-version = "0.1.20"
+version = "0.1.53"
 dependencies = [
  "anyhow",
  "communitas-core",
@@ -1675,7 +1675,7 @@ dependencies = [
 
 [[package]]
 name = "communitas-tui"
-version = "0.1.20"
+version = "0.1.53"
 dependencies = [
  "anyhow",
  "axum",

@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base href="$FLUTTER_BASE_HREF">
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="Communitas - Local-first collaboration platform">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Communitas">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <link rel="icon" type="image/png" href="favicon.png"/>
+  <title>Communitas</title>
+  <link rel="manifest" href="manifest.json">
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #1A241F;
+    }
+    .loading {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      flex-direction: column;
+    }
+    .loading-text {
+      color: #4CAF83;
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 18px;
+      margin-top: 20px;
+    }
+    .loader {
+      width: 48px;
+      height: 48px;
+      border: 3px solid #2D3D36;
+      border-radius: 50%;
+      border-top-color: #4CAF83;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="loading">
+    <div class="loader"></div>
+    <div class="loading-text">Loading Communitas...</div>
+  </div>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>

@@ -4,12 +4,11 @@ members = [
     "communitas-core",
     "communitas-headless",  # Bootstrap nodes
     "communitas-bridge",    # HTTP bridge for testing
-    "communitas-tui",
     "communitas-p2p-test",
-    "communitas-bindings",  # Swift/UniFFI bindings
+    "communitas-bindings",  # Swift/UniFFI bindings + flutter_rust_bridge
     "communitas-kanban",    # CRDT-based Kanban system
-    "communitas-iced",      # Cross-platform Iced GUI
     "communitas-mcp",       # MCP server for AI agent control
+    # communitas-flutter - Flutter GUI (not a Rust crate, separate build)
 ]
 
 [workspace.package]

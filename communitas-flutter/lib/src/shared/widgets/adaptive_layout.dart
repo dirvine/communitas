@@ -18,12 +18,21 @@ class AdaptiveLayout extends StatelessWidget {
 
     if (isDesktop) {
       // Desktop: sidebar + body
-      return Row(
-        children: [
-          sidebar,
-          const VerticalDivider(width: 1),
-          Expanded(child: body),
-        ],
+      // Use LayoutBuilder to get exact height for sidebar
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(
+                height: constraints.maxHeight,
+                child: sidebar,
+              ),
+              const VerticalDivider(width: 1),
+              Expanded(child: body),
+            ],
+          );
+        },
       );
     } else {
       // Mobile: body with bottom navigation

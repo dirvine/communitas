@@ -108,6 +108,7 @@ impl JsonRpcError {
 #[serde(rename_all = "camelCase")]
 pub struct InitializeParams {
     pub protocol_version: String,
+    #[serde(default)]
     pub capabilities: ClientCapabilities,
     pub client_info: ClientInfo,
 }

@@ -5,49 +5,92 @@
 //! MCP Server implementation
 //!
 //! Handles JSON-RPC 2.0 communication over stdio, routing requests to the
-//! CommunitasApp for processing.
+//! CommunitasApp for processing. Supports both authenticated and demo modes.
 
+use crate::auth::{requires_auth, AuthState, AuthenticatedSession, DelegateSession, DemoSession, Scope};
 use crate::protocol::{
     InitializeParams, InitializeResult, JsonRpcError, JsonRpcRequest, JsonRpcResponse, Resource,
     ResourceContent, ResourceListResult, ResourceReadParams, ResourceReadResult,
     ResourcesCapability, ServerCapabilities, ServerInfo, ToolCallParams, ToolListResult,
     ToolsCapability,
 };
+use crate::token::TokenManager;
 use crate::tools;
+use crate::Args;
 use anyhow::Result;
 use communitas_core::app::CommunitasApp;
+use communitas_core::auth_service::AuthService;
+use communitas_core::encrypted_storage::{EncryptedStorageManager, StorageConfig};
 use communitas_core::identity::generate_id_words;
 use serde_json::Value;
+use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::SystemTime;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
-/// MCP Server state
 pub struct McpServer {
-    /// The Communitas application instance
     app: Arc<RwLock<Option<CommunitasApp>>>,
-    /// Whether the server has been initialized
-    initialized: bool,
+    auth_state: AuthState,
+    protocol_initialized: bool,
+    demo_mode: bool,
+    args: Args,
+    token_manager: Option<TokenManager>,
 }
 
 impl McpServer {
-    /// Create a new MCP server
-    pub fn new() -> Self {
+    pub fn new(args: Args) -> Self {
+        let demo_mode = args.demo;
         Self {
             app: Arc::new(RwLock::new(None)),
-            initialized: false,
+            auth_state: AuthState::Unauthenticated,
+            protocol_initialized: false,
+            demo_mode,
+            args,
+            token_manager: None,
         }
     }
 
-    /// Handle a JSON-RPC request
+    async fn get_token_manager(&mut self) -> Result<&TokenManager, JsonRpcError> {
+        if self.token_manager.is_none() {
+            let vault_dir = self.get_vault_dir();
+            let manager = TokenManager::new(vault_dir)
+                .await
+                .map_err(|e| JsonRpcError::internal_error(&format!("Failed to initialize token manager: {}", e)))?;
+            self.token_manager = Some(manager);
+        }
+        Ok(self.token_manager.as_ref().expect("token_manager was just set"))
+    }
+
+    fn is_authenticated(&self) -> bool {
+        matches!(
+            self.auth_state,
+            AuthState::Authenticated(_) | AuthState::DemoMode(_) | AuthState::Delegate(_)
+        )
+    }
+
+    fn get_vault_dir(&self) -> PathBuf {
+        self.args
+            .storage_dir
+            .as_ref()
+            .map(PathBuf::from)
+            .unwrap_or_else(|| std::env::temp_dir().join("communitas-mcp"))
+    }
+
+    fn get_storage_dir(&self, four_words: &str) -> String {
+        self.get_vault_dir()
+            .join(four_words)
+            .to_string_lossy()
+            .to_string()
+    }
+
     pub async fn handle_request(&mut self, request: JsonRpcRequest) -> Option<JsonRpcResponse> {
         debug!(
             "Handling request: {} (id: {:?})",
             request.method, request.id
         );
 
-        // Notifications (no id) don't get responses
         let is_notification = request.id.is_none();
 
         let result = match request.method.as_str() {
@@ -97,33 +140,11 @@ impl McpServer {
             params.client_info.name, params.client_info.version, params.protocol_version
         );
 
-        // Generate temporary identity for MCP session using four-word-networking dictionary
-        // TODO: Allow client to provide identity in params
-        let four_words = generate_id_words().map_err(|e| {
-            JsonRpcError::internal_error(&format!("Failed to generate four-word identity: {}", e))
-        })?;
-        let display_name = format!("MCP Agent ({})", params.client_info.name);
-        let device_name = "mcp-server".to_string();
-        let storage_dir = std::env::temp_dir()
-            .join("communitas-mcp")
-            .to_string_lossy()
-            .to_string();
+        self.protocol_initialized = true;
 
-        // Initialize the CommunitasApp
-        match CommunitasApp::new(four_words, display_name, device_name, storage_dir).await {
-            Ok(app) => {
-                let mut app_lock = self.app.write().await;
-                *app_lock = Some(app);
-                self.initialized = true;
-                info!("CommunitasApp initialized successfully");
-            }
-            Err(e) => {
-                error!("Failed to initialize CommunitasApp: {}", e);
-                return Err(JsonRpcError::internal_error(&format!(
-                    "Failed to initialize: {}",
-                    e
-                )));
-            }
+        // In demo mode, auto-initialize with temporary identity
+        if self.demo_mode {
+            self.initialize_demo_mode().await?;
         }
 
         let result = InitializeResult {
@@ -146,18 +167,83 @@ impl McpServer {
         serde_json::to_value(result).map_err(|e| JsonRpcError::internal_error(&e.to_string()))
     }
 
+    /// Initialize demo mode with temporary identity
+    async fn initialize_demo_mode(&mut self) -> Result<(), JsonRpcError> {
+        // Use provided four-words or generate new ones
+        let four_words = match &self.args.four_words {
+            Some(fw) => fw.clone(),
+            None => generate_id_words().map_err(|e| {
+                JsonRpcError::internal_error(&format!(
+                    "Failed to generate four-word identity: {}",
+                    e
+                ))
+            })?,
+        };
+
+        let display_name = self.args.display_name.clone();
+        let device_name = "mcp-demo".to_string();
+        let storage_dir = self
+            .args
+            .storage_dir
+            .clone()
+            .unwrap_or_else(|| {
+                std::env::temp_dir()
+                    .join("communitas-mcp-demo")
+                    .to_string_lossy()
+                    .to_string()
+            });
+
+        info!(
+            "Demo mode: initializing with identity {} in {}",
+            four_words, storage_dir
+        );
+
+        // Initialize the CommunitasApp
+        match CommunitasApp::new(
+            four_words.clone(),
+            display_name.clone(),
+            device_name,
+            storage_dir.clone(),
+        )
+        .await
+        {
+            Ok(app) => {
+                let mut app_lock = self.app.write().await;
+                *app_lock = Some(app);
+
+                self.auth_state = AuthState::DemoMode(DemoSession {
+                    four_words,
+                    display_name,
+                    started_at: SystemTime::now(),
+                    storage_dir,
+                });
+
+                info!("Demo mode initialized successfully");
+                Ok(())
+            }
+            Err(e) => {
+                error!("Failed to initialize demo mode: {}", e);
+                Err(JsonRpcError::internal_error(&format!(
+                    "Failed to initialize demo mode: {}",
+                    e
+                )))
+            }
+        }
+    }
+
     /// Handle tools/list request
     async fn handle_tools_list(&self) -> Result<Value, JsonRpcError> {
+        // Return all tools - auth checking happens on call
         let result = ToolListResult {
-            tools: tools::list_tools(),
+            tools: tools::list_tools(self.is_authenticated()),
         };
 
         serde_json::to_value(result).map_err(|e| JsonRpcError::internal_error(&e.to_string()))
     }
 
     /// Handle tools/call request
-    async fn handle_tools_call(&self, params: Option<Value>) -> Result<Value, JsonRpcError> {
-        if !self.initialized {
+    async fn handle_tools_call(&mut self, params: Option<Value>) -> Result<Value, JsonRpcError> {
+        if !self.protocol_initialized {
             return Err(JsonRpcError::invalid_request("Server not initialized"));
         }
 
@@ -167,6 +253,27 @@ impl McpServer {
             })
             .transpose()?
             .ok_or_else(|| JsonRpcError::invalid_params("Missing tool call params"))?;
+
+        // Check if this is a pre-auth tool
+        let tool_requires_auth = requires_auth(&params.name);
+
+        // Handle pre-auth tools
+        if !tool_requires_auth {
+            return self.handle_pre_auth_tool(&params.name, params.arguments).await;
+        }
+
+        // For tools requiring auth, check if we're authenticated
+        if !self.is_authenticated() {
+            return Err(JsonRpcError::invalid_request(
+                "Authentication required. Use 'authenticate', 'create_vault', or restart with --demo flag.",
+            ));
+        }
+
+        if params.name == "create_delegate_token" {
+            return self
+                .handle_create_delegate_token(params.arguments.unwrap_or(serde_json::json!({})))
+                .await;
+        }
 
         let app_lock = self.app.read().await;
         let app = app_lock
@@ -178,10 +285,339 @@ impl McpServer {
         serde_json::to_value(result).map_err(|e| JsonRpcError::internal_error(&e.to_string()))
     }
 
+    /// Handle pre-authentication tools
+    async fn handle_pre_auth_tool(
+        &mut self,
+        name: &str,
+        args: Option<Value>,
+    ) -> Result<Value, JsonRpcError> {
+        let args = args.unwrap_or(serde_json::json!({}));
+
+        match name {
+            "authenticate" => self.handle_authenticate(args).await,
+            "create_vault" => self.handle_create_vault(args).await,
+            "authenticate_token" => self.handle_authenticate_token(args).await,
+            "health_check" => {
+                let result = tools::success_result("MCP service is healthy");
+                serde_json::to_value(result)
+                    .map_err(|e| JsonRpcError::internal_error(&e.to_string()))
+            }
+            "core_status" => {
+                let initialized = self.is_authenticated();
+                let result = serde_json::json!({
+                    "content": [{"type": "text", "text": serde_json::to_string(&serde_json::json!({"initialized": initialized})).unwrap_or_default()}],
+                    "isError": false
+                });
+                serde_json::to_value(result)
+                    .map_err(|e| JsonRpcError::internal_error(&e.to_string()))
+            }
+            _ => Err(JsonRpcError::method_not_found(name)),
+        }
+    }
+
+    /// Handle authenticate tool
+    async fn handle_authenticate(&mut self, args: Value) -> Result<Value, JsonRpcError> {
+        let four_words = args["four_words"]
+            .as_str()
+            .ok_or_else(|| JsonRpcError::invalid_params("Missing four_words"))?
+            .to_string();
+        let password = args["password"]
+            .as_str()
+            .ok_or_else(|| JsonRpcError::invalid_params("Missing password"))?
+            .to_string();
+        let device_name = args["device_name"]
+            .as_str()
+            .unwrap_or("mcp-client")
+            .to_string();
+
+        // Validate four-word format (accepts dots or dashes as separator)
+        let words: Vec<&str> = if four_words.contains('.') {
+            four_words.split('.').collect()
+        } else {
+            four_words.split('-').collect()
+        };
+        if words.len() != 4 {
+            return Err(JsonRpcError::invalid_params(
+                "Invalid four-word format. Expected: word1.word2.word3.word4 or word1-word2-word3-word4",
+            ));
+        }
+
+        let four_words_dashed = words.join("-");
+        let storage_dir = self.get_storage_dir(&four_words_dashed);
+
+        info!("Authenticating user: {}", four_words_dashed);
+
+        let storage_config = StorageConfig {
+            vault_dir: self.get_vault_dir(),
+            use_keyring: false,
+            ..Default::default()
+        };
+
+        let storage_manager = EncryptedStorageManager::new(storage_config)
+            .await
+            .map_err(|e| {
+                JsonRpcError::internal_error(&format!("Failed to initialize storage: {}", e))
+            })?;
+
+        let mut auth_service = AuthService::new(storage_manager);
+
+        let session_info = auth_service
+            .login(&four_words_dashed, &password, Some(&device_name))
+            .await
+            .map_err(|e| {
+                error!("Authentication failed: {}", e);
+                JsonRpcError::invalid_request(&format!(
+                    "Authentication failed: {}. Make sure vault exists and password is correct.",
+                    e
+                ))
+            })?;
+        match CommunitasApp::new(
+            four_words_dashed.clone(),
+            session_info.display_name.clone(),
+            device_name.clone(),
+            storage_dir.clone(),
+        )
+        .await
+        {
+            Ok(app) => {
+                let mut app_lock = self.app.write().await;
+                *app_lock = Some(app);
+
+                self.auth_state = AuthState::Authenticated(AuthenticatedSession {
+                    four_words: four_words_dashed.clone(),
+                    display_name: session_info.display_name,
+                    device_name,
+                    started_at: SystemTime::now(),
+                    storage_dir,
+                });
+
+                info!("User authenticated successfully: {}", four_words_dashed);
+
+                let result = tools::success_result("Authentication successful");
+                serde_json::to_value(result)
+                    .map_err(|e| JsonRpcError::internal_error(&e.to_string()))
+            }
+            Err(e) => {
+                error!("Failed to initialize app after authentication: {}", e);
+                Err(JsonRpcError::internal_error(&format!(
+                    "Failed to initialize app: {}",
+                    e
+                )))
+            }
+        }
+    }
+
+    async fn handle_create_vault(&mut self, args: Value) -> Result<Value, JsonRpcError> {
+        let four_words = args["four_words"]
+            .as_str()
+            .ok_or_else(|| JsonRpcError::invalid_params("Missing four_words"))?
+            .to_string();
+        let password = args["password"]
+            .as_str()
+            .ok_or_else(|| JsonRpcError::invalid_params("Missing password"))?
+            .to_string();
+        let display_name = args["display_name"]
+            .as_str()
+            .ok_or_else(|| JsonRpcError::invalid_params("Missing display_name"))?
+            .to_string();
+
+        let words: Vec<&str> = if four_words.contains('.') {
+            four_words.split('.').collect()
+        } else {
+            four_words.split('-').collect()
+        };
+        if words.len() != 4 {
+            return Err(JsonRpcError::invalid_params(
+                "Invalid four-word format. Expected: word1.word2.word3.word4 or word1-word2-word3-word4",
+            ));
+        }
+
+        let four_words_dashed = words.join("-");
+        let device_name = "mcp-client".to_string();
+        let storage_dir = self.get_storage_dir(&four_words_dashed);
+
+        info!("Creating new vault for: {}", four_words_dashed);
+
+        let storage_config = StorageConfig {
+            vault_dir: self.get_vault_dir(),
+            use_keyring: false,
+            ..Default::default()
+        };
+
+        let storage_manager = EncryptedStorageManager::new(storage_config)
+            .await
+            .map_err(|e| {
+                JsonRpcError::internal_error(&format!("Failed to initialize storage: {}", e))
+            })?;
+
+        let mut auth_service = AuthService::new(storage_manager);
+
+        auth_service
+            .create_vault(&four_words_dashed, &password, &display_name)
+            .await
+            .map_err(|e| {
+                error!("Failed to create vault: {}", e);
+                JsonRpcError::internal_error(&format!("Failed to create vault: {}", e))
+            })?;
+
+        let session_info = auth_service
+            .login(&four_words_dashed, &password, Some(&device_name))
+            .await
+            .map_err(|e| {
+                error!("Failed to login after vault creation: {}", e);
+                JsonRpcError::internal_error(&format!("Vault created but login failed: {}", e))
+            })?;
+
+        match CommunitasApp::new(
+            four_words_dashed.clone(),
+            session_info.display_name.clone(),
+            device_name.clone(),
+            storage_dir.clone(),
+        )
+        .await
+        {
+            Ok(app) => {
+                let mut app_lock = self.app.write().await;
+                *app_lock = Some(app);
+
+                self.auth_state = AuthState::Authenticated(AuthenticatedSession {
+                    four_words: four_words_dashed.clone(),
+                    display_name: session_info.display_name,
+                    device_name,
+                    started_at: SystemTime::now(),
+                    storage_dir,
+                });
+
+                info!("Vault created successfully for: {}", four_words_dashed);
+
+                let result = tools::success_result("Vault created and authenticated successfully");
+                serde_json::to_value(result)
+                    .map_err(|e| JsonRpcError::internal_error(&e.to_string()))
+            }
+            Err(e) => {
+                error!("Failed to initialize app after vault creation: {}", e);
+                Err(JsonRpcError::internal_error(&format!(
+                    "Vault created but app initialization failed: {}",
+                    e
+                )))
+            }
+        }
+    }
+
+    async fn handle_authenticate_token(&mut self, args: Value) -> Result<Value, JsonRpcError> {
+        let token_str = args["token"]
+            .as_str()
+            .ok_or_else(|| JsonRpcError::invalid_params("Missing token"))?;
+
+        let token_manager = self.get_token_manager().await?;
+        let delegate_token = token_manager.verify_token(token_str).map_err(|e| {
+            error!("Token verification failed: {}", e);
+            JsonRpcError::invalid_request(&format!("Invalid token: {}", e))
+        })?;
+
+        let storage_dir = self.get_storage_dir(&delegate_token.issuer);
+
+        match CommunitasApp::new(
+            delegate_token.issuer.clone(),
+            delegate_token.delegate_name.clone(),
+            "delegate-session".to_string(),
+            storage_dir.clone(),
+        )
+        .await
+        {
+            Ok(app) => {
+                let mut app_lock = self.app.write().await;
+                *app_lock = Some(app);
+
+                self.auth_state = AuthState::Delegate(DelegateSession {
+                    issuer_four_words: delegate_token.issuer.clone(),
+                    delegate_name: delegate_token.delegate_name,
+                    scopes: delegate_token.scopes,
+                    started_at: SystemTime::now(),
+                    storage_dir,
+                });
+
+                info!(
+                    "Delegate authenticated successfully for issuer: {}",
+                    delegate_token.issuer
+                );
+
+                let result = tools::success_result("Delegate token authentication successful");
+                serde_json::to_value(result)
+                    .map_err(|e| JsonRpcError::internal_error(&e.to_string()))
+            }
+            Err(e) => {
+                error!("Failed to initialize app for delegate: {}", e);
+                Err(JsonRpcError::internal_error(&format!(
+                    "Failed to initialize delegate session: {}",
+                    e
+                )))
+            }
+        }
+    }
+
+    async fn handle_create_delegate_token(&mut self, args: Value) -> Result<Value, JsonRpcError> {
+        let delegate_name = args["delegate_name"]
+            .as_str()
+            .ok_or_else(|| JsonRpcError::invalid_params("Missing delegate_name"))?
+            .to_string();
+
+        let expires_in_hours = args["expires_in_hours"].as_u64().unwrap_or(24);
+
+        let scopes: Vec<Scope> = match args.get("scopes") {
+            Some(Value::Array(arr)) => arr
+                .iter()
+                .filter_map(|v| v.as_str())
+                .filter_map(Scope::from_str)
+                .collect(),
+            _ => vec![Scope::Full],
+        };
+
+        let issuer = match &self.auth_state {
+            AuthState::Authenticated(session) => session.four_words.clone(),
+            AuthState::DemoMode(session) => session.four_words.clone(),
+            AuthState::Delegate(_) => {
+                return Err(JsonRpcError::invalid_request(
+                    "Delegate sessions cannot create new tokens",
+                ));
+            }
+            AuthState::Unauthenticated => {
+                return Err(JsonRpcError::invalid_request("Not authenticated"));
+            }
+        };
+
+        let token_manager = self.get_token_manager().await?;
+        let token = token_manager
+            .create_token(&issuer, &delegate_name, scopes.clone(), expires_in_hours)
+            .map_err(|e| JsonRpcError::internal_error(&format!("Failed to create token: {}", e)))?;
+
+        info!(
+            "Created delegate token for {} with {} scopes, expires in {} hours",
+            delegate_name,
+            scopes.len(),
+            expires_in_hours
+        );
+
+        let result = serde_json::json!({
+            "content": [{
+                "type": "text",
+                "text": serde_json::json!({
+                    "token": token,
+                    "delegate_name": delegate_name,
+                    "scopes": scopes,
+                    "expires_in_hours": expires_in_hours
+                }).to_string()
+            }],
+            "isError": false
+        });
+
+        serde_json::to_value(result).map_err(|e| JsonRpcError::internal_error(&e.to_string()))
+    }
+
     /// Handle resources/list request
     async fn handle_resources_list(&self) -> Result<Value, JsonRpcError> {
         // Expose application state as resources
-        let resources = vec![
+        let mut resources = vec![
             Resource {
                 uri: "communitas://identity".to_string(),
                 name: "Current Identity".to_string(),
@@ -210,14 +646,31 @@ impl McpServer {
             },
         ];
 
+        // Add new resources
+        resources.push(Resource {
+            uri: "communitas://contacts".to_string(),
+            name: "Contacts".to_string(),
+            description: Some("All contacts".to_string()),
+            mime_type: Some("application/json".to_string()),
+        });
+
+        resources.push(Resource {
+            uri: "communitas://network".to_string(),
+            name: "Network Status".to_string(),
+            description: Some("P2P network status and connected peers".to_string()),
+            mime_type: Some("application/json".to_string()),
+        });
+
         let result = ResourceListResult { resources };
         serde_json::to_value(result).map_err(|e| JsonRpcError::internal_error(&e.to_string()))
     }
 
     /// Handle resources/read request
     async fn handle_resources_read(&self, params: Option<Value>) -> Result<Value, JsonRpcError> {
-        if !self.initialized {
-            return Err(JsonRpcError::invalid_request("Server not initialized"));
+        if !self.is_authenticated() {
+            return Err(JsonRpcError::invalid_request(
+                "Authentication required to read resources",
+            ));
         }
 
         let params: ResourceReadParams = params
@@ -266,6 +719,19 @@ impl McpServer {
                 serde_json::to_string_pretty(&response)
                     .map_err(|e| JsonRpcError::internal_error(&e.to_string()))?
             }
+            "communitas://contacts" => {
+                // TODO: Implement contacts query
+                serde_json::json!({"contacts": []}).to_string()
+            }
+            "communitas://network" => {
+                // TODO: Implement network status query
+                serde_json::json!({
+                    "status": "not_started",
+                    "peers": [],
+                    "connection_info": null
+                })
+                .to_string()
+            }
             uri => {
                 return Err(JsonRpcError::invalid_params(&format!(
                     "Unknown resource: {}",
@@ -287,15 +753,9 @@ impl McpServer {
     }
 }
 
-impl Default for McpServer {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 /// Run the MCP server
-pub async fn run() -> Result<()> {
-    let mut server = McpServer::new();
+pub async fn run(args: Args) -> Result<()> {
+    let mut server = McpServer::new(args);
 
     let stdin = tokio::io::stdin();
     let mut stdout = tokio::io::stdout();

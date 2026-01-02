@@ -39,6 +39,10 @@ dependencies:
   uuid: ^4.3.1
   intl: ^0.18.1
   collection: ^1.18.0
+  freezed_annotation: ^2.4.1
+
+  # HTTP client for bridge communication
+  http: ^1.2.0
 
 dev_dependencies:
   flutter_test:
@@ -47,21 +51,15 @@ dev_dependencies:
   riverpod_generator: ^2.3.9
   build_runner: ^2.4.8
   mockito: ^5.4.4
+  ffigen: ^20.1.1
+  freezed: ^2.4.6
 
 flutter:
   uses-material-design: true
 
-  fonts:
-    - family: Inter
-      fonts:
-        - asset: assets/fonts/Inter-Regular.ttf
-        - asset: assets/fonts/Inter-Medium.ttf
-          weight: 500
-        - asset: assets/fonts/Inter-SemiBold.ttf
-          weight: 600
-        - asset: assets/fonts/Inter-Bold.ttf
-          weight: 700
+  # Note: Custom fonts (Inter) will be added later
+  # For now using system fonts for web demo
 
-  assets:
-    - assets/images/
-    - assets/icons/
+  # assets:
+  #   - assets/images/
+  #   - assets/icons/

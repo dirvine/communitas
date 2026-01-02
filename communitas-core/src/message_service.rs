@@ -251,6 +251,17 @@ impl MessageService {
     pub fn sort_messages(&self, messages: &mut [CRDTMessage]) {
         sort_messages_causally(messages);
     }
+
+    pub async fn delete_message(
+        &self,
+        entity_id: &str,
+        message_id: &str,
+    ) -> MessageServiceResult<bool> {
+        self.message_sync
+            .delete_message(entity_id, message_id)
+            .await
+            .map_err(|e| MessageServiceError::SyncError(e.to_string()))
+    }
 }
 
 #[cfg(test)]

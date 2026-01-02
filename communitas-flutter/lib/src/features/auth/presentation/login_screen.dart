@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/router.dart';
 import '../../../core/theme/colors.dart';
 import '../../../../main.dart';
+import '../providers/auth_provider.dart';
 
 /// Login screen with vault selection.
 class LoginScreen extends ConsumerStatefulWidget {
@@ -17,6 +18,7 @@ class LoginScreen extends ConsumerStatefulWidget {
 class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _passwordController = TextEditingController();
   bool _isLoading = false;
+  String? _selectedFourWords;
 
   @override
   void dispose() {
@@ -166,11 +168,32 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Future<void> _handleLogin() async {
     setState(() => _isLoading = true);
 
-    // Simulate login delay
-    await Future.delayed(const Duration(milliseconds: 500));
+    try {
+      final authNotifier = ref.read(authNotifierProvider.notifier);
 
-    if (mounted) {
-      context.go(Routes.home);
+      // For demo mode or when we have a vault selected
+      final fourWords = _selectedFourWords ?? 'ocean-forest-moon-star';
+      final success = await authNotifier.login(fourWords, _passwordController.text);
+
+      if (mounted) {
+        if (success) {
+          context.go(Routes.home);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Login failed. Check your password.')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Login error: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 }

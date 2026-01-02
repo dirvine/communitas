@@ -1,0 +1,391 @@
+# Phase 6: Kanban
+# Tests all 31 kanban tools
+
+name: "Phase 6: Kanban"
+description: "Tests all kanban tools: boards, columns, cards, tags, steps, comments"
+tools_covered:
+  - kanban_create_board
+  - kanban_get_board
+  - kanban_list_boards
+  - kanban_update_board
+  - kanban_delete_board
+  - kanban_create_column
+  - kanban_list_columns
+  - kanban_update_column
+  - kanban_delete_column
+  - kanban_reorder_columns
+  - kanban_create_card
+  - kanban_get_card
+  - kanban_list_cards
+  - kanban_update_card
+  - kanban_delete_card
+  - kanban_move_card
+  - kanban_assign_card
+  - kanban_unassign_card
+  - kanban_create_tag
+  - kanban_list_tags
+  - kanban_update_tag
+  - kanban_delete_tag
+  - kanban_add_tag_to_card
+  - kanban_remove_tag_from_card
+  - kanban_create_step
+  - kanban_list_steps
+  - kanban_update_step
+  - kanban_delete_step
+  - kanban_create_comment
+  - kanban_list_comments
+  - kanban_delete_comment
+
+test_cases:
+  # Create board
+  - id: KAN-001
+    name: "Alice creates kanban board"
+    actors: [alice]
+    steps:
+      - tool: kanban_create_board
+        params:
+          entity_id: "${project_id}"
+          name: "Sprint Board"
+          description: "Q1 Sprint tracking"
+        expect:
+          status: success
+        store:
+          board_id: id
+
+  # Get board
+  - id: KAN-002
+    name: "Get board details"
+    actors: [alice]
+    steps:
+      - tool: kanban_get_board
+        params:
+          board_id: "${board_id}"
+        expect:
+          status: success
+          fields:
+            name: "Sprint Board"
+
+  # Create columns
+  - id: KAN-003
+    name: "Create To Do column"
+    actors: [alice]
+    steps:
+      - tool: kanban_create_column
+        params:
+          board_id: "${board_id}"
+          name: "To Do"
+          position: 0
+        expect:
+          status: success
+        store:
+          col_todo_id: id
+
+  - id: KAN-004
+    name: "Create In Progress column"
+    actors: [alice]
+    steps:
+      - tool: kanban_create_column
+        params:
+          board_id: "${board_id}"
+          name: "In Progress"
+          position: 1
+        expect:
+          status: success
+        store:
+          col_progress_id: id
+
+  - id: KAN-005
+    name: "Create Done column"
+    actors: [alice]
+    steps:
+      - tool: kanban_create_column
+        params:
+          board_id: "${board_id}"
+          name: "Done"
+          position: 2
+        expect:
+          status: success
+        store:
+          col_done_id: id
+
+  # Create tags
+  - id: KAN-006
+    name: "Create bug tag"
+    actors: [alice]
+    steps:
+      - tool: kanban_create_tag
+        params:
+          board_id: "${board_id}"
+          name: "bug"
+          color: "#ef4444"
+        expect:
+          status: success
+        store:
+          tag_bug_id: id
+
+  - id: KAN-007
+    name: "Create feature tag"
+    actors: [alice]
+    steps:
+      - tool: kanban_create_tag
+        params:
+          board_id: "${board_id}"
+          name: "feature"
+          color: "#22c55e"
+        expect:
+          status: success
+        store:
+          tag_feature_id: id
+
+  # Create cards
+  - id: KAN-008
+    name: "Alice creates card"
+    actors: [alice]
+    steps:
+      - tool: kanban_create_card
+        params:
+          column_id: "${col_todo_id}"
+          title: "Setup development environment"
+          description: "Install all required tools"
+        expect:
+          status: success
+        store:
+          card1_id: id
+
+  - id: KAN-009
+    name: "Bob creates card"
+    actors: [bob]
+    steps:
+      - tool: kanban_create_card
+        params:
+          column_id: "${col_todo_id}"
+          title: "Write unit tests"
+          description: "Cover core functionality"
+        expect:
+          status: success
+        store:
+          card2_id: id
+
+  - id: KAN-010
+    name: "Charlie creates card"
+    actors: [charlie]
+    steps:
+      - tool: kanban_create_card
+        params:
+          column_id: "${col_todo_id}"
+          title: "Review documentation"
+          description: "Check all docs are up to date"
+        expect:
+          status: success
+        store:
+          card3_id: id
+
+  # Assign cards
+  - id: KAN-011
+    name: "Assign card to Bob"
+    actors: [alice]
+    steps:
+      - tool: kanban_assign_card
+        params:
+          card_id: "${card2_id}"
+          assignee_id: "${bob_identity}"
+        expect:
+          status: success
+
+  # Add tags to cards
+  - id: KAN-012
+    name: "Add feature tag to card"
+    actors: [alice]
+    steps:
+      - tool: kanban_add_tag_to_card
+        params:
+          card_id: "${card1_id}"
+          tag_id: "${tag_feature_id}"
+        expect:
+          status: success
+
+  # Move card to In Progress
+  - id: KAN-013
+    name: "Move card to In Progress"
+    actors: [bob]
+    steps:
+      - tool: kanban_move_card
+        params:
+          card_id: "${card2_id}"
+          column_id: "${col_progress_id}"
+          position: 0
+        expect:
+          status: success
+
+  # Create steps (checklist)
+  - id: KAN-014
+    name: "Add steps to card"
+    actors: [bob]
+    steps:
+      - tool: kanban_create_step
+        params:
+          card_id: "${card2_id}"
+          description: "Write test for module A"
+        expect:
+          status: success
+        store:
+          step1_id: id
+
+  - id: KAN-015
+    name: "Add second step"
+    actors: [bob]
+    steps:
+      - tool: kanban_create_step
+        params:
+          card_id: "${card2_id}"
+          description: "Write test for module B"
+        expect:
+          status: success
+
+  # Complete a step
+  - id: KAN-016
+    name: "Complete step"
+    actors: [bob]
+    steps:
+      - tool: kanban_update_step
+        params:
+          step_id: "${step1_id}"
+          completed: true
+        expect:
+          status: success
+
+  # Add comment
+  - id: KAN-017
+    name: "Add comment to card"
+    actors: [charlie]
+    steps:
+      - tool: kanban_create_comment
+        params:
+          card_id: "${card2_id}"
+          text: "Great progress Bob! Let me know if you need help."
+        expect:
+          status: success
+        store:
+          comment1_id: id
+
+  # List cards
+  - id: KAN-018
+    name: "List all cards"
+    actors: [alice]
+    wait_ms: 3000
+    steps:
+      - tool: kanban_list_cards
+        params:
+          board_id: "${board_id}"
+        expect:
+          status: success
+          contains:
+            - title: "Setup development environment"
+            - title: "Write unit tests"
+            - title: "Review documentation"
+
+  # Verify sync across nodes
+  - id: KAN-019
+    name: "Verify board synced to Dave"
+    actors: [dave]
+    wait_ms: 3000
+    steps:
+      - tool: kanban_get_board
+        params:
+          board_id: "${board_id}"
+        expect:
+          status: success
+          fields:
+            name: "Sprint Board"
+
+  # Move card to Done
+  - id: KAN-020
+    name: "Move card to Done"
+    actors: [bob]
+    steps:
+      - tool: kanban_move_card
+        params:
+          card_id: "${card2_id}"
+          column_id: "${col_done_id}"
+          position: 0
+        expect:
+          status: success
+
+  # List columns
+  - id: KAN-021
+    name: "List columns"
+    actors: [alice]
+    steps:
+      - tool: kanban_list_columns
+        params:
+          board_id: "${board_id}"
+        expect:
+          status: success
+          contains:
+            - name: "To Do"
+            - name: "In Progress"
+            - name: "Done"
+
+  # List tags
+  - id: KAN-022
+    name: "List tags"
+    actors: [alice]
+    steps:
+      - tool: kanban_list_tags
+        params:
+          board_id: "${board_id}"
+        expect:
+          status: success
+          contains:
+            - name: "bug"
+            - name: "feature"
+
+  # List comments
+  - id: KAN-023
+    name: "List comments"
+    actors: [alice]
+    steps:
+      - tool: kanban_list_comments
+        params:
+          card_id: "${card2_id}"
+        expect:
+          status: success
+          contains:
+            - text: "Great progress"
+
+  # Update card
+  - id: KAN-024
+    name: "Update card title"
+    actors: [bob]
+    steps:
+      - tool: kanban_update_card
+        params:
+          card_id: "${card2_id}"
+          title: "Write unit tests (COMPLETED)"
+        expect:
+          status: success
+
+  # Remove tag from card
+  - id: KAN-025
+    name: "Remove tag from card"
+    actors: [alice]
+    steps:
+      - tool: kanban_remove_tag_from_card
+        params:
+          card_id: "${card1_id}"
+          tag_id: "${tag_feature_id}"
+        expect:
+          status: success
+
+  # List boards
+  - id: KAN-026
+    name: "List all boards"
+    actors: [alice]
+    steps:
+      - tool: kanban_list_boards
+        params:
+          entity_id: "${project_id}"
+        expect:
+          status: success
+          contains:
+            - name: "Sprint Board"

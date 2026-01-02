@@ -149,7 +149,7 @@ cargo test
 ### **Applications**
 - **[communitas-desktop/](communitas-desktop/)**: Tauri v2 desktop application with React frontend
 - **[communitas-headless/](communitas-headless/)**: Headless daemon for system services ([README](communitas-headless/README.md))
-- **[communitas-bridge/](communitas-bridge/)**: HTTP/REST bridge for browser testing ([README](communitas-bridge/README.md))
+- **[communitas-mcp/](communitas-mcp/)**: MCP server for AI agent control (stdio + HTTPS with ML-DSA-65)
 
 ### **Core Libraries**
 - **[communitas-core/](communitas-core/)**: Shared Rust business logic and P2P networking
@@ -219,12 +219,13 @@ cargo run -p bootstrap-node -- --config config.toml
 ```
 Complete guide: [bootstrap-node/README.md](bootstrap-node/README.md)
 
-### **Testing Bridge** (Development)
-HTTP/REST bridge for browser-based testing with Chrome DevTools MCP.
+### **MCP Server** (AI Agent Interface)
+Model Context Protocol server for AI agent control with HTTPS (ML-DSA-65 raw public keys).
 ```bash
-cargo run -p communitas-bridge
+# HTTPS transport with demo mode
+cargo run -p communitas-mcp -- --http --tls --demo --no-client-auth
 ```
-Complete guide: [communitas-bridge/README.md](communitas-bridge/README.md)
+Complete guide: [communitas-mcp/README.md](communitas-mcp/README.md)
 
 ---
 

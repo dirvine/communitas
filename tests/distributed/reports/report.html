@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Distributed MCP Test Report</title>
+  <style>
+    :root {
+      --success-color: #22c55e;
+      --failure-color: #ef4444;
+      --bg-color: #1a1a2e;
+      --card-bg: #16213e;
+      --text-color: #e5e7eb;
+      --border-color: #374151;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg-color);
+      color: var(--text-color);
+      margin: 0;
+      padding: 2rem;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    h1 {
+      color: #f1f5f9;
+      margin-bottom: 0.5rem;
+    }
+    .timestamp {
+      color: #9ca3af;
+      font-size: 0.875rem;
+      margin-bottom: 2rem;
+    }
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+    .card {
+      background: var(--card-bg);
+      border-radius: 0.5rem;
+      padding: 1.5rem;
+      border: 1px solid var(--border-color);
+    }
+    .card h3 {
+      margin: 0 0 0.5rem 0;
+      font-size: 0.875rem;
+      color: #9ca3af;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .card .value {
+      font-size: 2rem;
+      font-weight: bold;
+    }
+    .card.success .value { color: var(--success-color); }
+    .card.failure .value { color: var(--failure-color); }
+    .tools {
+      background: var(--card-bg);
+      border-radius: 0.5rem;
+      padding: 1.5rem;
+      border: 1px solid var(--border-color);
+      margin-bottom: 2rem;
+    }
+    .tools h2 {
+      margin-top: 0;
+    }
+    .tools ul {
+      columns: 3;
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .tools li {
+      padding: 0.25rem 0;
+      font-family: monospace;
+      font-size: 0.875rem;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--card-bg);
+      border-radius: 0.5rem;
+      overflow: hidden;
+    }
+    th, td {
+      padding: 1rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border-color);
+    }
+    th {
+      background: #0f172a;
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 0.75rem;
+      letter-spacing: 0.05em;
+    }
+    tr.pass { background: rgba(34, 197, 94, 0.1); }
+    tr.fail { background: rgba(239, 68, 68, 0.1); }
+    .error {
+      color: var(--failure-color);
+      font-size: 0.875rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Full MCP Test Suite</h1>
+    <div class="timestamp">Generated: 2026-01-02 22:15:02 UTC</div>
+
+    <div class="summary">
+      <div class="card failure">
+        <h3>Status</h3>
+        <div class="value">FAIL</div>
+      </div>
+      <div class="card">
+        <h3>Total Tests</h3>
+        <div class="value">70</div>
+      </div>
+      <div class="card success">
+        <h3>Passed</h3>
+        <div class="value">68</div>
+      </div>
+      <div class="card failure">
+        <h3>Failed</h3>
+        <div class="value">2</div>
+      </div>
+      <div class="card">
+        <h3>Pass Rate</h3>
+        <div class="value">97.1%</div>
+      </div>
+    </div>
+
+    <div class="tools">
+      <h2>Tools Covered</h2>
+      <ul>
+        <li>health_check</li>
+          <li>core_status</li>
+          <li>create_vault</li>
+          <li>authenticate</li>
+          <li>authenticate_token</li>
+          <li>get_profile</li>
+          <li>create_entity</li>
+          <li>get_entity</li>
+          <li>list_entities</li>
+          <li>join_entity</li>
+          <li>add_member</li>
+          <li>remove_member</li>
+          <li>list_members</li>
+          <li>send_message</li>
+          <li>get_messages</li>
+          <li>create_thread</li>
+          <li>get_thread_messages</li>
+          <li>write_file</li>
+          <li>read_file</li>
+          <li>list_files</li>
+          <li>delete_file</li>
+          <li>get_disk_stats</li>
+          <li>create_kanban_board</li>
+          <li>get_kanban_board</li>
+          <li>update_kanban_board</li>
+          <li>list_kanban_boards</li>
+          <li>delete_kanban_board</li>
+          <li>create_kanban_column</li>
+          <li>get_kanban_column</li>
+          <li>update_kanban_column</li>
+          <li>move_kanban_column</li>
+          <li>list_kanban_columns</li>
+          <li>delete_kanban_column</li>
+          <li>create_kanban_card</li>
+          <li>get_kanban_card</li>
+          <li>update_kanban_card</li>
+          <li>move_kanban_card</li>
+          <li>list_kanban_cards</li>
+          <li>delete_kanban_card</li>
+          <li>create_kanban_tag</li>
+          <li>list_kanban_tags</li>
+          <li>tag_card</li>
+          <li>untag_card</li>
+          <li>add_step</li>
+          <li>get_step</li>
+          <li>toggle_step</li>
+          <li>delete_step</li>
+          <li>add_comment</li>
+          <li>list_comments</li>
+          <li>delete_comment</li>
+          <li>assign_user</li>
+          <li>unassign_user</li>
+          <li>change_card_state</li>
+          <li>create_contact</li>
+          <li>get_contact</li>
+          <li>update_contact</li>
+          <li>delete_contact</li>
+          <li>link_contact</li>
+          <li>list_contacts</li>
+          <li>search_contacts</li>
+          <li>set_favourite_contact</li>
+          <li>remove_favourite_contact</li>
+          <li>list_favourite_contacts</li>
+          <li>network_start</li>
+          <li>network_stop</li>
+          <li>network_status</li>
+          <li>network_peers</li>
+          <li>network_connect</li>
+          <li>network_disconnect</li>
+          <li>network_request_external_address</li>
+          <li>create_website</li>
+          <li>get_website</li>
+          <li>update_website</li>
+          <li>delete_website</li>
+          <li>create_invite</li>
+          <li>accept_invite</li>
+          <li>list_pending_invites</li>
+      </ul>
+    </div>
+
+    <h2>Test Results</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Status</th>
+          <th>Test ID</th>
+          <th>Name</th>
+          <th>Error</th>
+          <th>Duration</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="fail">
+          <td>❌</td>
+          <td>AUTH-001</td>
+          <td>Health check all nodes</td>
+          <td class="error">Could not find nodes for all actors: [&quot;alice&quot;, &quot;bob&quot;, &quot;dave&quot;]</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>AUTH-002</td>
+          <td>Core status before auth</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>AUTH-003</td>
+          <td>Create vault for Alice</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="fail">
+          <td>❌</td>
+          <td>AUTH-004</td>
+          <td>Create vault for Bob</td>
+          <td class="error">Could not find nodes for all actors: [&quot;bob&quot;]</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>AUTH-005</td>
+          <td>Create vault for Dave</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>AUTH-006</td>
+          <td>Re-authenticate Alice</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>AUTH-007</td>
+          <td>Get profile for Alice</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>ENT-001</td>
+          <td>Alice creates an organisation</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>ENT-002</td>
+          <td>Alice lists entities</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>ENT-003</td>
+          <td>Alice gets entity details</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>ENT-004</td>
+          <td>Alice lists members</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>MSG-001</td>
+          <td>Alice sends a message</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>MSG-002</td>
+          <td>Alice gets messages</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>FILE-001</td>
+          <td>Alice writes a file</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>FILE-002</td>
+          <td>Alice reads the file</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>FILE-003</td>
+          <td>Alice lists files</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>FILE-004</td>
+          <td>Alice gets disk stats</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>FILE-005</td>
+          <td>Alice deletes the file</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>KAN-001</td>
+          <td>Alice creates a kanban board</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>KAN-002</td>
+          <td>Alice lists kanban boards</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>KAN-003</td>
+          <td>Alice gets kanban board</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>KAN-004</td>
+          <td>Alice updates kanban board</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>KAN-005</td>
+          <td>Alice creates a column</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>KAN-006</td>
+          <td>Alice creates another column</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>KAN-007</td>
+          <td>Alice lists columns</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>KAN-008</td>
+          <td>Alice gets column</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>KAN-009</td>
+          <td>Alice updates column</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>KAN-010</td>
+          <td>Alice creates a card</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>KAN-011</td>
+          <td>Alice lists cards</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>KAN-012</td>
+          <td>Alice gets card</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>KAN-013</td>
+          <td>Alice updates card</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>KAN-014</td>
+          <td>Alice creates a tag</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>KAN-015</td>
+          <td>Alice lists tags</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>KAN-016</td>
+          <td>Alice tags the card</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>KAN-017</td>
+          <td>Alice adds a step to the card</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>KAN-018</td>
+          <td>Alice gets the step</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>KAN-019</td>
+          <td>Alice toggles the step</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>KAN-020</td>
+          <td>Alice adds a comment</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>KAN-021</td>
+          <td>Alice lists comments</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>KAN-022</td>
+          <td>Alice assigns user to card</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>KAN-023</td>
+          <td>Alice changes card state</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>KAN-024</td>
+          <td>Alice moves the card</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>KAN-025</td>
+          <td>Alice moves a column</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>KAN-026</td>
+          <td>Alice untags the card</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>KAN-027</td>
+          <td>Alice unassigns user from card</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>KAN-028</td>
+          <td>Alice deletes the comment</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>KAN-029</td>
+          <td>Alice deletes the step</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>KAN-030</td>
+          <td>Alice deletes the card</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>KAN-031</td>
+          <td>Alice deletes a column</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>KAN-032</td>
+          <td>Alice deletes the board</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>NET-001</td>
+          <td>Alice checks network status</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>NET-002</td>
+          <td>Alice starts network</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>NET-003</td>
+          <td>Alice lists network peers</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>CON-001</td>
+          <td>Alice creates a contact</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>CON-002</td>
+          <td>Alice lists contacts</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>CON-003</td>
+          <td>Alice gets contact</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>CON-004</td>
+          <td>Alice updates contact</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>CON-005</td>
+          <td>Alice searches contacts</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>CON-006</td>
+          <td>Alice links contact to identity</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>CON-007</td>
+          <td>Alice sets favourite contact</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>CON-008</td>
+          <td>Alice lists favourite contacts</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>CON-009</td>
+          <td>Alice removes favourite contact</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>CON-010</td>
+          <td>Alice deletes contact</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>NET-004</td>
+          <td>Alice stops network</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>WEB-001</td>
+          <td>Alice creates a website</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>WEB-002</td>
+          <td>Alice gets website</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>WEB-003</td>
+          <td>Alice updates website</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>WEB-004</td>
+          <td>Alice deletes website</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>INV-001</td>
+          <td>Alice creates an invite</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+        <tr class="pass">
+          <td>✅</td>
+          <td>INV-002</td>
+          <td>Alice lists pending invites</td>
+          <td>-</td>
+          <td>0ms</td>
+        </tr>
+
+      </tbody>
+    </table>
+  </div>
+</body>
+</html>

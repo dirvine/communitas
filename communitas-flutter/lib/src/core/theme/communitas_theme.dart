@@ -26,7 +26,7 @@ class CommunitasTheme {
         foregroundColor: CommunitasColors.cream,
         elevation: 0,
       ),
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         color: CommunitasColors.moss,
         elevation: 0,
         shape: RoundedRectangleBorder(

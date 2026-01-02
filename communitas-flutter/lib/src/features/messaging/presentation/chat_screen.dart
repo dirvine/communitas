@@ -4,7 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/colors.dart';
 import '../../../shared/widgets/sidebar.dart';
 import '../../../shared/widgets/adaptive_layout.dart';
-import '../../../demo/demo_data.dart';
+import '../../../services/unified_data_provider.dart';
+import '../../../services/bridge_provider.dart';
+import '../../../features/auth/providers/auth_provider.dart';
 
 /// Chat screen for entity messaging.
 class ChatScreen extends ConsumerStatefulWidget {
@@ -60,15 +62,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           children: [
             // Messages list
             Expanded(
-              child: ListView.builder(
-                controller: _scrollController,
-                padding: const EdgeInsets.all(16),
-                itemCount: DemoData.messages.length,
-                itemBuilder: (context, index) {
-                  final message = DemoData.messages[index];
-                  return _buildMessage(message);
-                },
-              ),
+              child: _buildMessageList(),
             ),
 
             // Message input
@@ -116,8 +110,63 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     );
   }
 
-  Widget _buildMessage(DemoMessage message) {
-    final isMe = message.senderId == DemoData.demoIdentity.fourWords;
+  Widget _buildMessageList() {
+    final messagesAsync = ref.watch(unifiedMessagesProvider(widget.entityId));
+
+    return messagesAsync.when(
+      loading: () => const Center(
+        child: CircularProgressIndicator(),
+      ),
+      error: (e, _) => Center(
+        child: Text('Error loading messages: $e'),
+      ),
+      data: (messages) {
+        if (messages.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.chat_bubble_outline,
+                  size: 64,
+                  color: CommunitasColors.cream.withOpacity(0.3),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'No messages yet',
+                  style: TextStyle(
+                    color: CommunitasColors.cream.withOpacity(0.5),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Start the conversation!',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: CommunitasColors.cream.withOpacity(0.3),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return ListView.builder(
+          controller: _scrollController,
+          padding: const EdgeInsets.all(16),
+          itemCount: messages.length,
+          itemBuilder: (context, index) {
+            final message = messages[index];
+            return _buildMessage(message);
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildMessage(UnifiedMessage message) {
+    final identity = ref.watch(unifiedIdentityProvider);
+    final isMe = message.senderId == identity.fourWords;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -129,7 +178,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: CommunitasColors.jade,
+              color: isMe ? CommunitasColors.jade : CommunitasColors.fern,
               borderRadius: BorderRadius.circular(18),
             ),
             child: Center(
@@ -232,11 +281,23 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
-  void _sendMessage() {
+  Future<void> _sendMessage() async {
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
 
-    // TODO: Send via FFI
     _messageController.clear();
+
+    if (kBridgeMode) {
+      // Send via bridge HTTP API
+      final sender = ref.read(messageSenderProvider.notifier);
+      final result = await sender.sendMessage(widget.entityId, text);
+      if (result != null) {
+        // Refresh messages
+        ref.invalidate(unifiedMessagesProvider(widget.entityId));
+      }
+    } else {
+      // TODO: Send via FFI for native mode
+      debugPrint('Send message (native): $text');
+    }
   }
 }

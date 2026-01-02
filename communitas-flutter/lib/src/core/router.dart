@@ -30,15 +30,33 @@ class Routes {
   static const String network = '/network';
 }
 
+/// Notifier that triggers router refresh when auth state changes.
+class _RouterNotifier extends ChangeNotifier {
+  _RouterNotifier(this._ref) {
+    _ref.listen(authNotifierProvider, (_, __) => notifyListeners());
+  }
+
+  final Ref _ref;
+
+  bool get isAuthenticated => _ref.read(authNotifierProvider).isAuthenticated;
+}
+
+/// Router notifier provider.
+final _routerNotifierProvider = Provider<_RouterNotifier>((ref) {
+  return _RouterNotifier(ref);
+});
+
 /// Router provider with auth-aware redirects.
+/// Uses refreshListenable pattern to avoid recreating router on auth changes.
 final routerProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(authNotifierProvider);
+  final notifier = ref.watch(_routerNotifierProvider);
 
   return GoRouter(
-    initialLocation: Routes.login,
+    initialLocation: Routes.home, // Start at home, redirect handles auth
     debugLogDiagnostics: true,
+    refreshListenable: notifier,
     redirect: (context, state) {
-      final isLoggedIn = authState.isAuthenticated;
+      final isLoggedIn = notifier.isAuthenticated;
       final isLoggingIn = state.matchedLocation == Routes.login ||
           state.matchedLocation == Routes.createIdentity;
 

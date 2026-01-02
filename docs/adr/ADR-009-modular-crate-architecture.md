@@ -43,9 +43,9 @@ communitas/
 ├── communitas-core/              # Core library (no UI, no platform)
 ├── communitas-desktop/           # Tauri desktop application
 ├── communitas-headless/          # Headless daemon
-├── communitas-tui/               # Terminal UI
 ├── communitas-bindings/          # UniFFI bindings for mobile
-├── communitas-bridge/            # HTTP bridge for testing
+├── communitas-mcp/               # MCP server for AI agents
+├── communitas-kanban/            # CRDT-based Kanban system
 └── communitas-app/               # iOS/Android (planned)
 ```
 
@@ -56,9 +56,9 @@ communitas/
 | **communitas-core** | Business logic, CRDT, storage, crypto | saorsa-*, yrs |
 | **communitas-desktop** | Tauri commands, desktop integration | core, tauri |
 | **communitas-headless** | Server mode, CLI, webhooks | core, tokio |
-| **communitas-tui** | Terminal interface | core, ratatui |
 | **communitas-bindings** | Swift/Kotlin FFI | core, uniffi |
-| **communitas-bridge** | HTTP REST API for testing | core, axum |
+| **communitas-mcp** | MCP server for AI agents (stdio + HTTPS) | core, axum |
+| **communitas-kanban** | CRDT-based Kanban boards | core, yrs |
 
 ### Dependency Graph
 
@@ -195,11 +195,11 @@ crdt = ["yrs"]
 [workspace]
 members = [
     "communitas-core",
-    "communitas-desktop",
     "communitas-headless",
-    "communitas-tui",
     "communitas-bindings",
-    "communitas-bridge",
+    "communitas-mcp",
+    "communitas-kanban",
+    "communitas-p2p-test",
 ]
 resolver = "2"
 

@@ -811,25 +811,28 @@ pub type Result<T> = std::result::Result<T, CoreError>;
 
 ## Testing & Development Tools
 
-### Bridge Server (communitas-bridge)
+### MCP Server (communitas-mcp)
 
-**Purpose**: HTTP/REST bridge for browser-based testing
+**Purpose**: Model Context Protocol server for AI agent control
 
-**Location**: `communitas-bridge/`
+**Location**: `communitas-mcp/`
 
-**Use Case**: Enables testing with Chrome DevTools MCP without Tauri
+**Use Case**: Enables AI agents (Claude, custom agents) to control Communitas
 
-**API Endpoints**:
+**Transport Options**:
+- **stdio**: Default JSON-RPC 2.0 over stdin/stdout
+- **HTTPS**: RFC 7250 Raw Public Keys with ML-DSA-65 (post-quantum)
+
+**CLI Flags**:
+```bash
+--demo              # Auto-initialize with temporary identity
+--http              # Enable HTTP transport
+--tls               # Enable HTTPS with ML-DSA-65 raw public keys
+--listen <addr>     # Listen address (default: 127.0.0.1:3040)
+--no-client-auth    # Disable client certificate verification
 ```
-POST /api/core/initialize      - Initialize identity
-POST /api/channels              - Create channel
-GET  /api/channels              - List channels
-POST /api/channels/:id/messages - Send message
-POST /api/threads/create        - Create thread
-GET  /health                    - Health check
-```
 
-See [communitas-bridge/README.md](../../communitas-bridge/README.md) for details.
+See [communitas-mcp/README.md](../../communitas-mcp/README.md) for details.
 
 ### Terminal UI (communitas-tui)
 

@@ -1,0 +1,35 @@
+# Alice Agent Persona
+# Primary test user on saorsa-4 (DigitalOcean Amsterdam)
+
+name: alice
+display_name: "Alice Anderson"
+identity: "ocean.forest.moon.star"
+role: "admin"
+
+# Node connection
+node:
+  host: "206.189.7.117"
+  port: 3040
+  name: "saorsa-4"
+  region: "Amsterdam, NL"
+  provider: "DigitalOcean"
+
+# Personality traits (for AI persona)
+traits:
+  - organized
+  - leadership
+  - detail-oriented
+
+# Default test behaviors
+behaviors:
+  # Alice is typically the org creator and admin
+  creates_entities: true
+  invites_members: true
+  manages_permissions: true
+
+# Vault credentials (for test scenarios)
+vault:
+  password: "test-pass-alice"
+
+# Color for reports
+color: "#3B82F6"  # Blue

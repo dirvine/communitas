@@ -1,0 +1,141 @@
+name: Build Binaries (Artifacts)
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Optional: version label for artifacts'
+        required: false
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-linux:
+    name: Build Linux Binaries
+    runs-on: ubuntu-22.04
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Rust stable
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          curl \
+          wget \
+          libssl-dev \
+          pkg-config \
+          libgtk-3-dev \
+          libayatana-appindicator3-dev \
+          librsvg2-dev \
+          libsoup-3.0-dev
+        sudo apt-get install -y libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev \
+          || sudo apt-get install -y libwebkit2gtk-4.0-dev libjavascriptcoregtk-4.0-dev
+
+    - name: Cache Cargo registry
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: linux-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Build binaries
+      run: |
+        cd communitas-headless
+        cargo build --release --bin communitas-headless
+
+    - name: Strip binaries
+      run: |
+        strip target/release/communitas-headless || true
+
+    - name: Create release archive (Linux target triple)
+      run: |
+        cd target/release
+        tar -czf communitas-headless-x86_64-unknown-linux-gnu.tar.gz \
+          communitas-headless
+
+    - name: Upload Linux binaries
+      uses: actions/upload-artifact@v4
+      with:
+        name: communitas-headless-x86_64-unknown-linux-gnu
+        path: target/release/communitas-headless-x86_64-unknown-linux-gnu.tar.gz
+
+  build-macos:
+    name: Build macOS Binaries
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Rust stable
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+    - name: Build x86_64 binaries
+      run: |
+        cd communitas-headless
+        cargo build --release --target x86_64-apple-darwin --bin communitas-headless
+
+    - name: Build aarch64 binaries
+      run: |
+        cd communitas-headless
+        cargo build --release --target aarch64-apple-darwin --bin communitas-headless
+
+    - name: Create universal binaries
+      run: |
+        cd target
+        mkdir -p universal-apple-darwin
+        lipo x86_64-apple-darwin/release/communitas-headless aarch64-apple-darwin/release/communitas-headless -create -output universal-apple-darwin/communitas-headless
+
+    - name: Create macOS archive
+      run: |
+        cd target/universal-apple-darwin
+        tar -czf communitas-headless-macos-universal.tar.gz \
+          communitas-headless
+
+    - name: Upload macOS binaries
+      uses: actions/upload-artifact@v4
+      with:
+        name: communitas-headless-macos-universal
+        path: target/universal-apple-darwin/communitas-headless-macos-universal.tar.gz
+
+  build-windows:
+    continue-on-error: true
+    name: Build Windows Binaries
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Rust stable
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Build binaries
+      run: |
+        cd communitas-headless
+        cargo build --release --bin communitas-headless
+
+    - name: Create Windows archive
+      run: |
+        cd target/release
+        Compress-Archive -Path communitas-headless.exe -DestinationPath communitas-headless-windows-x86_64.zip
+
+    - name: Upload Windows binaries
+      uses: actions/upload-artifact@v4
+      with:
+        name: communitas-headless-windows-x86_64
+        path: target/release/communitas-headless-windows-x86_64.zip
+
+  # Note: No release publishing here. Use release-headless.yml for releases.

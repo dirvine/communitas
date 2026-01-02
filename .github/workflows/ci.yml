@@ -11,6 +11,63 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  test-fast:
+    name: JS Fast Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PUPPETEER_SKIP_DOWNLOAD: "1"
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install Node deps
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Run unit tests (act)
+        if: env.ACT == 'true'
+        run: npm run test:run
+
+      - name: Run unit tests (full)
+        if: env.ACT != 'true'
+        run: npm run test:run
+
+  coverage:
+    name: JS Coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: test-fast
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install Node deps
+        run: npm ci
+
+      - name: Run unit tests with coverage
+        run: npm run test:coverage:smoke
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-html
+          path: coverage
+
   rust-checks:
     name: Rust Checks
     runs-on: ubuntu-latest
@@ -27,7 +84,13 @@ jobs:
             wget \
             file \
             libssl-dev \
-            pkg-config
+            pkg-config \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libsoup-3.0-dev
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev \
+            || sudo apt-get install -y libwebkit2gtk-4.0-dev libjavascriptcoregtk-4.0-dev
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
@@ -52,23 +115,20 @@ jobs:
           # Track upstream fix: https://github.com/saorsalabs/saorsa-webrtc/issues
           cargo audit --ignore RUSTSEC-2025-0008
 
-      - name: Build check
-        run: cargo check --workspace --all-features
+      - name: Build dependencies
+        run: cargo check --workspace --exclude communitas-desktop --all-features
 
       - name: Rust clippy policy
         run: |
           # Run clippy with practical checks
           # Note: unwrap_used/expect_used excluded - too restrictive for test code,
           # better caught in code review per CLAUDE.md policy
-          cargo clippy --workspace --all-features -- \
+          cargo clippy --workspace --exclude communitas-desktop --all-features -- \
             -D clippy::panic \
             -D clippy::todo \
             -D clippy::unimplemented \
             -D clippy::print_stdout \
             -D clippy::print_stderr
-
-      - name: Run tests
-        run: cargo test --workspace --all-features
 
   headless-build:
     name: Headless Build & Test (${{ matrix.os }})
@@ -133,6 +193,7 @@ jobs:
         shell: pwsh
         run: |
           Get-Item target/${{ matrix.target }}/release/communitas-headless.exe | Format-List Length,LastWriteTime
+          # Basic dep check (Windows doesn't have ldd equivalent in CI)
 
       - name: Upload headless binary
         uses: actions/upload-artifact@v4
@@ -141,10 +202,13 @@ jobs:
           path: target/${{ matrix.target }}/release/communitas-headless${{ matrix.suffix }}
           retention-days: 7
 
-  iced-build:
-    name: Iced GUI Build (${{ matrix.os }})
+  desktop-build:
+    name: Desktop Build & Bundle (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     needs: rust-checks
+    env:
+      # Required by tauri-build for dependency resolution
+      DEP_TAURI_DEV: "false"
     strategy:
       fail-fast: false
       matrix:
@@ -155,8 +219,43 @@ jobs:
           - os: macos-latest
             target: aarch64-apple-darwin
             suffix: ""
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            suffix: ".exe"
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Shallow clones should be disabled for a better npm dependency resolution
+
+      - name: Install dependencies (GTK/WebKit) [Linux]
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libssl-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libsoup-3.0-dev \
+            pkg-config \
+            libwebkit2gtk-4.1-dev \
+            libjavascriptcoregtk-4.1-dev \
+            libappindicator3-dev \
+            libgstreamer1.0-dev \
+            libgstreamer-plugins-base1.0-dev \
+            libnotify-dev \
+            libxtst-dev \
+            || true
+          # Fallback if 4.1 not available
+          sudo apt-get install -y libwebkit2gtk-4.0-dev libjavascriptcoregtk-4.0-dev || true
+
+      - name: Setup MSVC (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: microsoft/setup-msbuild@v2
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -168,14 +267,50 @@ jobs:
         with:
           workspaces: . -> target
           cache-on-failure: false
-          shared-key: iced-${{ matrix.os }}-${{ matrix.target }}
+          shared-key: desktop-${{ matrix.os }}-${{ matrix.target }}
 
-      - name: Build communitas-iced
-        run: cargo build --release -p communitas-iced --target ${{ matrix.target }}
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
 
-      - name: Upload iced binary
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Build Tauri app
+        run: cd communitas-desktop && npx @tauri-apps/cli build
+
+      - name: Inspect bundle (Linux)
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          find target/release/bundle -name "*.deb" -o -name "*.AppImage" | head -5
+          # Check for missing deps in the binary
+          ldd target/release/communitas-desktop | grep 'not found' && { echo 'Missing runtime deps'; exit 1; } || true
+
+      - name: Inspect bundle (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          find target/release/bundle -name "*.dmg" -o -name "*.app" | head -5
+          otool -L target/release/communitas-desktop || true
+
+      - name: Inspect bundle (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          Get-ChildItem -Path target/release/bundle -Recurse -Include *.msi,*.exe | Select-Object Name, Length, LastWriteTime | Format-Table
+          # Check binary size
+          (Get-Item target/release/communitas-desktop.exe).Length | Out-String
+
+      - name: Upload artifacts (success)
+        if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: communitas-iced-${{ matrix.os }}-${{ github.sha }}
-          path: target/${{ matrix.target }}/release/communitas-iced${{ matrix.suffix }}
+          name: communitas-desktop-${{ matrix.os }}-${{ github.sha }}
+          path: |
+            target/release/bundle/
+            src-tauri/target/release/
           retention-days: 7

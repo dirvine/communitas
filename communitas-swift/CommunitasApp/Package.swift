@@ -18,16 +18,14 @@ let package = Package(
         )
     ],
     dependencies: [
-        .package(path: "../CommunitasKit"),
-        .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.6.0")
+        .package(path: "../CommunitasKit")
     ],
     targets: [
         // Library target containing shared services and components
         .target(
             name: "CommunitasAppLib",
             dependencies: [
-                .product(name: "CommunitasKit", package: "CommunitasKit"),
-                .product(name: "Sparkle", package: "Sparkle")
+                .product(name: "CommunitasKit", package: "CommunitasKit")
             ],
             path: "Sources",
             exclude: ["main.swift", "Info.plist", "Generated"],

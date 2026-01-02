@@ -83,18 +83,10 @@ impl std::fmt::Display for InviteParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             InviteParseError::InvalidStatus(s) => {
-                write!(
-                    f,
-                    "invalid invite status '{}': expected pending, accepted, rejected, expired, or revoked",
-                    s
-                )
+                write!(f, "invalid invite status '{}': expected pending, accepted, rejected, expired, or revoked", s)
             }
             InviteParseError::InvalidFourWords(s) => {
-                write!(
-                    f,
-                    "invalid four-word identity '{}': expected format 'word-word-word-word'",
-                    s
-                )
+                write!(f, "invalid four-word identity '{}': expected format 'word-word-word-word'", s)
             }
         }
     }
@@ -189,8 +181,9 @@ impl Invite {
     ) -> Self {
         let now = Utc::now();
         let created_at = now.timestamp_millis();
-        let expires_at =
-            expires_in_hours.map(|h| (now + Duration::hours(i64::from(h))).timestamp_millis());
+        let expires_at = expires_in_hours.map(|h| {
+            (now + Duration::hours(i64::from(h))).timestamp_millis()
+        });
 
         Self {
             id: Uuid::new_v4().to_string(),
@@ -273,11 +266,7 @@ impl Invite {
     }
 
     /// Accept the invite at a specific time (for testing).
-    pub fn accept_at(
-        &mut self,
-        acceptor_id: &str,
-        at: DateTime<Utc>,
-    ) -> Result<(), InviteActionError> {
+    pub fn accept_at(&mut self, acceptor_id: &str, at: DateTime<Utc>) -> Result<(), InviteActionError> {
         if self.recipient_id != acceptor_id {
             return Err(InviteActionError::NotRecipient {
                 expected: self.recipient_id.clone(),
@@ -307,11 +296,7 @@ impl Invite {
     }
 
     /// Reject the invite at a specific time (for testing).
-    pub fn reject_at(
-        &mut self,
-        rejector_id: &str,
-        at: DateTime<Utc>,
-    ) -> Result<(), InviteActionError> {
+    pub fn reject_at(&mut self, rejector_id: &str, at: DateTime<Utc>) -> Result<(), InviteActionError> {
         if self.recipient_id != rejector_id {
             return Err(InviteActionError::NotRecipient {
                 expected: self.recipient_id.clone(),
@@ -338,11 +323,7 @@ impl Invite {
     }
 
     /// Revoke the invite at a specific time (for testing).
-    pub fn revoke_at(
-        &mut self,
-        revoker_id: &str,
-        at: DateTime<Utc>,
-    ) -> Result<(), InviteActionError> {
+    pub fn revoke_at(&mut self, revoker_id: &str, at: DateTime<Utc>) -> Result<(), InviteActionError> {
         if !self.is_pending() {
             return Err(InviteActionError::AlreadyResolved(self.status));
         }
@@ -373,7 +354,8 @@ impl Invite {
 
     /// Get the created_at timestamp as DateTime.
     pub fn created_at_datetime(&self) -> DateTime<Utc> {
-        DateTime::from_timestamp_millis(self.created_at).unwrap_or_else(Utc::now)
+        DateTime::from_timestamp_millis(self.created_at)
+            .unwrap_or_else(Utc::now)
     }
 
     /// Get the expires_at timestamp as DateTime, if set.
@@ -416,11 +398,7 @@ impl std::fmt::Display for InviteActionError {
             }
             InviteActionError::Expired => write!(f, "invite has expired"),
             InviteActionError::NotRecipient { expected, actual } => {
-                write!(
-                    f,
-                    "not the invite recipient: expected '{}', got '{}'",
-                    expected, actual
-                )
+                write!(f, "not the invite recipient: expected '{}', got '{}'", expected, actual)
             }
         }
     }
@@ -548,8 +526,7 @@ mod tests {
             "member".to_string(),
             None,
             None,
-        )
-        .set_id("my-custom-id".to_string());
+        ).set_id("my-custom-id".to_string());
 
         assert_eq!(invite.id, "my-custom-id");
     }
@@ -721,7 +698,10 @@ mod tests {
         invite.accept("bob-calm-river-east").unwrap();
 
         let result = invite.reject("bob-calm-river-east");
-        assert!(matches!(result, Err(InviteActionError::AlreadyResolved(_))));
+        assert!(matches!(
+            result,
+            Err(InviteActionError::AlreadyResolved(_))
+        ));
     }
 
     #[test]
@@ -748,10 +728,7 @@ mod tests {
         assert!(result.is_ok());
         assert_eq!(invite.status, InviteStatus::Revoked);
         assert!(invite.is_resolved());
-        assert_eq!(
-            invite.resolved_by,
-            Some("alice-brave-cloud-dawn".to_string())
-        );
+        assert_eq!(invite.resolved_by, Some("alice-brave-cloud-dawn".to_string()));
     }
 
     #[test]
@@ -770,7 +747,10 @@ mod tests {
         invite.accept("bob-calm-river-east").unwrap();
 
         let result = invite.revoke("alice-brave-cloud-dawn");
-        assert!(matches!(result, Err(InviteActionError::AlreadyResolved(_))));
+        assert!(matches!(
+            result,
+            Err(InviteActionError::AlreadyResolved(_))
+        ));
     }
 
     // ============================================
@@ -793,7 +773,10 @@ mod tests {
         invite.accept("bob-calm-river-east").unwrap();
 
         let result = invite.mark_expired();
-        assert!(matches!(result, Err(InviteActionError::AlreadyResolved(_))));
+        assert!(matches!(
+            result,
+            Err(InviteActionError::AlreadyResolved(_))
+        ));
     }
 
     // ============================================
@@ -831,18 +814,9 @@ mod tests {
 
     #[test]
     fn test_status_from_str() {
-        assert_eq!(
-            "pending".parse::<InviteStatus>().unwrap(),
-            InviteStatus::Pending
-        );
-        assert_eq!(
-            "ACCEPTED".parse::<InviteStatus>().unwrap(),
-            InviteStatus::Accepted
-        );
-        assert_eq!(
-            "Rejected".parse::<InviteStatus>().unwrap(),
-            InviteStatus::Rejected
-        );
+        assert_eq!("pending".parse::<InviteStatus>().unwrap(), InviteStatus::Pending);
+        assert_eq!("ACCEPTED".parse::<InviteStatus>().unwrap(), InviteStatus::Accepted);
+        assert_eq!("Rejected".parse::<InviteStatus>().unwrap(), InviteStatus::Rejected);
         assert!("invalid".parse::<InviteStatus>().is_err());
     }
 
@@ -1006,7 +980,8 @@ mod proptests {
     // Strategy for generating valid four-word identities
     fn four_word_identity() -> impl Strategy<Value = String> {
         // Generate 4 words of 3-8 lowercase letters each
-        proptest::collection::vec("[a-z]{3,8}", 4).prop_map(|words| words.join("-"))
+        proptest::collection::vec("[a-z]{3,8}", 4)
+            .prop_map(|words| words.join("-"))
     }
 
     // Strategy for generating roles
@@ -1033,12 +1008,18 @@ mod proptests {
 
     // Strategy for optional message
     fn optional_message() -> impl Strategy<Value = Option<String>> {
-        prop_oneof![Just(None), "[a-zA-Z0-9 ]{0,100}".prop_map(Some),]
+        prop_oneof![
+            Just(None),
+            "[a-zA-Z0-9 ]{0,100}".prop_map(Some),
+        ]
     }
 
     // Strategy for optional expiry (0-168 hours)
     fn optional_expiry() -> impl Strategy<Value = Option<u32>> {
-        prop_oneof![Just(None), (1u32..168).prop_map(Some),]
+        prop_oneof![
+            Just(None),
+            (1u32..168).prop_map(Some),
+        ]
     }
 
     proptest! {

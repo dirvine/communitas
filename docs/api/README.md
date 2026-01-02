@@ -712,9 +712,9 @@ When upgrading between major versions, see:
 - [four-word-networking](https://crates.io/crates/four-word-networking)
 
 ### Community
-- [GitHub Repository](https://github.com/saorsa-labs/communitas)
-- [GitHub Discussions](https://github.com/saorsa-labs/communitas/discussions)
-- [Issue Tracker](https://github.com/saorsa-labs/communitas/issues)
+- [GitHub Repository](https://github.com/dirvine/communitas)
+- [GitHub Discussions](https://github.com/dirvine/communitas/discussions)
+- [Issue Tracker](https://github.com/dirvine/communitas/issues)
 
 ---
 

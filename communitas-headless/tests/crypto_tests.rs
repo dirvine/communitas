@@ -88,7 +88,7 @@ fn test_verify_fails_with_wrong_message() {
 #[test]
 // #[ignore]
 fn test_verify_fails_with_wrong_key() {
-    let (_pk1, sk1) = crypto::generate_mldsa87_keypair().expect("Key generation failed");
+    let (pk1, sk1) = crypto::generate_mldsa87_keypair().expect("Key generation failed");
     let (pk2, _sk2) = crypto::generate_mldsa87_keypair().expect("Key generation failed");
 
     let message = b"test message";

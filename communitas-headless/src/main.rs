@@ -47,7 +47,7 @@ use std::os::unix::fs::PermissionsExt;
 pub fn try_self_update() -> Result<Option<String>> {
     use self_update::cargo_crate_version;
     let owner =
-        std::env::var("COMMUNITAS_UPDATE_REPO_OWNER").unwrap_or_else(|_| "saorsa-labs".to_string());
+        std::env::var("COMMUNITAS_UPDATE_REPO_OWNER").unwrap_or_else(|_| "dirvine".to_string());
     let name =
         std::env::var("COMMUNITAS_UPDATE_REPO_NAME").unwrap_or_else(|_| "communitas".to_string());
 
@@ -61,11 +61,11 @@ pub fn try_self_update() -> Result<Option<String>> {
     match builder.build()?.update() {
         Ok(status) => Ok(Some(status.version().to_string())),
         Err(e1) => {
-            // Optional fallback repo (legacy owner)
-            let fallback_owner = if owner == "saorsa-labs" {
-                "dirvine"
+            // Optional fallback repo (if the project lives under a different owner)
+            let fallback_owner = if owner == "dirvine" {
+                "david-irvine"
             } else {
-                "saorsa-labs"
+                "dirvine"
             };
             let mut cfg2 = self_update::backends::github::Update::configure();
             let b2 = cfg2

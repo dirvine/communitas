@@ -428,9 +428,6 @@ impl CoreContext {
         let gossip_arc = Arc::new(gossip);
         self.gossip = Some(gossip_arc.clone());
 
-        // Set up entity message handler for incoming gossip messages
-        self.setup_entity_message_handler().await?;
-
         // Initialize WebRTC service (requires gossip context)
         match CommunitasWebRtcService::new(gossip_arc).await {
             Ok(webrtc) => {
@@ -451,73 +448,6 @@ impl CoreContext {
         info!("Scheduling automatic external address detection...");
 
         Ok(connection_identity)
-    }
-
-    /// Set up the entity message handler to process incoming gossip messages
-    ///
-    /// This handler is called whenever a message is received on a subscribed entity topic.
-    /// It deserializes the message and stores it via the message service.
-    async fn setup_entity_message_handler(&self) -> Result<(), String> {
-        let gossip = self.gossip.as_ref().ok_or("Gossip not initialized")?;
-
-        // Clone message_service for use in the handler closure
-        let message_service = self.message_service.clone();
-
-        // Create handler that processes incoming entity messages
-        let handler: crate::gossip::EntityMessageHandler = Arc::new(
-            move |entity_id, sender_peer_id, message_bytes| {
-                // Deserialize the message
-                match serde_json::from_slice::<crate::legacy_crdt::CRDTMessage>(&message_bytes) {
-                    Ok(crdt_message) => {
-                        info!(
-                            "Received message for entity {} from peer {:?}: {}",
-                            entity_id, sender_peer_id, crdt_message.metadata.id
-                        );
-
-                        // Clone message_service for the async block
-                        let message_service = message_service.clone();
-                        let entity_id_clone = entity_id.clone();
-
-                        // Spawn a task to store the message (handler is sync but storage is async)
-                        tokio::spawn(async move {
-                            match message_service.receive_message(crdt_message).await {
-                                Ok(result) => {
-                                    if result.accepted {
-                                        info!(
-                                            "Stored incoming message for entity {}",
-                                            entity_id_clone
-                                        );
-                                    } else if result.out_of_order {
-                                        warn!(
-                                            "Message for entity {} was out of order, queued for later",
-                                            entity_id_clone
-                                        );
-                                    }
-                                }
-                                Err(e) => {
-                                    warn!(
-                                        "Failed to store incoming message for entity {}: {}",
-                                        entity_id_clone, e
-                                    );
-                                }
-                            }
-                        });
-                    }
-                    Err(e) => {
-                        warn!(
-                            "Failed to deserialize message for entity {}: {}",
-                            entity_id, e
-                        );
-                    }
-                }
-            },
-        );
-
-        // Register the handler with the gossip context
-        gossip.set_entity_message_handler(handler).await;
-
-        info!("Entity message handler registered for incoming gossip messages");
-        Ok(())
     }
 
     /// Automatically request external address with retry logic

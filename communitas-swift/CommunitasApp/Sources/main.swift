@@ -2,64 +2,10 @@ import SwiftUI
 import AppKit
 import CommunitasAppLib
 
-// MARK: - Test Mode Configuration
-/// Set to true to bypass authentication for testing purposes
-/// This auto-logs in with a test identity without requiring password
-/// Environment variables:
-///   COMMUNITAS_TEST_MODE=1         - Enable test mode
-///   COMMUNITAS_TEST_USER=A|B       - Select test user (A or B)
-///   COMMUNITAS_TEST_FOURWORDS=xxx  - Custom four-words identity
-///   COMMUNITAS_TEST_NAME=xxx       - Custom display name
-#if DEBUG
-let testModeEnabled = ProcessInfo.processInfo.environment["COMMUNITAS_TEST_MODE"] == "1"
-let testUserSelection = ProcessInfo.processInfo.environment["COMMUNITAS_TEST_USER"] ?? "A"
-let customFourWords = ProcessInfo.processInfo.environment["COMMUNITAS_TEST_FOURWORDS"]
-let customDisplayName = ProcessInfo.processInfo.environment["COMMUNITAS_TEST_NAME"]
-#else
-let testModeEnabled = false
-let testUserSelection = "A"
-let customFourWords: String? = nil
-let customDisplayName: String? = nil
-#endif
-
-/// Test user configurations for multi-user testing
-enum TestUser {
-    case userA
-    case userB
-    case custom(fourWords: String, displayName: String)
-
-    var fourWords: String {
-        switch self {
-        case .userA: return "alpha-test-user-one"
-        case .userB: return "beta-test-user-two"
-        case .custom(let fw, _): return fw
-        }
-    }
-
-    var displayName: String {
-        switch self {
-        case .userA: return "Alice (Test User A)"
-        case .userB: return "Bob (Test User B)"
-        case .custom(_, let name): return name
-        }
-    }
-
-    static func fromEnvironment() -> TestUser {
-        if let fw = customFourWords, let name = customDisplayName {
-            return .custom(fourWords: fw, displayName: name)
-        }
-        switch testUserSelection.uppercased() {
-        case "B", "2": return .userB
-        default: return .userA
-        }
-    }
-}
-
 // MARK: - Root View
 /// Switches between AuthenticationView and ContentView based on authentication state
 struct RootView: View {
     @EnvironmentObject var appState: AppState
-    @State private var testModeInitialized = false
 
     var body: some View {
         Group {
@@ -72,34 +18,6 @@ struct RootView: View {
             }
         }
         .animation(.easeInOut(duration: 0.3), value: appState.isAuthenticated)
-        .onAppear {
-            // Auto-login for test mode
-            if testModeEnabled && !testModeInitialized && !appState.isAuthenticated {
-                testModeInitialized = true
-                performTestModeLogin()
-            }
-        }
-    }
-
-    /// Performs automatic login for test mode
-    /// Creates a test identity or uses existing one without password
-    private func performTestModeLogin() {
-        let testUser = TestUser.fromEnvironment()
-        print("[Communitas] TEST MODE: Auto-login enabled for \(testUser.displayName)")
-
-        let testFourWords = testUser.fourWords
-        let testDisplayName = testUser.displayName
-
-        // Initialize client with test credentials
-        appState.initializeClientWithCredentials(fourWords: testFourWords, displayName: testDisplayName)
-
-        // Set authentication state directly for testing
-        appState.fourWords = testFourWords
-        appState.displayName = testDisplayName
-        appState.isAuthenticated = true
-        appState.isInitialized = true
-
-        print("[Communitas] TEST MODE: Logged in as '\(testDisplayName)' (\(testFourWords))")
     }
 }
 
@@ -117,11 +35,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Set activation policy to regular (foreground app)
         NSApp.setActivationPolicy(.regular)
-
-        // Initialize the update manager (triggers automatic update check)
-        Task { @MainActor in
-            _ = UpdateManager.shared
-        }
 
         // Setup the menu bar
         setupMenuBar()
@@ -155,12 +68,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         appMenuItem.submenu = appMenu
 
         appMenu.addItem(NSMenuItem(title: "About Communitas", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: ""))
-        appMenu.addItem(NSMenuItem.separator())
-
-        let checkForUpdatesItem = NSMenuItem(title: "Check for Updates...", action: #selector(checkForUpdatesMenuAction), keyEquivalent: "")
-        checkForUpdatesItem.target = self
-        appMenu.addItem(checkForUpdatesItem)
-
         appMenu.addItem(NSMenuItem.separator())
         appMenu.addItem(NSMenuItem(title: "Preferences...", action: nil, keyEquivalent: ","))
         appMenu.addItem(NSMenuItem.separator())
@@ -214,14 +121,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         NSApp.mainMenu = mainMenu
         NSApp.windowsMenu = windowMenu
-    }
-
-    // MARK: - Update Actions
-
-    @objc func checkForUpdatesMenuAction() {
-        Task { @MainActor in
-            UpdateManager.shared.checkForUpdates()
-        }
     }
 
     // MARK: - Window Management

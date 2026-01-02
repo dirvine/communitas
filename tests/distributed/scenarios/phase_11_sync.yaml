@@ -1,0 +1,169 @@
+# Phase 11: Sync & Reconnection
+# Tests CRDT synchronization and offline/online scenarios
+
+name: "Phase 11: Sync & Reconnection"
+description: "Tests cross-node CRDT verification, offline edits, and reconnection sync"
+tools_covered: []
+
+test_cases:
+  # Concurrent edits to same kanban card
+  - id: SYNC-001
+    name: "Concurrent card edits merge correctly"
+    actors: [alice, bob]
+    parallel: true
+    steps:
+      - actor: alice
+        tool: kanban_create_comment
+        params:
+          card_id: "${card1_id}"
+          text: "Alice's concurrent comment"
+        expect:
+          status: success
+      - actor: bob
+        tool: kanban_create_comment
+        params:
+          card_id: "${card1_id}"
+          text: "Bob's concurrent comment"
+        expect:
+          status: success
+
+  # Verify both comments exist after sync
+  - id: SYNC-002
+    name: "Verify concurrent edits merged"
+    actors: [charlie]
+    wait_ms: 5000
+    steps:
+      - tool: kanban_list_comments
+        params:
+          card_id: "${card1_id}"
+        expect:
+          status: success
+          contains:
+            - text: "Alice's concurrent comment"
+            - text: "Bob's concurrent comment"
+
+  # Test offline message sync
+  - id: SYNC-003
+    name: "Charlie goes offline"
+    actors: [charlie]
+    steps:
+      - tool: network_stop
+        expect:
+          status: success
+
+  # Alice and Bob send messages while Charlie offline
+  - id: SYNC-004
+    name: "Messages while Charlie offline"
+    actors: [alice, bob]
+    parallel: true
+    steps:
+      - actor: alice
+        tool: send_message
+        params:
+          entity_id: "${channel_id}"
+          text: "Alice message while Charlie offline"
+        expect:
+          status: success
+      - actor: bob
+        tool: send_message
+        params:
+          entity_id: "${channel_id}"
+          text: "Bob message while Charlie offline"
+        expect:
+          status: success
+
+  # Charlie reconnects
+  - id: SYNC-005
+    name: "Charlie reconnects"
+    actors: [charlie]
+    steps:
+      - tool: network_start
+        expect:
+          status: success
+
+  # Verify Charlie received all messages
+  - id: SYNC-006
+    name: "Charlie syncs missed messages"
+    actors: [charlie]
+    wait_ms: 10000
+    steps:
+      - tool: get_messages
+        params:
+          entity_id: "${channel_id}"
+        expect:
+          status: success
+          contains:
+            - text: "Alice message while Charlie offline"
+            - text: "Bob message while Charlie offline"
+
+  # Test file sync after offline edits
+  - id: SYNC-007
+    name: "Dave goes offline"
+    actors: [dave]
+    steps:
+      - tool: network_stop
+        expect:
+          status: success
+
+  # Alice updates a file while Dave offline
+  - id: SYNC-008
+    name: "Alice updates file while Dave offline"
+    actors: [alice]
+    steps:
+      - tool: write_file
+        params:
+          entity_id: "${org_id}"
+          path: "/docs/readme.md"
+          content: "# Acme Corp\n\nUpdated while Dave was offline.\n\nNew content!"
+        expect:
+          status: success
+
+  # Dave reconnects
+  - id: SYNC-009
+    name: "Dave reconnects"
+    actors: [dave]
+    steps:
+      - tool: network_start
+        expect:
+          status: success
+
+  # Verify Dave sees updated file
+  - id: SYNC-010
+    name: "Dave syncs file update"
+    actors: [dave]
+    wait_ms: 10000
+    steps:
+      - tool: read_file
+        params:
+          entity_id: "${org_id}"
+          path: "/docs/readme.md"
+        expect:
+          status: success
+          contains:
+            - "Updated while Dave was offline"
+
+  # Test entity creation sync
+  - id: SYNC-011
+    name: "All nodes see same entities"
+    actors: [alice, bob, charlie, dave]
+    parallel: true
+    wait_ms: 5000
+    steps:
+      - tool: list_entities
+        expect:
+          status: success
+          contains:
+            - name: "Acme Corp"
+            - name: "Secret Project"
+
+  # Final connectivity check
+  - id: SYNC-012
+    name: "Final connectivity check"
+    actors: [alice, bob, charlie, dave]
+    parallel: true
+    steps:
+      - tool: network_status
+        expect:
+          status: success
+          fields:
+            network_active: true

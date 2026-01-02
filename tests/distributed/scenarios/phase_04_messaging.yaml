@@ -1,0 +1,147 @@
+# Phase 4: Messaging
+# Tests message sending, retrieval, and threading
+
+name: "Phase 4: Messaging"
+description: "Tests message sending, retrieval, threading, and cross-node sync"
+tools_covered:
+  - send_message
+  - get_messages
+  - create_thread
+  - get_thread_messages
+
+test_cases:
+  # Alice sends first message
+  - id: MSG-001
+    name: "Alice sends first message"
+    actors: [alice]
+    steps:
+      - tool: send_message
+        params:
+          entity_id: "${channel_id}"
+          text: "Hello team! This is our general channel."
+        expect:
+          status: success
+        store:
+          msg1_id: id
+
+  # Bob replies
+  - id: MSG-002
+    name: "Bob sends message"
+    actors: [bob]
+    steps:
+      - tool: send_message
+        params:
+          entity_id: "${channel_id}"
+          text: "Hi Alice! Great to be here."
+        expect:
+          status: success
+        store:
+          msg2_id: id
+
+  # Charlie joins the conversation
+  - id: MSG-003
+    name: "Charlie sends message"
+    actors: [charlie]
+    steps:
+      - tool: send_message
+        params:
+          entity_id: "${channel_id}"
+          text: "Hey everyone! Looking forward to collaborating."
+        expect:
+          status: success
+
+  # Dave sends a message
+  - id: MSG-004
+    name: "Dave sends message"
+    actors: [dave]
+    steps:
+      - tool: send_message
+        params:
+          entity_id: "${channel_id}"
+          text: "Hello from the local node!"
+        expect:
+          status: success
+
+  # Verify all messages synced across nodes
+  - id: MSG-005
+    name: "Verify messages synced to all nodes"
+    actors: [alice, bob, charlie, dave]
+    parallel: true
+    wait_ms: 5000
+    steps:
+      - tool: get_messages
+        params:
+          entity_id: "${channel_id}"
+        expect:
+          status: success
+          contains:
+            - text: "Hello team!"
+            - text: "Hi Alice!"
+            - text: "Hey everyone!"
+            - text: "Hello from the local node!"
+
+  # Create a thread
+  - id: MSG-006
+    name: "Alice creates thread on Bob's message"
+    actors: [alice]
+    steps:
+      - tool: create_thread
+        params:
+          message_id: "${msg2_id}"
+          text: "Thanks Bob! Let's discuss the project here."
+        expect:
+          status: success
+        store:
+          thread_id: id
+
+  # Reply to thread
+  - id: MSG-007
+    name: "Bob replies in thread"
+    actors: [bob]
+    steps:
+      - tool: send_message
+        params:
+          thread_id: "${thread_id}"
+          text: "Sure! What's the first task?"
+        expect:
+          status: success
+
+  # Charlie replies to thread
+  - id: MSG-008
+    name: "Charlie replies in thread"
+    actors: [charlie]
+    steps:
+      - tool: send_message
+        params:
+          thread_id: "${thread_id}"
+          text: "I can help with the research."
+        expect:
+          status: success
+
+  # Get thread messages
+  - id: MSG-009
+    name: "Get thread messages"
+    actors: [alice]
+    wait_ms: 3000
+    steps:
+      - tool: get_thread_messages
+        params:
+          thread_id: "${thread_id}"
+        expect:
+          status: success
+          contains:
+            - text: "Thanks Bob!"
+            - text: "What's the first task?"
+            - text: "I can help"
+
+  # Test message ordering
+  - id: MSG-010
+    name: "Verify message ordering"
+    actors: [alice]
+    steps:
+      - tool: get_messages
+        params:
+          entity_id: "${channel_id}"
+          limit: 10
+        expect:
+          status: success

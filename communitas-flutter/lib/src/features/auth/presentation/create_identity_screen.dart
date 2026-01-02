@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../main.dart';
+import '../../../bindings/api_exports.dart';
 import '../../../core/router.dart';
 import '../../../core/theme/colors.dart';
+import '../providers/auth_provider.dart';
 
 /// Create new identity screen with four-word address generation.
 class CreateIdentityScreen extends ConsumerStatefulWidget {
@@ -186,17 +189,72 @@ class _CreateIdentityScreenState extends ConsumerState<CreateIdentityScreen> {
   Future<void> _generateFourWords() async {
     setState(() => _isGenerating = true);
 
-    // Simulate key generation
-    await Future.delayed(const Duration(milliseconds: 800));
+    try {
+      String fourWords;
+      if (kDemoMode) {
+        // Demo mode: use placeholder
+        await Future.delayed(const Duration(milliseconds: 500));
+        fourWords = 'ocean-forest-moon-star';
+      } else {
+        // Native mode: generate real four-word address via FFI
+        fourWords = await generateIdWords();
+      }
 
-    setState(() {
-      _generatedFourWords = 'ocean-forest-moon-star';
-      _isGenerating = false;
-    });
+      setState(() {
+        _generatedFourWords = fourWords;
+        _isGenerating = false;
+      });
+    } catch (e) {
+      debugPrint('Error generating four words: $e');
+      setState(() => _isGenerating = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to generate identity: $e')),
+        );
+      }
+    }
   }
 
-  void _handleCreate() {
-    // TODO: Validate and create identity via FFI
-    context.go(Routes.home);
+  Future<void> _handleCreate() async {
+    // Validate password match
+    if (_passwordController.text != _confirmPasswordController.text) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Passwords do not match')),
+      );
+      return;
+    }
+
+    // Validate display name
+    if (_displayNameController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a display name')),
+      );
+      return;
+    }
+
+    // Validate password length
+    if (_passwordController.text.length < 4) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Password must be at least 4 characters')),
+      );
+      return;
+    }
+
+    // Create identity via auth provider
+    final authNotifier = ref.read(authNotifierProvider.notifier);
+    final result = await authNotifier.createIdentity(
+      fourWords: _generatedFourWords!,
+      displayName: _displayNameController.text.trim(),
+      password: _passwordController.text,
+    );
+
+    if (result != null && mounted) {
+      // Success - navigate to home
+      context.go(Routes.home);
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to create identity')),
+      );
+    }
   }
 }

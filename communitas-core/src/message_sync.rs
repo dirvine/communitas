@@ -294,6 +294,20 @@ impl MessageSyncService {
         !missing.is_empty()
     }
 
+    pub async fn delete_message(&self, entity_id: &str, message_id: &str) -> AppResult<bool> {
+        let mut messages_map = self.entity_messages.write().await;
+        if let Some(messages) = messages_map.get_mut(entity_id) {
+            let original_len = messages.len();
+            messages.retain(|m| m.metadata.id != message_id);
+            let deleted = messages.len() < original_len;
+            if deleted {
+                info!("🗑️ Message deleted: {} (entity: {})", message_id, entity_id);
+            }
+            return Ok(deleted);
+        }
+        Ok(false)
+    }
+
     // Private methods
 
     async fn add_message(&self, message: CRDTMessage) -> AppResult<()> {

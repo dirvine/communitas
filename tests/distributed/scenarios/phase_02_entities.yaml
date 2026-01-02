@@ -1,0 +1,122 @@
+# Phase 2: Entity Lifecycle
+# Tests entity creation, retrieval, and listing
+
+name: "Phase 2: Entity Lifecycle"
+description: "Tests entity creation, retrieval, listing, and joining"
+tools_covered:
+  - create_entity
+  - get_entity
+  - list_entities
+  - join_entity
+
+test_cases:
+  # Create organisation
+  - id: ENT-001
+    name: "Alice creates organisation"
+    actors: [alice]
+    steps:
+      - tool: create_entity
+        params:
+          name: "Acme Corp"
+          entity_type: "organisation"
+        expect:
+          status: success
+        store:
+          org_id: id
+
+  # Create group within organisation
+  - id: ENT-002
+    name: "Alice creates group in organisation"
+    actors: [alice]
+    steps:
+      - tool: create_entity
+        params:
+          name: "Engineering Team"
+          entity_type: "group"
+          parent_id: "${org_id}"
+        expect:
+          status: success
+        store:
+          group_id: id
+
+  # Create channel within group
+  - id: ENT-003
+    name: "Alice creates channel"
+    actors: [alice]
+    steps:
+      - tool: create_entity
+        params:
+          name: "general"
+          entity_type: "channel"
+          parent_id: "${group_id}"
+        expect:
+          status: success
+        store:
+          channel_id: id
+
+  # Create project
+  - id: ENT-004
+    name: "Alice creates project"
+    actors: [alice]
+    steps:
+      - tool: create_entity
+        params:
+          name: "Q1 Sprint"
+          entity_type: "project"
+          parent_id: "${org_id}"
+        expect:
+          status: success
+        store:
+          project_id: id
+
+  # Retrieve entity by ID
+  - id: ENT-005
+    name: "Get organisation by ID"
+    actors: [alice]
+    steps:
+      - tool: get_entity
+        params:
+          entity_id: "${org_id}"
+        expect:
+          status: success
+          fields:
+            name: "Acme Corp"
+            entity_type: "organisation"
+
+  # List all entities
+  - id: ENT-006
+    name: "List all entities"
+    actors: [alice]
+    steps:
+      - tool: list_entities
+        expect:
+          status: success
+          contains:
+            - name: "Acme Corp"
+            - name: "Engineering Team"
+            - name: "general"
+            - name: "Q1 Sprint"
+
+  # Bob creates his own entity
+  - id: ENT-007
+    name: "Bob creates personal entity"
+    actors: [bob]
+    steps:
+      - tool: create_entity
+        params:
+          name: "Bob's Project"
+          entity_type: "project"
+        expect:
+          status: success
+        store:
+          bob_project_id: id
+
+  # Verify entity isolation (Bob shouldn't see Alice's entities yet)
+  - id: ENT-008
+    name: "Verify entity isolation before join"
+    actors: [bob]
+    steps:
+      - tool: list_entities
+        expect:
+          status: success
+          # Bob should only see his own entities

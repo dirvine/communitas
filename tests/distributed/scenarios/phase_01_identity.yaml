@@ -1,0 +1,125 @@
+# Phase 1: Identity & Authentication
+# Tests authentication, vault creation, and health checks
+
+name: "Phase 1: Identity & Authentication"
+description: "Tests identity management, authentication, and basic health checks"
+tools_covered:
+  - health_check
+  - create_vault
+  - authenticate
+  - authenticate_token
+  - core_status
+
+test_cases:
+  # Health check all nodes
+  - id: AUTH-001
+    name: "All nodes health check"
+    actors: [alice, bob, charlie, dave]
+    parallel: true
+    steps:
+      - tool: health_check
+        expect:
+          status: success
+
+  # Check core status before authentication
+  - id: AUTH-002
+    name: "Check core status (unauthenticated)"
+    actors: [alice]
+    steps:
+      - tool: core_status
+        expect:
+          fields:
+            authenticated: false
+
+  # Create vaults for all test users
+  - id: AUTH-003
+    name: "Create vault for Alice"
+    actors: [alice]
+    steps:
+      - tool: create_vault
+        params:
+          four_words: "ocean.forest.moon.star"
+          password: "test-pass-alice"
+          display_name: "Alice Test"
+        expect:
+          status: success
+        store:
+          alice_identity: identity
+
+  - id: AUTH-004
+    name: "Create vault for Bob"
+    actors: [bob]
+    steps:
+      - tool: create_vault
+        params:
+          four_words: "river.mountain.sun.cloud"
+          password: "test-pass-bob"
+          display_name: "Bob Test"
+        expect:
+          status: success
+        store:
+          bob_identity: identity
+
+  - id: AUTH-005
+    name: "Create vault for Charlie"
+    actors: [charlie]
+    steps:
+      - tool: create_vault
+        params:
+          four_words: "lake.valley.wind.rain"
+          password: "test-pass-charlie"
+          display_name: "Charlie Test"
+        expect:
+          status: success
+        store:
+          charlie_identity: identity
+
+  - id: AUTH-006
+    name: "Create vault for Dave"
+    actors: [dave]
+    steps:
+      - tool: create_vault
+        params:
+          four_words: "field.hill.fire.snow"
+          password: "test-pass-dave"
+          display_name: "Dave Test"
+        expect:
+          status: success
+        store:
+          dave_identity: identity
+
+  # Verify authentication state
+  - id: AUTH-007
+    name: "Verify authenticated status"
+    actors: [alice, bob, charlie, dave]
+    parallel: true
+    steps:
+      - tool: core_status
+        expect:
+          fields:
+            authenticated: true
+
+  # Test re-authentication
+  - id: AUTH-008
+    name: "Re-authenticate with password"
+    actors: [alice]
+    steps:
+      - tool: authenticate
+        params:
+          four_words: "ocean.forest.moon.star"
+          password: "test-pass-alice"
+        expect:
+          status: success
+
+  # Test wrong password rejection
+  - id: AUTH-009
+    name: "Reject wrong password"
+    actors: [alice]
+    steps:
+      - tool: authenticate
+        params:
+          four_words: "ocean.forest.moon.star"
+          password: "wrong-password"
+        expect:
+          status: error
+          error_contains: "authentication"

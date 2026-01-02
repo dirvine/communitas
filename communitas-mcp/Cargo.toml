@@ -10,6 +10,10 @@ description = "MCP (Model Context Protocol) server for Communitas - enables AI a
 [dependencies]
 # Core dependency - the headless app
 communitas-core = { path = "../communitas-core" }
+communitas-kanban = { path = "../communitas-kanban" }
+
+# CLI parsing
+clap = { workspace = true, features = ["derive"] }
 
 # Async runtime
 tokio = { workspace = true, features = ["full", "io-std"] }
@@ -27,6 +31,29 @@ thiserror.workspace = true
 # Logging
 tracing.workspace = true
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
+
+# Base64 for binary file encoding
+base64 = "0.22"
+
+# UUID for unique identifiers
+uuid.workspace = true
+
+blake3 = "1.5"
+rand = "0.8"
+
+# Web framework for HTTP transport
+axum.workspace = true
+axum-server = { version = "0.7", features = ["tls-rustls"] }
+tower.workspace = true
+tower-http.workspace = true
+
+# TLS with post-quantum cryptography
+rustls = { version = "0.23", default-features = false, features = ["aws_lc_rs", "std", "tls12"] }
+saorsa-pqc.workspace = true
+
+[dev-dependencies]
+reqwest = { version = "0.12", features = ["json"] }
+tempfile = "3"
 
 [[bin]]
 name = "communitas-mcp"

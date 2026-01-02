@@ -497,6 +497,52 @@ impl KanbanService {
         Ok(result)
     }
 
+    /// List all boards for an entity (project).
+    ///
+    /// Returns all non-deleted boards associated with the given entity_id.
+    #[instrument(skip(self))]
+    pub fn list_boards(&self, entity_id: &str) -> KanbanResult<Vec<Board>> {
+        let docs = self.documents.read().unwrap_or_else(|e| e.into_inner());
+        let mut boards = Vec::new();
+
+        for (board_id, doc) in docs.iter() {
+            let txn = doc.transact();
+            if let Some(root) = txn.get_map("root")
+                && let Some(Out::YMap(metadata)) = root.get(&txn, keys::METADATA)
+                && let Ok(board) = self.read_board_from_map(&metadata, &txn)
+                && !board.deleted
+                && board.project_id == entity_id
+            {
+                // Count columns for the board
+                let column_count = if let Some(Out::YArray(col_order)) =
+                    root.get(&txn, keys::COLUMN_ORDER)
+                {
+                    col_order.len(&txn) as usize
+                } else {
+                    0
+                };
+
+                boards.push(Board {
+                    id: board_id.clone(),
+                    name: board.name,
+                    description: board.description,
+                    project_id: board.project_id,
+                    created_by: board.created_by,
+                    created_at: board.created_at,
+                    updated_at: board.updated_at,
+                    settings: board.settings,
+                    deleted: board.deleted,
+                    deleted_at: board.deleted_at,
+                });
+                let _ = column_count; // column_count available if needed
+            }
+        }
+
+        // Sort by created_at
+        boards.sort_by_key(|b| b.created_at);
+        Ok(boards)
+    }
+
     /// Delete a column.
     #[instrument(skip(self))]
     pub fn delete_column(&self, board_id: &str, column_id: &str) -> KanbanResult<()> {

@@ -262,9 +262,10 @@ pub struct IntroducerConfig {
 impl Default for IntroducerConfig {
     fn default() -> Self {
         Self {
-            // Production bootstrap node
+            // Production bootstrap nodes (saorsa network)
             addresses: vec![
-                "138.197.29.195:8080".to_string(), // NYC bootstrap node
+                "142.93.199.50:11000".to_string(),  // saorsa-2: DigitalOcean NYC1 bootstrap
+                "147.182.234.192:11000".to_string(), // saorsa-3: DigitalOcean SFO3 bootstrap
             ],
             timeout_secs: 10,
         }

@@ -124,6 +124,18 @@ pub enum Command {
         parent_org_id: String,
     },
 
+    UpdateEntity {
+        entity_type: EntityType,
+        entity_id: String,
+        name: Option<String>,
+        description: Option<Option<String>>,
+    },
+
+    DeleteEntity {
+        entity_type: EntityType,
+        entity_id: String,
+    },
+
     // ========================================================================
     // Member Management Commands
     // ========================================================================
@@ -191,6 +203,12 @@ pub enum Command {
         recipients: Vec<String>,
         text: String,
         author: String,
+    },
+
+    DeleteMessage {
+        entity_id: String,
+        entity_type: EntityType,
+        message_id: String,
     },
 
     // ========================================================================
@@ -286,6 +304,16 @@ pub enum Command {
     /// Delete a Kanban card
     DeleteKanbanCard { board_id: String, card_id: String },
 
+    /// Update a Kanban board's name or description
+    UpdateKanbanBoard {
+        board_id: String,
+        name: Option<String>,
+        description: Option<Option<String>>,
+    },
+
+    /// Delete a Kanban board and all its columns and cards
+    DeleteKanbanBoard { board_id: String },
+
     // ========================================================================
     // WebRTC Commands (Voice/Video/Screen)
     // ========================================================================
@@ -312,6 +340,62 @@ pub enum Command {
 
     /// Stop screen sharing
     StopScreenShare { call_id: String },
+
+    // ========================================================================
+    // Contact Management Commands
+    // ========================================================================
+    /// Create a new contact (local-only or network-linked)
+    CreateContact {
+        display_name: String,
+        four_words: Option<String>,
+        is_favourite: bool,
+    },
+
+    /// Update a contact's display name
+    UpdateContact {
+        contact_id: String,
+        display_name: Option<String>,
+        is_favourite: Option<bool>,
+    },
+
+    /// Delete a contact
+    DeleteContact { contact_id: String },
+
+    /// Link a local-only contact to a network identity
+    LinkContact {
+        contact_id: String,
+        four_words: String,
+    },
+
+    /// Set a contact as favourite
+    SetFavouriteContact { four_words: String },
+
+    /// Remove a contact from favourites
+    RemoveFavouriteContact { four_words: String },
+
+    // ========================================================================
+    // Website Publishing Commands
+    // ========================================================================
+    /// Create/publish a website for an entity
+    CreateWebsite {
+        entity_id: String,
+        html: String,
+        css: Option<String>,
+        js: Option<String>,
+        metadata: Option<String>,
+    },
+
+    /// Update an existing website
+    UpdateWebsite {
+        entity_id: String,
+        html: Option<String>,
+        css: Option<String>,
+        js: Option<String>,
+        metadata: Option<String>,
+    },
+
+    /// Delete a website
+    DeleteWebsite { entity_id: String },
 }
 
 /// Disk type argument for commands (serializable)
@@ -398,6 +482,19 @@ pub enum Event {
         parent_org_id: String,
     },
 
+    /// Entity was updated
+    EntityUpdated {
+        entity_id: String,
+        entity_type: EntityType,
+        name: Option<String>,
+    },
+
+    /// Entity was deleted
+    EntityDeleted {
+        entity_id: String,
+        entity_type: EntityType,
+    },
+
     // ========================================================================
     // Member Events
     // ========================================================================
@@ -477,6 +574,13 @@ pub enum Event {
     DirectMessageSent {
         message_ids: Vec<String>,
         recipients: Vec<String>,
+    },
+
+    /// Message was deleted
+    MessageDeleted {
+        message_id: String,
+        entity_id: String,
+        entity_type: EntityType,
     },
 
     // ========================================================================
@@ -566,6 +670,15 @@ pub enum Event {
     /// Kanban card was deleted
     KanbanCardDeleted { card_id: String },
 
+    /// Kanban board was updated
+    KanbanBoardUpdated {
+        board_id: String,
+        name: Option<String>,
+    },
+
+    /// Kanban board was deleted
+    KanbanBoardDeleted { board_id: String },
+
     // ========================================================================
     // WebRTC Events
     // ========================================================================
@@ -589,6 +702,60 @@ pub enum Event {
 
     /// Screen sharing stopped
     ScreenShareStopped { call_id: String },
+
+    // ========================================================================
+    // Contact Events
+    // ========================================================================
+    /// Contact was created
+    ContactCreated {
+        contact_id: String,
+        display_name: String,
+        four_words: Option<String>,
+    },
+
+    /// Contact was updated
+    ContactUpdated {
+        contact_id: String,
+        display_name: Option<String>,
+        is_favourite: Option<bool>,
+    },
+
+    /// Contact was deleted
+    ContactDeleted { contact_id: String },
+
+    /// Contact was linked to network identity
+    ContactLinked {
+        contact_id: String,
+        four_words: String,
+    },
+
+    /// Contact was set as favourite
+    ContactFavouriteSet { four_words: String },
+
+    /// Contact was removed from favourites
+    ContactFavouriteRemoved { four_words: String },
+
+    // ========================================================================
+    // Website Events
+    // ========================================================================
+    /// A website was created/published for an entity
+    WebsiteCreated {
+        entity_id: String,
+        website_root_hash: String,
+        published_at: i64,
+        size_bytes: usize,
+    },
+
+    /// A website was updated
+    WebsiteUpdated {
+        entity_id: String,
+        website_root_hash: String,
+        updated_at: i64,
+        size_bytes: usize,
+    },
+
+    /// A website was deleted
+    WebsiteDeleted { entity_id: String },
 
     // ========================================================================
     // Error Events
@@ -731,6 +898,15 @@ pub enum Query {
     /// Get a Kanban card
     GetKanbanCard { board_id: String, card_id: String },
 
+    /// List Kanban cards in a board with optional filters
+    ListKanbanCards {
+        board_id: String,
+        column_id: Option<String>,
+        state: Option<String>,
+        assignee_id: Option<String>,
+        tag_id: Option<String>,
+    },
+
     // ========================================================================
     // Presence Queries
     // ========================================================================
@@ -748,6 +924,27 @@ pub enum Query {
 
     /// Get call participants
     GetCallParticipants { call_id: String },
+
+    // ========================================================================
+    // Contact Queries
+    // ========================================================================
+    /// Get a contact by ID or four-words
+    GetContact { contact_id: String },
+
+    /// List all contacts
+    ListContacts,
+
+    /// List favourite contacts only
+    ListFavouriteContacts,
+
+    /// Search contacts by display name
+    SearchContacts { query: String },
+
+    // ========================================================================
+    // Website Queries
+    // ========================================================================
+    /// Get website information for an entity
+    GetWebsite { entity_id: String },
 }
 
 // ============================================================================
@@ -816,6 +1013,9 @@ pub enum QueryResponse {
     /// Kanban card
     KanbanCard(KanbanCardResponse),
 
+    /// List of Kanban cards
+    KanbanCards(Vec<KanbanCardResponse>),
+
     /// Presence information
     Presence(PresenceResponse),
 
@@ -827,6 +1027,15 @@ pub enum QueryResponse {
 
     /// Call participants
     CallParticipants(Vec<String>),
+
+    /// Contact information
+    Contact(ContactResponse),
+
+    /// List of contacts
+    ContactList(Vec<ContactResponse>),
+
+    /// Website information
+    Website(WebsiteResponse),
 }
 
 // ============================================================================
@@ -947,6 +1156,31 @@ pub struct CallResponse {
     pub entity_id: String,
     pub participant_count: usize,
     pub started_at: i64,
+}
+
+/// Contact response data
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContactResponse {
+    pub id: String,
+    pub display_name: String,
+    pub four_words: Option<String>,
+    pub is_favourite: bool,
+    pub is_online: bool,
+    pub created_at: i64,
+    pub last_seen: Option<i64>,
+}
+
+/// Website response data
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WebsiteResponse {
+    pub entity_id: String,
+    pub html: String,
+    pub css: String,
+    pub js: String,
+    pub website_root_hash: String,
+    pub published_at: i64,
+    pub size_bytes: usize,
+    pub url: String,
 }
 
 // ============================================================================

@@ -56,9 +56,10 @@ use crate::command::{
     QueryResult, Subscription,
 };
 use crate::command::{
-    DiskStatsResponse, EntityResponse, FileInfoResponse, InviteResponse, MemberResponse,
-    MessageResponse, SyncStateResponse,
+    ContactResponse, DiskStatsResponse, EntityResponse, FileInfoResponse, InviteResponse,
+    MemberResponse, MessageResponse, SyncStateResponse, WebsiteResponse,
 };
+use yrs::{Map, ReadTxn, Transact};
 use crate::core_context::CoreContext;
 use crate::crdt::EntityType;
 use crate::disk_service::DiskType;
@@ -363,6 +364,54 @@ impl CommunitasApp {
                 Ok(vec![event])
             }
 
+            Command::UpdateEntity {
+                entity_type,
+                entity_id,
+                name,
+                description,
+            } => {
+                let ctx = self.context.read().await;
+                let entity = ctx
+                    .entity_service
+                    .update_entity(&entity_id, name.clone(), description)
+                    .await
+                    .map_err(|e| CommandError {
+                        command_type: command_type.clone(),
+                        message: format!("{}", e),
+                        code: "UPDATE_ENTITY_FAILED".to_string(),
+                    })?;
+
+                let event = Event::EntityUpdated {
+                    entity_id,
+                    entity_type,
+                    name: Some(entity.name),
+                };
+                self.broadcast_event(event.clone());
+                Ok(vec![event])
+            }
+
+            Command::DeleteEntity {
+                entity_type,
+                entity_id,
+            } => {
+                let ctx = self.context.read().await;
+                ctx.entity_service
+                    .delete_entity(&entity_id)
+                    .await
+                    .map_err(|e| CommandError {
+                        command_type: command_type.clone(),
+                        message: format!("{}", e),
+                        code: "DELETE_ENTITY_FAILED".to_string(),
+                    })?;
+
+                let event = Event::EntityDeleted {
+                    entity_id,
+                    entity_type,
+                };
+                self.broadcast_event(event.clone());
+                Ok(vec![event])
+            }
+
             // ================================================================
             // Member Management Commands
             // ================================================================
@@ -606,6 +655,30 @@ impl CommunitasApp {
                 let event = Event::DirectMessageSent {
                     message_ids,
                     recipients,
+                };
+                self.broadcast_event(event.clone());
+                Ok(vec![event])
+            }
+
+            Command::DeleteMessage {
+                entity_id,
+                entity_type,
+                message_id,
+            } => {
+                let ctx = self.context.read().await;
+                ctx.message_service
+                    .delete_message(&entity_id, &message_id)
+                    .await
+                    .map_err(|e| CommandError {
+                        command_type: command_type.clone(),
+                        message: format!("{}", e),
+                        code: "DELETE_MESSAGE_FAILED".to_string(),
+                    })?;
+
+                let event = Event::MessageDeleted {
+                    message_id,
+                    entity_id,
+                    entity_type,
                 };
                 self.broadcast_event(event.clone());
                 Ok(vec![event])
@@ -971,6 +1044,49 @@ impl CommunitasApp {
                 Ok(vec![event])
             }
 
+            Command::UpdateKanbanBoard {
+                board_id,
+                name,
+                description,
+            } => {
+                let ctx = self.context.read().await;
+                let updates = communitas_kanban::BoardUpdate {
+                    name: name.clone(),
+                    description,
+                    settings: None,
+                };
+                let board = ctx
+                    .kanban_service
+                    .update_board(&board_id, updates)
+                    .map_err(|e| CommandError {
+                        command_type: command_type.clone(),
+                        message: format!("{}", e),
+                        code: "UPDATE_BOARD_FAILED".to_string(),
+                    })?;
+
+                let event = Event::KanbanBoardUpdated {
+                    board_id,
+                    name: Some(board.name),
+                };
+                self.broadcast_event(event.clone());
+                Ok(vec![event])
+            }
+
+            Command::DeleteKanbanBoard { board_id } => {
+                let ctx = self.context.read().await;
+                ctx.kanban_service
+                    .delete_board(&board_id)
+                    .map_err(|e| CommandError {
+                        command_type: command_type.clone(),
+                        message: format!("{}", e),
+                        code: "DELETE_BOARD_FAILED".to_string(),
+                    })?;
+
+                let event = Event::KanbanBoardDeleted { board_id };
+                self.broadcast_event(event.clone());
+                Ok(vec![event])
+            }
+
             // ================================================================
             // WebRTC Commands
             // Note: WebRTC integration requires proper CallId conversion and
@@ -1194,6 +1310,414 @@ impl CommunitasApp {
                     })?;
 
                 let event = Event::ScreenShareStopped { call_id };
+                self.broadcast_event(event.clone());
+                Ok(vec![event])
+            }
+
+            // ================================================================
+            // Contact Management Commands
+            // ================================================================
+            Command::CreateContact {
+                display_name,
+                four_words,
+                is_favourite,
+            } => {
+                let ctx = self.context.read().await;
+                let gossip = ctx.gossip.as_ref().ok_or_else(|| CommandError {
+                    command_type: command_type.clone(),
+                    message: "Networking not started - contacts require gossip context".to_string(),
+                    code: "GOSSIP_NOT_AVAILABLE".to_string(),
+                })?;
+
+                use crate::gossip::contact_storage::ContactRecord;
+
+                // Create contact based on whether it has network identity
+                let mut contact = match four_words.clone() {
+                    Some(fw) => ContactRecord::with_display_name(fw, display_name.clone()),
+                    None => ContactRecord::new_local(display_name.clone()),
+                };
+
+                // Set favourite if requested
+                contact.is_favourite = is_favourite;
+                let contact_id = contact.id.clone();
+
+                gossip.contact_store.add(contact).await.map_err(|e| {
+                    CommandError {
+                        command_type: command_type.clone(),
+                        message: format!("Failed to create contact: {}", e),
+                        code: "CREATE_CONTACT_FAILED".to_string(),
+                    }
+                })?;
+
+                let event = Event::ContactCreated {
+                    contact_id,
+                    display_name,
+                    four_words,
+                };
+                self.broadcast_event(event.clone());
+                Ok(vec![event])
+            }
+
+            Command::UpdateContact {
+                contact_id,
+                display_name,
+                is_favourite,
+            } => {
+                let ctx = self.context.read().await;
+                let gossip = ctx.gossip.as_ref().ok_or_else(|| CommandError {
+                    command_type: command_type.clone(),
+                    message: "Networking not started".to_string(),
+                    code: "GOSSIP_NOT_AVAILABLE".to_string(),
+                })?;
+
+                // Get the existing contact
+                let mut contact =
+                    gossip
+                        .contact_store
+                        .get_by_id(&contact_id)
+                        .await
+                        .ok_or_else(|| CommandError {
+                            command_type: command_type.clone(),
+                            message: format!("Contact not found: {}", contact_id),
+                            code: "CONTACT_NOT_FOUND".to_string(),
+                        })?;
+
+                // Update display name if provided
+                if let Some(ref name) = display_name {
+                    contact.display_name = Some(name.clone());
+                }
+
+                // Update favourite status if provided
+                if let Some(fav) = is_favourite {
+                    contact.is_favourite = fav;
+                }
+
+                // Save updated contact
+                gossip.contact_store.update(contact).await.map_err(|e| {
+                    CommandError {
+                        command_type: command_type.clone(),
+                        message: format!("Failed to update contact: {}", e),
+                        code: "UPDATE_CONTACT_FAILED".to_string(),
+                    }
+                })?;
+
+                let event = Event::ContactUpdated {
+                    contact_id,
+                    display_name,
+                    is_favourite,
+                };
+                self.broadcast_event(event.clone());
+                Ok(vec![event])
+            }
+
+            Command::DeleteContact { contact_id } => {
+                let ctx = self.context.read().await;
+                let gossip = ctx.gossip.as_ref().ok_or_else(|| CommandError {
+                    command_type: command_type.clone(),
+                    message: "Networking not started".to_string(),
+                    code: "GOSSIP_NOT_AVAILABLE".to_string(),
+                })?;
+
+                gossip
+                    .contact_store
+                    .remove_by_id(&contact_id)
+                    .await
+                    .map_err(|e| CommandError {
+                        command_type: command_type.clone(),
+                        message: format!("Failed to delete contact: {}", e),
+                        code: "DELETE_CONTACT_FAILED".to_string(),
+                    })?;
+
+                let event = Event::ContactDeleted { contact_id };
+                self.broadcast_event(event.clone());
+                Ok(vec![event])
+            }
+
+            Command::LinkContact {
+                contact_id,
+                four_words,
+            } => {
+                let ctx = self.context.read().await;
+                let gossip = ctx.gossip.as_ref().ok_or_else(|| CommandError {
+                    command_type: command_type.clone(),
+                    message: "Networking not started".to_string(),
+                    code: "GOSSIP_NOT_AVAILABLE".to_string(),
+                })?;
+
+                gossip
+                    .contact_store
+                    .link_contact(&contact_id, &four_words)
+                    .await
+                    .map_err(|e| CommandError {
+                        command_type: command_type.clone(),
+                        message: format!("Failed to link contact: {}", e),
+                        code: "LINK_CONTACT_FAILED".to_string(),
+                    })?;
+
+                let event = Event::ContactLinked {
+                    contact_id,
+                    four_words,
+                };
+                self.broadcast_event(event.clone());
+                Ok(vec![event])
+            }
+
+            Command::SetFavouriteContact { four_words } => {
+                let ctx = self.context.read().await;
+                let gossip = ctx.gossip.as_ref().ok_or_else(|| CommandError {
+                    command_type: command_type.clone(),
+                    message: "Networking not started".to_string(),
+                    code: "GOSSIP_NOT_AVAILABLE".to_string(),
+                })?;
+
+                // Get the contact by four_words, update favourite, save
+                let mut contact =
+                    gossip
+                        .contact_store
+                        .get(&four_words)
+                        .await
+                        .ok_or_else(|| CommandError {
+                            command_type: command_type.clone(),
+                            message: format!("Contact not found: {}", four_words),
+                            code: "CONTACT_NOT_FOUND".to_string(),
+                        })?;
+
+                contact.is_favourite = true;
+                gossip.contact_store.update(contact).await.map_err(|e| {
+                    CommandError {
+                        command_type: command_type.clone(),
+                        message: format!("Failed to set favourite: {}", e),
+                        code: "SET_FAVOURITE_FAILED".to_string(),
+                    }
+                })?;
+
+                let event = Event::ContactFavouriteSet { four_words };
+                self.broadcast_event(event.clone());
+                Ok(vec![event])
+            }
+
+            Command::RemoveFavouriteContact { four_words } => {
+                let ctx = self.context.read().await;
+                let gossip = ctx.gossip.as_ref().ok_or_else(|| CommandError {
+                    command_type: command_type.clone(),
+                    message: "Networking not started".to_string(),
+                    code: "GOSSIP_NOT_AVAILABLE".to_string(),
+                })?;
+
+                // Get the contact by four_words, update favourite, save
+                let mut contact =
+                    gossip
+                        .contact_store
+                        .get(&four_words)
+                        .await
+                        .ok_or_else(|| CommandError {
+                            command_type: command_type.clone(),
+                            message: format!("Contact not found: {}", four_words),
+                            code: "CONTACT_NOT_FOUND".to_string(),
+                        })?;
+
+                contact.is_favourite = false;
+                gossip.contact_store.update(contact).await.map_err(|e| {
+                    CommandError {
+                        command_type: command_type.clone(),
+                        message: format!("Failed to remove favourite: {}", e),
+                        code: "REMOVE_FAVOURITE_FAILED".to_string(),
+                    }
+                })?;
+
+                let event = Event::ContactFavouriteRemoved { four_words };
+                self.broadcast_event(event.clone());
+                Ok(vec![event])
+            }
+
+            // Website Publishing Commands
+            Command::CreateWebsite {
+                entity_id,
+                html,
+                css,
+                js,
+                metadata,
+            } => {
+                // Validate input
+                if html.is_empty() {
+                    return Err(CommandError {
+                        command_type: command_type.clone(),
+                        message: "HTML content cannot be empty".to_string(),
+                        code: "INVALID_HTML".to_string(),
+                    });
+                }
+                if html.len() > 1024 * 1024 {
+                    return Err(CommandError {
+                        command_type: command_type.clone(),
+                        message: "HTML content too large (max 1MB)".to_string(),
+                        code: "HTML_TOO_LARGE".to_string(),
+                    });
+                }
+
+                let ctx = self.context.read().await;
+
+                // Create content hash using Blake3
+                let mut content = html.clone();
+                if let Some(ref css_content) = css {
+                    content.push_str(css_content);
+                }
+                if let Some(ref js_content) = js {
+                    content.push_str(js_content);
+                }
+
+                let hash = blake3::hash(content.as_bytes());
+                let hash_hex = hash.to_hex().to_string();
+                let published_at = chrono::Utc::now().timestamp();
+                let size_bytes = content.len();
+
+                // Create CRDT document for website
+                let doc = yrs::Doc::new();
+                let root = doc.get_or_insert_map("website");
+                {
+                    let mut txn = doc.transact_mut();
+                    root.insert(&mut txn, "entity_id", entity_id.clone());
+                    root.insert(&mut txn, "html", html);
+                    root.insert(&mut txn, "css", css.unwrap_or_default());
+                    root.insert(&mut txn, "js", js.unwrap_or_default());
+                    root.insert(&mut txn, "hash", hash_hex.clone());
+                    root.insert(&mut txn, "published_at", published_at);
+                    root.insert(&mut txn, "size_bytes", size_bytes as i64);
+                    if let Some(meta) = metadata {
+                        root.insert(&mut txn, "metadata", meta);
+                    }
+                }
+
+                // Save to CRDT manager
+                ctx.crdt_manager
+                    .save_document(
+                        &format!("website:{}", entity_id),
+                        "website",
+                        &entity_id,
+                        &doc,
+                    )
+                    .await
+                    .map_err(|e| CommandError {
+                        command_type: command_type.clone(),
+                        message: format!("Failed to save website: {}", e),
+                        code: "WEBSITE_SAVE_FAILED".to_string(),
+                    })?;
+
+                let event = Event::WebsiteCreated {
+                    entity_id,
+                    website_root_hash: hash_hex,
+                    published_at,
+                    size_bytes,
+                };
+                self.broadcast_event(event.clone());
+                Ok(vec![event])
+            }
+
+            Command::UpdateWebsite {
+                entity_id,
+                html,
+                css,
+                js,
+                metadata: _,
+            } => {
+                let ctx = self.context.read().await;
+
+                // Load existing website document
+                let doc = ctx
+                    .crdt_manager
+                    .load_document(&format!("website:{}", entity_id))
+                    .await
+                    .map_err(|e| CommandError {
+                        command_type: command_type.clone(),
+                        message: format!("Website not found: {}", e),
+                        code: "WEBSITE_NOT_FOUND".to_string(),
+                    })?;
+
+                let root = doc.get_or_insert_map("website");
+                {
+                    let mut txn = doc.transact_mut();
+                    if let Some(ref h) = html {
+                        root.insert(&mut txn, "html", h.clone());
+                    }
+                    if let Some(ref c) = css {
+                        root.insert(&mut txn, "css", c.clone());
+                    }
+                    if let Some(ref j) = js {
+                        root.insert(&mut txn, "js", j.clone());
+                    }
+                }
+
+                // Recalculate hash
+                let txn = doc.transact();
+                let current_html = match root.get(&txn, "html") {
+                    Some(yrs::Out::Any(yrs::Any::String(s))) => s.to_string(),
+                    _ => String::new(),
+                };
+                let current_css = match root.get(&txn, "css") {
+                    Some(yrs::Out::Any(yrs::Any::String(s))) => s.to_string(),
+                    _ => String::new(),
+                };
+                let current_js = match root.get(&txn, "js") {
+                    Some(yrs::Out::Any(yrs::Any::String(s))) => s.to_string(),
+                    _ => String::new(),
+                };
+                drop(txn);
+
+                let mut content = current_html;
+                content.push_str(&current_css);
+                content.push_str(&current_js);
+
+                let hash = blake3::hash(content.as_bytes());
+                let hash_hex = hash.to_hex().to_string();
+                let updated_at = chrono::Utc::now().timestamp();
+                let size_bytes = content.len();
+
+                // Update hash and timestamp
+                {
+                    let mut txn = doc.transact_mut();
+                    root.insert(&mut txn, "hash", hash_hex.clone());
+                    root.insert(&mut txn, "updated_at", updated_at);
+                    root.insert(&mut txn, "size_bytes", size_bytes as i64);
+                }
+
+                // Save updated document
+                ctx.crdt_manager
+                    .save_document(
+                        &format!("website:{}", entity_id),
+                        "website",
+                        &entity_id,
+                        &doc,
+                    )
+                    .await
+                    .map_err(|e| CommandError {
+                        command_type: command_type.clone(),
+                        message: format!("Failed to update website: {}", e),
+                        code: "WEBSITE_UPDATE_FAILED".to_string(),
+                    })?;
+
+                let event = Event::WebsiteUpdated {
+                    entity_id,
+                    website_root_hash: hash_hex,
+                    updated_at,
+                    size_bytes,
+                };
+                self.broadcast_event(event.clone());
+                Ok(vec![event])
+            }
+
+            Command::DeleteWebsite { entity_id } => {
+                let ctx = self.context.read().await;
+
+                // Delete website document
+                ctx.crdt_manager
+                    .delete_document(&format!("website:{}", entity_id))
+                    .await
+                    .map_err(|e| CommandError {
+                        command_type: command_type.clone(),
+                        message: format!("Failed to delete website: {}", e),
+                        code: "WEBSITE_DELETE_FAILED".to_string(),
+                    })?;
+
+                let event = Event::WebsiteDeleted { entity_id };
                 self.broadcast_event(event.clone());
                 Ok(vec![event])
             }
@@ -1678,10 +2202,29 @@ impl CommunitasApp {
                 ))
             }
 
-            Query::ListKanbanBoards { entity_id: _ } => {
-                // KanbanService doesn't have list_boards yet - return empty list
-                // TODO: Implement list_boards in KanbanService
-                Ok(QueryResponse::KanbanBoardList(vec![]))
+            Query::ListKanbanBoards { entity_id } => {
+                let ctx = self.context.read().await;
+                let boards = ctx
+                    .kanban_service
+                    .list_boards(&entity_id)
+                    .map_err(|e| QueryError {
+                        query_type: query_type.clone(),
+                        message: format!("{}", e),
+                        code: "LIST_BOARDS_FAILED".to_string(),
+                    })?;
+
+                let board_responses: Vec<crate::command::KanbanBoardResponse> = boards
+                    .into_iter()
+                    .map(|board| crate::command::KanbanBoardResponse {
+                        id: board.id,
+                        entity_id: board.project_id,
+                        name: board.name,
+                        description: board.description,
+                        column_count: 0, // Column count requires additional lookup
+                    })
+                    .collect();
+
+                Ok(QueryResponse::KanbanBoardList(board_responses))
             }
 
             Query::GetKanbanCard { board_id, card_id } => {
@@ -1705,6 +2248,79 @@ impl CommunitasApp {
                         position: card.position,
                     },
                 ))
+            }
+
+            Query::ListKanbanCards {
+                board_id,
+                column_id,
+                state,
+                assignee_id,
+                tag_id,
+            } => {
+                let ctx = self.context.read().await;
+
+                // If column_id is specified, get cards from that column only
+                // Otherwise, get all cards from all columns
+                let mut all_cards = Vec::new();
+
+                if let Some(col_id) = &column_id {
+                    // Get cards from specific column
+                    let cards = ctx
+                        .kanban_service
+                        .list_cards_in_column(&board_id, col_id)
+                        .map_err(|e| QueryError {
+                            query_type: query_type.clone(),
+                            message: format!("{}", e),
+                            code: "LIST_CARDS_FAILED".to_string(),
+                        })?;
+                    all_cards.extend(cards);
+                } else {
+                    // Get all columns and collect all cards
+                    let columns = ctx
+                        .kanban_service
+                        .list_columns(&board_id)
+                        .map_err(|e| QueryError {
+                            query_type: query_type.clone(),
+                            message: format!("{}", e),
+                            code: "LIST_COLUMNS_FAILED".to_string(),
+                        })?;
+
+                    for column in columns {
+                        if let Ok(cards) = ctx
+                            .kanban_service
+                            .list_cards_in_column(&board_id, &column.id)
+                        {
+                            all_cards.extend(cards);
+                        }
+                    }
+                }
+
+                // Apply optional filters
+                if let Some(state_filter) = &state {
+                    all_cards.retain(|card| format!("{:?}", card.state) == *state_filter);
+                }
+
+                if let Some(assignee) = &assignee_id {
+                    all_cards.retain(|card| card.assignee_ids.contains(assignee));
+                }
+
+                if let Some(tag) = &tag_id {
+                    all_cards.retain(|card| card.tag_ids.contains(tag));
+                }
+
+                let card_responses: Vec<crate::command::KanbanCardResponse> = all_cards
+                    .into_iter()
+                    .map(|card| crate::command::KanbanCardResponse {
+                        id: card.id,
+                        column_id: card.column_id,
+                        title: card.title,
+                        description: Some(card.description),
+                        assignee: card.assignee_ids.first().cloned(),
+                        position: card.position,
+                    })
+                    .collect();
+
+                Ok(QueryResponse::KanbanCards(card_responses))
             }
 
             // ================================================================
@@ -1739,6 +2355,196 @@ impl CommunitasApp {
                 // WebRTC service doesn't expose get_call_participants yet
                 // TODO: Implement participants query in CommunitasWebRtcService
                 Ok(QueryResponse::CallParticipants(vec![]))
+            }
+
+            // ================================================================
+            // Contact Queries
+            // ================================================================
+            Query::GetContact { contact_id } => {
+                let ctx = self.context.read().await;
+                let gossip = ctx.gossip.as_ref().ok_or_else(|| QueryError {
+                    query_type: query_type.clone(),
+                    message: "Networking not started".to_string(),
+                    code: "GOSSIP_NOT_AVAILABLE".to_string(),
+                })?;
+
+                // Try to get by id
+                let contact = gossip
+                    .contact_store
+                    .get_by_id(&contact_id)
+                    .await
+                    .ok_or_else(|| QueryError {
+                        query_type: query_type.clone(),
+                        message: format!("Contact not found: {}", contact_id),
+                        code: "CONTACT_NOT_FOUND".to_string(),
+                    })?;
+
+                Ok(QueryResponse::Contact(ContactResponse {
+                    id: contact.id.clone(),
+                    display_name: contact.effective_name(),
+                    four_words: contact.four_words.clone(),
+                    is_favourite: contact.is_favourite,
+                    is_online: false, // TODO: Check presence
+                    created_at: contact.created_at as i64,
+                    last_seen: contact.last_online_at.map(|t| t as i64),
+                }))
+            }
+
+            Query::ListContacts => {
+                let ctx = self.context.read().await;
+                let gossip = ctx.gossip.as_ref().ok_or_else(|| QueryError {
+                    query_type: query_type.clone(),
+                    message: "Networking not started".to_string(),
+                    code: "GOSSIP_NOT_AVAILABLE".to_string(),
+                })?;
+
+                let contacts = gossip.contact_store.all().await;
+
+                let responses: Vec<ContactResponse> = contacts
+                    .into_iter()
+                    .map(|contact| ContactResponse {
+                        id: contact.id.clone(),
+                        display_name: contact.effective_name(),
+                        four_words: contact.four_words.clone(),
+                        is_favourite: contact.is_favourite,
+                        is_online: false, // TODO: Check presence
+                        created_at: contact.created_at as i64,
+                        last_seen: contact.last_online_at.map(|t| t as i64),
+                    })
+                    .collect();
+
+                Ok(QueryResponse::ContactList(responses))
+            }
+
+            Query::ListFavouriteContacts => {
+                let ctx = self.context.read().await;
+                let gossip = ctx.gossip.as_ref().ok_or_else(|| QueryError {
+                    query_type: query_type.clone(),
+                    message: "Networking not started".to_string(),
+                    code: "GOSSIP_NOT_AVAILABLE".to_string(),
+                })?;
+
+                let favourites = gossip.contact_store.favourites().await;
+
+                let responses: Vec<ContactResponse> = favourites
+                    .into_iter()
+                    .map(|contact| ContactResponse {
+                        id: contact.id.clone(),
+                        display_name: contact.effective_name(),
+                        four_words: contact.four_words.clone(),
+                        is_favourite: true,
+                        is_online: false, // TODO: Check presence
+                        created_at: contact.created_at as i64,
+                        last_seen: contact.last_online_at.map(|t| t as i64),
+                    })
+                    .collect();
+
+                Ok(QueryResponse::ContactList(responses))
+            }
+
+            Query::SearchContacts { query } => {
+                let ctx = self.context.read().await;
+                let gossip = ctx.gossip.as_ref().ok_or_else(|| QueryError {
+                    query_type: query_type.clone(),
+                    message: "Networking not started".to_string(),
+                    code: "GOSSIP_NOT_AVAILABLE".to_string(),
+                })?;
+
+                // Simple search - filter all contacts by display name or four_words
+                let all_contacts = gossip.contact_store.all().await;
+                let query_lower = query.to_lowercase();
+
+                let results: Vec<ContactResponse> = all_contacts
+                    .into_iter()
+                    .filter(|c| {
+                        c.effective_name().to_lowercase().contains(&query_lower)
+                            || c.four_words
+                                .as_ref()
+                                .is_some_and(|fw| fw.to_lowercase().contains(&query_lower))
+                    })
+                    .map(|contact| ContactResponse {
+                        id: contact.id.clone(),
+                        display_name: contact.effective_name(),
+                        four_words: contact.four_words.clone(),
+                        is_favourite: contact.is_favourite,
+                        is_online: false, // TODO: Check presence
+                        created_at: contact.created_at as i64,
+                        last_seen: contact.last_online_at.map(|t| t as i64),
+                    })
+                    .collect();
+
+                Ok(QueryResponse::ContactList(results))
+            }
+
+            Query::GetWebsite { entity_id } => {
+                let ctx = self.context.read().await;
+
+                // Construct the document ID for this website
+                let doc_id = format!("website:{entity_id}");
+
+                // Load the website CRDT document
+                let doc = ctx.crdt_manager.load_document(&doc_id).await.map_err(|e| {
+                    QueryError {
+                        query_type: query_type.clone(),
+                        message: format!("Website not found: {e}"),
+                        code: "WEBSITE_NOT_FOUND".to_string(),
+                    }
+                })?;
+
+                // Extract website content from the CRDT document
+                // Note: CreateWebsite stores in "website" map, not "root"
+                let txn = doc.transact();
+                let root = txn.get_map("website").ok_or_else(|| QueryError {
+                    query_type: query_type.clone(),
+                    message: "Invalid website document structure".to_string(),
+                    code: "INVALID_STRUCTURE".to_string(),
+                })?;
+
+                let html = match root.get(&txn, "html") {
+                    Some(yrs::Out::Any(yrs::Any::String(s))) => s.to_string(),
+                    _ => String::new(),
+                };
+                let css = match root.get(&txn, "css") {
+                    Some(yrs::Out::Any(yrs::Any::String(s))) => s.to_string(),
+                    _ => String::new(),
+                };
+                let js = match root.get(&txn, "js") {
+                    Some(yrs::Out::Any(yrs::Any::String(s))) => s.to_string(),
+                    _ => String::new(),
+                };
+                // Note: CreateWebsite stores as "hash", not "website_root_hash"
+                let website_root_hash = match root.get(&txn, "hash") {
+                    Some(yrs::Out::Any(yrs::Any::String(s))) => s.to_string(),
+                    _ => String::new(),
+                };
+                let published_at = root
+                    .get(&txn, "published_at")
+                    .and_then(|v| match v {
+                        yrs::Out::Any(yrs::Any::BigInt(n)) => Some(n),
+                        _ => None,
+                    })
+                    .unwrap_or(0);
+                let size_bytes = root
+                    .get(&txn, "size_bytes")
+                    .and_then(|v| match v {
+                        yrs::Out::Any(yrs::Any::BigInt(n)) => Some(n as usize),
+                        _ => None,
+                    })
+                    .unwrap_or(0);
+
+                // Generate URL from entity_id
+                let url = format!("communitas://{entity_id}/website");
+
+                Ok(QueryResponse::Website(WebsiteResponse {
+                    entity_id,
+                    html,
+                    css,
+                    js,
+                    website_root_hash,
+                    published_at,
+                    size_bytes,
+                    url,
+                }))
             }
         }
     }

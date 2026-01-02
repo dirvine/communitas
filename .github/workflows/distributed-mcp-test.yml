@@ -1,0 +1,291 @@
+name: Distributed MCP Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      test_suite:
+        description: 'Test suite to run'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - identity
+          - entities
+          - members
+          - messaging
+          - files
+          - kanban
+          - contacts
+          - networking
+          - websites
+          - invites
+          - sync
+      skip_deploy:
+        description: 'Skip VPS deployment (use existing)'
+        required: false
+        default: false
+        type: boolean
+  push:
+    tags:
+      - 'v*'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+
+jobs:
+  build:
+    name: Build Binaries
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "distributed-tests"
+
+      - name: Build communitas-mcp
+        run: cargo build --release -p communitas-mcp
+
+      - name: Build test orchestrator
+        run: cargo build --release -p distributed-test-orchestrator
+
+      - name: Upload MCP binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: communitas-mcp
+          path: target/release/communitas-mcp
+          retention-days: 1
+
+      - name: Upload orchestrator binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: distributed-test-orchestrator
+          path: target/release/distributed-test-orchestrator
+          retention-days: 1
+
+  deploy-vps:
+    name: Deploy to VPS
+    needs: build
+    if: ${{ !inputs.skip_deploy }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node:
+          - name: saorsa-4
+            ip: 206.189.7.117
+            region: Amsterdam
+          - name: saorsa-5
+            ip: 144.126.230.161
+            region: London
+          - name: saorsa-6
+            ip: 65.21.157.229
+            region: Helsinki
+    steps:
+      - name: Download MCP binary
+        uses: actions/download-artifact@v4
+        with:
+          name: communitas-mcp
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VPS_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ matrix.node.ip }} >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Deploy to ${{ matrix.node.name }}
+        run: |
+          echo "Deploying to ${{ matrix.node.name }} (${{ matrix.node.region }})..."
+
+          # Create remote directory
+          ssh -o StrictHostKeyChecking=no root@${{ matrix.node.ip }} \
+            "mkdir -p /opt/communitas"
+
+          # Copy binary
+          scp -o StrictHostKeyChecking=no communitas-mcp \
+            root@${{ matrix.node.ip }}:/opt/communitas/
+
+          # Restart service
+          ssh -o StrictHostKeyChecking=no root@${{ matrix.node.ip }} << 'EOF'
+            pkill -f communitas-mcp || true
+            sleep 2
+            chmod +x /opt/communitas/communitas-mcp
+            nohup /opt/communitas/communitas-mcp \
+              --http --demo --listen 0.0.0.0:3040 \
+              > /var/log/communitas-mcp.log 2>&1 &
+            sleep 5
+          EOF
+
+      - name: Health check ${{ matrix.node.name }}
+        run: |
+          for i in {1..10}; do
+            if curl -sf --connect-timeout 5 http://${{ matrix.node.ip }}:3040/health; then
+              echo "Health check passed"
+              exit 0
+            fi
+            echo "Attempt $i failed, retrying..."
+            sleep 3
+          done
+          echo "Health check failed after 10 attempts"
+          exit 1
+
+  run-tests:
+    name: Run Distributed Tests
+    needs: [build, deploy-vps]
+    if: always() && needs.build.result == 'success'
+    runs-on: ubuntu-latest
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download orchestrator
+        uses: actions/download-artifact@v4
+        with:
+          name: distributed-test-orchestrator
+
+      - name: Download MCP binary
+        uses: actions/download-artifact@v4
+        with:
+          name: communitas-mcp
+
+      - name: Make binaries executable
+        run: |
+          chmod +x distributed-test-orchestrator
+          chmod +x communitas-mcp
+
+      - name: Start local MCP server
+        run: |
+          ./communitas-mcp --http --demo --listen 127.0.0.1:3041 &
+          echo "LOCAL_MCP_PID=$!" >> $GITHUB_ENV
+
+          # Wait for startup
+          for i in {1..30}; do
+            if curl -sf http://127.0.0.1:3041/health > /dev/null 2>&1; then
+              echo "Local MCP server ready"
+              break
+            fi
+            sleep 1
+          done
+
+      - name: Verify all nodes healthy
+        run: |
+          echo "Checking node health..."
+          for addr in "206.189.7.117:3040" "144.126.230.161:3040" "65.21.157.229:3040" "127.0.0.1:3041"; do
+            echo -n "  $addr: "
+            curl -sf --connect-timeout 10 "http://$addr/health" && echo "OK" || echo "FAILED"
+          done
+
+      - name: Run test suite
+        run: |
+          mkdir -p test-reports
+          SUITE="${{ inputs.test_suite || 'all' }}"
+
+          # Map suite to config file
+          case "$SUITE" in
+            all)       CONFIG="tests/distributed/scenarios/all_tools.yaml" ;;
+            identity)  CONFIG="tests/distributed/scenarios/phase_01_identity.yaml" ;;
+            entities)  CONFIG="tests/distributed/scenarios/phase_02_entities.yaml" ;;
+            members)   CONFIG="tests/distributed/scenarios/phase_03_members.yaml" ;;
+            messaging) CONFIG="tests/distributed/scenarios/phase_04_messaging.yaml" ;;
+            files)     CONFIG="tests/distributed/scenarios/phase_05_files.yaml" ;;
+            kanban)    CONFIG="tests/distributed/scenarios/phase_06_kanban.yaml" ;;
+            contacts)  CONFIG="tests/distributed/scenarios/phase_07_contacts.yaml" ;;
+            networking) CONFIG="tests/distributed/scenarios/phase_08_networking.yaml" ;;
+            websites)  CONFIG="tests/distributed/scenarios/phase_09_websites.yaml" ;;
+            invites)   CONFIG="tests/distributed/scenarios/phase_10_invites.yaml" ;;
+            sync)      CONFIG="tests/distributed/scenarios/phase_11_sync.yaml" ;;
+          esac
+
+          ./distributed-test-orchestrator \
+            --config "$CONFIG" \
+            --nodes "alice:206.189.7.117:3040,bob:144.126.230.161:3040,charlie:65.21.157.229:3040,dave:127.0.0.1:3041" \
+            --output test-reports \
+            --anthropic-key "$ANTHROPIC_API_KEY" \
+            --model "claude-3-haiku-20240307"
+
+      - name: Upload test reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-reports-${{ inputs.test_suite || 'all' }}
+          path: test-reports/
+          retention-days: 30
+
+      - name: Cleanup local MCP
+        if: always()
+        run: |
+          kill $LOCAL_MCP_PID 2>/dev/null || true
+
+  cleanup:
+    name: Cleanup VPS
+    needs: run-tests
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VPS_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+
+      - name: Stop MCP on VPS nodes
+        run: |
+          for ip in 206.189.7.117 144.126.230.161 65.21.157.229; do
+            echo "Stopping MCP on $ip..."
+            ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 root@$ip \
+              "pkill -f communitas-mcp || true" 2>/dev/null || echo "Could not connect to $ip"
+          done
+
+  report:
+    name: Generate Summary
+    needs: [run-tests, cleanup]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download test reports
+        uses: actions/download-artifact@v4
+        with:
+          name: test-reports-${{ inputs.test_suite || 'all' }}
+          path: reports/
+        continue-on-error: true
+
+      - name: Generate summary
+        run: |
+          echo "## Distributed MCP Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [[ -f reports/report.json ]]; then
+            # Parse JSON report
+            PASSED=$(jq '.summary.passed // 0' reports/report.json)
+            FAILED=$(jq '.summary.failed // 0' reports/report.json)
+            TOTAL=$(jq '.summary.total // 0' reports/report.json)
+
+            echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+            echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+            echo "| Total Tests | $TOTAL |" >> $GITHUB_STEP_SUMMARY
+            echo "| Passed | $PASSED |" >> $GITHUB_STEP_SUMMARY
+            echo "| Failed | $FAILED |" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+
+            if [[ "$FAILED" -gt 0 ]]; then
+              echo "### Failed Tests" >> $GITHUB_STEP_SUMMARY
+              jq -r '.results[] | select(.status == "FAIL") | "- \(.id): \(.name)"' reports/report.json >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "No test report found. Tests may have failed to run." >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Infrastructure" >> $GITHUB_STEP_SUMMARY
+          echo "- Alice: saorsa-4 (206.189.7.117) - DigitalOcean Amsterdam" >> $GITHUB_STEP_SUMMARY
+          echo "- Bob: saorsa-5 (144.126.230.161) - DigitalOcean London" >> $GITHUB_STEP_SUMMARY
+          echo "- Charlie: saorsa-6 (65.21.157.229) - Hetzner Helsinki" >> $GITHUB_STEP_SUMMARY
+          echo "- Dave: localhost (127.0.0.1) - GitHub Runner" >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,191 @@
+# Phase 7: Contacts
+# Tests contact management
+
+name: "Phase 7: Contacts"
+description: "Tests contact creation, updates, deletion, linking, favourites, and search"
+tools_covered:
+  - create_contact
+  - get_contact
+  - update_contact
+  - delete_contact
+  - list_contacts
+  - link_contact
+  - unlink_contact
+  - add_to_favourites
+  - remove_from_favourites
+  - search_contacts
+
+test_cases:
+  # Create contacts
+  - id: CON-001
+    name: "Alice creates contact for external partner"
+    actors: [alice]
+    steps:
+      - tool: create_contact
+        params:
+          display_name: "John External"
+          email: "john@external.com"
+          phone: "+1-555-0100"
+          notes: "External partner contact"
+        expect:
+          status: success
+        store:
+          contact1_id: id
+
+  - id: CON-002
+    name: "Bob creates contact"
+    actors: [bob]
+    steps:
+      - tool: create_contact
+        params:
+          display_name: "Jane Partner"
+          email: "jane@partner.org"
+          company: "Partner Inc"
+        expect:
+          status: success
+        store:
+          contact2_id: id
+
+  # Get contact details
+  - id: CON-003
+    name: "Get contact details"
+    actors: [alice]
+    steps:
+      - tool: get_contact
+        params:
+          contact_id: "${contact1_id}"
+        expect:
+          status: success
+          fields:
+            display_name: "John External"
+            email: "john@external.com"
+
+  # Update contact
+  - id: CON-004
+    name: "Update contact phone"
+    actors: [alice]
+    steps:
+      - tool: update_contact
+        params:
+          contact_id: "${contact1_id}"
+          phone: "+1-555-0101"
+          notes: "Updated phone number"
+        expect:
+          status: success
+
+  # List contacts
+  - id: CON-005
+    name: "List all contacts"
+    actors: [alice]
+    steps:
+      - tool: list_contacts
+        expect:
+          status: success
+          contains:
+            - display_name: "John External"
+
+  # Add to favourites
+  - id: CON-006
+    name: "Add contact to favourites"
+    actors: [alice]
+    steps:
+      - tool: add_to_favourites
+        params:
+          contact_id: "${contact1_id}"
+        expect:
+          status: success
+
+  # Search contacts
+  - id: CON-007
+    name: "Search contacts by name"
+    actors: [alice]
+    steps:
+      - tool: search_contacts
+        params:
+          query: "John"
+        expect:
+          status: success
+          contains:
+            - display_name: "John External"
+
+  # Search by email
+  - id: CON-008
+    name: "Search contacts by email"
+    actors: [alice]
+    steps:
+      - tool: search_contacts
+        params:
+          query: "external.com"
+        expect:
+          status: success
+          contains:
+            - email: "john@external.com"
+
+  # Link contact to entity
+  - id: CON-009
+    name: "Link contact to organisation"
+    actors: [alice]
+    steps:
+      - tool: link_contact
+        params:
+          contact_id: "${contact1_id}"
+          entity_id: "${org_id}"
+        expect:
+          status: success
+
+  # Remove from favourites
+  - id: CON-010
+    name: "Remove from favourites"
+    actors: [alice]
+    steps:
+      - tool: remove_from_favourites
+        params:
+          contact_id: "${contact1_id}"
+        expect:
+          status: success
+
+  # Unlink contact
+  - id: CON-011
+    name: "Unlink contact from entity"
+    actors: [alice]
+    steps:
+      - tool: unlink_contact
+        params:
+          contact_id: "${contact1_id}"
+          entity_id: "${org_id}"
+        expect:
+          status: success
+
+  # Verify contacts sync across nodes
+  - id: CON-012
+    name: "Verify contacts visible to team"
+    actors: [bob, charlie]
+    parallel: true
+    wait_ms: 3000
+    steps:
+      - tool: list_contacts
+        expect:
+          status: success
+
+  # Delete contact
+  - id: CON-013
+    name: "Delete contact"
+    actors: [bob]
+    steps:
+      - tool: delete_contact
+        params:
+          contact_id: "${contact2_id}"
+        expect:
+          status: success
+
+  # Verify deletion
+  - id: CON-014
+    name: "Verify contact deleted"
+    actors: [bob]
+    steps:
+      - tool: get_contact
+        params:
+          contact_id: "${contact2_id}"
+        expect:
+          status: error
+          error_contains: "not found"

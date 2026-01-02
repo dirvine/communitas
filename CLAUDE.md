@@ -73,13 +73,16 @@ cargo test -p communitas-core
 cargo test -p communitas-kanban
 ```
 
-### Bridge Server (Testing)
+### MCP Server (AI Agent Interface)
 ```bash
-# Start HTTP bridge for testing (useful for debugging)
-cargo run -p communitas-bridge
+# Start MCP server with stdio transport (default)
+cargo run -p communitas-mcp -- --demo
 
-# Bridge provides HTTP/REST endpoints at http://localhost:3030
-# See docs/api/bridge-api.md for details
+# Start MCP server with HTTPS transport (ML-DSA-65 raw public keys)
+cargo run -p communitas-mcp -- --http --tls --demo --no-client-auth
+
+# MCP provides JSON-RPC 2.0 endpoints for AI agents
+# See docs/api/mcp-api.md for details
 ```
 
 ## Workspace Crates
@@ -89,9 +92,8 @@ cargo run -p communitas-bridge
 | `communitas-core` | Core business logic, P2P, cryptography |
 | `communitas-bindings` | UniFFI Swift bindings |
 | `communitas-kanban` | CRDT-based Kanban system |
-| `communitas-bridge` | HTTP REST bridge for testing |
+| `communitas-mcp` | MCP server for AI agents (stdio + HTTPS) |
 | `communitas-headless` | Bootstrap/seed nodes |
-| `communitas-tui` | Terminal UI (development tool) |
 | `communitas-p2p-test` | P2P testing utilities |
 
 ## Architecture Insights

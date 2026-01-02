@@ -105,6 +105,9 @@ VULTR_API_KEY="$VULTR_API_TOKEN" vultr-cli instance list
 
 ## Firewall Configuration
 
+> **IMPORTANT:** All firewalls must allow UDP ephemeral ports (49152-65535) for dynamic QUIC connections.
+> Services using dynamic port allocation (port 0) will bind to ports in this range.
+
 ### DigitalOcean Firewall (saorsa-p2p-firewall)
 Applied to all nodes tagged with `saorsa`:
 
@@ -112,9 +115,11 @@ Applied to all nodes tagged with `saorsa`:
 - TCP 22 (SSH)
 - TCP 80 (HTTP)
 - TCP 443 (HTTPS)
-- UDP 9000 (ant-quic)
-- UDP 10000 (saorsa-node)
-- UDP 11000 (communitas)
+- TCP 3030 (Bridge HTTP API)
+- UDP 9000 (ant-quic fixed port)
+- UDP 10000 (saorsa-node fixed port)
+- UDP 11000 (communitas-headless fixed port)
+- UDP 49152-65535 (Ephemeral ports for dynamic QUIC)
 
 **Outbound Rules:**
 - All TCP
@@ -128,9 +133,23 @@ Applied to all saorsa servers:
 - TCP 22 (SSH)
 - TCP 80 (HTTP)
 - TCP 443 (HTTPS)
-- UDP 9000 (ant-quic)
-- UDP 10000 (saorsa-node)
-- UDP 11000 (communitas)
+- UDP 9000 (ant-quic fixed port)
+- UDP 10000 (saorsa-node fixed port)
+- UDP 11000 (communitas-headless fixed port)
+- UDP 49152-65535 (Ephemeral ports for dynamic QUIC)
+- ICMP
+
+### Vultr Firewall (saorsa-p2p-firewall)
+Applied to saorsa instances:
+
+**Inbound Rules:**
+- TCP 22 (SSH)
+- TCP 80 (HTTP)
+- TCP 443 (HTTPS)
+- UDP 9000 (ant-quic fixed port)
+- UDP 10000 (saorsa-node fixed port)
+- UDP 11000 (communitas-headless fixed port)
+- UDP 49152-65535 (Ephemeral ports for dynamic QUIC)
 - ICMP
 
 ## SSH Access
@@ -357,6 +376,36 @@ ssh root@saorsa-2.saorsalabs.com "systemctl restart ant-quic-bootstrap"
 1. Verify service is running: `systemctl status <service>`
 2. Check if port is listening: `ss -tulpn | grep <port>`
 3. Test from another node in the network
+
+### QUIC Connection Timeouts
+If QUIC connections timeout despite UDP connectivity working on known ports (9000, 11000):
+
+1. **Check ephemeral port firewall rules:** Services using dynamic ports (port 0) bind to ports 49152-65535
+   ```bash
+   # Verify with tcpdump
+   tcpdump -i eth0 -n 'udp port 55000-65535' -c 10
+   ```
+
+2. **Update cloud firewalls to allow ephemeral ports:**
+   ```bash
+   # DigitalOcean
+   doctl compute firewall update <ID> --inbound-rules "...protocol:udp,ports:49152-65535,address:0.0.0.0/0..."
+
+   # Hetzner
+   hcloud firewall add-rule <name> --direction in --protocol udp --port 49152-65535 --source-ips 0.0.0.0/0
+
+   # Vultr
+   vultr-cli firewall rule create <ID> --ip-type=v4 --protocol=udp --port=49152:65535 --subnet=0.0.0.0 --size=0
+   ```
+
+3. **Verify packets are flowing:**
+   ```bash
+   # On receiving node
+   tcpdump -i eth0 -n 'udp port <target-port>' -c 5
+
+   # While triggering connection from sending node
+   curl -X POST http://localhost:3030/api/network/connect -d '{"address": "target-ip:port"}'
+   ```
 
 ### High Latency
 1. Check node resource usage: `htop`

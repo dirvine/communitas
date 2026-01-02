@@ -13,10 +13,52 @@
   <title>Communitas</title>
   <link rel="manifest" href="manifest.json">
   <style>
+    /* Comprehensive CSS reset for Flutter web semantic layer */
+    /* Target all possible Flutter-generated elements */
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
+
+    /* Reset ALL link styles everywhere */
+    a, a:link, a:visited, a:hover, a:active,
+    [role="link"], [role="button"],
+    flt-semantics a, flt-semantics-host a,
+    flt-glass-pane a, flt-scene a {
+      color: inherit !important;
+      text-decoration: none !important;
+      -webkit-text-decoration: none !important;
+      background: transparent !important;
+    }
+
+    /* Target Flutter's semantic containers */
+    flt-glass-pane, flt-glass-pane *,
+    flt-semantics, flt-semantics *,
+    flt-semantics-host, flt-semantics-host *,
+    flt-scene, flt-scene *,
+    flt-scene-host, flt-scene-host * {
+      color: inherit !important;
+      text-decoration: none !important;
+      -webkit-text-decoration: none !important;
+    }
+
+    /* Ensure semantic placeholders don't show browser default styles */
+    flt-semantics-placeholder {
+      color: transparent !important;
+      text-decoration: none !important;
+    }
+
+    /* Force all text elements to not have link styling */
+    [flt-text], [data-semantics-role] {
+      color: inherit !important;
+      text-decoration: none !important;
+    }
+
     body {
       margin: 0;
       padding: 0;
       background-color: #1A241F;
+      /* Prevent any inherited link colors */
+      color: #F5F5DC;
     }
     .loading {
       display: flex;

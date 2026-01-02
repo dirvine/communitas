@@ -26,17 +26,5 @@
     <string>Microphone access for voice and video calls</string>
     <key>com.apple.security.screen-capture</key>
     <true/>
-
-    <!-- Sparkle Auto-Update Configuration -->
-    <key>SUFeedURL</key>
-    <string>https://github.com/saorsa-labs/communitas/releases/latest/download/appcast.xml</string>
-    <key>SUEnableAutomaticChecks</key>
-    <true/>
-    <key>SUAutomaticallyUpdate</key>
-    <true/>
-    <key>SUScheduledCheckInterval</key>
-    <integer>86400</integer>
-    <key>SUPublicEDKey</key>
-    <string></string>
 </dict>
 </plist>

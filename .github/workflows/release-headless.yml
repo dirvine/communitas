@@ -37,55 +37,10 @@ jobs:
         run: |
           if [[ $GITHUB_REF == refs/tags/* ]]; then
             VERSION=${GITHUB_REF#refs/tags/}
-          elif [[ "${{ github.event.inputs.version }}" != "" && "${{ github.event.inputs.version }}" != "latest" ]]; then
-            VERSION="${{ github.event.inputs.version }}"
           else
-            # Extract version from Cargo.toml
-            VERSION="v$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')"
+            VERSION="v$(node -p "require('./package.json').version")"
           fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-      - name: Delete existing draft releases for this version
-        if: env.ACT != 'true'
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const version = '${{ steps.get-version.outputs.version }}'
-            console.log(`Checking for existing releases with tag: ${version}`)
-
-            // List all releases (including drafts)
-            const releases = await github.rest.repos.listReleases({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              per_page: 100
-            })
-
-            // Find and delete any releases with matching tag
-            for (const release of releases.data) {
-              if (release.tag_name === version) {
-                console.log(`Deleting existing release: ${release.name} (ID: ${release.id}, draft: ${release.draft})`)
-                await github.rest.repos.deleteRelease({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  release_id: release.id
-                })
-                console.log(`Deleted release ${release.id}`)
-              }
-            }
-
-            // Also try to delete the tag if it exists (for clean slate)
-            try {
-              await github.rest.git.deleteRef({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                ref: `tags/${version}`
-              })
-              console.log(`Deleted existing tag: ${version}`)
-            } catch (e) {
-              // Tag may not exist or may have been created by the push that triggered this workflow
-              console.log(`Tag ${version} not deleted (may be the triggering tag): ${e.message}`)
-            }
 
       - name: Create release
         if: env.ACT != 'true'
@@ -97,29 +52,24 @@ jobs:
             const version = '${{ steps.get-version.outputs.version }}'
             const releaseBody = '## Headless Binaries Release\n\n' +
               '### Available Downloads\n' +
-              '- **Linux x86_64**: communitas-headless, communitas-tui, communitas-iced\n' +
-              '- **macOS Universal**: communitas-headless, communitas-tui, communitas-iced (universal binaries)\n' +
-              '- **Windows x86_64**: communitas-headless, communitas-tui\n\n' +
+              '- **Linux x86_64**: communitas-headless-x86_64-unknown-linux-gnu.tar.gz, communitas-tui-x86_64-unknown-linux-gnu.tar.gz\n' +
+              '- **macOS Universal**: communitas-headless-macos-universal.tar.gz, communitas-tui-macos-universal.tar.gz\n' +
+              '- **Windows x86_64**: communitas-headless-windows-x86_64.zip, communitas-tui-windows-x86_64.zip\n\n' +
               '### Binaries Included\n' +
               '- communitas-headless (headless P2P node with built-in auto-update)\n' +
-              '- communitas-tui (Terminal UI for testing backend features)\n' +
-              '- communitas-iced (Native GUI desktop application with self-update)\n\n' +
+              '- communitas-tui (Terminal UI for testing backend features)\n\n' +
               '### Installation\n' +
-              'Extract the archive and run the binaries directly. No additional dependencies required.\n\n' +
-              '### Auto-Update\n' +
-              '- All binaries include self-update capability\n' +
-              '- Swift/macOS app: appcast.xml included for Sparkle updates'
+              'Extract the archive and run the binaries directly. No additional dependencies required.'
 
             const { data } = await github.rest.repos.createRelease({
               owner: context.repo.owner,
               repo: context.repo.repo,
               tag_name: version,
-              name: 'Communitas ' + version,
+              name: 'Communitas Headless ' + version,
               body: releaseBody,
               draft: true,
               prerelease: false
             })
-            console.log(`Created release: ${data.name} (ID: ${data.id})`)
             return data.id
 
   build-linux:
@@ -150,15 +100,14 @@ jobs:
             target
           key: linux-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Build binaries (headless, TUI, and Iced)
+      - name: Build binaries (headless and TUI)
         run: |
-          COMMUNITAS_SKIP_TAURI_BUILD=1 cargo build --release --no-default-features --bin communitas-headless --bin communitas-tui --bin communitas-iced
+          COMMUNITAS_SKIP_TAURI_BUILD=1 cargo build --release --no-default-features --bin communitas-headless --bin communitas-tui
 
       - name: Strip binaries
         run: |
           strip target/release/communitas-headless || true
           strip target/release/communitas-tui || true
-          strip target/release/communitas-iced || true
 
       - name: Create archives (Linux target triple)
         run: |
@@ -167,19 +116,16 @@ jobs:
             communitas-headless
           tar -czf communitas-tui-x86_64-unknown-linux-gnu.tar.gz \
             communitas-tui
-          tar -czf communitas-iced-x86_64-unknown-linux-gnu.tar.gz \
-            communitas-iced
 
       - name: Upload to release (Linux)
         if: env.ACT != 'true'
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            target/release/communitas-headless-x86_64-unknown-linux-gnu.tar.gz
+            target/release/communitas-tui-x86_64-unknown-linux-gnu.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release upload "${{ needs.create-release.outputs.version }}" \
-            target/release/communitas-headless-x86_64-unknown-linux-gnu.tar.gz \
-            target/release/communitas-tui-x86_64-unknown-linux-gnu.tar.gz \
-            target/release/communitas-iced-x86_64-unknown-linux-gnu.tar.gz \
-            --clobber
 
   build-macos:
     permissions:
@@ -195,13 +141,13 @@ jobs:
         with:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
 
-      - name: Build x86_64 binaries (headless, TUI, and Iced)
+      - name: Build x86_64 binaries (headless and TUI)
         run: |
-          COMMUNITAS_SKIP_TAURI_BUILD=1 cargo build --release --no-default-features --target x86_64-apple-darwin --bin communitas-headless --bin communitas-tui --bin communitas-iced
+          COMMUNITAS_SKIP_TAURI_BUILD=1 cargo build --release --no-default-features --target x86_64-apple-darwin --bin communitas-headless --bin communitas-tui
 
-      - name: Build aarch64 binaries (headless, TUI, and Iced)
+      - name: Build aarch64 binaries (headless and TUI)
         run: |
-          COMMUNITAS_SKIP_TAURI_BUILD=1 cargo build --release --no-default-features --target aarch64-apple-darwin --bin communitas-headless --bin communitas-tui --bin communitas-iced
+          COMMUNITAS_SKIP_TAURI_BUILD=1 cargo build --release --no-default-features --target aarch64-apple-darwin --bin communitas-headless --bin communitas-tui
 
       - name: Create universal binaries
         run: |
@@ -209,7 +155,6 @@ jobs:
           mkdir -p universal-apple-darwin
           lipo x86_64-apple-darwin/release/communitas-headless aarch64-apple-darwin/release/communitas-headless -create -output universal-apple-darwin/communitas-headless
           lipo x86_64-apple-darwin/release/communitas-tui aarch64-apple-darwin/release/communitas-tui -create -output universal-apple-darwin/communitas-tui
-          lipo x86_64-apple-darwin/release/communitas-iced aarch64-apple-darwin/release/communitas-iced -create -output universal-apple-darwin/communitas-iced
 
       - name: Create archives
         run: |
@@ -218,19 +163,16 @@ jobs:
             communitas-headless
           tar -czf communitas-tui-macos-universal.tar.gz \
             communitas-tui
-          tar -czf communitas-iced-macos-universal.tar.gz \
-            communitas-iced
 
       - name: Upload to release
         if: env.ACT != 'true'
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            target/universal-apple-darwin/communitas-headless-macos-universal.tar.gz
+            target/universal-apple-darwin/communitas-tui-macos-universal.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release upload "${{ needs.create-release.outputs.version }}" \
-            target/universal-apple-darwin/communitas-headless-macos-universal.tar.gz \
-            target/universal-apple-darwin/communitas-tui-macos-universal.tar.gz \
-            target/universal-apple-darwin/communitas-iced-macos-universal.tar.gz \
-            --clobber
 
   build-windows:
     continue-on-error: true
@@ -258,118 +200,29 @@ jobs:
 
       - name: Upload to release
         if: env.ACT != 'true'
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            target/release/communitas-headless-windows-x86_64.zip
+            target/release/communitas-tui-windows-x86_64.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: bash
-        run: |
-          gh release upload "${{ needs.create-release.outputs.version }}" \
-            target/release/communitas-headless-windows-x86_64.zip \
-            target/release/communitas-tui-windows-x86_64.zip \
-            --clobber
 
-  # Note: build-desktop (Tauri) removed - project uses communitas-iced and communitas-swift instead
-  # Swift app builds are handled separately via communitas-swift workflows
-
-  generate-appcast:
+  build-desktop:
     permissions:
       contents: write
-    needs: [create-release, build-macos]
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Get DMG info from release
-        id: dmg-info
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          VERSION="${{ needs.create-release.outputs.version }}"
-
-          # Find the DMG asset in the release
-          DMG_ASSET=$(gh release view "$VERSION" --json assets -q '.assets[] | select(.name | endswith(".dmg")) | .name' 2>/dev/null || echo "")
-
-          if [ -z "$DMG_ASSET" ]; then
-            echo "No DMG found in release, skipping appcast generation"
-            echo "skip=true" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-
-          # Download DMG to get size
-          gh release download "$VERSION" --pattern "*.dmg" --output communitas.dmg
-          DMG_SIZE=$(stat -f%z communitas.dmg)
-          DMG_URL="https://github.com/${{ github.repository }}/releases/download/${VERSION}/${DMG_ASSET}"
-
-          echo "dmg_url=$DMG_URL" >> $GITHUB_OUTPUT
-          echo "dmg_size=$DMG_SIZE" >> $GITHUB_OUTPUT
-          echo "version=${VERSION#v}" >> $GITHUB_OUTPUT
-          echo "skip=false" >> $GITHUB_OUTPUT
-
-      - name: Generate EdDSA signature (if key available)
-        id: sign
-        if: steps.dmg-info.outputs.skip != 'true'
-        run: |
-          # Sparkle EdDSA signature (optional - requires SPARKLE_SIGNING_PRIVATE_KEY secret)
-          if [ -n "${{ secrets.SPARKLE_SIGNING_PRIVATE_KEY }}" ]; then
-            echo "${{ secrets.SPARKLE_SIGNING_PRIVATE_KEY }}" > /tmp/sparkle_key
-            # Use openssl to sign with Ed25519
-            openssl pkeyutl -sign -inkey /tmp/sparkle_key -rawin -in communitas.dmg | base64 > /tmp/signature
-            SIGNATURE=$(cat /tmp/signature)
-            rm /tmp/sparkle_key
-            echo "signature=$SIGNATURE" >> $GITHUB_OUTPUT
-          else
-            echo "No Sparkle signing key configured, using placeholder"
-            echo "signature=" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Generate appcast.xml
-        if: steps.dmg-info.outputs.skip != 'true'
-        run: |
-          VERSION="${{ steps.dmg-info.outputs.version }}"
-          DMG_URL="${{ steps.dmg-info.outputs.dmg_url }}"
-          DMG_SIZE="${{ steps.dmg-info.outputs.dmg_size }}"
-          SIGNATURE="${{ steps.sign.outputs.signature }}"
-
-          # Generate appcast.xml
-          cat << EOF > appcast.xml
-          <?xml version="1.0" encoding="utf-8"?>
-          <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
-            <channel>
-              <title>Communitas Updates</title>
-              <link>https://github.com/${{ github.repository }}/releases</link>
-              <description>Most recent changes with links to updates.</description>
-              <language>en</language>
-              <item>
-                <title>Version ${VERSION}</title>
-                <pubDate>$(date -u +"%a, %d %b %Y %H:%M:%S %z")</pubDate>
-                <sparkle:version>${VERSION}</sparkle:version>
-                <sparkle:shortVersionString>${VERSION}</sparkle:shortVersionString>
-                <description><![CDATA[
-          Release ${VERSION} of Communitas - local-first collaboration platform.
-                ]]></description>
-                <enclosure
-                  url="${DMG_URL}"
-                  sparkle:edSignature="${SIGNATURE}"
-                  length="${DMG_SIZE}"
-                  type="application/octet-stream" />
-              </item>
-            </channel>
-          </rss>
-          EOF
-
-          cat appcast.xml
-
-      - name: Upload appcast.xml to release
-        if: steps.dmg-info.outputs.skip != 'true'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release upload "${{ needs.create-release.outputs.version }}" appcast.xml --clobber
+    needs: create-release
+    uses: ./.github/workflows/tauri-release.yml
+    secrets: inherit
+    with:
+      release_id: ${{ needs.create-release.outputs.release_id }}
+      tag: ${{ needs.create-release.outputs.version }}
 
   publish-release:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     permissions:
       contents: write
-    needs: [create-release, build-linux, build-macos, generate-appcast]
+    needs: [create-release, build-linux, build-macos, build-desktop]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

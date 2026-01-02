@@ -1,7 +1,7 @@
 # Contributing to Communitas
 
 ## Setup
-1. Clone: `git clone https://github.com/saorsa-labs/communitas`
+1. Clone: `git clone https://github.com/dirvine/communitas`
 2. Rust: `rustup default stable`
 3. Node: `npx setup-node@latest --install-dirs`
 4. Deps: `npm ci && cargo build`

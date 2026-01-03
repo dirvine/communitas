@@ -30,6 +30,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
+use tokio::task::JoinHandle;
 use tracing::{debug, info, warn};
 
 // Phase 2 TDD: Import resilience modules
@@ -37,6 +38,10 @@ use crate::{ConnectivityWatchdog, ResourceLimits, WatchdogConfig};
 
 // Contact storage for endpoint tracking
 use super::contact_storage::{ContactRecord, ContactStore};
+
+/// Type alias for entity message handler callback
+/// Called with (entity_id, sender_peer_id, message_bytes)
+pub type EntityMessageHandler = Arc<dyn Fn(String, PeerId, Bytes) + Send + Sync>;
 
 /// Centralized context for the gossip overlay system
 ///
@@ -114,6 +119,14 @@ pub struct GossipContext {
 
     /// Contact store for endpoint tracking (per SPEC2.md contact management)
     pub contact_store: ContactStore,
+
+    /// Entity message handler callback for incoming gossip messages
+    /// Set via set_entity_message_handler() to receive entity messages
+    entity_message_handler: Arc<RwLock<Option<EntityMessageHandler>>>,
+
+    /// Background tasks for entity subscription receivers
+    /// entity_id → JoinHandle for the receiver task
+    entity_receiver_tasks: Arc<RwLock<HashMap<String, JoinHandle<()>>>>,
 }
 
 impl GossipContext {
@@ -374,6 +387,8 @@ impl GossipContext {
             watchdog,
             resource_limits,
             contact_store: ContactStore::new(),
+            entity_message_handler: Arc::new(RwLock::new(None)),
+            entity_receiver_tasks: Arc::new(RwLock::new(HashMap::new())),
         })
     }
 
@@ -471,6 +486,16 @@ impl GossipContext {
     /// Get list of favourite contacts
     pub async fn get_favourite_contacts(&self) -> Vec<String> {
         self.favourite_contacts.read().await.clone()
+    }
+
+    /// Set the handler for incoming entity messages
+    ///
+    /// The handler is called with (entity_id, sender_peer_id, message_bytes)
+    /// whenever a message is received on a subscribed entity topic.
+    pub async fn set_entity_message_handler(&self, handler: EntityMessageHandler) {
+        let mut guard = self.entity_message_handler.write().await;
+        *guard = Some(handler);
+        info!("Entity message handler registered");
     }
 
     /// Map a channel/project/org entity to an MLS group + topic

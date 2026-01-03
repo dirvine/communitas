@@ -51,7 +51,7 @@ pub use backup::BackupManager;
 pub use block_cache::{BlockCache, CacheStats};
 pub use boot::GossipBootSequence;
 pub use contact_storage::{ContactRecord, ContactResult, ContactStorageError, ContactStore};
-pub use context::GossipContext;
+pub use context::{EntityMessageHandler, GossipContext};
 pub use coordinator::CoordinatorClient;
 pub use discovery::{FoafDiscovery, IntroducerConfig, cold_start_discovery};
 pub use name_record::{NameRecord, NameRegistry};

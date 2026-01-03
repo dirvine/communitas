@@ -181,6 +181,7 @@ communitas-core/keystore/*
 test-data/
 p2p-test-data/
 mcp-test-data/
+bridge-data/
 
 # MCP
 .mcp.json

@@ -239,7 +239,7 @@ async fn test_custom_backoff_config() {
 #[test]
 fn test_retry_result_conversion() {
     let success: RetryResult<i32> = Ok(42);
-    assert_eq!(success.unwrap(), 42);
+    assert!(matches!(success, Ok(42)));
 
     let failure: RetryResult<i32> = Err(anyhow::anyhow!("Failed"));
     assert!(failure.is_err());

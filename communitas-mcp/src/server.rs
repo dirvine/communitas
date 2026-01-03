@@ -761,12 +761,9 @@ impl McpServer {
     }
 
     async fn handle_export_vault(&self, _args: Value) -> Result<Value, JsonRpcError> {
-        match &self.auth_state {
-            AuthState::Unauthenticated => {
-                return Err(JsonRpcError::invalid_request("Not authenticated"));
-            }
-            _ => {}
-        };
+        if let AuthState::Unauthenticated = &self.auth_state {
+            return Err(JsonRpcError::invalid_request("Not authenticated"));
+        }
 
         Err(JsonRpcError::internal_error(
             "Vault export not yet implemented - requires session-based storage access. Use the desktop app for vault backup.",

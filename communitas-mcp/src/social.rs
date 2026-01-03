@@ -1,5 +1,4 @@
 // Licensed under the AGPL-3.0 license - see LICENSE file for details
-#![allow(dead_code)]
 
 //! Advanced social collaboration features
 //! 

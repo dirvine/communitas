@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 // Licensed under the AGPL-3.0 license - see LICENSE file for details
 
 //! Presence and status system for real-time collaboration
@@ -92,44 +91,6 @@ impl PresenceUpdate {
             typing: None,
         }
     }
-
-    /// Create an entity change update
-    pub fn entity_change(entity_id: String) -> Self {
-        Self {
-            status: None,
-            current_entity: Some(entity_id),
-            typing: None,
-        }
-    }
-
-    /// Create a typing indicator
-    pub fn typing_start(entity_id: String, message_preview: Option<String>) -> Self {
-        Self {
-            status: Some(PresenceStatus::Typing {
-                entity_id: entity_id.clone(),
-                message_preview: message_preview.clone(),
-            }),
-            current_entity: Some(entity_id.clone()),
-            typing: Some(TypingIndicator {
-                entity_id,
-                message_preview,
-                started_at: SystemTime::now(),
-            }),
-        }
-    }
-
-    /// Create a typing stop
-    pub fn typing_stop(entity_id: String) -> Self {
-        Self {
-            status: Some(PresenceStatus::Online),
-            current_entity: Some(entity_id.clone()),
-            typing: Some(TypingIndicator {
-                entity_id,
-                message_preview: None,
-                started_at: SystemTime::now(),
-            }),
-        }
-    }
 }
 
 /// CRDT operations for presence data
@@ -181,15 +142,6 @@ impl PresenceOperations {
         Ok(subscription_id)
     }
 
-    /// Unsubscribe from presence updates
-    pub fn unsubscribe_from_presence(
-        _app: &communitas_core::app::CommunitasApp,
-        subscription_id: String,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        // Implementation would remove CRDT subscription
-        tracing::info!("Unsubscribing from presence: {}", subscription_id);
-        Ok(())
-    }
 }
 
 #[cfg(test)]
@@ -205,11 +157,10 @@ mod tests {
 
     #[test]
     fn test_presence_update_creation() {
-        let update = PresenceUpdate::typing_start(
-            "test-entity".to_string(),
-            Some("Hello world".to_string()),
-        );
+        let update = PresenceUpdate::status_only(PresenceStatus::Online);
         assert!(update.status.is_some());
+        assert!(update.current_entity.is_none());
+        assert!(update.typing.is_none());
     }
 
     #[test]

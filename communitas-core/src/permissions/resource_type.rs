@@ -380,12 +380,10 @@ mod tests {
     }
 
     #[test]
-    fn test_clone_and_copy() {
+    fn test_copy_semantics() {
         let original = ResourceType::KanbanBoards;
-        let cloned = original.clone();
-        let copied = original;
+        let copied = original; // Copy happens automatically for Copy types
 
-        assert_eq!(original, cloned);
         assert_eq!(original, copied);
     }
 

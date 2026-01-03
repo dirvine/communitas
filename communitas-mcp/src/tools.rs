@@ -2527,7 +2527,7 @@ async fn execute_upload_with_metadata(app: &CommunitasApp, args: Value) -> ToolC
     // 1. Write the main file
     let cmd_file = Command::WriteFile {
         entity_id: entity_id.clone(),
-        disk_type: disk_type.clone(),
+        disk_type,
         path: path.clone(),
         data,
     };

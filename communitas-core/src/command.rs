@@ -211,6 +211,30 @@ pub enum Command {
         message_id: String,
     },
 
+    /// Edit a message's text content
+    EditMessage {
+        entity_id: String,
+        entity_type: EntityType,
+        message_id: String,
+        new_text: String,
+    },
+
+    /// Add a reaction to a message
+    AddReaction {
+        entity_id: String,
+        entity_type: EntityType,
+        message_id: String,
+        emoji: String,
+    },
+
+    /// Remove a reaction from a message
+    RemoveReaction {
+        entity_id: String,
+        entity_type: EntityType,
+        message_id: String,
+        emoji: String,
+    },
+
     // ========================================================================
     // Invite Commands
     // ========================================================================
@@ -583,6 +607,33 @@ pub enum Event {
         entity_type: EntityType,
     },
 
+    /// Message was edited
+    MessageEdited {
+        message_id: String,
+        entity_id: String,
+        entity_type: EntityType,
+        new_text: String,
+        edited_at: u64,
+    },
+
+    /// Reaction was added to a message
+    ReactionAdded {
+        message_id: String,
+        entity_id: String,
+        entity_type: EntityType,
+        emoji: String,
+        reactor_id: String,
+    },
+
+    /// Reaction was removed from a message
+    ReactionRemoved {
+        message_id: String,
+        entity_id: String,
+        entity_type: EntityType,
+        emoji: String,
+        reactor_id: String,
+    },
+
     // ========================================================================
     // Invite Events
     // ========================================================================
@@ -833,6 +884,12 @@ pub enum Query {
     // ========================================================================
     // Message Queries
     // ========================================================================
+    /// Get a single message by ID (includes reactions)
+    GetMessage {
+        entity_id: String,
+        message_id: String,
+    },
+
     /// Get messages for an entity
     GetEntityMessages { entity_id: String },
 
@@ -983,6 +1040,9 @@ pub enum QueryResponse {
     /// Permission overrides
     PermissionOverrides(Vec<(String, String)>),
 
+    /// Single message with reactions
+    Message(MessageResponse),
+
     /// Messages
     Messages(Vec<MessageResponse>),
 
@@ -1074,6 +1134,17 @@ pub struct MessageResponse {
     pub text: String,
     pub timestamp: i64,
     pub reply_to_id: Option<String>,
+    #[serde(default)]
+    pub reactions: Vec<ReactionResponse>,
+    pub edited_at: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReactionResponse {
+    pub emoji: String,
+    pub count: u32,
+    pub user_reacted: bool,
+    pub peer_ids: Vec<String>,
 }
 
 /// Sync state response data

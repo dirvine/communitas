@@ -74,6 +74,38 @@ pub fn list_tools(authenticated: bool) -> Vec<Tool> {
                 "properties": {}
             }),
         },
+        Tool {
+            name: "list_vaults".to_string(),
+            description: "List all available identity vaults on this device".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {}
+            }),
+        },
+        Tool {
+            name: "delete_vault".to_string(),
+            description: "Delete an identity vault (requires password confirmation)".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "four_words": {"type": "string", "description": "Four-word identity of the vault to delete"},
+                    "password": {"type": "string", "description": "Password to confirm deletion"}
+                },
+                "required": ["four_words", "password"]
+            }),
+        },
+        Tool {
+            name: "import_vault".to_string(),
+            description: "Import an identity vault from a backup".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "backup_data": {"type": "string", "description": "Base64-encoded backup data"},
+                    "password": {"type": "string", "description": "Password to decrypt the backup"}
+                },
+                "required": ["backup_data", "password"]
+            }),
+        },
     ];
 
     // If not authenticated, only return pre-auth tools
@@ -179,6 +211,60 @@ pub fn list_tools(authenticated: bool) -> Vec<Tool> {
                     "message_id": {"type": "string", "description": "Message ID to delete"}
                 },
                 "required": ["entity_id", "entity_type", "message_id"]
+            }),
+        },
+        Tool {
+            name: "edit_message".to_string(),
+            description: "Edit an existing message's text content".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string", "description": "Entity ID containing the message"},
+                    "entity_type": {"type": "string", "enum": ["organisation", "project", "group", "channel", "person"]},
+                    "message_id": {"type": "string", "description": "Message ID to edit"},
+                    "new_text": {"type": "string", "description": "New message text"}
+                },
+                "required": ["entity_id", "entity_type", "message_id", "new_text"]
+            }),
+        },
+        Tool {
+            name: "add_reaction".to_string(),
+            description: "Add an emoji reaction to a message".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string", "description": "Entity ID containing the message"},
+                    "entity_type": {"type": "string", "enum": ["organisation", "project", "group", "channel", "person"]},
+                    "message_id": {"type": "string", "description": "Message ID to react to"},
+                    "emoji": {"type": "string", "description": "Emoji to add (e.g., '👍', '❤️', '😀')"}
+                },
+                "required": ["entity_id", "entity_type", "message_id", "emoji"]
+            }),
+        },
+        Tool {
+            name: "remove_reaction".to_string(),
+            description: "Remove an emoji reaction from a message".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string", "description": "Entity ID containing the message"},
+                    "entity_type": {"type": "string", "enum": ["organisation", "project", "group", "channel", "person"]},
+                    "message_id": {"type": "string", "description": "Message ID to remove reaction from"},
+                    "emoji": {"type": "string", "description": "Emoji to remove"}
+                },
+                "required": ["entity_id", "entity_type", "message_id", "emoji"]
+            }),
+        },
+        Tool {
+            name: "get_reactions".to_string(),
+            description: "Get all reactions on a message".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string", "description": "Entity ID containing the message"},
+                    "message_id": {"type": "string", "description": "Message ID to get reactions for"}
+                },
+                "required": ["entity_id", "message_id"]
             }),
         },
         // Kanban tools
@@ -777,6 +863,27 @@ pub fn list_tools(authenticated: bool) -> Vec<Tool> {
             }),
         },
         Tool {
+            name: "update_profile".to_string(),
+            description: "Update the current user's display name".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "display_name": {"type": "string", "description": "New display name"}
+                },
+                "required": ["display_name"]
+            }),
+        },
+        Tool {
+            name: "export_vault".to_string(),
+            description: "Export the current vault for backup".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "include_data": {"type": "boolean", "description": "Include all data in export (default: true)", "default": true}
+                }
+            }),
+        },
+        Tool {
             name: "list_pending_invites".to_string(),
             description: "List pending invitations for the current user".to_string(),
             input_schema: json!({
@@ -1053,6 +1160,10 @@ pub async fn call_tool(app: &CommunitasApp, name: &str, args: Option<Value>) -> 
         // Message commands
         "send_message" => execute_send_message(app, args).await,
         "delete_message" => execute_delete_message(app, args).await,
+        "edit_message" => execute_edit_message(app, args).await,
+        "add_reaction" => execute_add_reaction(app, args).await,
+        "remove_reaction" => execute_remove_reaction(app, args).await,
+        "get_reactions" => execute_get_reactions(app, args).await,
 
         // Kanban commands
         "create_kanban_board" => execute_create_board(app, args).await,
@@ -1085,6 +1196,7 @@ pub async fn call_tool(app: &CommunitasApp, name: &str, args: Option<Value>) -> 
         "get_messages" => execute_get_messages(app, args).await,
         "list_files" => execute_list_files(app, args).await,
         "get_profile" => execute_get_profile(app).await,
+        "update_profile" => execute_update_profile(app, args).await,
         "list_pending_invites" => execute_list_pending_invites(app).await,
 
         // Network commands
@@ -1401,6 +1513,130 @@ async fn execute_delete_message(app: &CommunitasApp, args: Value) -> ToolCallRes
     match app.execute(cmd).await {
         Ok(_) => success_result("Message deleted successfully"),
         Err(e) => error_result(&format!("Failed to delete message: {}", e.message)),
+    }
+}
+
+async fn execute_edit_message(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let entity_id = args["entity_id"].as_str().unwrap_or_default().to_string();
+    let entity_type = match args["entity_type"].as_str().and_then(parse_entity_type) {
+        Some(t) => t,
+        None => return error_result("Invalid or missing entity_type"),
+    };
+    let message_id = args["message_id"].as_str().unwrap_or_default().to_string();
+    let new_text = args["new_text"].as_str().unwrap_or_default().to_string();
+
+    let cmd = Command::EditMessage {
+        entity_id,
+        entity_type,
+        message_id,
+        new_text,
+    };
+
+    match app.execute(cmd).await {
+        Ok(events) => {
+            let edited_at = events.iter().find_map(|e| match e {
+                Event::MessageEdited { edited_at, .. } => Some(*edited_at),
+                _ => None,
+            });
+            let result = json!({
+                "success": true,
+                "message": "Message edited successfully",
+                "edited_at": edited_at
+            });
+            json_result(&result)
+        }
+        Err(e) => error_result(&format!("Failed to edit message: {}", e.message)),
+    }
+}
+
+async fn execute_add_reaction(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let entity_id = args["entity_id"].as_str().unwrap_or_default().to_string();
+    let entity_type = match args["entity_type"].as_str().and_then(parse_entity_type) {
+        Some(t) => t,
+        None => return error_result("Invalid or missing entity_type"),
+    };
+    let message_id = args["message_id"].as_str().unwrap_or_default().to_string();
+    let emoji = args["emoji"].as_str().unwrap_or_default().to_string();
+
+    let cmd = Command::AddReaction {
+        entity_id,
+        entity_type,
+        message_id,
+        emoji: emoji.clone(),
+    };
+
+    match app.execute(cmd).await {
+        Ok(_) => {
+            let result = json!({
+                "success": true,
+                "message": "Reaction added successfully",
+                "emoji": emoji
+            });
+            json_result(&result)
+        }
+        Err(e) => error_result(&format!("Failed to add reaction: {}", e.message)),
+    }
+}
+
+async fn execute_remove_reaction(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let entity_id = args["entity_id"].as_str().unwrap_or_default().to_string();
+    let entity_type = match args["entity_type"].as_str().and_then(parse_entity_type) {
+        Some(t) => t,
+        None => return error_result("Invalid or missing entity_type"),
+    };
+    let message_id = args["message_id"].as_str().unwrap_or_default().to_string();
+    let emoji = args["emoji"].as_str().unwrap_or_default().to_string();
+
+    let cmd = Command::RemoveReaction {
+        entity_id,
+        entity_type,
+        message_id,
+        emoji: emoji.clone(),
+    };
+
+    match app.execute(cmd).await {
+        Ok(_) => {
+            let result = json!({
+                "success": true,
+                "message": "Reaction removed successfully",
+                "emoji": emoji
+            });
+            json_result(&result)
+        }
+        Err(e) => error_result(&format!("Failed to remove reaction: {}", e.message)),
+    }
+}
+
+async fn execute_get_reactions(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let entity_id = args["entity_id"].as_str().unwrap_or_default().to_string();
+    let message_id = args["message_id"].as_str().unwrap_or_default().to_string();
+
+    let query = Query::GetMessage {
+        entity_id,
+        message_id,
+    };
+
+    match app.query(query).await {
+        Ok(QueryResponse::Message(msg)) => {
+            let reactions: Vec<serde_json::Value> = msg
+                .reactions
+                .into_iter()
+                .map(|r| {
+                    json!({
+                        "emoji": r.emoji,
+                        "count": r.count,
+                        "user_reacted": r.user_reacted,
+                        "peer_ids": r.peer_ids
+                    })
+                })
+                .collect();
+            json_result(&json!({
+                "success": true,
+                "reactions": reactions
+            }))
+        }
+        Ok(_) => error_result("Unexpected response type"),
+        Err(e) => error_result(&format!("Failed to get reactions: {}", e)),
     }
 }
 
@@ -1780,6 +2016,32 @@ async fn execute_get_profile(app: &CommunitasApp) -> ToolCallResult {
         })),
         Ok(_) => error_result("Unexpected response type"),
         Err(e) => error_result(&format!("Failed to get profile: {}", e.message)),
+    }
+}
+
+async fn execute_update_profile(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let display_name = match args["display_name"].as_str() {
+        Some(name) => name.to_string(),
+        None => return error_result("display_name is required"),
+    };
+
+    let cmd = Command::UpdateDisplayName { display_name };
+
+    match app.execute(cmd).await {
+        Ok(events) => {
+            for event in &events {
+                if let Event::DisplayNameUpdated { old_name, new_name } = event {
+                    return json_result(&json!({
+                        "success": true,
+                        "message": "Profile updated",
+                        "old_display_name": old_name,
+                        "new_display_name": new_name
+                    }));
+                }
+            }
+            success_result("Profile updated")
+        }
+        Err(e) => error_result(&format!("Failed to update profile: {}", e.message)),
     }
 }
 

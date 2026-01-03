@@ -262,6 +262,55 @@ impl MessageService {
             .await
             .map_err(|e| MessageServiceError::SyncError(e.to_string()))
     }
+
+    pub async fn edit_message(
+        &self,
+        entity_id: &str,
+        message_id: &str,
+        new_text: String,
+    ) -> MessageServiceResult<u64> {
+        self.message_sync
+            .edit_message(entity_id, message_id, new_text)
+            .await
+            .map_err(|e| MessageServiceError::SyncError(e.to_string()))
+    }
+
+    pub async fn add_reaction(
+        &self,
+        entity_id: &str,
+        message_id: &str,
+        emoji: String,
+        peer_id: String,
+    ) -> MessageServiceResult<()> {
+        self.message_sync
+            .add_reaction(entity_id, message_id, emoji, peer_id)
+            .await
+            .map_err(|e| MessageServiceError::SyncError(e.to_string()))
+    }
+
+    pub async fn remove_reaction(
+        &self,
+        entity_id: &str,
+        message_id: &str,
+        emoji: String,
+        peer_id: String,
+    ) -> MessageServiceResult<()> {
+        self.message_sync
+            .remove_reaction(entity_id, message_id, emoji, peer_id)
+            .await
+            .map_err(|e| MessageServiceError::SyncError(e.to_string()))
+    }
+
+    pub async fn get_reactions(
+        &self,
+        entity_id: &str,
+        message_id: &str,
+    ) -> MessageServiceResult<Vec<crate::crdt::Reaction>> {
+        self.message_sync
+            .get_reactions(entity_id, message_id)
+            .await
+            .map_err(|e| MessageServiceError::SyncError(e.to_string()))
+    }
 }
 
 #[cfg(test)]

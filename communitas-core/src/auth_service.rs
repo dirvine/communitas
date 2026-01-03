@@ -432,8 +432,10 @@ mod tests {
     #[tokio::test]
     async fn test_auth_service_recent_identities() {
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let vault_subdir = temp_dir.path().join("vaults");
+        std::fs::create_dir_all(&vault_subdir).expect("Failed to create vault subdir");
         let config = StorageConfig {
-            vault_dir: temp_dir.path().to_path_buf(),
+            vault_dir: vault_subdir,
             use_keyring: false,
             ..Default::default()
         };

@@ -275,6 +275,12 @@ impl McpServer {
                 .await;
         }
 
+        if params.name == "export_vault" {
+            return self
+                .handle_export_vault(params.arguments.unwrap_or(serde_json::json!({})))
+                .await;
+        }
+
         let app_lock = self.app.read().await;
         let app = app_lock
             .as_ref()
@@ -311,6 +317,9 @@ impl McpServer {
                 serde_json::to_value(result)
                     .map_err(|e| JsonRpcError::internal_error(&e.to_string()))
             }
+            "list_vaults" => self.handle_list_vaults().await,
+            "delete_vault" => self.handle_delete_vault(args).await,
+            "import_vault" => self.handle_import_vault(args).await,
             _ => Err(JsonRpcError::method_not_found(name)),
         }
     }
@@ -612,6 +621,150 @@ impl McpServer {
         });
 
         serde_json::to_value(result).map_err(|e| JsonRpcError::internal_error(&e.to_string()))
+    }
+
+    async fn handle_list_vaults(&self) -> Result<Value, JsonRpcError> {
+        let storage_config = StorageConfig {
+            vault_dir: self.get_vault_dir(),
+            use_keyring: false,
+            ..Default::default()
+        };
+
+        let storage_manager = EncryptedStorageManager::new(storage_config)
+            .await
+            .map_err(|e| {
+                JsonRpcError::internal_error(&format!("Failed to initialize storage: {}", e))
+            })?;
+
+        let auth_service = AuthService::new(storage_manager);
+
+        let vaults = auth_service.list_vaults().await.map_err(|e| {
+            JsonRpcError::internal_error(&format!("Failed to list vaults: {}", e))
+        })?;
+
+        let vault_list: Vec<Value> = vaults
+            .iter()
+            .map(|v| {
+                serde_json::json!({
+                    "four_words": v.four_words,
+                    "display_name": v.display_name,
+                    "created_at": v.created_at,
+                    "last_accessed": v.last_accessed,
+                    "size_bytes": v.size_bytes
+                })
+            })
+            .collect();
+
+        let result = serde_json::json!({
+            "content": [{"type": "text", "text": serde_json::to_string(&serde_json::json!({"vaults": vault_list, "count": vault_list.len()})).unwrap_or_default()}],
+            "isError": false
+        });
+        serde_json::to_value(result).map_err(|e| JsonRpcError::internal_error(&e.to_string()))
+    }
+
+    async fn handle_delete_vault(&mut self, args: Value) -> Result<Value, JsonRpcError> {
+        let four_words = args["four_words"]
+            .as_str()
+            .ok_or_else(|| JsonRpcError::invalid_params("Missing four_words"))?
+            .to_string();
+        let password = args["password"]
+            .as_str()
+            .ok_or_else(|| JsonRpcError::invalid_params("Missing password"))?
+            .to_string();
+
+        let words: Vec<&str> = if four_words.contains('.') {
+            four_words.split('.').collect()
+        } else {
+            four_words.split('-').collect()
+        };
+        if words.len() != 4 {
+            return Err(JsonRpcError::invalid_params(
+                "Invalid four-word format. Expected: word1.word2.word3.word4 or word1-word2-word3-word4",
+            ));
+        }
+
+        let four_words_dashed = words.join("-");
+
+        let storage_config = StorageConfig {
+            vault_dir: self.get_vault_dir(),
+            use_keyring: false,
+            ..Default::default()
+        };
+
+        let storage_manager = EncryptedStorageManager::new(storage_config)
+            .await
+            .map_err(|e| {
+                JsonRpcError::internal_error(&format!("Failed to initialize storage: {}", e))
+            })?;
+
+        let mut auth_service = AuthService::new(storage_manager);
+
+        auth_service
+            .delete_vault(&four_words_dashed, &password)
+            .await
+            .map_err(|e| {
+                JsonRpcError::invalid_request(&format!("Failed to delete vault: {}", e))
+            })?;
+
+        info!("Vault deleted: {}", four_words_dashed);
+
+        let result = tools::success_result("Vault deleted successfully");
+        serde_json::to_value(result).map_err(|e| JsonRpcError::internal_error(&e.to_string()))
+    }
+
+    async fn handle_import_vault(&mut self, args: Value) -> Result<Value, JsonRpcError> {
+        let backup_data_base64 = args["backup_data"]
+            .as_str()
+            .ok_or_else(|| JsonRpcError::invalid_params("Missing backup_data"))?;
+        let password = args["password"]
+            .as_str()
+            .ok_or_else(|| JsonRpcError::invalid_params("Missing password"))?
+            .to_string();
+
+        use base64::Engine;
+        let backup_data = base64::engine::general_purpose::STANDARD
+            .decode(backup_data_base64)
+            .map_err(|e| JsonRpcError::invalid_params(&format!("Invalid base64 data: {}", e)))?;
+
+        let storage_config = StorageConfig {
+            vault_dir: self.get_vault_dir(),
+            use_keyring: false,
+            ..Default::default()
+        };
+
+        let storage_manager = EncryptedStorageManager::new(storage_config)
+            .await
+            .map_err(|e| {
+                JsonRpcError::internal_error(&format!("Failed to initialize storage: {}", e))
+            })?;
+
+        let four_words = storage_manager
+            .import_vault(&backup_data, &password)
+            .await
+            .map_err(|e| {
+                JsonRpcError::invalid_request(&format!("Failed to import vault: {}", e))
+            })?;
+
+        info!("Vault imported: {}", four_words);
+
+        let result = serde_json::json!({
+            "content": [{"type": "text", "text": serde_json::to_string(&serde_json::json!({"success": true, "four_words": four_words, "message": "Vault imported successfully"})).unwrap_or_default()}],
+            "isError": false
+        });
+        serde_json::to_value(result).map_err(|e| JsonRpcError::internal_error(&e.to_string()))
+    }
+
+    async fn handle_export_vault(&self, _args: Value) -> Result<Value, JsonRpcError> {
+        match &self.auth_state {
+            AuthState::Unauthenticated => {
+                return Err(JsonRpcError::invalid_request("Not authenticated"));
+            }
+            _ => {}
+        };
+
+        Err(JsonRpcError::internal_error(
+            "Vault export not yet implemented - requires session-based storage access. Use the desktop app for vault backup.",
+        ))
     }
 
     /// Handle resources/list request

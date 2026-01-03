@@ -428,6 +428,9 @@ impl CoreContext {
         let gossip_arc = Arc::new(gossip);
         self.gossip = Some(gossip_arc.clone());
 
+        // Set up entity message handler for incoming gossip messages
+        self.setup_entity_message_handler().await?;
+
         // Initialize WebRTC service (requires gossip context)
         match CommunitasWebRtcService::new(gossip_arc).await {
             Ok(webrtc) => {

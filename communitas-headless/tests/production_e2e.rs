@@ -1,4 +1,5 @@
 use communitas_core::CoreContext;
+use communitas_core::crdt::EntityType;
 use communitas_core::types::DeviceType;
 use std::net::SocketAddr;
 use std::time::Duration;

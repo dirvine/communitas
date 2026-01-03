@@ -242,12 +242,9 @@ impl EncryptedVault {
                 },
             };
 
-            {
-                let mut store = self.data_store.write().await;
-                store.insert(key.to_string(), entry);
-            } // Drop write lock before calling save_index
+            let mut store = self.data_store.write().await;
+            store.insert(key.to_string(), entry);
 
-            // Update index (takes read lock, so write lock must be released first)
             self.save_index().await?;
         } else {
             // Fall back to normal storage
@@ -289,12 +286,9 @@ impl EncryptedVault {
 
     /// Delete an entry
     pub async fn delete(&self, key: &str) -> Result<()> {
-        let entry_to_delete = {
-            let mut store = self.data_store.write().await;
-            store.remove(key)
-        }; // Drop write lock before calling save_index
+        let mut store = self.data_store.write().await;
 
-        if let Some(entry) = entry_to_delete {
+        if let Some(entry) = store.remove(key) {
             // Delete FEC shards if present
             if let Some(shard_paths) = entry.metadata.fec_shards {
                 for path in shard_paths {
@@ -306,7 +300,6 @@ impl EncryptedVault {
             let file_path = self.vault_path.join(format!("{}.enc", key));
             let _ = fs::remove_file(file_path).await;
 
-            // Update index (takes read lock, so write lock must be released first)
             self.save_index().await?;
         }
 
@@ -443,16 +436,14 @@ impl EncryptedVault {
         };
 
         // Store in memory
-        {
-            let mut store = self.data_store.write().await;
-            store.insert(key.to_string(), entry);
-        } // Drop write lock before calling save_index
+        let mut store = self.data_store.write().await;
+        store.insert(key.to_string(), entry);
 
         // Store on disk
         let file_path = self.vault_path.join(format!("{}.enc", key));
         fs::write(file_path, encrypted).await?;
 
-        // Update index (takes read lock, so write lock must be released first)
+        // Update index
         self.save_index().await?;
 
         Ok(())
@@ -537,17 +528,12 @@ mod tests {
     use super::*;
     use tempfile::TempDir;
 
-    /// Use fewer PBKDF2 iterations in tests for speed (1000 vs 100,000 in production)
-    const TEST_PBKDF2_ITERATIONS: u32 = 1000;
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[tokio::test]
     async fn test_vault_operations() {
         let temp_dir = TempDir::new().unwrap();
         let config = StorageConfig {
             vault_dir: temp_dir.path().to_path_buf(),
             use_keyring: false,
-            pbkdf2_iterations: TEST_PBKDF2_ITERATIONS,
-            enable_fec: false, // Disable FEC for faster tests
             ..Default::default()
         };
 

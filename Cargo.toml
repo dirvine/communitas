@@ -12,7 +12,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.53"
+version = "0.1.20"
 edition = "2024"
 authors = ["David Irvine <david.irvine@maidsafe.net>", "Saorsa Labs"]
 license = "GPL-3.0"
@@ -27,7 +27,6 @@ saorsa-rsps = "0.2.0"
 saorsa-pqc = "0.3.12"
 
 # Saorsa Gossip ecosystem (published v0.1.10 with native NAT traversal via OBSERVED_ADDRESS)
-# TODO: Update to v0.1.11 when network is available (ant-quic 0.14.68, saorsa-gossip 0.1.11)
 saorsa-gossip-types = "0.1.10"
 saorsa-gossip-identity = "0.1.10"
 saorsa-gossip-crdt-sync = "0.1.10"

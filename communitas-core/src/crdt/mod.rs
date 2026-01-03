@@ -83,8 +83,8 @@ pub mod operations;
 
 // Re-export key types for convenience
 pub use conflict_resolution::{
-    ConflictDetector, ConflictNotification, ConflictResolution, ConflictResolver, StateMachine,
-    call_state_machine, issue_state_machine,
+    call_state_machine, issue_state_machine, ConflictDetector, ConflictNotification,
+    ConflictResolution, ConflictResolver, StateMachine,
 };
 pub use documents::{ChannelDocument, CrdtDocument, MemberDocument, OrganizationDocument};
 pub use offline_queue::{OfflineQueue, OperationBuilder, OperationType, QueuedOperation};
@@ -92,7 +92,7 @@ pub use operations::{Counter, LWWRegister, LamportTimestamp, ORSet, Tombstone};
 
 // Re-export legacy CRDT types for backwards compatibility during migration
 pub use crate::legacy_crdt::{
-    CRDTMessage, ClockOrdering, EntitySyncState, EntityType, GossipMessageType, LocalMessageState,
-    MessageContent, MessageMetadata, MessageStatus, MissingRange, SyncRequest, SyncResponse,
-    VectorClock, sort_messages_causally,
+    sort_messages_causally, CRDTMessage, ClockOrdering, EntitySyncState, EntityType,
+    GossipMessageType, LocalMessageState, MessageContent, MessageMetadata, MessageStatus,
+    MissingRange, Reaction, SyncRequest, SyncResponse, VectorClock,
 };

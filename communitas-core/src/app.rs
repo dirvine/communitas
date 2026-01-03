@@ -57,7 +57,7 @@ use crate::command::{
 };
 use crate::command::{
     ContactResponse, DiskStatsResponse, EntityResponse, FileInfoResponse, InviteResponse,
-    MemberResponse, MessageResponse, SyncStateResponse, WebsiteResponse,
+    MemberResponse, MessageResponse, ReactionResponse, SyncStateResponse, WebsiteResponse,
 };
 use yrs::{Map, ReadTxn, Transact};
 use crate::core_context::CoreContext;
@@ -679,6 +679,90 @@ impl CommunitasApp {
                     message_id,
                     entity_id,
                     entity_type,
+                };
+                self.broadcast_event(event.clone());
+                Ok(vec![event])
+            }
+
+            Command::EditMessage {
+                entity_id,
+                entity_type,
+                message_id,
+                new_text,
+            } => {
+                let ctx = self.context.read().await;
+                let edited_at = ctx
+                    .message_service
+                    .edit_message(&entity_id, &message_id, new_text.clone())
+                    .await
+                    .map_err(|e| CommandError {
+                        command_type: command_type.clone(),
+                        message: format!("{}", e),
+                        code: "EDIT_MESSAGE_FAILED".to_string(),
+                    })?;
+
+                let event = Event::MessageEdited {
+                    message_id,
+                    entity_id,
+                    entity_type,
+                    new_text,
+                    edited_at,
+                };
+                self.broadcast_event(event.clone());
+                Ok(vec![event])
+            }
+
+            Command::AddReaction {
+                entity_id,
+                entity_type,
+                message_id,
+                emoji,
+            } => {
+                let ctx = self.context.read().await;
+                let reactor_id = ctx.four_words.clone();
+                ctx.message_service
+                    .add_reaction(&entity_id, &message_id, emoji.clone(), reactor_id.clone())
+                    .await
+                    .map_err(|e| CommandError {
+                        command_type: command_type.clone(),
+                        message: format!("{}", e),
+                        code: "ADD_REACTION_FAILED".to_string(),
+                    })?;
+
+                let event = Event::ReactionAdded {
+                    message_id,
+                    entity_id,
+                    entity_type,
+                    emoji,
+                    reactor_id,
+                };
+                self.broadcast_event(event.clone());
+                Ok(vec![event])
+            }
+
+            Command::RemoveReaction {
+                entity_id,
+                entity_type,
+                message_id,
+                emoji,
+            } => {
+                let ctx = self.context.read().await;
+                let reactor_id = ctx.four_words.clone();
+                ctx.message_service
+                    .remove_reaction(&entity_id, &message_id, emoji.clone(), reactor_id.clone())
+                    .await
+                    .map_err(|e| CommandError {
+                        command_type: command_type.clone(),
+                        message: format!("{}", e),
+                        code: "REMOVE_REACTION_FAILED".to_string(),
+                    })?;
+
+                let event = Event::ReactionRemoved {
+                    message_id,
+                    entity_id,
+                    entity_type,
+                    emoji,
+                    reactor_id,
                 };
                 self.broadcast_event(event.clone());
                 Ok(vec![event])
@@ -1938,6 +2022,61 @@ impl CommunitasApp {
             // ================================================================
             // Message Queries
             // ================================================================
+            Query::GetMessage {
+                entity_id,
+                message_id,
+            } => {
+                let ctx = self.context.read().await;
+                let sync_response = ctx
+                    .message_service
+                    .get_entity_messages(entity_id.clone())
+                    .await
+                    .map_err(|e| QueryError {
+                        query_type: query_type.clone(),
+                        message: format!("{}", e),
+                        code: "GET_MESSAGE_FAILED".to_string(),
+                    })?;
+
+                let message = sync_response
+                    .messages
+                    .into_iter()
+                    .find(|m| m.metadata.id == message_id)
+                    .ok_or_else(|| QueryError {
+                        query_type: query_type.clone(),
+                        message: format!("Message not found: {}", message_id),
+                        code: "MESSAGE_NOT_FOUND".to_string(),
+                    })?;
+
+                let reactions = message
+                    .local_state
+                    .as_ref()
+                    .map(|ls| {
+                        ls.reactions
+                            .iter()
+                            .map(|r| ReactionResponse {
+                                emoji: r.emoji.clone(),
+                                count: r.count,
+                                user_reacted: r.user_reacted.unwrap_or(false),
+                                peer_ids: r.peer_ids.clone(),
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
+
+                let response = MessageResponse {
+                    id: message.metadata.id,
+                    entity_id: message.metadata.entity_id,
+                    author: message.metadata.author_peer_id,
+                    text: message.content.text,
+                    timestamp: message.metadata.timestamp as i64,
+                    reply_to_id: message.metadata.reply_to_id,
+                    reactions,
+                    edited_at: None,
+                };
+
+                Ok(QueryResponse::Message(response))
+            }
+
             Query::GetEntityMessages { entity_id } => {
                 let ctx = self.context.read().await;
                 let sync_response = ctx
@@ -1960,6 +2099,8 @@ impl CommunitasApp {
                         text: m.content.text,
                         timestamp: m.metadata.timestamp as i64,
                         reply_to_id: m.metadata.reply_to_id,
+                        reactions: vec![],
+                        edited_at: None,
                     })
                     .collect();
 
@@ -1990,6 +2131,8 @@ impl CommunitasApp {
                         text: m.content.text,
                         timestamp: m.metadata.timestamp as i64,
                         reply_to_id: m.metadata.reply_to_id,
+                        reactions: vec![],
+                        edited_at: None,
                     })
                     .collect();
 
@@ -2018,6 +2161,8 @@ impl CommunitasApp {
                         text: m.content.text,
                         timestamp: m.metadata.timestamp as i64,
                         reply_to_id: m.metadata.reply_to_id,
+                        reactions: vec![],
+                        edited_at: None,
                     })
                     .collect();
 

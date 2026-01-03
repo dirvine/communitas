@@ -163,6 +163,9 @@ pub const PRE_AUTH_TOOLS: &[&str] = &[
     "authenticate_token",
     "health_check",
     "core_status",
+    "list_vaults",
+    "delete_vault",
+    "import_vault",
 ];
 
 /// Check if a tool requires authentication

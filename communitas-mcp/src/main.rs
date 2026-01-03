@@ -29,6 +29,10 @@ mod server;
 mod tls;
 mod token;
 mod tools;
+mod presence;
+mod webrtc;
+mod social;
+mod presentation;
 
 use anyhow::Result;
 use clap::Parser;

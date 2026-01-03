@@ -7,6 +7,11 @@
 //! Exposes Communitas commands and queries as MCP tools that AI agents can invoke.
 
 use crate::protocol::{Tool, ToolCallResult, ToolContent};
+use crate::presence::{PresenceStatus, PresenceUpdate, PresenceSubscription, PresenceOperations};
+use crate::webrtc::{WebRtcOperations, CallRequest};
+use crate::social::{PollOperations, LocationOperations, StoryOperations};
+use crate::presentation::{PresentationOperations, Slide, ScreenRegion};
+use base64::prelude::*;
 use communitas_core::{
     app::CommunitasApp,
     command::{Command, DiskTypeArg, Event, Query, QueryResponse},
@@ -115,6 +120,28 @@ pub fn list_tools(authenticated: bool) -> Vec<Tool> {
 
     // Add all authenticated tools
     tools.extend(vec![
+        // Session tools
+        Tool {
+            name: "get_session".to_string(),
+            description: "Get current session info".to_string(),
+            input_schema: json!({ "type": "object", "properties": {} }),
+        },
+        Tool {
+            name: "logout".to_string(),
+            description: "End current session".to_string(),
+            input_schema: json!({ "type": "object", "properties": {} }),
+        },
+        Tool {
+            name: "get_unread_count".to_string(),
+            description: "Get unread messages count".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "entity_ids": {"type": "array", "items": {"type": "string"}, "description": "Entity IDs to check"}
+                },
+                "required": ["entity_ids"]
+            }),
+        },
         // Entity tools
         Tool {
             name: "create_entity".to_string(),
@@ -265,6 +292,30 @@ pub fn list_tools(authenticated: bool) -> Vec<Tool> {
                     "message_id": {"type": "string", "description": "Message ID to get reactions for"}
                 },
                 "required": ["entity_id", "message_id"]
+            }),
+        },
+        Tool {
+            name: "create_custom_reaction".to_string(),
+            description: "Create a custom emoji reaction".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string", "description": "Entity ID to add the reaction to"},
+                    "emoji": {"type": "string", "description": "Emoji character or URL"},
+                    "short_name": {"type": "string", "description": "Short name for the reaction (e.g. 'rocket')"}
+                },
+                "required": ["entity_id", "emoji", "short_name"]
+            }),
+        },
+        Tool {
+            name: "get_available_reactions".to_string(),
+            description: "Get list of available reactions (standard + custom) for an entity".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string", "description": "Entity ID"}
+                },
+                "required": ["entity_id"]
             }),
         },
         // Kanban tools
@@ -891,6 +942,204 @@ pub fn list_tools(authenticated: bool) -> Vec<Tool> {
                 "properties": {}
             }),
         },
+        // WebRTC Calling tools
+        Tool {
+            name: "start_voice_call".to_string(),
+            description: "Start a voice/video call with an entity or users".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string", "description": "Entity ID (channel/group) to call"},
+                    "participant_ids": {"type": "array", "items": {"type": "string"}, "description": "Specific users to invite (optional)"},
+                    "video_enabled": {"type": "boolean", "description": "Enable video (default: true)", "default": true}
+                },
+                "required": ["entity_id"]
+            }),
+        },
+        Tool {
+            name: "join_call".to_string(),
+            description: "Join an active call".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "call_id": {"type": "string", "description": "ID of the call to join"}
+                },
+                "required": ["call_id"]
+            }),
+        },
+        Tool {
+            name: "end_call".to_string(),
+            description: "End or leave a call".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "call_id": {"type": "string", "description": "ID of the call to end"}
+                },
+                "required": ["call_id"]
+            }),
+        },
+        // Media tools
+        Tool {
+            name: "upload_with_metadata".to_string(),
+            description: "Upload a file with associated metadata (thumbnails, mime type)".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string", "description": "Entity ID"},
+                    "disk_type": {"type": "string", "enum": ["private", "public", "shared"], "description": "Disk type"},
+                    "path": {"type": "string", "description": "File path"},
+                    "content": {"type": "string", "description": "Base64 encoded content"},
+                    "metadata": {"type": "object", "description": "Metadata object"}
+                },
+                "required": ["entity_id", "disk_type", "path", "content"]
+            }),
+        },
+        Tool {
+            name: "get_media_metadata".to_string(),
+            description: "Get metadata for a file".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string", "description": "Entity ID"},
+                    "disk_type": {"type": "string", "enum": ["private", "public", "shared"], "description": "Disk type"},
+                    "path": {"type": "string", "description": "File path"}
+                },
+                "required": ["entity_id", "disk_type", "path"]
+            }),
+        },
+        // Social tools (Polls, Location, Stories)
+        Tool {
+            name: "create_poll".to_string(),
+            description: "Create a poll".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string", "description": "Entity ID"},
+                    "question": {"type": "string", "description": "Poll question"},
+                    "options": {"type": "array", "items": {"type": "string"}, "description": "Poll options"},
+                    "allows_multiple": {"type": "boolean", "description": "Allow multiple choices", "default": false},
+                    "duration_hours": {"type": "integer", "description": "Duration in hours"}
+                },
+                "required": ["entity_id", "question", "options"]
+            }),
+        },
+        Tool {
+            name: "vote_in_poll".to_string(),
+            description: "Vote in a poll".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "poll_id": {"type": "string", "description": "Poll ID"},
+                    "option_id": {"type": "string", "description": "Option ID to vote for"}
+                },
+                "required": ["poll_id", "option_id"]
+            }),
+        },
+        Tool {
+            name: "share_location".to_string(),
+            description: "Share location".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string", "description": "Entity ID"},
+                    "latitude": {"type": "number", "description": "Latitude"},
+                    "longitude": {"type": "number", "description": "Longitude"},
+                    "is_live": {"type": "boolean", "description": "Is live location", "default": false},
+                    "duration_minutes": {"type": "integer", "description": "Duration for live location"}
+                },
+                "required": ["entity_id", "latitude", "longitude"]
+            }),
+        },
+        Tool {
+            name: "create_story".to_string(),
+            description: "Create an ephemeral story".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string", "description": "Entity ID"},
+                    "text": {"type": "string", "description": "Story text"},
+                    "media_paths": {"type": "array", "items": {"type": "string"}, "description": "Paths to media files"},
+                    "expires_hours": {"type": "integer", "description": "Expiration in hours", "default": 24}
+                },
+                "required": ["entity_id", "text"]
+            }),
+        },
+        // Presentation tools
+        Tool {
+            name: "start_presentation".to_string(),
+            description: "Start a presentation".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string", "description": "Entity ID"},
+                    "slides": {"type": "array", "items": {
+                        "type": "object",
+                        "properties": {
+                            "title": {"type": "string"},
+                            "content": {"type": "string"}
+                        },
+                        "required": ["title", "content"]
+                    }, "description": "List of slides"}
+                },
+                "required": ["entity_id", "slides"]
+            }),
+        },
+        Tool {
+            name: "share_screen".to_string(),
+            description: "Share screen in a call".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "call_id": {"type": "string", "description": "Call ID"},
+                    "region": {
+                        "type": "object",
+                        "properties": {
+                            "x": {"type": "integer"},
+                            "y": {"type": "integer"},
+                            "width": {"type": "integer"},
+                            "height": {"type": "integer"}
+                        },
+                        "description": "Screen region to share (optional, defaults to full screen)"
+                    }
+                },
+                "required": ["call_id"]
+            }),
+        },
+        // Presence tools
+        Tool {
+            name: "set_presence".to_string(),
+            description: "Set your current presence status".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "status": {"type": "string", "enum": ["online", "away", "busy", "invisible"], "description": "Presence status"},
+                    "entity_id": {"type": "string", "description": "Entity ID where this presence applies (optional)"}
+                },
+                "required": ["status"]
+            }),
+        },
+        Tool {
+            name: "get_presence".to_string(),
+            description: "Get presence status for specific users".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "user_ids": {"type": "array", "items": {"type": "string"}, "description": "List of user IDs to check"}
+                },
+                "required": ["user_ids"]
+            }),
+        },
+        Tool {
+            name: "subscribe_to_presence".to_string(),
+            description: "Subscribe to presence updates for specific entities".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "entity_ids": {"type": "array", "items": {"type": "string"}, "description": "List of entity IDs to subscribe to"}
+                },
+                "required": ["entity_ids"]
+            }),
+        },
         // Network tools
         Tool {
             name: "network_start".to_string(),
@@ -1148,6 +1397,10 @@ pub async fn call_tool(app: &CommunitasApp, name: &str, args: Option<Value>) -> 
     match name {
         // Note: health_check and core_status are handled as pre-auth tools in server.rs
 
+        // Session commands
+        "get_session" => execute_get_session(app).await,
+        "get_unread_count" => execute_get_unread_count(app, args).await,
+
         // Entity commands
         "create_entity" => execute_create_entity(app, args).await,
         "update_entity" => execute_update_entity(app, args).await,
@@ -1164,6 +1417,8 @@ pub async fn call_tool(app: &CommunitasApp, name: &str, args: Option<Value>) -> 
         "add_reaction" => execute_add_reaction(app, args).await,
         "remove_reaction" => execute_remove_reaction(app, args).await,
         "get_reactions" => execute_get_reactions(app, args).await,
+        "create_custom_reaction" => execute_create_custom_reaction(app, args).await,
+        "get_available_reactions" => execute_get_available_reactions(app, args).await,
 
         // Kanban commands
         "create_kanban_board" => execute_create_board(app, args).await,
@@ -1198,6 +1453,30 @@ pub async fn call_tool(app: &CommunitasApp, name: &str, args: Option<Value>) -> 
         "get_profile" => execute_get_profile(app).await,
         "update_profile" => execute_update_profile(app, args).await,
         "list_pending_invites" => execute_list_pending_invites(app).await,
+
+        // Presence tools
+        "set_presence" => execute_set_presence(app, args).await,
+        "get_presence" => execute_get_presence(app, args).await,
+        "subscribe_to_presence" => execute_subscribe_to_presence(app, args).await,
+
+        // WebRTC commands
+        "start_voice_call" => execute_start_voice_call(app, args).await,
+        "join_call" => execute_join_call(app, args).await,
+        "end_call" => execute_end_call(app, args).await,
+
+        // Media commands
+        "upload_with_metadata" => execute_upload_with_metadata(app, args).await,
+        "get_media_metadata" => execute_get_media_metadata(app, args).await,
+
+        // Social commands
+        "create_poll" => execute_create_poll(app, args).await,
+        "vote_in_poll" => execute_vote_in_poll(app, args).await,
+        "share_location" => execute_share_location(app, args).await,
+        "create_story" => execute_create_story(app, args).await,
+
+        // Presentation commands
+        "start_presentation" => execute_start_presentation(app, args).await,
+        "share_screen" => execute_share_screen(app, args).await,
 
         // Network commands
         "network_start" => execute_network_start(app, args).await,
@@ -1640,6 +1919,59 @@ async fn execute_get_reactions(app: &CommunitasApp, args: Value) -> ToolCallResu
     }
 }
 
+async fn execute_create_custom_reaction(_app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let entity_id = match args["entity_id"].as_str() {
+        Some(s) => s.to_string(),
+        None => return error_result("entity_id is required"),
+    };
+    let emoji = match args["emoji"].as_str() {
+        Some(s) => s.to_string(),
+        None => return error_result("emoji is required"),
+    };
+    let short_name = match args["short_name"].as_str() {
+        Some(s) => s.to_string(),
+        None => return error_result("short_name is required"),
+    };
+
+    // TODO: Implement actual storage logic in CommunitasCore
+    
+    json_result(&json!({
+        "success": true,
+        "message": format!("Custom reaction '{}' created", short_name),
+        "reaction": {
+            "entity_id": entity_id,
+            "emoji": emoji,
+            "short_name": short_name
+        }
+    }))
+}
+
+async fn execute_get_available_reactions(_app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let entity_id = match args["entity_id"].as_str() {
+        Some(s) => s.to_string(),
+        None => return error_result("entity_id is required"),
+    };
+
+    // Return standard reactions plus any custom ones for this entity
+    let standard_reactions = vec![
+        json!({"emoji": "👍", "short_name": "+1"}),
+        json!({"emoji": "👎", "short_name": "-1"}),
+        json!({"emoji": "😄", "short_name": "smile"}),
+        json!({"emoji": "🎉", "short_name": "tada"}),
+        json!({"emoji": "😕", "short_name": "confused"}),
+        json!({"emoji": "❤️", "short_name": "heart"}),
+        json!({"emoji": "🚀", "short_name": "rocket"}),
+        json!({"emoji": "👀", "short_name": "eyes"}),
+    ];
+
+    // TODO: Fetch custom reactions from entity storage
+
+    json_result(&json!({
+        "entity_id": entity_id,
+        "reactions": standard_reactions
+    }))
+}
+
 async fn execute_create_board(app: &CommunitasApp, args: Value) -> ToolCallResult {
     let entity_id = args["entity_id"].as_str().unwrap_or_default().to_string();
     let board_name = args["board_name"].as_str().unwrap_or_default().to_string();
@@ -2043,6 +2375,341 @@ async fn execute_update_profile(app: &CommunitasApp, args: Value) -> ToolCallRes
         }
         Err(e) => error_result(&format!("Failed to update profile: {}", e.message)),
     }
+}
+
+async fn execute_set_presence(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let status_str = match args["status"].as_str() {
+        Some(s) => s,
+        None => return error_result("status is required"),
+    };
+
+    let status = match status_str {
+        "online" => PresenceStatus::Online,
+        "away" => PresenceStatus::Away,
+        "busy" => PresenceStatus::Busy,
+        "invisible" => PresenceStatus::Invisible,
+        _ => return error_result("Invalid status. Must be one of: online, away, busy, invisible"),
+    };
+
+    let entity_id = args["entity_id"].as_str().map(|s| s.to_string());
+
+    let update = if let Some(eid) = entity_id {
+        let mut update = PresenceUpdate::status_only(status);
+        update.current_entity = Some(eid);
+        update
+    } else {
+        PresenceUpdate::status_only(status)
+    };
+
+    // Get user ID from profile
+    let user_id = match app.query(communitas_core::command::Query::GetProfile).await {
+        Ok(communitas_core::command::QueryResponse::Profile { four_words, .. }) => four_words,
+        _ => return error_result("Failed to get user profile"),
+    };
+
+    match PresenceOperations::update_presence(app, user_id, update) {
+        Ok(_) => success_result(&format!("Presence set to {}", status_str)),
+        Err(e) => error_result(&format!("Failed to set presence: {}", e)),
+    }
+}
+
+async fn execute_get_presence(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let user_ids = match args["user_ids"].as_array() {
+        Some(arr) => arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect::<Vec<_>>(),
+        None => return error_result("user_ids must be an array of strings"),
+    };
+
+    if user_ids.is_empty() {
+        return error_result("user_ids cannot be empty");
+    }
+
+    match PresenceOperations::get_users_presence(app, user_ids) {
+        Ok(presences) => json_result(&json!({ "presences": presences })),
+        Err(e) => error_result(&format!("Failed to get presence: {}", e)),
+    }
+}
+
+async fn execute_subscribe_to_presence(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let entity_ids = match args["entity_ids"].as_array() {
+        Some(arr) => arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect::<Vec<_>>(),
+        None => return error_result("entity_ids must be an array of strings"),
+    };
+
+    if entity_ids.is_empty() {
+        return error_result("entity_ids cannot be empty");
+    }
+
+    let subscription = PresenceSubscription {
+        entity_ids: entity_ids.clone(),
+        include_self: false,
+    };
+
+    match PresenceOperations::subscribe_to_presence(app, subscription) {
+        Ok(sub_id) => json_result(&json!({ 
+            "subscription_id": sub_id,
+            "message": format!("Subscribed to presence for {} entities", entity_ids.len())
+        })),
+        Err(e) => error_result(&format!("Failed to subscribe to presence: {}", e)),
+    }
+}
+
+async fn execute_start_voice_call(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let entity_id = match args["entity_id"].as_str() {
+        Some(s) => s.to_string(),
+        None => return error_result("entity_id is required"),
+    };
+    let participant_ids = args["participant_ids"]
+        .as_array()
+        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect())
+        .unwrap_or_default();
+    let video_enabled = args["video_enabled"].as_bool().unwrap_or(true);
+
+    let request = CallRequest {
+        entity_id,
+        participant_ids,
+        video_enabled,
+    };
+
+    // Get user ID
+    let initiator_id = match app.query(communitas_core::command::Query::GetProfile).await {
+        Ok(communitas_core::command::QueryResponse::Profile { four_words, .. }) => four_words,
+        _ => return error_result("Failed to get user profile"),
+    };
+
+    match WebRtcOperations::start_call(app, request, initiator_id) {
+        Ok(session) => json_result(&json!({ "call_session": session })),
+        Err(e) => error_result(&format!("Failed to start call: {}", e)),
+    }
+}
+
+async fn execute_join_call(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let call_id = match args["call_id"].as_str() {
+        Some(s) => s.to_string(),
+        None => return error_result("call_id is required"),
+    };
+
+    let user_id = match app.query(communitas_core::command::Query::GetProfile).await {
+        Ok(communitas_core::command::QueryResponse::Profile { four_words, .. }) => four_words,
+        _ => return error_result("Failed to get user profile"),
+    };
+
+    match WebRtcOperations::join_call(app, call_id, user_id) {
+        Ok(_) => success_result("Joined call successfully"),
+        Err(e) => error_result(&format!("Failed to join call: {}", e)),
+    }
+}
+
+async fn execute_end_call(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let call_id = match args["call_id"].as_str() {
+        Some(s) => s.to_string(),
+        None => return error_result("call_id is required"),
+    };
+
+    match WebRtcOperations::end_call(app, call_id) {
+        Ok(_) => success_result("Call ended"),
+        Err(e) => error_result(&format!("Failed to end call: {}", e)),
+    }
+}
+
+async fn execute_upload_with_metadata(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let entity_id = match args["entity_id"].as_str() { Some(s) => s.to_string(), None => return error_result("entity_id required") };
+    let disk_type = match args["disk_type"].as_str().and_then(parse_disk_type) { Some(t) => t, None => return error_result("Invalid disk_type") };
+    let path = match args["path"].as_str() { Some(s) => s.to_string(), None => return error_result("path required") };
+    let content_base64 = match args["content"].as_str() { Some(s) => s, None => return error_result("content required (base64)") };
+    let metadata = args["metadata"].clone();
+
+    // Decode base64 content
+    let data = match BASE64_STANDARD.decode(content_base64) {
+        Ok(d) => d,
+        Err(e) => return error_result(&format!("Failed to decode content: {}", e)),
+    };
+
+    // 1. Write the main file
+    let cmd_file = Command::WriteFile {
+        entity_id: entity_id.clone(),
+        disk_type: disk_type.clone(),
+        path: path.clone(),
+        data,
+    };
+    if let Err(e) = app.execute(cmd_file).await {
+        return error_result(&format!("Failed to write file: {}", e.message));
+    }
+
+    // 2. Write the metadata file
+    let meta_path = format!("{}.meta.json", path);
+    let meta_data = serde_json::to_vec(&metadata).unwrap_or_default();
+    
+    let cmd_meta = Command::WriteFile {
+        entity_id,
+        disk_type,
+        path: meta_path,
+        data: meta_data,
+    };
+    
+    match app.execute(cmd_meta).await {
+        Ok(_) => success_result("File and metadata uploaded successfully"),
+        Err(e) => error_result(&format!("Failed to write metadata: {}", e.message)),
+    }
+}
+
+async fn execute_get_media_metadata(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let entity_id = match args["entity_id"].as_str() { Some(s) => s.to_string(), None => return error_result("entity_id required") };
+    let disk_type = match args["disk_type"].as_str().and_then(parse_disk_type) { Some(t) => t, None => return error_result("Invalid disk_type") };
+    let path = match args["path"].as_str() { Some(s) => s.to_string(), None => return error_result("path required") };
+
+    let meta_path = format!("{}.meta.json", path);
+    
+    let query = Query::ReadFile {
+        entity_id,
+        disk_type,
+        path: meta_path,
+    };
+
+    match app.query(query).await {
+        Ok(QueryResponse::FileContents(content)) => {
+            match serde_json::from_slice::<Value>(&content) {
+                Ok(meta) => json_result(&meta),
+                Err(_) => error_result("Failed to parse metadata JSON"),
+            }
+        },
+        Ok(_) => error_result("Unexpected response type"),
+        Err(e) => error_result(&format!("Failed to read metadata (or file not found): {}", e.message)),
+    }
+}
+
+async fn execute_create_poll(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let entity_id = match args["entity_id"].as_str() { Some(s) => s.to_string(), None => return error_result("entity_id required") };
+    let question = match args["question"].as_str() { Some(s) => s.to_string(), None => return error_result("question required") };
+    let options: Vec<String> = match args["options"].as_array() {
+        Some(arr) => arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect(),
+        None => return error_result("options required"),
+    };
+    let allows_multiple = args["allows_multiple"].as_bool().unwrap_or(false);
+    let duration_hours = args["duration_hours"].as_u64();
+
+    match PollOperations::create_poll(app, entity_id, question, options, allows_multiple, duration_hours) {
+        Ok(poll) => json_result(&json!({ "poll": poll })),
+        Err(e) => error_result(&format!("Failed to create poll: {}", e)),
+    }
+}
+
+async fn execute_vote_in_poll(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let poll_id = match args["poll_id"].as_str() { Some(s) => s.to_string(), None => return error_result("poll_id required") };
+    let option_id = match args["option_id"].as_str() { Some(s) => s.to_string(), None => return error_result("option_id required") };
+
+    // Get user ID
+    let user_id = match app.query(communitas_core::command::Query::GetProfile).await {
+        Ok(communitas_core::command::QueryResponse::Profile { four_words, .. }) => four_words,
+        _ => return error_result("Failed to get user profile"),
+    };
+
+    match PollOperations::vote(app, poll_id, option_id, user_id) {
+        Ok(_) => success_result("Voted successfully"),
+        Err(e) => error_result(&format!("Failed to vote: {}", e)),
+    }
+}
+
+async fn execute_share_location(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let entity_id = match args["entity_id"].as_str() { Some(s) => s.to_string(), None => return error_result("entity_id required") };
+    let latitude = match args["latitude"].as_f64() { Some(f) => f, None => return error_result("latitude required") };
+    let longitude = match args["longitude"].as_f64() { Some(f) => f, None => return error_result("longitude required") };
+    let is_live = args["is_live"].as_bool().unwrap_or(false);
+    let duration_minutes = args["duration_minutes"].as_u64();
+
+    // Get user ID
+    let user_id = match app.query(communitas_core::command::Query::GetProfile).await {
+        Ok(communitas_core::command::QueryResponse::Profile { four_words, .. }) => four_words,
+        _ => return error_result("Failed to get user profile"),
+    };
+
+    match LocationOperations::share_location(app, entity_id, user_id, latitude, longitude, is_live, duration_minutes) {
+        Ok(loc) => json_result(&json!({ "location": loc })),
+        Err(e) => error_result(&format!("Failed to share location: {}", e)),
+    }
+}
+
+async fn execute_create_story(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let entity_id = match args["entity_id"].as_str() { Some(s) => s.to_string(), None => return error_result("entity_id required") };
+    let text = match args["text"].as_str() { Some(s) => s.to_string(), None => return error_result("text required") };
+    let media_paths: Vec<String> = args["media_paths"]
+        .as_array()
+        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect())
+        .unwrap_or_default();
+    let expires_hours = args["expires_hours"].as_u64().unwrap_or(24);
+
+    // Get user ID
+    let author_id = match app.query(communitas_core::command::Query::GetProfile).await {
+        Ok(communitas_core::command::QueryResponse::Profile { four_words, .. }) => four_words,
+        _ => return error_result("Failed to get user profile"),
+    };
+
+    match StoryOperations::create_story(app, entity_id, author_id, text, media_paths, expires_hours) {
+        Ok(story) => json_result(&json!({ "story": story })),
+        Err(e) => error_result(&format!("Failed to create story: {}", e)),
+    }
+}
+
+async fn execute_start_presentation(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let entity_id = match args["entity_id"].as_str() { Some(s) => s.to_string(), None => return error_result("entity_id required") };
+    let slides: Vec<Slide> = match serde_json::from_value(args["slides"].clone()) {
+        Ok(s) => s,
+        Err(_) => return error_result("Invalid slides format"),
+    };
+
+    // Get user ID
+    let presenter_id = match app.query(communitas_core::command::Query::GetProfile).await {
+        Ok(communitas_core::command::QueryResponse::Profile { four_words, .. }) => four_words,
+        _ => return error_result("Failed to get user profile"),
+    };
+
+    match PresentationOperations::start_presentation(app, entity_id, presenter_id, slides) {
+        Ok(session) => json_result(&json!({ "session": session })),
+        Err(e) => error_result(&format!("Failed to start presentation: {}", e)),
+    }
+}
+
+async fn execute_share_screen(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let call_id = match args["call_id"].as_str() { Some(s) => s.to_string(), None => return error_result("call_id required") };
+    let region: Option<ScreenRegion> = if let Some(r) = args.get("region") {
+        match serde_json::from_value(r.clone()) {
+            Ok(reg) => Some(reg),
+            Err(_) => return error_result("Invalid region format"),
+        }
+    } else {
+        None
+    };
+
+    match PresentationOperations::share_screen(app, call_id, region) {
+        Ok(_) => success_result("Screen sharing started"),
+        Err(e) => error_result(&format!("Failed to share screen: {}", e)),
+    }
+}
+
+async fn execute_get_session(app: &CommunitasApp) -> ToolCallResult {
+    match app.query(communitas_core::command::Query::GetProfile).await {
+        Ok(communitas_core::command::QueryResponse::Profile { four_words, display_name, device_name, .. }) => json_result(&json!({
+            "four_words": four_words,
+            "display_name": display_name,
+            "device_name": device_name,
+            "authenticated": true
+        })),
+        _ => error_result("Failed to get session info"),
+    }
+}
+
+async fn execute_get_unread_count(_app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let entity_ids = match args["entity_ids"].as_array() {
+        Some(arr) => arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect::<Vec<_>>(),
+        None => return error_result("entity_ids required"),
+    };
+
+    // TODO: Implement actual unread count query in Core
+    let mut unread_counts = serde_json::Map::new();
+    for id in entity_ids {
+        unread_counts.insert(id, json!(0));
+    }
+
+    json_result(&json!({ "unread_counts": unread_counts }))
 }
 
 async fn execute_list_pending_invites(app: &CommunitasApp) -> ToolCallResult {

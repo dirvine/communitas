@@ -269,6 +269,12 @@ impl McpServer {
             ));
         }
 
+        if params.name == "logout" {
+            self.auth_state = AuthState::Unauthenticated;
+            let result = tools::success_result("Logged out successfully");
+            return serde_json::to_value(result).map_err(|e| JsonRpcError::internal_error(&e.to_string()));
+        }
+
         if params.name == "create_delegate_token" {
             return self
                 .handle_create_delegate_token(params.arguments.unwrap_or(serde_json::json!({})))

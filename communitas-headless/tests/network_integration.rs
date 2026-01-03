@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 fn build_binary() -> std::path::PathBuf {
     let status = Command::new("cargo")
-        .args(&["build", "-p", "communitas-headless"])
+        .args(["build", "-p", "communitas-headless"])
         .status()
         .expect("Failed to build binary");
     assert!(status.success());
@@ -42,11 +42,9 @@ impl LogMonitor {
 
         thread::spawn(move || {
             let reader = BufReader::new(child_stdout);
-            for line in reader.lines() {
-                if let Ok(l) = line {
-                    println!("{}: {}", prefix, l); // Echo to test stdout
-                    logs_clone.lock().unwrap().push(l);
-                }
+            for l in reader.lines().map_while(Result::ok) {
+                println!("{}: {}", prefix, l); // Echo to test stdout
+                logs_clone.lock().unwrap().push(l);
             }
         });
 
@@ -239,7 +237,9 @@ jitter_secs = 0
     println!("Node B Metrics:\n{}", output_b);
     assert!(output_b.contains("communitas_peers_connected 1"));
 
-    // Cleanup
+    // Cleanup: kill and wait to avoid zombie processes
     let _ = node_a.kill();
+    let _ = node_a.wait();
     let _ = node_b.kill();
+    let _ = node_b.wait();
 }

@@ -2999,11 +2999,15 @@ mod crdt_storage_tests {
             }
 
             let invite_id = invite.id.clone();
-            service.store_invite_in_crdt(&invite).await
-                .expect(&format!("store {} failed", status));
+            service
+                .store_invite_in_crdt(&invite)
+                .await
+                .unwrap_or_else(|_| panic!("store {} failed", status));
 
-            let loaded = service.load_invite_from_crdt(&invite_id).await
-                .expect(&format!("load {} failed", status));
+            let loaded = service
+                .load_invite_from_crdt(&invite_id)
+                .await
+                .unwrap_or_else(|_| panic!("load {} failed", status));
 
             assert_eq!(loaded.status, *status, "status mismatch for {}", status);
         }

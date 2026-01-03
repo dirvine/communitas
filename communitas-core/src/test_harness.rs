@@ -296,6 +296,15 @@ impl TestHarness {
     /// Setup line topology (0-1-2-3-...)
     pub async fn line(&self) -> Result<()> {
         let node_count = self.network.read().await.nodes.len();
+
+        // First disconnect all nodes from each other
+        for i in 0..node_count {
+            for j in (i + 1)..node_count {
+                self.network.read().await.disconnect(i, j).await;
+            }
+        }
+
+        // Then connect only adjacent nodes
         for i in 0..node_count.saturating_sub(1) {
             self.network.read().await.connect(i, i + 1).await;
         }
@@ -306,6 +315,15 @@ impl TestHarness {
     /// Setup star topology (hub connected to all)
     pub async fn star(&self, hub: usize) -> Result<()> {
         let node_count = self.network.read().await.nodes.len();
+
+        // First disconnect all nodes from each other
+        for i in 0..node_count {
+            for j in (i + 1)..node_count {
+                self.network.read().await.disconnect(i, j).await;
+            }
+        }
+
+        // Then connect hub to all spokes
         for i in 0..node_count {
             if i != hub {
                 self.network.read().await.connect(hub, i).await;

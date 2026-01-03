@@ -104,17 +104,15 @@ async fn test_remove_from_org_cascades_to_channels() {
         .await
         .unwrap();
 
-    // Verify member removed from organization
+    // Verify member removed from organization (list_members filters deleted members)
     let org_members_after = service
         .list_members(EntityType::Organisation, org_id)
         .await
         .unwrap();
-    let removed_from_org = org_members_after
-        .iter()
-        .find(|m| m.member_id == "member-to-remove")
-        .unwrap();
     assert!(
-        removed_from_org.deleted,
+        !org_members_after
+            .iter()
+            .any(|m| m.member_id == "member-to-remove"),
         "Member should be removed from organization"
     );
 
@@ -123,17 +121,10 @@ async fn test_remove_from_org_cascades_to_channels() {
         .list_members(EntityType::Channel, channel_id)
         .await
         .unwrap();
-    let removed_from_channel = channel_members_after
-        .iter()
-        .find(|m| m.member_id == "member-to-remove");
-
     assert!(
-        removed_from_channel.is_some(),
-        "Member tombstone should exist in channel"
-    );
-
-    assert!(
-        removed_from_channel.unwrap().deleted,
+        !channel_members_after
+            .iter()
+            .any(|m| m.member_id == "member-to-remove"),
         "SECURITY: Member MUST be removed from org channel when removed from org"
     );
 }
@@ -193,18 +184,15 @@ async fn test_remove_from_org_cascades_to_groups() {
         .await
         .unwrap();
 
-    // Verify removed from group
+    // Verify removed from group (list_members filters deleted members)
     let group_members = service
         .list_members(EntityType::Group, group_id)
         .await
         .unwrap();
-    let removed = group_members
-        .iter()
-        .find(|m| m.member_id == "member-to-remove")
-        .unwrap();
-
     assert!(
-        removed.deleted,
+        !group_members
+            .iter()
+            .any(|m| m.member_id == "member-to-remove"),
         "SECURITY: Member MUST be removed from org group"
     );
 }
@@ -269,18 +257,15 @@ async fn test_remove_from_org_cascades_to_projects() {
         .await
         .unwrap();
 
-    // Verify removed from project
+    // Verify removed from project (list_members filters deleted members)
     let project_members = service
         .list_members(EntityType::Project, project_id)
         .await
         .unwrap();
-    let removed = project_members
-        .iter()
-        .find(|m| m.member_id == "member-to-remove")
-        .unwrap();
-
     assert!(
-        removed.deleted,
+        !project_members
+            .iter()
+            .any(|m| m.member_id == "member-to-remove"),
         "SECURITY: Member MUST be removed from org project"
     );
 }
@@ -398,17 +383,16 @@ async fn test_remove_from_org_cascades_to_all_child_types() {
         "Should remove from org + 3 children = 4 entities"
     );
 
-    // Verify each child has member removed
+    // Verify each child has member removed (list_members filters deleted members)
     let channel_members = service
         .list_members(EntityType::Channel, channel_id)
         .await
         .unwrap();
     assert!(
-        channel_members
+        !channel_members
             .iter()
-            .find(|m| m.member_id == "member-to-remove")
-            .unwrap()
-            .deleted
+            .any(|m| m.member_id == "member-to-remove"),
+        "Member should be removed from channel"
     );
 
     let group_members = service
@@ -416,11 +400,10 @@ async fn test_remove_from_org_cascades_to_all_child_types() {
         .await
         .unwrap();
     assert!(
-        group_members
+        !group_members
             .iter()
-            .find(|m| m.member_id == "member-to-remove")
-            .unwrap()
-            .deleted
+            .any(|m| m.member_id == "member-to-remove"),
+        "Member should be removed from group"
     );
 
     let project_members = service
@@ -428,11 +411,10 @@ async fn test_remove_from_org_cascades_to_all_child_types() {
         .await
         .unwrap();
     assert!(
-        project_members
+        !project_members
             .iter()
-            .find(|m| m.member_id == "member-to-remove")
-            .unwrap()
-            .deleted
+            .any(|m| m.member_id == "member-to-remove"),
+        "Member should be removed from project"
     );
 }
 

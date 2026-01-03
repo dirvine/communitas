@@ -30,6 +30,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
+use tokio::task::JoinHandle;
 use tracing::{debug, info, warn};
 
 // Phase 2 TDD: Import resilience modules
@@ -37,6 +38,10 @@ use crate::{ConnectivityWatchdog, ResourceLimits, WatchdogConfig};
 
 // Contact storage for endpoint tracking
 use super::contact_storage::{ContactRecord, ContactStore};
+
+/// Type alias for entity message handler callback
+/// Called with (entity_id, sender_peer_id, message_bytes)
+pub type EntityMessageHandler = Arc<dyn Fn(String, PeerId, Bytes) + Send + Sync>;
 
 /// Centralized context for the gossip overlay system
 ///
@@ -114,6 +119,14 @@ pub struct GossipContext {
 
     /// Contact store for endpoint tracking (per SPEC2.md contact management)
     pub contact_store: ContactStore,
+
+    /// Entity message handler callback for incoming gossip messages
+    /// Set via set_entity_message_handler() to receive entity messages
+    entity_message_handler: Arc<RwLock<Option<EntityMessageHandler>>>,
+
+    /// Background tasks for entity subscription receivers
+    /// entity_id → JoinHandle for the receiver task
+    entity_receiver_tasks: Arc<RwLock<HashMap<String, JoinHandle<()>>>>,
 }
 
 impl GossipContext {
@@ -169,12 +182,13 @@ impl GossipContext {
             bind_port,
         );
 
-        let transport_config = AntQuicTransportConfig::new(
-            bind_addr,
-            saorsa_gossip_transport::EndpointRole::Bootstrap,
-            vec![],
-        )
-        .with_allow_any_key(true);
+        // Extract keypair bytes from identity to ensure transport uses the same peer ID
+        let keypair = identity.key_pair();
+        let pub_key_bytes = keypair.public_key().to_vec();
+        let sec_key_bytes = keypair.secret_key().to_vec();
+
+        let transport_config = AntQuicTransportConfig::new(bind_addr, vec![])
+            .with_keypair(pub_key_bytes, sec_key_bytes);
 
         let transport = AntQuicTransport::with_config(transport_config, None)
             .await
@@ -373,6 +387,8 @@ impl GossipContext {
             watchdog,
             resource_limits,
             contact_store: ContactStore::new(),
+            entity_message_handler: Arc::new(RwLock::new(None)),
+            entity_receiver_tasks: Arc::new(RwLock::new(HashMap::new())),
         })
     }
 
@@ -472,6 +488,16 @@ impl GossipContext {
         self.favourite_contacts.read().await.clone()
     }
 
+    /// Set the handler for incoming entity messages
+    ///
+    /// The handler is called with (entity_id, sender_peer_id, message_bytes)
+    /// whenever a message is received on a subscribed entity topic.
+    pub async fn set_entity_message_handler(&self, handler: EntityMessageHandler) {
+        let mut guard = self.entity_message_handler.write().await;
+        *guard = Some(handler);
+        info!("Entity message handler registered");
+    }
+
     /// Map a channel/project/org entity to an MLS group + topic
     ///
     /// Per SPEC.md §1: Channel/Project/Org → MLS group + gossip topic
@@ -522,10 +548,108 @@ impl GossipContext {
             groups_by_topic.insert(topic_id, group_ctx);
         }
 
-        // 3. Subscribe to topic (returns a receiver, not async)
-        let pubsub = self.pubsub.read().await;
-        let _rx = pubsub.subscribe(topic_id);
-        // TODO: Store receiver for processing incoming messages
+        // 3. Subscribe to topic and spawn receiver task
+        let mut rx = {
+            let pubsub = self.pubsub.read().await;
+            pubsub.subscribe(topic_id)
+        };
+
+        // 3.5. Initialize topic peers from connected transport peers
+        // This populates the eager_peers set so messages are actually broadcast
+        let connected_peers: Vec<_> = self
+            .transport
+            .connected_peers()
+            .await
+            .into_iter()
+            .map(|(peer_id, _addr)| peer_id)
+            .collect();
+
+        if !connected_peers.is_empty() {
+            // Initialize topic peers (read lock released after this block)
+            {
+                let pubsub = self.pubsub.read().await;
+                (**pubsub)
+                    .initialize_topic_peers(topic_id, connected_peers.clone())
+                    .await;
+            } // Read lock released here
+
+            debug!(
+                "Initialized topic {:?} with {} connected peers",
+                topic_id,
+                connected_peers.len()
+            );
+
+            // 3.6. Send sync request to get historical messages
+            // This ensures new joiners catch up on messages sent before they joined
+            // Note: publish_to_entity needs a write lock, so we must release
+            // the read lock above before calling it
+            let sync_request = crate::crdt::SyncRequest {
+                entity_id: entity_id.to_string(),
+                entity_type: Self::parse_entity_type(entity_type),
+                requester_peer_id: self.four_words.clone(),
+                vector_clock: crate::crdt::VectorClock::new(), // Empty = request all messages
+                missing_message_ids: None,
+            };
+
+            let gossip_msg = crate::crdt::GossipMessageType::SyncRequest(sync_request);
+            match serde_json::to_vec(&gossip_msg) {
+                Ok(bytes) => {
+                    if let Err(e) = self.publish_to_entity(entity_id, bytes).await {
+                        warn!("Failed to send sync request for {}: {}", entity_id, e);
+                    } else {
+                        info!(
+                            "Sent sync request for entity {} to {} peers",
+                            entity_id,
+                            connected_peers.len()
+                        );
+                    }
+                }
+                Err(e) => {
+                    warn!("Failed to serialize sync request: {}", e);
+                }
+            }
+        } else {
+            debug!(
+                "No connected peers yet for topic {:?}, messages will buffer",
+                topic_id
+            );
+        }
+
+        // 4. Spawn background task to process incoming messages
+        let entity_id_clone = entity_id.to_string();
+        let handler_ref = self.entity_message_handler.clone();
+
+        let handle = tokio::spawn(async move {
+            debug!(
+                "Started entity message receiver task for {}",
+                entity_id_clone
+            );
+
+            while let Some((sender_peer_id, message_bytes)) = rx.recv().await {
+                debug!(
+                    "Received message for entity {} from peer {:?}",
+                    entity_id_clone, sender_peer_id
+                );
+
+                // Get handler and invoke if set
+                if let Some(handler) = handler_ref.read().await.as_ref() {
+                    handler(entity_id_clone.clone(), sender_peer_id, message_bytes);
+                } else {
+                    warn!(
+                        "No entity message handler set, dropping message for {}",
+                        entity_id_clone
+                    );
+                }
+            }
+
+            debug!("Entity message receiver task ended for {}", entity_id_clone);
+        });
+
+        // Store the task handle
+        {
+            let mut tasks = self.entity_receiver_tasks.write().await;
+            tasks.insert(entity_id.to_string(), handle);
+        }
 
         info!("Joined {} {}, subscribed to topic", entity_type, entity_id);
         Ok(())
@@ -931,6 +1055,40 @@ impl GossipContext {
         Ok(online_peers)
     }
 
+    /// Add a peer to the eager_peers set for an entity's topic
+    ///
+    /// This ensures that when we publish messages to this entity,
+    /// the peer will receive them. Called when we receive a sync request
+    /// from a peer, indicating they're interested in this entity's messages.
+    pub async fn add_peer_to_entity_topic(&self, entity_id: &str, peer_id: PeerId) -> Result<()> {
+        // Get topic ID for entity
+        let topic_id = {
+            let topics = self.topics.read().await;
+            match topics.get(entity_id) {
+                Some(id) => *id,
+                None => {
+                    debug!(
+                        "Entity {} not found when adding peer to topic, skipping",
+                        entity_id
+                    );
+                    return Ok(());
+                }
+            }
+        };
+
+        // Add peer to eager_peers via initialize_topic_peers
+        let pubsub = self.pubsub.read().await;
+        (**pubsub)
+            .initialize_topic_peers(topic_id, vec![peer_id])
+            .await;
+
+        debug!(
+            "Added peer {:?} to eager_peers for entity {}",
+            peer_id, entity_id
+        );
+        Ok(())
+    }
+
     /// Establish peer routing for Sites transport
     ///
     /// The Sites protocol uses a dedicated transport that needs its own peer routing.
@@ -956,18 +1114,35 @@ impl GossipContext {
 
     /// Establish a connection to a specific address (bootstrap)
     pub async fn dial_address(&self, addr: std::net::SocketAddr) -> Result<()> {
-        // Use membership to join the network via this peer
-        // We assume this is a bootstrap node
-        // HyParView join(addr)
-        let membership = self.membership.read().await;
-        // Convert to four-word address for membership join
-        let seed = crate::conn_words(&addr)
-            .map_err(|e| anyhow::anyhow!("Failed to encode addr: {}", e))?;
-        membership
-            .join(vec![seed])
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to join via {}: {}", addr, e))?;
-        Ok(())
+        use saorsa_gossip_transport::GossipTransport;
+
+        // Use transport layer to establish actual QUIC connection
+        info!("Dialing bootstrap node at {} via transport", addr);
+        match self.transport.dial_bootstrap(addr).await {
+            Ok(peer_id) => {
+                info!(
+                    "Successfully connected to bootstrap {} (peer_id: {:?})",
+                    addr, peer_id
+                );
+
+                // Register peer for anti-entropy sync
+                self.anti_entropy.add_peer(peer_id).await;
+
+                // Also notify membership layer about this peer
+                let seed = crate::conn_words(&addr)
+                    .map_err(|e| anyhow::anyhow!("Failed to encode addr: {}", e))?;
+                let membership = self.membership.read().await;
+                if let Err(e) = membership.join(vec![seed]).await {
+                    warn!("Membership join after dial failed (non-fatal): {}", e);
+                }
+
+                Ok(())
+            }
+            Err(e) => {
+                warn!("Failed to dial bootstrap {}: {}", addr, e);
+                Err(anyhow::anyhow!("Failed to dial {}: {}", addr, e))
+            }
+        }
     }
 
     // ========================================================================
@@ -1082,6 +1257,25 @@ impl GossipContext {
 
         debug!("Recorded connection failure to {}", four_words);
         Ok(())
+    }
+
+    // ========================================================================
+    // Helper Functions
+    // ========================================================================
+
+    /// Parse entity type string into EntityType enum
+    fn parse_entity_type(entity_type: &str) -> crate::crdt::EntityType {
+        match entity_type.to_lowercase().as_str() {
+            "person" | "contact" => crate::crdt::EntityType::Person,
+            "group" => crate::crdt::EntityType::Group,
+            "project" => crate::crdt::EntityType::Project,
+            "channel" => crate::crdt::EntityType::Channel,
+            "organisation" | "organization" | "org" => crate::crdt::EntityType::Organisation,
+            _ => {
+                warn!("Unknown entity type '{}', defaulting to Channel", entity_type);
+                crate::crdt::EntityType::Channel
+            }
+        }
     }
 }
 

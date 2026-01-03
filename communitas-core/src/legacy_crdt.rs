@@ -269,6 +269,25 @@ pub struct EntitySyncState {
     pub out_of_order_messages: Vec<String>,
 }
 
+/// Gossip message type wrapper
+///
+/// Wraps different message types sent over the gossip network:
+/// - Chat messages (regular CRDTMessage)
+/// - Sync requests (when a peer needs historical messages)
+/// - Sync responses (reply with historical messages)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum GossipMessageType {
+    /// Regular chat/entity message
+    Chat(CRDTMessage),
+
+    /// Request for historical messages (sent when joining a topic)
+    SyncRequest(SyncRequest),
+
+    /// Response with historical messages
+    SyncResponse(SyncResponse),
+}
+
 /// Sort messages in causal order
 pub fn sort_messages_causally(messages: &mut [CRDTMessage]) {
     messages.sort_by(|a, b| {

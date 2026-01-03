@@ -1,4 +1,13 @@
+// UniFFI scaffolding (Swift bindings) - enabled by default
+#[cfg(feature = "uniffi-bindings")]
 uniffi::setup_scaffolding!();
+
+// Flutter API module (flutter_rust_bridge bindings)
+// Build with: cargo build --no-default-features --features flutter-bindings
+#[cfg(feature = "flutter-bindings")]
+mod frb_generated;
+#[cfg(feature = "flutter-bindings")]
+pub mod flutter_api;
 
 use communitas_core::auth_service::{AuthService, SessionInfo};
 use communitas_core::crdt::EntityType;

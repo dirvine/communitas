@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base href="$FLUTTER_BASE_HREF">
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="Communitas - Local-first collaboration platform">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Communitas">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <link rel="icon" type="image/png" href="favicon.png"/>
+  <title>Communitas</title>
+  <link rel="manifest" href="manifest.json">
+  <style>
+    /* Comprehensive CSS reset for Flutter web semantic layer */
+    /* Target all possible Flutter-generated elements */
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
+
+    /* Reset ALL link styles everywhere */
+    a, a:link, a:visited, a:hover, a:active,
+    [role="link"], [role="button"],
+    flt-semantics a, flt-semantics-host a,
+    flt-glass-pane a, flt-scene a {
+      color: inherit !important;
+      text-decoration: none !important;
+      -webkit-text-decoration: none !important;
+      background: transparent !important;
+    }
+
+    /* Target Flutter's semantic containers */
+    flt-glass-pane, flt-glass-pane *,
+    flt-semantics, flt-semantics *,
+    flt-semantics-host, flt-semantics-host *,
+    flt-scene, flt-scene *,
+    flt-scene-host, flt-scene-host * {
+      color: inherit !important;
+      text-decoration: none !important;
+      -webkit-text-decoration: none !important;
+    }
+
+    /* Ensure semantic placeholders don't show browser default styles */
+    flt-semantics-placeholder {
+      color: transparent !important;
+      text-decoration: none !important;
+    }
+
+    /* Force all text elements to not have link styling */
+    [flt-text], [data-semantics-role] {
+      color: inherit !important;
+      text-decoration: none !important;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #1A241F;
+      /* Prevent any inherited link colors */
+      color: #F5F5DC;
+    }
+    .loading {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      flex-direction: column;
+    }
+    .loading-text {
+      color: #4CAF83;
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 18px;
+      margin-top: 20px;
+    }
+    .loader {
+      width: 48px;
+      height: 48px;
+      border: 3px solid #2D3D36;
+      border-radius: 50%;
+      border-top-color: #4CAF83;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="loading">
+    <div class="loader"></div>
+    <div class="loading-text">Loading Communitas...</div>
+  </div>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>

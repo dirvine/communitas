@@ -26,8 +26,10 @@
 // Allow these in tests for convenience
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
+pub mod app; // CommunitasApp - The headless core with execute/query/subscribe API
 pub mod auth_service;
 // pub mod bootstrap_integration; // TODO: Reimplement in Sprint 2 with gossip-based bootstrap
+pub mod command; // Command/Event/Query architecture for headless core
 pub mod connectivity_watchdog; // Internet collapse detection (MESH_CAPABILITIES.md §3.2)
 pub mod core_context;
 pub mod crdt; // New pure CRDT infrastructure

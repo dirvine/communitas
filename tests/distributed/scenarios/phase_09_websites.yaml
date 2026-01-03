@@ -1,0 +1,143 @@
+# Phase 9: Websites
+# Tests website publishing
+
+name: "Phase 9: Websites"
+description: "Tests website creation, updates, and deletion for identity-bound publishing"
+tools_covered:
+  - create_website
+  - get_website
+  - update_website
+  - delete_website
+
+test_cases:
+  # Create website for organisation
+  - id: WEB-001
+    name: "Alice creates organisation website"
+    actors: [alice]
+    steps:
+      - tool: create_website
+        params:
+          entity_id: "${org_id}"
+          name: "Acme Corp Website"
+          content: |
+            <!DOCTYPE html>
+            <html>
+            <head><title>Acme Corp</title></head>
+            <body>
+              <h1>Welcome to Acme Corp</h1>
+              <p>Building the future together.</p>
+            </body>
+            </html>
+        expect:
+          status: success
+        store:
+          website_id: id
+
+  # Get website
+  - id: WEB-002
+    name: "Get website details"
+    actors: [alice]
+    steps:
+      - tool: get_website
+        params:
+          website_id: "${website_id}"
+        expect:
+          status: success
+          fields:
+            name: "Acme Corp Website"
+          contains:
+            - "Welcome to Acme Corp"
+
+  # Update website
+  - id: WEB-003
+    name: "Update website content"
+    actors: [bob]
+    steps:
+      - tool: update_website
+        params:
+          website_id: "${website_id}"
+          content: |
+            <!DOCTYPE html>
+            <html>
+            <head><title>Acme Corp - Updated</title></head>
+            <body>
+              <h1>Welcome to Acme Corp</h1>
+              <p>Building the future together.</p>
+              <p>Updated by Bob.</p>
+            </body>
+            </html>
+        expect:
+          status: success
+
+  # Verify update
+  - id: WEB-004
+    name: "Verify website updated"
+    actors: [charlie]
+    wait_ms: 3000
+    steps:
+      - tool: get_website
+        params:
+          website_id: "${website_id}"
+        expect:
+          status: success
+          contains:
+            - "Updated by Bob"
+
+  # Create personal website
+  - id: WEB-005
+    name: "Charlie creates personal website"
+    actors: [charlie]
+    steps:
+      - tool: create_website
+        params:
+          name: "Charlie's Page"
+          content: |
+            <!DOCTYPE html>
+            <html>
+            <head><title>Charlie</title></head>
+            <body>
+              <h1>Charlie's Personal Page</h1>
+              <p>Hello from Charlie!</p>
+            </body>
+            </html>
+        expect:
+          status: success
+        store:
+          charlie_website_id: id
+
+  # Verify website accessible from other nodes
+  - id: WEB-006
+    name: "Dave accesses Charlie's website"
+    actors: [dave]
+    wait_ms: 3000
+    steps:
+      - tool: get_website
+        params:
+          website_id: "${charlie_website_id}"
+        expect:
+          status: success
+          contains:
+            - "Charlie's Personal Page"
+
+  # Delete personal website
+  - id: WEB-007
+    name: "Charlie deletes website"
+    actors: [charlie]
+    steps:
+      - tool: delete_website
+        params:
+          website_id: "${charlie_website_id}"
+        expect:
+          status: success
+
+  # Verify deletion
+  - id: WEB-008
+    name: "Verify website deleted"
+    actors: [charlie]
+    steps:
+      - tool: get_website
+        params:
+          website_id: "${charlie_website_id}"
+        expect:
+          status: error
+          error_contains: "not found"

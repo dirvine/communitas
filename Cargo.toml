@@ -3,11 +3,12 @@ resolver = "2"
 members = [
     "communitas-core",
     "communitas-headless",  # Bootstrap nodes
-    "communitas-bridge",    # HTTP bridge for testing
-    "communitas-tui",
     "communitas-p2p-test",
-    "communitas-bindings",  # Swift/UniFFI bindings
+    "communitas-bindings",  # Swift/UniFFI bindings + flutter_rust_bridge
     "communitas-kanban",    # CRDT-based Kanban system
+    "communitas-mcp",       # MCP server for AI agent control (HTTP/HTTPS + stdio)
+    "tests/distributed/orchestrator",  # Distributed test orchestrator
+    # communitas-flutter - Flutter GUI (not a Rust crate, separate build)
 ]
 
 [workspace.package]
@@ -83,6 +84,9 @@ chrono = { version = "0.4", features = ["serde"] }
 base64 = "0.22"
 hex = "0.4"
 
+# CLI parsing
+clap = "4"
+
 # CRDT
 yrs = { version = "0.19", features = ["sync"] }
 
@@ -102,3 +106,18 @@ strip = true
 
 [profile.dev]
 opt-level = 0
+
+# Patch saorsa-gossip crates to use local versions with initialize_topic_peers fix
+[patch.crates-io]
+saorsa-gossip-types = { path = "../saorsa-gossip/crates/types" }
+saorsa-gossip-identity = { path = "../saorsa-gossip/crates/identity" }
+saorsa-gossip-transport = { path = "../saorsa-gossip/crates/transport" }
+saorsa-gossip-membership = { path = "../saorsa-gossip/crates/membership" }
+saorsa-gossip-pubsub = { path = "../saorsa-gossip/crates/pubsub" }
+saorsa-gossip-crdt-sync = { path = "../saorsa-gossip/crates/crdt-sync" }
+saorsa-gossip-groups = { path = "../saorsa-gossip/crates/groups" }
+saorsa-gossip-presence = { path = "../saorsa-gossip/crates/presence" }
+saorsa-gossip-coordinator = { path = "../saorsa-gossip/crates/coordinator" }
+saorsa-gossip-rendezvous = { path = "../saorsa-gossip/crates/rendezvous" }
+saorsa-gossip-simulator = { path = "../saorsa-gossip/crates/simulator" }
+saorsa-gossip-load-test = { path = "../saorsa-gossip/crates/load-test" }

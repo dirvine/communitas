@@ -200,16 +200,12 @@ fn default_config_with_storage(base_dir: PathBuf) -> Config {
     Config {
         identity: None,
         bootstrap_nodes: vec![
-            // Digital Ocean NYC3 Bootstrap Nodes
-            // NOTE: Use IP:port format for reliability. Four-word user identities cannot be
-            // decoded to IP addresses - they're one-way hashed. Only connection-identity
-            // format (encoded via conn_words()) can be decoded back.
-            //
-            // Droplet: 2064413, IPv4: 167.71.188.131
-            // Port is dynamically assigned - update from node logs
-            "167.71.188.131:50000".to_string(),
-            // Droplet: communitas-bootstrap-1, IPv4: 138.197.29.195
-            "138.197.29.195:50000".to_string(),
+            // Saorsa Network Bootstrap Nodes
+            // See docs/infrastructure/INFRASTRUCTURE.md for full node list
+            "142.93.199.50:11000".to_string(),  // saorsa-2: DigitalOcean NYC1 bootstrap
+            "147.182.234.192:11000".to_string(), // saorsa-3: DigitalOcean SFO3 bootstrap
+            "206.189.7.117:11000".to_string(),  // saorsa-4: DigitalOcean AMS3 test node
+            "144.126.230.161:11000".to_string(), // saorsa-5: DigitalOcean LON1 test node
         ],
         storage: StorageConfig {
             base_dir,
@@ -608,20 +604,27 @@ async fn start_health_endpoint(
         }))
     });
 
+    // Clone gossip for each endpoint before moving into closures
+    let gossip_for_metrics = gossip.clone();
     let metrics = warp::path("metrics").and(warp::get()).then(move || {
-        let gossip = gossip.clone();
+        let gossip = gossip_for_metrics.clone();
         async move {
-            let peer_count = if let Some(g) = gossip {
-                g.membership.read().await.active_view().len()
+            let (transport_peers, membership_peers) = if let Some(g) = gossip {
+                let transport_count = g.transport.connected_peers().await.len();
+                let membership_count = g.membership.read().await.active_view().len();
+                (transport_count, membership_count)
             } else {
-                0
+                (0, 0)
             };
 
             let response = format!(
-                "# HELP communitas_peers_connected Number of connected peers\n\
+                "# HELP communitas_peers_connected Number of connected peers (transport layer)\n\
                  # TYPE communitas_peers_connected gauge\n\
-                 communitas_peers_connected {}\n",
-                peer_count
+                 communitas_peers_connected {}\n\
+                 # HELP communitas_membership_peers Number of peers in membership active view\n\
+                 # TYPE communitas_membership_peers gauge\n\
+                 communitas_membership_peers {}\n",
+                transport_peers, membership_peers
             );
 
             warp::reply::html(response)
@@ -651,7 +654,64 @@ async fn start_health_endpoint(
         }))
     });
 
-    let routes = health.or(metrics).or(authenticate).or(get_identity);
+    // Clone gossip context for API endpoints
+    let gossip_for_peers = gossip.clone();
+    let api_peers = warp::path!("api" / "peers")
+        .and(warp::get())
+        .then(move || {
+            let gossip = gossip_for_peers.clone();
+            async move {
+                let peers = if let Some(g) = gossip {
+                    let connected = g.transport.connected_peers().await;
+                    connected
+                        .into_iter()
+                        .map(|(peer_id, addr)| {
+                            serde_json::json!({
+                                "peer_id": format!("{:?}", peer_id),
+                                "address": addr.to_string()
+                            })
+                        })
+                        .collect::<Vec<_>>()
+                } else {
+                    vec![]
+                };
+                warp::reply::json(&serde_json::json!({
+                    "connected_peers": peers,
+                    "count": peers.len()
+                }))
+            }
+        });
+
+    let gossip_for_info = gossip.clone();
+    let api_node_info = warp::path!("api" / "node-info")
+        .and(warp::get())
+        .then(move || {
+            let gossip = gossip_for_info.clone();
+            async move {
+                let info = if let Some(g) = gossip {
+                    let peers = g.transport.connected_peers().await;
+                    serde_json::json!({
+                        "four_words": g.four_words,
+                        "display_name": g.display_name,
+                        "device_name": g.device_name,
+                        "connected_peers": peers.len(),
+                        "status": "active"
+                    })
+                } else {
+                    serde_json::json!({
+                        "status": "no_gossip_context"
+                    })
+                };
+                warp::reply::json(&info)
+            }
+        });
+
+    let routes = health
+        .or(metrics)
+        .or(authenticate)
+        .or(get_identity)
+        .or(api_peers)
+        .or(api_node_info);
 
     // Add CORS support
     let cors = cors()

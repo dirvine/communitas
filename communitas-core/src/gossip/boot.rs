@@ -113,8 +113,10 @@ impl GossipBootSequence {
         // words hashed one-way to seeds), NOT connection identities (encoded IPs).
         // User identities cannot be decoded back to IP addresses.
         let bootstrap_nodes = vec![
-            "167.71.188.131:50000".to_string(), // Digital Ocean Droplet 1 (2064413)
-            "138.197.29.195:50000".to_string(), // Digital Ocean Droplet 2 (communitas-bootstrap-1)
+            "142.93.199.50:11000".to_string(),  // saorsa-2: DigitalOcean NYC1 bootstrap
+            "147.182.234.192:11000".to_string(), // saorsa-3: DigitalOcean SFO3 bootstrap
+            "206.189.7.117:11000".to_string(),  // saorsa-4: DigitalOcean AMS3 test node
+            "144.126.230.161:11000".to_string(), // saorsa-5: DigitalOcean LON1 test node
         ];
 
         // Seed peer cache with bootstrap nodes for fast boot
@@ -390,6 +392,8 @@ impl GossipBootSequence {
         {
             let transport = Arc::clone(&self.context.transport);
             let anti_entropy = Arc::clone(&self.context.anti_entropy);
+            let pubsub = Arc::clone(&self.context.pubsub);
+            let topics = Arc::clone(&self.context.topics);
 
             tokio::spawn(async move {
                 info!("Starting transport peer sync task (5s interval)");
@@ -406,10 +410,13 @@ impl GossipBootSequence {
                         continue;
                     }
 
+                    // Extract peer IDs for reuse
+                    let peer_ids: Vec<_> = connected.iter().map(|(pid, _)| *pid).collect();
+
                     // Register all connected peers for CRDT anti-entropy sync
                     let mut registered = 0;
-                    for (peer_id, addr) in connected {
-                        anti_entropy.add_peer(peer_id).await;
+                    for (peer_id, addr) in &connected {
+                        anti_entropy.add_peer(*peer_id).await;
                         registered += 1;
                         debug!(
                             "Registered transport peer {:?} ({}) for CRDT sync",
@@ -423,9 +430,71 @@ impl GossipBootSequence {
                             registered
                         );
                     }
+
+                    // Also sync peers to all subscribed pubsub topics
+                    // This ensures topics get peer updates when new connections are made
+                    let topic_ids: Vec<_> = {
+                        let topics_guard = topics.read().await;
+                        topics_guard.values().copied().collect()
+                    };
+
+                    if !topic_ids.is_empty() && !peer_ids.is_empty() {
+                        let pubsub_guard = pubsub.read().await;
+                        for topic_id in topic_ids {
+                            (**pubsub_guard)
+                                .initialize_topic_peers(topic_id, peer_ids.clone())
+                                .await;
+                        }
+                        debug!(
+                            "Synced {} transport peers to pubsub topics",
+                            peer_ids.len()
+                        );
+                    }
                 }
             });
             info!("Transport peer sync task active (5s interval)");
+        }
+
+        // Start PubSub message processing loop
+        // This receives incoming PubSub messages from transport and routes them to handlers
+        {
+            let transport = Arc::clone(&self.context.transport);
+            let pubsub = Arc::clone(&self.context.pubsub);
+
+            tokio::spawn(async move {
+                info!("Starting PubSub message processing loop");
+
+                loop {
+                    match transport.receive_message().await {
+                        Ok((peer_id, stream_type, data)) => {
+                            // Only process PubSub messages in this loop
+                            if stream_type != StreamType::PubSub {
+                                debug!("Ignoring non-PubSub message from {:?}", peer_id);
+                                continue;
+                            }
+
+                            debug!(
+                                "Received PubSub message ({} bytes) from {:?}",
+                                data.len(),
+                                peer_id
+                            );
+
+                            // Route to pubsub handler via the trait method
+                            let pubsub_guard = pubsub.read().await;
+                            if let Err(e) = pubsub_guard.handle_message(peer_id, data).await {
+                                warn!("Failed to handle PubSub message from {:?}: {}", peer_id, e);
+                            }
+                        }
+                        Err(e) => {
+                            // Log at debug level since receive may return errors when no messages available
+                            debug!("Error receiving message from transport: {}", e);
+                            // Brief pause to avoid busy loop on persistent errors
+                            tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+                        }
+                    }
+                }
+            });
+            info!("PubSub message processing loop active");
         }
 
         Ok(())

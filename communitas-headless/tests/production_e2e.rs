@@ -1,5 +1,4 @@
 use communitas_core::CoreContext;
-use communitas_core::crdt::EntityType;
 use communitas_core::types::DeviceType;
 use std::net::SocketAddr;
 use std::time::Duration;
@@ -56,15 +55,12 @@ async fn test_production_network_gossip_sync() {
                 .get("http://138.197.29.195:9600/metrics")
                 .send()
                 .await
+                && let Ok(text) = resp.text().await
+                && let Some(line) = text
+                    .lines()
+                    .find(|l| l.contains("communitas_peers_connected"))
             {
-                if let Ok(text) = resp.text().await {
-                    if let Some(line) = text
-                        .lines()
-                        .find(|l| l.contains("communitas_peers_connected"))
-                    {
-                        println!("DO Node Metrics: {}", line);
-                    }
-                }
+                println!("DO Node Metrics: {}", line);
             }
             sleep(Duration::from_secs(5)).await;
         }

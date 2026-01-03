@@ -206,7 +206,13 @@ impl EntityService {
         }
 
         for member_id in &all_members {
-            self.add_member(entity_type, &entity_id, member_id, "member")
+            // Creator gets "owner" role, others get "member"
+            let role = if member_id == &created_by {
+                "owner"
+            } else {
+                "member"
+            };
+            self.add_member(entity_type, &entity_id, member_id, role)
                 .await?;
         }
 
@@ -770,6 +776,82 @@ impl EntityService {
         Ok(entity)
     }
 
+    pub async fn update_entity(
+        &self,
+        entity_id: &str,
+        name: Option<String>,
+        description: Option<Option<String>>,
+    ) -> EntityServiceResult<Entity> {
+        let mut entity = self.get_entity(entity_id).await?;
+
+        if let Some(new_name) = name {
+            entity.name = new_name;
+        }
+
+        if let Some(new_description) = description {
+            entity.description = new_description;
+        }
+
+        self.save_entity(&entity).await?;
+        Ok(entity)
+    }
+
+    pub async fn delete_entity(&self, entity_id: &str) -> EntityServiceResult<()> {
+        let doc_id = format!("entity:{}:metadata", entity_id);
+        self.crdt_manager
+            .delete_document(&doc_id)
+            .await
+            .map_err(|_| EntityServiceError::NotFound(entity_id.to_string()))?;
+        Ok(())
+    }
+
+    /// Import/join an existing entity by ID (for multi-node sync)
+    ///
+    /// This allows a node to join an entity that was created on another node.
+    /// The caller provides the entity metadata including the original ID.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn import_entity(
+        &self,
+        id: String,
+        name: String,
+        entity_type: EntityType,
+        description: Option<String>,
+        created_by: String,
+        created_at: i64,
+        joiner_four_words: String,
+        role: String,
+    ) -> EntityServiceResult<Entity> {
+        // Check if entity already exists
+        if let Ok(existing) = self.get_entity(&id).await {
+            return Ok(existing);
+        }
+
+        // Create entity with the provided ID
+        let entity = Entity {
+            id: id.clone(),
+            name,
+            entity_type,
+            description,
+            created_by,
+            created_at,
+            members: vec![joiner_four_words.clone()],
+            parent_org_id: None,
+            network_four_words: None,
+            is_local_only: false,
+            linked_at: None,
+            last_sync_at: None,
+        };
+
+        // Save entity metadata
+        self.save_entity(&entity).await?;
+
+        // Add the joining member with their role
+        self.add_member(entity_type, &id, &joiner_four_words, &role)
+            .await?;
+
+        Ok(entity)
+    }
+
     // ========================================================================
     // Permission Methods (Phase 3b: CRDT Persistence)
     // ========================================================================
@@ -1149,8 +1231,11 @@ mod tests {
             .await
             .expect("Failed to list members");
 
-        let member1 = members.iter().find(|m| m.member_id == "member1").unwrap();
-        assert!(member1.deleted);
+        // Member should no longer be in the list (list_members filters deleted)
+        assert!(
+            !members.iter().any(|m| m.member_id == "member1"),
+            "Deleted member should not appear in list_members"
+        );
     }
 
     #[tokio::test]

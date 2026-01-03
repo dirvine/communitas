@@ -110,10 +110,14 @@ impl RetryConfig {
     }
 
     /// Build tokio-retry strategy from config
+    ///
+    /// With tokio-retry, the iterator produces delays between attempts.
+    /// N delays = N+1 total attempts (initial + N retries).
+    /// So for max_retries total attempts, we need (max_retries - 1) delays.
     pub fn build_strategy(&self) -> impl Iterator<Item = Duration> {
         let backoff = ExponentialBackoff::from_millis(self.initial_delay.as_millis() as u64)
             .max_delay(self.max_delay)
-            .take(self.max_retries + 1);
+            .take(self.max_retries.saturating_sub(1));
 
         backoff.map(jitter)
     }

@@ -1,0 +1,139 @@
+# Phase 3: Member Management
+# Tests adding, removing, and listing members
+
+name: "Phase 3: Member Management"
+description: "Tests member addition, removal, and listing with role-based permissions"
+tools_covered:
+  - add_member
+  - remove_member
+  - list_members
+
+test_cases:
+  # Add Bob as admin to organisation
+  - id: MEM-001
+    name: "Alice adds Bob as admin"
+    actors: [alice]
+    steps:
+      - tool: add_member
+        params:
+          entity_id: "${org_id}"
+          member_id: "${bob_identity}"
+          role: "admin"
+        expect:
+          status: success
+
+  # Add Charlie as member
+  - id: MEM-002
+    name: "Alice adds Charlie as member"
+    actors: [alice]
+    steps:
+      - tool: add_member
+        params:
+          entity_id: "${org_id}"
+          member_id: "${charlie_identity}"
+          role: "member"
+        expect:
+          status: success
+
+  # Add Dave as member
+  - id: MEM-003
+    name: "Alice adds Dave as member"
+    actors: [alice]
+    steps:
+      - tool: add_member
+        params:
+          entity_id: "${org_id}"
+          member_id: "${dave_identity}"
+          role: "member"
+        expect:
+          status: success
+
+  # List members
+  - id: MEM-004
+    name: "List organisation members"
+    actors: [alice]
+    steps:
+      - tool: list_members
+        params:
+          entity_id: "${org_id}"
+        expect:
+          status: success
+          contains:
+            - role: "owner"
+            - role: "admin"
+            - role: "member"
+
+  # Bob (admin) can add members
+  - id: MEM-005
+    name: "Admin Bob can modify membership"
+    actors: [bob]
+    steps:
+      - tool: list_members
+        params:
+          entity_id: "${org_id}"
+        expect:
+          status: success
+
+  # Member cannot remove admin (ACL test)
+  - id: MEM-006
+    name: "Member cannot remove admin"
+    actors: [dave]
+    steps:
+      - tool: remove_member
+        params:
+          entity_id: "${org_id}"
+          member_id: "${bob_identity}"
+        expect:
+          status: error
+          error_contains: "permission"
+
+  # Member cannot remove owner (ACL test)
+  - id: MEM-007
+    name: "Member cannot remove owner"
+    actors: [charlie]
+    steps:
+      - tool: remove_member
+        params:
+          entity_id: "${org_id}"
+          member_id: "${alice_identity}"
+        expect:
+          status: error
+          error_contains: "permission"
+
+  # Admin can remove member
+  - id: MEM-008
+    name: "Admin can remove member"
+    actors: [bob]
+    steps:
+      - tool: remove_member
+        params:
+          entity_id: "${org_id}"
+          member_id: "${charlie_identity}"
+        expect:
+          status: success
+
+  # Re-add Charlie for further tests
+  - id: MEM-009
+    name: "Re-add Charlie for further tests"
+    actors: [alice]
+    steps:
+      - tool: add_member
+        params:
+          entity_id: "${org_id}"
+          member_id: "${charlie_identity}"
+          role: "member"
+        expect:
+          status: success
+
+  # Verify member sync across nodes
+  - id: MEM-010
+    name: "Verify member list synced across nodes"
+    actors: [alice, bob, charlie, dave]
+    parallel: true
+    wait_ms: 3000
+    steps:
+      - tool: list_members
+        params:
+          entity_id: "${org_id}"
+        expect:
+          status: success

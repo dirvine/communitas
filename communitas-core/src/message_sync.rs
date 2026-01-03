@@ -294,6 +294,159 @@ impl MessageSyncService {
         !missing.is_empty()
     }
 
+    pub async fn delete_message(&self, entity_id: &str, message_id: &str) -> AppResult<bool> {
+        let mut messages_map = self.entity_messages.write().await;
+        if let Some(messages) = messages_map.get_mut(entity_id) {
+            let original_len = messages.len();
+            messages.retain(|m| m.metadata.id != message_id);
+            let deleted = messages.len() < original_len;
+            if deleted {
+                info!("🗑️ Message deleted: {} (entity: {})", message_id, entity_id);
+            }
+            return Ok(deleted);
+        }
+        Ok(false)
+    }
+
+    pub async fn edit_message(
+        &self,
+        entity_id: &str,
+        message_id: &str,
+        new_text: String,
+    ) -> AppResult<u64> {
+        let mut messages_map = self.entity_messages.write().await;
+        if let Some(messages) = messages_map.get_mut(entity_id) {
+            for message in messages.iter_mut() {
+                if message.metadata.id == message_id {
+                    message.content.text = new_text;
+                    let edited_at = chrono::Utc::now().timestamp_millis() as u64;
+                    info!("✏️ Message edited: {} (entity: {})", message_id, entity_id);
+                    return Ok(edited_at);
+                }
+            }
+        }
+        Err(crate::error::AppError::NotFound(format!(
+            "Message not found: {}",
+            message_id
+        )))
+    }
+
+    pub async fn add_reaction(
+        &self,
+        entity_id: &str,
+        message_id: &str,
+        emoji: String,
+        peer_id: String,
+    ) -> AppResult<()> {
+        let mut messages_map = self.entity_messages.write().await;
+        if let Some(messages) = messages_map.get_mut(entity_id) {
+            for message in messages.iter_mut() {
+                if message.metadata.id == message_id {
+                    let local_state = message.local_state.get_or_insert_with(|| LocalMessageState {
+                        status: None,
+                        reactions: Vec::new(),
+                        thread_count: None,
+                        latest_reply_by: None,
+                    });
+
+                    if let Some(reaction) = local_state
+                        .reactions
+                        .iter_mut()
+                        .find(|r| r.emoji == emoji)
+                    {
+                        if !reaction.peer_ids.contains(&peer_id) {
+                            reaction.peer_ids.push(peer_id.clone());
+                            reaction.count += 1;
+                        }
+                    } else {
+                        local_state.reactions.push(Reaction {
+                            emoji: emoji.clone(),
+                            count: 1,
+                            user_reacted: Some(true),
+                            peer_ids: vec![peer_id.clone()],
+                        });
+                    }
+
+                    info!(
+                        "👍 Reaction added: {} to {} (entity: {})",
+                        emoji, message_id, entity_id
+                    );
+                    return Ok(());
+                }
+            }
+        }
+        Err(crate::error::AppError::NotFound(format!(
+            "Message not found: {}",
+            message_id
+        )))
+    }
+
+    pub async fn remove_reaction(
+        &self,
+        entity_id: &str,
+        message_id: &str,
+        emoji: String,
+        peer_id: String,
+    ) -> AppResult<()> {
+        let mut messages_map = self.entity_messages.write().await;
+        if let Some(messages) = messages_map.get_mut(entity_id) {
+            for message in messages.iter_mut() {
+                if message.metadata.id == message_id {
+                    if let Some(ref mut local_state) = message.local_state
+                        && let Some(reaction) = local_state
+                            .reactions
+                            .iter_mut()
+                            .find(|r| r.emoji == emoji)
+                    {
+                        reaction.peer_ids.retain(|p| p != &peer_id);
+                        reaction.count = reaction.count.saturating_sub(1);
+
+                        if reaction.count == 0 {
+                            local_state.reactions.retain(|r| r.emoji != emoji);
+                        }
+
+                        info!(
+                            "👎 Reaction removed: {} from {} (entity: {})",
+                            emoji, message_id, entity_id
+                        );
+                        return Ok(());
+                    }
+                    return Err(crate::error::AppError::NotFound(format!(
+                        "Reaction not found: {} on {}",
+                        emoji, message_id
+                    )));
+                }
+            }
+        }
+        Err(crate::error::AppError::NotFound(format!(
+            "Message not found: {}",
+            message_id
+        )))
+    }
+
+    pub async fn get_reactions(
+        &self,
+        entity_id: &str,
+        message_id: &str,
+    ) -> AppResult<Vec<Reaction>> {
+        let messages_map = self.entity_messages.read().await;
+        if let Some(messages) = messages_map.get(entity_id) {
+            for message in messages.iter() {
+                if message.metadata.id == message_id {
+                    return Ok(message
+                        .local_state
+                        .as_ref()
+                        .map(|ls| ls.reactions.clone())
+                        .unwrap_or_default());
+                }
+            }
+        }
+        Err(crate::error::AppError::NotFound(format!(
+            "Message not found: {}",
+            message_id
+        )))
+    }
+
     // Private methods
 
     async fn add_message(&self, message: CRDTMessage) -> AppResult<()> {

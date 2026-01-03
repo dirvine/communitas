@@ -178,10 +178,9 @@ communitas-core/keystore/*
 !communitas-core/keystore/.gitkeep
 
 # Test data directories
-communitas-bridge/test-bridge-instance*/
-communitas-bridge/test-*/
 test-data/
 p2p-test-data/
+mcp-test-data/
 bridge-data/
 
 # MCP

@@ -428,6 +428,9 @@ impl CoreContext {
         let gossip_arc = Arc::new(gossip);
         self.gossip = Some(gossip_arc.clone());
 
+        // Set up entity message handler for incoming gossip messages
+        self.setup_entity_message_handler().await?;
+
         // Initialize WebRTC service (requires gossip context)
         match CommunitasWebRtcService::new(gossip_arc).await {
             Ok(webrtc) => {
@@ -448,6 +451,211 @@ impl CoreContext {
         info!("Scheduling automatic external address detection...");
 
         Ok(connection_identity)
+    }
+
+    /// Set up the entity message handler to process incoming gossip messages
+    ///
+    /// This handler is called whenever a message is received on a subscribed entity topic.
+    /// It deserializes the message and handles different message types:
+    /// - Chat: Regular messages stored via message service
+    /// - SyncRequest: Respond with historical messages
+    /// - SyncResponse: Process and store historical messages
+    async fn setup_entity_message_handler(&self) -> Result<(), String> {
+        let gossip = self.gossip.as_ref().ok_or("Gossip not initialized")?;
+
+        // Clone services for use in the handler closure
+        let message_service = self.message_service.clone();
+        let gossip_clone = gossip.clone();
+
+        // Create handler that processes incoming entity messages
+        let handler: crate::gossip::EntityMessageHandler = Arc::new(
+            move |entity_id, sender_peer_id, message_bytes| {
+                // Try to parse as GossipMessageType first (new format)
+                // Fall back to CRDTMessage for backwards compatibility
+                let gossip_msg: Result<crate::crdt::GossipMessageType, _> =
+                    serde_json::from_slice(&message_bytes);
+
+                let message_service = message_service.clone();
+                let gossip_clone = gossip_clone.clone();
+                let entity_id_clone = entity_id.clone();
+
+                match gossip_msg {
+                    Ok(crate::crdt::GossipMessageType::Chat(crdt_message)) => {
+                        info!(
+                            "Received chat message for entity {} from peer {:?}: {}",
+                            entity_id, sender_peer_id, crdt_message.metadata.id
+                        );
+                        Self::handle_chat_message(message_service, entity_id_clone, crdt_message);
+                    }
+                    Ok(crate::crdt::GossipMessageType::SyncRequest(sync_request)) => {
+                        info!(
+                            "Received sync request for entity {} from peer {:?}",
+                            entity_id, sender_peer_id
+                        );
+                        Self::handle_sync_request(
+                            message_service,
+                            gossip_clone,
+                            entity_id_clone,
+                            sender_peer_id,
+                            sync_request,
+                        );
+                    }
+                    Ok(crate::crdt::GossipMessageType::SyncResponse(sync_response)) => {
+                        info!(
+                            "Received sync response for entity {} from peer {:?} with {} messages",
+                            entity_id,
+                            sender_peer_id,
+                            sync_response.messages.len()
+                        );
+                        Self::handle_sync_response(message_service, entity_id_clone, sync_response);
+                    }
+                    Err(_) => {
+                        // Try legacy CRDTMessage format for backwards compatibility
+                        match serde_json::from_slice::<crate::crdt::CRDTMessage>(&message_bytes) {
+                            Ok(crdt_message) => {
+                                info!(
+                                    "Received legacy message for entity {} from peer {:?}: {}",
+                                    entity_id, sender_peer_id, crdt_message.metadata.id
+                                );
+                                Self::handle_chat_message(
+                                    message_service,
+                                    entity_id_clone,
+                                    crdt_message,
+                                );
+                            }
+                            Err(e) => {
+                                warn!(
+                                    "Failed to deserialize message for entity {}: {}",
+                                    entity_id, e
+                                );
+                            }
+                        }
+                    }
+                }
+            },
+        );
+
+        // Register the handler with the gossip context
+        gossip.set_entity_message_handler(handler).await;
+
+        info!("Entity message handler registered for incoming gossip messages");
+        Ok(())
+    }
+
+    /// Handle incoming chat message
+    fn handle_chat_message(
+        message_service: Arc<crate::MessageService>,
+        entity_id: String,
+        crdt_message: crate::crdt::CRDTMessage,
+    ) {
+        tokio::spawn(async move {
+            match message_service.receive_message(crdt_message).await {
+                Ok(result) => {
+                    if result.accepted {
+                        info!("Stored incoming message for entity {}", entity_id);
+                    } else if result.out_of_order {
+                        warn!(
+                            "Message for entity {} was out of order, queued for later",
+                            entity_id
+                        );
+                    }
+                }
+                Err(e) => {
+                    warn!(
+                        "Failed to store incoming message for entity {}: {}",
+                        entity_id, e
+                    );
+                }
+            }
+        });
+    }
+
+    /// Handle sync request - respond with historical messages
+    ///
+    /// Also adds the requesting peer to our eager_peers for this entity's topic,
+    /// ensuring they receive any new messages we publish.
+    fn handle_sync_request(
+        message_service: Arc<crate::MessageService>,
+        gossip: Arc<crate::gossip::GossipContext>,
+        entity_id: String,
+        sender_peer_id: saorsa_gossip_types::PeerId,
+        _sync_request: crate::crdt::SyncRequest,
+    ) {
+        tokio::spawn(async move {
+            // Add the requesting peer to our eager_peers for this entity's topic
+            // This ensures they receive any new messages we publish
+            if let Err(e) = gossip
+                .add_peer_to_entity_topic(&entity_id, sender_peer_id)
+                .await
+            {
+                warn!(
+                    "Failed to add peer {:?} to entity {} topic: {}",
+                    sender_peer_id, entity_id, e
+                );
+            }
+
+            // Get all messages for this entity
+            match message_service.get_entity_messages(entity_id.clone()).await {
+                Ok(sync_response) => {
+                    info!(
+                        "Sending sync response with {} messages for entity {}",
+                        sync_response.messages.len(),
+                        entity_id
+                    );
+
+                    // Wrap in GossipMessageType
+                    let gossip_msg = crate::crdt::GossipMessageType::SyncResponse(sync_response);
+
+                    // Serialize and publish
+                    match serde_json::to_vec(&gossip_msg) {
+                        Ok(bytes) => {
+                            if let Err(e) = gossip.publish_to_entity(&entity_id, bytes).await {
+                                warn!("Failed to send sync response for {}: {}", entity_id, e);
+                            }
+                        }
+                        Err(e) => {
+                            warn!("Failed to serialize sync response: {}", e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    warn!("Failed to get messages for sync response: {}", e);
+                }
+            }
+        });
+    }
+
+    /// Handle sync response - process and store historical messages
+    fn handle_sync_response(
+        message_service: Arc<crate::MessageService>,
+        entity_id: String,
+        sync_response: crate::crdt::SyncResponse,
+    ) {
+        tokio::spawn(async move {
+            let mut accepted = 0;
+            let mut rejected = 0;
+
+            for message in sync_response.messages {
+                match message_service.receive_message(message).await {
+                    Ok(result) => {
+                        if result.accepted {
+                            accepted += 1;
+                        } else {
+                            rejected += 1;
+                        }
+                    }
+                    Err(e) => {
+                        warn!("Failed to process sync message for {}: {}", entity_id, e);
+                        rejected += 1;
+                    }
+                }
+            }
+
+            info!(
+                "Sync response processed for {}: {} accepted, {} rejected",
+                entity_id, accepted, rejected
+            );
+        });
     }
 
     /// Automatically request external address with retry logic
@@ -586,35 +794,24 @@ impl CoreContext {
             .map_err(|e| format!("Failed to add favourite contact: {}", e))?;
 
         // Try to decode as connection address and dial immediately (for bootstrap)
-        if let Ok(addr) = crate::identity::conn_from_words(peer_four_words) {
+        // First try parsing as a direct IP:port address, then as four-word address
+        let maybe_addr: Option<std::net::SocketAddr> = peer_four_words
+            .parse::<std::net::SocketAddr>()
+            .ok()
+            .or_else(|| crate::identity::conn_from_words(peer_four_words).ok());
+
+        if let Some(addr) = maybe_addr {
             info!("Dialing peer at {} ({})", addr, peer_four_words);
-            // Use internal transport to dial
-            // We need to convert SocketAddr to the transport's format or use a dial method on GossipContext if available.
-            // GossipContext doesn't have a high-level dial.
-            // But we can use the transport directly if we can access it.
-            // gossip.transport is public.
-            // QuicTransport::connect_to_peer requires PeerId, which we don't have yet if we only have address.
-            // But QuicTransport usually has a connect() method that takes SocketAddr?
-            // Checking saorsa_gossip_transport::QuicTransport...
-            // It usually handles connection by PeerId lookup OR direct dial.
-
-            // Actually, HyParView membership handles "join" via address?
-            // gossip.membership.write().await.join(addr)...?
-
-            // Let's use a simpler approach: if we have the address, we can try to "introduce" via membership.
-            // Or we can use `gossip.transport.dial(addr)` if it exists.
-
-            // Since I cannot see saorsa_gossip_transport source easily, I'll assume `membership` is the way.
-            // `membership` is `Box<dyn Membership>`.
-            // `Membership` usually has `join(addr)`.
-
-            // Let's try to access gossip.dial_address(addr) if I add it to GossipContext.
-            // Or just leave it as is and implement `dial_address` in `GossipContext`.
             if let Err(e) = gossip.dial_address(addr).await {
                 warn!("Failed to dial peer {}: {}", addr, e);
             } else {
                 info!("Successfully dialed peer {}", addr);
             }
+        } else {
+            info!(
+                "Peer {} is not a direct address; relying on FOAF discovery",
+                peer_four_words
+            );
         }
 
         // The gossip overlay will automatically discover and connect via FOAF
@@ -624,6 +821,89 @@ impl CoreContext {
         );
 
         Ok(())
+    }
+
+    /// Send a channel message and publish it to gossip if networking is active
+    ///
+    /// This method:
+    /// 1. Stores the message locally via CRDT
+    /// 2. If gossip is active, joins the entity topic and publishes for P2P sync
+    ///
+    /// # Arguments
+    /// * `channel_id` - The channel to send to
+    /// * `content_text` - The message text
+    /// * `reply_to_id` - Optional parent message for threading
+    ///
+    /// # Returns
+    /// The message ID on success
+    pub async fn send_and_publish_channel_message(
+        &self,
+        channel_id: String,
+        content_text: String,
+        reply_to_id: Option<String>,
+    ) -> Result<String, String> {
+        use crate::crdt::{EntityType, MessageContent};
+
+        // Create message content
+        let content = MessageContent {
+            text: content_text,
+            author: self.four_words.clone(),
+            attachments: None,
+        };
+
+        // Store locally via message_service
+        let message = if let Some(reply_to) = reply_to_id {
+            self.message_service
+                .send_message(
+                    channel_id.clone(),
+                    EntityType::Channel,
+                    content,
+                    Some(reply_to),
+                )
+                .await
+                .map_err(|e| format!("Failed to send message: {}", e))?
+        } else {
+            self.message_service
+                .send_message(channel_id.clone(), EntityType::Channel, content, None)
+                .await
+                .map_err(|e| format!("Failed to send message: {}", e))?
+        };
+
+        let message_id = message.metadata.id.clone();
+
+        // If gossip is active, publish to the network
+        if let Some(gossip) = self.gossip.as_ref() {
+            // Ensure we're joined to the entity topic
+            if let Err(e) = gossip.join_entity(&channel_id, "channel").await {
+                warn!(
+                    "Failed to join channel topic {} (may already be joined): {}",
+                    channel_id, e
+                );
+                // Continue anyway - we might already be subscribed
+            }
+
+            // Serialize message to JSON bytes
+            let message_bytes = serde_json::to_vec(&message)
+                .map_err(|e| format!("Failed to serialize message: {}", e))?;
+
+            // Publish to gossip
+            if let Err(e) = gossip.publish_to_entity(&channel_id, message_bytes).await {
+                warn!("Failed to publish message to gossip: {}", e);
+                // Don't fail - message is stored locally, sync will catch up
+            } else {
+                info!(
+                    "Message {} published to gossip for channel {}",
+                    message_id, channel_id
+                );
+            }
+        } else {
+            info!(
+                "Gossip not active - message {} stored locally only",
+                message_id
+            );
+        }
+
+        Ok(message_id)
     }
 
     /// Add a group key for a channel/project/org

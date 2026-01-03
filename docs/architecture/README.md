@@ -358,10 +358,10 @@ See [Security Architecture](security.md) for complete analysis.
 - CRDT synchronization tests
 - Storage policy verification
 
-### Browser Testing
-- communitas-bridge HTTP/REST interface
+### AI Agent Testing
+- communitas-mcp HTTPS interface (ML-DSA-65 raw public keys)
 - Chrome DevTools MCP integration
-- End-to-end scenarios
+- End-to-end scenarios with AI agents
 
 See the main [README.md](../../README.md) for testing instructions.
 

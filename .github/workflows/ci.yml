@@ -202,8 +202,8 @@ jobs:
           path: target/${{ matrix.target }}/release/communitas-headless${{ matrix.suffix }}
           retention-days: 7
 
-  desktop-build:
-    name: Desktop Build & Bundle (${{ matrix.os }})
+  flutter-build:
+    name: Flutter Build (${{ matrix.platform }})
     runs-on: ${{ matrix.os }}
     needs: rust-checks
     env:
@@ -213,15 +213,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-22.04
-            target: x86_64-unknown-linux-gnu
-            suffix: ""
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            suffix: ""
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            suffix: ".exe"
+          - platform: web
+            os: ubuntu-latest
+          - platform: macos
+            os: macos-latest
+          - platform: linux
+            os: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -257,60 +254,42 @@ jobs:
         if: matrix.os == 'windows-latest'
         uses: microsoft/setup-msbuild@v2
 
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
         with:
-          targets: ${{ matrix.target }}
+          flutter-version: '3.24.0'
+          channel: stable
 
-      - name: Rust Cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: . -> target
-          cache-on-failure: false
-          shared-key: desktop-${{ matrix.os }}-${{ matrix.target }}
+      - name: Install dependencies
+        working-directory: communitas-flutter
+        run: flutter pub get
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'npm'
+      - name: Analyze code
+        working-directory: communitas-flutter
+        run: flutter analyze
 
-      - name: Install Node dependencies
-        run: npm ci
+      - name: Run tests
+        working-directory: communitas-flutter
+        run: flutter test
 
-      - name: Build frontend
-        run: npm run build
-
-      - name: Build Tauri app
-        run: cd communitas-desktop && npx @tauri-apps/cli build
-
-      - name: Inspect bundle (Linux)
-        if: matrix.os == 'ubuntu-22.04'
+      - name: Build (${{ matrix.platform }})
+        working-directory: communitas-flutter
         run: |
-          find target/release/bundle -name "*.deb" -o -name "*.AppImage" | head -5
-          # Check for missing deps in the binary
-          ldd target/release/communitas-desktop | grep 'not found' && { echo 'Missing runtime deps'; exit 1; } || true
+          if [ "${{ matrix.platform }}" = "web" ]; then
+            flutter build web --release --dart-define=DEMO_MODE=true
+          elif [ "${{ matrix.platform }}" = "macos" ]; then
+            flutter build macos --release
+          elif [ "${{ matrix.platform }}" = "linux" ]; then
+            flutter build linux --release
+          fi
 
-      - name: Inspect bundle (macOS)
-        if: matrix.os == 'macos-latest'
-        run: |
-          find target/release/bundle -name "*.dmg" -o -name "*.app" | head -5
-          otool -L target/release/communitas-desktop || true
-
-      - name: Inspect bundle (Windows)
-        if: matrix.os == 'windows-latest'
-        shell: pwsh
-        run: |
-          Get-ChildItem -Path target/release/bundle -Recurse -Include *.msi,*.exe | Select-Object Name, Length, LastWriteTime | Format-Table
-          # Check binary size
-          (Get-Item target/release/communitas-desktop.exe).Length | Out-String
-
-      - name: Upload artifacts (success)
-        if: success()
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: communitas-desktop-${{ matrix.os }}-${{ github.sha }}
+          name: communitas-flutter-${{ matrix.platform }}-${{ github.sha }}
           path: |
-            target/release/bundle/
-            src-tauri/target/release/
+            communitas-flutter/build/web/
+            communitas-flutter/build/macos/
+            communitas-flutter/build/linux/
           retention-days: 7
+          if-no-files-found: ignore

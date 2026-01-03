@@ -30,7 +30,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
-use tokio::task::JoinHandle;
 use tracing::{debug, info, warn};
 
 // Phase 2 TDD: Import resilience modules
@@ -38,10 +37,6 @@ use crate::{ConnectivityWatchdog, ResourceLimits, WatchdogConfig};
 
 // Contact storage for endpoint tracking
 use super::contact_storage::{ContactRecord, ContactStore};
-
-/// Type alias for entity message handler callback
-/// Called with (entity_id, sender_peer_id, message_bytes)
-pub type EntityMessageHandler = Arc<dyn Fn(String, PeerId, Bytes) + Send + Sync>;
 
 /// Centralized context for the gossip overlay system
 ///
@@ -119,14 +114,6 @@ pub struct GossipContext {
 
     /// Contact store for endpoint tracking (per SPEC2.md contact management)
     pub contact_store: ContactStore,
-
-    /// Entity message handler callback for incoming gossip messages
-    /// Set via set_entity_message_handler() to receive entity messages
-    entity_message_handler: Arc<RwLock<Option<EntityMessageHandler>>>,
-
-    /// Background tasks for entity subscription receivers
-    /// entity_id → JoinHandle for the receiver task
-    entity_receiver_tasks: Arc<RwLock<HashMap<String, JoinHandle<()>>>>,
 }
 
 impl GossipContext {
@@ -387,8 +374,6 @@ impl GossipContext {
             watchdog,
             resource_limits,
             contact_store: ContactStore::new(),
-            entity_message_handler: Arc::new(RwLock::new(None)),
-            entity_receiver_tasks: Arc::new(RwLock::new(HashMap::new())),
         })
     }
 
@@ -488,16 +473,6 @@ impl GossipContext {
         self.favourite_contacts.read().await.clone()
     }
 
-    /// Set the handler for incoming entity messages
-    ///
-    /// The handler is called with (entity_id, sender_peer_id, message_bytes)
-    /// whenever a message is received on a subscribed entity topic.
-    pub async fn set_entity_message_handler(&self, handler: EntityMessageHandler) {
-        let mut guard = self.entity_message_handler.write().await;
-        *guard = Some(handler);
-        info!("Entity message handler registered");
-    }
-
     /// Map a channel/project/org entity to an MLS group + topic
     ///
     /// Per SPEC.md §1: Channel/Project/Org → MLS group + gossip topic
@@ -533,7 +508,6 @@ impl GossipContext {
     /// Join an MLS group and subscribe to its topic
     ///
     /// Per SPEC.md §2.4: For each channel/org: join MLS group, subscribe to topic
-    /// Spawns a background task to process incoming messages via the entity message handler.
     pub async fn join_entity(&self, entity_id: &str, entity_type: &str) -> Result<()> {
         // 1. Get or create topic ID
         let topic_id = self.map_entity_to_topic(entity_id, entity_type).await?;
@@ -667,20 +641,11 @@ impl GossipContext {
                 .context("Entity not found in topic map")?
         };
 
-        // 2. Cancel the receiver task if it exists
-        {
-            let mut tasks = self.entity_receiver_tasks.write().await;
-            if let Some(handle) = tasks.remove(entity_id) {
-                handle.abort();
-                debug!("Cancelled receiver task for entity {}", entity_id);
-            }
-        }
-
-        // 3. Unsubscribe from topic
+        // 2. Unsubscribe from topic
         let pubsub = self.pubsub.write().await;
         pubsub.unsubscribe(topic_id).await?;
 
-        // 4. Remove MLS group from both maps
+        // 3. Remove MLS group from both maps
         {
             let mut groups = self.groups.write().await;
             groups.remove(entity_id);
@@ -690,7 +655,7 @@ impl GossipContext {
             groups_by_topic.remove(&topic_id);
         }
 
-        // 5. Remove from topics map
+        // 4. Remove from topics map
         {
             let mut topics = self.topics.write().await;
             topics.remove(entity_id);

@@ -26,10 +26,8 @@
 // Allow these in tests for convenience
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
-pub mod app; // CommunitasApp - The headless core with execute/query/subscribe API
 pub mod auth_service;
 // pub mod bootstrap_integration; // TODO: Reimplement in Sprint 2 with gossip-based bootstrap
-pub mod command; // Command/Event/Query architecture for headless core
 pub mod connectivity_watchdog; // Internet collapse detection (MESH_CAPABILITIES.md §3.2)
 pub mod core_context;
 pub mod crdt; // New pure CRDT infrastructure
@@ -43,13 +41,13 @@ pub mod encrypted_storage;
 pub mod entity_service;
 pub mod error;
 pub mod identity;
-pub mod invite; // Cross-organization collaboration via four-word invites
-pub mod invite_service;
 pub mod keystore;
 pub mod linking_service;
 pub mod message_service;
 pub mod message_sync;
-pub mod permissions; // Granular per-resource permission system // Invite service with CRDT persistence
+pub mod permissions; // Granular per-resource permission system
+pub mod invite; // Cross-organization collaboration via four-word invites
+pub mod invite_service; // Invite service with CRDT persistence
 // pub mod messaging; // TODO: Refactor in Sprint 3 for gossip pubsub
 pub mod presence_service;
 pub mod resource_limits; // Resource management and limits (MESH_CAPABILITIES.md §8.3)
@@ -103,12 +101,3 @@ pub use permissions::{AccessLevel, MemberPermissions, ResourceType, role_default
 // Re-export invite system types for cross-organization collaboration
 pub use invite::{Invite, InviteStatus};
 pub use invite_service::{InviteRequest, InviteService, InviteServiceError, InviteServiceResult};
-
-// Re-export command/event/query architecture for headless core
-pub use command::{
-    Command, CommandError, CommandResult, DiskTypeArg, Event, Query, QueryError, QueryResponse,
-    QueryResult, Subscription,
-};
-
-// Re-export CommunitasApp - the main headless core API
-pub use app::CommunitasApp;

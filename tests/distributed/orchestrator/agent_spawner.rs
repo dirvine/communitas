@@ -96,10 +96,8 @@ impl AgentSpawner {
                 } else {
                     "success"
                 }
-            } else if let Some(status) = result.get("status").and_then(|v| v.as_str()) {
-                status
             } else {
-                "unknown"
+                result.get("status").and_then(|v| v.as_str()).unwrap_or("unknown")
             };
 
             if actual_status != expected_status {

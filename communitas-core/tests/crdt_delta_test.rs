@@ -13,6 +13,5 @@ mod tests {
         // - Delta sync vs full document sync
         // - Yrs CRDT integration
         // - Document merging and conflict resolution
-        assert!(true);
     }
 }

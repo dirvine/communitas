@@ -392,25 +392,24 @@ impl MessageSyncService {
         if let Some(messages) = messages_map.get_mut(entity_id) {
             for message in messages.iter_mut() {
                 if message.metadata.id == message_id {
-                    if let Some(ref mut local_state) = message.local_state {
-                        if let Some(reaction) = local_state
+                    if let Some(ref mut local_state) = message.local_state
+                        && let Some(reaction) = local_state
                             .reactions
                             .iter_mut()
                             .find(|r| r.emoji == emoji)
-                        {
-                            reaction.peer_ids.retain(|p| p != &peer_id);
-                            reaction.count = reaction.count.saturating_sub(1);
+                    {
+                        reaction.peer_ids.retain(|p| p != &peer_id);
+                        reaction.count = reaction.count.saturating_sub(1);
 
-                            if reaction.count == 0 {
-                                local_state.reactions.retain(|r| r.emoji != emoji);
-                            }
-
-                            info!(
-                                "👎 Reaction removed: {} from {} (entity: {})",
-                                emoji, message_id, entity_id
-                            );
-                            return Ok(());
+                        if reaction.count == 0 {
+                            local_state.reactions.retain(|r| r.emoji != emoji);
                         }
+
+                        info!(
+                            "👎 Reaction removed: {} from {} (entity: {})",
+                            emoji, message_id, entity_id
+                        );
+                        return Ok(());
                     }
                     return Err(crate::error::AppError::NotFound(format!(
                         "Reaction not found: {} on {}",

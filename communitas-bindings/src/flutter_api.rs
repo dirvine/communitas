@@ -129,7 +129,7 @@ impl From<&EntityResponse> for FlutterEntity {
         Self {
             id: e.id.clone(),
             name: e.name.clone(),
-            entity_type: e.entity_type.clone().into(),
+            entity_type: e.entity_type.into(),
             description: e.description.clone(),
             created_by: e.created_by.clone(),
             created_at: e.created_at,

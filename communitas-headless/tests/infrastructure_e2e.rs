@@ -119,6 +119,12 @@ pub struct TestContext {
     pub start_time: Instant,
 }
 
+impl Default for TestContext {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TestContext {
     pub fn new() -> Self {
         Self {
@@ -145,6 +151,7 @@ impl TestContext {
         );
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn record_result(
         &mut self,
         function: &str,
@@ -253,7 +260,7 @@ fn generate_markdown_report(report: &TestReport) -> String {
             node.entity_count
         ));
     }
-    md.push_str("\n");
+    md.push('\n');
 
     // Function Matrix by Phase
     md.push_str("## Function Results by Phase\n\n");
@@ -282,7 +289,7 @@ fn generate_markdown_report(report: &TestReport) -> String {
                 result.function, result.node, status_icon, result.duration_ms
             ));
         }
-        md.push_str("\n");
+        md.push('\n');
     }
 
     // Sync Verification

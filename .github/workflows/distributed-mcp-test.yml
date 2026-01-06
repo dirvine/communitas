@@ -78,15 +78,30 @@ jobs:
       fail-fast: false
       matrix:
         node:
+          - name: saorsa-2
+            ip: 142.93.199.50
+            region: NYC1 (DigitalOcean)
+          - name: saorsa-3
+            ip: 147.182.234.192
+            region: SFO3 (DigitalOcean)
           - name: saorsa-4
             ip: 206.189.7.117
-            region: Amsterdam
+            region: AMS3 (DigitalOcean)
           - name: saorsa-5
             ip: 144.126.230.161
-            region: London
+            region: LON1 (DigitalOcean)
           - name: saorsa-6
             ip: 65.21.157.229
-            region: Helsinki
+            region: Helsinki (Hetzner)
+          - name: saorsa-7
+            ip: 116.203.101.172
+            region: Nuremberg (Hetzner)
+          - name: saorsa-8
+            ip: 149.28.156.231
+            region: Singapore (Vultr)
+          - name: saorsa-9
+            ip: 45.77.176.184
+            region: Tokyo (Vultr)
     steps:
       - name: Download MCP binary
         uses: actions/download-artifact@v4
@@ -178,7 +193,7 @@ jobs:
       - name: Verify all nodes healthy
         run: |
           echo "Checking node health..."
-          for addr in "206.189.7.117:3040" "144.126.230.161:3040" "65.21.157.229:3040" "127.0.0.1:3041"; do
+          for addr in "142.93.199.50:3040" "147.182.234.192:3040" "206.189.7.117:3040" "144.126.230.161:3040" "65.21.157.229:3040" "116.203.101.172:3040" "149.28.156.231:3040" "45.77.176.184:3040" "127.0.0.1:3041"; do
             echo -n "  $addr: "
             curl -sf --connect-timeout 10 "http://$addr/health" && echo "OK" || echo "FAILED"
           done
@@ -206,7 +221,7 @@ jobs:
 
           ./distributed-test-orchestrator \
             --config "$CONFIG" \
-            --nodes "alice:206.189.7.117:3040,bob:144.126.230.161:3040,charlie:65.21.157.229:3040,dave:127.0.0.1:3041" \
+            --nodes "alice:142.93.199.50:3040,bob:147.182.234.192:3040,charlie:206.189.7.117:3040,dave:144.126.230.161:3040,eve:65.21.157.229:3040,frank:116.203.101.172:3040,grace:149.28.156.231:3040,henry:45.77.176.184:3040,local:127.0.0.1:3041" \
             --output test-reports \
             --anthropic-key "$ANTHROPIC_API_KEY" \
             --model "claude-3-haiku-20240307"
@@ -238,7 +253,7 @@ jobs:
 
       - name: Stop MCP on VPS nodes
         run: |
-          for ip in 206.189.7.117 144.126.230.161 65.21.157.229; do
+          for ip in 142.93.199.50 147.182.234.192 206.189.7.117 144.126.230.161 65.21.157.229 116.203.101.172 149.28.156.231 45.77.176.184; do
             echo "Stopping MCP on $ip..."
             ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 root@$ip \
               "pkill -f communitas-mcp || true" 2>/dev/null || echo "Could not connect to $ip"
@@ -284,8 +299,15 @@ jobs:
           fi
 
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Infrastructure" >> $GITHUB_STEP_SUMMARY
-          echo "- Alice: saorsa-4 (206.189.7.117) - DigitalOcean Amsterdam" >> $GITHUB_STEP_SUMMARY
-          echo "- Bob: saorsa-5 (144.126.230.161) - DigitalOcean London" >> $GITHUB_STEP_SUMMARY
-          echo "- Charlie: saorsa-6 (65.21.157.229) - Hetzner Helsinki" >> $GITHUB_STEP_SUMMARY
-          echo "- Dave: localhost (127.0.0.1) - GitHub Runner" >> $GITHUB_STEP_SUMMARY
+          echo "### Infrastructure (9 nodes)" >> $GITHUB_STEP_SUMMARY
+          echo "| Node | Name | IP | Provider/Region |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|------|-----|-----------------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Alice | saorsa-2 | 142.93.199.50 | DigitalOcean NYC1 |" >> $GITHUB_STEP_SUMMARY
+          echo "| Bob | saorsa-3 | 147.182.234.192 | DigitalOcean SFO3 |" >> $GITHUB_STEP_SUMMARY
+          echo "| Charlie | saorsa-4 | 206.189.7.117 | DigitalOcean AMS3 |" >> $GITHUB_STEP_SUMMARY
+          echo "| Dave | saorsa-5 | 144.126.230.161 | DigitalOcean LON1 |" >> $GITHUB_STEP_SUMMARY
+          echo "| Eve | saorsa-6 | 65.21.157.229 | Hetzner Helsinki |" >> $GITHUB_STEP_SUMMARY
+          echo "| Frank | saorsa-7 | 116.203.101.172 | Hetzner Nuremberg |" >> $GITHUB_STEP_SUMMARY
+          echo "| Grace | saorsa-8 | 149.28.156.231 | Vultr Singapore |" >> $GITHUB_STEP_SUMMARY
+          echo "| Henry | saorsa-9 | 45.77.176.184 | Vultr Tokyo |" >> $GITHUB_STEP_SUMMARY
+          echo "| Local | localhost | 127.0.0.1 | GitHub Runner |" >> $GITHUB_STEP_SUMMARY

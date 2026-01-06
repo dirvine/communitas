@@ -26,20 +26,17 @@ saorsa-mls = "0.1.5"
 saorsa-rsps = "0.2.0"
 saorsa-pqc = "0.3.12"
 
-# Saorsa Gossip ecosystem (published v0.1.10 with native NAT traversal via OBSERVED_ADDRESS)
-saorsa-gossip-types = "0.1.10"
-saorsa-gossip-identity = "0.1.10"
-saorsa-gossip-crdt-sync = "0.1.10"
-saorsa-gossip-groups = "0.1.10"
-saorsa-gossip-presence = "0.1.10"
-saorsa-gossip-transport = "0.1.10"
-saorsa-gossip-membership = "0.1.10"
-saorsa-gossip-pubsub = "0.1.10"
-saorsa-gossip-coordinator = "0.1.10"
-saorsa-gossip-rendezvous = "0.1.10"
-# Testing infrastructure
-saorsa-gossip-simulator = "0.1.10"
-saorsa-gossip-load-test = "0.1.10"
+# Saorsa Gossip ecosystem - latest published versions
+saorsa-gossip-types = "0.1.16"
+saorsa-gossip-identity = "0.1.16"
+saorsa-gossip-crdt-sync = "0.1.14"
+saorsa-gossip-groups = "0.1.14"
+saorsa-gossip-presence = "0.1.14"
+saorsa-gossip-transport = "0.1.18"
+saorsa-gossip-membership = "0.1.16"
+saorsa-gossip-pubsub = "0.1.16"
+saorsa-gossip-coordinator = "0.1.16"
+saorsa-gossip-rendezvous = "0.1.14"
 
 # Real-time multimedia (WebRTC over QUIC) - Updated to 0.2.0
 # Note: saorsa-webrtc-tauri omitted (requires Tauri 1.5, we use Tauri 2.x)
@@ -107,17 +104,5 @@ strip = true
 [profile.dev]
 opt-level = 0
 
-# Patch saorsa-gossip crates to use local versions with initialize_topic_peers fix
-[patch.crates-io]
-saorsa-gossip-types = { path = "../saorsa-gossip/crates/types" }
-saorsa-gossip-identity = { path = "../saorsa-gossip/crates/identity" }
-saorsa-gossip-transport = { path = "../saorsa-gossip/crates/transport" }
-saorsa-gossip-membership = { path = "../saorsa-gossip/crates/membership" }
-saorsa-gossip-pubsub = { path = "../saorsa-gossip/crates/pubsub" }
-saorsa-gossip-crdt-sync = { path = "../saorsa-gossip/crates/crdt-sync" }
-saorsa-gossip-groups = { path = "../saorsa-gossip/crates/groups" }
-saorsa-gossip-presence = { path = "../saorsa-gossip/crates/presence" }
-saorsa-gossip-coordinator = { path = "../saorsa-gossip/crates/coordinator" }
-saorsa-gossip-rendezvous = { path = "../saorsa-gossip/crates/rendezvous" }
-saorsa-gossip-simulator = { path = "../saorsa-gossip/crates/simulator" }
-saorsa-gossip-load-test = { path = "../saorsa-gossip/crates/load-test" }
+# Note: saorsa-gossip crates are published at v0.1.16 on crates.io
+# Local path patches removed for CI compatibility

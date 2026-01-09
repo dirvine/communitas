@@ -38,7 +38,7 @@ impl AgentSpawner {
         steps: &[TestStep],
         context: std::sync::Arc<tokio::sync::Mutex<TestContext>>,
     ) -> Result<()> {
-        let mcp_client = McpClient::new(&node.host, node.port);
+        let mcp_client = McpClient::new(&node.host, node.port)?;
 
         info!(
             "Running {} steps for {} on {}",

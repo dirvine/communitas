@@ -145,7 +145,7 @@ async fn verify_nodes_healthy(nodes: &[NodeConfig]) -> Result<()> {
     info!("Verifying node health...");
 
     for node in nodes {
-        let client = McpClient::new(&node.host, node.port);
+        let client = McpClient::new(&node.host, node.port)?;
         match client.health_check().await {
             Ok(()) => info!("  {} ({}:{}): healthy", node.name, node.host, node.port),
             Err(e) => {

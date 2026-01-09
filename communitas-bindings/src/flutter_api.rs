@@ -13,7 +13,15 @@
 //! ```text
 //! Flutter UI -> flutter_api.rs -> CommunitasApp -> CoreContext
 //! ```
+//!
+//! # Note on panics
+//!
+//! This module intentionally uses `panic!` for error handling because flutter_rust_bridge
+//! automatically converts Rust panics into Dart exceptions. This is the recommended
+//! pattern for FFI bridges to propagate errors to the Dart side.
 
+// Allow panics and expects in this module - flutter_rust_bridge converts them to Dart exceptions
+#![allow(clippy::panic, clippy::expect_used, clippy::unwrap_used)]
 #![allow(dead_code)] // API surface may not be used by tests
 #![allow(unexpected_cfgs)] // Allow flutter_rust_bridge cfg checks
 

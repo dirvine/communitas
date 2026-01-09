@@ -19,16 +19,19 @@ pub struct McpClient {
 
 impl McpClient {
     /// Create a new MCP client for a node
-    pub fn new(host: &str, port: u16) -> Self {
+    ///
+    /// # Errors
+    /// Returns an error if the HTTP client cannot be built
+    pub fn new(host: &str, port: u16) -> Result<Self> {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(30))
             .build()
-            .expect("Failed to build HTTP client");
+            .context("Failed to build HTTP client")?;
 
-        Self {
+        Ok(Self {
             base_url: format!("http://{}:{}", host, port),
             client,
-        }
+        })
     }
 
     /// Check if the node is healthy
@@ -338,7 +341,7 @@ mod tests {
 
     #[test]
     fn test_mcp_client_creation() {
-        let client = McpClient::new("127.0.0.1", 3040);
+        let client = McpClient::new("127.0.0.1", 3040).unwrap();
         assert_eq!(client.base_url, "http://127.0.0.1:3040");
     }
 

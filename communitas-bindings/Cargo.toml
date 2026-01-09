@@ -43,4 +43,5 @@ required-features = ["uniffi/cli"]
 tempfile = "3.0"
 tokio = { version = "1.39", features = ["full"] }
 
-
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(frb_expand)"] }

@@ -274,7 +274,9 @@ pub fn extract_key_from_spki(spki: &[u8]) -> Result<MlDsaPublicKey, TlsConfigErr
     pos += len_bytes;
 
     if oid_len != ML_DSA_65_OID.len() {
-        return Err(TlsConfigError::InvalidPublicKey("Invalid OID length".into()));
+        return Err(TlsConfigError::InvalidPublicKey(
+            "Invalid OID length".into(),
+        ));
     }
 
     if spki.get(pos..pos + oid_len) != Some(&ML_DSA_65_OID[..]) {
@@ -331,10 +333,7 @@ struct RawPublicKeyResolver {
 }
 
 impl RawPublicKeyResolver {
-    fn new(
-        secret_key: MlDsaSecretKey,
-        public_key: MlDsaPublicKey,
-    ) -> Result<Self, TlsConfigError> {
+    fn new(secret_key: MlDsaSecretKey, public_key: MlDsaPublicKey) -> Result<Self, TlsConfigError> {
         let spki = create_spki(&public_key)?;
         let rustls_signing_key = MlDsaRustlsSigningKey::new(secret_key);
 
@@ -452,7 +451,9 @@ impl ClientCertVerifier for RawPublicKeyClientVerifier {
             .map_err(|e| TlsError::General(format!("Signature verification failed: {e:?}")))?;
 
         if !valid {
-            return Err(TlsError::General("Signature verification failed".to_string()));
+            return Err(TlsError::General(
+                "Signature verification failed".to_string(),
+            ));
         }
 
         debug!("TLS 1.3 ML-DSA-65 client signature verification successful");

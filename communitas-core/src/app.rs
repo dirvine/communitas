@@ -59,7 +59,6 @@ use crate::command::{
     ContactResponse, DiskStatsResponse, EntityResponse, FileInfoResponse, InviteResponse,
     MemberResponse, MessageResponse, ReactionResponse, SyncStateResponse, WebsiteResponse,
 };
-use yrs::{Map, ReadTxn, Transact};
 use crate::core_context::CoreContext;
 use crate::crdt::EntityType;
 use crate::disk_service::DiskType;
@@ -70,6 +69,7 @@ use std::sync::Arc;
 use tokio::sync::{RwLock, broadcast};
 use tracing::{info, warn};
 use uuid::Uuid;
+use yrs::{Map, ReadTxn, Transact};
 
 /// The main Communitas application
 ///
@@ -1425,13 +1425,15 @@ impl CommunitasApp {
                 contact.is_favourite = is_favourite;
                 let contact_id = contact.id.clone();
 
-                gossip.contact_store.add(contact).await.map_err(|e| {
-                    CommandError {
+                gossip
+                    .contact_store
+                    .add(contact)
+                    .await
+                    .map_err(|e| CommandError {
                         command_type: command_type.clone(),
                         message: format!("Failed to create contact: {}", e),
                         code: "CREATE_CONTACT_FAILED".to_string(),
-                    }
-                })?;
+                    })?;
 
                 let event = Event::ContactCreated {
                     contact_id,
@@ -1455,16 +1457,15 @@ impl CommunitasApp {
                 })?;
 
                 // Get the existing contact
-                let mut contact =
-                    gossip
-                        .contact_store
-                        .get_by_id(&contact_id)
-                        .await
-                        .ok_or_else(|| CommandError {
-                            command_type: command_type.clone(),
-                            message: format!("Contact not found: {}", contact_id),
-                            code: "CONTACT_NOT_FOUND".to_string(),
-                        })?;
+                let mut contact = gossip
+                    .contact_store
+                    .get_by_id(&contact_id)
+                    .await
+                    .ok_or_else(|| CommandError {
+                        command_type: command_type.clone(),
+                        message: format!("Contact not found: {}", contact_id),
+                        code: "CONTACT_NOT_FOUND".to_string(),
+                    })?;
 
                 // Update display name if provided
                 if let Some(ref name) = display_name {
@@ -1477,13 +1478,15 @@ impl CommunitasApp {
                 }
 
                 // Save updated contact
-                gossip.contact_store.update(contact).await.map_err(|e| {
-                    CommandError {
+                gossip
+                    .contact_store
+                    .update(contact)
+                    .await
+                    .map_err(|e| CommandError {
                         command_type: command_type.clone(),
                         message: format!("Failed to update contact: {}", e),
                         code: "UPDATE_CONTACT_FAILED".to_string(),
-                    }
-                })?;
+                    })?;
 
                 let event = Event::ContactUpdated {
                     contact_id,
@@ -1567,13 +1570,15 @@ impl CommunitasApp {
                         })?;
 
                 contact.is_favourite = true;
-                gossip.contact_store.update(contact).await.map_err(|e| {
-                    CommandError {
+                gossip
+                    .contact_store
+                    .update(contact)
+                    .await
+                    .map_err(|e| CommandError {
                         command_type: command_type.clone(),
                         message: format!("Failed to set favourite: {}", e),
                         code: "SET_FAVOURITE_FAILED".to_string(),
-                    }
-                })?;
+                    })?;
 
                 let event = Event::ContactFavouriteSet { four_words };
                 self.broadcast_event(event.clone());
@@ -1601,13 +1606,15 @@ impl CommunitasApp {
                         })?;
 
                 contact.is_favourite = false;
-                gossip.contact_store.update(contact).await.map_err(|e| {
-                    CommandError {
+                gossip
+                    .contact_store
+                    .update(contact)
+                    .await
+                    .map_err(|e| CommandError {
                         command_type: command_type.clone(),
                         message: format!("Failed to remove favourite: {}", e),
                         code: "REMOVE_FAVOURITE_FAILED".to_string(),
-                    }
-                })?;
+                    })?;
 
                 let event = Event::ContactFavouriteRemoved { four_words };
                 self.broadcast_event(event.clone());
@@ -2349,14 +2356,14 @@ impl CommunitasApp {
 
             Query::ListKanbanBoards { entity_id } => {
                 let ctx = self.context.read().await;
-                let boards = ctx
-                    .kanban_service
-                    .list_boards(&entity_id)
-                    .map_err(|e| QueryError {
-                        query_type: query_type.clone(),
-                        message: format!("{}", e),
-                        code: "LIST_BOARDS_FAILED".to_string(),
-                    })?;
+                let boards =
+                    ctx.kanban_service
+                        .list_boards(&entity_id)
+                        .map_err(|e| QueryError {
+                            query_type: query_type.clone(),
+                            message: format!("{}", e),
+                            code: "LIST_BOARDS_FAILED".to_string(),
+                        })?;
 
                 let board_responses: Vec<crate::command::KanbanBoardResponse> = boards
                     .into_iter()
@@ -2421,14 +2428,14 @@ impl CommunitasApp {
                     all_cards.extend(cards);
                 } else {
                     // Get all columns and collect all cards
-                    let columns = ctx
-                        .kanban_service
-                        .list_columns(&board_id)
-                        .map_err(|e| QueryError {
-                            query_type: query_type.clone(),
-                            message: format!("{}", e),
-                            code: "LIST_COLUMNS_FAILED".to_string(),
-                        })?;
+                    let columns =
+                        ctx.kanban_service
+                            .list_columns(&board_id)
+                            .map_err(|e| QueryError {
+                                query_type: query_type.clone(),
+                                message: format!("{}", e),
+                                code: "LIST_COLUMNS_FAILED".to_string(),
+                            })?;
 
                     for column in columns {
                         if let Ok(cards) = ctx
@@ -2628,13 +2635,15 @@ impl CommunitasApp {
                 let doc_id = format!("website:{entity_id}");
 
                 // Load the website CRDT document
-                let doc = ctx.crdt_manager.load_document(&doc_id).await.map_err(|e| {
-                    QueryError {
-                        query_type: query_type.clone(),
-                        message: format!("Website not found: {e}"),
-                        code: "WEBSITE_NOT_FOUND".to_string(),
-                    }
-                })?;
+                let doc =
+                    ctx.crdt_manager
+                        .load_document(&doc_id)
+                        .await
+                        .map_err(|e| QueryError {
+                            query_type: query_type.clone(),
+                            message: format!("Website not found: {e}"),
+                            code: "WEBSITE_NOT_FOUND".to_string(),
+                        })?;
 
                 // Extract website content from the CRDT document
                 // Note: CreateWebsite stores in "website" map, not "root"

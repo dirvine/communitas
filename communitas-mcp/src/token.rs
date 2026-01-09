@@ -3,7 +3,7 @@
 // Licensed under the AGPL-3.0 license
 
 use crate::auth::{DelegateToken, Scope};
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use base64::Engine;
 use rand::Rng;
 use std::path::PathBuf;
@@ -149,7 +149,9 @@ mod tests {
             )
             .expect("Failed to create token");
 
-        let verified = manager.verify_token(&token).expect("Failed to verify token");
+        let verified = manager
+            .verify_token(&token)
+            .expect("Failed to verify token");
         assert_eq!(verified.issuer, "ocean-forest-moon-star");
         assert_eq!(verified.delegate_name, "test-agent");
         assert!(verified.has_scope(&Scope::ReadMessages));

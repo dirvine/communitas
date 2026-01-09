@@ -7,7 +7,10 @@
 //! Handles JSON-RPC 2.0 communication over stdio, routing requests to the
 //! CommunitasApp for processing. Supports both authenticated and demo modes.
 
-use crate::auth::{requires_auth, AuthState, AuthenticatedSession, DelegateSession, DemoSession, Scope};
+use crate::Args;
+use crate::auth::{
+    AuthState, AuthenticatedSession, DelegateSession, DemoSession, Scope, requires_auth,
+};
 use crate::protocol::{
     InitializeParams, InitializeResult, JsonRpcError, JsonRpcRequest, JsonRpcResponse, Resource,
     ResourceContent, ResourceListResult, ResourceReadParams, ResourceReadResult,
@@ -16,7 +19,6 @@ use crate::protocol::{
 };
 use crate::token::TokenManager;
 use crate::tools;
-use crate::Args;
 use anyhow::Result;
 use communitas_core::app::CommunitasApp;
 use communitas_core::auth_service::AuthService;
@@ -55,12 +57,14 @@ impl McpServer {
     async fn get_token_manager(&mut self) -> Result<&TokenManager, JsonRpcError> {
         if self.token_manager.is_none() {
             let vault_dir = self.get_vault_dir();
-            let manager = TokenManager::new(vault_dir)
-                .await
-                .map_err(|e| JsonRpcError::internal_error(&format!("Failed to initialize token manager: {}", e)))?;
+            let manager = TokenManager::new(vault_dir).await.map_err(|e| {
+                JsonRpcError::internal_error(&format!("Failed to initialize token manager: {}", e))
+            })?;
             self.token_manager = Some(manager);
         }
-        Ok(self.token_manager.as_ref().expect("token_manager was just set"))
+        self.token_manager
+            .as_ref()
+            .ok_or_else(|| JsonRpcError::internal_error("token_manager not initialized"))
     }
 
     fn is_authenticated(&self) -> bool {
@@ -182,16 +186,12 @@ impl McpServer {
 
         let display_name = self.args.display_name.clone();
         let device_name = "mcp-demo".to_string();
-        let storage_dir = self
-            .args
-            .storage_dir
-            .clone()
-            .unwrap_or_else(|| {
-                std::env::temp_dir()
-                    .join("communitas-mcp-demo")
-                    .to_string_lossy()
-                    .to_string()
-            });
+        let storage_dir = self.args.storage_dir.clone().unwrap_or_else(|| {
+            std::env::temp_dir()
+                .join("communitas-mcp-demo")
+                .to_string_lossy()
+                .to_string()
+        });
 
         info!(
             "Demo mode: initializing with identity {} in {}",
@@ -259,7 +259,9 @@ impl McpServer {
 
         // Handle pre-auth tools
         if !tool_requires_auth {
-            return self.handle_pre_auth_tool(&params.name, params.arguments).await;
+            return self
+                .handle_pre_auth_tool(&params.name, params.arguments)
+                .await;
         }
 
         // For tools requiring auth, check if we're authenticated
@@ -272,7 +274,8 @@ impl McpServer {
         if params.name == "logout" {
             self.auth_state = AuthState::Unauthenticated;
             let result = tools::success_result("Logged out successfully");
-            return serde_json::to_value(result).map_err(|e| JsonRpcError::internal_error(&e.to_string()));
+            return serde_json::to_value(result)
+                .map_err(|e| JsonRpcError::internal_error(&e.to_string()));
         }
 
         if params.name == "create_delegate_token" {
@@ -644,9 +647,10 @@ impl McpServer {
 
         let auth_service = AuthService::new(storage_manager);
 
-        let vaults = auth_service.list_vaults().await.map_err(|e| {
-            JsonRpcError::internal_error(&format!("Failed to list vaults: {}", e))
-        })?;
+        let vaults = auth_service
+            .list_vaults()
+            .await
+            .map_err(|e| JsonRpcError::internal_error(&format!("Failed to list vaults: {}", e)))?;
 
         let vault_list: Vec<Value> = vaults
             .iter()

@@ -24,15 +24,15 @@
 
 mod auth;
 mod http;
+mod presence;
+mod presentation;
 mod protocol;
 mod server;
+mod social;
 mod tls;
 mod token;
 mod tools;
-mod presence;
 mod webrtc;
-mod social;
-mod presentation;
 
 use anyhow::Result;
 use clap::Parser;

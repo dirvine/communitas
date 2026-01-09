@@ -1,7 +1,7 @@
 // Licensed under the AGPL-3.0 license - see LICENSE file for details
 
 //! Advanced social collaboration features
-//! 
+//!
 //! This module implements high-level social features including Polls, Location Sharing,
 //! and ephemeral Stories. These features leverage the underlying CRDT and Gossip
 //! layers for distributed consistency.
@@ -41,16 +41,17 @@ impl PollOperations {
         duration_hours: Option<u64>,
     ) -> Result<Poll, Box<dyn std::error::Error>> {
         let poll_id = format!("poll_{}", uuid::Uuid::new_v4());
-        let poll_options = options.into_iter().enumerate().map(|(i, text)| {
-            PollOption {
+        let poll_options = options
+            .into_iter()
+            .enumerate()
+            .map(|(i, text)| PollOption {
                 id: format!("opt_{}", i),
                 text,
-            }
-        }).collect();
+            })
+            .collect();
 
-        let ends_at = duration_hours.map(|h| {
-            SystemTime::now() + std::time::Duration::from_secs(h * 3600)
-        });
+        let ends_at =
+            duration_hours.map(|h| SystemTime::now() + std::time::Duration::from_secs(h * 3600));
 
         let poll = Poll {
             id: poll_id,
@@ -74,7 +75,12 @@ impl PollOperations {
         user_id: String,
     ) -> Result<(), Box<dyn std::error::Error>> {
         // TODO: Record vote in CRDT
-        tracing::info!("User {} voted for {} in poll {}", user_id, option_id, poll_id);
+        tracing::info!(
+            "User {} voted for {} in poll {}",
+            user_id,
+            option_id,
+            poll_id
+        );
         Ok(())
     }
 }
@@ -105,9 +111,8 @@ impl LocationOperations {
         duration_minutes: Option<u64>,
     ) -> Result<LocationShare, Box<dyn std::error::Error>> {
         let id = format!("loc_{}", uuid::Uuid::new_v4());
-        let expires_at = duration_minutes.map(|m| {
-            SystemTime::now() + std::time::Duration::from_secs(m * 60)
-        });
+        let expires_at =
+            duration_minutes.map(|m| SystemTime::now() + std::time::Duration::from_secs(m * 60));
 
         let location = LocationShare {
             id,

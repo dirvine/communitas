@@ -113,9 +113,9 @@ impl GossipBootSequence {
         // words hashed one-way to seeds), NOT connection identities (encoded IPs).
         // User identities cannot be decoded back to IP addresses.
         let bootstrap_nodes = vec![
-            "142.93.199.50:11000".to_string(),  // saorsa-2: DigitalOcean NYC1 bootstrap
+            "142.93.199.50:11000".to_string(), // saorsa-2: DigitalOcean NYC1 bootstrap
             "147.182.234.192:11000".to_string(), // saorsa-3: DigitalOcean SFO3 bootstrap
-            "206.189.7.117:11000".to_string(),  // saorsa-4: DigitalOcean AMS3 test node
+            "206.189.7.117:11000".to_string(), // saorsa-4: DigitalOcean AMS3 test node
             "144.126.230.161:11000".to_string(), // saorsa-5: DigitalOcean LON1 test node
         ];
 
@@ -445,10 +445,7 @@ impl GossipBootSequence {
                                 .initialize_topic_peers(topic_id, peer_ids.clone())
                                 .await;
                         }
-                        debug!(
-                            "Synced {} transport peers to pubsub topics",
-                            peer_ids.len()
-                        );
+                        debug!("Synced {} transport peers to pubsub topics", peer_ids.len());
                     }
                 }
             });

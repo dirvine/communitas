@@ -514,13 +514,12 @@ impl KanbanService {
                 && board.project_id == entity_id
             {
                 // Count columns for the board
-                let column_count = if let Some(Out::YArray(col_order)) =
-                    root.get(&txn, keys::COLUMN_ORDER)
-                {
-                    col_order.len(&txn) as usize
-                } else {
-                    0
-                };
+                let column_count =
+                    if let Some(Out::YArray(col_order)) = root.get(&txn, keys::COLUMN_ORDER) {
+                        col_order.len(&txn) as usize
+                    } else {
+                        0
+                    };
 
                 boards.push(Board {
                     id: board_id.clone(),

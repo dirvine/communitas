@@ -224,19 +224,48 @@ impl From<FlutterDiskType> for DiskType {
 /// Event wrapper for Flutter
 #[derive(Debug, Clone)]
 pub enum FlutterEvent {
-    NetworkingStarted { address: String },
+    NetworkingStarted {
+        address: String,
+    },
     NetworkingStopped,
-    PeerConnected { peer_id: String },
-    PeerDisconnected { peer_id: String },
-    EntityCreated { entity_id: String },
-    EntityUpdated { entity_id: String },
-    MessageSent { message_id: String, entity_id: String },
-    MessageReceived { message_id: String, entity_id: String },
-    InviteCreated { invite_id: String },
-    InviteAccepted { invite_id: String },
-    FileWritten { entity_id: String, path: String },
-    FileDeleted { entity_id: String, path: String },
-    Error { code: String, message: String },
+    PeerConnected {
+        peer_id: String,
+    },
+    PeerDisconnected {
+        peer_id: String,
+    },
+    EntityCreated {
+        entity_id: String,
+    },
+    EntityUpdated {
+        entity_id: String,
+    },
+    MessageSent {
+        message_id: String,
+        entity_id: String,
+    },
+    MessageReceived {
+        message_id: String,
+        entity_id: String,
+    },
+    InviteCreated {
+        invite_id: String,
+    },
+    InviteAccepted {
+        invite_id: String,
+    },
+    FileWritten {
+        entity_id: String,
+        path: String,
+    },
+    FileDeleted {
+        entity_id: String,
+        path: String,
+    },
+    Error {
+        code: String,
+        message: String,
+    },
 }
 
 impl From<&Event> for FlutterEvent {
@@ -275,11 +304,15 @@ impl From<&Event> for FlutterEvent {
             Event::InviteAccepted { invite_id, .. } => FlutterEvent::InviteAccepted {
                 invite_id: invite_id.clone(),
             },
-            Event::FileWritten { entity_id, path, .. } => FlutterEvent::FileWritten {
+            Event::FileWritten {
+                entity_id, path, ..
+            } => FlutterEvent::FileWritten {
                 entity_id: entity_id.clone(),
                 path: path.clone(),
             },
-            Event::FileDeleted { entity_id, path, .. } => FlutterEvent::FileDeleted {
+            Event::FileDeleted {
+                entity_id, path, ..
+            } => FlutterEvent::FileDeleted {
                 entity_id: entity_id.clone(),
                 path: path.clone(),
             },
@@ -361,7 +394,7 @@ impl CommunitasApi {
             };
             let storage = to_dart_error(
                 communitas_core::encrypted_storage::EncryptedStorageManager::new(storage_config)
-                    .await
+                    .await,
             );
             *auth_lock = Some(AuthService::new(storage));
         }
@@ -391,9 +424,7 @@ impl CommunitasApi {
 
     /// Execute a query and return the response
     fn execute_query(&self, query: Query) -> QueryResponse {
-        block_on(async {
-            to_dart_error(self.app.query(query).await)
-        })
+        block_on(async { to_dart_error(self.app.query(query).await) })
     }
 
     // ========================================================================
@@ -439,23 +470,18 @@ impl CommunitasApi {
             let mut auth_lock = self.auth_service.write().await;
             let auth = self.get_or_init_auth(&mut auth_lock).await;
             to_dart_error(
-                auth.create_vault(&four_words, &password, &display_name).await
+                auth.create_vault(&four_words, &password, &display_name)
+                    .await,
             )
         })
     }
 
     /// Login to an existing vault
-    pub fn auth_login(
-        &self,
-        four_words: String,
-        password: String,
-    ) -> FlutterSessionInfo {
+    pub fn auth_login(&self, four_words: String, password: String) -> FlutterSessionInfo {
         block_on(async {
             let mut auth_lock = self.auth_service.write().await;
             let auth = self.get_or_init_auth(&mut auth_lock).await;
-            let session = to_dart_error(
-                auth.login(&four_words, &password, None).await
-            );
+            let session = to_dart_error(auth.login(&four_words, &password, None).await);
             FlutterSessionInfo::from(session)
         })
     }
@@ -551,10 +577,7 @@ impl CommunitasApi {
     }
 
     /// List entities by type
-    pub fn entity_list_by_type(
-        &self,
-        entity_type: FlutterEntityType,
-    ) -> Vec<FlutterEntity> {
+    pub fn entity_list_by_type(&self, entity_type: FlutterEntityType) -> Vec<FlutterEntity> {
         let core_type: EntityType = entity_type.into();
         let response = self.execute_query(Query::ListEntitiesByType {
             entity_type: core_type,

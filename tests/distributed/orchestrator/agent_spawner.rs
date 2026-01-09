@@ -40,10 +40,20 @@ impl AgentSpawner {
     ) -> Result<()> {
         let mcp_client = McpClient::new(&node.host, node.port);
 
-        info!("Running {} steps for {} on {}", steps.len(), actor, node.name);
+        info!(
+            "Running {} steps for {} on {}",
+            steps.len(),
+            actor,
+            node.name
+        );
 
         for (i, step) in steps.iter().enumerate() {
-            debug!("  Step {}: {} with params {:?}", i + 1, step.tool, step.params);
+            debug!(
+                "  Step {}: {} with params {:?}",
+                i + 1,
+                step.tool,
+                step.params
+            );
 
             // Substitute variables in params (lock briefly to read)
             let params: HashMap<String, serde_json::Value> = {
@@ -80,11 +90,7 @@ impl AgentSpawner {
     }
 
     /// Verify that a result matches expectations
-    fn verify_expectations(
-        &self,
-        step: &TestStep,
-        result: &serde_json::Value,
-    ) -> Result<()> {
+    fn verify_expectations(&self, step: &TestStep, result: &serde_json::Value) -> Result<()> {
         let expect = &step.expect;
 
         // Check status if specified
@@ -97,7 +103,10 @@ impl AgentSpawner {
                     "success"
                 }
             } else {
-                result.get("status").and_then(|v| v.as_str()).unwrap_or("unknown")
+                result
+                    .get("status")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown")
             };
 
             if actual_status != expected_status {
@@ -306,7 +315,10 @@ pub struct Usage {
 }
 
 /// Extract a value from JSON using a simple path (e.g., "result.id")
-fn extract_json_path<'a>(value: &'a serde_json::Value, path: &str) -> Option<&'a serde_json::Value> {
+fn extract_json_path<'a>(
+    value: &'a serde_json::Value,
+    path: &str,
+) -> Option<&'a serde_json::Value> {
     let mut current = value;
 
     for part in path.split('.') {
@@ -357,9 +369,8 @@ fn json_contains(haystack: Option<&serde_json::Value>, needle: &serde_json::Valu
         }
         (serde_json::Value::Object(obj1), serde_json::Value::Object(obj2)) => {
             // Check if all fields in needle exist and match in haystack
-            obj2.iter().all(|(k, v)| {
-                obj1.get(k).is_some_and(|hv| json_contains(Some(hv), v))
-            })
+            obj2.iter()
+                .all(|(k, v)| obj1.get(k).is_some_and(|hv| json_contains(Some(hv), v)))
         }
         (a, b) => a == b,
     }

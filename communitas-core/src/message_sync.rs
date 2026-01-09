@@ -342,17 +342,18 @@ impl MessageSyncService {
         if let Some(messages) = messages_map.get_mut(entity_id) {
             for message in messages.iter_mut() {
                 if message.metadata.id == message_id {
-                    let local_state = message.local_state.get_or_insert_with(|| LocalMessageState {
-                        status: None,
-                        reactions: Vec::new(),
-                        thread_count: None,
-                        latest_reply_by: None,
-                    });
+                    let local_state =
+                        message
+                            .local_state
+                            .get_or_insert_with(|| LocalMessageState {
+                                status: None,
+                                reactions: Vec::new(),
+                                thread_count: None,
+                                latest_reply_by: None,
+                            });
 
-                    if let Some(reaction) = local_state
-                        .reactions
-                        .iter_mut()
-                        .find(|r| r.emoji == emoji)
+                    if let Some(reaction) =
+                        local_state.reactions.iter_mut().find(|r| r.emoji == emoji)
                     {
                         if !reaction.peer_ids.contains(&peer_id) {
                             reaction.peer_ids.push(peer_id.clone());
@@ -393,10 +394,8 @@ impl MessageSyncService {
             for message in messages.iter_mut() {
                 if message.metadata.id == message_id {
                     if let Some(ref mut local_state) = message.local_state
-                        && let Some(reaction) = local_state
-                            .reactions
-                            .iter_mut()
-                            .find(|r| r.emoji == emoji)
+                        && let Some(reaction) =
+                            local_state.reactions.iter_mut().find(|r| r.emoji == emoji)
                     {
                         reaction.peer_ids.retain(|p| p != &peer_id);
                         reaction.count = reaction.count.saturating_sub(1);

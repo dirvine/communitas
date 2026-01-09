@@ -11,7 +11,7 @@
 //! - State machine validation for state transitions
 
 use super::operations::{Counter, LWWRegister, LamportTimestamp, ORSet};
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 
 /// Conflict resolution result

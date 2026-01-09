@@ -1,7 +1,7 @@
 // Licensed under the AGPL-3.0 license - see LICENSE file for details
 
 //! Presentation and Screen Sharing
-//! 
+//!
 //! This module manages presentation sessions, slide sharing, and screen sharing capabilities.
 //! It integrates with the WebRTC module for media transport and the gossip layer for
 //! session state synchronization.
@@ -49,7 +49,7 @@ impl PresentationOperations {
             slides,
             current_slide: 0,
         };
-        
+
         // TODO: Sync presentation state via CRDT
         tracing::info!("Started presentation session: {:?}", session);
         Ok(session)

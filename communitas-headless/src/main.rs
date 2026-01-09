@@ -202,9 +202,9 @@ fn default_config_with_storage(base_dir: PathBuf) -> Config {
         bootstrap_nodes: vec![
             // Saorsa Network Bootstrap Nodes
             // See docs/infrastructure/INFRASTRUCTURE.md for full node list
-            "142.93.199.50:11000".to_string(),  // saorsa-2: DigitalOcean NYC1 bootstrap
+            "142.93.199.50:11000".to_string(), // saorsa-2: DigitalOcean NYC1 bootstrap
             "147.182.234.192:11000".to_string(), // saorsa-3: DigitalOcean SFO3 bootstrap
-            "206.189.7.117:11000".to_string(),  // saorsa-4: DigitalOcean AMS3 test node
+            "206.189.7.117:11000".to_string(), // saorsa-4: DigitalOcean AMS3 test node
             "144.126.230.161:11000".to_string(), // saorsa-5: DigitalOcean LON1 test node
         ],
         storage: StorageConfig {
@@ -656,31 +656,29 @@ async fn start_health_endpoint(
 
     // Clone gossip context for API endpoints
     let gossip_for_peers = gossip.clone();
-    let api_peers = warp::path!("api" / "peers")
-        .and(warp::get())
-        .then(move || {
-            let gossip = gossip_for_peers.clone();
-            async move {
-                let peers = if let Some(g) = gossip {
-                    let connected = g.transport.connected_peers().await;
-                    connected
-                        .into_iter()
-                        .map(|(peer_id, addr)| {
-                            serde_json::json!({
-                                "peer_id": format!("{:?}", peer_id),
-                                "address": addr.to_string()
-                            })
+    let api_peers = warp::path!("api" / "peers").and(warp::get()).then(move || {
+        let gossip = gossip_for_peers.clone();
+        async move {
+            let peers = if let Some(g) = gossip {
+                let connected = g.transport.connected_peers().await;
+                connected
+                    .into_iter()
+                    .map(|(peer_id, addr)| {
+                        serde_json::json!({
+                            "peer_id": format!("{:?}", peer_id),
+                            "address": addr.to_string()
                         })
-                        .collect::<Vec<_>>()
-                } else {
-                    vec![]
-                };
-                warp::reply::json(&serde_json::json!({
-                    "connected_peers": peers,
-                    "count": peers.len()
-                }))
-            }
-        });
+                    })
+                    .collect::<Vec<_>>()
+            } else {
+                vec![]
+            };
+            warp::reply::json(&serde_json::json!({
+                "connected_peers": peers,
+                "count": peers.len()
+            }))
+        }
+    });
 
     let gossip_for_info = gossip.clone();
     let api_node_info = warp::path!("api" / "node-info")

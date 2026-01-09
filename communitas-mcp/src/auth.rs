@@ -12,10 +12,11 @@ use std::time::SystemTime;
 /// MCP Server authentication state
 /// Session data stored for future get_session API
 #[allow(dead_code)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum AuthState {
     /// Server running, waiting for authentication
     /// Only pre-auth tools available: authenticate, create_vault, authenticate_token
+    #[default]
     Unauthenticated,
 
     /// User authenticated with full access
@@ -26,12 +27,6 @@ pub enum AuthState {
     DemoMode(DemoSession),
 
     Delegate(DelegateSession),
-}
-
-impl Default for AuthState {
-    fn default() -> Self {
-        Self::Unauthenticated
-    }
 }
 
 /// Authenticated session with user credentials

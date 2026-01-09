@@ -468,8 +468,8 @@ impl CoreContext {
         let gossip_clone = gossip.clone();
 
         // Create handler that processes incoming entity messages
-        let handler: crate::gossip::EntityMessageHandler = Arc::new(
-            move |entity_id, sender_peer_id, message_bytes| {
+        let handler: crate::gossip::EntityMessageHandler =
+            Arc::new(move |entity_id, sender_peer_id, message_bytes| {
                 // Try to parse as GossipMessageType first (new format)
                 // Fall back to CRDTMessage for backwards compatibility
                 let gossip_msg: Result<crate::crdt::GossipMessageType, _> =
@@ -532,8 +532,7 @@ impl CoreContext {
                         }
                     }
                 }
-            },
-        );
+            });
 
         // Register the handler with the gossip context
         gossip.set_entity_message_handler(handler).await;

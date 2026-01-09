@@ -1272,7 +1272,10 @@ impl GossipContext {
             "channel" => crate::crdt::EntityType::Channel,
             "organisation" | "organization" | "org" => crate::crdt::EntityType::Organisation,
             _ => {
-                warn!("Unknown entity type '{}', defaulting to Channel", entity_type);
+                warn!(
+                    "Unknown entity type '{}', defaulting to Channel",
+                    entity_type
+                );
                 crate::crdt::EntityType::Channel
             }
         }

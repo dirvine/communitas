@@ -43,10 +43,7 @@ impl McpClient {
             .context("Failed to send health check request")?;
 
         if !response.status().is_success() {
-            anyhow::bail!(
-                "Health check failed with status: {}",
-                response.status()
-            );
+            anyhow::bail!("Health check failed with status: {}", response.status());
         }
 
         Ok(())
@@ -132,10 +129,9 @@ impl McpClient {
             .await
             .context("Failed to parse tools list response")?;
 
-        let tools: ToolsListResult = serde_json::from_value(
-            mcp_response.result.unwrap_or(serde_json::Value::Null),
-        )
-        .context("Failed to parse tools list")?;
+        let tools: ToolsListResult =
+            serde_json::from_value(mcp_response.result.unwrap_or(serde_json::Value::Null))
+                .context("Failed to parse tools list")?;
 
         Ok(tools.tools)
     }
@@ -182,11 +178,7 @@ impl McpClient {
 
     /// Create an entity
     #[allow(dead_code)]
-    pub async fn create_entity(
-        &self,
-        name: &str,
-        entity_type: &str,
-    ) -> Result<EntityResponse> {
+    pub async fn create_entity(&self, name: &str, entity_type: &str) -> Result<EntityResponse> {
         let mut params = HashMap::new();
         params.insert("name".to_string(), serde_json::json!(name));
         params.insert("entity_type".to_string(), serde_json::json!(entity_type));
@@ -206,11 +198,7 @@ impl McpClient {
 
     /// Send a message
     #[allow(dead_code)]
-    pub async fn send_message(
-        &self,
-        entity_id: &str,
-        text: &str,
-    ) -> Result<MessageResponse> {
+    pub async fn send_message(&self, entity_id: &str, text: &str) -> Result<MessageResponse> {
         let mut params = HashMap::new();
         params.insert("entity_id".to_string(), serde_json::json!(entity_id));
         params.insert("text".to_string(), serde_json::json!(text));

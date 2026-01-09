@@ -44,7 +44,11 @@ impl TestConfig {
             let entry = entry?;
             let path = entry.path();
 
-            if path.extension().map(|e| e == "yaml" || e == "yml").unwrap_or(false) {
+            if path
+                .extension()
+                .map(|e| e == "yaml" || e == "yml")
+                .unwrap_or(false)
+            {
                 configs.push(Self::load(&path)?);
             }
         }

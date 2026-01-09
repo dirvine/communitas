@@ -58,14 +58,14 @@ impl WebRtcOperations {
             state: CallState::Ringing,
             video_enabled: request.video_enabled,
         };
-        
+
         // TODO: Integrate with saorsa-webrtc-core to actually start signaling via Gossip
         // This will involve:
         // 1. Creating a WebRTC PeerConnection
         // 2. Generating an SDP offer
         // 3. Sending the offer via gossip.publish to the participants
         tracing::info!("Starting WebRTC call session: {:?}", session);
-        
+
         Ok(session)
     }
 

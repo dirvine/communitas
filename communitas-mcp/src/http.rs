@@ -7,8 +7,8 @@
 //! Provides an HTTP-based JSON-RPC 2.0 endpoint as an alternative to stdio.
 //! Supports both plain HTTP (for development) and HTTPS with RFC 7250 Raw Public Keys.
 
-use base64::Engine;
-use crate::auth::{requires_auth, AuthState, AuthenticatedSession, DemoSession};
+use crate::Args;
+use crate::auth::{AuthState, AuthenticatedSession, DelegateSession, DemoSession, requires_auth};
 use crate::protocol::{
     InitializeParams, InitializeResult, JsonRpcError, JsonRpcRequest, JsonRpcResponse, Resource,
     ResourceContent, ResourceListResult, ResourceReadParams, ResourceReadResult,
@@ -16,15 +16,11 @@ use crate::protocol::{
     ToolsCapability,
 };
 use crate::tls::{ServerTlsConfig, ServerTlsConfigBuilder, TlsConfigError};
+use crate::token::TokenManager;
 use crate::tools;
-use crate::Args;
 use anyhow::Result;
-use axum::{
-    Json, Router,
-    extract::State,
-    http::StatusCode,
-    routing::post,
-};
+use axum::{Json, Router, extract::State, http::StatusCode, routing::post};
+use base64::Engine;
 use communitas_core::app::CommunitasApp;
 use communitas_core::identity::generate_id_words;
 use serde_json::Value;
@@ -41,34 +37,68 @@ pub struct HttpServerState {
     app: RwLock<Option<CommunitasApp>>,
     /// Authentication state
     auth_state: RwLock<AuthState>,
-    /// Whether running in demo mode (for future get_session API)
-    #[allow(dead_code)]
-    demo_mode: bool,
     /// CLI arguments
     args: Args,
     /// Whether MCP protocol has been initialized
     protocol_initialized: RwLock<bool>,
+    /// Token manager for delegate authentication
+    token_manager: RwLock<Option<TokenManager>>,
 }
 
 impl HttpServerState {
-    /// Create a new HTTP server state
     pub fn new(args: Args) -> Self {
         Self {
             app: RwLock::new(None),
             auth_state: RwLock::new(AuthState::Unauthenticated),
-            demo_mode: args.demo,
             args,
             protocol_initialized: RwLock::new(false),
+            token_manager: RwLock::new(None),
         }
     }
 
-    /// Check if authenticated
     async fn is_authenticated(&self) -> bool {
         let auth_state = self.auth_state.read().await;
         matches!(
             *auth_state,
-            AuthState::Authenticated(_) | AuthState::DemoMode(_)
+            AuthState::Authenticated(_) | AuthState::DemoMode(_) | AuthState::Delegate(_)
         )
+    }
+
+    fn get_vault_dir(&self) -> std::path::PathBuf {
+        self.args
+            .storage_dir
+            .as_ref()
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| std::env::temp_dir().join("communitas-mcp-http"))
+    }
+
+    fn get_storage_dir(&self, four_words: &str) -> String {
+        self.get_vault_dir()
+            .join(four_words)
+            .to_string_lossy()
+            .to_string()
+    }
+
+    async fn get_token_manager(
+        &self,
+    ) -> Result<tokio::sync::RwLockReadGuard<'_, Option<TokenManager>>, JsonRpcError> {
+        {
+            let existing = self.token_manager.read().await;
+            if existing.is_some() {
+                return Ok(existing);
+            }
+        }
+
+        let vault_dir = self.get_vault_dir();
+        let manager = TokenManager::new(vault_dir).await.map_err(|e| {
+            JsonRpcError::internal_error(&format!("Failed to initialize token manager: {}", e))
+        })?;
+
+        let mut write_guard = self.token_manager.write().await;
+        *write_guard = Some(manager);
+        drop(write_guard);
+
+        Ok(self.token_manager.read().await)
     }
 }
 
@@ -120,9 +150,12 @@ pub async fn run_https(args: Args, tls_config: ServerTlsConfig) -> Result<()> {
 
     // Create axum-server with TLS
     let rustls_config = tls_config.into_inner();
-    axum_server::bind_rustls(addr, axum_server::tls_rustls::RustlsConfig::from_config(Arc::new(rustls_config)))
-        .serve(app.into_make_service())
-        .await?;
+    axum_server::bind_rustls(
+        addr,
+        axum_server::tls_rustls::RustlsConfig::from_config(Arc::new(rustls_config)),
+    )
+    .serve(app.into_make_service())
+    .await?;
 
     Ok(())
 }
@@ -235,21 +268,18 @@ async fn handle_request_inner(
 async fn initialize_demo_mode(state: &HttpServerState) -> Result<()> {
     let four_words = match &state.args.four_words {
         Some(fw) => fw.clone(),
-        None => generate_id_words().map_err(|e| anyhow::anyhow!("Failed to generate identity: {}", e))?,
+        None => generate_id_words()
+            .map_err(|e| anyhow::anyhow!("Failed to generate identity: {}", e))?,
     };
 
     let display_name = state.args.display_name.clone();
     let device_name = "mcp-http-demo".to_string();
-    let storage_dir = state
-        .args
-        .storage_dir
-        .clone()
-        .unwrap_or_else(|| {
-            std::env::temp_dir()
-                .join("communitas-mcp-http-demo")
-                .to_string_lossy()
-                .to_string()
-        });
+    let storage_dir = state.args.storage_dir.clone().unwrap_or_else(|| {
+        std::env::temp_dir()
+            .join("communitas-mcp-http-demo")
+            .to_string_lossy()
+            .to_string()
+    });
 
     info!(
         "HTTP Demo mode: initializing with identity {} in {}",
@@ -281,6 +311,27 @@ async fn initialize_demo_mode(state: &HttpServerState) -> Result<()> {
 
     info!("HTTP Demo mode initialized successfully");
     Ok(())
+}
+
+// =============================================================================
+// Helper Functions
+// =============================================================================
+
+/// Validates and normalizes a four-word identity string.
+/// Accepts both dot-separated (word1.word2.word3.word4) and dash-separated (word1-word2-word3-word4) formats.
+/// Returns the dash-separated format on success.
+fn validate_four_words(four_words: &str) -> Result<String, JsonRpcError> {
+    let words: Vec<&str> = if four_words.contains('.') {
+        four_words.split('.').collect()
+    } else {
+        four_words.split('-').collect()
+    };
+    if words.len() != 4 {
+        return Err(JsonRpcError::invalid_params(
+            "Invalid four-word format. Expected: word1.word2.word3.word4 or word1-word2-word3-word4",
+        ));
+    }
+    Ok(words.join("-"))
 }
 
 // =============================================================================
@@ -393,23 +444,118 @@ async fn handle_pre_auth_tool(
         }
         "authenticate" => handle_authenticate(state, args).await,
         "create_vault" => handle_create_vault(state, args).await,
-        "authenticate_token" => {
-            Err(JsonRpcError::internal_error(
-                "Delegate token authentication not yet implemented",
-            ))
-        }
+        "authenticate_token" => handle_authenticate_token(state, args).await,
+        "list_vaults" => handle_list_vaults(state).await,
         _ => Err(JsonRpcError::method_not_found(name)),
     }
 }
 
-async fn handle_authenticate(
+async fn handle_authenticate_token(
     state: &HttpServerState,
     args: Value,
 ) -> Result<Value, JsonRpcError> {
-    let four_words = args["four_words"]
+    let token_str = args["token"]
         .as_str()
-        .ok_or_else(|| JsonRpcError::invalid_params("Missing four_words"))?
-        .to_string();
+        .ok_or_else(|| JsonRpcError::invalid_params("Missing token"))?;
+
+    let token_manager_guard = state.get_token_manager().await?;
+    let token_manager = token_manager_guard
+        .as_ref()
+        .ok_or_else(|| JsonRpcError::internal_error("Token manager not initialized"))?;
+
+    let delegate_token = token_manager.verify_token(token_str).map_err(|e| {
+        error!("HTTP: Token verification failed: {}", e);
+        JsonRpcError::invalid_request(&format!("Invalid token: {}", e))
+    })?;
+
+    let storage_dir = state.get_storage_dir(&delegate_token.issuer);
+
+    match CommunitasApp::new(
+        delegate_token.issuer.clone(),
+        delegate_token.delegate_name.clone(),
+        "delegate-session".to_string(),
+        storage_dir.clone(),
+    )
+    .await
+    {
+        Ok(app) => {
+            let mut app_lock = state.app.write().await;
+            *app_lock = Some(app);
+
+            let mut auth_lock = state.auth_state.write().await;
+            *auth_lock = AuthState::Delegate(DelegateSession {
+                issuer_four_words: delegate_token.issuer.clone(),
+                delegate_name: delegate_token.delegate_name,
+                scopes: delegate_token.scopes,
+                started_at: SystemTime::now(),
+                storage_dir,
+            });
+
+            info!(
+                "HTTP: Delegate authenticated successfully for issuer: {}",
+                delegate_token.issuer
+            );
+
+            let result = tools::success_result("Delegate token authentication successful");
+            serde_json::to_value(result).map_err(|e| JsonRpcError::internal_error(&e.to_string()))
+        }
+        Err(e) => {
+            error!("HTTP: Failed to initialize app for delegate: {}", e);
+            Err(JsonRpcError::internal_error(&format!(
+                "Failed to initialize delegate session: {}",
+                e
+            )))
+        }
+    }
+}
+
+async fn handle_list_vaults(state: &HttpServerState) -> Result<Value, JsonRpcError> {
+    use communitas_core::auth_service::AuthService;
+    use communitas_core::encrypted_storage::{EncryptedStorageManager, StorageConfig};
+
+    let storage_config = StorageConfig {
+        vault_dir: state.get_vault_dir(),
+        use_keyring: false,
+        ..Default::default()
+    };
+
+    let storage_manager = EncryptedStorageManager::new(storage_config)
+        .await
+        .map_err(|e| {
+            JsonRpcError::internal_error(&format!("Failed to initialize storage: {}", e))
+        })?;
+
+    let auth_service = AuthService::new(storage_manager);
+
+    let vaults = auth_service
+        .list_vaults()
+        .await
+        .map_err(|e| JsonRpcError::internal_error(&format!("Failed to list vaults: {}", e)))?;
+
+    let vault_list: Vec<Value> = vaults
+        .iter()
+        .map(|v| {
+            serde_json::json!({
+                "four_words": v.four_words,
+                "display_name": v.display_name,
+                "created_at": v.created_at,
+                "last_accessed": v.last_accessed,
+                "size_bytes": v.size_bytes
+            })
+        })
+        .collect();
+
+    let result = serde_json::json!({
+        "content": [{"type": "text", "text": serde_json::to_string(&serde_json::json!({"vaults": vault_list, "count": vault_list.len()})).unwrap_or_default()}],
+        "isError": false
+    });
+    serde_json::to_value(result).map_err(|e| JsonRpcError::internal_error(&e.to_string()))
+}
+
+async fn handle_authenticate(state: &HttpServerState, args: Value) -> Result<Value, JsonRpcError> {
+    let four_words_raw = args["four_words"]
+        .as_str()
+        .ok_or_else(|| JsonRpcError::invalid_params("Missing four_words"))?;
     let _password = args["password"]
         .as_str()
         .ok_or_else(|| JsonRpcError::invalid_params("Missing password"))?;
@@ -418,20 +564,7 @@ async fn handle_authenticate(
         .unwrap_or("mcp-http-client")
         .to_string();
 
-    // Validate four-word format (accepts dots or dashes as separator)
-    let words: Vec<&str> = if four_words.contains('.') {
-        four_words.split('.').collect()
-    } else {
-        four_words.split('-').collect()
-    };
-    if words.len() != 4 {
-        return Err(JsonRpcError::invalid_params(
-            "Invalid four-word format. Expected: word1.word2.word3.word4 or word1-word2-word3-word4",
-        ));
-    }
-
-    // Convert to dash-separated format for core (which expects dashes)
-    let four_words_dashed = words.join("-");
+    let four_words_dashed = validate_four_words(four_words_raw)?;
 
     let storage_dir = std::env::temp_dir()
         .join("communitas-mcp-http")
@@ -462,7 +595,10 @@ async fn handle_authenticate(
                 storage_dir,
             });
 
-            info!("HTTP: User authenticated successfully: {}", four_words_dashed);
+            info!(
+                "HTTP: User authenticated successfully: {}",
+                four_words_dashed
+            );
 
             let result = tools::success_result("Authentication successful");
             serde_json::to_value(result).map_err(|e| JsonRpcError::internal_error(&e.to_string()))
@@ -477,14 +613,10 @@ async fn handle_authenticate(
     }
 }
 
-async fn handle_create_vault(
-    state: &HttpServerState,
-    args: Value,
-) -> Result<Value, JsonRpcError> {
-    let four_words = args["four_words"]
+async fn handle_create_vault(state: &HttpServerState, args: Value) -> Result<Value, JsonRpcError> {
+    let four_words_raw = args["four_words"]
         .as_str()
-        .ok_or_else(|| JsonRpcError::invalid_params("Missing four_words"))?
-        .to_string();
+        .ok_or_else(|| JsonRpcError::invalid_params("Missing four_words"))?;
     let _password = args["password"]
         .as_str()
         .ok_or_else(|| JsonRpcError::invalid_params("Missing password"))?;
@@ -493,20 +625,7 @@ async fn handle_create_vault(
         .ok_or_else(|| JsonRpcError::invalid_params("Missing display_name"))?
         .to_string();
 
-    // Validate four-word format (accepts dots or dashes as separator)
-    let words: Vec<&str> = if four_words.contains('.') {
-        four_words.split('.').collect()
-    } else {
-        four_words.split('-').collect()
-    };
-    if words.len() != 4 {
-        return Err(JsonRpcError::invalid_params(
-            "Invalid four-word format. Expected: word1.word2.word3.word4 or word1-word2-word3-word4",
-        ));
-    }
-
-    // Convert to dash-separated format for core (which expects dashes)
-    let four_words_dashed = words.join("-");
+    let four_words_dashed = validate_four_words(four_words_raw)?;
 
     let device_name = "mcp-http-client".to_string();
     let storage_dir = std::env::temp_dir()
@@ -538,7 +657,10 @@ async fn handle_create_vault(
                 storage_dir,
             });
 
-            info!("HTTP: Vault created successfully for: {}", four_words_dashed);
+            info!(
+                "HTTP: Vault created successfully for: {}",
+                four_words_dashed
+            );
 
             let result = tools::success_result("Vault created and authenticated successfully");
             serde_json::to_value(result).map_err(|e| JsonRpcError::internal_error(&e.to_string()))

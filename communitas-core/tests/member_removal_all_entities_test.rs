@@ -82,7 +82,11 @@ async fn test_remove_member_from_group() {
         .list_members(EntityType::Group, &group_id)
         .await
         .unwrap();
-    assert_eq!(members_after.len(), 1, "Should only have creator after removal");
+    assert_eq!(
+        members_after.len(),
+        1,
+        "Should only have creator after removal"
+    );
     assert!(
         !members_after
             .iter()
@@ -144,7 +148,11 @@ async fn test_remove_member_from_organization() {
         .list_members(EntityType::Organisation, &org_id)
         .await
         .unwrap();
-    assert_eq!(members_after.len(), 1, "Should only have creator after removal");
+    assert_eq!(
+        members_after.len(),
+        1,
+        "Should only have creator after removal"
+    );
     assert!(
         !members_after
             .iter()
@@ -206,7 +214,11 @@ async fn test_remove_member_from_channel() {
         .list_members(EntityType::Channel, &channel_id)
         .await
         .unwrap();
-    assert_eq!(members_after.len(), 1, "Should only have creator after removal");
+    assert_eq!(
+        members_after.len(),
+        1,
+        "Should only have creator after removal"
+    );
     assert!(
         !members_after
             .iter()
@@ -268,7 +280,11 @@ async fn test_remove_member_from_project() {
         .list_members(EntityType::Project, &project_id)
         .await
         .unwrap();
-    assert_eq!(members_after.len(), 1, "Should only have creator after removal");
+    assert_eq!(
+        members_after.len(),
+        1,
+        "Should only have creator after removal"
+    );
     assert!(
         !members_after
             .iter()

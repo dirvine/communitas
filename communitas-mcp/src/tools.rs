@@ -6,11 +6,11 @@
 //!
 //! Exposes Communitas commands and queries as MCP tools that AI agents can invoke.
 
+use crate::presence::{PresenceOperations, PresenceStatus, PresenceSubscription, PresenceUpdate};
+use crate::presentation::{PresentationOperations, ScreenRegion, Slide};
 use crate::protocol::{Tool, ToolCallResult, ToolContent};
-use crate::presence::{PresenceStatus, PresenceUpdate, PresenceSubscription, PresenceOperations};
-use crate::webrtc::{WebRtcOperations, CallRequest};
-use crate::social::{PollOperations, LocationOperations, StoryOperations};
-use crate::presentation::{PresentationOperations, Slide, ScreenRegion};
+use crate::social::{LocationOperations, PollOperations, StoryOperations};
+use crate::webrtc::{CallRequest, WebRtcOperations};
 use base64::prelude::*;
 use communitas_core::{
     app::CommunitasApp,
@@ -1385,6 +1385,24 @@ pub fn list_tools(authenticated: bool) -> Vec<Tool> {
                 "required": ["delegate_name"]
             }),
         },
+        Tool {
+            name: "workspace_init".to_string(),
+            description: "Initialize a new workspace with default structure: creates a project entity with a default Kanban board containing To Do, In Progress, and Done columns".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Workspace/project name"},
+                    "description": {"type": "string", "description": "Workspace description (optional)"},
+                    "board_name": {"type": "string", "description": "Name for the default Kanban board (default: 'Main Board')"},
+                    "columns": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Column names (default: ['To Do', 'In Progress', 'Done'])"
+                    }
+                },
+                "required": ["name"]
+            }),
+        },
     ]);
 
     tools
@@ -1394,169 +1412,252 @@ pub fn list_tools(authenticated: bool) -> Vec<Tool> {
 pub async fn call_tool(app: &CommunitasApp, name: &str, args: Option<Value>) -> ToolCallResult {
     let args = args.unwrap_or(json!({}));
 
+    // Try each category dispatcher in turn
+    // Note: health_check and core_status are handled as pre-auth tools in server.rs
+
+    if let Some(result) = dispatch_session_tools(app, name, &args).await {
+        return result;
+    }
+    if let Some(result) = dispatch_entity_tools(app, name, &args).await {
+        return result;
+    }
+    if let Some(result) = dispatch_message_tools(app, name, &args).await {
+        return result;
+    }
+    if let Some(result) = dispatch_kanban_tools(app, name, &args).await {
+        return result;
+    }
+    if let Some(result) = dispatch_file_tools(app, name, &args).await {
+        return result;
+    }
+    if let Some(result) = dispatch_contact_tools(app, name, &args).await {
+        return result;
+    }
+    if let Some(result) = dispatch_network_tools(app, name, &args).await {
+        return result;
+    }
+    if let Some(result) = dispatch_social_tools(app, name, &args).await {
+        return result;
+    }
+    if let Some(result) = dispatch_misc_tools(app, name, &args).await {
+        return result;
+    }
+
+    error_result(&format!("Unknown tool: {}", name))
+}
+
+// ============================================================================
+// Category Dispatchers
+// ============================================================================
+
+async fn dispatch_session_tools(
+    app: &CommunitasApp,
+    name: &str,
+    args: &Value,
+) -> Option<ToolCallResult> {
     match name {
-        // Note: health_check and core_status are handled as pre-auth tools in server.rs
+        "get_session" => Some(execute_get_session(app).await),
+        "get_unread_count" => Some(execute_get_unread_count(app, args.clone()).await),
+        "get_profile" => Some(execute_get_profile(app).await),
+        "update_profile" => Some(execute_update_profile(app, args.clone()).await),
+        _ => None,
+    }
+}
 
-        // Session commands
-        "get_session" => execute_get_session(app).await,
-        "get_unread_count" => execute_get_unread_count(app, args).await,
+async fn dispatch_entity_tools(
+    app: &CommunitasApp,
+    name: &str,
+    args: &Value,
+) -> Option<ToolCallResult> {
+    match name {
+        // Entity CRUD
+        "create_entity" => Some(execute_create_entity(app, args.clone()).await),
+        "update_entity" => Some(execute_update_entity(app, args.clone()).await),
+        "delete_entity" => Some(execute_delete_entity(app, args.clone()).await),
+        "get_entity" => Some(execute_get_entity(app, args.clone()).await),
+        "list_entities" => Some(execute_list_entities(app, args.clone()).await),
+        "join_entity" => Some(execute_join_entity(app, args.clone()).await),
+        // Member operations
+        "add_member" => Some(execute_add_member(app, args.clone()).await),
+        "remove_member" => Some(execute_remove_member(app, args.clone()).await),
+        "list_members" => Some(execute_list_members(app, args.clone()).await),
+        // Invite operations
+        "create_invite" => Some(execute_create_invite(app, args.clone()).await),
+        "accept_invite" => Some(execute_accept_invite(app, args.clone()).await),
+        "list_pending_invites" => Some(execute_list_pending_invites(app).await),
+        _ => None,
+    }
+}
 
-        // Entity commands
-        "create_entity" => execute_create_entity(app, args).await,
-        "update_entity" => execute_update_entity(app, args).await,
-        "delete_entity" => execute_delete_entity(app, args).await,
-
-        // Member commands
-        "add_member" => execute_add_member(app, args).await,
-        "remove_member" => execute_remove_member(app, args).await,
-
-        // Message commands
-        "send_message" => execute_send_message(app, args).await,
-        "delete_message" => execute_delete_message(app, args).await,
-        "edit_message" => execute_edit_message(app, args).await,
-        "add_reaction" => execute_add_reaction(app, args).await,
-        "remove_reaction" => execute_remove_reaction(app, args).await,
-        "get_reactions" => execute_get_reactions(app, args).await,
-        "create_custom_reaction" => execute_create_custom_reaction(app, args).await,
-        "get_available_reactions" => execute_get_available_reactions(app, args).await,
-
-        // Kanban commands
-        "create_kanban_board" => execute_create_board(app, args).await,
-        "create_kanban_column" => execute_create_column(app, args).await,
-        "create_kanban_card" => execute_create_card(app, args).await,
-        "move_kanban_card" => execute_move_card(app, args).await,
-        "update_kanban_card" => execute_update_kanban_card(app, args).await,
-        "delete_kanban_card" => execute_delete_kanban_card(app, args).await,
-
-        // Kanban queries
-        "list_kanban_boards" => execute_list_kanban_boards(app, args).await,
-        "get_kanban_card" => execute_get_kanban_card(app, args).await,
-        "get_kanban_board" => execute_get_kanban_board(app, args).await,
-        "update_kanban_board" => execute_update_kanban_board(app, args).await,
-        "delete_kanban_board" => execute_delete_kanban_board(app, args).await,
-        "list_kanban_cards" => execute_list_kanban_cards(app, args).await,
-
-        // Invite commands
-        "create_invite" => execute_create_invite(app, args).await,
-        "accept_invite" => execute_accept_invite(app, args).await,
-
-        // File commands
-        "write_file" => execute_write_file(app, args).await,
-        "read_file" => execute_read_file(app, args).await,
-
-        // Query commands
-        "get_entity" => execute_get_entity(app, args).await,
-        "list_entities" => execute_list_entities(app, args).await,
-        "list_members" => execute_list_members(app, args).await,
-        "get_messages" => execute_get_messages(app, args).await,
-        "list_files" => execute_list_files(app, args).await,
-        "get_profile" => execute_get_profile(app).await,
-        "update_profile" => execute_update_profile(app, args).await,
-        "list_pending_invites" => execute_list_pending_invites(app).await,
-
-        // Presence tools
-        "set_presence" => execute_set_presence(app, args).await,
-        "get_presence" => execute_get_presence(app, args).await,
-        "subscribe_to_presence" => execute_subscribe_to_presence(app, args).await,
-
-        // WebRTC commands
-        "start_voice_call" => execute_start_voice_call(app, args).await,
-        "join_call" => execute_join_call(app, args).await,
-        "end_call" => execute_end_call(app, args).await,
-
-        // Media commands
-        "upload_with_metadata" => execute_upload_with_metadata(app, args).await,
-        "get_media_metadata" => execute_get_media_metadata(app, args).await,
-
-        // Social commands
-        "create_poll" => execute_create_poll(app, args).await,
-        "vote_in_poll" => execute_vote_in_poll(app, args).await,
-        "share_location" => execute_share_location(app, args).await,
-        "create_story" => execute_create_story(app, args).await,
-
-        // Presentation commands
-        "start_presentation" => execute_start_presentation(app, args).await,
-        "share_screen" => execute_share_screen(app, args).await,
-
-        // Network commands
-        "network_start" => execute_network_start(app, args).await,
-        "network_stop" => execute_network_stop(app).await,
-        "network_connect" => execute_network_connect(app, args).await,
-        "network_status" => execute_network_status(app).await,
-        "network_peers" => execute_network_peers(app).await,
-        "network_request_external_address" => execute_request_external_address(app).await,
-        "network_disconnect" => execute_network_disconnect(app, args).await,
-
-        // Contact commands
-        "create_contact" => execute_create_contact(app, args).await,
-        "update_contact" => execute_update_contact(app, args).await,
-        "delete_contact" => execute_delete_contact(app, args).await,
-        "link_contact" => execute_link_contact(app, args).await,
-        "set_favourite_contact" => execute_set_favourite_contact(app, args).await,
-        "remove_favourite_contact" => execute_remove_favourite_contact(app, args).await,
-
-        // Contact queries
-        "get_contact" => execute_get_contact(app, args).await,
-        "list_contacts" => execute_list_contacts(app).await,
-        "list_favourite_contacts" => execute_list_favourite_contacts(app).await,
-        "search_contacts" => execute_search_contacts(app, args).await,
-
-        // Website commands
-        "create_website" => execute_create_website(app, args).await,
-        "update_website" => execute_update_website(app, args).await,
-        "delete_website" => execute_delete_website(app, args).await,
-
-        // Website queries
-        "get_website" => execute_get_website(app, args).await,
-
-        // Kanban column commands and queries
-        "list_kanban_columns" => execute_list_kanban_columns(app, args).await,
-        "get_kanban_column" => execute_get_kanban_column(app, args).await,
-        "update_kanban_column" => execute_update_kanban_column(app, args).await,
-        "delete_kanban_column" => execute_delete_kanban_column(app, args).await,
-        "move_kanban_column" => execute_move_kanban_column(app, args).await,
-
-        // Kanban card state
-        "change_card_state" => execute_change_card_state(app, args).await,
-
-        // Kanban assignment commands
-        "assign_user" => execute_assign_user(app, args).await,
-        "unassign_user" => execute_unassign_user(app, args).await,
-
-        // Kanban tag commands
-        "create_kanban_tag" => execute_create_kanban_tag(app, args).await,
-        "list_kanban_tags" => execute_list_kanban_tags(app, args).await,
-        "tag_card" => execute_tag_card(app, args).await,
-        "untag_card" => execute_untag_card(app, args).await,
-
-        // Kanban step commands
-        "add_step" => execute_add_step(app, args).await,
-        "get_step" => execute_get_step(app, args).await,
-        "toggle_step" => execute_toggle_step(app, args).await,
-        "delete_step" => execute_delete_step(app, args).await,
-
-        // Kanban comment commands
-        "add_comment" => execute_add_comment(app, args).await,
-        "list_comments" => execute_list_comments(app, args).await,
-        "delete_comment" => execute_delete_comment(app, args).await,
-
-        // Entity join
-        "join_entity" => execute_join_entity(app, args).await,
-
-        // File operations
-        "delete_file" => execute_delete_file(app, args).await,
-        "get_disk_stats" => execute_get_disk_stats(app, args).await,
-
+async fn dispatch_message_tools(
+    app: &CommunitasApp,
+    name: &str,
+    args: &Value,
+) -> Option<ToolCallResult> {
+    match name {
+        // Message CRUD
+        "send_message" => Some(execute_send_message(app, args.clone()).await),
+        "delete_message" => Some(execute_delete_message(app, args.clone()).await),
+        "edit_message" => Some(execute_edit_message(app, args.clone()).await),
+        "get_messages" => Some(execute_get_messages(app, args.clone()).await),
+        // Reactions
+        "add_reaction" => Some(execute_add_reaction(app, args.clone()).await),
+        "remove_reaction" => Some(execute_remove_reaction(app, args.clone()).await),
+        "get_reactions" => Some(execute_get_reactions(app, args.clone()).await),
+        "create_custom_reaction" => Some(execute_create_custom_reaction(app, args.clone()).await),
+        "get_available_reactions" => Some(execute_get_available_reactions(app, args.clone()).await),
         // Thread operations
-        "create_thread" => execute_create_thread(app, args).await,
-        "get_thread_messages" => execute_get_thread_messages(app, args).await,
+        "create_thread" => Some(execute_create_thread(app, args.clone()).await),
+        "get_thread_messages" => Some(execute_get_thread_messages(app, args.clone()).await),
+        _ => None,
+    }
+}
 
-        _ => ToolCallResult {
-            content: vec![ToolContent::Text {
-                text: format!("Unknown tool: {}", name),
-            }],
-            is_error: true,
-        },
+async fn dispatch_kanban_tools(
+    app: &CommunitasApp,
+    name: &str,
+    args: &Value,
+) -> Option<ToolCallResult> {
+    match name {
+        // Board operations
+        "create_kanban_board" => Some(execute_create_board(app, args.clone()).await),
+        "get_kanban_board" => Some(execute_get_kanban_board(app, args.clone()).await),
+        "update_kanban_board" => Some(execute_update_kanban_board(app, args.clone()).await),
+        "delete_kanban_board" => Some(execute_delete_kanban_board(app, args.clone()).await),
+        "list_kanban_boards" => Some(execute_list_kanban_boards(app, args.clone()).await),
+        // Column operations
+        "create_kanban_column" => Some(execute_create_column(app, args.clone()).await),
+        "get_kanban_column" => Some(execute_get_kanban_column(app, args.clone()).await),
+        "update_kanban_column" => Some(execute_update_kanban_column(app, args.clone()).await),
+        "delete_kanban_column" => Some(execute_delete_kanban_column(app, args.clone()).await),
+        "move_kanban_column" => Some(execute_move_kanban_column(app, args.clone()).await),
+        "list_kanban_columns" => Some(execute_list_kanban_columns(app, args.clone()).await),
+        // Card operations
+        "create_kanban_card" => Some(execute_create_card(app, args.clone()).await),
+        "get_kanban_card" => Some(execute_get_kanban_card(app, args.clone()).await),
+        "update_kanban_card" => Some(execute_update_kanban_card(app, args.clone()).await),
+        "delete_kanban_card" => Some(execute_delete_kanban_card(app, args.clone()).await),
+        "move_kanban_card" => Some(execute_move_card(app, args.clone()).await),
+        "list_kanban_cards" => Some(execute_list_kanban_cards(app, args.clone()).await),
+        "change_card_state" => Some(execute_change_card_state(app, args.clone()).await),
+        // Assignment operations
+        "assign_user" => Some(execute_assign_user(app, args.clone()).await),
+        "unassign_user" => Some(execute_unassign_user(app, args.clone()).await),
+        // Tag operations
+        "create_kanban_tag" => Some(execute_create_kanban_tag(app, args.clone()).await),
+        "list_kanban_tags" => Some(execute_list_kanban_tags(app, args.clone()).await),
+        "tag_card" => Some(execute_tag_card(app, args.clone()).await),
+        "untag_card" => Some(execute_untag_card(app, args.clone()).await),
+        // Step operations
+        "add_step" => Some(execute_add_step(app, args.clone()).await),
+        "get_step" => Some(execute_get_step(app, args.clone()).await),
+        "toggle_step" => Some(execute_toggle_step(app, args.clone()).await),
+        "delete_step" => Some(execute_delete_step(app, args.clone()).await),
+        // Comment operations
+        "add_comment" => Some(execute_add_comment(app, args.clone()).await),
+        "list_comments" => Some(execute_list_comments(app, args.clone()).await),
+        "delete_comment" => Some(execute_delete_comment(app, args.clone()).await),
+        _ => None,
+    }
+}
+
+async fn dispatch_file_tools(
+    app: &CommunitasApp,
+    name: &str,
+    args: &Value,
+) -> Option<ToolCallResult> {
+    match name {
+        "write_file" => Some(execute_write_file(app, args.clone()).await),
+        "read_file" => Some(execute_read_file(app, args.clone()).await),
+        "delete_file" => Some(execute_delete_file(app, args.clone()).await),
+        "list_files" => Some(execute_list_files(app, args.clone()).await),
+        "get_disk_stats" => Some(execute_get_disk_stats(app, args.clone()).await),
+        // Media operations
+        "upload_with_metadata" => Some(execute_upload_with_metadata(app, args.clone()).await),
+        "get_media_metadata" => Some(execute_get_media_metadata(app, args.clone()).await),
+        _ => None,
+    }
+}
+
+async fn dispatch_contact_tools(
+    app: &CommunitasApp,
+    name: &str,
+    args: &Value,
+) -> Option<ToolCallResult> {
+    match name {
+        "create_contact" => Some(execute_create_contact(app, args.clone()).await),
+        "update_contact" => Some(execute_update_contact(app, args.clone()).await),
+        "delete_contact" => Some(execute_delete_contact(app, args.clone()).await),
+        "get_contact" => Some(execute_get_contact(app, args.clone()).await),
+        "list_contacts" => Some(execute_list_contacts(app).await),
+        "link_contact" => Some(execute_link_contact(app, args.clone()).await),
+        "set_favourite_contact" => Some(execute_set_favourite_contact(app, args.clone()).await),
+        "remove_favourite_contact" => {
+            Some(execute_remove_favourite_contact(app, args.clone()).await)
+        }
+        "list_favourite_contacts" => Some(execute_list_favourite_contacts(app).await),
+        "search_contacts" => Some(execute_search_contacts(app, args.clone()).await),
+        _ => None,
+    }
+}
+
+async fn dispatch_network_tools(
+    app: &CommunitasApp,
+    name: &str,
+    args: &Value,
+) -> Option<ToolCallResult> {
+    match name {
+        "network_start" => Some(execute_network_start(app, args.clone()).await),
+        "network_stop" => Some(execute_network_stop(app).await),
+        "network_connect" => Some(execute_network_connect(app, args.clone()).await),
+        "network_disconnect" => Some(execute_network_disconnect(app, args.clone()).await),
+        "network_status" => Some(execute_network_status(app).await),
+        "network_peers" => Some(execute_network_peers(app).await),
+        "network_request_external_address" => Some(execute_request_external_address(app).await),
+        _ => None,
+    }
+}
+
+async fn dispatch_social_tools(
+    app: &CommunitasApp,
+    name: &str,
+    args: &Value,
+) -> Option<ToolCallResult> {
+    match name {
+        // Presence
+        "set_presence" => Some(execute_set_presence(app, args.clone()).await),
+        "get_presence" => Some(execute_get_presence(app, args.clone()).await),
+        "subscribe_to_presence" => Some(execute_subscribe_to_presence(app, args.clone()).await),
+        // WebRTC calls
+        "start_voice_call" => Some(execute_start_voice_call(app, args.clone()).await),
+        "join_call" => Some(execute_join_call(app, args.clone()).await),
+        "end_call" => Some(execute_end_call(app, args.clone()).await),
+        // Polls, location, stories
+        "create_poll" => Some(execute_create_poll(app, args.clone()).await),
+        "vote_in_poll" => Some(execute_vote_in_poll(app, args.clone()).await),
+        "share_location" => Some(execute_share_location(app, args.clone()).await),
+        "create_story" => Some(execute_create_story(app, args.clone()).await),
+        // Presentations
+        "start_presentation" => Some(execute_start_presentation(app, args.clone()).await),
+        "share_screen" => Some(execute_share_screen(app, args.clone()).await),
+        _ => None,
+    }
+}
+
+async fn dispatch_misc_tools(
+    app: &CommunitasApp,
+    name: &str,
+    args: &Value,
+) -> Option<ToolCallResult> {
+    match name {
+        // Website operations
+        "create_website" => Some(execute_create_website(app, args.clone()).await),
+        "update_website" => Some(execute_update_website(app, args.clone()).await),
+        "delete_website" => Some(execute_delete_website(app, args.clone()).await),
+        "get_website" => Some(execute_get_website(app, args.clone()).await),
+        // Workspace initialization
+        "workspace_init" => Some(execute_workspace_init(app, args.clone()).await),
+        _ => None,
     }
 }
 
@@ -1607,23 +1708,84 @@ fn error_result(message: &str) -> ToolCallResult {
     }
 }
 
-// Command executors
+// ============================================================================
+// Argument Extraction Helpers
+// ============================================================================
 
-async fn execute_create_entity(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let name = args["name"].as_str().unwrap_or_default().to_string();
-    let entity_type = match args["entity_type"].as_str().and_then(parse_entity_type) {
-        Some(t) => t,
-        None => return error_result("Invalid or missing entity_type"),
+/// Extract a required string argument, returning an error result if missing
+macro_rules! require_str {
+    ($args:expr, $field:expr) => {
+        match $args[$field].as_str() {
+            Some(s) => s.to_string(),
+            None => return error_result(concat!($field, " is required")),
+        }
     };
-    let description = args["description"].as_str().map(|s| s.to_string());
-    let initial_members: Vec<String> = args["initial_members"]
+}
+
+/// Extract a string argument with empty default
+fn str_or_default(args: &Value, field: &str) -> String {
+    args[field].as_str().unwrap_or_default().to_string()
+}
+
+/// Extract an optional string argument
+fn opt_str(args: &Value, field: &str) -> Option<String> {
+    args[field].as_str().map(|s| s.to_string())
+}
+
+/// Extract an optional u32 from i64
+fn opt_u32(args: &Value, field: &str) -> Option<u32> {
+    args[field].as_i64().map(|p| p as u32)
+}
+
+/// Extract an optional bool
+fn opt_bool(args: &Value, field: &str) -> Option<bool> {
+    args[field].as_bool()
+}
+
+/// Extract a bool with default value
+fn bool_or(args: &Value, field: &str, default: bool) -> bool {
+    args[field].as_bool().unwrap_or(default)
+}
+
+/// Extract a required entity type, returning an error result if missing or invalid
+macro_rules! require_entity_type {
+    ($args:expr) => {
+        match $args["entity_type"].as_str().and_then(parse_entity_type) {
+            Some(t) => t,
+            None => return error_result("Invalid or missing entity_type"),
+        }
+    };
+}
+
+/// Extract a required disk type, returning an error result if missing or invalid
+macro_rules! require_disk_type {
+    ($args:expr) => {
+        match $args["disk_type"].as_str().and_then(parse_disk_type) {
+            Some(t) => t,
+            None => return error_result("Invalid or missing disk_type"),
+        }
+    };
+}
+
+/// Extract a string array with empty default
+fn str_array_or_default(args: &Value, field: &str) -> Vec<String> {
+    args[field]
         .as_array()
         .map(|arr| {
             arr.iter()
                 .filter_map(|v| v.as_str().map(|s| s.to_string()))
                 .collect()
         })
-        .unwrap_or_default();
+        .unwrap_or_default()
+}
+
+// Command executors
+
+async fn execute_create_entity(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let name = str_or_default(&args, "name");
+    let entity_type = require_entity_type!(args);
+    let description = opt_str(&args, "description");
+    let initial_members = str_array_or_default(&args, "initial_members");
 
     let cmd = Command::CreateEntity {
         name,
@@ -1653,14 +1815,11 @@ async fn execute_create_entity(app: &CommunitasApp, args: Value) -> ToolCallResu
 }
 
 async fn execute_update_entity(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let entity_type = match args["entity_type"].as_str().and_then(parse_entity_type) {
-        Some(t) => t,
-        None => return error_result("Invalid or missing entity_type"),
-    };
-    let entity_id = args["entity_id"].as_str().unwrap_or_default().to_string();
-    let name = args["name"].as_str().map(|s| s.to_string());
+    let entity_type = require_entity_type!(args);
+    let entity_id = str_or_default(&args, "entity_id");
+    let name = opt_str(&args, "name");
     let description = if args.get("description").is_some() {
-        Some(args["description"].as_str().map(|s| s.to_string()))
+        Some(opt_str(&args, "description"))
     } else {
         None
     };
@@ -1679,11 +1838,8 @@ async fn execute_update_entity(app: &CommunitasApp, args: Value) -> ToolCallResu
 }
 
 async fn execute_delete_entity(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let entity_type = match args["entity_type"].as_str().and_then(parse_entity_type) {
-        Some(t) => t,
-        None => return error_result("Invalid or missing entity_type"),
-    };
-    let entity_id = args["entity_id"].as_str().unwrap_or_default().to_string();
+    let entity_type = require_entity_type!(args);
+    let entity_id = str_or_default(&args, "entity_id");
 
     let cmd = Command::DeleteEntity {
         entity_type,
@@ -1697,12 +1853,9 @@ async fn execute_delete_entity(app: &CommunitasApp, args: Value) -> ToolCallResu
 }
 
 async fn execute_add_member(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let entity_type = match args["entity_type"].as_str().and_then(parse_entity_type) {
-        Some(t) => t,
-        None => return error_result("Invalid or missing entity_type"),
-    };
-    let entity_id = args["entity_id"].as_str().unwrap_or_default().to_string();
-    let member_id = args["member_id"].as_str().unwrap_or_default().to_string();
+    let entity_type = require_entity_type!(args);
+    let entity_id = str_or_default(&args, "entity_id");
+    let member_id = str_or_default(&args, "member_id");
     let role = args["role"].as_str().unwrap_or("member").to_string();
 
     let cmd = Command::AddMember {
@@ -1719,12 +1872,9 @@ async fn execute_add_member(app: &CommunitasApp, args: Value) -> ToolCallResult 
 }
 
 async fn execute_remove_member(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let entity_type = match args["entity_type"].as_str().and_then(parse_entity_type) {
-        Some(t) => t,
-        None => return error_result("Invalid or missing entity_type"),
-    };
-    let entity_id = args["entity_id"].as_str().unwrap_or_default().to_string();
-    let member_id = args["member_id"].as_str().unwrap_or_default().to_string();
+    let entity_type = require_entity_type!(args);
+    let entity_id = str_or_default(&args, "entity_id");
+    let member_id = str_or_default(&args, "member_id");
 
     let cmd = Command::RemoveMember {
         entity_type,
@@ -1739,13 +1889,10 @@ async fn execute_remove_member(app: &CommunitasApp, args: Value) -> ToolCallResu
 }
 
 async fn execute_send_message(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let entity_id = args["entity_id"].as_str().unwrap_or_default().to_string();
-    let entity_type = match args["entity_type"].as_str().and_then(parse_entity_type) {
-        Some(t) => t,
-        None => return error_result("Invalid or missing entity_type"),
-    };
-    let text = args["text"].as_str().unwrap_or_default().to_string();
-    let reply_to_id = args["reply_to_id"].as_str().map(|s| s.to_string());
+    let entity_id = str_or_default(&args, "entity_id");
+    let entity_type = require_entity_type!(args);
+    let text = str_or_default(&args, "text");
+    let reply_to_id = opt_str(&args, "reply_to_id");
 
     let cmd = Command::SendMessage {
         entity_id,
@@ -1776,12 +1923,9 @@ async fn execute_send_message(app: &CommunitasApp, args: Value) -> ToolCallResul
 }
 
 async fn execute_delete_message(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let entity_id = args["entity_id"].as_str().unwrap_or_default().to_string();
-    let entity_type = match args["entity_type"].as_str().and_then(parse_entity_type) {
-        Some(t) => t,
-        None => return error_result("Invalid or missing entity_type"),
-    };
-    let message_id = args["message_id"].as_str().unwrap_or_default().to_string();
+    let entity_id = str_or_default(&args, "entity_id");
+    let entity_type = require_entity_type!(args);
+    let message_id = str_or_default(&args, "message_id");
 
     let cmd = Command::DeleteMessage {
         entity_id,
@@ -1796,13 +1940,10 @@ async fn execute_delete_message(app: &CommunitasApp, args: Value) -> ToolCallRes
 }
 
 async fn execute_edit_message(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let entity_id = args["entity_id"].as_str().unwrap_or_default().to_string();
-    let entity_type = match args["entity_type"].as_str().and_then(parse_entity_type) {
-        Some(t) => t,
-        None => return error_result("Invalid or missing entity_type"),
-    };
-    let message_id = args["message_id"].as_str().unwrap_or_default().to_string();
-    let new_text = args["new_text"].as_str().unwrap_or_default().to_string();
+    let entity_id = str_or_default(&args, "entity_id");
+    let entity_type = require_entity_type!(args);
+    let message_id = str_or_default(&args, "message_id");
+    let new_text = str_or_default(&args, "new_text");
 
     let cmd = Command::EditMessage {
         entity_id,
@@ -1829,13 +1970,10 @@ async fn execute_edit_message(app: &CommunitasApp, args: Value) -> ToolCallResul
 }
 
 async fn execute_add_reaction(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let entity_id = args["entity_id"].as_str().unwrap_or_default().to_string();
-    let entity_type = match args["entity_type"].as_str().and_then(parse_entity_type) {
-        Some(t) => t,
-        None => return error_result("Invalid or missing entity_type"),
-    };
-    let message_id = args["message_id"].as_str().unwrap_or_default().to_string();
-    let emoji = args["emoji"].as_str().unwrap_or_default().to_string();
+    let entity_id = str_or_default(&args, "entity_id");
+    let entity_type = require_entity_type!(args);
+    let message_id = str_or_default(&args, "message_id");
+    let emoji = str_or_default(&args, "emoji");
 
     let cmd = Command::AddReaction {
         entity_id,
@@ -1858,13 +1996,10 @@ async fn execute_add_reaction(app: &CommunitasApp, args: Value) -> ToolCallResul
 }
 
 async fn execute_remove_reaction(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let entity_id = args["entity_id"].as_str().unwrap_or_default().to_string();
-    let entity_type = match args["entity_type"].as_str().and_then(parse_entity_type) {
-        Some(t) => t,
-        None => return error_result("Invalid or missing entity_type"),
-    };
-    let message_id = args["message_id"].as_str().unwrap_or_default().to_string();
-    let emoji = args["emoji"].as_str().unwrap_or_default().to_string();
+    let entity_id = str_or_default(&args, "entity_id");
+    let entity_type = require_entity_type!(args);
+    let message_id = str_or_default(&args, "message_id");
+    let emoji = str_or_default(&args, "emoji");
 
     let cmd = Command::RemoveReaction {
         entity_id,
@@ -1887,8 +2022,8 @@ async fn execute_remove_reaction(app: &CommunitasApp, args: Value) -> ToolCallRe
 }
 
 async fn execute_get_reactions(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let entity_id = args["entity_id"].as_str().unwrap_or_default().to_string();
-    let message_id = args["message_id"].as_str().unwrap_or_default().to_string();
+    let entity_id = str_or_default(&args, "entity_id");
+    let message_id = str_or_default(&args, "message_id");
 
     let query = Query::GetMessage {
         entity_id,
@@ -1920,21 +2055,12 @@ async fn execute_get_reactions(app: &CommunitasApp, args: Value) -> ToolCallResu
 }
 
 async fn execute_create_custom_reaction(_app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let entity_id = match args["entity_id"].as_str() {
-        Some(s) => s.to_string(),
-        None => return error_result("entity_id is required"),
-    };
-    let emoji = match args["emoji"].as_str() {
-        Some(s) => s.to_string(),
-        None => return error_result("emoji is required"),
-    };
-    let short_name = match args["short_name"].as_str() {
-        Some(s) => s.to_string(),
-        None => return error_result("short_name is required"),
-    };
+    let entity_id = require_str!(args, "entity_id");
+    let emoji = require_str!(args, "emoji");
+    let short_name = require_str!(args, "short_name");
 
     // TODO: Implement actual storage logic in CommunitasCore
-    
+
     json_result(&json!({
         "success": true,
         "message": format!("Custom reaction '{}' created", short_name),
@@ -1947,10 +2073,7 @@ async fn execute_create_custom_reaction(_app: &CommunitasApp, args: Value) -> To
 }
 
 async fn execute_get_available_reactions(_app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let entity_id = match args["entity_id"].as_str() {
-        Some(s) => s.to_string(),
-        None => return error_result("entity_id is required"),
-    };
+    let entity_id = require_str!(args, "entity_id");
 
     // Return standard reactions plus any custom ones for this entity
     let standard_reactions = vec![
@@ -1973,9 +2096,9 @@ async fn execute_get_available_reactions(_app: &CommunitasApp, args: Value) -> T
 }
 
 async fn execute_create_board(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let entity_id = args["entity_id"].as_str().unwrap_or_default().to_string();
-    let board_name = args["board_name"].as_str().unwrap_or_default().to_string();
-    let description = args["description"].as_str().map(|s| s.to_string());
+    let entity_id = str_or_default(&args, "entity_id");
+    let board_name = str_or_default(&args, "board_name");
+    let description = opt_str(&args, "description");
 
     let cmd = Command::CreateKanbanBoard {
         entity_id,
@@ -2003,9 +2126,9 @@ async fn execute_create_board(app: &CommunitasApp, args: Value) -> ToolCallResul
 }
 
 async fn execute_create_column(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let board_id = args["board_id"].as_str().unwrap_or_default().to_string();
-    let column_name = args["column_name"].as_str().unwrap_or_default().to_string();
-    let position = args["position"].as_i64().map(|p| p as u32);
+    let board_id = str_or_default(&args, "board_id");
+    let column_name = str_or_default(&args, "column_name");
+    let position = opt_u32(&args, "position");
 
     let cmd = Command::CreateKanbanColumn {
         board_id,
@@ -2033,11 +2156,11 @@ async fn execute_create_column(app: &CommunitasApp, args: Value) -> ToolCallResu
 }
 
 async fn execute_create_card(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let board_id = args["board_id"].as_str().unwrap_or_default().to_string();
-    let column_id = args["column_id"].as_str().unwrap_or_default().to_string();
-    let title = args["title"].as_str().unwrap_or_default().to_string();
-    let description = args["description"].as_str().map(|s| s.to_string());
-    let assignee = args["assignee"].as_str().map(|s| s.to_string());
+    let board_id = str_or_default(&args, "board_id");
+    let column_id = str_or_default(&args, "column_id");
+    let title = str_or_default(&args, "title");
+    let description = opt_str(&args, "description");
+    let assignee = opt_str(&args, "assignee");
 
     let cmd = Command::CreateKanbanCard {
         board_id,
@@ -2067,13 +2190,10 @@ async fn execute_create_card(app: &CommunitasApp, args: Value) -> ToolCallResult
 }
 
 async fn execute_move_card(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let board_id = args["board_id"].as_str().unwrap_or_default().to_string();
-    let card_id = args["card_id"].as_str().unwrap_or_default().to_string();
-    let target_column_id = args["target_column_id"]
-        .as_str()
-        .unwrap_or_default()
-        .to_string();
-    let position = args["position"].as_i64().map(|p| p as u32);
+    let board_id = str_or_default(&args, "board_id");
+    let card_id = str_or_default(&args, "card_id");
+    let target_column_id = str_or_default(&args, "target_column_id");
+    let position = opt_u32(&args, "position");
 
     let cmd = Command::MoveKanbanCard {
         board_id,
@@ -2089,17 +2209,11 @@ async fn execute_move_card(app: &CommunitasApp, args: Value) -> ToolCallResult {
 }
 
 async fn execute_create_invite(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let recipient_id = args["recipient_id"]
-        .as_str()
-        .unwrap_or_default()
-        .to_string();
-    let entity_type = match args["entity_type"].as_str().and_then(parse_entity_type) {
-        Some(t) => t,
-        None => return error_result("Invalid or missing entity_type"),
-    };
-    let entity_id = args["entity_id"].as_str().unwrap_or_default().to_string();
+    let recipient_id = str_or_default(&args, "recipient_id");
+    let entity_type = require_entity_type!(args);
+    let entity_id = str_or_default(&args, "entity_id");
     let role = args["role"].as_str().unwrap_or("member").to_string();
-    let message = args["message"].as_str().map(|s| s.to_string());
+    let message = opt_str(&args, "message");
 
     let cmd = Command::CreateInvite {
         recipient_id,
@@ -2130,7 +2244,7 @@ async fn execute_create_invite(app: &CommunitasApp, args: Value) -> ToolCallResu
 }
 
 async fn execute_accept_invite(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let invite_id = args["invite_id"].as_str().unwrap_or_default().to_string();
+    let invite_id = str_or_default(&args, "invite_id");
 
     let cmd = Command::AcceptInvite { invite_id };
 
@@ -2141,12 +2255,9 @@ async fn execute_accept_invite(app: &CommunitasApp, args: Value) -> ToolCallResu
 }
 
 async fn execute_write_file(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let entity_id = args["entity_id"].as_str().unwrap_or_default().to_string();
-    let disk_type = match args["disk_type"].as_str().and_then(parse_disk_type) {
-        Some(t) => t,
-        None => return error_result("Invalid or missing disk_type"),
-    };
-    let path = args["path"].as_str().unwrap_or_default().to_string();
+    let entity_id = str_or_default(&args, "entity_id");
+    let disk_type = require_disk_type!(args);
+    let path = str_or_default(&args, "path");
     let content_str = args["content"].as_str().unwrap_or_default();
     let data = content_str.as_bytes().to_vec();
 
@@ -2164,12 +2275,9 @@ async fn execute_write_file(app: &CommunitasApp, args: Value) -> ToolCallResult 
 }
 
 async fn execute_read_file(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let entity_id = args["entity_id"].as_str().unwrap_or_default().to_string();
-    let disk_type = match args["disk_type"].as_str().and_then(parse_disk_type) {
-        Some(t) => t,
-        None => return error_result("Invalid or missing disk_type"),
-    };
-    let path = args["path"].as_str().unwrap_or_default().to_string();
+    let entity_id = str_or_default(&args, "entity_id");
+    let disk_type = require_disk_type!(args);
+    let path = str_or_default(&args, "path");
 
     let query = Query::ReadFile {
         entity_id,
@@ -2193,7 +2301,7 @@ async fn execute_read_file(app: &CommunitasApp, args: Value) -> ToolCallResult {
 // Query executors
 
 async fn execute_get_entity(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let entity_id = args["entity_id"].as_str().unwrap_or_default().to_string();
+    let entity_id = str_or_default(&args, "entity_id");
 
     let query = Query::GetEntity { entity_id };
 
@@ -2241,11 +2349,8 @@ async fn execute_list_entities(app: &CommunitasApp, args: Value) -> ToolCallResu
 }
 
 async fn execute_list_members(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let entity_type = match args["entity_type"].as_str().and_then(parse_entity_type) {
-        Some(t) => t,
-        None => return error_result("Invalid or missing entity_type"),
-    };
-    let entity_id = args["entity_id"].as_str().unwrap_or_default().to_string();
+    let entity_type = require_entity_type!(args);
+    let entity_id = str_or_default(&args, "entity_id");
 
     let query = Query::ListMembers {
         entity_type,
@@ -2272,7 +2377,7 @@ async fn execute_list_members(app: &CommunitasApp, args: Value) -> ToolCallResul
 }
 
 async fn execute_get_messages(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let entity_id = args["entity_id"].as_str().unwrap_or_default().to_string();
+    let entity_id = str_or_default(&args, "entity_id");
 
     let query = Query::GetEntityMessages { entity_id };
 
@@ -2352,10 +2457,7 @@ async fn execute_get_profile(app: &CommunitasApp) -> ToolCallResult {
 }
 
 async fn execute_update_profile(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let display_name = match args["display_name"].as_str() {
-        Some(name) => name.to_string(),
-        None => return error_result("display_name is required"),
-    };
+    let display_name = require_str!(args, "display_name");
 
     let cmd = Command::UpdateDisplayName { display_name };
 
@@ -2378,12 +2480,9 @@ async fn execute_update_profile(app: &CommunitasApp, args: Value) -> ToolCallRes
 }
 
 async fn execute_set_presence(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let status_str = match args["status"].as_str() {
-        Some(s) => s,
-        None => return error_result("status is required"),
-    };
+    let status_str = require_str!(args, "status");
 
-    let status = match status_str {
+    let status = match status_str.as_str() {
         "online" => PresenceStatus::Online,
         "away" => PresenceStatus::Away,
         "busy" => PresenceStatus::Busy,
@@ -2391,7 +2490,7 @@ async fn execute_set_presence(app: &CommunitasApp, args: Value) -> ToolCallResul
         _ => return error_result("Invalid status. Must be one of: online, away, busy, invisible"),
     };
 
-    let entity_id = args["entity_id"].as_str().map(|s| s.to_string());
+    let entity_id = opt_str(&args, "entity_id");
 
     let update = if let Some(eid) = entity_id {
         let mut update = PresenceUpdate::status_only(status);
@@ -2407,7 +2506,7 @@ async fn execute_set_presence(app: &CommunitasApp, args: Value) -> ToolCallResul
         _ => return error_result("Failed to get user profile"),
     };
 
-    match PresenceOperations::update_presence(app, user_id, update) {
+    match PresenceOperations::update_presence(app, user_id, update).await {
         Ok(_) => success_result(&format!("Presence set to {}", status_str)),
         Err(e) => error_result(&format!("Failed to set presence: {}", e)),
     }
@@ -2415,7 +2514,10 @@ async fn execute_set_presence(app: &CommunitasApp, args: Value) -> ToolCallResul
 
 async fn execute_get_presence(app: &CommunitasApp, args: Value) -> ToolCallResult {
     let user_ids = match args["user_ids"].as_array() {
-        Some(arr) => arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect::<Vec<_>>(),
+        Some(arr) => arr
+            .iter()
+            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+            .collect::<Vec<_>>(),
         None => return error_result("user_ids must be an array of strings"),
     };
 
@@ -2423,7 +2525,7 @@ async fn execute_get_presence(app: &CommunitasApp, args: Value) -> ToolCallResul
         return error_result("user_ids cannot be empty");
     }
 
-    match PresenceOperations::get_users_presence(app, user_ids) {
+    match PresenceOperations::get_users_presence(app, user_ids).await {
         Ok(presences) => json_result(&json!({ "presences": presences })),
         Err(e) => error_result(&format!("Failed to get presence: {}", e)),
     }
@@ -2431,7 +2533,10 @@ async fn execute_get_presence(app: &CommunitasApp, args: Value) -> ToolCallResul
 
 async fn execute_subscribe_to_presence(app: &CommunitasApp, args: Value) -> ToolCallResult {
     let entity_ids = match args["entity_ids"].as_array() {
-        Some(arr) => arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect::<Vec<_>>(),
+        Some(arr) => arr
+            .iter()
+            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+            .collect::<Vec<_>>(),
         None => return error_result("entity_ids must be an array of strings"),
     };
 
@@ -2444,8 +2549,8 @@ async fn execute_subscribe_to_presence(app: &CommunitasApp, args: Value) -> Tool
         include_self: false,
     };
 
-    match PresenceOperations::subscribe_to_presence(app, subscription) {
-        Ok(sub_id) => json_result(&json!({ 
+    match PresenceOperations::subscribe_to_presence(app, subscription).await {
+        Ok(sub_id) => json_result(&json!({
             "subscription_id": sub_id,
             "message": format!("Subscribed to presence for {} entities", entity_ids.len())
         })),
@@ -2454,15 +2559,9 @@ async fn execute_subscribe_to_presence(app: &CommunitasApp, args: Value) -> Tool
 }
 
 async fn execute_start_voice_call(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let entity_id = match args["entity_id"].as_str() {
-        Some(s) => s.to_string(),
-        None => return error_result("entity_id is required"),
-    };
-    let participant_ids = args["participant_ids"]
-        .as_array()
-        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect())
-        .unwrap_or_default();
-    let video_enabled = args["video_enabled"].as_bool().unwrap_or(true);
+    let entity_id = require_str!(args, "entity_id");
+    let participant_ids = str_array_or_default(&args, "participant_ids");
+    let video_enabled = bool_or(&args, "video_enabled", true);
 
     let request = CallRequest {
         entity_id,
@@ -2483,10 +2582,7 @@ async fn execute_start_voice_call(app: &CommunitasApp, args: Value) -> ToolCallR
 }
 
 async fn execute_join_call(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let call_id = match args["call_id"].as_str() {
-        Some(s) => s.to_string(),
-        None => return error_result("call_id is required"),
-    };
+    let call_id = require_str!(args, "call_id");
 
     let user_id = match app.query(communitas_core::command::Query::GetProfile).await {
         Ok(communitas_core::command::QueryResponse::Profile { four_words, .. }) => four_words,
@@ -2500,10 +2596,7 @@ async fn execute_join_call(app: &CommunitasApp, args: Value) -> ToolCallResult {
 }
 
 async fn execute_end_call(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let call_id = match args["call_id"].as_str() {
-        Some(s) => s.to_string(),
-        None => return error_result("call_id is required"),
-    };
+    let call_id = require_str!(args, "call_id");
 
     match WebRtcOperations::end_call(app, call_id) {
         Ok(_) => success_result("Call ended"),
@@ -2512,10 +2605,10 @@ async fn execute_end_call(app: &CommunitasApp, args: Value) -> ToolCallResult {
 }
 
 async fn execute_upload_with_metadata(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let entity_id = match args["entity_id"].as_str() { Some(s) => s.to_string(), None => return error_result("entity_id required") };
-    let disk_type = match args["disk_type"].as_str().and_then(parse_disk_type) { Some(t) => t, None => return error_result("Invalid disk_type") };
-    let path = match args["path"].as_str() { Some(s) => s.to_string(), None => return error_result("path required") };
-    let content_base64 = match args["content"].as_str() { Some(s) => s, None => return error_result("content required (base64)") };
+    let entity_id = require_str!(args, "entity_id");
+    let disk_type = require_disk_type!(args);
+    let path = require_str!(args, "path");
+    let content_base64 = require_str!(args, "content");
     let metadata = args["metadata"].clone();
 
     // Decode base64 content
@@ -2538,14 +2631,14 @@ async fn execute_upload_with_metadata(app: &CommunitasApp, args: Value) -> ToolC
     // 2. Write the metadata file
     let meta_path = format!("{}.meta.json", path);
     let meta_data = serde_json::to_vec(&metadata).unwrap_or_default();
-    
+
     let cmd_meta = Command::WriteFile {
         entity_id,
         disk_type,
         path: meta_path,
         data: meta_data,
     };
-    
+
     match app.execute(cmd_meta).await {
         Ok(_) => success_result("File and metadata uploaded successfully"),
         Err(e) => error_result(&format!("Failed to write metadata: {}", e.message)),
@@ -2553,12 +2646,12 @@ async fn execute_upload_with_metadata(app: &CommunitasApp, args: Value) -> ToolC
 }
 
 async fn execute_get_media_metadata(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let entity_id = match args["entity_id"].as_str() { Some(s) => s.to_string(), None => return error_result("entity_id required") };
-    let disk_type = match args["disk_type"].as_str().and_then(parse_disk_type) { Some(t) => t, None => return error_result("Invalid disk_type") };
-    let path = match args["path"].as_str() { Some(s) => s.to_string(), None => return error_result("path required") };
+    let entity_id = require_str!(args, "entity_id");
+    let disk_type = require_disk_type!(args);
+    let path = require_str!(args, "path");
 
     let meta_path = format!("{}.meta.json", path);
-    
+
     let query = Query::ReadFile {
         entity_id,
         disk_type,
@@ -2571,31 +2664,41 @@ async fn execute_get_media_metadata(app: &CommunitasApp, args: Value) -> ToolCal
                 Ok(meta) => json_result(&meta),
                 Err(_) => error_result("Failed to parse metadata JSON"),
             }
-        },
+        }
         Ok(_) => error_result("Unexpected response type"),
-        Err(e) => error_result(&format!("Failed to read metadata (or file not found): {}", e.message)),
+        Err(e) => error_result(&format!(
+            "Failed to read metadata (or file not found): {}",
+            e.message
+        )),
     }
 }
 
 async fn execute_create_poll(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let entity_id = match args["entity_id"].as_str() { Some(s) => s.to_string(), None => return error_result("entity_id required") };
-    let question = match args["question"].as_str() { Some(s) => s.to_string(), None => return error_result("question required") };
-    let options: Vec<String> = match args["options"].as_array() {
-        Some(arr) => arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect(),
-        None => return error_result("options required"),
-    };
-    let allows_multiple = args["allows_multiple"].as_bool().unwrap_or(false);
+    let entity_id = require_str!(args, "entity_id");
+    let question = require_str!(args, "question");
+    let options = str_array_or_default(&args, "options");
+    if options.is_empty() {
+        return error_result("options required");
+    }
+    let allows_multiple = bool_or(&args, "allows_multiple", false);
     let duration_hours = args["duration_hours"].as_u64();
 
-    match PollOperations::create_poll(app, entity_id, question, options, allows_multiple, duration_hours) {
+    match PollOperations::create_poll(
+        app,
+        entity_id,
+        question,
+        options,
+        allows_multiple,
+        duration_hours,
+    ) {
         Ok(poll) => json_result(&json!({ "poll": poll })),
         Err(e) => error_result(&format!("Failed to create poll: {}", e)),
     }
 }
 
 async fn execute_vote_in_poll(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let poll_id = match args["poll_id"].as_str() { Some(s) => s.to_string(), None => return error_result("poll_id required") };
-    let option_id = match args["option_id"].as_str() { Some(s) => s.to_string(), None => return error_result("option_id required") };
+    let poll_id = require_str!(args, "poll_id");
+    let option_id = require_str!(args, "option_id");
 
     // Get user ID
     let user_id = match app.query(communitas_core::command::Query::GetProfile).await {
@@ -2610,10 +2713,16 @@ async fn execute_vote_in_poll(app: &CommunitasApp, args: Value) -> ToolCallResul
 }
 
 async fn execute_share_location(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let entity_id = match args["entity_id"].as_str() { Some(s) => s.to_string(), None => return error_result("entity_id required") };
-    let latitude = match args["latitude"].as_f64() { Some(f) => f, None => return error_result("latitude required") };
-    let longitude = match args["longitude"].as_f64() { Some(f) => f, None => return error_result("longitude required") };
-    let is_live = args["is_live"].as_bool().unwrap_or(false);
+    let entity_id = require_str!(args, "entity_id");
+    let latitude = match args["latitude"].as_f64() {
+        Some(f) => f,
+        None => return error_result("latitude required"),
+    };
+    let longitude = match args["longitude"].as_f64() {
+        Some(f) => f,
+        None => return error_result("longitude required"),
+    };
+    let is_live = bool_or(&args, "is_live", false);
     let duration_minutes = args["duration_minutes"].as_u64();
 
     // Get user ID
@@ -2622,19 +2731,24 @@ async fn execute_share_location(app: &CommunitasApp, args: Value) -> ToolCallRes
         _ => return error_result("Failed to get user profile"),
     };
 
-    match LocationOperations::share_location(app, entity_id, user_id, latitude, longitude, is_live, duration_minutes) {
+    match LocationOperations::share_location(
+        app,
+        entity_id,
+        user_id,
+        latitude,
+        longitude,
+        is_live,
+        duration_minutes,
+    ) {
         Ok(loc) => json_result(&json!({ "location": loc })),
         Err(e) => error_result(&format!("Failed to share location: {}", e)),
     }
 }
 
 async fn execute_create_story(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let entity_id = match args["entity_id"].as_str() { Some(s) => s.to_string(), None => return error_result("entity_id required") };
-    let text = match args["text"].as_str() { Some(s) => s.to_string(), None => return error_result("text required") };
-    let media_paths: Vec<String> = args["media_paths"]
-        .as_array()
-        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect())
-        .unwrap_or_default();
+    let entity_id = require_str!(args, "entity_id");
+    let text = require_str!(args, "text");
+    let media_paths = str_array_or_default(&args, "media_paths");
     let expires_hours = args["expires_hours"].as_u64().unwrap_or(24);
 
     // Get user ID
@@ -2643,14 +2757,15 @@ async fn execute_create_story(app: &CommunitasApp, args: Value) -> ToolCallResul
         _ => return error_result("Failed to get user profile"),
     };
 
-    match StoryOperations::create_story(app, entity_id, author_id, text, media_paths, expires_hours) {
+    match StoryOperations::create_story(app, entity_id, author_id, text, media_paths, expires_hours)
+    {
         Ok(story) => json_result(&json!({ "story": story })),
         Err(e) => error_result(&format!("Failed to create story: {}", e)),
     }
 }
 
 async fn execute_start_presentation(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let entity_id = match args["entity_id"].as_str() { Some(s) => s.to_string(), None => return error_result("entity_id required") };
+    let entity_id = require_str!(args, "entity_id");
     let slides: Vec<Slide> = match serde_json::from_value(args["slides"].clone()) {
         Ok(s) => s,
         Err(_) => return error_result("Invalid slides format"),
@@ -2669,7 +2784,7 @@ async fn execute_start_presentation(app: &CommunitasApp, args: Value) -> ToolCal
 }
 
 async fn execute_share_screen(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let call_id = match args["call_id"].as_str() { Some(s) => s.to_string(), None => return error_result("call_id required") };
+    let call_id = require_str!(args, "call_id");
     let region: Option<ScreenRegion> = if let Some(r) = args.get("region") {
         match serde_json::from_value(r.clone()) {
             Ok(reg) => Some(reg),
@@ -2687,7 +2802,12 @@ async fn execute_share_screen(app: &CommunitasApp, args: Value) -> ToolCallResul
 
 async fn execute_get_session(app: &CommunitasApp) -> ToolCallResult {
     match app.query(communitas_core::command::Query::GetProfile).await {
-        Ok(communitas_core::command::QueryResponse::Profile { four_words, display_name, device_name, .. }) => json_result(&json!({
+        Ok(communitas_core::command::QueryResponse::Profile {
+            four_words,
+            display_name,
+            device_name,
+            ..
+        }) => json_result(&json!({
             "four_words": four_words,
             "display_name": display_name,
             "device_name": device_name,
@@ -2699,7 +2819,10 @@ async fn execute_get_session(app: &CommunitasApp) -> ToolCallResult {
 
 async fn execute_get_unread_count(_app: &CommunitasApp, args: Value) -> ToolCallResult {
     let entity_ids = match args["entity_ids"].as_array() {
-        Some(arr) => arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect::<Vec<_>>(),
+        Some(arr) => arr
+            .iter()
+            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+            .collect::<Vec<_>>(),
         None => return error_result("entity_ids required"),
     };
 
@@ -2781,14 +2904,7 @@ async fn execute_network_stop(app: &CommunitasApp) -> ToolCallResult {
 }
 
 async fn execute_network_connect(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let peer_four_words = args["peer_four_words"]
-        .as_str()
-        .unwrap_or_default()
-        .to_string();
-
-    if peer_four_words.is_empty() {
-        return error_result("peer_four_words is required");
-    }
+    let peer_four_words = require_str!(args, "peer_four_words");
 
     let cmd = Command::ConnectToPeer { peer_four_words };
 
@@ -2879,20 +2995,19 @@ async fn execute_request_external_address(app: &CommunitasApp) -> ToolCallResult
             }
             success_result("External address request initiated")
         }
-        Err(e) => error_result(&format!("Failed to request external address: {}", e.message)),
+        Err(e) => error_result(&format!(
+            "Failed to request external address: {}",
+            e.message
+        )),
     }
 }
 
 // Contact executors
 
 async fn execute_create_contact(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let display_name = args["display_name"].as_str().unwrap_or_default().to_string();
-    let four_words = args["four_words"].as_str().map(|s| s.to_string());
-    let is_favourite = args["is_favourite"].as_bool().unwrap_or(false);
-
-    if display_name.is_empty() {
-        return error_result("display_name is required");
-    }
+    let display_name = require_str!(args, "display_name");
+    let four_words = opt_str(&args, "four_words");
+    let is_favourite = bool_or(&args, "is_favourite", false);
 
     let cmd = Command::CreateContact {
         display_name,
@@ -2926,13 +3041,9 @@ async fn execute_create_contact(app: &CommunitasApp, args: Value) -> ToolCallRes
 }
 
 async fn execute_update_contact(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let contact_id = args["contact_id"].as_str().unwrap_or_default().to_string();
-    let display_name = args["display_name"].as_str().map(|s| s.to_string());
-    let is_favourite = args["is_favourite"].as_bool();
-
-    if contact_id.is_empty() {
-        return error_result("contact_id is required");
-    }
+    let contact_id = require_str!(args, "contact_id");
+    let display_name = opt_str(&args, "display_name");
+    let is_favourite = opt_bool(&args, "is_favourite");
 
     let cmd = Command::UpdateContact {
         contact_id,
@@ -2947,11 +3058,7 @@ async fn execute_update_contact(app: &CommunitasApp, args: Value) -> ToolCallRes
 }
 
 async fn execute_delete_contact(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let contact_id = args["contact_id"].as_str().unwrap_or_default().to_string();
-
-    if contact_id.is_empty() {
-        return error_result("contact_id is required");
-    }
+    let contact_id = require_str!(args, "contact_id");
 
     let cmd = Command::DeleteContact { contact_id };
 
@@ -2962,15 +3069,8 @@ async fn execute_delete_contact(app: &CommunitasApp, args: Value) -> ToolCallRes
 }
 
 async fn execute_link_contact(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let contact_id = args["contact_id"].as_str().unwrap_or_default().to_string();
-    let four_words = args["four_words"].as_str().unwrap_or_default().to_string();
-
-    if contact_id.is_empty() {
-        return error_result("contact_id is required");
-    }
-    if four_words.is_empty() {
-        return error_result("four_words is required");
-    }
+    let contact_id = require_str!(args, "contact_id");
+    let four_words = require_str!(args, "four_words");
 
     let cmd = Command::LinkContact {
         contact_id,
@@ -2984,11 +3084,7 @@ async fn execute_link_contact(app: &CommunitasApp, args: Value) -> ToolCallResul
 }
 
 async fn execute_set_favourite_contact(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let four_words = args["four_words"].as_str().unwrap_or_default().to_string();
-
-    if four_words.is_empty() {
-        return error_result("four_words is required");
-    }
+    let four_words = require_str!(args, "four_words");
 
     let cmd = Command::SetFavouriteContact { four_words };
 
@@ -2999,11 +3095,7 @@ async fn execute_set_favourite_contact(app: &CommunitasApp, args: Value) -> Tool
 }
 
 async fn execute_remove_favourite_contact(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let four_words = args["four_words"].as_str().unwrap_or_default().to_string();
-
-    if four_words.is_empty() {
-        return error_result("four_words is required");
-    }
+    let four_words = require_str!(args, "four_words");
 
     let cmd = Command::RemoveFavouriteContact { four_words };
 
@@ -3014,11 +3106,7 @@ async fn execute_remove_favourite_contact(app: &CommunitasApp, args: Value) -> T
 }
 
 async fn execute_get_contact(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let contact_id = args["contact_id"].as_str().unwrap_or_default().to_string();
-
-    if contact_id.is_empty() {
-        return error_result("contact_id is required");
-    }
+    let contact_id = require_str!(args, "contact_id");
 
     let query = Query::GetContact { contact_id };
 
@@ -3086,11 +3174,7 @@ async fn execute_list_favourite_contacts(app: &CommunitasApp) -> ToolCallResult 
 }
 
 async fn execute_search_contacts(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let query_str = args["query"].as_str().unwrap_or_default().to_string();
-
-    if query_str.is_empty() {
-        return error_result("query is required");
-    }
+    let query_str = require_str!(args, "query");
 
     let query = Query::SearchContacts { query: query_str };
 
@@ -3118,19 +3202,11 @@ async fn execute_search_contacts(app: &CommunitasApp, args: Value) -> ToolCallRe
 // ========== Website Executors ==========
 
 async fn execute_create_website(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let entity_id = match args["entity_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("entity_id is required"),
-    };
-
-    let html = match args["html"].as_str() {
-        Some(h) => h.to_string(),
-        None => return error_result("html is required"),
-    };
-
-    let css = args["css"].as_str().map(|s| s.to_string());
-    let js = args["js"].as_str().map(|s| s.to_string());
-    let metadata = args["metadata"].as_str().map(|s| s.to_string());
+    let entity_id = require_str!(args, "entity_id");
+    let html = require_str!(args, "html");
+    let css = opt_str(&args, "css");
+    let js = opt_str(&args, "js");
+    let metadata = opt_str(&args, "metadata");
 
     let cmd = Command::CreateWebsite {
         entity_id,
@@ -3167,15 +3243,11 @@ async fn execute_create_website(app: &CommunitasApp, args: Value) -> ToolCallRes
 }
 
 async fn execute_update_website(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let entity_id = match args["entity_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("entity_id is required"),
-    };
-
-    let html = args["html"].as_str().map(|s| s.to_string());
-    let css = args["css"].as_str().map(|s| s.to_string());
-    let js = args["js"].as_str().map(|s| s.to_string());
-    let metadata = args["metadata"].as_str().map(|s| s.to_string());
+    let entity_id = require_str!(args, "entity_id");
+    let html = opt_str(&args, "html");
+    let css = opt_str(&args, "css");
+    let js = opt_str(&args, "js");
+    let metadata = opt_str(&args, "metadata");
 
     // At least one field should be provided
     if html.is_none() && css.is_none() && js.is_none() && metadata.is_none() {
@@ -3216,10 +3288,7 @@ async fn execute_update_website(app: &CommunitasApp, args: Value) -> ToolCallRes
 }
 
 async fn execute_delete_website(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let entity_id = match args["entity_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("entity_id is required"),
-    };
+    let entity_id = require_str!(args, "entity_id");
 
     let cmd = Command::DeleteWebsite { entity_id };
 
@@ -3240,10 +3309,7 @@ async fn execute_delete_website(app: &CommunitasApp, args: Value) -> ToolCallRes
 }
 
 async fn execute_get_website(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let entity_id = match args["entity_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("entity_id is required"),
-    };
+    let entity_id = require_str!(args, "entity_id");
 
     let query = Query::GetWebsite { entity_id };
 
@@ -3266,19 +3332,11 @@ async fn execute_get_website(app: &CommunitasApp, args: Value) -> ToolCallResult
 // ========== Kanban Executors ==========
 
 async fn execute_update_kanban_card(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let board_id = match args["board_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("board_id is required"),
-    };
-
-    let card_id = match args["card_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("card_id is required"),
-    };
-
-    let title = args["title"].as_str().map(|s| s.to_string());
-    let description = args["description"].as_str().map(|s| s.to_string());
-    let assignee = args["assignee"].as_str().map(|s| s.to_string());
+    let board_id = require_str!(args, "board_id");
+    let card_id = require_str!(args, "card_id");
+    let title = opt_str(&args, "title");
+    let description = opt_str(&args, "description");
+    let assignee = opt_str(&args, "assignee");
 
     let cmd = Command::UpdateKanbanCard {
         board_id,
@@ -3295,15 +3353,8 @@ async fn execute_update_kanban_card(app: &CommunitasApp, args: Value) -> ToolCal
 }
 
 async fn execute_delete_kanban_card(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let board_id = match args["board_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("board_id is required"),
-    };
-
-    let card_id = match args["card_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("card_id is required"),
-    };
+    let board_id = require_str!(args, "board_id");
+    let card_id = require_str!(args, "card_id");
 
     let cmd = Command::DeleteKanbanCard { board_id, card_id };
 
@@ -3314,10 +3365,7 @@ async fn execute_delete_kanban_card(app: &CommunitasApp, args: Value) -> ToolCal
 }
 
 async fn execute_list_kanban_boards(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let entity_id = match args["entity_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("entity_id is required"),
-    };
+    let entity_id = require_str!(args, "entity_id");
 
     let query = Query::ListKanbanBoards { entity_id };
 
@@ -3343,15 +3391,8 @@ async fn execute_list_kanban_boards(app: &CommunitasApp, args: Value) -> ToolCal
 }
 
 async fn execute_get_kanban_card(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let board_id = match args["board_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("board_id is required"),
-    };
-
-    let card_id = match args["card_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("card_id is required"),
-    };
+    let board_id = require_str!(args, "board_id");
+    let card_id = require_str!(args, "card_id");
 
     let query = Query::GetKanbanCard { board_id, card_id };
 
@@ -3370,10 +3411,7 @@ async fn execute_get_kanban_card(app: &CommunitasApp, args: Value) -> ToolCallRe
 }
 
 async fn execute_get_kanban_board(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let board_id = match args["board_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("board_id is required"),
-    };
+    let board_id = require_str!(args, "board_id");
 
     let query = Query::GetKanbanBoard { board_id };
 
@@ -3393,10 +3431,7 @@ async fn execute_get_kanban_board(app: &CommunitasApp, args: Value) -> ToolCallR
 // ========== Kanban Column Executors ==========
 
 async fn execute_list_kanban_columns(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let board_id = match args["board_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("board_id is required"),
-    };
+    let board_id = require_str!(args, "board_id");
 
     let ctx_lock = app.context();
     let ctx = ctx_lock.read().await;
@@ -3422,14 +3457,8 @@ async fn execute_list_kanban_columns(app: &CommunitasApp, args: Value) -> ToolCa
 }
 
 async fn execute_get_kanban_column(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let board_id = match args["board_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("board_id is required"),
-    };
-    let column_id = match args["column_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("column_id is required"),
-    };
+    let board_id = require_str!(args, "board_id");
+    let column_id = require_str!(args, "column_id");
 
     let ctx_lock = app.context();
     let ctx = ctx_lock.read().await;
@@ -3447,16 +3476,9 @@ async fn execute_get_kanban_column(app: &CommunitasApp, args: Value) -> ToolCall
 }
 
 async fn execute_update_kanban_column(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let board_id = match args["board_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("board_id is required"),
-    };
-    let column_id = match args["column_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("column_id is required"),
-    };
-
-    let name = args["name"].as_str().map(|s| s.to_string());
+    let board_id = require_str!(args, "board_id");
+    let column_id = require_str!(args, "column_id");
+    let name = opt_str(&args, "name");
     // ColumnUpdate uses Option<Option<String>> - None = don't change, Some(None) = set to null, Some(Some(v)) = set to value
     let color = if args["color"].is_null() {
         Some(None) // explicitly set to null
@@ -3478,7 +3500,10 @@ async fn execute_update_kanban_column(app: &CommunitasApp, args: Value) -> ToolC
         wip_limit,
     };
 
-    match ctx.kanban_service.update_column(&board_id, &column_id, updates) {
+    match ctx
+        .kanban_service
+        .update_column(&board_id, &column_id, updates)
+    {
         Ok(column) => json_result(&json!({
             "id": column.id,
             "name": column.name,
@@ -3491,14 +3516,8 @@ async fn execute_update_kanban_column(app: &CommunitasApp, args: Value) -> ToolC
 }
 
 async fn execute_delete_kanban_column(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let board_id = match args["board_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("board_id is required"),
-    };
-    let column_id = match args["column_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("column_id is required"),
-    };
+    let board_id = require_str!(args, "board_id");
+    let column_id = require_str!(args, "column_id");
 
     let ctx_lock = app.context();
     let ctx = ctx_lock.read().await;
@@ -3510,14 +3529,8 @@ async fn execute_delete_kanban_column(app: &CommunitasApp, args: Value) -> ToolC
 }
 
 async fn execute_move_kanban_column(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let board_id = match args["board_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("board_id is required"),
-    };
-    let column_id = match args["column_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("column_id is required"),
-    };
+    let board_id = require_str!(args, "board_id");
+    let column_id = require_str!(args, "column_id");
     let new_position = match args["new_position"].as_u64() {
         Some(pos) => pos as u32,
         None => return error_result("new_position is required"),
@@ -3526,7 +3539,10 @@ async fn execute_move_kanban_column(app: &CommunitasApp, args: Value) -> ToolCal
     let ctx_lock = app.context();
     let ctx = ctx_lock.read().await;
 
-    match ctx.kanban_service.move_column(&board_id, &column_id, new_position) {
+    match ctx
+        .kanban_service
+        .move_column(&board_id, &column_id, new_position)
+    {
         Ok(()) => success_result("Column moved"),
         Err(e) => error_result(&format!("Failed to move column: {}", e)),
     }
@@ -3535,20 +3551,11 @@ async fn execute_move_kanban_column(app: &CommunitasApp, args: Value) -> ToolCal
 // ========== Kanban Card State Executor ==========
 
 async fn execute_change_card_state(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let board_id = match args["board_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("board_id is required"),
-    };
-    let card_id = match args["card_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("card_id is required"),
-    };
-    let state_str = match args["state"].as_str() {
-        Some(s) => s,
-        None => return error_result("state is required"),
-    };
+    let board_id = require_str!(args, "board_id");
+    let card_id = require_str!(args, "card_id");
+    let state_str = require_str!(args, "state");
 
-    let state = match state_str {
+    let state = match state_str.as_str() {
         "Open" => communitas_kanban::CardState::Open,
         "Closed" => communitas_kanban::CardState::Closed,
         "Postponed" => communitas_kanban::CardState::Postponed,
@@ -3559,7 +3566,10 @@ async fn execute_change_card_state(app: &CommunitasApp, args: Value) -> ToolCall
     let ctx_lock = app.context();
     let ctx = ctx_lock.read().await;
 
-    match ctx.kanban_service.change_card_state(&board_id, &card_id, state) {
+    match ctx
+        .kanban_service
+        .change_card_state(&board_id, &card_id, state)
+    {
         Ok(()) => json_result(&json!({
             "card_id": card_id,
             "state": state_str,
@@ -3572,46 +3582,34 @@ async fn execute_change_card_state(app: &CommunitasApp, args: Value) -> ToolCall
 // ========== Kanban Assignment Executors ==========
 
 async fn execute_assign_user(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let board_id = match args["board_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("board_id is required"),
-    };
-    let card_id = match args["card_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("card_id is required"),
-    };
-    let user_id = match args["user_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("user_id is required"),
-    };
+    let board_id = require_str!(args, "board_id");
+    let card_id = require_str!(args, "card_id");
+    let user_id = require_str!(args, "user_id");
 
     let ctx_lock = app.context();
     let ctx = ctx_lock.read().await;
 
-    match ctx.kanban_service.assign_user(&board_id, &card_id, &user_id) {
+    match ctx
+        .kanban_service
+        .assign_user(&board_id, &card_id, &user_id)
+    {
         Ok(()) => success_result("User assigned to card"),
         Err(e) => error_result(&format!("Failed to assign user: {}", e)),
     }
 }
 
 async fn execute_unassign_user(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let board_id = match args["board_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("board_id is required"),
-    };
-    let card_id = match args["card_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("card_id is required"),
-    };
-    let user_id = match args["user_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("user_id is required"),
-    };
+    let board_id = require_str!(args, "board_id");
+    let card_id = require_str!(args, "card_id");
+    let user_id = require_str!(args, "user_id");
 
     let ctx_lock = app.context();
     let ctx = ctx_lock.read().await;
 
-    match ctx.kanban_service.unassign_user(&board_id, &card_id, &user_id) {
+    match ctx
+        .kanban_service
+        .unassign_user(&board_id, &card_id, &user_id)
+    {
         Ok(()) => success_result("User unassigned from card"),
         Err(e) => error_result(&format!("Failed to unassign user: {}", e)),
     }
@@ -3620,18 +3618,9 @@ async fn execute_unassign_user(app: &CommunitasApp, args: Value) -> ToolCallResu
 // ========== Kanban Tag Executors ==========
 
 async fn execute_create_kanban_tag(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let board_id = match args["board_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("board_id is required"),
-    };
-    let name = match args["name"].as_str() {
-        Some(n) => n.to_string(),
-        None => return error_result("name is required"),
-    };
-    let color = match args["color"].as_str() {
-        Some(c) => c.to_string(),
-        None => return error_result("color is required"),
-    };
+    let board_id = require_str!(args, "board_id");
+    let name = require_str!(args, "name");
+    let color = require_str!(args, "color");
 
     let ctx_lock = app.context();
     let ctx = ctx_lock.read().await;
@@ -3647,10 +3636,7 @@ async fn execute_create_kanban_tag(app: &CommunitasApp, args: Value) -> ToolCall
 }
 
 async fn execute_list_kanban_tags(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let board_id = match args["board_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("board_id is required"),
-    };
+    let board_id = require_str!(args, "board_id");
 
     let ctx_lock = app.context();
     let ctx = ctx_lock.read().await;
@@ -3674,18 +3660,9 @@ async fn execute_list_kanban_tags(app: &CommunitasApp, args: Value) -> ToolCallR
 }
 
 async fn execute_tag_card(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let board_id = match args["board_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("board_id is required"),
-    };
-    let card_id = match args["card_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("card_id is required"),
-    };
-    let tag_id = match args["tag_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("tag_id is required"),
-    };
+    let board_id = require_str!(args, "board_id");
+    let card_id = require_str!(args, "card_id");
+    let tag_id = require_str!(args, "tag_id");
 
     let ctx_lock = app.context();
     let ctx = ctx_lock.read().await;
@@ -3697,18 +3674,9 @@ async fn execute_tag_card(app: &CommunitasApp, args: Value) -> ToolCallResult {
 }
 
 async fn execute_untag_card(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let board_id = match args["board_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("board_id is required"),
-    };
-    let card_id = match args["card_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("card_id is required"),
-    };
-    let tag_id = match args["tag_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("tag_id is required"),
-    };
+    let board_id = require_str!(args, "board_id");
+    let card_id = require_str!(args, "card_id");
+    let tag_id = require_str!(args, "tag_id");
 
     let ctx_lock = app.context();
     let ctx = ctx_lock.read().await;
@@ -3722,24 +3690,18 @@ async fn execute_untag_card(app: &CommunitasApp, args: Value) -> ToolCallResult 
 // ========== Kanban Step Executors ==========
 
 async fn execute_add_step(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let board_id = match args["board_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("board_id is required"),
-    };
-    let card_id = match args["card_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("card_id is required"),
-    };
-    let text = match args["text"].as_str() {
-        Some(t) => t.to_string(),
-        None => return error_result("text is required"),
-    };
-    let position = args["position"].as_u64().map(|p| p as u32);
+    let board_id = require_str!(args, "board_id");
+    let card_id = require_str!(args, "card_id");
+    let text = require_str!(args, "text");
+    let position = opt_u32(&args, "position");
 
     let ctx_lock = app.context();
     let ctx = ctx_lock.read().await;
 
-    match ctx.kanban_service.add_step(&board_id, &card_id, text, position) {
+    match ctx
+        .kanban_service
+        .add_step(&board_id, &card_id, text, position)
+    {
         Ok(step) => json_result(&json!({
             "id": step.id,
             "text": step.text,
@@ -3751,18 +3713,9 @@ async fn execute_add_step(app: &CommunitasApp, args: Value) -> ToolCallResult {
 }
 
 async fn execute_get_step(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let board_id = match args["board_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("board_id is required"),
-    };
-    let card_id = match args["card_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("card_id is required"),
-    };
-    let step_id = match args["step_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("step_id is required"),
-    };
+    let board_id = require_str!(args, "board_id");
+    let card_id = require_str!(args, "card_id");
+    let step_id = require_str!(args, "step_id");
 
     let ctx_lock = app.context();
     let ctx = ctx_lock.read().await;
@@ -3779,23 +3732,17 @@ async fn execute_get_step(app: &CommunitasApp, args: Value) -> ToolCallResult {
 }
 
 async fn execute_toggle_step(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let board_id = match args["board_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("board_id is required"),
-    };
-    let card_id = match args["card_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("card_id is required"),
-    };
-    let step_id = match args["step_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("step_id is required"),
-    };
+    let board_id = require_str!(args, "board_id");
+    let card_id = require_str!(args, "card_id");
+    let step_id = require_str!(args, "step_id");
 
     let ctx_lock = app.context();
     let ctx = ctx_lock.read().await;
 
-    match ctx.kanban_service.toggle_step(&board_id, &card_id, &step_id) {
+    match ctx
+        .kanban_service
+        .toggle_step(&board_id, &card_id, &step_id)
+    {
         Ok(step) => json_result(&json!({
             "id": step.id,
             "text": step.text,
@@ -3807,23 +3754,17 @@ async fn execute_toggle_step(app: &CommunitasApp, args: Value) -> ToolCallResult
 }
 
 async fn execute_delete_step(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let board_id = match args["board_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("board_id is required"),
-    };
-    let card_id = match args["card_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("card_id is required"),
-    };
-    let step_id = match args["step_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("step_id is required"),
-    };
+    let board_id = require_str!(args, "board_id");
+    let card_id = require_str!(args, "card_id");
+    let step_id = require_str!(args, "step_id");
 
     let ctx_lock = app.context();
     let ctx = ctx_lock.read().await;
 
-    match ctx.kanban_service.delete_step(&board_id, &card_id, &step_id) {
+    match ctx
+        .kanban_service
+        .delete_step(&board_id, &card_id, &step_id)
+    {
         Ok(()) => success_result("Step deleted"),
         Err(e) => error_result(&format!("Failed to delete step: {}", e)),
     }
@@ -3832,25 +3773,19 @@ async fn execute_delete_step(app: &CommunitasApp, args: Value) -> ToolCallResult
 // ========== Kanban Comment Executors ==========
 
 async fn execute_add_comment(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let board_id = match args["board_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("board_id is required"),
-    };
-    let card_id = match args["card_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("card_id is required"),
-    };
-    let content = match args["content"].as_str() {
-        Some(c) => c.to_string(),
-        None => return error_result("content is required"),
-    };
-    let reply_to_id = args["reply_to_id"].as_str().map(|s| s.to_string());
+    let board_id = require_str!(args, "board_id");
+    let card_id = require_str!(args, "card_id");
+    let content = require_str!(args, "content");
+    let reply_to_id = opt_str(&args, "reply_to_id");
 
     let ctx_lock = app.context();
     let ctx = ctx_lock.read().await;
 
     // add_comment takes (board_id, card_id, content, reply_to_id) - author is auto-set from peer_id
-    match ctx.kanban_service.add_comment(&board_id, &card_id, content, reply_to_id) {
+    match ctx
+        .kanban_service
+        .add_comment(&board_id, &card_id, content, reply_to_id)
+    {
         Ok(comment) => json_result(&json!({
             "id": comment.id,
             "author_id": comment.author_id,
@@ -3863,14 +3798,8 @@ async fn execute_add_comment(app: &CommunitasApp, args: Value) -> ToolCallResult
 }
 
 async fn execute_list_comments(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let board_id = match args["board_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("board_id is required"),
-    };
-    let card_id = match args["card_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("card_id is required"),
-    };
+    let board_id = require_str!(args, "board_id");
+    let card_id = require_str!(args, "card_id");
 
     let ctx_lock = app.context();
     let ctx = ctx_lock.read().await;
@@ -3896,23 +3825,17 @@ async fn execute_list_comments(app: &CommunitasApp, args: Value) -> ToolCallResu
 }
 
 async fn execute_delete_comment(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let board_id = match args["board_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("board_id is required"),
-    };
-    let card_id = match args["card_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("card_id is required"),
-    };
-    let comment_id = match args["comment_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("comment_id is required"),
-    };
+    let board_id = require_str!(args, "board_id");
+    let card_id = require_str!(args, "card_id");
+    let comment_id = require_str!(args, "comment_id");
 
     let ctx_lock = app.context();
     let ctx = ctx_lock.read().await;
 
-    match ctx.kanban_service.delete_comment(&board_id, &card_id, &comment_id) {
+    match ctx
+        .kanban_service
+        .delete_comment(&board_id, &card_id, &comment_id)
+    {
         Ok(()) => success_result("Comment deleted"),
         Err(e) => error_result(&format!("Failed to delete comment: {}", e)),
     }
@@ -3921,27 +3844,12 @@ async fn execute_delete_comment(app: &CommunitasApp, args: Value) -> ToolCallRes
 // ========== Entity Join Executor ==========
 
 async fn execute_join_entity(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let id = match args["id"].as_str() {
-        Some(i) => i.to_string(),
-        None => return error_result("id is required"),
-    };
-    let name = match args["name"].as_str() {
-        Some(n) => n.to_string(),
-        None => return error_result("name is required"),
-    };
-    let entity_type_str = match args["entity_type"].as_str() {
-        Some(t) => t,
-        None => return error_result("entity_type is required"),
-    };
-    let entity_type = match parse_entity_type(entity_type_str) {
-        Some(t) => t,
-        None => return error_result("Invalid entity_type"),
-    };
-    let created_by = match args["created_by"].as_str() {
-        Some(c) => c.to_string(),
-        None => return error_result("created_by is required"),
-    };
-    let description = args["description"].as_str().map(|s| s.to_string());
+    let id = require_str!(args, "id");
+    let name = require_str!(args, "name");
+    let entity_type = require_entity_type!(args);
+    let entity_type_str = str_or_default(&args, "entity_type");
+    let created_by = require_str!(args, "created_by");
+    let description = opt_str(&args, "description");
     let role = args["role"].as_str().unwrap_or("member").to_string();
 
     let ctx_lock = app.context();
@@ -3974,7 +3882,7 @@ async fn execute_join_entity(app: &CommunitasApp, args: Value) -> ToolCallResult
         Ok(_entity) => {
             // Subscribe to the entity's gossip topic if available
             if let Some(gossip) = ctx.gossip.as_ref()
-                && let Err(e) = gossip.join_entity(&id, entity_type_str).await
+                && let Err(e) = gossip.join_entity(&id, &entity_type_str).await
             {
                 tracing::warn!(
                     "Failed to join entity topic for {} (may already be joined): {}",
@@ -3999,18 +3907,9 @@ async fn execute_join_entity(app: &CommunitasApp, args: Value) -> ToolCallResult
 // ========== File Operations Executors ==========
 
 async fn execute_delete_file(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let entity_id = match args["entity_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("entity_id is required"),
-    };
-    let disk_type = match args["disk_type"].as_str().and_then(parse_disk_type) {
-        Some(t) => t,
-        None => return error_result("Invalid or missing disk_type"),
-    };
-    let path = match args["path"].as_str() {
-        Some(p) => p.to_string(),
-        None => return error_result("path is required"),
-    };
+    let entity_id = require_str!(args, "entity_id");
+    let disk_type = require_disk_type!(args);
+    let path = require_str!(args, "path");
 
     let cmd = Command::DeleteFile {
         entity_id,
@@ -4025,14 +3924,8 @@ async fn execute_delete_file(app: &CommunitasApp, args: Value) -> ToolCallResult
 }
 
 async fn execute_get_disk_stats(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let entity_id = match args["entity_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("entity_id is required"),
-    };
-    let disk_type = match args["disk_type"].as_str().and_then(parse_disk_type) {
-        Some(t) => t,
-        None => return error_result("Invalid or missing disk_type"),
-    };
+    let entity_id = require_str!(args, "entity_id");
+    let disk_type = require_disk_type!(args);
 
     let query = Query::GetDiskStats {
         entity_id,
@@ -4053,14 +3946,8 @@ async fn execute_get_disk_stats(app: &CommunitasApp, args: Value) -> ToolCallRes
 }
 
 async fn execute_create_thread(_app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let channel_id = match args["channel_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("channel_id is required"),
-    };
-    let parent_message_id = match args["parent_message_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("parent_message_id is required"),
-    };
+    let channel_id = require_str!(args, "channel_id");
+    let parent_message_id = require_str!(args, "parent_message_id");
 
     json_result(&json!({
         "thread_id": parent_message_id.clone(),
@@ -4071,14 +3958,8 @@ async fn execute_create_thread(_app: &CommunitasApp, args: Value) -> ToolCallRes
 }
 
 async fn execute_get_thread_messages(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let entity_id = match args["channel_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("channel_id is required"),
-    };
-    let parent_message_id = match args["thread_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("thread_id is required"),
-    };
+    let entity_id = require_str!(args, "channel_id");
+    let parent_message_id = require_str!(args, "thread_id");
 
     let query = Query::GetThreadMessages {
         entity_id: entity_id.clone(),
@@ -4116,10 +3997,7 @@ async fn execute_get_thread_messages(app: &CommunitasApp, args: Value) -> ToolCa
 
 /// Network disconnect - disconnect from a specific peer
 async fn execute_network_disconnect(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let _peer_four_words = match args["peer_four_words"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("peer_four_words is required"),
-    };
+    let _peer_four_words = require_str!(args, "peer_four_words");
 
     // Note: CoreContext P2PNode doesn't currently expose disconnect_peer method
     // For now, just return success matching bridge behavior
@@ -4130,12 +4008,9 @@ async fn execute_network_disconnect(app: &CommunitasApp, args: Value) -> ToolCal
 
 /// Update Kanban board name or description
 async fn execute_update_kanban_board(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let board_id = match args["board_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("board_id is required"),
-    };
-    let name = args["name"].as_str().map(|s| s.to_string());
-    let description = args["description"].as_str().map(|s| Some(s.to_string()));
+    let board_id = require_str!(args, "board_id");
+    let name = opt_str(&args, "name");
+    let description = opt_str(&args, "description").map(Some);
 
     let cmd = Command::UpdateKanbanBoard {
         board_id,
@@ -4161,10 +4036,7 @@ async fn execute_update_kanban_board(app: &CommunitasApp, args: Value) -> ToolCa
 
 /// Delete a Kanban board
 async fn execute_delete_kanban_board(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let board_id = match args["board_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("board_id is required"),
-    };
+    let board_id = require_str!(args, "board_id");
 
     let cmd = Command::DeleteKanbanBoard { board_id };
 
@@ -4179,14 +4051,11 @@ async fn execute_delete_kanban_board(app: &CommunitasApp, args: Value) -> ToolCa
 
 /// List all cards in a Kanban board with optional filters
 async fn execute_list_kanban_cards(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let board_id = match args["board_id"].as_str() {
-        Some(id) => id.to_string(),
-        None => return error_result("board_id is required"),
-    };
-    let column_id = args["column_id"].as_str().map(|s| s.to_string());
-    let state = args["state"].as_str().map(|s| s.to_string());
-    let assignee_id = args["assignee_id"].as_str().map(|s| s.to_string());
-    let tag_id = args["tag_id"].as_str().map(|s| s.to_string());
+    let board_id = require_str!(args, "board_id");
+    let column_id = opt_str(&args, "column_id");
+    let state = opt_str(&args, "state");
+    let assignee_id = opt_str(&args, "assignee_id");
+    let tag_id = opt_str(&args, "tag_id");
 
     let query = Query::ListKanbanCards {
         board_id,
@@ -4216,4 +4085,106 @@ async fn execute_list_kanban_cards(app: &CommunitasApp, args: Value) -> ToolCall
         Ok(_) => error_result("Unexpected response type"),
         Err(e) => error_result(&format!("Failed to list cards: {}", e)),
     }
+}
+
+async fn execute_workspace_init(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let name = require_str!(args, "name");
+    let description = opt_str(&args, "description");
+    let board_name = args["board_name"]
+        .as_str()
+        .unwrap_or("Main Board")
+        .to_string();
+    let columns_arr = str_array_or_default(&args, "columns");
+    let columns: Vec<String> = if columns_arr.is_empty() {
+        vec![
+            "To Do".to_string(),
+            "In Progress".to_string(),
+            "Done".to_string(),
+        ]
+    } else {
+        columns_arr
+    };
+
+    let cmd = Command::CreateEntity {
+        name: name.clone(),
+        entity_type: EntityType::Project,
+        description,
+        initial_members: vec![],
+    };
+
+    let entity_id = match app.execute(cmd).await {
+        Ok(events) => events.iter().find_map(|e| match e {
+            Event::EntityCreated { entity_id, .. } => Some(entity_id.clone()),
+            _ => None,
+        }),
+        Err(e) => return error_result(&format!("Failed to create project: {}", e.message)),
+    };
+
+    let entity_id = match entity_id {
+        Some(id) => id,
+        None => return error_result("Project created but no entity_id returned"),
+    };
+
+    let board_cmd = Command::CreateKanbanBoard {
+        entity_id: entity_id.clone(),
+        board_name: board_name.clone(),
+        description: Some(format!("Default board for {}", name)),
+    };
+
+    let board_id = match app.execute(board_cmd).await {
+        Ok(events) => events.iter().find_map(|e| match e {
+            Event::KanbanBoardCreated { board_id, .. } => Some(board_id.clone()),
+            _ => None,
+        }),
+        Err(e) => return error_result(&format!("Failed to create board: {}", e.message)),
+    };
+
+    let board_id = match board_id {
+        Some(id) => id,
+        None => return error_result("Board created but no board_id returned"),
+    };
+
+    let mut column_ids = Vec::new();
+    for (position, column_name) in columns.iter().enumerate() {
+        let col_cmd = Command::CreateKanbanColumn {
+            board_id: board_id.clone(),
+            column_name: column_name.clone(),
+            position: Some(position as u32),
+        };
+
+        match app.execute(col_cmd).await {
+            Ok(events) => {
+                if let Some(col_id) = events.iter().find_map(|e| match e {
+                    Event::KanbanColumnCreated { column_id, .. } => Some(column_id.clone()),
+                    _ => None,
+                }) {
+                    column_ids.push(json!({
+                        "id": col_id,
+                        "name": column_name,
+                        "position": position
+                    }));
+                }
+            }
+            Err(e) => {
+                return error_result(&format!(
+                    "Failed to create column '{}': {}",
+                    column_name, e.message
+                ));
+            }
+        }
+    }
+
+    json_result(&json!({
+        "success": true,
+        "workspace": {
+            "entity_id": entity_id,
+            "name": name,
+            "entity_type": "project"
+        },
+        "board": {
+            "id": board_id,
+            "name": board_name
+        },
+        "columns": column_ids
+    }))
 }

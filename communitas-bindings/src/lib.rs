@@ -5,9 +5,9 @@ uniffi::setup_scaffolding!();
 // Flutter API module (flutter_rust_bridge bindings)
 // Build with: cargo build --no-default-features --features flutter-bindings
 #[cfg(feature = "flutter-bindings")]
-mod frb_generated;
-#[cfg(feature = "flutter-bindings")]
 pub mod flutter_api;
+#[cfg(feature = "flutter-bindings")]
+mod frb_generated;
 
 use communitas_core::auth_service::{AuthService, SessionInfo};
 use communitas_core::crdt::EntityType;
@@ -2865,11 +2865,7 @@ impl CommunitasClient {
     }
 
     /// Delete a card
-    pub fn kanban_delete_card(
-        &self,
-        board_id: String,
-        card_id: String,
-    ) -> Result<(), ClientError> {
+    pub fn kanban_delete_card(&self, board_id: String, card_id: String) -> Result<(), ClientError> {
         // First, get the board to find its project_id
         let project_id = block_on(async {
             let ctx = self.inner.read().await;
@@ -3083,12 +3079,8 @@ impl CommunitasClient {
 
             // Build the invite request
             // InviteRequest::new(recipient_id, entity_type, entity_id, role)
-            let mut request = InviteRequest::new(
-                &recipient_id,
-                entity_type.into(),
-                &entity_id,
-                &role,
-            );
+            let mut request =
+                InviteRequest::new(&recipient_id, entity_type.into(), &entity_id, &role);
 
             if let Some(msg) = message {
                 request = request.with_message(msg);
@@ -3881,9 +3873,11 @@ impl CommunitasClient {
 
             // Apply overrides to defaults
             for (resource_str, access_str) in overrides {
-                if let Ok(resource) = resource_str.parse::<communitas_core::permissions::ResourceType>()
+                if let Ok(resource) =
+                    resource_str.parse::<communitas_core::permissions::ResourceType>()
                 {
-                    if let Ok(access) = access_str.parse::<communitas_core::permissions::AccessLevel>()
+                    if let Ok(access) =
+                        access_str.parse::<communitas_core::permissions::AccessLevel>()
                     {
                         permissions_map.insert(resource, access);
                     }

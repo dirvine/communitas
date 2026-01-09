@@ -128,10 +128,7 @@ fn parse_nodes(nodes_str: &str) -> Result<Vec<NodeConfig>> {
         .map(|node| {
             let parts: Vec<&str> = node.trim().split(':').collect();
             if parts.len() != 3 {
-                anyhow::bail!(
-                    "Invalid node format: '{}'. Expected 'name:host:port'",
-                    node
-                );
+                anyhow::bail!("Invalid node format: '{}'. Expected 'name:host:port'", node);
             }
             Ok(NodeConfig {
                 name: parts[0].to_string(),
@@ -180,7 +177,14 @@ async fn run_scenario(
     for test_case in &config.test_cases {
         info!("Running test case: {} - {}", test_case.id, test_case.name);
 
-        let result = run_test_case(test_case, nodes, agent_spawner, sync_barrier, context.clone()).await;
+        let result = run_test_case(
+            test_case,
+            nodes,
+            agent_spawner,
+            sync_barrier,
+            context.clone(),
+        )
+        .await;
 
         let passed = result.is_ok();
         let error_message = result.as_ref().err().map(|e| e.to_string());
@@ -246,9 +250,8 @@ async fn run_test_case(
             let spawner = agent_spawner.clone();
             let ctx = context.clone();
 
-            let handle = tokio::spawn(async move {
-                spawner.run_steps(&actor, &node, &steps, ctx).await
-            });
+            let handle =
+                tokio::spawn(async move { spawner.run_steps(&actor, &node, &steps, ctx).await });
 
             handles.push(handle);
         }
@@ -260,7 +263,9 @@ async fn run_test_case(
     } else {
         // Run sequentially
         for (actor, node) in test_case.actors.iter().zip(actor_nodes.iter()) {
-            agent_spawner.run_steps(actor, node, &test_case.steps, context.clone()).await?;
+            agent_spawner
+                .run_steps(actor, node, &test_case.steps, context.clone())
+                .await?;
         }
     }
 

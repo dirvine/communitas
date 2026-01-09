@@ -553,6 +553,11 @@ impl EntityService {
                     let deleted =
                         CrdtManager::get_map_bool(&member_data, &txn, "deleted").unwrap_or(false);
 
+                    // Skip deleted members - they should not appear in the active member list
+                    if deleted {
+                        continue;
+                    }
+
                     let member_id_str =
                         CrdtManager::get_map_string(&member_data, &txn, "member_id")
                             .unwrap_or_else(|| member_id_string.clone());

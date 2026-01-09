@@ -42,7 +42,7 @@ Thumbs.db
 
 # Logs
 *.log
-logs/
+**/logs/
 
 # Runtime data
 pids/
@@ -194,6 +194,10 @@ communitas-swift/CommunitasKit/.build/
 communitas-swift/*.app/
 communitas-swift/CommunitasBindings.xcframework/
 communitas-swift/Frameworks/
+**/workspace-state.json
+
+# Legacy apps directory (migrated to Swift)
+apps/
 
 # Removed web/desktop components (legacy)
 communitas-desktop/

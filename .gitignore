@@ -201,3 +201,6 @@ communitas-app/
 mcp-desktop-control/
 playwright-report/
 public/
+# Local files
+dave
+.beads/

@@ -187,23 +187,14 @@ impl ValidationService {
 
     /// Validate display name
     pub fn validate_display_name(&self, name: &str) -> ValidationResult<()> {
-        // Check for empty or whitespace-only
-        if name.trim().is_empty() {
-            return Err(ValidationError {
-                field: "display_name".to_string(),
-                message: "Display name cannot be empty".to_string(),
-                code: ValidationErrorCode::Required,
-            });
-        }
-
         let trimmed = name.trim();
 
-        // Check minimum length
+        // Check for empty or whitespace-only
         if trimmed.is_empty() {
             return Err(ValidationError {
                 field: "display_name".to_string(),
                 message: "Display name cannot be empty".to_string(),
-                code: ValidationErrorCode::TooShort,
+                code: ValidationErrorCode::Required,
             });
         }
 

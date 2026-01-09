@@ -148,25 +148,24 @@ where
                 return Ok(result);
             }
             Err(e) => {
-                if attempt <= config.max_retries {
-                    debug!(
-                        "Dial to {} failed (attempt {}): {} - retrying in {:?}",
-                        peer_id, attempt, e, delay
-                    );
-                    tokio::time::sleep(delay).await;
-                } else {
-                    warn!(
-                        "Dial to {} failed after {} attempts: {}",
-                        peer_id, attempt, e
-                    );
-                    return Err(e);
-                }
+                debug!(
+                    "Dial to {} failed (attempt {}): {} - retrying in {:?}",
+                    peer_id, attempt, e, delay
+                );
+                tokio::time::sleep(delay).await;
             }
         }
     }
 
-    // This should never be reached due to take() on strategy
-    unreachable!("Retry strategy exhausted")
+    // Final attempt after all delays exhausted
+    attempt += 1;
+    dial_fn().await.map_err(|e| {
+        warn!(
+            "Dial to {} failed after {} attempts: {}",
+            peer_id, attempt, e
+        );
+        e
+    })
 }
 
 /// Retry a coordinator discovery operation with appropriate backoff

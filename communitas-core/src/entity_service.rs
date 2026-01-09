@@ -25,6 +25,22 @@ use std::sync::Arc;
 use uuid::Uuid;
 use yrs::{Map, Transact, WriteTxn};
 
+/// Get current Unix timestamp in seconds (never panics, falls back to 0)
+fn unix_timestamp() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+/// Get current Unix timestamp in seconds, returning an error on failure
+fn unix_timestamp_result() -> EntityServiceResult<i64> {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .map_err(|e| EntityServiceError::Io(std::io::Error::other(format!("Time error: {}", e))))
+}
+
 /// Entity information
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Entity {
@@ -59,10 +75,7 @@ impl Entity {
         description: Option<String>,
         created_by: String,
     ) -> Self {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs() as i64)
-            .unwrap_or(0);
+        let now = unix_timestamp();
 
         Self {
             id: uuid::Uuid::new_v4().to_string(),
@@ -87,23 +100,14 @@ impl Entity {
 
     /// Link this entity to a network identity
     pub fn link_to_network(&mut self, four_words: String) {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs() as i64)
-            .unwrap_or(0);
-
         self.network_four_words = Some(four_words);
         self.is_local_only = false;
-        self.linked_at = Some(now);
+        self.linked_at = Some(unix_timestamp());
     }
 
     /// Update the last sync timestamp
     pub fn mark_synced(&mut self) {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs() as i64)
-            .unwrap_or(0);
-        self.last_sync_at = Some(now);
+        self.last_sync_at = Some(unix_timestamp());
     }
 }
 
@@ -173,12 +177,7 @@ impl EntityService {
         initial_members: Vec<String>,
     ) -> EntityServiceResult<Entity> {
         let entity_id = Uuid::new_v4().to_string();
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_err(|e| {
-                EntityServiceError::Io(std::io::Error::other(format!("Time error: {}", e)))
-            })?
-            .as_secs() as i64;
+        let now = unix_timestamp_result()?;
 
         let entity = Entity {
             id: entity_id.clone(),
@@ -424,15 +423,7 @@ impl EntityService {
 
             CrdtManager::set_map_string(&member_data, &mut txn, "member_id", member_id);
             CrdtManager::set_map_string(&member_data, &mut txn, "role", role);
-
-            let now = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map_err(|e| {
-                    EntityServiceError::Io(std::io::Error::other(format!("Time error: {}", e)))
-                })?
-                .as_secs() as i64;
-
-            CrdtManager::set_map_i64(&member_data, &mut txn, "joined_at", now);
+            CrdtManager::set_map_i64(&member_data, &mut txn, "joined_at", unix_timestamp_result()?);
             CrdtManager::set_map_bool(&member_data, &mut txn, "deleted", false);
 
             CrdtManager::set_map_bool(&active_members_map, &mut txn, member_id, true);
@@ -484,15 +475,7 @@ impl EntityService {
                 CrdtManager::get_or_create_nested_map(&members_map, &mut txn, member_id);
 
             CrdtManager::set_map_bool(&member_data, &mut txn, "deleted", true);
-
-            let now = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map_err(|e| {
-                    EntityServiceError::Io(std::io::Error::other(format!("Time error: {}", e)))
-                })?
-                .as_secs() as i64;
-
-            CrdtManager::set_map_i64(&member_data, &mut txn, "deleted_at", now);
+            CrdtManager::set_map_i64(&member_data, &mut txn, "deleted_at", unix_timestamp_result()?);
             CrdtManager::set_map_string(&member_data, &mut txn, "deleted_by", deleted_by);
 
             active_members_map.remove(&mut txn, member_id);

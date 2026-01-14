@@ -12,7 +12,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.21"
+version = "0.1.22"
 edition = "2024"
 authors = ["David Irvine <david.irvine@maidsafe.net>", "Saorsa Labs"]
 license = "GPL-3.0"
@@ -46,10 +46,6 @@ saorsa-webrtc-codecs = "0.2.1"
 # Networking
 ant-quic = "0.18"
 four-word-networking = "2.6"
-
-# Saorsa Node (DHT layer) - published versions
-saorsa-node = "0.3.0"
-saorsa-core = "0.10.0"
 
 # Async runtime
 tokio = { version = "1.39", features = ["full"] }

@@ -4,16 +4,19 @@
 
 //! DHT Node Management
 //!
-//! Embeds saorsa-node into communitas-mcp, providing:
+//! Provides placeholder node management for future DHT integration.
+//! Currently, all networking uses the saorsa-gossip overlay protocol.
+//!
+//! This module provides:
 //! - Node lifecycle management (start/stop based on platform conditions)
-//! - DHT operations (store, retrieve, query)
-//! - Gossip relay fallback when local node unavailable
+//! - Placeholder DHT operations (store, retrieve, query)
+//! - Metrics types for future DHT health monitoring
 //!
 //! ## Architecture
 //!
-//! Desktop: Node auto-starts with 35GB storage allocation
-//! Mobile: Node starts only when charging + WiFi
-//! Fallback: DHT requests relay through gossip to peers with active nodes
+//! All networking currently uses saorsa-gossip (HyParView membership,
+//! presence, pubsub). DHT functionality via saorsa-node is planned for
+//! future releases when persistent distributed storage is needed.
 
 use anyhow::Result;
 use bytes::Bytes;
@@ -23,11 +26,109 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info};
 
-// Re-export metrics types from saorsa-core for use in tools.rs
-pub use saorsa_core::dht::metrics::MetricsSummary;
-pub use saorsa_core::dht::{DhtHealthMetrics, PlacementMetrics, SecurityMetrics, TrustMetrics};
+/// DHT health metrics (local definition, no longer from saorsa-core)
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct DhtHealthMetrics {
+    pub routing_table_size: u64,
+    pub buckets_filled: u64,
+    pub bucket_fullness: f64,
+    pub replication_factor: u32,
+    pub replication_health: f64,
+    pub under_replicated_keys: u64,
+    pub lookup_latency_p50_ms: f64,
+    pub lookup_latency_p95_ms: f64,
+    pub lookup_latency_p99_ms: f64,
+    pub lookup_hops_avg: f64,
+    pub operations_total: u64,
+    pub operations_success_total: u64,
+    pub operations_failed_total: u64,
+    pub success_rate: f64,
+    pub bucket_refresh_total: u64,
+    pub liveness_checks_total: u64,
+    pub liveness_failures_total: u64,
+}
 
-/// Node state - manages the embedded saorsa-node
+/// Trust metrics for the DHT (local definition)
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct TrustMetrics {
+    pub eigentrust_avg: f64,
+    pub eigentrust_min: f64,
+    pub eigentrust_max: f64,
+    pub eigentrust_epochs_total: u64,
+    pub low_trust_nodes: u64,
+    pub witness_receipts_issued_total: u64,
+    pub witness_receipts_verified_total: u64,
+    pub witness_receipts_rejected_total: u64,
+    pub interactions_recorded_total: u64,
+    pub positive_interactions_total: u64,
+    pub negative_interactions_total: u64,
+    pub trust_distribution: HashMap<String, u64>,
+}
+
+/// Security metrics (local definition)
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct SecurityMetrics {
+    pub eclipse_score: f64,
+    pub sybil_score: f64,
+    pub collusion_score: f64,
+    pub routing_manipulation_score: f64,
+    pub eclipse_attempts_total: u64,
+    pub sybil_nodes_detected_total: u64,
+    pub collusion_groups_detected_total: u64,
+    pub bft_mode_active: bool,
+    pub bft_escalations_total: u64,
+    pub sibling_broadcasts_validated_total: u64,
+    pub sibling_broadcasts_rejected_total: u64,
+    pub sibling_overlap_ratio: f64,
+    pub close_group_validations_total: u64,
+    pub close_group_consensus_failures_total: u64,
+    pub witness_validations_total: u64,
+    pub witness_failures_total: u64,
+    pub nodes_evicted_total: u64,
+    pub eviction_by_reason: HashMap<String, u64>,
+    pub churn_rate_5m: f64,
+    pub high_churn_alerts_total: u64,
+    pub attestation_challenges_sent_total: u64,
+    pub attestation_challenges_passed_total: u64,
+    pub attestation_challenges_failed_total: u64,
+    pub ip_diversity_rejections_total: u64,
+    pub geographic_diversity_rejections_total: u64,
+    pub nodes_per_region: HashMap<String, u64>,
+    pub trust_threshold_violations_total: u64,
+    pub low_trust_nodes_current: u64,
+    pub enforcement_mode_strict: bool,
+    pub close_group_failure_by_type: HashMap<String, u64>,
+}
+
+/// Placement metrics (local definition)
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct PlacementMetrics {
+    pub total_stored_bytes: u64,
+    pub total_records: u64,
+    pub storage_nodes: u64,
+    pub geographic_diversity: f64,
+    pub regions_covered: u64,
+    pub total_capacity_bytes: u64,
+    pub used_capacity_ratio: f64,
+    pub load_balance_score: f64,
+    pub overloaded_nodes: u64,
+    pub rebalance_operations_total: u64,
+    pub audits_total: u64,
+    pub audit_failures_total: u64,
+}
+
+/// Aggregated metrics summary (local definition)
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct MetricsSummary {
+    pub overall_health_score: f64,
+    pub security_score: f64,
+    pub dht_health_score: f64,
+    pub trust_score: f64,
+    pub placement_score: f64,
+    pub active_alerts: u64,
+}
+
+/// Node state - manages placeholder node for future DHT integration
 pub struct NodeState {
     /// Running node instance (None if not started)
     inner: Option<RunningNode>,
@@ -71,10 +172,8 @@ impl Default for NodeConfig {
     }
 }
 
-/// A running saorsa-node instance
+/// A running node instance (placeholder - actual DHT handled by gossip overlay)
 struct RunningNode {
-    // TODO: Add saorsa-node client when API is finalized
-    // client: saorsa_node::Client,
     _started_at: std::time::Instant,
 }
 
@@ -106,7 +205,7 @@ impl NodeState {
             "Starting embedded DHT node"
         );
 
-        // TODO: Initialize saorsa-node when API is finalized
+        // TODO: Initialize actual DHT node when integrated
         // For now, create placeholder
         self.inner = Some(RunningNode {
             _started_at: std::time::Instant::now(),
@@ -199,7 +298,7 @@ impl DhtOps {
 
         if node.is_running() {
             // Direct DHT storage via local node
-            // TODO: Implement when saorsa-node API is finalized
+            // TODO: Implement when DHT is integrated
             let hash = blake3::hash(&data);
             Ok(hex::encode(hash.as_bytes()))
         } else {
@@ -217,7 +316,7 @@ impl DhtOps {
 
         if node.is_running() {
             // Direct DHT retrieval via local node
-            // TODO: Implement when saorsa-node API is finalized
+            // TODO: Implement when DHT is integrated
             debug!(address = address, "DHT retrieve requested");
             Ok(None) // Not found (placeholder)
         } else {
@@ -280,7 +379,7 @@ impl DhtOps {
         let node = self.node.read().await;
 
         if node.is_running() {
-            // TODO: Query real metrics from saorsa-node when API finalized
+            // TODO: Query real metrics when DHT is integrated
             // For now return sensible defaults indicating a healthy new node
             Ok(DhtHealthMetrics {
                 routing_table_size: 0,
@@ -313,7 +412,7 @@ impl DhtOps {
         let node = self.node.read().await;
 
         if node.is_running() {
-            // TODO: Query real trust metrics from saorsa-node
+            // TODO: Query real trust metrics when DHT is integrated
             Ok(TrustMetrics {
                 eigentrust_avg: 0.5,
                 eigentrust_min: 0.0,
@@ -340,7 +439,7 @@ impl DhtOps {
         let node = self.node.read().await;
 
         if node.is_running() {
-            // TODO: Query real security metrics from saorsa-node
+            // TODO: Query real security metrics when DHT is integrated
             Ok(SecurityMetrics {
                 eclipse_score: 0.0,
                 sybil_score: 0.0,
@@ -386,7 +485,7 @@ impl DhtOps {
         let node = self.node.read().await;
 
         if node.is_running() {
-            // TODO: Query real placement metrics from saorsa-node
+            // TODO: Query real placement metrics when DHT is integrated
             Ok(PlacementMetrics {
                 total_stored_bytes: 0,
                 total_records: 0,

@@ -18,12 +18,8 @@ path = "src/main.rs"
 
 [dependencies]
 # Core dependency - the headless app (version required for crates.io publishing)
-communitas-core = { version = "0.1.21", path = "../communitas-core" }
-communitas-kanban = { version = "0.1.21", path = "../communitas-kanban" }
-
-# DHT layer for persistent distributed storage
-saorsa-node = { workspace = true }
-saorsa-core = { workspace = true }
+communitas-core = { version = "0.1.22", path = "../communitas-core" }
+communitas-kanban = { version = "0.1.22", path = "../communitas-kanban" }
 
 # CLI parsing
 clap = { workspace = true, features = ["derive"] }

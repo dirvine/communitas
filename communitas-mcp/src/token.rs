@@ -57,8 +57,8 @@ impl TokenManager {
     ) -> Result<String> {
         let now = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
+            .map_err(|e| anyhow::anyhow!("System time before UNIX epoch: {}", e))?
+            .as_secs();
 
         let nonce: [u8; 16] = rand::thread_rng().r#gen();
         let nonce_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(nonce);

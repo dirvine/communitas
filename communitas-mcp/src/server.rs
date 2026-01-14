@@ -8,22 +8,22 @@
 //! CommunitasApp for processing. Supports both authenticated and demo modes.
 
 use crate::Args;
-use crate::auth::{
-    AuthState, AuthenticatedSession, DelegateSession, DemoSession, Scope, requires_auth,
-};
 use crate::protocol::{
     InitializeParams, InitializeResult, JsonRpcError, JsonRpcRequest, JsonRpcResponse, Resource,
     ResourceContent, ResourceListResult, ResourceReadParams, ResourceReadResult,
     ResourcesCapability, ServerCapabilities, ServerInfo, ToolCallParams, ToolListResult,
     ToolsCapability,
 };
-use crate::token::TokenManager;
 use crate::tools;
 use anyhow::Result;
 use communitas_core::app::CommunitasApp;
 use communitas_core::auth_service::AuthService;
 use communitas_core::encrypted_storage::{EncryptedStorageManager, StorageConfig};
 use communitas_core::identity::generate_id_words;
+use communitas_mcp::auth::{
+    AuthState, AuthenticatedSession, DelegateSession, DemoSession, Scope, requires_auth,
+};
+use communitas_mcp::token::TokenManager;
 use serde_json::Value;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -320,7 +320,7 @@ impl McpServer {
             "core_status" => {
                 let initialized = self.is_authenticated();
                 let result = serde_json::json!({
-                    "content": [{"type": "text", "text": serde_json::to_string(&serde_json::json!({"initialized": initialized})).unwrap_or_default()}],
+                    "content": [{"type": "text", "text": serde_json::to_string(&serde_json::json!({"initialized": initialized})).map_err(|e| JsonRpcError::internal_error(&format!("JSON serialization failed: {}", e)))?}],
                     "isError": false
                 });
                 serde_json::to_value(result)
@@ -586,7 +586,7 @@ impl McpServer {
             Some(Value::Array(arr)) => arr
                 .iter()
                 .filter_map(|v| v.as_str())
-                .filter_map(Scope::from_str)
+                .filter_map(Scope::parse)
                 .collect(),
             _ => vec![Scope::Full],
         };
@@ -666,7 +666,7 @@ impl McpServer {
             .collect();
 
         let result = serde_json::json!({
-            "content": [{"type": "text", "text": serde_json::to_string(&serde_json::json!({"vaults": vault_list, "count": vault_list.len()})).unwrap_or_default()}],
+            "content": [{"type": "text", "text": serde_json::to_string(&serde_json::json!({"vaults": vault_list, "count": vault_list.len()})).map_err(|e| JsonRpcError::internal_error(&format!("JSON serialization failed: {}", e)))?}],
             "isError": false
         });
         serde_json::to_value(result).map_err(|e| JsonRpcError::internal_error(&e.to_string()))
@@ -758,7 +758,7 @@ impl McpServer {
         info!("Vault imported: {}", four_words);
 
         let result = serde_json::json!({
-            "content": [{"type": "text", "text": serde_json::to_string(&serde_json::json!({"success": true, "four_words": four_words, "message": "Vault imported successfully"})).unwrap_or_default()}],
+            "content": [{"type": "text", "text": serde_json::to_string(&serde_json::json!({"success": true, "four_words": four_words, "message": "Vault imported successfully"})).map_err(|e| JsonRpcError::internal_error(&format!("JSON serialization failed: {}", e)))?}],
             "isError": false
         });
         serde_json::to_value(result).map_err(|e| JsonRpcError::internal_error(&e.to_string()))
@@ -917,6 +917,14 @@ impl McpServer {
 pub async fn run(args: Args) -> Result<()> {
     let mut server = McpServer::new(args);
 
+    // Initialize DHT node (auto-starts on desktop, conditional on mobile)
+    if let Err(e) = tools::initialize_node().await {
+        warn!(
+            "Failed to initialize DHT node: {}. Continuing without DHT.",
+            e
+        );
+    }
+
     let stdin = tokio::io::stdin();
     let mut stdout = tokio::io::stdout();
     let mut reader = BufReader::new(stdin);
@@ -969,6 +977,11 @@ pub async fn run(args: Args) -> Result<()> {
                 break;
             }
         }
+    }
+
+    // Gracefully shutdown DHT node
+    if let Err(e) = tools::shutdown_node().await {
+        warn!("Error during DHT node shutdown: {}", e);
     }
 
     info!("MCP Server shutting down");

@@ -8,7 +8,6 @@
 //! Supports both plain HTTP (for development) and HTTPS with RFC 7250 Raw Public Keys.
 
 use crate::Args;
-use crate::auth::{AuthState, AuthenticatedSession, DelegateSession, DemoSession, requires_auth};
 use crate::protocol::{
     InitializeParams, InitializeResult, JsonRpcError, JsonRpcRequest, JsonRpcResponse, Resource,
     ResourceContent, ResourceListResult, ResourceReadParams, ResourceReadResult,
@@ -16,13 +15,16 @@ use crate::protocol::{
     ToolsCapability,
 };
 use crate::tls::{ServerTlsConfig, ServerTlsConfigBuilder, TlsConfigError};
-use crate::token::TokenManager;
 use crate::tools;
 use anyhow::Result;
 use axum::{Json, Router, extract::State, http::StatusCode, routing::post};
 use base64::Engine;
 use communitas_core::app::CommunitasApp;
 use communitas_core::identity::generate_id_words;
+use communitas_mcp::auth::{
+    AuthState, AuthenticatedSession, DelegateSession, DemoSession, requires_auth,
+};
+use communitas_mcp::token::TokenManager;
 use serde_json::Value;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -112,6 +114,14 @@ pub async fn run_http(args: Args) -> Result<()> {
 
     let state = Arc::new(HttpServerState::new(args.clone()));
 
+    // Initialize DHT node (auto-starts on desktop, conditional on mobile)
+    if let Err(e) = tools::initialize_node().await {
+        warn!(
+            "Failed to initialize DHT node: {}. Continuing without DHT.",
+            e
+        );
+    }
+
     // Initialize demo mode if enabled
     if args.demo {
         initialize_demo_mode(&state).await?;
@@ -125,6 +135,11 @@ pub async fn run_http(args: Args) -> Result<()> {
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;
 
+    // Gracefully shutdown DHT node
+    if let Err(e) = tools::shutdown_node().await {
+        warn!("Error during DHT node shutdown: {}", e);
+    }
+
     Ok(())
 }
 
@@ -137,6 +152,14 @@ pub async fn run_https(args: Args, tls_config: ServerTlsConfig) -> Result<()> {
         .parse()?;
 
     let state = Arc::new(HttpServerState::new(args.clone()));
+
+    // Initialize DHT node (auto-starts on desktop, conditional on mobile)
+    if let Err(e) = tools::initialize_node().await {
+        warn!(
+            "Failed to initialize DHT node: {}. Continuing without DHT.",
+            e
+        );
+    }
 
     // Initialize demo mode if enabled
     if args.demo {
@@ -156,6 +179,11 @@ pub async fn run_https(args: Args, tls_config: ServerTlsConfig) -> Result<()> {
     )
     .serve(app.into_make_service())
     .await?;
+
+    // Gracefully shutdown DHT node
+    if let Err(e) = tools::shutdown_node().await {
+        warn!("Error during DHT node shutdown: {}", e);
+    }
 
     Ok(())
 }
@@ -437,7 +465,7 @@ async fn handle_pre_auth_tool(
         "core_status" => {
             let initialized = state.is_authenticated().await;
             let result = serde_json::json!({
-                "content": [{"type": "text", "text": serde_json::to_string(&serde_json::json!({"initialized": initialized})).unwrap_or_default()}],
+                "content": [{"type": "text", "text": serde_json::to_string(&serde_json::json!({"initialized": initialized})).map_err(|e| JsonRpcError::internal_error(&format!("JSON serialization failed: {}", e)))?}],
                 "isError": false
             });
             serde_json::to_value(result).map_err(|e| JsonRpcError::internal_error(&e.to_string()))
@@ -546,7 +574,7 @@ async fn handle_list_vaults(state: &HttpServerState) -> Result<Value, JsonRpcErr
         .collect();
 
     let result = serde_json::json!({
-        "content": [{"type": "text", "text": serde_json::to_string(&serde_json::json!({"vaults": vault_list, "count": vault_list.len()})).unwrap_or_default()}],
+        "content": [{"type": "text", "text": serde_json::to_string(&serde_json::json!({"vaults": vault_list, "count": vault_list.len()})).map_err(|e| JsonRpcError::internal_error(&format!("JSON serialization failed: {}", e)))?}],
         "isError": false
     });
     serde_json::to_value(result).map_err(|e| JsonRpcError::internal_error(&e.to_string()))

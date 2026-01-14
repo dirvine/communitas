@@ -22,15 +22,14 @@
 //! ## Resources
 //! Queries are exposed as MCP resources for reading application state.
 
-mod auth;
 mod http;
+mod node;
 mod presence;
 mod presentation;
 mod protocol;
 mod server;
 mod social;
 mod tls;
-mod token;
 mod tools;
 mod webrtc;
 

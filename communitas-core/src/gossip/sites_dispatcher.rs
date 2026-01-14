@@ -18,7 +18,7 @@
 
 use anyhow::Result;
 use bytes::Bytes;
-use saorsa_gossip_transport::{GossipTransport, StreamType};
+use saorsa_gossip_transport::{GossipStreamType, GossipTransport};
 use saorsa_gossip_types::PeerId;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -110,11 +110,11 @@ impl SitesDispatcher {
     async fn handle_message(
         &self,
         peer_id: PeerId,
-        stream_type: StreamType,
+        stream_type: GossipStreamType,
         data: Bytes,
     ) -> Result<()> {
         // Only handle Bulk stream
-        if stream_type != StreamType::Bulk {
+        if stream_type != GossipStreamType::Bulk {
             return Ok(());
         }
 

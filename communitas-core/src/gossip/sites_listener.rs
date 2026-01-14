@@ -17,7 +17,7 @@
 //! - Implements backpressure and timeouts
 
 use bytes::Bytes;
-use saorsa_gossip_transport::{GossipTransport, StreamType};
+use saorsa_gossip_transport::{GossipStreamType, GossipTransport};
 use saorsa_gossip_types::PeerId;
 use std::sync::Arc;
 use tokio::time::{Duration, timeout};
@@ -148,7 +148,7 @@ impl SitesListener {
     pub async fn maybe_handle_incoming(
         &self,
         peer_id: PeerId,
-        stream_type: StreamType,
+        stream_type: GossipStreamType,
         message_bytes: Bytes,
     ) -> bool {
         debug!(
@@ -159,7 +159,7 @@ impl SitesListener {
         );
 
         // Only handle Bulk stream (Sites protocol uses Bulk)
-        if stream_type != StreamType::Bulk {
+        if stream_type != GossipStreamType::Bulk {
             debug!(
                 "SitesListener: ignoring non-Bulk stream type: {:?}",
                 stream_type
@@ -204,7 +204,7 @@ impl SitesListener {
                 if let Ok(error_bytes) = bincode::serialize(&wire_response) {
                     let _ = self
                         .transport
-                        .send_to_peer(peer_id, StreamType::Bulk, Bytes::from(error_bytes))
+                        .send_to_peer(peer_id, GossipStreamType::Bulk, Bytes::from(error_bytes))
                         .await;
                 }
                 return true; // We recognized it as Sites, even if rejected
@@ -226,7 +226,7 @@ impl SitesListener {
                 };
                 if let Ok(response_bytes) = bincode::serialize(&wire_response)
                     && let Err(e) = transport
-                        .send_to_peer(peer_id, StreamType::Bulk, Bytes::from(response_bytes))
+                        .send_to_peer(peer_id, GossipStreamType::Bulk, Bytes::from(response_bytes))
                         .await
                 {
                     warn!("Failed to send Sites response: {}", e);

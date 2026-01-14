@@ -17,7 +17,7 @@
 use super::context::GossipContext;
 use anyhow::{Context, Result};
 use bytes::Bytes;
-use saorsa_gossip_transport::{GossipTransport, StreamType};
+use saorsa_gossip_transport::{GossipStreamType, GossipTransport};
 use std::sync::Arc;
 use tracing::{debug, info, warn};
 
@@ -325,7 +325,7 @@ impl GossipBootSequence {
 
                         // Send delta to peer via transport using Bulk stream
                         transport
-                            .send_to_peer(peer_id, StreamType::Bulk, Bytes::from(delta_bytes))
+                            .send_to_peer(peer_id, GossipStreamType::Bulk, Bytes::from(delta_bytes))
                             .await
                             .map_err(|e| {
                                 anyhow::anyhow!("Failed to send CRDT delta to {:?}: {}", peer_id, e)
@@ -465,7 +465,7 @@ impl GossipBootSequence {
                     match transport.receive_message().await {
                         Ok((peer_id, stream_type, data)) => {
                             // Only process PubSub messages in this loop
-                            if stream_type != StreamType::PubSub {
+                            if stream_type != GossipStreamType::PubSub {
                                 debug!("Ignoring non-PubSub message from {:?}", peer_id);
                                 continue;
                             }

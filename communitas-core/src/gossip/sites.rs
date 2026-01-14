@@ -25,7 +25,7 @@ use anyhow::Result;
 use blake3;
 use bytes::Bytes;
 use fips204::traits::{SerDes, Signer, Verifier};
-use saorsa_gossip_transport::StreamType;
+use saorsa_gossip_transport::GossipStreamType;
 use saorsa_gossip_types::PeerId;
 use saorsa_pqc::ml_dsa_65::{PrivateKey, PublicKey};
 use serde::{Deserialize, Serialize};
@@ -598,7 +598,7 @@ impl SiteFetcher {
             request_id, provider
         );
         self.transport
-            .send_to_peer(provider, StreamType::Bulk, Bytes::from(request_bytes))
+            .send_to_peer(provider, GossipStreamType::Bulk, Bytes::from(request_bytes))
             .await
             .map_err(|e| anyhow::anyhow!("Failed to send request: {}", e))?;
         debug!("Sites request {} sent successfully", request_id);
@@ -626,7 +626,7 @@ impl SiteFetcher {
                         .await
                         .map_err(|e| anyhow::anyhow!("Failed to receive response: {}", e))?;
 
-                if stream_type != StreamType::Bulk {
+                if stream_type != GossipStreamType::Bulk {
                     continue; // Skip non-Bulk messages
                 }
 

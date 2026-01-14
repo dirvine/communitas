@@ -160,8 +160,7 @@ impl TestNode {
 
     /// Join a topic/group
     pub async fn join_group(&self, topic_id: TopicId, group_name: &str) -> Result<()> {
-        let group_ctx = GroupContext::from_entity(group_name)
-            .with_context(|| format!("failed to create group {}", group_name))?;
+        let group_ctx = GroupContext::from_entity(group_name);
 
         let mut groups = self.groups.write().await;
         groups.insert(topic_id, group_ctx);

@@ -423,7 +423,12 @@ impl EntityService {
 
             CrdtManager::set_map_string(&member_data, &mut txn, "member_id", member_id);
             CrdtManager::set_map_string(&member_data, &mut txn, "role", role);
-            CrdtManager::set_map_i64(&member_data, &mut txn, "joined_at", unix_timestamp_result()?);
+            CrdtManager::set_map_i64(
+                &member_data,
+                &mut txn,
+                "joined_at",
+                unix_timestamp_result()?,
+            );
             CrdtManager::set_map_bool(&member_data, &mut txn, "deleted", false);
 
             CrdtManager::set_map_bool(&active_members_map, &mut txn, member_id, true);
@@ -475,7 +480,12 @@ impl EntityService {
                 CrdtManager::get_or_create_nested_map(&members_map, &mut txn, member_id);
 
             CrdtManager::set_map_bool(&member_data, &mut txn, "deleted", true);
-            CrdtManager::set_map_i64(&member_data, &mut txn, "deleted_at", unix_timestamp_result()?);
+            CrdtManager::set_map_i64(
+                &member_data,
+                &mut txn,
+                "deleted_at",
+                unix_timestamp_result()?,
+            );
             CrdtManager::set_map_string(&member_data, &mut txn, "deleted_by", deleted_by);
 
             active_members_map.remove(&mut txn, member_id);

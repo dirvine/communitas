@@ -22,7 +22,7 @@ use saorsa_gossip_membership::Membership;
 use saorsa_gossip_presence::PresenceManager; // Actual exports
 use saorsa_gossip_pubsub::PubSub;
 use saorsa_gossip_transport::{
-    AntQuicTransport, AntQuicTransportConfig, GossipTransport, StreamType,
+    AntQuicTransport, AntQuicTransportConfig, GossipStreamType, GossipTransport,
 };
 use saorsa_gossip_types::{PeerId, TopicId};
 use saorsa_pqc::symmetric::{ChaCha20Poly1305Cipher, SymmetricKey};
@@ -201,6 +201,7 @@ impl GossipContext {
         // HyParView parameters: active_degree (3-7), passive_degree (3x active)
         let membership: Arc<RwLock<Box<dyn Membership>>> = Arc::new(RwLock::new(Box::new(
             saorsa_gossip_membership::HyParViewMembership::new(
+                peer_id,
                 5,  // active_degree: maintain 5 active connections
                 15, // passive_degree: keep 15 passive peers
                 transport.clone(),
@@ -515,7 +516,7 @@ impl GossipContext {
         }
 
         // Create new topic from entity ID
-        let topic_id = TopicId::from_entity(entity_id)?;
+        let topic_id = TopicId::from_entity(entity_id);
 
         // Store mapping
         {
@@ -538,7 +539,7 @@ impl GossipContext {
         let topic_id = self.map_entity_to_topic(entity_id, entity_type).await?;
 
         // 2. Create MLS group context (simplified for now)
-        let group_ctx = GroupContext::from_entity(entity_id)?;
+        let group_ctx = GroupContext::from_entity(entity_id);
         {
             let mut groups = self.groups.write().await;
             groups.insert(entity_id.to_string(), group_ctx.clone());
@@ -851,7 +852,7 @@ impl GossipContext {
     /// Uses QUIC transport directly for point-to-point messaging
     pub async fn send_direct_message(&self, peer_id: PeerId, message: Vec<u8>) -> Result<()> {
         self.transport
-            .send_to_peer(peer_id, StreamType::Bulk, Bytes::from(message))
+            .send_to_peer(peer_id, GossipStreamType::Bulk, Bytes::from(message))
             .await
             .context("Failed to send direct message")
     }
@@ -926,7 +927,7 @@ impl GossipContext {
                     // Send encrypted replica via Bulk stream
                     if let Err(e) = self
                         .transport
-                        .send_to_peer(peer_id, StreamType::Bulk, Bytes::from(package))
+                        .send_to_peer(peer_id, GossipStreamType::Bulk, Bytes::from(package))
                         .await
                     {
                         warn!("Failed to replicate to {}: {}", four_words, e);
@@ -1100,7 +1101,7 @@ impl GossipContext {
                 .transport()
                 .send_to_peer(
                     peer_id,
-                    saorsa_gossip_transport::StreamType::Bulk,
+                    saorsa_gossip_transport::GossipStreamType::Bulk,
                     bytes::Bytes::from_static(b""),
                 )
                 .await
@@ -1157,7 +1158,7 @@ impl GossipContext {
         // Create a DM topic ID from the recipient's four-word address
         // DM topics use format: "dm:{four_words}"
         let dm_topic_str = format!("dm:{}", recipient_four_words);
-        let topic_id = TopicId::from_entity(&dm_topic_str)?;
+        let topic_id = TopicId::from_entity(&dm_topic_str);
 
         // Publish via pubsub
         let pubsub = self.pubsub.write().await;

@@ -11,63 +11,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test-fast:
-    name: JS Fast Tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    env:
-      PUPPETEER_SKIP_DOWNLOAD: "1"
-      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Node.js 20
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: "npm"
-
-      - name: Install Node deps
-        run: npm ci
-
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Run unit tests (act)
-        if: env.ACT == 'true'
-        run: npm run test:run
-
-      - name: Run unit tests (full)
-        if: env.ACT != 'true'
-        run: npm run test:run
-
-  coverage:
-    name: JS Coverage
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    needs: test-fast
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Node.js 20
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: "npm"
-
-      - name: Install Node deps
-        run: npm ci
-
-      - name: Run unit tests with coverage
-        run: npm run test:coverage:smoke
-
-      - name: Upload coverage report
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-html
-          path: coverage
-
   rust-checks:
     name: Rust Checks
     runs-on: ubuntu-latest

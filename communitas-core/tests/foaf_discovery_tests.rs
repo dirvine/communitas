@@ -185,7 +185,7 @@ async fn test_presence_discovery_expired_beacon() {
 
     // Add the group to groups map
     {
-        let group_ctx = GroupContext::from_entity("test-group").expect("Failed to create group");
+        let group_ctx = GroupContext::from_entity("test-group");
         let mut groups_guard = groups.write().await;
         groups_guard.insert(topic_id, group_ctx);
     }
@@ -633,7 +633,7 @@ async fn add_mock_presence(
     four_words: &str,
 ) {
     // Add the group to the groups map so get_groups() will return it
-    let group_ctx = GroupContext::from_entity("test-group").expect("Failed to create group");
+    let group_ctx = GroupContext::from_entity("test-group");
     {
         let mut groups = groups_map.write().await;
         groups.entry(topic_id).or_insert(group_ctx);

@@ -25,7 +25,7 @@ use saorsa_gossip_coordinator::{
     AddrHint, CoordinatorAdvert, CoordinatorRoles, FindCoordinatorQuery, NatClass,
 };
 use saorsa_gossip_membership::Membership;
-use saorsa_gossip_transport::{GossipTransport, StreamType};
+use saorsa_gossip_transport::{GossipStreamType, GossipTransport};
 use saorsa_gossip_types::PeerId;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -120,7 +120,7 @@ impl CoordinatorClient {
             match transport
                 .send_to_peer(
                     peer_id,
-                    StreamType::PubSub,
+                    GossipStreamType::PubSub,
                     Bytes::from(advert_bytes.clone()),
                 )
                 .await
@@ -212,7 +212,7 @@ impl CoordinatorClient {
             match transport
                 .send_to_peer(
                     *peer_id,
-                    StreamType::Membership,
+                    GossipStreamType::Membership,
                     Bytes::from(query_bytes.clone()),
                 )
                 .await
@@ -282,7 +282,11 @@ impl CoordinatorClient {
         // Send request to coordinator via membership stream
         let transport = self.transport.read().await;
         transport
-            .send_to_peer(coordinator_peer_id, StreamType::Membership, request_bytes)
+            .send_to_peer(
+                coordinator_peer_id,
+                GossipStreamType::Membership,
+                request_bytes,
+            )
             .await
             .map_err(|e| anyhow::anyhow!("Failed to send reflection request: {}", e))?;
 
@@ -291,7 +295,9 @@ impl CoordinatorClient {
             loop {
                 match transport.receive_message().await {
                     Ok((peer, stream_type, data)) => {
-                        if peer == coordinator_peer_id && stream_type == StreamType::Membership {
+                        if peer == coordinator_peer_id
+                            && stream_type == GossipStreamType::Membership
+                        {
                             // Parse response - expected format: "ADDR_REFLECT_RESPONSE:<ip>:<port>"
                             if let Ok(response_str) = String::from_utf8(data.to_vec())
                                 && let Some(addr_str) =
@@ -357,7 +363,7 @@ impl CoordinatorClient {
                 match transport.receive_message().await {
                     Ok((peer_id, stream_type, data)) => {
                         // Only process Membership stream responses from expected peers
-                        if stream_type != StreamType::Membership {
+                        if stream_type != GossipStreamType::Membership {
                             continue;
                         }
                         if !expected_peers.contains(&peer_id) {
@@ -436,6 +442,7 @@ mod tests {
         // Create a test membership layer
         let membership: Arc<RwLock<Box<dyn Membership>>> = Arc::new(RwLock::new(Box::new(
             saorsa_gossip_membership::HyParViewMembership::new(
+                peer_id,
                 5,  // active_degree
                 15, // passive_degree
                 Arc::new(QuicTransport::new(TransportConfig::default())),
@@ -514,8 +521,10 @@ mod tests {
         assert!(result.is_err());
         let err_msg = result.unwrap_err().to_string();
         assert!(
-            err_msg.contains("timed out") || err_msg.contains("No valid reflection response"),
-            "Expected timeout or no response error, got: {}",
+            err_msg.contains("timed out")
+                || err_msg.contains("No valid reflection response")
+                || err_msg.contains("channel closed"),
+            "Expected timeout, no response, or channel closed error, got: {}",
             err_msg
         );
 

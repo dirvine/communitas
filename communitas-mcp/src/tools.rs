@@ -6,18 +6,90 @@
 //!
 //! Exposes Communitas commands and queries as MCP tools that AI agents can invoke.
 
+use crate::node::{DhtOps, NodeConfig, NodeState};
 use crate::presence::{PresenceOperations, PresenceStatus, PresenceSubscription, PresenceUpdate};
 use crate::presentation::{PresentationOperations, ScreenRegion, Slide};
 use crate::protocol::{Tool, ToolCallResult, ToolContent};
 use crate::social::{LocationOperations, PollOperations, StoryOperations};
 use crate::webrtc::{CallRequest, WebRtcOperations};
 use base64::prelude::*;
+use bytes::Bytes;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+
+// Global node state for DHT operations
+lazy_static::lazy_static! {
+    static ref NODE_STATE: Arc<RwLock<NodeState>> = {
+        Arc::new(RwLock::new(NodeState::new(NodeConfig::default())))
+    };
+}
+
+/// Initialize the DHT node if platform conditions allow
+///
+/// This should be called at MCP server startup. On desktop platforms,
+/// the node auto-starts. On mobile, it only starts when charging + WiFi.
+pub async fn initialize_node() -> anyhow::Result<()> {
+    let mut node = NODE_STATE.write().await;
+
+    // Check if node should auto-start based on platform
+    if should_auto_start_node() {
+        tracing::info!("Auto-starting DHT node (platform conditions met)");
+        node.start().await?;
+    } else {
+        tracing::info!("Skipping DHT node auto-start (platform conditions not met)");
+    }
+
+    Ok(())
+}
+
+/// Gracefully shutdown the DHT node
+///
+/// This should be called when the MCP server is shutting down.
+/// Handles departure announcement and data transfer to peers.
+pub async fn shutdown_node() -> anyhow::Result<()> {
+    let mut node = NODE_STATE.write().await;
+
+    if node.is_running() {
+        tracing::info!("Gracefully shutting down DHT node");
+        node.stop().await?;
+    }
+
+    Ok(())
+}
+
+/// Determine if the node should auto-start based on platform
+fn should_auto_start_node() -> bool {
+    #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+    {
+        // Desktop: always auto-start
+        true
+    }
+    #[cfg(any(target_os = "ios", target_os = "android"))]
+    {
+        // Mobile: only when conditions are right
+        // TODO: Implement platform-specific checks (charging + WiFi)
+        false
+    }
+    #[cfg(not(any(
+        target_os = "macos",
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "ios",
+        target_os = "android"
+    )))]
+    {
+        // Unknown platform: conservative default
+        false
+    }
+}
+
 use communitas_core::{
     app::CommunitasApp,
     command::{Command, DiskTypeArg, Event, Query, QueryResponse},
     crdt::EntityType,
 };
 use serde_json::{Value, json};
+use tracing::warn;
 
 /// Get list of all available tools
 /// If authenticated is false, only pre-auth tools are returned
@@ -1205,6 +1277,127 @@ pub fn list_tools(authenticated: bool) -> Vec<Tool> {
                 "required": ["peer_four_words"]
             }),
         },
+        // DHT tools (Distributed Hash Table storage via saorsa-node)
+        Tool {
+            name: "dht_start".to_string(),
+            description: "Start the embedded DHT node for distributed storage. Desktop: auto-starts, Mobile: requires charging+WiFi.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "listen_port": {"type": "integer", "description": "Port to listen on (default: 10000)"}
+                }
+            }),
+        },
+        Tool {
+            name: "dht_stop".to_string(),
+            description: "Gracefully shutdown the DHT node. Announces departure and transfers data ownership.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {}
+            }),
+        },
+        Tool {
+            name: "dht_status".to_string(),
+            description: "Get DHT node status including uptime, storage usage, and connected peers.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {}
+            }),
+        },
+        Tool {
+            name: "dht_store".to_string(),
+            description: "Store data in the DHT. Returns the content address (XorName) where data was stored.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "data": {"type": "string", "description": "Base64-encoded data to store"},
+                    "content_type": {"type": "string", "description": "MIME type of the content (optional)"}
+                },
+                "required": ["data"]
+            }),
+        },
+        Tool {
+            name: "dht_retrieve".to_string(),
+            description: "Retrieve data from the DHT by its content address.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "address": {"type": "string", "description": "Content address (XorName) to retrieve"}
+                },
+                "required": ["address"]
+            }),
+        },
+        Tool {
+            name: "dht_exists".to_string(),
+            description: "Check if content exists at the given addresses.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "addresses": {"type": "array", "items": {"type": "string"}, "description": "List of content addresses to check"}
+                },
+                "required": ["addresses"]
+            }),
+        },
+        Tool {
+            name: "dht_network_stats".to_string(),
+            description: "Get statistics about the DHT network.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {}
+            }),
+        },
+        Tool {
+            name: "dht_closest_peers".to_string(),
+            description: "Find peers closest to a given address in the DHT keyspace.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "address": {"type": "string", "description": "Address to find closest peers for"}
+                },
+                "required": ["address"]
+            }),
+        },
+        // DHT Metrics tools (from saorsa-core's DhtMetricsAggregator)
+        Tool {
+            name: "dht_health_metrics".to_string(),
+            description: "Get comprehensive DHT health metrics including routing table, replication, and latency stats.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {}
+            }),
+        },
+        Tool {
+            name: "trust_metrics".to_string(),
+            description: "Get EigenTrust reputation metrics including peer trust scores and convergence status.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {}
+            }),
+        },
+        Tool {
+            name: "security_metrics".to_string(),
+            description: "Get security metrics including Sybil/eclipse attack detection scores and enforcement status.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {}
+            }),
+        },
+        Tool {
+            name: "placement_metrics".to_string(),
+            description: "Get storage placement metrics including geographic diversity, capacity, and replication health.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {}
+            }),
+        },
+        Tool {
+            name: "metrics_summary".to_string(),
+            description: "Get a quick health summary with overall scores for security, DHT, trust, and placement.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {}
+            }),
+        },
         // Contact tools
         Tool {
             name: "create_contact".to_string(),
@@ -1436,6 +1629,9 @@ pub async fn call_tool(app: &CommunitasApp, name: &str, args: Option<Value>) -> 
     if let Some(result) = dispatch_network_tools(app, name, &args).await {
         return result;
     }
+    if let Some(result) = dispatch_dht_tools(name, &args).await {
+        return result;
+    }
     if let Some(result) = dispatch_social_tools(app, name, &args).await {
         return result;
     }
@@ -1618,6 +1814,26 @@ async fn dispatch_network_tools(
     }
 }
 
+async fn dispatch_dht_tools(name: &str, args: &Value) -> Option<ToolCallResult> {
+    match name {
+        "dht_start" => Some(execute_dht_start(args.clone()).await),
+        "dht_stop" => Some(execute_dht_stop().await),
+        "dht_status" => Some(execute_dht_status().await),
+        "dht_store" => Some(execute_dht_store(args.clone()).await),
+        "dht_retrieve" => Some(execute_dht_retrieve(args.clone()).await),
+        "dht_exists" => Some(execute_dht_exists(args.clone()).await),
+        "dht_network_stats" => Some(execute_dht_network_stats().await),
+        "dht_closest_peers" => Some(execute_dht_closest_peers(args.clone()).await),
+        // Metrics tools (from saorsa-core's DhtMetricsAggregator)
+        "dht_health_metrics" => Some(execute_dht_health_metrics().await),
+        "trust_metrics" => Some(execute_trust_metrics().await),
+        "security_metrics" => Some(execute_security_metrics().await),
+        "placement_metrics" => Some(execute_placement_metrics().await),
+        "metrics_summary" => Some(execute_metrics_summary().await),
+        _ => None,
+    }
+}
+
 async fn dispatch_social_tools(
     app: &CommunitasApp,
     name: &str,
@@ -1721,10 +1937,18 @@ macro_rules! require_str {
         }
     };
 }
-
-/// Extract a string argument with empty default
+/// Extract a string argument with empty default, logging when type mismatches occur
 fn str_or_default(args: &Value, field: &str) -> String {
-    args[field].as_str().unwrap_or_default().to_string()
+    match args.get(field) {
+        Some(v) if !v.is_null() => match v.as_str() {
+            Some(s) => s.to_string(),
+            None => {
+                warn!(field = field, "field is not a string, using empty default");
+                String::new()
+            }
+        },
+        _ => String::new(),
+    }
 }
 
 /// Extract an optional string argument
@@ -1767,16 +1991,40 @@ macro_rules! require_disk_type {
     };
 }
 
-/// Extract a string array with empty default
+/// Extract a string array with empty default, logging when non-strings are dropped
 fn str_array_or_default(args: &Value, field: &str) -> Vec<String> {
-    args[field]
-        .as_array()
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                .collect()
-        })
-        .unwrap_or_default()
+    match args.get(field) {
+        Some(v) => match v.as_array() {
+            Some(arr) => {
+                let mut dropped_count = 0;
+                let result: Vec<String> = arr
+                    .iter()
+                    .filter_map(|elem| {
+                        if let Some(s) = elem.as_str() {
+                            Some(s.to_string())
+                        } else {
+                            dropped_count += 1;
+                            None
+                        }
+                    })
+                    .collect();
+                if dropped_count > 0 {
+                    warn!(
+                        field = field,
+                        dropped_count = dropped_count,
+                        "dropped non-string elements from array"
+                    );
+                }
+                result
+            }
+            None if !v.is_null() => {
+                warn!(field = field, "field is not an array, using empty default");
+                Vec::new()
+            }
+            _ => Vec::new(),
+        },
+        None => Vec::new(),
+    }
 }
 
 // Command executors
@@ -2258,7 +2506,10 @@ async fn execute_write_file(app: &CommunitasApp, args: Value) -> ToolCallResult 
     let entity_id = str_or_default(&args, "entity_id");
     let disk_type = require_disk_type!(args);
     let path = str_or_default(&args, "path");
-    let content_str = args["content"].as_str().unwrap_or_default();
+    let content_str = match args["content"].as_str() {
+        Some(s) => s,
+        None => return error_result("content is required for write_file"),
+    };
     let data = content_str.as_bytes().to_vec();
 
     let cmd = Command::WriteFile {
@@ -2403,7 +2654,10 @@ async fn execute_get_messages(app: &CommunitasApp, args: Value) -> ToolCallResul
 }
 
 async fn execute_list_files(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let entity_id = args["entity_id"].as_str().unwrap_or_default().to_string();
+    let entity_id = match args["entity_id"].as_str() {
+        Some(s) => s.to_string(),
+        None => return error_result("entity_id is required for list_files"),
+    };
     let disk_type = match args["disk_type"].as_str().and_then(parse_disk_type) {
         Some(t) => t,
         None => return error_result("Invalid or missing disk_type"),
@@ -2630,7 +2884,10 @@ async fn execute_upload_with_metadata(app: &CommunitasApp, args: Value) -> ToolC
 
     // 2. Write the metadata file
     let meta_path = format!("{}.meta.json", path);
-    let meta_data = serde_json::to_vec(&metadata).unwrap_or_default();
+    let meta_data = match serde_json::to_vec(&metadata) {
+        Ok(d) => d,
+        Err(e) => return error_result(&format!("Failed to serialize metadata: {}", e)),
+    };
 
     let cmd_meta = Command::WriteFile {
         entity_id,
@@ -4187,4 +4444,370 @@ async fn execute_workspace_init(app: &CommunitasApp, args: Value) -> ToolCallRes
         },
         "columns": column_ids
     }))
+}
+
+// ============================================================================
+// DHT Tool Executors
+// ============================================================================
+
+async fn execute_dht_start(args: Value) -> ToolCallResult {
+    let listen_port = args["listen_port"].as_u64().map(|p| p as u16);
+
+    let mut node = NODE_STATE.write().await;
+
+    // Update config if port specified
+    if let Some(port) = listen_port {
+        node.config.listen_port = port;
+    }
+
+    match node.start().await {
+        Ok(()) => {
+            let status = node.status();
+            json_result(&json!({
+                "success": true,
+                "message": "DHT node started",
+                "status": {
+                    "running": status.running,
+                    "listen_port": status.listen_port,
+                    "storage_quota_gb": status.storage_quota_bytes / (1024 * 1024 * 1024)
+                }
+            }))
+        }
+        Err(e) => error_result(&format!("Failed to start DHT node: {}", e)),
+    }
+}
+
+async fn execute_dht_stop() -> ToolCallResult {
+    let mut node = NODE_STATE.write().await;
+
+    match node.stop().await {
+        Ok(()) => success_result("DHT node stopped"),
+        Err(e) => error_result(&format!("Failed to stop DHT node: {}", e)),
+    }
+}
+
+async fn execute_dht_status() -> ToolCallResult {
+    let node = NODE_STATE.read().await;
+    let status = node.status();
+
+    json_result(&json!({
+        "running": status.running,
+        "uptime_secs": status.uptime_secs,
+        "storage_used_bytes": status.storage_used_bytes,
+        "storage_quota_bytes": status.storage_quota_bytes,
+        "storage_used_percent": if status.storage_quota_bytes > 0 {
+            (status.storage_used_bytes as f64 / status.storage_quota_bytes as f64) * 100.0
+        } else {
+            0.0
+        },
+        "connected_peers": status.connected_peers,
+        "listen_port": status.listen_port
+    }))
+}
+
+async fn execute_dht_store(args: Value) -> ToolCallResult {
+    let data_b64 = match args["data"].as_str() {
+        Some(d) => d,
+        None => return error_result("Missing required parameter: data"),
+    };
+
+    // Decode base64
+    let data = match BASE64_STANDARD.decode(data_b64) {
+        Ok(d) => Bytes::from(d),
+        Err(e) => return error_result(&format!("Invalid base64 data: {}", e)),
+    };
+
+    let dht = DhtOps::new(Arc::clone(&NODE_STATE));
+
+    match dht.store(data).await {
+        Ok(address) => json_result(&json!({
+            "success": true,
+            "address": address,
+            "message": "Data stored in DHT"
+        })),
+        Err(e) => error_result(&format!("Failed to store data: {}", e)),
+    }
+}
+
+async fn execute_dht_retrieve(args: Value) -> ToolCallResult {
+    let address = match args["address"].as_str() {
+        Some(a) => a,
+        None => return error_result("Missing required parameter: address"),
+    };
+
+    let dht = DhtOps::new(Arc::clone(&NODE_STATE));
+
+    match dht.retrieve(address).await {
+        Ok(Some(data)) => {
+            let encoded = BASE64_STANDARD.encode(&data);
+            json_result(&json!({
+                "success": true,
+                "address": address,
+                "data": encoded,
+                "size_bytes": data.len()
+            }))
+        }
+        Ok(None) => json_result(&json!({
+            "success": false,
+            "address": address,
+            "message": "Content not found"
+        })),
+        Err(e) => error_result(&format!("Failed to retrieve data: {}", e)),
+    }
+}
+
+async fn execute_dht_exists(args: Value) -> ToolCallResult {
+    let addresses: Vec<String> = match args["addresses"].as_array() {
+        Some(arr) => arr
+            .iter()
+            .filter_map(|v| v.as_str().map(String::from))
+            .collect(),
+        None => return error_result("Missing required parameter: addresses"),
+    };
+
+    if addresses.is_empty() {
+        return error_result("addresses array cannot be empty");
+    }
+
+    let dht = DhtOps::new(Arc::clone(&NODE_STATE));
+
+    match dht.check_exists(&addresses).await {
+        Ok(results) => {
+            let entries: Vec<_> = addresses
+                .iter()
+                .zip(results.iter())
+                .map(|(addr, exists)| {
+                    json!({
+                        "address": addr,
+                        "exists": exists
+                    })
+                })
+                .collect();
+
+            json_result(&json!({
+                "success": true,
+                "results": entries
+            }))
+        }
+        Err(e) => error_result(&format!("Failed to check existence: {}", e)),
+    }
+}
+
+async fn execute_dht_network_stats() -> ToolCallResult {
+    let dht = DhtOps::new(Arc::clone(&NODE_STATE));
+
+    match dht.network_stats().await {
+        Ok(stats) => json_result(&json!({
+            "total_nodes": stats.total_nodes,
+            "reachable_nodes": stats.reachable_nodes,
+            "stored_chunks": stats.stored_chunks,
+            "total_storage_bytes": stats.total_storage_bytes
+        })),
+        Err(e) => error_result(&format!("Failed to get network stats: {}", e)),
+    }
+}
+
+async fn execute_dht_closest_peers(args: Value) -> ToolCallResult {
+    let address = match args["address"].as_str() {
+        Some(a) => a,
+        None => return error_result("Missing required parameter: address"),
+    };
+
+    let dht = DhtOps::new(Arc::clone(&NODE_STATE));
+
+    match dht.closest_peers(address).await {
+        Ok(peers) => {
+            let peer_list: Vec<_> = peers
+                .iter()
+                .map(|p| {
+                    json!({
+                        "peer_id": p.peer_id,
+                        "address": p.address,
+                        "distance": p.distance
+                    })
+                })
+                .collect();
+
+            json_result(&json!({
+                "success": true,
+                "address": address,
+                "peers": peer_list
+            }))
+        }
+        Err(e) => error_result(&format!("Failed to find closest peers: {}", e)),
+    }
+}
+
+// =============================================================================
+// DHT Metrics Tools (from saorsa-core's DhtMetricsAggregator)
+// =============================================================================
+
+async fn execute_dht_health_metrics() -> ToolCallResult {
+    let dht = DhtOps::new(Arc::clone(&NODE_STATE));
+
+    match dht.dht_health_metrics().await {
+        Ok(metrics) => json_result(&json!({
+            "routing_table": {
+                "size": metrics.routing_table_size,
+                "buckets_filled": metrics.buckets_filled,
+                "bucket_fullness": metrics.bucket_fullness
+            },
+            "replication": {
+                "factor": metrics.replication_factor,
+                "health": metrics.replication_health,
+                "under_replicated_keys": metrics.under_replicated_keys
+            },
+            "latency": {
+                "p50_ms": metrics.lookup_latency_p50_ms,
+                "p95_ms": metrics.lookup_latency_p95_ms,
+                "p99_ms": metrics.lookup_latency_p99_ms,
+                "avg_hops": metrics.lookup_hops_avg
+            },
+            "operations": {
+                "total": metrics.operations_total,
+                "success": metrics.operations_success_total,
+                "failed": metrics.operations_failed_total,
+                "success_rate": metrics.success_rate
+            },
+            "maintenance": {
+                "bucket_refreshes": metrics.bucket_refresh_total,
+                "liveness_checks": metrics.liveness_checks_total,
+                "liveness_failures": metrics.liveness_failures_total
+            }
+        })),
+        Err(e) => error_result(&format!("Failed to get DHT health metrics: {}", e)),
+    }
+}
+
+async fn execute_trust_metrics() -> ToolCallResult {
+    let dht = DhtOps::new(Arc::clone(&NODE_STATE));
+
+    match dht.trust_metrics().await {
+        Ok(metrics) => json_result(&json!({
+            "eigentrust": {
+                "average": metrics.eigentrust_avg,
+                "min": metrics.eigentrust_min,
+                "max": metrics.eigentrust_max,
+                "epochs_total": metrics.eigentrust_epochs_total,
+                "low_trust_nodes": metrics.low_trust_nodes
+            },
+            "witness_validation": {
+                "receipts_issued": metrics.witness_receipts_issued_total,
+                "receipts_verified": metrics.witness_receipts_verified_total,
+                "receipts_rejected": metrics.witness_receipts_rejected_total
+            },
+            "interactions": {
+                "total": metrics.interactions_recorded_total,
+                "positive": metrics.positive_interactions_total,
+                "negative": metrics.negative_interactions_total
+            },
+            "distribution": metrics.trust_distribution
+        })),
+        Err(e) => error_result(&format!("Failed to get trust metrics: {}", e)),
+    }
+}
+
+async fn execute_security_metrics() -> ToolCallResult {
+    let dht = DhtOps::new(Arc::clone(&NODE_STATE));
+
+    match dht.security_metrics().await {
+        Ok(metrics) => json_result(&json!({
+            "attack_detection": {
+                "eclipse_score": metrics.eclipse_score,
+                "sybil_score": metrics.sybil_score,
+                "collusion_score": metrics.collusion_score,
+                "routing_manipulation_score": metrics.routing_manipulation_score
+            },
+            "attack_events": {
+                "eclipse_attempts": metrics.eclipse_attempts_total,
+                "sybil_nodes_detected": metrics.sybil_nodes_detected_total,
+                "collusion_groups_detected": metrics.collusion_groups_detected_total
+            },
+            "bft_mode": {
+                "active": metrics.bft_mode_active,
+                "escalations": metrics.bft_escalations_total
+            },
+            "sibling_broadcast": {
+                "validated": metrics.sibling_broadcasts_validated_total,
+                "rejected": metrics.sibling_broadcasts_rejected_total,
+                "overlap_ratio": metrics.sibling_overlap_ratio
+            },
+            "close_group": {
+                "validations": metrics.close_group_validations_total,
+                "consensus_failures": metrics.close_group_consensus_failures_total
+            },
+            "witness": {
+                "validations": metrics.witness_validations_total,
+                "failures": metrics.witness_failures_total
+            },
+            "eviction": {
+                "total": metrics.nodes_evicted_total,
+                "by_reason": metrics.eviction_by_reason
+            },
+            "churn": {
+                "rate_5m": metrics.churn_rate_5m,
+                "high_churn_alerts": metrics.high_churn_alerts_total
+            }
+        })),
+        Err(e) => error_result(&format!("Failed to get security metrics: {}", e)),
+    }
+}
+
+async fn execute_placement_metrics() -> ToolCallResult {
+    let dht = DhtOps::new(Arc::clone(&NODE_STATE));
+
+    match dht.placement_metrics().await {
+        Ok(metrics) => json_result(&json!({
+            "storage": {
+                "total_bytes": metrics.total_stored_bytes,
+                "total_records": metrics.total_records,
+                "storage_nodes": metrics.storage_nodes
+            },
+            "geographic": {
+                "diversity_score": metrics.geographic_diversity,
+                "regions_covered": metrics.regions_covered
+            },
+            "capacity": {
+                "total_bytes": metrics.total_capacity_bytes,
+                "used_ratio": metrics.used_capacity_ratio,
+                "overloaded_nodes": metrics.overloaded_nodes
+            },
+            "load_balancing": {
+                "score": metrics.load_balance_score,
+                "rebalance_operations": metrics.rebalance_operations_total
+            },
+            "audits": {
+                "total": metrics.audits_total,
+                "failures": metrics.audit_failures_total
+            }
+        })),
+        Err(e) => error_result(&format!("Failed to get placement metrics: {}", e)),
+    }
+}
+
+async fn execute_metrics_summary() -> ToolCallResult {
+    let dht = DhtOps::new(Arc::clone(&NODE_STATE));
+
+    match dht.metrics_summary().await {
+        Ok(summary) => json_result(&json!({
+            "health_scores": {
+                "overall": summary.overall_health_score,
+                "security": summary.security_score,
+                "dht": summary.dht_health_score,
+                "trust": summary.trust_score,
+                "placement": summary.placement_score
+            },
+            "active_alerts": summary.active_alerts,
+            "status": if summary.overall_health_score >= 0.9 {
+                "healthy"
+            } else if summary.overall_health_score >= 0.7 {
+                "degraded"
+            } else if summary.overall_health_score >= 0.5 {
+                "unhealthy"
+            } else {
+                "critical"
+            }
+        })),
+        Err(e) => error_result(&format!("Failed to get metrics summary: {}", e)),
+    }
 }

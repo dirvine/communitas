@@ -47,6 +47,9 @@
 
 use crate::crdt::EntityType;
 use crate::invite::InviteStatus;
+use crate::peer_presence::{
+    PresenceQuery as PeerPresenceQuery, PresenceRecord as PeerPresenceRecord,
+};
 use serde::{Deserialize, Serialize};
 
 // ============================================================================
@@ -90,6 +93,18 @@ pub enum Command {
 
     /// Request external address discovery via NAT reflection
     RequestExternalAddress,
+
+    /// Announce our presence to the network (ADR-014)
+    ///
+    /// Broadcasts a signed PresenceRecord containing our current connection
+    /// words to the gossip network so other peers can find us.
+    AnnouncePresence,
+
+    /// Query the network for a peer's current presence (ADR-014)
+    ///
+    /// Sends a PresenceQuery to find another peer's current location.
+    /// Only peers connected to the target will respond.
+    QueryPeerPresence { target_pubkey: Vec<u8> },
 
     // ========================================================================
     // Entity Management Commands
@@ -480,6 +495,18 @@ pub enum Event {
         reason: String,
     },
 
+    /// Our presence was announced to the network (ADR-014)
+    PresenceAnnounced {
+        connection_words: String,
+        timestamp: u64,
+    },
+
+    /// Received a presence query from another peer (ADR-014)
+    PeerPresenceQueryReceived { query: PeerPresenceQuery },
+
+    /// Received a presence record for a peer (ADR-014)
+    PeerPresenceReceived { record: PeerPresenceRecord },
+
     // ========================================================================
     // Entity Events
     // ========================================================================
@@ -843,6 +870,13 @@ pub enum Query {
     /// Get external address
     GetExternalAddress,
 
+    /// Get connection words (external address encoded as 4 memorable words)
+    ///
+    /// Returns the external IP:port encoded as 4 words using `FourWordAdaptiveEncoder`.
+    /// Share these words out-of-band so others can connect to you for the first time.
+    /// When they connect, they'll receive your cryptographic identity packet.
+    GetConnectionWords,
+
     // ========================================================================
     // Entity Queries
     // ========================================================================
@@ -973,6 +1007,18 @@ pub enum Query {
     /// List online peers
     ListOnlinePeers,
 
+    /// Get our current presence record (ADR-014)
+    ///
+    /// Returns our most recently created PresenceRecord with current
+    /// connection words and timestamp.
+    GetOurPresenceRecord,
+
+    /// Get cached presence for a peer (ADR-014)
+    ///
+    /// Looks up a peer's presence record from our local cache.
+    /// Returns None if we don't have a cached record for this peer.
+    GetCachedPeerPresence { pubkey: Vec<u8> },
+
     // ========================================================================
     // WebRTC Queries
     // ========================================================================
@@ -1096,6 +1142,12 @@ pub enum QueryResponse {
 
     /// Website information
     Website(WebsiteResponse),
+
+    /// Our presence record (ADR-014)
+    OurPresenceRecord(Option<PeerPresenceRecord>),
+
+    /// Cached peer presence record (ADR-014)
+    CachedPeerPresence(Option<PeerPresenceRecord>),
 }
 
 // ============================================================================

@@ -49,6 +49,7 @@ pub mod keystore;
 pub mod linking_service;
 pub mod message_service;
 pub mod message_sync;
+pub mod peer_presence; // Network-wide peer discovery (ADR-014)
 pub mod permissions; // Granular per-resource permission system // Invite service with CRDT persistence
 // pub mod messaging; // TODO: Refactor in Sprint 3 for gossip pubsub
 pub mod presence_service;
@@ -103,3 +104,8 @@ pub use permissions::{AccessLevel, MemberPermissions, ResourceType, role_default
 // Re-export invite system types for cross-organization collaboration
 pub use invite::{Invite, InviteStatus};
 pub use invite_service::{InviteRequest, InviteService, InviteServiceError, InviteServiceResult};
+
+// Re-export peer presence types for network-wide discovery (ADR-014)
+pub use peer_presence::{
+    PresenceCache, PresenceError, PresenceQuery, PresenceRecord, PresenceResponse, PresenceResult,
+};

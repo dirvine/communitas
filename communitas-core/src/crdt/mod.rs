@@ -53,7 +53,7 @@
 //! // Create a new member document
 //! let member = MemberDocument {
 //!     id: "member-123".to_string(),
-//!     four_word_identity: "alice-dev-coder-pro".to_string(),
+//!     pubkey_hex: "abcd1234".to_string(),
 //!     display_name: "Alice".to_string(),
 //!     email: Some("alice@example.com".to_string()),
 //!     bio: None,

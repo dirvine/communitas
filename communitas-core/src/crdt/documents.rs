@@ -103,7 +103,9 @@ pub fn get_map_bool(txn: &impl ReadTxn, map: &MapRef, key: &str) -> Result<Optio
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MemberDocument {
     pub id: String,
-    pub four_word_identity: String,
+    /// Hex-encoded ML-DSA-65 public key (THE identity)
+    pub pubkey_hex: String,
+    /// User-chosen display name (shown in UI)
     pub display_name: String,
     pub email: Option<String>,
     pub bio: Option<String>,
@@ -153,8 +155,8 @@ impl CrdtDocument for MemberDocument {
             .map_err(|e| anyhow::anyhow!("Invalid metadata structure: {:?}", e))?;
 
         let id = get_map_string(&txn, &metadata_map, "id")?.context("Missing id")?;
-        let four_word_identity = get_map_string(&txn, &metadata_map, "four_word_identity")?
-            .context("Missing four_word_identity")?;
+        let pubkey_hex =
+            get_map_string(&txn, &metadata_map, "pubkey_hex")?.context("Missing pubkey_hex")?;
         let display_name =
             get_map_string(&txn, &metadata_map, "display_name")?.context("Missing display_name")?;
         let email = get_map_string(&txn, &metadata_map, "email")?;
@@ -169,7 +171,7 @@ impl CrdtDocument for MemberDocument {
         drop(txn);
         Ok(Self {
             id,
-            four_word_identity,
+            pubkey_hex,
             display_name,
             email,
             bio,
@@ -187,12 +189,7 @@ impl CrdtDocument for MemberDocument {
         let metadata = get_or_create_map(&mut txn, &root, "metadata")?;
 
         set_map_string(&mut txn, &metadata, "id", &self.id)?;
-        set_map_string(
-            &mut txn,
-            &metadata,
-            "four_word_identity",
-            &self.four_word_identity,
-        )?;
+        set_map_string(&mut txn, &metadata, "pubkey_hex", &self.pubkey_hex)?;
         set_map_string(&mut txn, &metadata, "display_name", &self.display_name)?;
 
         if let Some(ref email) = self.email {
@@ -230,7 +227,9 @@ impl CrdtDocument for MemberDocument {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OrganizationDocument {
     pub id: String,
-    pub four_word_identity: String,
+    /// Hex-encoded ML-DSA-65 public key (THE identity)
+    pub pubkey_hex: String,
+    /// Organization display name (shown in UI)
     pub name: String,
     pub description: Option<String>,
     pub created_by: String,
@@ -283,8 +282,8 @@ impl CrdtDocument for OrganizationDocument {
             .map_err(|e| anyhow::anyhow!("Invalid metadata structure: {:?}", e))?;
 
         let id = get_map_string(&txn, &metadata_map, "id")?.context("Missing id")?;
-        let four_word_identity = get_map_string(&txn, &metadata_map, "four_word_identity")?
-            .context("Missing four_word_identity")?;
+        let pubkey_hex =
+            get_map_string(&txn, &metadata_map, "pubkey_hex")?.context("Missing pubkey_hex")?;
         let name = get_map_string(&txn, &metadata_map, "name")?.context("Missing name")?;
         let description = get_map_string(&txn, &metadata_map, "description")?;
         let created_by =
@@ -300,7 +299,7 @@ impl CrdtDocument for OrganizationDocument {
         drop(txn);
         Ok(Self {
             id,
-            four_word_identity,
+            pubkey_hex,
             name,
             description,
             created_by,
@@ -318,12 +317,7 @@ impl CrdtDocument for OrganizationDocument {
         let metadata = get_or_create_map(&mut txn, &root, "metadata")?;
 
         set_map_string(&mut txn, &metadata, "id", &self.id)?;
-        set_map_string(
-            &mut txn,
-            &metadata,
-            "four_word_identity",
-            &self.four_word_identity,
-        )?;
+        set_map_string(&mut txn, &metadata, "pubkey_hex", &self.pubkey_hex)?;
         set_map_string(&mut txn, &metadata, "name", &self.name)?;
 
         if let Some(ref desc) = self.description {
@@ -357,8 +351,10 @@ impl CrdtDocument for OrganizationDocument {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChannelDocument {
     pub id: String,
-    pub four_word_identity: String,
+    /// Hex-encoded ML-DSA-65 public key (THE identity)
+    pub pubkey_hex: String,
     pub org_id: String,
+    /// Channel display name (shown in UI)
     pub name: String,
     pub description: Option<String>,
     pub created_by: String,
@@ -406,8 +402,8 @@ impl CrdtDocument for ChannelDocument {
             .map_err(|e| anyhow::anyhow!("Invalid metadata structure: {:?}", e))?;
 
         let id = get_map_string(&txn, &metadata_map, "id")?.context("Missing id")?;
-        let four_word_identity = get_map_string(&txn, &metadata_map, "four_word_identity")?
-            .context("Missing four_word_identity")?;
+        let pubkey_hex =
+            get_map_string(&txn, &metadata_map, "pubkey_hex")?.context("Missing pubkey_hex")?;
         let org_id = get_map_string(&txn, &metadata_map, "org_id")?.context("Missing org_id")?;
         let name = get_map_string(&txn, &metadata_map, "name")?.context("Missing name")?;
         let description = get_map_string(&txn, &metadata_map, "description")?;
@@ -424,7 +420,7 @@ impl CrdtDocument for ChannelDocument {
         drop(txn);
         Ok(Self {
             id,
-            four_word_identity,
+            pubkey_hex,
             org_id,
             name,
             description,
@@ -443,12 +439,7 @@ impl CrdtDocument for ChannelDocument {
         let metadata = get_or_create_map(&mut txn, &root, "metadata")?;
 
         set_map_string(&mut txn, &metadata, "id", &self.id)?;
-        set_map_string(
-            &mut txn,
-            &metadata,
-            "four_word_identity",
-            &self.four_word_identity,
-        )?;
+        set_map_string(&mut txn, &metadata, "pubkey_hex", &self.pubkey_hex)?;
         set_map_string(&mut txn, &metadata, "org_id", &self.org_id)?;
         set_map_string(&mut txn, &metadata, "name", &self.name)?;
 
@@ -487,7 +478,7 @@ mod tests {
     fn test_member_document_roundtrip() {
         let member = MemberDocument {
             id: "member-123".to_string(),
-            four_word_identity: "alice-dev-coder-pro".to_string(),
+            pubkey_hex: "abcd1234".to_string(),
             display_name: "Alice".to_string(),
             email: Some("alice@example.com".to_string()),
             bio: Some("Software engineer".to_string()),
@@ -503,7 +494,7 @@ mod tests {
         let loaded = MemberDocument::from_document(&doc).unwrap();
 
         assert_eq!(member.id, loaded.id);
-        assert_eq!(member.four_word_identity, loaded.four_word_identity);
+        assert_eq!(member.pubkey_hex, loaded.pubkey_hex);
         assert_eq!(member.display_name, loaded.display_name);
         assert_eq!(member.email, loaded.email);
     }
@@ -512,7 +503,7 @@ mod tests {
     fn test_organization_document_roundtrip() {
         let org = OrganizationDocument {
             id: "org-123".to_string(),
-            four_word_identity: "tech-startup-global-inc".to_string(),
+            pubkey_hex: "ef567890".to_string(),
             name: "TechCorp".to_string(),
             description: Some("Our company".to_string()),
             created_by: "member-456".to_string(),
@@ -528,6 +519,7 @@ mod tests {
         let loaded = OrganizationDocument::from_document(&doc).unwrap();
 
         assert_eq!(org.id, loaded.id);
+        assert_eq!(org.pubkey_hex, loaded.pubkey_hex);
         assert_eq!(org.name, loaded.name);
         assert_eq!(org.created_by, loaded.created_by);
     }
@@ -536,7 +528,7 @@ mod tests {
     fn test_channel_document_roundtrip() {
         let channel = ChannelDocument {
             id: "channel-123".to_string(),
-            four_word_identity: "general-chat-main-room".to_string(),
+            pubkey_hex: "1234abcd".to_string(),
             org_id: "org-456".to_string(),
             name: "General".to_string(),
             description: Some("Main channel".to_string()),
@@ -553,6 +545,7 @@ mod tests {
         let loaded = ChannelDocument::from_document(&doc).unwrap();
 
         assert_eq!(channel.id, loaded.id);
+        assert_eq!(channel.pubkey_hex, loaded.pubkey_hex);
         assert_eq!(channel.name, loaded.name);
         assert_eq!(channel.org_id, loaded.org_id);
     }

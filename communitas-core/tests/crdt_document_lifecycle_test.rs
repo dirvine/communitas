@@ -40,7 +40,7 @@ async fn test_create_and_load_document() {
     // Create a channel document
     let channel = ChannelDocument {
         id: "channel-123".to_string(),
-        four_word_identity: "test-channel-main-room".to_string(),
+        pubkey_hex: "test-channel-main-room".to_string(),
         org_id: "org-456".to_string(),
         name: "Test Channel".to_string(),
         description: Some("A test channel for CRDT operations".to_string()),
@@ -94,7 +94,7 @@ async fn test_concurrent_edits_merge_correctly() {
     // Create initial document (Peer A)
     let channel = ChannelDocument {
         id: "channel-concurrent".to_string(),
-        four_word_identity: "test-concurrent-edit".to_string(),
+        pubkey_hex: "test-concurrent-edit".to_string(),
         org_id: "org-123".to_string(),
         name: "Original Name".to_string(),
         description: Some("Original description".to_string()),
@@ -186,7 +186,7 @@ async fn test_three_way_concurrent_merge() {
     // Create initial document
     let channel = ChannelDocument {
         id: "channel-three-way".to_string(),
-        four_word_identity: "test-three-way".to_string(),
+        pubkey_hex: "test-three-way".to_string(),
         org_id: "org-999".to_string(),
         name: "Initial".to_string(),
         description: Some("Initial".to_string()),
@@ -288,7 +288,7 @@ async fn test_document_deletion_with_tombstone() {
     // Create a document
     let channel = ChannelDocument {
         id: "channel-to-delete".to_string(),
-        four_word_identity: "test-delete".to_string(),
+        pubkey_hex: "test-delete".to_string(),
         org_id: "org-123".to_string(),
         name: "To Be Deleted".to_string(),
         description: None,
@@ -357,7 +357,7 @@ async fn test_tombstone_propagation() {
     // Create initial document
     let channel = ChannelDocument {
         id: "channel-tombstone-prop".to_string(),
-        four_word_identity: "test-tombstone".to_string(),
+        pubkey_hex: "test-tombstone".to_string(),
         org_id: "org-123".to_string(),
         name: "Test Channel".to_string(),
         description: None,
@@ -419,7 +419,7 @@ async fn test_offline_online_sync() {
     // Create initial document
     let channel = ChannelDocument {
         id: "channel-offline".to_string(),
-        four_word_identity: "test-offline".to_string(),
+        pubkey_hex: "test-offline".to_string(),
         org_id: "org-123".to_string(),
         name: "Initial".to_string(),
         description: Some("Initial".to_string()),
@@ -507,7 +507,7 @@ async fn test_document_size_limit() {
 
     let channel = ChannelDocument {
         id: "channel-large".to_string(),
-        four_word_identity: "test-large".to_string(),
+        pubkey_hex: "test-large".to_string(),
         org_id: "org-123".to_string(),
         name: "Test".to_string(),
         description: Some(large_desc),

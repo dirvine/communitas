@@ -5,9 +5,9 @@ use anyhow::{Context, Result};
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use blake3::Hasher;
-use fips204::traits::{SerDes, Signer, Verifier};
 use keyring::Entry;
 use rand::rngs::OsRng;
+use saorsa_pqc::dsa_traits::{SerDes, Signer, Verifier};
 use saorsa_pqc::ml_dsa_87::{PrivateKey, PublicKey, try_keygen_with_rng};
 use zeroize::Zeroize;
 

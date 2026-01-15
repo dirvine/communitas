@@ -265,14 +265,20 @@ pub fn derive_identity_keys(
 ) -> RecoveryResult<IdentityKeys> {
     // BIP39 seed derivation: PBKDF2-HMAC-SHA512, 2048 iterations
     // Salt: "mnemonic" + passphrase
-    let seed = mnemonic.to_seed(passphrase.unwrap_or(""));
+    let mut seed = mnemonic.to_seed(passphrase.unwrap_or(""));
 
     // Derive master key using BLAKE3 with domain separation
-    let master_key = blake3::derive_key(derivation::MASTER_KEY, &seed);
+    let mut master_key = blake3::derive_key(derivation::MASTER_KEY, &seed);
+
+    // Zeroize BIP39 seed immediately after deriving master key
+    seed.zeroize();
 
     // Derive ML-DSA-65 signing keypair
-    let mldsa_seed = blake3::derive_key(derivation::MLDSA65, &master_key);
+    let mut mldsa_seed = blake3::derive_key(derivation::MLDSA65, &master_key);
     let mut mldsa_rng = ChaCha20Rng::from_seed(mldsa_seed);
+
+    // Zeroize ML-DSA seed after creating RNG
+    mldsa_seed.zeroize();
 
     let (verifying_key, signing_key) = ml_dsa_65::KG::try_keygen_with_rng(&mut mldsa_rng)
         .map_err(|e| RecoveryError::KeyDerivationFailed(format!("ML-DSA-65 keygen failed: {e}")))?;
@@ -281,8 +287,15 @@ pub fn derive_identity_keys(
     let verifying_key_bytes = verifying_key.clone().into_bytes().to_vec();
 
     // Derive ML-KEM-768 encryption keypair
-    let mlkem_seed = blake3::derive_key(derivation::MLKEM768, &master_key);
+    let mut mlkem_seed = blake3::derive_key(derivation::MLKEM768, &master_key);
+
+    // Zeroize master key after deriving all child keys
+    master_key.zeroize();
+
     let mut mlkem_rng = ChaCha20Rng::from_seed(mlkem_seed);
+
+    // Zeroize ML-KEM seed after creating RNG
+    mlkem_seed.zeroize();
 
     let (encapsulation_key, decapsulation_key) =
         ml_kem_768::KG::try_keygen_with_rng(&mut mlkem_rng).map_err(|e| {

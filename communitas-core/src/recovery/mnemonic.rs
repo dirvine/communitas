@@ -13,6 +13,7 @@
 
 use bip39::{Language, Mnemonic};
 use rand::RngCore;
+use zeroize::Zeroize;
 
 use super::error::RecoveryError;
 
@@ -101,8 +102,13 @@ pub fn generate_recovery_mnemonic(config: &RecoveryConfig) -> Result<Mnemonic, R
     let mut entropy = vec![0u8; entropy_len];
     rand::thread_rng().fill_bytes(&mut entropy);
 
-    Mnemonic::from_entropy_in(config.language, &entropy)
-        .map_err(|e| RecoveryError::MnemonicGenerationFailed(e.to_string()))
+    let result = Mnemonic::from_entropy_in(config.language, &entropy)
+        .map_err(|e| RecoveryError::MnemonicGenerationFailed(e.to_string()));
+
+    // Zeroize entropy immediately after mnemonic creation
+    entropy.zeroize();
+
+    result
 }
 
 /// Validate a mnemonic string and verify its checksum.

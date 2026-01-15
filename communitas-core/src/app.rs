@@ -41,13 +41,13 @@
 //!         "Alice".to_string(),
 //!         "MacBook".to_string(),
 //!         "/path/to/storage".to_string(),
-//!     ).await.unwrap();
+//!     ).await?;
 //!
 //!     // Execute a command
-//!     let events = app.execute(Command::StartNetworking { preferred_port: None }).await.unwrap();
+//!     let events = app.execute(Command::StartNetworking { preferred_port: None }).await?;
 //!
 //!     // Run a query
-//!     let response = app.query(Query::GetProfile).await.unwrap();
+//!     let response = app.query(Query::GetProfile).await?;
 //! }
 //! ```
 
@@ -62,6 +62,8 @@ use crate::command::{
 use crate::core_context::CoreContext;
 use crate::crdt::EntityType;
 use crate::disk_service::DiskType;
+use crate::identity::conn_words;
+use crate::peer_presence::PresenceCache;
 use crate::types::DeviceType;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -84,6 +86,9 @@ pub struct CommunitasApp {
 
     /// Active subscriptions (keyed by subscriber ID)
     subscriptions: Arc<RwLock<HashMap<String, Vec<Subscription>>>>,
+
+    /// Presence cache for peer discovery (ADR-014)
+    presence_cache: Arc<RwLock<PresenceCache>>,
 }
 
 impl CommunitasApp {
@@ -121,6 +126,7 @@ impl CommunitasApp {
             context: Arc::new(RwLock::new(context)),
             event_sender,
             subscriptions: Arc::new(RwLock::new(HashMap::new())),
+            presence_cache: Arc::new(RwLock::new(PresenceCache::new())),
         })
     }
 
@@ -247,6 +253,47 @@ impl CommunitasApp {
                 let event = Event::ExternalAddressDiscovered { address };
                 self.broadcast_event(event.clone());
                 Ok(vec![event])
+            }
+
+            Command::AnnouncePresence => {
+                // For now, return a placeholder - full implementation requires gossip integration
+                // This will be expanded when we integrate with the gossip broadcast system
+                let ctx = self.context.read().await;
+                let connection_words = ctx
+                    .external_address
+                    .map(|addr| {
+                        crate::identity::conn_words(&addr).unwrap_or_else(|_| "unknown".to_string())
+                    })
+                    .unwrap_or_else(|| "no-address".to_string());
+
+                let timestamp = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0);
+
+                let event = Event::PresenceAnnounced {
+                    connection_words,
+                    timestamp,
+                };
+                self.broadcast_event(event.clone());
+                Ok(vec![event])
+            }
+
+            Command::QueryPeerPresence { target_pubkey } => {
+                // Check local cache first
+                let cache = self.presence_cache.read().await;
+                if let Some(record) = cache.get(&target_pubkey) {
+                    let event = Event::PeerPresenceReceived {
+                        record: record.record.clone(),
+                    };
+                    self.broadcast_event(event.clone());
+                    return Ok(vec![event]);
+                }
+                drop(cache);
+
+                // No cached record - in full implementation, would broadcast query to gossip
+                // For now, return empty events (query sent but no immediate response)
+                Ok(vec![])
             }
 
             // ================================================================
@@ -1861,6 +1908,12 @@ impl CommunitasApp {
                 ))
             }
 
+            Query::GetConnectionWords => {
+                let ctx = self.context.read().await;
+                let words = ctx.external_address.and_then(|addr| conn_words(&addr).ok());
+                Ok(QueryResponse::OptionalString(words))
+            }
+
             // ================================================================
             // Entity Queries
             // ================================================================
@@ -2492,6 +2545,36 @@ impl CommunitasApp {
                 // list_online_peers requires entity_id parameter in GossipContext
                 // TODO: Implement global online peers list
                 Ok(QueryResponse::PeerList(vec![]))
+            }
+
+            Query::GetOurPresenceRecord => {
+                // Get our current connection words
+                let ctx = self.context.read().await;
+                let connection_words = ctx.external_address.map(|addr| {
+                    crate::identity::conn_words(&addr).unwrap_or_else(|_| "unknown".to_string())
+                });
+
+                match connection_words {
+                    Some(words) => {
+                        // Create a record (without signing for now - that requires keypair access)
+                        let record = crate::peer_presence::PresenceRecord::new_unsigned(
+                            vec![], // Would be our pubkey
+                            words,
+                            std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .map(|d| d.as_secs())
+                                .unwrap_or(0),
+                        );
+                        Ok(QueryResponse::OurPresenceRecord(Some(record)))
+                    }
+                    None => Ok(QueryResponse::OurPresenceRecord(None)),
+                }
+            }
+
+            Query::GetCachedPeerPresence { pubkey } => {
+                let cache = self.presence_cache.read().await;
+                let record = cache.get(&pubkey).map(|cp| cp.record.clone());
+                Ok(QueryResponse::CachedPeerPresence(record))
             }
 
             // ================================================================

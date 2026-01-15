@@ -35,6 +35,12 @@ dependencies:
   # WebRTC (voice/video/screenshare)
   flutter_webrtc: ^0.9.47
 
+  # Speech-to-text (native platform APIs)
+  speech_to_text: ^6.6.0
+
+  # Text-to-speech (native platform APIs)
+  flutter_tts: ^3.8.5
+
   # Utils
   uuid: ^4.3.1
   intl: ^0.18.1
@@ -42,6 +48,9 @@ dependencies:
   freezed_annotation: ^2.4.1
 
   # HTTP client for bridge communication
+
+  # WebSocket for Canvas real-time communication
+  web_socket_channel: ^2.4.0
   http: ^1.2.0
 
 dev_dependencies:
@@ -51,7 +60,7 @@ dev_dependencies:
   riverpod_generator: ^2.3.9
   build_runner: ^2.4.8
   mockito: ^5.4.4
-  ffigen: ^20.1.1
+  ffigen: ^16.1.0
   freezed: ^2.4.6
 
 flutter:

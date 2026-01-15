@@ -86,6 +86,7 @@ fn should_auto_start_node() -> bool {
 use communitas_core::{
     app::CommunitasApp,
     command::{Command, DiskTypeArg, Event, Query, QueryResponse},
+    conn_from_words,
     crdt::EntityType,
 };
 use serde_json::{Value, json};
@@ -1267,6 +1268,25 @@ pub fn list_tools(authenticated: bool) -> Vec<Tool> {
             }),
         },
         Tool {
+            name: "get_connection_words".to_string(),
+            description: "Get your connection words (external IP:port encoded as 4 memorable words). Share these out-of-band so others can connect to you for the first time.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {}
+            }),
+        },
+        Tool {
+            name: "connect_by_words".to_string(),
+            description: "Connect to a peer using their 4-word encoded address. After connecting, you'll receive their cryptographic identity packet.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "words": {"type": "string", "description": "Four words encoding the peer's external address (e.g., 'ocean forest moon star')"}
+                },
+                "required": ["words"]
+            }),
+        },
+        Tool {
             name: "network_disconnect".to_string(),
             description: "Disconnect from a specific peer by their four-word identity".to_string(),
             input_schema: json!({
@@ -1275,6 +1295,47 @@ pub fn list_tools(authenticated: bool) -> Vec<Tool> {
                     "peer_four_words": {"type": "string", "description": "Four-word identity of the peer to disconnect from"}
                 },
                 "required": ["peer_four_words"]
+            }),
+        },
+        // Peer Presence Tools (ADR-014: Network-wide peer discovery)
+        Tool {
+            name: "announce_presence".to_string(),
+            description: "Broadcast your presence (connection words) to connected peers so they can cache your current address.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {},
+                "required": []
+            }),
+        },
+        Tool {
+            name: "query_presence".to_string(),
+            description: "Find a peer's current address by their public key. Queries the network for the peer's presence record.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "pubkey": {"type": "string", "description": "Public key of the peer to find (hex or base64 encoded)"}
+                },
+                "required": ["pubkey"]
+            }),
+        },
+        Tool {
+            name: "get_our_presence".to_string(),
+            description: "Get your own presence record including your public key and current connection words.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {},
+                "required": []
+            }),
+        },
+        Tool {
+            name: "get_cached_presence".to_string(),
+            description: "Check if we have a cached presence record for a peer by their public key.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "pubkey": {"type": "string", "description": "Public key of the peer to look up (hex or base64 encoded)"}
+                },
+                "required": ["pubkey"]
             }),
         },
         // DHT tools (Distributed Hash Table storage via saorsa-node)
@@ -1810,6 +1871,13 @@ async fn dispatch_network_tools(
         "network_status" => Some(execute_network_status(app).await),
         "network_peers" => Some(execute_network_peers(app).await),
         "network_request_external_address" => Some(execute_request_external_address(app).await),
+        "get_connection_words" => Some(execute_get_connection_words(app).await),
+        "connect_by_words" => Some(execute_connect_by_words(app, args.clone()).await),
+        // Peer Presence tools
+        "announce_presence" => Some(execute_announce_presence(app).await),
+        "query_presence" => Some(execute_query_presence(app, args.clone()).await),
+        "get_our_presence" => Some(execute_get_our_presence(app).await),
+        "get_cached_presence" => Some(execute_get_cached_presence(app, args.clone()).await),
         _ => None,
     }
 }
@@ -3256,6 +3324,202 @@ async fn execute_request_external_address(app: &CommunitasApp) -> ToolCallResult
             "Failed to request external address: {}",
             e.message
         )),
+    }
+}
+
+async fn execute_get_connection_words(app: &CommunitasApp) -> ToolCallResult {
+    match app.query(Query::GetConnectionWords).await {
+        Ok(QueryResponse::OptionalString(Some(words))) => json_result(&json!({
+            "success": true,
+            "connection_words": words,
+            "message": "Share these words out-of-band so others can connect to you"
+        })),
+        Ok(QueryResponse::OptionalString(None)) => json_result(&json!({
+            "success": false,
+            "error": "No external address discovered yet. Start networking and wait for NAT reflection."
+        })),
+        Ok(_) => error_result("Unexpected response type"),
+        Err(e) => error_result(&format!("Failed to get connection words: {}", e.message)),
+    }
+}
+
+async fn execute_connect_by_words(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let words = require_str!(args, "words");
+
+    // Decode the 4 words to a SocketAddr
+    let addr = match conn_from_words(&words) {
+        Ok(addr) => addr,
+        Err(e) => return error_result(&format!("Invalid connection words '{}': {}", words, e)),
+    };
+
+    // Connect to the peer's address directly
+    // The gossip system will handle identity exchange
+    let cmd = Command::ConnectToPeer {
+        peer_four_words: addr.to_string(),
+    };
+
+    match app.execute(cmd).await {
+        Ok(events) => {
+            for event in &events {
+                if let Event::PeerConnected { peer_four_words } = event {
+                    return json_result(&json!({
+                        "success": true,
+                        "message": "Connected to peer",
+                        "peer_identity": peer_four_words,
+                        "address": addr.to_string()
+                    }));
+                }
+            }
+            json_result(&json!({
+                "success": true,
+                "message": "Connection initiated",
+                "address": addr.to_string()
+            }))
+        }
+        Err(e) => error_result(&format!("Failed to connect to {}: {}", addr, e.message)),
+    }
+}
+
+// Peer Presence executors (ADR-014)
+
+/// Parse a pubkey string that may be hex or base64 encoded
+fn parse_pubkey(pubkey_str: &str) -> Result<Vec<u8>, String> {
+    // Try hex first (common format)
+    if let Ok(bytes) = hex::decode(pubkey_str) {
+        return Ok(bytes);
+    }
+
+    // Try base64 standard
+    if let Ok(bytes) = BASE64_STANDARD.decode(pubkey_str) {
+        return Ok(bytes);
+    }
+
+    // Try base64 URL-safe
+    if let Ok(bytes) = BASE64_URL_SAFE.decode(pubkey_str) {
+        return Ok(bytes);
+    }
+
+    Err(format!(
+        "Invalid pubkey format: expected hex or base64, got '{}'",
+        if pubkey_str.len() > 20 {
+            format!("{}...", &pubkey_str[..20])
+        } else {
+            pubkey_str.to_string()
+        }
+    ))
+}
+
+async fn execute_announce_presence(app: &CommunitasApp) -> ToolCallResult {
+    match app.execute(Command::AnnouncePresence).await {
+        Ok(_events) => {
+            // Get our connection words to include in response
+            match app.query(Query::GetConnectionWords).await {
+                Ok(QueryResponse::OptionalString(Some(words))) => json_result(&json!({
+                    "success": true,
+                    "message": "Presence announced to connected peers",
+                    "connection_words": words
+                })),
+                Ok(QueryResponse::OptionalString(None)) => json_result(&json!({
+                    "success": true,
+                    "message": "Presence announced (connection words not yet discovered)"
+                })),
+                Ok(_) => json_result(&json!({
+                    "success": true,
+                    "message": "Presence announced to connected peers"
+                })),
+                Err(_) => json_result(&json!({
+                    "success": true,
+                    "message": "Presence announced to connected peers"
+                })),
+            }
+        }
+        Err(e) => error_result(&format!("Failed to announce presence: {}", e.message)),
+    }
+}
+
+async fn execute_query_presence(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let pubkey_str = require_str!(args, "pubkey");
+
+    let pubkey = match parse_pubkey(&pubkey_str) {
+        Ok(pk) => pk,
+        Err(e) => return error_result(&e),
+    };
+
+    let cmd = Command::QueryPeerPresence {
+        target_pubkey: pubkey,
+    };
+
+    match app.execute(cmd).await {
+        Ok(events) => {
+            // Check if we received a presence response
+            for event in &events {
+                if let Event::PeerPresenceReceived { record } = event {
+                    return json_result(&json!({
+                        "success": true,
+                        "found": true,
+                        "presence": {
+                            "pubkey": hex::encode(&record.pubkey),
+                            "connection_words": record.connection_words,
+                            "timestamp": record.timestamp
+                        }
+                    }));
+                }
+            }
+            // Query sent but no immediate response (async network query)
+            json_result(&json!({
+                "success": true,
+                "found": false,
+                "message": "Presence query sent to network. Results may arrive asynchronously."
+            }))
+        }
+        Err(e) => error_result(&format!("Failed to query presence: {}", e.message)),
+    }
+}
+
+async fn execute_get_our_presence(app: &CommunitasApp) -> ToolCallResult {
+    match app.query(Query::GetOurPresenceRecord).await {
+        Ok(QueryResponse::OurPresenceRecord(Some(record))) => json_result(&json!({
+            "success": true,
+            "presence": {
+                "pubkey": hex::encode(&record.pubkey),
+                "connection_words": record.connection_words,
+                "timestamp": record.timestamp
+            }
+        })),
+        Ok(QueryResponse::OurPresenceRecord(None)) => json_result(&json!({
+            "success": false,
+            "message": "No presence record available. Start networking first."
+        })),
+        Ok(_) => error_result("Unexpected response type"),
+        Err(e) => error_result(&format!("Failed to get our presence: {}", e.message)),
+    }
+}
+
+async fn execute_get_cached_presence(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let pubkey_str = require_str!(args, "pubkey");
+
+    let pubkey = match parse_pubkey(&pubkey_str) {
+        Ok(pk) => pk,
+        Err(e) => return error_result(&e),
+    };
+
+    match app.query(Query::GetCachedPeerPresence { pubkey }).await {
+        Ok(QueryResponse::CachedPeerPresence(Some(record))) => json_result(&json!({
+            "success": true,
+            "found": true,
+            "presence": {
+                "pubkey": hex::encode(&record.pubkey),
+                "connection_words": record.connection_words,
+                "timestamp": record.timestamp
+            }
+        })),
+        Ok(QueryResponse::CachedPeerPresence(None)) => json_result(&json!({
+            "success": true,
+            "found": false,
+            "message": "No cached presence for this peer"
+        })),
+        Ok(_) => error_result("Unexpected response type"),
+        Err(e) => error_result(&format!("Failed to get cached presence: {}", e.message)),
     }
 }
 

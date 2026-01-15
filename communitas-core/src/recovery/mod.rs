@@ -25,7 +25,7 @@ pub mod keys;
 pub mod mnemonic;
 
 pub use error::{RecoveryError, RecoveryResult};
-pub use keys::{IdentityKeys, derive_identity_keys};
+pub use keys::{IdentityKeys, create_new_identity, derive_identity_keys, recover_identity};
 pub use mnemonic::{
     RecoveryConfig, generate_recovery_mnemonic, mnemonic_to_words, validate_mnemonic,
 };

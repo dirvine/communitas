@@ -354,6 +354,108 @@ fn derive_four_words_from_pubkey(pubkey_bytes: &[u8]) -> RecoveryResult<String> 
     Ok(words.join("-"))
 }
 
+/// Create a new identity with a fresh BIP39 mnemonic.
+///
+/// This is a convenience function that combines mnemonic generation and key derivation
+/// in a single call. Use this when creating a new user identity that needs backup capability.
+///
+/// **IMPORTANT**: The mnemonic must be shown to the user exactly once for backup.
+/// It should NEVER be stored by the application. The user is responsible for
+/// securely recording their recovery phrase.
+///
+/// # Arguments
+///
+/// * `config` - Recovery configuration (word count, language, passphrase usage)
+/// * `passphrase` - Optional passphrase for additional security
+///
+/// # Returns
+///
+/// A tuple of (Mnemonic, IdentityKeys) where:
+/// - `Mnemonic` - The BIP39 mnemonic phrase (show to user for backup, then discard)
+/// - `IdentityKeys` - The derived cryptographic keys for identity operations
+///
+/// # Errors
+///
+/// Returns error if mnemonic generation or key derivation fails.
+///
+/// # Example
+///
+/// ```no_run
+/// use communitas_core::recovery::{create_new_identity, RecoveryConfig};
+///
+/// let config = RecoveryConfig::default(); // 24-word English mnemonic
+/// let (mnemonic, keys) = create_new_identity(&config, None).unwrap();
+///
+/// // CRITICAL: Show mnemonic to user for backup
+/// println!("Your recovery phrase (write it down!):");
+/// for (i, word) in mnemonic.words().enumerate() {
+///     println!("  {}. {}", i + 1, word);
+/// }
+///
+/// // Use the derived keys for identity operations
+/// println!("Your identity: {}", keys.four_words);
+///
+/// // After user confirms they've recorded the phrase, the mnemonic
+/// // goes out of scope and is securely zeroed from memory
+/// ```
+pub fn create_new_identity(
+    config: &super::mnemonic::RecoveryConfig,
+    passphrase: Option<&str>,
+) -> RecoveryResult<(bip39::Mnemonic, IdentityKeys)> {
+    // Generate a new cryptographically secure mnemonic
+    let mnemonic = super::mnemonic::generate_recovery_mnemonic(config)?;
+
+    // Derive identity keys from the mnemonic
+    let keys = derive_identity_keys(&mnemonic, passphrase)?;
+
+    Ok((mnemonic, keys))
+}
+
+/// Recover an identity from an existing BIP39 mnemonic phrase.
+///
+/// This function validates the mnemonic and derives the same identity keys
+/// that were originally created. Use this when restoring a user's identity
+/// from their backup recovery phrase.
+///
+/// # Arguments
+///
+/// * `mnemonic_words` - Space-separated BIP39 mnemonic words
+/// * `language` - BIP39 language for validation
+/// * `passphrase` - Optional passphrase used during original creation
+///
+/// # Returns
+///
+/// The `IdentityKeys` derived from the mnemonic, identical to the original.
+///
+/// # Errors
+///
+/// Returns error if:
+/// - The mnemonic is invalid (wrong words, bad checksum)
+/// - Key derivation fails
+///
+/// # Example
+///
+/// ```no_run
+/// use bip39::Language;
+/// use communitas_core::recovery::recover_identity;
+///
+/// let phrase = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+/// let keys = recover_identity(phrase, Language::English, None).unwrap();
+///
+/// println!("Recovered identity: {}", keys.four_words);
+/// ```
+pub fn recover_identity(
+    mnemonic_words: &str,
+    language: bip39::Language,
+    passphrase: Option<&str>,
+) -> RecoveryResult<IdentityKeys> {
+    // Validate and parse the mnemonic
+    let mnemonic = super::mnemonic::validate_mnemonic(mnemonic_words, language)?;
+
+    // Derive identity keys (will produce identical keys to original)
+    derive_identity_keys(&mnemonic, passphrase)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -550,5 +652,169 @@ mod tests {
         // Should work correctly
         assert_eq!(keys.signing_key_bytes.len(), mldsa65_sizes::PRIVATE_KEY);
         assert_eq!(keys.verifying_key_bytes.len(), mldsa65_sizes::PUBLIC_KEY);
+    }
+
+    #[test]
+    fn test_create_new_identity() {
+        use super::super::mnemonic::RecoveryConfig;
+
+        let config = RecoveryConfig::default();
+        let (mnemonic, keys) = create_new_identity(&config, None).unwrap();
+
+        // Verify mnemonic has 24 words (default)
+        assert_eq!(mnemonic.word_count(), 24);
+
+        // Verify keys are valid
+        assert_eq!(keys.signing_key_bytes.len(), mldsa65_sizes::PRIVATE_KEY);
+        assert_eq!(keys.verifying_key_bytes.len(), mldsa65_sizes::PUBLIC_KEY);
+        assert_eq!(
+            keys.decapsulation_key_bytes.len(),
+            mlkem768_sizes::DECAPSULATION_KEY
+        );
+        assert_eq!(
+            keys.encapsulation_key_bytes.len(),
+            mlkem768_sizes::ENCAPSULATION_KEY
+        );
+
+        // Verify four-word identity format
+        let parts: Vec<&str> = keys.four_words.split('-').collect();
+        assert_eq!(parts.len(), 4);
+    }
+
+    #[test]
+    fn test_create_new_identity_with_passphrase() {
+        use super::super::mnemonic::RecoveryConfig;
+
+        let config = RecoveryConfig::default();
+
+        // Create with passphrase
+        let (mnemonic, keys_with_pass) = create_new_identity(&config, Some("secret")).unwrap();
+
+        // Re-derive without passphrase should be different
+        let keys_no_pass = derive_identity_keys(&mnemonic, None).unwrap();
+
+        assert_ne!(keys_with_pass.four_words, keys_no_pass.four_words);
+        assert_ne!(
+            keys_with_pass.signing_key_bytes,
+            keys_no_pass.signing_key_bytes
+        );
+    }
+
+    #[test]
+    fn test_recover_identity_valid() {
+        let keys = recover_identity(TEST_MNEMONIC, Language::English, None).unwrap();
+
+        // Should produce valid keys
+        assert_eq!(keys.signing_key_bytes.len(), mldsa65_sizes::PRIVATE_KEY);
+        assert_eq!(keys.verifying_key_bytes.len(), mldsa65_sizes::PUBLIC_KEY);
+
+        // Verify four-word identity format
+        let parts: Vec<&str> = keys.four_words.split('-').collect();
+        assert_eq!(parts.len(), 4);
+    }
+
+    #[test]
+    fn test_recover_identity_matches_derive() {
+        let mnemonic = get_test_mnemonic();
+
+        // Derive directly
+        let keys_derived = derive_identity_keys(&mnemonic, None).unwrap();
+
+        // Recover from phrase string
+        let keys_recovered = recover_identity(TEST_MNEMONIC, Language::English, None).unwrap();
+
+        // Should produce identical keys
+        assert_eq!(keys_derived.four_words, keys_recovered.four_words);
+        assert_eq!(
+            keys_derived.signing_key_bytes,
+            keys_recovered.signing_key_bytes
+        );
+        assert_eq!(
+            keys_derived.verifying_key_bytes,
+            keys_recovered.verifying_key_bytes
+        );
+        assert_eq!(
+            keys_derived.decapsulation_key_bytes,
+            keys_recovered.decapsulation_key_bytes
+        );
+        assert_eq!(
+            keys_derived.encapsulation_key_bytes,
+            keys_recovered.encapsulation_key_bytes
+        );
+    }
+
+    #[test]
+    fn test_recover_identity_with_passphrase() {
+        // Recover with passphrase
+        let keys_with_pass =
+            recover_identity(TEST_MNEMONIC, Language::English, Some("secret")).unwrap();
+
+        // Recover without passphrase
+        let keys_no_pass = recover_identity(TEST_MNEMONIC, Language::English, None).unwrap();
+
+        // Different passphrases should produce different keys
+        assert_ne!(keys_with_pass.four_words, keys_no_pass.four_words);
+        assert_ne!(
+            keys_with_pass.signing_key_bytes,
+            keys_no_pass.signing_key_bytes
+        );
+    }
+
+    #[test]
+    fn test_recover_identity_invalid_mnemonic() {
+        // Invalid words
+        let result = recover_identity(
+            "invalid words that are not in bip39 dictionary at all",
+            Language::English,
+            None,
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_recover_identity_bad_checksum() {
+        // Valid words but wrong checksum (last word changed)
+        let result = recover_identity(
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon",
+            Language::English,
+            None,
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_create_and_recover_roundtrip() {
+        use super::super::mnemonic::RecoveryConfig;
+
+        // Create a new identity
+        let config = RecoveryConfig::default();
+        let (mnemonic, original_keys) = create_new_identity(&config, Some("passphrase")).unwrap();
+
+        // Convert mnemonic to string for recovery
+        let mnemonic_words: Vec<&str> = mnemonic.words().collect();
+        let mnemonic_string = mnemonic_words.join(" ");
+
+        // Recover from the mnemonic string
+        let recovered_keys =
+            recover_identity(&mnemonic_string, Language::English, Some("passphrase")).unwrap();
+
+        // Keys should be identical
+        assert_eq!(original_keys.four_words, recovered_keys.four_words);
+        assert_eq!(
+            original_keys.signing_key_bytes,
+            recovered_keys.signing_key_bytes
+        );
+        assert_eq!(
+            original_keys.verifying_key_bytes,
+            recovered_keys.verifying_key_bytes
+        );
+        assert_eq!(
+            original_keys.decapsulation_key_bytes,
+            recovered_keys.decapsulation_key_bytes
+        );
+        assert_eq!(
+            original_keys.encapsulation_key_bytes,
+            recovered_keys.encapsulation_key_bytes
+        );
     }
 }

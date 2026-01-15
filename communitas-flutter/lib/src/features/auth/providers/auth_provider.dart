@@ -15,7 +15,15 @@ const bool kBridgeMode = kIsWeb && !kDemoMode;
 /// Authentication state for Communitas.
 class AuthState {
   final bool isAuthenticated;
+
+  /// Hex-encoded ML-DSA-65 public key (THE identity).
+  final String? pubkeyHex;
+
+  /// Legacy: Four words used for vault storage filename.
+  /// TODO: Migrate vault storage to use pubkeyHex.
   final String? fourWords;
+
+  /// User-chosen display name (shown in UI).
   final String? displayName;
   final List<VaultInfo> availableVaults;
   final VaultInfo? currentVault;
@@ -23,6 +31,7 @@ class AuthState {
 
   const AuthState({
     this.isAuthenticated = false,
+    this.pubkeyHex,
     this.fourWords,
     this.displayName,
     this.availableVaults = const [],
@@ -32,6 +41,7 @@ class AuthState {
 
   AuthState copyWith({
     bool? isAuthenticated,
+    String? pubkeyHex,
     String? fourWords,
     String? displayName,
     List<VaultInfo>? availableVaults,
@@ -40,6 +50,7 @@ class AuthState {
   }) {
     return AuthState(
       isAuthenticated: isAuthenticated ?? this.isAuthenticated,
+      pubkeyHex: pubkeyHex ?? this.pubkeyHex,
       fourWords: fourWords ?? this.fourWords,
       displayName: displayName ?? this.displayName,
       availableVaults: availableVaults ?? this.availableVaults,

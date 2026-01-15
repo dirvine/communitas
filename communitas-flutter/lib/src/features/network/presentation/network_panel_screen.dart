@@ -10,8 +10,9 @@ import '../providers/presence_provider.dart';
 /// Network status panel showing P2P connectivity, presence, and connection words.
 ///
 /// This screen implements the identity/presence system from ADR-012, ADR-013, ADR-014:
-/// - Identity Words: Permanent WHO you are (derived from ML-DSA-65 pubkey)
+/// - pubkeyHex: Permanent WHO you are (ML-DSA-65 public key)
 /// - Connection Words: Ephemeral WHERE you are (IP:port encoded as 4 words)
+/// - Display Name: User-chosen name shown in UI
 /// - Presence: Network-wide peer discovery via signed records
 class NetworkPanelScreen extends ConsumerStatefulWidget {
   const NetworkPanelScreen({super.key});
@@ -365,30 +366,29 @@ class _NetworkPanelScreenState extends ConsumerState<NetworkPanelScreen> {
             data: (presence) => Row(
               children: [
                 Icon(
-                  Icons.fingerprint,
+                  Icons.person,
                   size: 16,
                   color: CommunitasColors.cream.withOpacity(0.5),
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  'Identity: ',
+                  'Display Name: ',
                   style: TextStyle(
                     fontSize: 12,
                     color: CommunitasColors.cream.withOpacity(0.5),
                   ),
                 ),
                 Text(
-                  presence.identityWords,
+                  presence.displayName,
                   style: TextStyle(
                     fontSize: 12,
-                    fontFamily: 'monospace',
                     color: CommunitasColors.cream.withOpacity(0.7),
                   ),
                 ),
                 const Spacer(),
                 Tooltip(
                   message:
-                      'Your permanent identity (WHO you are).\nDifferent from connection words (WHERE you are).',
+                      'Your display name (shown to others).\nConnection words tell others WHERE to find you.',
                   child: Icon(
                     Icons.help_outline,
                     size: 16,
@@ -547,6 +547,8 @@ class _NetworkPanelScreenState extends ConsumerState<NetworkPanelScreen> {
 
   Widget _buildPeerTile(PeerInfo peer) {
     final isDirect = peer.connectionType == 'direct';
+    // Show display name if available, otherwise truncate pubkeyHex
+    final displayText = peer.displayName ?? _truncatePubkey(peer.pubkeyHex);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -566,7 +568,7 @@ class _NetworkPanelScreenState extends ConsumerState<NetworkPanelScreen> {
             ),
             child: Center(
               child: Text(
-                (peer.displayName ?? peer.fourWords)[0].toUpperCase(),
+                displayText.isNotEmpty ? displayText[0].toUpperCase() : '?',
                 style: const TextStyle(
                   fontWeight: FontWeight.bold,
                   color: CommunitasColors.cream,
@@ -580,11 +582,11 @@ class _NetworkPanelScreenState extends ConsumerState<NetworkPanelScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  peer.displayName ?? peer.fourWords,
+                  displayText,
                   style: const TextStyle(fontWeight: FontWeight.w500),
                 ),
                 Text(
-                  peer.fourWords,
+                  _truncatePubkey(peer.pubkeyHex),
                   style: TextStyle(
                     fontSize: 12,
                     fontFamily: 'monospace',
@@ -681,5 +683,11 @@ class _NetworkPanelScreenState extends ConsumerState<NetworkPanelScreen> {
         ],
       ),
     );
+  }
+
+  /// Truncate a pubkey hex string for display (first 8 + last 4 chars).
+  String _truncatePubkey(String pubkeyHex) {
+    if (pubkeyHex.length <= 16) return pubkeyHex;
+    return '${pubkeyHex.substring(0, 8)}...${pubkeyHex.substring(pubkeyHex.length - 4)}';
   }
 }

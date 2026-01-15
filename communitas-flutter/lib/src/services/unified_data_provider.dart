@@ -52,19 +52,23 @@ class UnifiedEntity {
 
 /// Unified contact model for both demo and bridge data.
 class UnifiedContact {
-  final String fourWords;
+  /// Hex-encoded ML-DSA-65 public key (THE identity).
+  final String pubkeyHex;
+
+  /// User-chosen display name (shown in UI).
   final String displayName;
   final String status;
 
   const UnifiedContact({
-    required this.fourWords,
+    required this.pubkeyHex,
     required this.displayName,
     required this.status,
   });
 
   factory UnifiedContact.fromDemo(DemoContact demo) {
     return UnifiedContact(
-      fourWords: demo.fourWords,
+      // Use fourWords as placeholder for pubkeyHex in demo mode
+      pubkeyHex: demo.fourWords,
       displayName: demo.displayName,
       status: demo.status,
     );
@@ -72,7 +76,7 @@ class UnifiedContact {
 
   factory UnifiedContact.fromBridge(Map<String, dynamic> json) {
     return UnifiedContact(
-      fourWords: json['four_words'] as String? ?? '',
+      pubkeyHex: json['pubkey_hex'] as String? ?? json['four_words'] as String? ?? '',
       displayName: json['display_name'] as String? ?? json['four_words'] as String? ?? '',
       status: json['status'] as String? ?? 'offline',
     );
@@ -135,19 +139,23 @@ class UnifiedMessage {
 // ============================================================
 
 /// Provider for user identity info.
-final unifiedIdentityProvider = Provider<({String fourWords, String displayName})>((ref) {
+///
+/// Returns pubkeyHex (permanent identity) and displayName (shown in UI).
+final unifiedIdentityProvider = Provider<({String pubkeyHex, String displayName})>((ref) {
   final auth = ref.watch(authNotifierProvider);
 
   if (auth.isAuthenticated) {
+    // Use pubkeyHex if available, fallback to fourWords during migration
+    final pubkeyHex = auth.pubkeyHex ?? auth.fourWords ?? 'unknown-identity';
     return (
-      fourWords: auth.fourWords ?? 'unknown-identity',
+      pubkeyHex: pubkeyHex,
       displayName: auth.displayName ?? 'Unknown User',
     );
   }
 
-  // Fallback to demo identity
+  // Fallback to demo identity (using fourWords as placeholder for pubkeyHex)
   return (
-    fourWords: DemoData.demoIdentity.fourWords,
+    pubkeyHex: DemoData.demoIdentity.fourWords,
     displayName: DemoData.demoIdentity.displayName,
   );
 });

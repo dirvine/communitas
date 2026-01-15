@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../services/bridge_provider.dart';
+import '../../../services/unified_data_provider.dart';
 
 // ============================================================
 // Presence & Connection Words Providers (ADR-012, ADR-013, ADR-014)
@@ -16,15 +17,6 @@ final connectionWordsProvider = FutureProvider<String?>((ref) async {
   return client.getConnectionWords();
 });
 
-/// Our identity words (permanent cryptographic identity).
-///
-/// Derived from ML-DSA-65 public key via BLAKE3 hash.
-/// These never change and are WHO you are on the network.
-final identityWordsProvider = FutureProvider<String?>((ref) async {
-  final client = ref.watch(bridgeClientProvider);
-  return client.getIdentityWords();
-});
-
 /// Our current presence record (ADR-014).
 ///
 /// Contains connection_words, timestamp, and signature.
@@ -36,13 +28,19 @@ final ourPresenceRecordProvider =
 
 /// Presence information model.
 class PresenceInfo {
-  final String identityWords;
+  /// Hex-encoded ML-DSA-65 public key (THE identity).
+  final String pubkeyHex;
+
+  /// User-chosen display name (shown in UI).
+  final String displayName;
+
   final String? connectionWords;
   final bool isOnline;
   final DateTime? lastSeen;
 
   const PresenceInfo({
-    required this.identityWords,
+    required this.pubkeyHex,
+    required this.displayName,
     this.connectionWords,
     required this.isOnline,
     this.lastSeen,
@@ -51,12 +49,13 @@ class PresenceInfo {
 
 /// Combined presence information for the current user.
 final currentUserPresenceProvider = FutureProvider<PresenceInfo>((ref) async {
-  final identityWords = await ref.watch(identityWordsProvider.future);
   final connectionWords = await ref.watch(connectionWordsProvider.future);
   final isOnline = await ref.watch(bridgeStatusProvider.future);
+  final identity = ref.watch(unifiedIdentityProvider);
 
   return PresenceInfo(
-    identityWords: identityWords ?? 'unknown-identity',
+    pubkeyHex: identity.pubkeyHex,
+    displayName: identity.displayName,
     connectionWords: connectionWords,
     isOnline: isOnline,
     lastSeen: isOnline ? DateTime.now() : null,
@@ -159,14 +158,17 @@ final presenceControllerProvider =
 
 /// Peer information with presence data.
 class PeerInfo {
-  final String fourWords;
+  /// Hex-encoded ML-DSA-65 public key (THE identity).
+  final String pubkeyHex;
+
+  /// User-chosen display name (shown in UI).
   final String? displayName;
   final String connectionType;
   final String? latency;
   final bool isOnline;
 
   const PeerInfo({
-    required this.fourWords,
+    required this.pubkeyHex,
     this.displayName,
     required this.connectionType,
     this.latency,
@@ -175,7 +177,7 @@ class PeerInfo {
 
   factory PeerInfo.fromJson(Map<String, dynamic> json) {
     return PeerInfo(
-      fourWords: json['four_words'] as String? ?? '',
+      pubkeyHex: json['pubkey_hex'] as String? ?? json['four_words'] as String? ?? '',
       displayName: json['display_name'] as String?,
       connectionType: json['connection_type'] as String? ?? 'direct',
       latency: json['latency'] as String?,

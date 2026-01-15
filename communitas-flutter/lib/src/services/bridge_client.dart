@@ -498,24 +498,6 @@ class BridgeClient {
     }
   }
 
-  /// Get our identity words (permanent cryptographic identity).
-  ///
-  /// These are derived from our ML-DSA-65 public key and never change.
-  /// Different from connection words - identity words are permanent.
-  Future<String?> getIdentityWords() async {
-    try {
-      final response =
-          await _client.get(Uri.parse('$baseUrl/api/identity/words'));
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return data['four_words'];
-      }
-      return null;
-    } catch (e) {
-      return null;
-    }
-  }
-
   // ============================================================
   // Contacts
   // ============================================================

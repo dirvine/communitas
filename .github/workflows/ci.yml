@@ -66,9 +66,13 @@ jobs:
           # Run clippy with practical checks on library crates
           # Note: unwrap_used/expect_used excluded - too restrictive for test code,
           # better caught in code review per CLAUDE.md policy
-          # Excluded: communitas-desktop (requires Tauri), distributed-test-orchestrator (CLI tool)
+          # Excluded:
+          # - communitas-desktop: requires Tauri build environment
+          # - communitas-bindings: generated Flutter Rust Bridge code uses unimplemented!()
+          # - distributed-test-orchestrator: CLI tool uses println!()
           cargo clippy --workspace \
             --exclude communitas-desktop \
+            --exclude communitas-bindings \
             --exclude distributed-test-orchestrator \
             --all-features -- \
             -D clippy::panic \

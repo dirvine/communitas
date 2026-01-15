@@ -1114,6 +1114,7 @@ dependencies = [
  "ciborium",
  "communitas-kanban",
  "dirs",
+ "fips203",
  "fips204",
  "flate2",
  "four-word-networking",

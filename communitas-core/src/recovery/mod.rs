@@ -10,11 +10,22 @@
 //! This module provides BIP-39 compatible mnemonic phrase generation and
 //! validation for vault recovery. Users can backup their vault with a
 //! 24-word recovery phrase and restore it on any device.
+//!
+//! ## Key Derivation
+//!
+//! The recovery system uses deterministic key derivation from BIP39 mnemonics:
+//! - ML-DSA-65 signing keys for identity authentication
+//! - ML-KEM-768 encapsulation keys for message encryption
+//! - Four-word identity derived from the public signing key
+//!
+//! See [`derive_identity_keys`] for the key derivation function.
 
 pub mod error;
+pub mod keys;
 pub mod mnemonic;
 
 pub use error::{RecoveryError, RecoveryResult};
+pub use keys::{IdentityKeys, derive_identity_keys};
 pub use mnemonic::{
     RecoveryConfig, generate_recovery_mnemonic, mnemonic_to_words, validate_mnemonic,
 };

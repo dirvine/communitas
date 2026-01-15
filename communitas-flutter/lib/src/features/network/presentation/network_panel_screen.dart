@@ -1,16 +1,79 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/colors.dart';
 import '../../../shared/widgets/sidebar.dart';
 import '../../../shared/widgets/adaptive_layout.dart';
+import '../providers/presence_provider.dart';
 
-/// Network status panel showing P2P connectivity.
-class NetworkPanelScreen extends ConsumerWidget {
+/// Network status panel showing P2P connectivity, presence, and connection words.
+///
+/// This screen implements the identity/presence system from ADR-012, ADR-013, ADR-014:
+/// - Identity Words: Permanent WHO you are (derived from ML-DSA-65 pubkey)
+/// - Connection Words: Ephemeral WHERE you are (IP:port encoded as 4 words)
+/// - Presence: Network-wide peer discovery via signed records
+class NetworkPanelScreen extends ConsumerStatefulWidget {
   const NetworkPanelScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<NetworkPanelScreen> createState() => _NetworkPanelScreenState();
+}
+
+class _NetworkPanelScreenState extends ConsumerState<NetworkPanelScreen> {
+  final TextEditingController _connectionWordsController =
+      TextEditingController();
+  bool _isConnecting = false;
+
+  @override
+  void dispose() {
+    _connectionWordsController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _connectToPeer() async {
+    final words = _connectionWordsController.text.trim();
+    if (words.isEmpty) return;
+
+    setState(() => _isConnecting = true);
+
+    final controller = ref.read(presenceControllerProvider.notifier);
+    final success = await controller.connectWithConnectionWords(words);
+
+    setState(() => _isConnecting = false);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(success
+              ? 'Connected to peer!'
+              : 'Failed to connect. Check the connection words.'),
+          backgroundColor:
+              success ? CommunitasColors.online : CommunitasColors.error,
+        ),
+      );
+      if (success) {
+        _connectionWordsController.clear();
+      }
+    }
+  }
+
+  void _copyToClipboard(String text, String label) {
+    Clipboard.setData(ClipboardData(text: text));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('$label copied to clipboard'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final networkStatus = ref.watch(networkStatusProvider);
+    final currentPresence = ref.watch(currentUserPresenceProvider);
+    final connectedPeers = ref.watch(connectedPeersProvider);
+
     return AdaptiveLayout(
       sidebar: const Sidebar(),
       body: Scaffold(
@@ -19,7 +82,11 @@ class NetworkPanelScreen extends ConsumerWidget {
           actions: [
             IconButton(
               icon: const Icon(Icons.refresh),
-              onPressed: () {},
+              onPressed: () {
+                ref.invalidate(networkStatusProvider);
+                ref.invalidate(currentUserPresenceProvider);
+                ref.invalidate(connectedPeersProvider);
+              },
               tooltip: 'Refresh',
             ),
           ],
@@ -30,16 +97,20 @@ class NetworkPanelScreen extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Connection status card
-              _buildStatusCard(context),
+              _buildStatusCard(context, networkStatus, currentPresence),
               const SizedBox(height: 24),
 
-              // Bootstrap nodes
+              // Your Connection Words (shareable)
+              _buildConnectionWordsCard(context, currentPresence),
+              const SizedBox(height: 24),
+
+              // Connect to Peer
               Text(
-                'Bootstrap Nodes',
+                'Connect to Peer',
                 style: Theme.of(context).textTheme.titleLarge,
               ),
               const SizedBox(height: 16),
-              _buildBootstrapNodes(),
+              _buildConnectCard(context),
               const SizedBox(height: 24),
 
               // Connected peers
@@ -48,7 +119,7 @@ class NetworkPanelScreen extends ConsumerWidget {
                 style: Theme.of(context).textTheme.titleLarge,
               ),
               const SizedBox(height: 16),
-              _buildPeerList(),
+              _buildPeerList(connectedPeers),
               const SizedBox(height: 24),
 
               // Network stats
@@ -57,7 +128,7 @@ class NetworkPanelScreen extends ConsumerWidget {
                 style: Theme.of(context).textTheme.titleLarge,
               ),
               const SizedBox(height: 16),
-              _buildStats(),
+              _buildStats(networkStatus),
             ],
           ),
         ),
@@ -65,13 +136,50 @@ class NetworkPanelScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildStatusCard(BuildContext context) {
+  Widget _buildStatusCard(
+    BuildContext context,
+    AsyncValue<NetworkStatus> networkStatusAsync,
+    AsyncValue<PresenceInfo> presenceAsync,
+  ) {
+    return networkStatusAsync.when(
+      loading: () => _buildStatusCardContent(
+        context,
+        isOnline: false,
+        peerCount: 0,
+        bootstrapCount: 0,
+        natType: 'Checking...',
+      ),
+      error: (e, _) => _buildStatusCardContent(
+        context,
+        isOnline: false,
+        peerCount: 0,
+        bootstrapCount: 0,
+        natType: 'Error',
+      ),
+      data: (status) => _buildStatusCardContent(
+        context,
+        isOnline: status.isActive,
+        peerCount: status.peerCount,
+        bootstrapCount: status.bootstrapNodesConnected,
+        natType: status.natType ?? 'Unknown',
+      ),
+    );
+  }
+
+  Widget _buildStatusCardContent(
+    BuildContext context, {
+    required bool isOnline,
+    required int peerCount,
+    required int bootstrapCount,
+    required String natType,
+  }) {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            CommunitasColors.online.withOpacity(0.2),
+            (isOnline ? CommunitasColors.online : CommunitasColors.offline)
+                .withOpacity(0.2),
             CommunitasColors.moss,
           ],
           begin: Alignment.topLeft,
@@ -85,12 +193,16 @@ class NetworkPanelScreen extends ConsumerWidget {
             width: 64,
             height: 64,
             decoration: BoxDecoration(
-              color: CommunitasColors.online.withOpacity(0.2),
+              color: (isOnline
+                      ? CommunitasColors.online
+                      : CommunitasColors.offline)
+                  .withOpacity(0.2),
               borderRadius: BorderRadius.circular(32),
             ),
-            child: const Icon(
-              Icons.wifi,
-              color: CommunitasColors.online,
+            child: Icon(
+              isOnline ? Icons.wifi : Icons.wifi_off,
+              color:
+                  isOnline ? CommunitasColors.online : CommunitasColors.offline,
               size: 32,
             ),
           ),
@@ -100,14 +212,16 @@ class NetworkPanelScreen extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Connected',
+                  isOnline ? 'Connected' : 'Offline',
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        color: CommunitasColors.online,
+                        color: isOnline
+                            ? CommunitasColors.online
+                            : CommunitasColors.offline,
                       ),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '5 peers • 3 bootstrap nodes',
+                  '$peerCount peers \u2022 $bootstrapCount bootstrap nodes',
                   style: TextStyle(
                     color: CommunitasColors.cream.withOpacity(0.7),
                   ),
@@ -120,7 +234,7 @@ class NetworkPanelScreen extends ConsumerWidget {
             children: [
               const Text('NAT Type'),
               Text(
-                'Symmetric',
+                natType,
                 style: TextStyle(
                   color: CommunitasColors.jade,
                   fontWeight: FontWeight.w600,
@@ -133,83 +247,155 @@ class NetworkPanelScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildBootstrapNodes() {
-    final nodes = [
-      _NodeInfo(
-        name: 'saorsa-2.saorsalabs.com',
-        address: '142.93.199.50:11000',
-        status: 'connected',
-        region: 'NYC1',
-      ),
-      _NodeInfo(
-        name: 'saorsa-3.saorsalabs.com',
-        address: '147.182.234.192:11000',
-        status: 'connected',
-        region: 'SFO3',
-      ),
-      _NodeInfo(
-        name: 'saorsa-4.saorsalabs.com',
-        address: '206.189.7.117:11000',
-        status: 'standby',
-        region: 'AMS3',
-      ),
-    ];
-
-    return Column(
-      children: nodes.map((node) => _buildNodeTile(node)).toList(),
-    );
-  }
-
-  Widget _buildNodeTile(_NodeInfo node) {
-    final isConnected = node.status == 'connected';
-
+  Widget _buildConnectionWordsCard(
+    BuildContext context,
+    AsyncValue<PresenceInfo> presenceAsync,
+  ) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: CommunitasColors.moss,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: CommunitasColors.jade.withOpacity(0.3),
+          width: 1,
+        ),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 10,
-            height: 10,
-            decoration: BoxDecoration(
-              color: isConnected
-                  ? CommunitasColors.online
-                  : CommunitasColors.offline,
-              shape: BoxShape.circle,
+          Row(
+            children: [
+              Icon(
+                Icons.share_location,
+                color: CommunitasColors.jade,
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'Your Connection Words',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: CommunitasColors.jade,
+                    ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Share these 4 words for others to connect to you. They encode your current IP:port.',
+            style: TextStyle(
+              fontSize: 12,
+              color: CommunitasColors.cream.withOpacity(0.6),
             ),
           ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          const SizedBox(height: 16),
+          presenceAsync.when(
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (e, _) => Text(
+              'Unable to get connection words',
+              style: TextStyle(color: CommunitasColors.error),
+            ),
+            data: (presence) {
+              final words = presence.connectionWords;
+              if (words == null || words.isEmpty) {
+                return Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: CommunitasColors.fern,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline,
+                          color: CommunitasColors.cream.withOpacity(0.7)),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Start networking to get your connection words',
+                          style: TextStyle(
+                            color: CommunitasColors.cream.withOpacity(0.7),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }
+              return Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 16),
+                      decoration: BoxDecoration(
+                        color: CommunitasColors.fern,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        words,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 1.5,
+                          fontFamily: 'monospace',
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  IconButton(
+                    onPressed: () =>
+                        _copyToClipboard(words, 'Connection words'),
+                    icon: const Icon(Icons.copy),
+                    tooltip: 'Copy to clipboard',
+                    style: IconButton.styleFrom(
+                      backgroundColor: CommunitasColors.jade,
+                      foregroundColor: CommunitasColors.cream,
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 16),
+          Divider(color: CommunitasColors.cream.withOpacity(0.1)),
+          const SizedBox(height: 12),
+          presenceAsync.when(
+            loading: () => const SizedBox.shrink(),
+            error: (_, __) => const SizedBox.shrink(),
+            data: (presence) => Row(
               children: [
-                Text(
-                  node.name,
-                  style: const TextStyle(fontWeight: FontWeight.w500),
+                Icon(
+                  Icons.fingerprint,
+                  size: 16,
+                  color: CommunitasColors.cream.withOpacity(0.5),
                 ),
+                const SizedBox(width: 8),
                 Text(
-                  node.address,
+                  'Identity: ',
                   style: TextStyle(
                     fontSize: 12,
-                    color: CommunitasColors.jade,
+                    color: CommunitasColors.cream.withOpacity(0.5),
+                  ),
+                ),
+                Text(
+                  presence.identityWords,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontFamily: 'monospace',
+                    color: CommunitasColors.cream.withOpacity(0.7),
+                  ),
+                ),
+                const Spacer(),
+                Tooltip(
+                  message:
+                      'Your permanent identity (WHO you are).\nDifferent from connection words (WHERE you are).',
+                  child: Icon(
+                    Icons.help_outline,
+                    size: 16,
+                    color: CommunitasColors.cream.withOpacity(0.5),
                   ),
                 ),
               ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: CommunitasColors.fern,
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Text(
-              node.region,
-              style: const TextStyle(fontSize: 11),
             ),
           ),
         ],
@@ -217,24 +403,90 @@ class NetworkPanelScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildPeerList() {
-    final peers = [
-      _PeerInfo(
-        fourWords: 'river-mountain-sun-cloud',
-        displayName: 'Alice',
-        latency: '42ms',
-        status: 'direct',
+  Widget _buildConnectCard(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: CommunitasColors.moss,
+        borderRadius: BorderRadius.circular(12),
       ),
-      _PeerInfo(
-        fourWords: 'wind-valley-tree-stone',
-        displayName: 'Bob',
-        latency: '128ms',
-        status: 'relayed',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Enter the connection words shared by another user:',
+            style: TextStyle(
+              fontSize: 14,
+              color: CommunitasColors.cream.withOpacity(0.7),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _connectionWordsController,
+                  decoration: InputDecoration(
+                    hintText: 'e.g., ocean-forest-moon-star',
+                    hintStyle: TextStyle(
+                      color: CommunitasColors.cream.withOpacity(0.3),
+                    ),
+                    filled: true,
+                    fillColor: CommunitasColors.fern,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 14,
+                    ),
+                  ),
+                  style: const TextStyle(
+                    fontFamily: 'monospace',
+                    fontSize: 16,
+                  ),
+                  onSubmitted: (_) => _connectToPeer(),
+                ),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                height: 48,
+                child: ElevatedButton.icon(
+                  onPressed: _isConnecting ? null : _connectToPeer,
+                  icon: _isConnecting
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.link),
+                  label: Text(_isConnecting ? 'Connecting...' : 'Connect'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: CommunitasColors.jade,
+                    foregroundColor: CommunitasColors.cream,
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
-    ];
+    );
+  }
 
-    if (peers.isEmpty) {
-      return Container(
+  Widget _buildPeerList(AsyncValue<List<PeerInfo>> peersAsync) {
+    return peersAsync.when(
+      loading: () => Container(
+        padding: const EdgeInsets.all(32),
+        decoration: BoxDecoration(
+          color: CommunitasColors.moss,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Center(child: CircularProgressIndicator()),
+      ),
+      error: (e, _) => Container(
         padding: const EdgeInsets.all(32),
         decoration: BoxDecoration(
           color: CommunitasColors.moss,
@@ -242,22 +494,59 @@ class NetworkPanelScreen extends ConsumerWidget {
         ),
         child: Center(
           child: Text(
-            'No peers connected',
+            'Error loading peers',
             style: TextStyle(
-              color: CommunitasColors.cream.withOpacity(0.5),
+              color: CommunitasColors.error,
             ),
           ),
         ),
-      );
-    }
+      ),
+      data: (peers) {
+        if (peers.isEmpty) {
+          return Container(
+            padding: const EdgeInsets.all(32),
+            decoration: BoxDecoration(
+              color: CommunitasColors.moss,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Center(
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.people_outline,
+                    size: 48,
+                    color: CommunitasColors.cream.withOpacity(0.3),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'No peers connected',
+                    style: TextStyle(
+                      color: CommunitasColors.cream.withOpacity(0.5),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Share your connection words to invite others',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: CommunitasColors.cream.withOpacity(0.3),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
 
-    return Column(
-      children: peers.map((peer) => _buildPeerTile(peer)).toList(),
+        return Column(
+          children: peers.map((peer) => _buildPeerTile(peer)).toList(),
+        );
+      },
     );
   }
 
-  Widget _buildPeerTile(_PeerInfo peer) {
-    final isDirect = peer.status == 'direct';
+  Widget _buildPeerTile(PeerInfo peer) {
+    final isDirect = peer.connectionType == 'direct';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -277,7 +566,7 @@ class NetworkPanelScreen extends ConsumerWidget {
             ),
             child: Center(
               child: Text(
-                peer.displayName[0].toUpperCase(),
+                (peer.displayName ?? peer.fourWords)[0].toUpperCase(),
                 style: const TextStyle(
                   fontWeight: FontWeight.bold,
                   color: CommunitasColors.cream,
@@ -291,13 +580,14 @@ class NetworkPanelScreen extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  peer.displayName,
+                  peer.displayName ?? peer.fourWords,
                   style: const TextStyle(fontWeight: FontWeight.w500),
                 ),
                 Text(
                   peer.fourWords,
                   style: TextStyle(
                     fontSize: 12,
+                    fontFamily: 'monospace',
                     color: CommunitasColors.jade,
                   ),
                 ),
@@ -316,7 +606,7 @@ class NetworkPanelScreen extends ConsumerWidget {
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(
-                  peer.status,
+                  peer.connectionType,
                   style: TextStyle(
                     fontSize: 11,
                     color: isDirect
@@ -325,14 +615,16 @@ class NetworkPanelScreen extends ConsumerWidget {
                   ),
                 ),
               ),
-              const SizedBox(height: 4),
-              Text(
-                peer.latency,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: CommunitasColors.cream.withOpacity(0.5),
+              if (peer.latency != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  peer.latency!,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: CommunitasColors.cream.withOpacity(0.5),
+                  ),
                 ),
-              ),
+              ],
             ],
           ),
         ],
@@ -340,18 +632,22 @@ class NetworkPanelScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildStats() {
-    return Wrap(
-      spacing: 16,
-      runSpacing: 16,
-      children: [
-        _buildStatCard('Messages Sent', '1,247'),
-        _buildStatCard('Messages Received', '3,891'),
-        _buildStatCard('Data Uploaded', '24.5 MB'),
-        _buildStatCard('Data Downloaded', '128.3 MB'),
-        _buildStatCard('Uptime', '4h 32m'),
-        _buildStatCard('Reconnections', '2'),
-      ],
+  Widget _buildStats(AsyncValue<NetworkStatus> networkStatusAsync) {
+    return networkStatusAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => Text('Error: $e'),
+      data: (status) => Wrap(
+        spacing: 16,
+        runSpacing: 16,
+        children: [
+          _buildStatCard('Peers Connected', '${status.peerCount}'),
+          _buildStatCard('Bootstrap Nodes', '${status.bootstrapNodesConnected}'),
+          _buildStatCard(
+              'Network Status', status.isActive ? 'Active' : 'Inactive'),
+          if (status.externalAddress != null)
+            _buildStatCard('External Address', status.externalAddress!),
+        ],
+      ),
     );
   }
 
@@ -386,32 +682,4 @@ class NetworkPanelScreen extends ConsumerWidget {
       ),
     );
   }
-}
-
-class _NodeInfo {
-  final String name;
-  final String address;
-  final String status;
-  final String region;
-
-  _NodeInfo({
-    required this.name,
-    required this.address,
-    required this.status,
-    required this.region,
-  });
-}
-
-class _PeerInfo {
-  final String fourWords;
-  final String displayName;
-  final String latency;
-  final String status;
-
-  _PeerInfo({
-    required this.fourWords,
-    required this.displayName,
-    required this.latency,
-    required this.status,
-  });
 }

@@ -414,7 +414,7 @@ class BridgeClient {
     return data['peers'] ?? [];
   }
 
-  /// Connect to a peer by four-word address.
+  /// Connect to a peer by four-word address (connection words or identity).
   Future<bool> connectToPeer(String fourWords) async {
     final response = await _client.post(
       Uri.parse('$baseUrl/api/network/connect'),
@@ -432,6 +432,88 @@ class BridgeClient {
       body: jsonEncode({'four_words': fourWords}),
     );
     return response.statusCode == 200;
+  }
+
+  // ============================================================
+  // Presence & Connection Words (ADR-012, ADR-013, ADR-014)
+  // ============================================================
+
+  /// Get our connection words (ephemeral IP:port as 4 memorable words).
+  ///
+  /// Share these words out-of-band for first-time connections.
+  /// Different from identity words - connection words are ephemeral.
+  Future<String?> getConnectionWords() async {
+    try {
+      final response = await _client
+          .get(Uri.parse('$baseUrl/api/network/connection-words'));
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['connection_words'];
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// Get our current presence record (ADR-014).
+  ///
+  /// Returns our signed presence record with connection words and timestamp.
+  Future<Map<String, dynamic>?> getOurPresenceRecord() async {
+    try {
+      final response =
+          await _client.get(Uri.parse('$baseUrl/api/network/presence'));
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// Announce our presence to the network (ADR-014).
+  ///
+  /// Broadcasts a signed PresenceRecord to the gossip network.
+  Future<bool> announcePresence() async {
+    final response =
+        await _client.post(Uri.parse('$baseUrl/api/network/presence/announce'));
+    return response.statusCode == 200;
+  }
+
+  /// Query the network for a peer's presence (ADR-014).
+  ///
+  /// Sends a presence query to find another peer's current location.
+  Future<Map<String, dynamic>?> queryPeerPresence(String pubkeyHex) async {
+    try {
+      final response = await _client.get(
+        Uri.parse('$baseUrl/api/network/presence/$pubkeyHex'),
+      );
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// Get our identity words (permanent cryptographic identity).
+  ///
+  /// These are derived from our ML-DSA-65 public key and never change.
+  /// Different from connection words - identity words are permanent.
+  Future<String?> getIdentityWords() async {
+    try {
+      final response =
+          await _client.get(Uri.parse('$baseUrl/api/identity/words'));
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['four_words'];
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
   }
 
   // ============================================================

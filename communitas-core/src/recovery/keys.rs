@@ -12,13 +12,13 @@
 //! The same mnemonic always produces the same cryptographic keys.
 
 use bip39::Mnemonic;
-use fips203::ml_kem_768;
-use fips203::traits::{KeyGen as KemKeyGen, SerDes as KemSerDes};
-use fips204::ml_dsa_65;
-use fips204::traits::{KeyGen as DsaKeyGen, SerDes as DsaSerDes};
 use four_word_networking::FourWordAdaptiveEncoder;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
+use saorsa_pqc::dsa_traits::{KeyGen as DsaKeyGen, SerDes as DsaSerDes};
+use saorsa_pqc::kem_traits::{KeyGen as KemKeyGen, SerDes as KemSerDes};
+use saorsa_pqc::ml_dsa_65;
+use saorsa_pqc::ml_kem_768;
 use zeroize::Zeroize;
 
 use super::error::{RecoveryError, RecoveryResult};

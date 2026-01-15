@@ -524,7 +524,7 @@ async fn test_raw_key_operations() {
     let (public_key, private_key) = node.ctx.get_sites_signing_keys().expect("Should get keys");
 
     // Check sizes
-    use fips204::traits::SerDes;
+    use saorsa_pqc::dsa_traits::SerDes;
     let pk_bytes = public_key.clone().into_bytes();
     let sk_bytes = private_key.clone().into_bytes();
 
@@ -535,7 +535,7 @@ async fn test_raw_key_operations() {
     println!("Private key: {} bytes", sk_bytes.len());
 
     // Test signing
-    use fips204::traits::{Signer, Verifier};
+    use saorsa_pqc::dsa_traits::{Signer, Verifier};
     let message = b"Test message for signing";
     let signature = private_key.try_sign(message, &[]).expect("Should sign");
 

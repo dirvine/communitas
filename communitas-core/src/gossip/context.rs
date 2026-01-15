@@ -469,7 +469,7 @@ impl GossipContext {
         saorsa_pqc::ml_dsa_65::PublicKey,
         saorsa_pqc::ml_dsa_65::PrivateKey,
     )> {
-        use fips204::traits::SerDes;
+        use saorsa_pqc::dsa_traits::SerDes;
 
         let kp = self.identity.key_pair();
 

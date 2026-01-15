@@ -42,7 +42,7 @@
 //! 4. Querier verifies signature and connects to discovered address
 //! 5. Connection success/failure updates the ConnectivityState
 
-use fips204::traits::{SerDes, Signer, Verifier};
+use saorsa_pqc::dsa_traits::{SerDes, Signer, Verifier};
 use saorsa_pqc::ml_dsa_65::{PrivateKey, PublicKey};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

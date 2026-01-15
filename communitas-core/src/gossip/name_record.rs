@@ -22,7 +22,7 @@
 //! - TOFU + FOAF endorsements prevent hijacking
 
 use anyhow::Result;
-use fips204::traits::{SerDes, Signer, Verifier};
+use saorsa_pqc::dsa_traits::{SerDes, Signer, Verifier};
 use saorsa_pqc::ml_dsa_65::{PrivateKey, PublicKey};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

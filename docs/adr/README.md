@@ -21,6 +21,32 @@ ADRs document significant architectural decisions made in the project. Each reco
 | [ADR-009](ADR-009-modular-crate-architecture.md) | Modular Crate Architecture | Accepted | 2025-12-24 |
 | [ADR-010](ADR-010-cross-organization-invites.md) | Cross-Organization Invites | Accepted | 2025-12-24 |
 | [ADR-011](ADR-011-encrypted-vault-storage.md) | Encrypted Vault Storage | Accepted | 2025-12-24 |
+| [ADR-012](ADR-012-identity-packet-system.md) | Identity Packet System | Superseded | 2025-01-15 |
+| [ADR-013](ADR-013-connection-system.md) | Connection System | Accepted | 2025-01-10 |
+| [ADR-014](ADR-014-peer-discovery-presence.md) | Peer Discovery & Presence | Accepted | 2025-01-10 |
+| [ADR-015](ADR-015-bootstrap-process.md) | Bootstrap Process | Accepted | 2025-01-10 |
+| [ADR-016](ADR-016-identity-recovery-system.md) | Identity Recovery System | Proposed | 2025-01-15 |
+
+## Key ADR Relationships
+
+### Identity & Security
+- **ADR-001** (Four-Word Identity) → defines human-readable identity format
+- **ADR-006** (Post-Quantum Cryptography) → ML-DSA-65, ML-KEM-768 algorithms
+- **ADR-011** (Encrypted Vault Storage) → local key storage with PBKDF2
+- **ADR-012** (Identity Packet System) → identity packet structure
+- **ADR-016** (Identity Recovery) → BIP39 mnemonic recovery, social recovery
+
+### Networking & P2P
+- **ADR-007** (Gossip Overlay) → P2P networking layer
+- **ADR-013** (Connection System) → peer connection management
+- **ADR-014** (Peer Discovery) → finding and tracking peers
+- **ADR-015** (Bootstrap Process) → initial network join
+
+### Data & Storage
+- **ADR-002** (Local-First) → offline-first architecture
+- **ADR-003** (Yrs CRDT) → conflict-free data synchronization
+- **ADR-004** (Entity Hierarchy) → organizational data model
+- **ADR-005** (Virtual Disk) → distributed file storage
 
 ## ADR Template
 

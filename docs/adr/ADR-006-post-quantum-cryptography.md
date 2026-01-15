@@ -36,7 +36,6 @@ Adopt **pure post-quantum cryptography** using NIST FIPS 203/204 standards via t
 | Signatures | ML-DSA-65 | FIPS 204 | NIST Level 3 |
 | Symmetric | ChaCha20-Poly1305 | RFC 8439 | 256-bit |
 | Hashing | BLAKE3 | N/A | 256-bit |
-| Identity (PeerId) | Ed25519 | RFC 8032 | Compact routing |
 
 ### Why Pure PQC (Not Hybrid)?
 
@@ -60,24 +59,24 @@ We chose **pure PQC** because:
 │                    Key Hierarchy                                    │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                     │
-│  Four-Word Identity: "ocean-forest-moon-star"                      │
+│  ML-DSA-65 Public Key (1952 bytes)                                 │
 │         │                                                           │
 │         ▼                                                           │
 │  ┌─────────────────────────────────────────────────────────────┐   │
-│  │ BLAKE3 Hash → 32-byte seed                                  │   │
+│  │ BLAKE3 Hash → 32-byte identity seed                         │   │
 │  └─────────────────────────────────────────────────────────────┘   │
 │         │                                                           │
-│         ├──────────────────────┬──────────────────────┐            │
-│         ▼                      ▼                      ▼            │
-│  ┌──────────────┐      ┌──────────────┐      ┌──────────────┐     │
-│  │  Ed25519     │      │  ML-DSA-65   │      │  ML-KEM-768  │     │
-│  │  Keypair     │      │  Keypair     │      │  Keypair     │     │
-│  │              │      │              │      │              │     │
-│  │  PeerId      │      │  Signing     │      │  Key Exchange│     │
-│  │  (32 bytes)  │      │  (PQ-safe)   │      │  (PQ-safe)   │     │
-│  └──────────────┘      └──────────────┘      └──────────────┘     │
+│         ├──────────────────────────────────────────┐               │
+│         ▼                                          ▼               │
+│  ┌──────────────────────┐              ┌──────────────────────┐   │
+│  │  ML-DSA-65 Keypair   │              │  ML-KEM-768 Keypair  │   │
+│  │                      │              │                      │   │
+│  │  Signing (PQ-safe)   │              │  Key Exchange        │   │
+│  │  1952 byte pubkey    │              │  (PQ-safe)           │   │
+│  │  3309 byte signature │              │                      │   │
+│  └──────────────────────┘              └──────────────────────┘   │
 │                                                                     │
-│  Note: Ed25519 is ONLY for compact PeerId, NOT for authentication │
+│  Identity: pubkey_hex (hex-encoded ML-DSA-65 public key)           │
 │                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
 ```

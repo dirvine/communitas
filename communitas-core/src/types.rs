@@ -58,7 +58,8 @@ pub struct UserProfile {
     /// Display name for the user
     pub display_name: String,
 
-    /// Ed25519 public key (32 bytes)
+    /// First 32 bytes of ML-DSA-65 public key (for compact storage).
+    /// Full public key is stored in identity vault.
     pub pubkey: [u8; 32],
 
     /// Device type classification

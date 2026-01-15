@@ -2,9 +2,11 @@
 
 ## Status
 
-Accepted (2025-12-24)
+**Superseded** (2025-01-15)
 
-## Context
+Superseded by pubkey_hex identity model. Four-word encoding now used **only for connection addresses** (WHERE), not user identity (WHO).
+
+## Original Context (Historical)
 
 ### The Problem
 
@@ -15,86 +17,59 @@ Traditional identity systems for decentralized networks face usability challenge
 - **DNS-based**: Depend on centralized infrastructure and can be hijacked
 - **QR codes only**: Not usable in voice calls, radio, or text-limited contexts
 
-Communitas needs human-verifiable identities that:
-- Can be communicated verbally (phone calls, in-person)
-- Are cryptographically bound to the user's key material
-- Work without centralized registries
-- Are resistant to phishing and impersonation
+### Original Decision
 
-### Requirements
+The original design used four-word phrases as the primary identity:
+- `ocean-forest-moon-star` → BLAKE3 hash → cryptographic seed → keypair
 
-- Human-readable and memorable
-- Verbally communicable in ~5 seconds
-- No central registry or authority
-- Deterministic derivation from cryptographic material
-- Anti-phishing checksum validation
-- Usable for both user identities and network addresses
+This created a **coupling problem**: the four words were both the identity AND the key derivation source.
 
-## Decision
+## Current Identity Model
 
-Adopt a **four-word identity system** using the `four-word-networking` crate, which provides:
-
-### Identity Generation
-
-```rust
-// Generate random identity from dictionary
-let identity = generate_id_words()?; // "ocean-forest-moon-star"
-
-// Derive cryptographic seed from identity
-let seed = identity_to_seed("ocean-forest-moon-star")?; // [u8; 32]
-
-// Validate identity uses dictionary words
-assert!(validate_id_words("ocean-forest-moon-star")); // true
-```
-
-### Dual-Purpose Addressing
-
-| Use Case | Format | Example |
-|----------|--------|---------|
-| User Identity | word-word-word-word | ocean-forest-moon-star |
-| IPv4 Connection | space-separated words | echo foxtrot lima bravo |
-| IPv6 Connection | more words (adaptive) | alpha bravo charlie delta echo foxtrot |
-
-### Key Properties
-
-**1. Dictionary-Based**
-- 2048-word dictionary from four-word-networking
-- Each word uniquely maps to 11 bits of entropy
-- 4 words = 44 bits = 17.6 trillion combinations
-
-**2. Deterministic Seed Derivation**
-- Same identity always produces same 32-byte seed via BLAKE3
-- Seed used to derive Ed25519 keypairs and ML-DSA-65 keys
-- No external lookup required
-
-**3. Validation Layers**
-- Format validation: exactly 4 words separated by dashes
-- Dictionary validation: all words from approved dictionary
-- Checksum validation: built into word selection
-
-### Cryptographic Binding
+The identity model has been simplified to separate concerns:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                    Identity Derivation Flow                         │
+│                    Simplified Identity Model                        │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                     │
-│  Four Words      BLAKE3 Hash      Ed25519 Seed    Ed25519 Keypair   │
-│  "ocean-forest   ──────────►     [u8; 32]       ──────────►        │
-│   moon-star"                      │                Public Key       │
-│                                   │                Private Key      │
-│                                   ▼                                 │
-│                              ML-DSA-65 Seed    ──────────►         │
-│                                                   PQC Keys          │
+│  WHO (Identity)        WHERE (Connection)       SHOWN (Display)     │
+│  ────────────────      ─────────────────        ───────────────     │
+│                                                                     │
+│  pubkey_hex            connection_words         display_name        │
+│  (ML-DSA-65)           (four-word IP:port)      (user-chosen)       │
+│                                                                     │
+│  Permanent             Ephemeral                Mutable             │
+│  Cryptographic         Network location         Human-friendly      │
+│  1952 bytes raw        4+ words                 Any string          │
+│                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-### Network Address Encoding
+### Identity = Public Key
 
-The same system encodes socket addresses for peer discovery:
+The user's identity is now simply their **hex-encoded ML-DSA-65 public key**:
 
 ```rust
-// Encode IP:port to words
+// Identity is the public key itself
+let identity = hex::encode(&ml_dsa_public_key); // 3904 hex chars
+
+// For compact storage, first 32 bytes used as fingerprint
+let fingerprint: [u8; 32] = public_key[..32].try_into()?;
+```
+
+**Benefits**:
+- No collision risk (full cryptographic uniqueness)
+- No dictionary dependency
+- Directly verifiable against signatures
+- Language-agnostic
+
+### Connection Words (Still Active)
+
+Four-word encoding remains valuable for **network addresses only**:
+
+```rust
+// Encode IP:port to words for verbal sharing
 let addr: SocketAddr = "192.168.1.100:9000".parse()?;
 let words = conn_words(&addr)?; // "alpha bravo charlie delta"
 
@@ -108,57 +83,86 @@ This enables:
 - **QR-free bootstrapping**: Works over phone, radio, SMS
 - **Firewall-friendly**: No need to share numeric IPs
 
+### Display Names
+
+Users choose their own display name for UI presentation:
+
+```rust
+pub struct UserProfile {
+    /// Hex-encoded ML-DSA-65 public key (THE identity)
+    pub pubkey_hex: String,
+
+    /// User-chosen display name (shown in UI)
+    pub display_name: String,
+
+    /// Ephemeral connection addresses (four-word encoded)
+    pub connection_ids: Vec<String>,
+}
+```
+
+## Migration Notes
+
+### Deprecated Patterns
+
+```rust
+// OLD: Four words as identity
+let id_fw = "ocean-forest-moon-star";
+let seed = identity_to_seed(id_fw)?;
+let keypair = derive_keypair(seed)?;
+
+// NEW: Public key IS the identity
+let keypair = generate_ml_dsa_keypair()?;
+let pubkey_hex = hex::encode(&keypair.public_key);
+```
+
+### Legacy Compatibility
+
+The `id_fw` field remains in `UserProfile` for:
+- Vault storage directory naming (backward compatibility)
+- Migration path for existing users
+
+New code should use `pubkey_hex` for all identity comparisons and lookups.
+
+## Connection Words Reference
+
+The `four-word-networking` crate provides address encoding:
+
+| Use Case | Format | Example |
+|----------|--------|---------|
+| IPv4 Connection | space-separated words | echo foxtrot lima bravo |
+| IPv6 Connection | more words (adaptive) | alpha bravo charlie delta echo foxtrot |
+
+### Properties
+
+- 2048-word dictionary
+- Each word = 11 bits of entropy
+- 4 words = 44 bits (sufficient for IPv4:port)
+- Checksum validation prevents typos
+
 ## Consequences
 
-### Benefits
+### Benefits of New Model
 
-- **Human-verifiable**: Users can verify identities verbally
-- **Phishing-resistant**: Misremembered words produce invalid identities
-- **DNS-independent**: No centralized naming infrastructure
-- **Verbally communicable**: ~5 second voice transmission
-- **Deterministic**: Same words always produce same keys
-- **Dual-purpose**: Works for both identities and addresses
+- **True uniqueness**: No collision risk (full public key)
+- **Simpler mental model**: pubkey = identity, period
+- **Language-agnostic**: No dictionary dependency for identity
+- **Separation of concerns**: WHO vs WHERE vs SHOWN
 
 ### Trade-offs
 
-- **Collision probability**: 44 bits allows ~17 trillion identities (sufficient for intended scale)
-- **Dictionary dependency**: Words must be from approved list
-- **Language-specific**: English dictionary (future: localized dictionaries)
-- **Not globally unique**: Theoretical collision possible at extreme scale
+- **Not verbally communicable**: pubkey_hex is 3904 characters
+- **QR/link sharing required**: For identity exchange
+- **Display name not unique**: Multiple users can have same name
 
-### Security Properties
+### Mitigation
 
-| Property | Guarantee |
-|----------|-----------|
-| Pre-image resistance | BLAKE3 provides 256-bit security |
-| Collision resistance | 44-bit identity space (acceptable for target use) |
-| Verbal verification | 4 words easily compared by humans |
-| Typo detection | Invalid words rejected by validation |
-
-## Alternatives Considered
-
-1. **Base58 encoding**: Alphanumeric strings like "5HueCGU8rMj..."
-   - Rejected: Not verbally communicable, error-prone
-
-2. **UUID-style identifiers**: Random 128-bit identifiers
-   - Rejected: Cannot be communicated verbally
-
-3. **Centralized usernames**: "@alice" style handles
-   - Rejected: Requires central registry, censorship vector
-
-4. **PGP key fingerprints**: 40-character hex strings
-   - Rejected: Too long for verbal communication
-
-5. **BIP-39 mnemonics**: 12-24 word seed phrases
-   - Rejected: Too long for identity verification (designed for key backup)
-
-6. **QR codes only**: Visual scanning for identity exchange
-   - Rejected: Not usable in voice-only contexts
+- Connection words remain verbally communicable for network addresses
+- Display names provide human-friendly presentation
+- Pubkey fingerprints (first 8 chars) can be compared for verification
 
 ## References
 
-- Implementation: `communitas-core/src/identity.rs`
-- Library: `four-word-networking` crate
-- Types: `communitas-core/src/types.rs` (UserProfile)
-- Validation: `communitas-core/src/security/input_validation.rs`
-- Related ADR: [ADR-006 Post-Quantum Cryptography](ADR-006-post-quantum-cryptography.md)
+- New identity model: [ADR-006 Post-Quantum Cryptography](ADR-006-post-quantum-cryptography.md)
+- Recovery system: [ADR-016 Identity Recovery System](ADR-016-identity-recovery-system.md)
+- Implementation: `communitas-core/src/types.rs` (UserProfile)
+- Connection words: `four-word-networking` crate

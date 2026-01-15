@@ -7,7 +7,7 @@ import '../../../core/theme/colors.dart';
 import '../../../../main.dart';
 import '../providers/auth_provider.dart';
 
-/// Login screen with vault selection.
+/// Login screen with vault selection and demo user support.
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
@@ -16,15 +16,22 @@ class LoginScreen extends ConsumerStatefulWidget {
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
+  final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
   String? _selectedFourWords;
 
   @override
   void dispose() {
+    _usernameController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
+
+  /// Check if the entered credentials are for demo user.
+  bool get _isDemoLogin =>
+      _usernameController.text.trim().toLowerCase() == 'demo' &&
+      _passwordController.text == 'demo';
 
   @override
   Widget build(BuildContext context) {
@@ -53,18 +60,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               Text(
                 'Local-first collaboration',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: CommunitasColors.cream.withOpacity(0.7),
+                      color: CommunitasColors.cream.withAlpha(179),
                     ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 48),
 
-              // Demo mode indicator
+              // Demo mode indicator (compile-time flag)
               if (kDemoMode) ...[
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: CommunitasColors.amber.withOpacity(0.2),
+                    color: CommunitasColors.amber.withAlpha(51),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: CommunitasColors.amber),
                   ),
@@ -83,49 +90,48 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 const SizedBox(height: 24),
               ],
 
-              // Vault selection (placeholder)
+              // Demo login hint
               Container(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: CommunitasColors.moss,
-                  borderRadius: BorderRadius.circular(12),
+                  color: CommunitasColors.jade.withAlpha(26),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: CommunitasColors.jade.withAlpha(77),
+                  ),
                 ),
                 child: Row(
                   children: [
-                    Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: CommunitasColors.jade,
-                        borderRadius: BorderRadius.circular(24),
-                      ),
-                      child: const Icon(
-                        Icons.person,
-                        color: CommunitasColors.cream,
+                    Icon(
+                      Icons.lightbulb_outline,
+                      color: CommunitasColors.jade.withAlpha(204),
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Tip: Use "demo" / "demo" for quick testing',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: CommunitasColors.jade.withAlpha(204),
+                        ),
                       ),
                     ),
-                    const SizedBox(width: 16),
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Demo User',
-                            style: TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                          Text(
-                            'ocean-forest-moon-star',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: CommunitasColors.jade,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Icon(Icons.check_circle, color: CommunitasColors.jade),
                   ],
                 ),
+              ),
+              const SizedBox(height: 16),
+
+              // Username field
+              TextField(
+                controller: _usernameController,
+                decoration: const InputDecoration(
+                  labelText: 'Username',
+                  prefixIcon: Icon(Icons.person_outline),
+                  hintText: 'Enter username or "demo"',
+                ),
+                textInputAction: TextInputAction.next,
+                onChanged: (_) => setState(() {}),
               ),
               const SizedBox(height: 16),
 
@@ -136,20 +142,30 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 decoration: const InputDecoration(
                   labelText: 'Password',
                   prefixIcon: Icon(Icons.lock_outline),
+                  hintText: 'Enter password',
                 ),
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) => _handleLogin(),
+                onChanged: (_) => setState(() {}),
               ),
               const SizedBox(height: 24),
 
               // Login button
               ElevatedButton(
                 onPressed: _isLoading ? null : _handleLogin,
+                style: _isDemoLogin
+                    ? ElevatedButton.styleFrom(
+                        backgroundColor: CommunitasColors.amber,
+                        foregroundColor: CommunitasColors.deepForest,
+                      )
+                    : null,
                 child: _isLoading
                     ? const SizedBox(
                         height: 20,
                         width: 20,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Text('Unlock'),
+                    : Text(_isDemoLogin ? 'Login as Demo User' : 'Unlock'),
               ),
               const SizedBox(height: 16),
 
@@ -177,16 +193,23 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     try {
       final authNotifier = ref.read(authNotifierProvider.notifier);
 
-      // For demo mode or when we have a vault selected
-      final fourWords = _selectedFourWords ?? 'ocean-forest-moon-star';
-      final success = await authNotifier.login(fourWords, _passwordController.text);
+      bool success;
+
+      // Check for demo user login
+      if (_isDemoLogin) {
+        success = await authNotifier.loginAsDemo();
+      } else {
+        // Normal login flow
+        final fourWords = _selectedFourWords ?? 'ocean-forest-moon-star';
+        success = await authNotifier.login(fourWords, _passwordController.text);
+      }
 
       if (mounted) {
         if (success) {
           context.go(Routes.home);
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Login failed. Check your password.')),
+            const SnackBar(content: Text('Login failed. Check your credentials.')),
           );
         }
       }

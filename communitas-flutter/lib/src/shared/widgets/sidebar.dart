@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/router.dart';
 import '../../core/theme/colors.dart';
+import '../../features/auth/providers/auth_provider.dart';
 import '../../services/unified_data_provider.dart';
 
 /// Main navigation sidebar for desktop layout.
@@ -445,7 +446,8 @@ class _SidebarState extends ConsumerState<Sidebar> {
 
   Widget _buildContactItemUnified(BuildContext context, UnifiedContact contact) {
     final statusColor = _getStatusColor(contact.status);
-    final route = '/contact/${contact.fourWords}/chat';
+    // Use pubkeyHex for routing (the permanent identity)
+    final route = '/contact/${contact.pubkeyHex}/chat';
     final displayInitial = contact.displayName.isNotEmpty ? contact.displayName[0].toUpperCase() : '?';
 
     return GestureDetector(
@@ -510,7 +512,7 @@ class _SidebarState extends ConsumerState<Sidebar> {
                     ),
                   ),
                   Text(
-                    _truncateFourWords(contact.fourWords),
+                    _truncatePubkeyHex(contact.pubkeyHex),
                     style: TextStyle(
                       color: CommunitasColors.jade.withAlpha(179),
                       fontSize: 10,
@@ -590,61 +592,103 @@ class _SidebarState extends ConsumerState<Sidebar> {
 
   Widget _buildUserHeader(BuildContext context) {
     final identity = ref.watch(unifiedIdentityProvider);
+    final isDemoUser = ref.watch(isDemoUserProvider);
 
     return Container(
       padding: const EdgeInsets.all(16),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: CommunitasColors.jade,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: const Icon(
-              Icons.person,
-              color: CommunitasColors.cream,
-              size: 24,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  identity.displayName,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                    color: CommunitasColors.cream,
-                    decoration: TextDecoration.none,
-                    fontFamily: 'Roboto',
-                    inherit: false,
-                  ),
+          Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: CommunitasColors.jade,
+                  borderRadius: BorderRadius.circular(20),
                 ),
-                Text(
-                  identity.fourWords,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: CommunitasColors.jade,
-                    fontFamily: 'monospace',
-                    decoration: TextDecoration.none,
-                    inherit: false,
-                  ),
+                child: const Icon(
+                  Icons.person,
+                  color: CommunitasColors.cream,
+                  size: 24,
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      identity.displayName,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                        color: CommunitasColors.cream,
+                        decoration: TextDecoration.none,
+                        fontFamily: 'Roboto',
+                        inherit: false,
+                      ),
+                    ),
+                    Text(
+                      _truncatePubkeyHex(identity.pubkeyHex),
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: CommunitasColors.jade,
+                        fontFamily: 'monospace',
+                        decoration: TextDecoration.none,
+                        inherit: false,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                width: 8,
+                height: 8,
+                decoration: const BoxDecoration(
+                  color: CommunitasColors.online,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ],
           ),
-          Container(
-            width: 8,
-            height: 8,
-            decoration: const BoxDecoration(
-              color: CommunitasColors.online,
-              shape: BoxShape.circle,
+          // Demo mode badge
+          if (isDemoUser) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: CommunitasColors.amber.withAlpha(51),
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(
+                  color: CommunitasColors.amber.withAlpha(128),
+                ),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.science,
+                    color: CommunitasColors.amber,
+                    size: 12,
+                  ),
+                  SizedBox(width: 4),
+                  Text(
+                    'Demo Mode',
+                    style: TextStyle(
+                      color: CommunitasColors.amber,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      decoration: TextDecoration.none,
+                      fontFamily: 'Roboto',
+                      inherit: false,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -700,11 +744,21 @@ class _SidebarState extends ConsumerState<Sidebar> {
     }
   }
 
-  String _truncateFourWords(String fourWords) {
-    final parts = fourWords.split('-');
-    if (parts.length >= 4) {
-      return '${parts[0]}-${parts[1]}-...';
+  /// Truncate pubkey hex for display (show first few chars).
+  /// For four-word addresses (demo mode), show first two words.
+  String _truncatePubkeyHex(String pubkeyHex) {
+    // Check if it looks like a four-word address (contains dashes)
+    if (pubkeyHex.contains('-')) {
+      final parts = pubkeyHex.split('-');
+      if (parts.length >= 4) {
+        return '${parts[0]}-${parts[1]}-...';
+      }
+      return pubkeyHex;
     }
-    return fourWords;
+    // For hex pubkey, show first 8 chars
+    if (pubkeyHex.length > 12) {
+      return '${pubkeyHex.substring(0, 8)}...';
+    }
+    return pubkeyHex;
   }
 }

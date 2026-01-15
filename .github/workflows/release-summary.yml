@@ -10,10 +10,10 @@ permissions:
 
 jobs:
   summarize:
-    name: Summarize Headless + Desktop
+    name: Summarize Release
     runs-on: ubuntu-latest
     steps:
-      - name: Wait for headless + desktop and update release
+      - name: Wait for headless and update release
         uses: actions/github-script@v7
         env:
           TAG_REF: ${{ github.ref }}
@@ -68,14 +68,13 @@ jobs:
               throw new Error('Timed out waiting for release to exist');
             }
 
-            const [headless, desktop] = await Promise.all([
+            const [headless] = await Promise.all([
               waitWorkflow('release-headless.yml', 'Headless'),
-              waitWorkflow('tauri-release.yml', 'Desktop'),
             ]);
 
             const rel = await waitForRelease();
             const when = new Date().toISOString();
-            const summary = `\n\n## Build Summary (auto)\n- Headless: ${headless.status} ${headless.url ? `(${headless.url})` : ''}\n- Desktop: ${desktop.status} ${desktop.url ? `(${desktop.url})` : ''}\n\nGenerated: ${when}`;
+            const summary = `\n\n## Build Summary (auto)\n- Headless: ${headless.status} ${headless.url ? `(${headless.url})` : ''}\n- Desktop/Mobile: See communitas-flutter (Flutter cross-platform app)\n\nGenerated: ${when}`;
 
             const body = (rel.body || '');
             const newBody = body.includes('## Build Summary (auto)') ? body.replace(/## Build Summary \(auto\)[\s\S]*/m, summary) : (body + summary);

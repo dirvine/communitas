@@ -59,7 +59,7 @@ jobs:
           cargo audit --ignore RUSTSEC-2025-0008
 
       - name: Build dependencies
-        run: cargo check --workspace --exclude communitas-desktop --all-features
+        run: cargo check --workspace --all-features
 
       - name: Rust clippy policy
         run: |
@@ -67,12 +67,8 @@ jobs:
           # Note: unwrap_used/expect_used excluded - too restrictive for test code,
           # better caught in code review per CLAUDE.md policy
           # Excluded:
-          # - communitas-desktop: requires Tauri build environment
-          # - communitas-bindings: generated Flutter Rust Bridge code uses unimplemented!()
           # - distributed-test-orchestrator: CLI tool uses println!()
           cargo clippy --workspace \
-            --exclude communitas-desktop \
-            --exclude communitas-bindings \
             --exclude distributed-test-orchestrator \
             --all-features -- \
             -D clippy::panic \
@@ -157,9 +153,6 @@ jobs:
     name: Flutter Build (${{ matrix.platform }})
     runs-on: ${{ matrix.os }}
     needs: rust-checks
-    env:
-      # Required by tauri-build for dependency resolution
-      DEP_TAURI_DEV: "false"
     strategy:
       fail-fast: false
       matrix:

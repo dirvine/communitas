@@ -12,6 +12,9 @@ import '../../../services/bridge_client.dart';
 /// Bridge mode connects to a Communitas bridge server via HTTP.
 const bool kBridgeMode = kIsWeb && !kDemoMode;
 
+/// Four-word identity for demo user login.
+const String kDemoUserFourWords = 'demo-user-test-mode';
+
 /// Authentication state for Communitas.
 class AuthState {
   final bool isAuthenticated;
@@ -58,6 +61,9 @@ class AuthState {
       api: api ?? this.api,
     );
   }
+
+  /// Check if currently logged in as demo user.
+  bool get isDemoUser => fourWords == kDemoUserFourWords;
 }
 
 /// Vault information for identity storage.
@@ -236,6 +242,37 @@ class AuthNotifier extends StateNotifier<AuthState> {
     } catch (e) {
       debugPrint('Error scanning vault directory: $e');
     }
+  }
+
+  /// Login as demo user (bypasses normal auth flow).
+  /// Used when username "demo" and password "demo" are entered.
+  Future<bool> loginAsDemo() async {
+    const demoDisplayName = 'Demo User';
+
+    await Future.delayed(const Duration(milliseconds: 300));
+
+    state = AuthState(
+      isAuthenticated: true,
+      fourWords: kDemoUserFourWords,
+      displayName: demoDisplayName,
+      availableVaults: [
+        VaultInfo(
+          id: 'demo-vault',
+          fourWords: kDemoUserFourWords,
+          displayName: demoDisplayName,
+          createdAt: DateTime.now().subtract(const Duration(days: 30)),
+          lastUsed: DateTime.now(),
+        ),
+      ],
+      currentVault: VaultInfo(
+        id: 'demo-vault',
+        fourWords: kDemoUserFourWords,
+        displayName: demoDisplayName,
+        createdAt: DateTime.now().subtract(const Duration(days: 30)),
+        lastUsed: DateTime.now(),
+      ),
+    );
+    return true;
   }
 
   /// Login with password to unlock vault
@@ -466,4 +503,9 @@ final authNotifierProvider =
 /// Current four-words provider (convenience).
 final currentFourWordsProvider = Provider<String?>((ref) {
   return ref.watch(authNotifierProvider).fourWords;
+});
+
+/// Whether currently logged in as demo user.
+final isDemoUserProvider = Provider<bool>((ref) {
+  return ref.watch(authNotifierProvider).isDemoUser;
 });

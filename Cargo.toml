@@ -4,15 +4,14 @@ members = [
     "communitas-core",
     "communitas-headless",  # Bootstrap nodes
     "communitas-p2p-test",
-    "communitas-bindings",  # Swift/UniFFI bindings + flutter_rust_bridge
     "communitas-kanban",    # CRDT-based Kanban system
     "communitas-mcp",       # MCP server for AI agent control (HTTP/HTTPS + stdio)
     "tests/distributed/orchestrator",  # Distributed test orchestrator
-    # communitas-flutter - Flutter GUI (not a Rust crate, separate build)
 ]
+# communitas-flutter - Flutter GUI with flutter_rust_bridge (separate build)
 
 [workspace.package]
-version = "0.1.22"
+version = "0.1.54"
 edition = "2024"
 authors = ["David Irvine <david.irvine@maidsafe.net>", "Saorsa Labs"]
 license = "GPL-3.0"
@@ -38,8 +37,7 @@ saorsa-gossip-pubsub = "0.2.0"
 saorsa-gossip-coordinator = "0.2.0"
 saorsa-gossip-rendezvous = "0.2.0"
 
-# Real-time multimedia (WebRTC over QUIC) - Updated to 0.2.0
-# Note: saorsa-webrtc-tauri omitted (requires Tauri 1.5, we use Tauri 2.x)
+# Real-time multimedia (WebRTC over QUIC)
 saorsa-webrtc-core = "0.2.1"
 saorsa-webrtc-codecs = "0.2.1"
 

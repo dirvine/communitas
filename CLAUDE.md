@@ -6,15 +6,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Communitas is a local-first, PQC-ready collaboration platform that merges WhatsApp, Dropbox, Zoom, and Slack into one decentralized application. It uses Four-Word identities for human-verifiable addressing, provides per-entity virtual disks (org, group, channel, project, individual), and enables DNS-free website publishing via identity-bound website roots.
 
-**Platform Focus**: Native macOS application (Swift + SwiftUI), with future expansion to iOS, Android, Linux, and Windows.
+**Platform Focus**: Cross-platform Flutter application (macOS, iOS, Android, Linux, Windows, Web).
 
 ## Core Architecture
 
-### Native macOS Application (Swift + SwiftUI)
-- **Location**: `communitas-swift/`
-- **Framework**: SwiftUI with native macOS components
-- **Build System**: Xcode project and Swift Package Manager
-- **Rust Integration**: UniFFI bindings via `communitas-bindings/`
+### Flutter Application
+- **Location**: `communitas-flutter/`
+- **Framework**: Flutter with Dart
+- **Rust Integration**: flutter_rust_bridge for native bindings
+- **Platforms**: macOS, iOS, Android, Linux, Windows, Web
 
 ### Rust Core Library
 - **Location**: `communitas-core/`
@@ -22,11 +22,6 @@ Communitas is a local-first, PQC-ready collaboration platform that merges WhatsA
 - **Cryptography**: Post-quantum (ML-DSA/ML-KEM) with ChaCha20-Poly1305
 - **Storage**: Virtual disks with CRDT synchronization (Yrs)
 - **Networking**: QUIC via ant-quic, IPv4-first with Happy Eyeballs fallback
-
-### UniFFI Bindings
-- **Location**: `communitas-bindings/`
-- **Purpose**: Generate Swift bindings from Rust core
-- **Output**: XCFramework for macOS (and later iOS)
 
 ### Key Components
 - **Four-Word Addresses**: Human-readable network identities (e.g., "ocean-forest-moon-star")
@@ -39,19 +34,20 @@ Communitas is a local-first, PQC-ready collaboration platform that merges WhatsA
 
 ## Development Commands
 
-### Quick Start - macOS App
+### Quick Start - Flutter App
 ```bash
-# Build the Rust core and bindings
-cargo build -p communitas-bindings --release
+# Install Flutter dependencies
+cd communitas-flutter && flutter pub get
 
-# Generate Swift bindings (XCFramework)
-cd communitas-bindings && ./build-xcframework.sh
+# Run Flutter app (macOS)
+flutter run -d macos
 
-# Open Xcode project
-open communitas-swift/Communitas.xcodeproj
+# Run Flutter app (web)
+flutter run -d chrome
 
-# Or build from command line
-cd communitas-swift && xcodebuild -scheme Communitas -configuration Debug build
+# Build for release
+flutter build macos --release
+flutter build web --release
 ```
 
 ### Rust Development
@@ -90,7 +86,6 @@ cargo run -p communitas-mcp -- --http --tls --demo --no-client-auth
 | Crate | Purpose |
 |-------|---------|
 | `communitas-core` | Core business logic, P2P, cryptography |
-| `communitas-bindings` | UniFFI Swift bindings |
 | `communitas-kanban` | CRDT-based Kanban system |
 | `communitas-mcp` | MCP server for AI agents (stdio + HTTPS) |
 | `communitas-headless` | Bootstrap/seed nodes |
@@ -107,12 +102,12 @@ The application uses a centralized `CoreContext` (communitas-core/src/core_conte
 - Kanban service for collaborative project management
 - Group key storage for membership updates
 
-### Swift-Rust Bridge
-Commands flow through UniFFI-generated bindings:
-1. Swift UI calls generated Swift functions
-2. UniFFI marshals data to Rust
+### Flutter-Rust Bridge
+Commands flow through flutter_rust_bridge bindings:
+1. Flutter/Dart UI calls generated Dart functions
+2. flutter_rust_bridge marshals data to Rust
 3. Rust core processes request
-4. Results return via UniFFI to Swift
+4. Results return via flutter_rust_bridge to Dart
 
 ### Virtual Disk System
 Per-entity storage with different access policies:
@@ -124,7 +119,7 @@ Per-entity storage with different access policies:
 - **Zero panics/unwraps**: Production Rust code enforces Result types
 - **Rate limiting**: Built-in protection against abuse
 - **Input validation**: All commands validate inputs
-- **Secure storage**: macOS Keychain integration
+- **Secure storage**: Platform-specific secure storage integration
 
 ## Quality Standards
 
@@ -135,10 +130,10 @@ Per-entity storage with different access policies:
 - Formatting: `cargo fmt --all` before commits.
 - Documentation: Prefer doc comments on public items; add when helpful.
 
-### Swift Code
-- SwiftUI best practices with proper state management
-- No force unwraps in production code
-- Proper error handling with Result types
+### Flutter/Dart Code
+- Follow Flutter best practices with proper state management
+- Use null safety properly
+- Proper error handling with Result-like patterns
 - Accessibility support for all UI components
 
 ### Git Workflow
@@ -147,6 +142,7 @@ Per-entity storage with different access policies:
 cargo fmt --all
 cargo clippy --all-features -- -D clippy::panic -D clippy::unwrap_used -D clippy::expect_used
 cargo test
+cd communitas-flutter && flutter analyze && flutter test
 
 # Commit with conventional format
 git commit -m "feat: add new feature"
@@ -156,10 +152,13 @@ git commit -m "docs: update documentation"
 
 ## Deployment
 
-### macOS Application
-Native macOS application distributed via:
-- Direct DMG download
-- Future: Mac App Store
+### Flutter Application
+Cross-platform distribution:
+- macOS: DMG or Mac App Store
+- iOS: App Store
+- Android: Google Play
+- Web: Static hosting
+- Linux/Windows: Native installers
 
 ### Headless Node
 Bootstrap and seed nodes for network support:
@@ -170,8 +169,8 @@ Bootstrap and seed nodes for network support:
 
 ### Common Issues
 - **P2P Connection Failures**: Check bootstrap node connectivity
-- **Build Failures**: Ensure Rust 1.85+ and Xcode 15+ installed
-- **Binding Generation**: Run `./build-xcframework.sh` after Rust changes
+- **Build Failures**: Ensure Rust 1.85+ and Flutter 3.27+ installed
+- **Binding Generation**: Run flutter_rust_bridge code generation after Rust changes
 
 ### Debug Modes
 ```bash
@@ -180,13 +179,16 @@ RUST_LOG=debug cargo run -p communitas-headless
 
 # Test debugging
 RUST_LOG=debug cargo test -- --nocapture
+
+# Flutter debugging
+flutter run --debug
 ```
 
 ## API Documentation
 
 For detailed API documentation, see:
 - `docs/api/core-api.md` - Rust library API (communitas-core)
-- `docs/api/bridge-api.md` - HTTP/REST bridge API for testing
+- `docs/api/mcp-api.md` - MCP server API for AI agents
 - `docs/architecture/README.md` - System architecture overview
 - `docs/architecture/crdt-system.md` - CRDT synchronization (Yrs)
 - `docs/architecture/gossip-protocol.md` - Saorsa Gossip networking

@@ -29,49 +29,50 @@ Technical implementation verified through comprehensive integration testing (37 
 
 ---
 
-## **🚀 Quick Start**
+## Quick Start
 
-### **Prerequisites**
-- Node.js 20+
+### Prerequisites
+- Flutter 3.27+
 - Rust 1.85+
-- Platform dependencies for Tauri v2
+- Platform-specific dependencies (see Flutter docs)
 
-### **Development Setup**
+### Development Setup
 ```bash
 git clone https://github.com/dirvine/communitas.git
 cd communitas
-npm install
 
-# Build frontend and run Tauri app
-npm run build
-npm run tauri dev
+# Flutter app development
+cd communitas-flutter
+flutter pub get
+flutter run -d macos  # or: -d chrome, -d linux, -d windows
 ```
 
-### **Testing**
+### Testing
 ```bash
-# TypeScript validation
-npm run typecheck
+# Flutter tests
+cd communitas-flutter
+flutter analyze
+flutter test
 
 # Rust linting (strict policy)
 cargo clippy --all-features -- -D clippy::panic -D clippy::unwrap_used -D clippy::expect_used
 
-# Unit tests
-npm run test:run
+# Rust unit tests
 cargo test
 ```
 
 ---
 
-## **📋 Technical Capabilities**
+## Technical Capabilities
 
-### **Partition Tolerance & Failure Recovery**
+### Partition Tolerance & Failure Recovery
 - **Network Partition Healing**: CRDT-based automatic state reconciliation across partition boundaries
 - **Internet Collapse Detection**: 10-second watchdog monitoring with automatic local-only mode activation
 - **Exponential Backoff Retry**: Jittered retry strategies prevent thundering herd during recovery (100ms → 60s backoff)
 - **Multi-Layer Connectivity**: Hierarchical degradation from global internet → NAT-traversed WAN → LAN broadcast → loopback
 - **Resource Limit Enforcement**: Configurable peer connection limits (default: 50), memory caps (2GB), and connection timeouts prevent resource exhaustion
 
-### **Cryptographic Security (Post-Quantum)**
+### Cryptographic Security (Post-Quantum)
 - **ML-DSA-87 Signatures**: NIST FIPS 204 quantum-resistant digital signatures for user identity (192-bit quantum security, Level 5)
 - **ML-DSA-65 Signatures**: NIST FIPS 204 signatures for site/gossip identity (128-bit quantum security, Level 3)
 - **ML-KEM-768 Key Exchange**: NIST FIPS 203 quantum-resistant key encapsulation for session establishment
@@ -79,129 +80,121 @@ cargo test
 - **Four-Word Addressing**: Human-memorable cryptographic identifiers (e.g., `ocean-blue-eagle-star`) solving Zooko's Triangle
 - **Zero Central Authority**: Fully decentralized trust model with cryptographic verification replacing DNS/PKI
 
-### **CRDT-Based Eventual Consistency**
+### CRDT-Based Eventual Consistency
 - **Yrs CRDT (v0.19)**: Conflict-free replicated data types for documents, messages, and shared state
 - **Operation-Based Synchronization**: Delta-based sync protocol minimizes bandwidth during partition healing
 - **Anti-Entropy Protocol**: 60-second background synchronization with adaptive intervals based on network conditions
 - **Causal Consistency**: Vector clocks ensure causal ordering of operations across partitioned replicas
 - **Automatic Merge**: Conflict-free convergence without manual intervention or consensus protocols
 
-### **Decentralized Network Architecture**
-- **QUIC Transport**: UDP-based reliable transport with built-in NAT traversal (ant-quic v0.8.17)
-- **Gossip Overlay (saorsa-gossip v0.1.8)**: HyParView membership + SWIM failure detection + Plumtree broadcast
+### Decentralized Network Architecture
+- **QUIC Transport**: UDP-based reliable transport with built-in NAT traversal (ant-quic v0.18)
+- **Gossip Overlay (saorsa-gossip v0.2.0)**: HyParView membership + SWIM failure detection + Plumtree broadcast
 - **FOAF Discovery**: Friend-of-a-friend peer discovery without DHT or global indexing
 - **Rendezvous Shards**: 65,536-shard distributed discovery system for global user location
 - **No Single Point of Failure**: Operates without bootstrap nodes after initial peer cache seeding
 
-### **Entity-Based Collaboration**
-- **👤 Individuals**: Personal identity with ML-DSA-87 keypairs, encrypted local storage
-- **👥 Groups**: CRDT-synchronized shared state, partition-tolerant membership
-- **🏢 Organizations**: Multi-channel hierarchy with admin delegation
-- **📁 Projects**: Version-controlled workspaces with conflict-free document merging
-- **📢 Channels**: Topic-scoped pubsub with message anti-entropy
+### Entity-Based Collaboration
+- **Individuals**: Personal identity with ML-DSA-87 keypairs, encrypted local storage
+- **Groups**: CRDT-synchronized shared state, partition-tolerant membership
+- **Organizations**: Multi-channel hierarchy with admin delegation
+- **Projects**: Version-controlled workspaces with conflict-free document merging
+- **Channels**: Topic-scoped pubsub with message anti-entropy
 
 ---
 
-## **📚 Documentation**
+## Documentation
 
-### **Getting Started**
+### Getting Started
 - **[Getting Started Guide](docs/guides/getting-started.md)**: Complete setup and first steps
 - **[Authentication Guide](docs/guides/authentication.md)**: Login, passkeys, and security
 - **[Four-Word Addresses](docs/guides/four-word-addresses.md)**: Understanding identity system
 
-### **Architecture & Design**
+### Architecture & Design
 - **[DESIGN.md](DESIGN.md)**: System architecture and technical design
 - **[MESH_CAPABILITIES.md](docs/MESH_CAPABILITIES.md)**: Network resilience specification and failure scenarios
 - **[Architecture Overview](docs/architecture/)**: Detailed architecture documentation
 - **[CRDT System](docs/CRDT_ARCHITECTURE.md)**: Conflict-free replicated data types and eventual consistency
 - **[Gossip Protocol](docs/GOSSIP_OVERLAY.md)**: P2P communication layer (HyParView, SWIM, Plumtree)
 
-### **API Reference**
-- **[Tauri Commands API](docs/AGENTS_API.md)**: Complete Tauri command reference
+### API Reference
 - **[Core API](docs/api/core-api.md)**: Rust core library API
-- **[Frontend API](docs/api/frontend-api.md)**: React/TypeScript interface
+- **[MCP API](docs/api/mcp-api.md)**: AI agent interface
 
-### **Deployment Guides**
-
+### Deployment Guides
 - **[Headless Service](communitas-headless/README.md)**: systemd, launchd, JSON-RPC API
-- **[Bootstrap Node](bootstrap-node/README.md)**: Network bootstrap deployment
 - **[Testnet Deployment](finalise/DEPLOY_TESTNET.md)**: Complete network deployment
 
-### **Development**
+### Development
 - **[Contributing Guide](docs/development/contributing.md)**: How to contribute
 - **[Coding Standards](docs/development/coding-standards.md)**: Code style and quality
 - **[Testing Guide](docs/guides/testing.md)**: Test strategy and examples
 - **[Troubleshooting](docs/development/troubleshooting.md)**: Common issues and solutions
 
-### **Operations**
+### Operations
 - **[Monitoring](docs/operations/monitoring.md)**: Prometheus, Grafana, metrics
 - **[Security Policy](docs/operations/security-policy.md)**: Security guidelines
 - **[Incident Response](docs/operations/incident-response.md)**: Emergency procedures
 
-### **For AI Assistants**
+### For AI Assistants
 - **[CLAUDE.md](CLAUDE.md)**: Project context for LLM helpers
 - **[Agent Automation](docs/development/AGENTS.md)**: Automated development workflows
 
 ---
 
-## **🏗️ Project Structure**
+## Project Structure
 
-### **Applications**
-- **[communitas-desktop/](communitas-desktop/)**: Tauri v2 desktop application with React frontend
+### Applications
+- **[communitas-flutter/](communitas-flutter/)**: Cross-platform Flutter application (macOS, iOS, Android, Linux, Windows, Web)
 - **[communitas-headless/](communitas-headless/)**: Headless daemon for system services ([README](communitas-headless/README.md))
 - **[communitas-mcp/](communitas-mcp/)**: MCP server for AI agent control (stdio + HTTPS with ML-DSA-65)
 
-### **Core Libraries**
+### Core Libraries
 - **[communitas-core/](communitas-core/)**: Shared Rust business logic and P2P networking
-- **[bootstrap-node/](bootstrap-node/)**: Network bootstrap and discovery service ([README](bootstrap-node/README.md))
+- **[communitas-kanban/](communitas-kanban/)**: CRDT-based collaborative Kanban system
 
-### **Container & Deployment**
-
-
-### **Frontend**
-- **[src/](src/)**: React frontend with TypeScript
-- **[dist/](dist/)**: Built frontend assets (served by Tauri)
-
-### **Documentation**
+### Documentation
 - **[docs/](docs/)**: Comprehensive project documentation
   - **[guides/](docs/guides/)**: User and developer guides
   - **[architecture/](docs/architecture/)**: System architecture documentation
   - **[api/](docs/api/)**: API reference documentation
   - **[development/](docs/development/)**: Development setup and standards
   - **[operations/](docs/operations/)**: Deployment and operations guides
-  - **[archive/](docs/archive/)**: Historical documentation
 
-### **Key Commands**
+### Key Commands
 ```bash
-# Development
-npm run build && npm run tauri dev
+# Flutter Development
+cd communitas-flutter
+flutter pub get
+flutter run -d macos
 
 # Production Build
-npm run build && npm run tauri build
+flutter build macos --release
+flutter build web --release
 
 # Quality Checks
-npm run typecheck && cargo clippy --all-features
+flutter analyze && cargo clippy --all-features
 
 # Run as system service (see communitas-headless/README.md)
 communitas-headless --config /etc/communitas/headless.toml
-
-
 ```
 
 ---
 
-## **🚢 Deployment Options**
+## Deployment Options
 
 Communitas supports multiple deployment scenarios for different use cases:
 
-### **Desktop Application** (End Users)
-Full-featured native application with UI for Windows, macOS, and Linux.
+### Flutter Application (End Users)
+Full-featured cross-platform application for macOS, iOS, Android, Linux, Windows, and Web.
 ```bash
-npm run build && npm run tauri build
+cd communitas-flutter
+flutter build macos --release
+flutter build web --release
 ```
-See [communitas-desktop/](communitas-desktop/) for details.
+See [communitas-flutter/](communitas-flutter/) for details.
 
-### **Headless Daemon** (Servers & Bots)
+### Headless Daemon (Servers & Bots)
 Run as a system service for automated operations, bots, or server infrastructure.
 ```bash
 # Install and run as systemd service
@@ -210,16 +203,7 @@ sudo systemctl start communitas
 ```
 Complete guide: [communitas-headless/README.md](communitas-headless/README.md)
 
-
-
-### **Bootstrap Nodes** (Network Infrastructure)
-DHT bootstrap and discovery nodes for network infrastructure.
-```bash
-cargo run -p bootstrap-node -- --config config.toml
-```
-Complete guide: [bootstrap-node/README.md](bootstrap-node/README.md)
-
-### **MCP Server** (AI Agent Interface)
+### MCP Server (AI Agent Interface)
 Model Context Protocol server for AI agent control with HTTPS (ML-DSA-65 raw public keys).
 ```bash
 # HTTPS transport with demo mode
@@ -229,39 +213,39 @@ Complete guide: [communitas-mcp/README.md](communitas-mcp/README.md)
 
 ---
 
-## **🌐 Network & Identity**
+## Network & Identity
 
-### **Four-Word Addressing Example**
-```typescript
+### Four-Word Addressing Example
+```dart
 // Create new organization with just display name
-const result = await createOrganization({ 
-  displayName: "Acme Corporation" 
-});
+final result = await createOrganization(
+  displayName: "Acme Corporation",
+);
 // → { fourWords: "ocean-blue-eagle-star", entityId: "org-abc123" }
 
 // Others can find it using the four-words
-const entity = await findEntity("ocean-blue-eagle-star");
+final entity = await findEntity("ocean-blue-eagle-star");
 // → Access organization workspace, channels, shared storage
 ```
 
-### **Network Participation**
-- **Desktop Nodes**: Full participants with UI
-- **Headless Nodes**: Bootstrap/seed nodes for network infrastructure  
-- **Mobile Nodes**: Future lightweight clients
-- **Browser Bridge**: WebRTC bridge for web access
+### Network Participation
+- **Desktop Nodes**: Full participants with UI (Flutter macOS/Linux/Windows)
+- **Mobile Nodes**: Full participants on iOS and Android
+- **Headless Nodes**: Bootstrap/seed nodes for network infrastructure
+- **Web Clients**: Browser-based access via Flutter Web
 
 ---
 
-## **🔐 Security & Cryptographic Guarantees**
+## Security & Cryptographic Guarantees
 
-### **Post-Quantum Cryptographic Primitives**
+### Post-Quantum Cryptographic Primitives
 - **NIST FIPS 204 (ML-DSA-87/65)**: Module-Lattice-Based Digital Signature Algorithm with 192-bit (user) and 128-bit (site) quantum security levels
 - **NIST FIPS 203 (ML-KEM-768)**: Module-Lattice-Based Key Encapsulation Mechanism with 192-bit classical security
 - **ChaCha20-Poly1305**: Authenticated encryption with associated data (AEAD) for session encryption
 - **BLAKE3**: Cryptographic hash function for content addressing and integrity verification
 - **Keyring Integration**: Platform keychain storage (macOS Keychain, Windows Credential Manager, Linux Secret Service)
 
-### **Threat Model & Mitigations**
+### Threat Model & Mitigations
 - **Man-in-the-Middle**: Prevented by ML-DSA signature verification and ML-KEM authenticated key exchange
 - **Quantum Computing**: Post-quantum algorithms resist Shor's and Grover's algorithms
 - **Replay Attacks**: Nonce-based message authentication and temporal ordering
@@ -269,7 +253,7 @@ const entity = await findEntity("ocean-blue-eagle-star");
 - **Eclipse Attacks**: Multiple bootstrap sources with FOAF-based peer discovery
 - **Network Partitioning**: CRDT eventual consistency ensures state convergence without coordination
 
-### **Decentralization Properties**
+### Decentralization Properties
 - **No DNS Dependency**: Four-word cryptographic identities replace hierarchical naming
 - **No PKI/Certificate Authorities**: Self-sovereign identity with cryptographic verification
 - **No Blockchain Consensus**: CRDT conflict-free convergence without global coordination
@@ -278,41 +262,41 @@ const entity = await findEntity("ocean-blue-eagle-star");
 
 ---
 
-## **📄 License**
+## License
 
 **AGPL-3.0** for open collaboration. Commercial licensing available via [Saorsa Labs](mailto:saorsalabs@gmail.com).
 
 ---
 
-## **🤝 Contributing**
+## Contributing
 
 1. **Code Style**: Follow existing patterns and conventions
 2. **Commit Format**: Conventional commits (`feat:`, `fix:`, `docs:`)
-3. **Quality Gates**: All code must pass TypeScript + Rust linting
+3. **Quality Gates**: All code must pass Flutter + Rust linting
 4. **Testing**: Include tests for new functionality
 
-### **Development Standards**
+### Development Standards
 - **No Panics**: Rust code forbids `unwrap`/`expect`/`panic!` in production (enforced by clippy)
-- **Type Safety**: Full TypeScript coverage with strict configuration
+- **Type Safety**: Full Dart null safety with strict analysis
 - **Test Coverage**: 37+ integration tests covering resilience features
 - **Security First**: Post-quantum cryptography and secure defaults
 - **Partition Tolerance**: All features must operate correctly during network partitions
 
 ---
 
-## **🔬 Research & Standards Compliance**
+## Research & Standards Compliance
 
-### **Cryptographic Standards**
+### Cryptographic Standards
 - **[NIST FIPS 204](https://csrc.nist.gov/pubs/fips/204/final)**: Module-Lattice-Based Digital Signature Standard (ML-DSA)
 - **[NIST FIPS 203](https://csrc.nist.gov/pubs/fips/203/final)**: Module-Lattice-Based Key-Encapsulation Mechanism Standard (ML-KEM)
 - **[RFC 8439](https://www.rfc-editor.org/rfc/rfc8439)**: ChaCha20 and Poly1305 for IETF Protocols
 
-### **Distributed Systems Theory**
+### Distributed Systems Theory
 - **CAP Theorem**: Prioritizes availability and partition tolerance (AP system)
 - **CRDT Research**: Operation-based CRDTs with causal consistency (Shapiro et al.)
-- **Gossip Protocols**: HyParView (Leitão et al.), SWIM (Das et al.), Plumtree (Leitão et al.)
+- **Gossip Protocols**: HyParView (Leitao et al.), SWIM (Das et al.), Plumtree (Leitao et al.)
 
-### **Network Resilience Testing**
+### Network Resilience Testing
 - **Partition Tolerance**: Verified through integration tests with simulated network failures
 - **Exponential Backoff**: Jittered retry strategies prevent cascading failures
 - **Resource Limits**: Enforced connection limits (50 peers), memory caps (2GB), timeouts (30s)

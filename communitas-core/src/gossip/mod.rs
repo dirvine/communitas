@@ -55,7 +55,7 @@ pub use context::{EntityMessageHandler, GossipContext};
 pub use coordinator::CoordinatorClient;
 pub use discovery::{FoafDiscovery, IntroducerConfig, cold_start_discovery};
 pub use name_record::{NameRecord, NameRegistry};
-pub use peer_cache::{NatClass, PeerCache, PeerCacheEntry};
+pub use peer_cache::{BootstrapEntry, NatClass, PeerCache, PeerCacheEntry};
 pub use port_manager::PortManager;
 pub use presence::{PresenceInfo, PresenceStatus, PresenceWrapper};
 pub use rendezvous::RendezvousClient;

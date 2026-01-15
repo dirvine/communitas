@@ -88,7 +88,7 @@ pub use services::CoreServices;
 pub use validation::{InputType, ValidationError, ValidationService};
 
 // Re-export gossip context and presence types (now default, no longer feature-gated)
-pub use gossip::{GossipContext, PresenceInfo, PresenceStatus, PresenceWrapper};
+pub use gossip::{BootstrapEntry, GossipContext, PresenceInfo, PresenceStatus, PresenceWrapper};
 
 // Re-export identity helpers for convenience
 pub use identity::{

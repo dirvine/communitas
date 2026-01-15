@@ -127,6 +127,10 @@ pub struct GossipContext {
     /// Background tasks for entity subscription receivers
     /// entity_id → JoinHandle for the receiver task
     entity_receiver_tasks: Arc<RwLock<HashMap<String, JoinHandle<()>>>>,
+
+    /// Listen port for connection identity encoding
+    /// Stored during initialization for use by get_my_connection_words()
+    listen_port: Option<u16>,
 }
 
 impl GossipContext {
@@ -390,6 +394,7 @@ impl GossipContext {
             contact_store: ContactStore::new(),
             entity_message_handler: Arc::new(RwLock::new(None)),
             entity_receiver_tasks: Arc::new(RwLock::new(HashMap::new())),
+            listen_port,
         })
     }
 
@@ -401,6 +406,54 @@ impl GossipContext {
     /// Get four-word address
     pub fn four_words(&self) -> &str {
         &self.four_words
+    }
+
+    /// Get the listen port (if explicitly set during initialization)
+    pub fn listen_port(&self) -> Option<u16> {
+        self.listen_port
+    }
+
+    /// Get connection words for this node's listen address
+    ///
+    /// Returns the four-word encoding of this node's local listen address,
+    /// suitable for sharing with peers so they can connect to us.
+    ///
+    /// # Returns
+    /// Four-word connection identity string (e.g., "apple bear coral dawn" for IPv4)
+    ///
+    /// # Errors
+    /// Returns error if:
+    /// - No listen port was configured (port was 0/OS-assigned)
+    /// - Failed to determine local IP address
+    /// - Four-word encoding failed
+    ///
+    /// # Example
+    /// ```ignore
+    /// let ctx = GossipContext::initialize(..., Some(11000)).await?;
+    /// let words = ctx.get_my_connection_words()?;
+    /// println!("Share this to connect: {}", words);
+    /// ```
+    pub fn get_my_connection_words(&self) -> crate::IdentityResult<String> {
+        // Get listen port (must have been explicitly set)
+        let port = self.listen_port.ok_or_else(|| {
+            crate::identity::IdentityError::EncodingFailed(
+                "No listen port configured (port was OS-assigned)".to_string(),
+            )
+        })?;
+
+        // Get local IP address
+        let local_ip = local_ip_address::local_ip().map_err(|e| {
+            crate::identity::IdentityError::EncodingFailed(format!(
+                "Failed to get local IP address: {}",
+                e
+            ))
+        })?;
+
+        // Construct SocketAddr
+        let addr = std::net::SocketAddr::new(local_ip, port);
+
+        // Encode to four words
+        crate::conn_words(&addr)
     }
 
     /// Get ML-DSA-65 keypair for Sites protocol (signing manifests and name records)
@@ -1346,5 +1399,71 @@ mod tests {
             ctx.site_fetcher.is_some(),
             "SiteFetcher should be initialized"
         );
+    }
+
+    #[tokio::test]
+    async fn test_get_my_connection_words_with_port() {
+        // Initialize with explicit port
+        let ctx = GossipContext::initialize(
+            "ocean-forest-moon-star".to_string(),
+            "Alice".to_string(),
+            "Desktop".to_string(),
+            Some(11000),
+        )
+        .await
+        .expect("init");
+
+        // Should have listen_port stored
+        assert_eq!(ctx.listen_port(), Some(11000));
+
+        // get_my_connection_words should succeed
+        let words = ctx.get_my_connection_words();
+        assert!(words.is_ok(), "get_my_connection_words failed: {:?}", words);
+
+        let words = words.unwrap();
+        // Should contain spaces (four-word-networking uses spaces for IPs)
+        assert!(
+            words.contains(' '),
+            "Connection words should contain spaces"
+        );
+
+        // Words should be decodable back to an address
+        let decoded = crate::conn_from_words(&words);
+        assert!(decoded.is_ok(), "Should decode back to address");
+        assert_eq!(decoded.unwrap().port(), 11000);
+    }
+
+    #[tokio::test]
+    async fn test_get_my_connection_words_without_port() {
+        // Initialize without explicit port (None = OS-assigned)
+        let ctx = GossipContext::initialize(
+            "river-mountain-cloud-light".to_string(),
+            "Bob".to_string(),
+            "Laptop".to_string(),
+            None,
+        )
+        .await
+        .expect("init");
+
+        // Should not have listen_port stored
+        assert_eq!(ctx.listen_port(), None);
+
+        // get_my_connection_words should fail (port unknown)
+        let words = ctx.get_my_connection_words();
+        assert!(
+            words.is_err(),
+            "get_my_connection_words should fail without explicit port"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_connection_words_roundtrip() {
+        // Test that connection words can roundtrip through encode/decode
+        use std::net::SocketAddr;
+
+        let addr: SocketAddr = "192.168.1.100:9000".parse().unwrap();
+        let words = crate::conn_words(&addr).unwrap();
+        let decoded = crate::conn_from_words(&words).unwrap();
+        assert_eq!(addr, decoded);
     }
 }

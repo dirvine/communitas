@@ -25,6 +25,23 @@ mod tool_helpers {
         Language, RecoveryConfig, create_new_identity, recover_identity, validate_mnemonic,
     };
 
+    /// Valid BIP39 mnemonic word counts.
+    const VALID_WORD_COUNTS: [usize; 5] = [12, 15, 18, 21, 24];
+
+    /// Normalize mnemonic: collapse whitespace, lowercase.
+    fn normalize_mnemonic(input: &str) -> String {
+        input
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+            .to_lowercase()
+    }
+
+    /// Treat empty passphrase as None.
+    fn normalize_passphrase(passphrase: Option<&str>) -> Option<&str> {
+        passphrase.filter(|s| !s.is_empty())
+    }
+
     /// Result type matching MCP tool results
     pub struct ToolResult {
         pub content: Value,
@@ -34,11 +51,12 @@ mod tool_helpers {
     /// Execute create_identity tool
     pub fn create_identity(word_count: Option<usize>, passphrase: Option<&str>) -> ToolResult {
         let word_count = word_count.unwrap_or(24);
+        let passphrase = normalize_passphrase(passphrase);
 
-        if ![12, 15, 18, 21, 24].contains(&word_count) {
+        if !VALID_WORD_COUNTS.contains(&word_count) {
             return ToolResult {
                 content: json!({
-                    "error": format!("Invalid word_count: {}. Must be 12, 15, 18, 21, or 24", word_count)
+                    "error": format!("Invalid word_count: {}. BIP39 requires 12, 15, 18, 21, or 24 words", word_count)
                 }),
                 is_error: true,
             };
@@ -79,11 +97,8 @@ mod tool_helpers {
             };
         }
 
-        let normalized: String = mnemonic_words
-            .split_whitespace()
-            .collect::<Vec<_>>()
-            .join(" ")
-            .to_lowercase();
+        let normalized = normalize_mnemonic(mnemonic_words);
+        let passphrase = normalize_passphrase(passphrase);
 
         match recover_identity(&normalized, Language::English, passphrase) {
             Ok(keys) => {
@@ -120,15 +135,10 @@ mod tool_helpers {
             };
         }
 
-        let normalized: String = mnemonic_words
-            .split_whitespace()
-            .collect::<Vec<_>>()
-            .join(" ")
-            .to_lowercase();
-
+        let normalized = normalize_mnemonic(mnemonic_words);
         let word_count = normalized.split_whitespace().count();
 
-        if ![12, 15, 18, 21, 24].contains(&word_count) {
+        if !VALID_WORD_COUNTS.contains(&word_count) {
             return ToolResult {
                 content: json!({
                     "valid": false,

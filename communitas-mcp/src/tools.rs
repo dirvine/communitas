@@ -5135,6 +5135,34 @@ async fn execute_metrics_summary() -> ToolCallResult {
 // Recovery Tools (ADR-016) - Identity Creation and Recovery
 // ============================================================================
 
+/// Valid BIP39 mnemonic word counts (128-256 bits of entropy).
+const VALID_WORD_COUNTS: [usize; 5] = [12, 15, 18, 21, 24];
+
+/// Normalize mnemonic input: trim, collapse whitespace, lowercase.
+fn normalize_mnemonic(input: &str) -> String {
+    input
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_lowercase()
+}
+
+/// Encode identity public keys as base64 strings.
+fn encode_public_keys(keys: &communitas_core::recovery::IdentityKeys) -> (String, String) {
+    (
+        BASE64_STANDARD.encode(keys.verifying_key_bytes()),
+        BASE64_STANDARD.encode(keys.encapsulation_key_bytes()),
+    )
+}
+
+/// Extract passphrase from args, treating empty string as None.
+/// This prevents accidental key derivation differences from "" vs missing passphrase.
+fn extract_passphrase(args: &Value) -> Option<&str> {
+    args.get("passphrase")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+}
+
 /// Dispatcher for recovery-related tools.
 /// These tools do not require authentication as they're used to create/recover identity.
 async fn dispatch_recovery_tools(name: &str, args: &Value) -> Option<ToolCallResult> {
@@ -5160,12 +5188,13 @@ async fn execute_create_identity(args: &Value) -> ToolCallResult {
         .map(|v| v as usize)
         .unwrap_or(24);
 
-    let passphrase = args.get("passphrase").and_then(|v| v.as_str());
+    let passphrase = extract_passphrase(args);
 
     // Validate word count
-    if ![12, 15, 18, 21, 24].contains(&word_count) {
+    if !VALID_WORD_COUNTS.contains(&word_count) {
+        tracing::warn!(word_count, "Invalid word count requested");
         return error_result(&format!(
-            "Invalid word_count: {}. Must be 12, 15, 18, 21, or 24",
+            "Invalid word_count: {}. BIP39 requires 12, 15, 18, 21, or 24 words",
             word_count
         ));
     }
@@ -5178,10 +5207,13 @@ async fn execute_create_identity(args: &Value) -> ToolCallResult {
         Ok((mnemonic, keys)) => {
             // Convert mnemonic to word array
             let mnemonic_words: Vec<String> = mnemonic.words().map(String::from).collect();
+            let (public_signing_key, public_encryption_key) = encode_public_keys(&keys);
 
-            // Encode public keys as base64
-            let public_signing_key = BASE64_STANDARD.encode(keys.verifying_key_bytes());
-            let public_encryption_key = BASE64_STANDARD.encode(keys.encapsulation_key_bytes());
+            tracing::info!(
+                four_words = %keys.four_words,
+                word_count,
+                "Created new identity"
+            );
 
             json_result(&json!({
                 "mnemonic_words": mnemonic_words,
@@ -5193,7 +5225,15 @@ async fn execute_create_identity(args: &Value) -> ToolCallResult {
                            Never share it with anyone. Never store it digitally."
             }))
         }
-        Err(e) => error_result(&format!("Failed to create identity: {}", e)),
+        Err(e) => {
+            tracing::error!(
+                error = %e,
+                word_count,
+                has_passphrase = passphrase.is_some(),
+                "Identity creation failed"
+            );
+            error_result(&format!("Failed to create identity: {}", e))
+        }
     }
 }
 
@@ -5214,21 +5254,18 @@ async fn execute_recover_identity(args: &Value) -> ToolCallResult {
         return error_result("mnemonic_words cannot be empty");
     }
 
-    let passphrase = args.get("passphrase").and_then(|v| v.as_str());
-
-    // Normalize whitespace (handle extra spaces, newlines, etc.)
-    let normalized: String = mnemonic_words
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-        .to_lowercase();
+    let passphrase = extract_passphrase(args);
+    let normalized = normalize_mnemonic(mnemonic_words);
 
     // Recover identity
     match recover_identity(&normalized, Language::English, passphrase) {
         Ok(keys) => {
-            // Encode public keys as base64
-            let public_signing_key = BASE64_STANDARD.encode(keys.verifying_key_bytes());
-            let public_encryption_key = BASE64_STANDARD.encode(keys.encapsulation_key_bytes());
+            let (public_signing_key, public_encryption_key) = encode_public_keys(&keys);
+
+            tracing::info!(
+                four_words = %keys.four_words,
+                "Recovered identity from mnemonic"
+            );
 
             json_result(&json!({
                 "four_words": keys.four_words,
@@ -5237,13 +5274,22 @@ async fn execute_recover_identity(args: &Value) -> ToolCallResult {
                 "success": true
             }))
         }
-        Err(e) => error_result(&format!("Failed to recover identity: {}", e)),
+        Err(e) => {
+            tracing::error!(
+                error = %e,
+                has_passphrase = passphrase.is_some(),
+                "Identity recovery failed"
+            );
+            error_result(&format!("Failed to recover identity: {}", e))
+        }
     }
 }
 
 /// Validate a BIP39 mnemonic phrase without deriving keys.
 ///
 /// Quick check for word validity and checksum. Does not derive any keys.
+/// Note: Returns is_error=false even for invalid mnemonics, since validation
+/// itself succeeded - check the `valid` field for the validation result.
 async fn execute_validate_mnemonic(args: &Value) -> ToolCallResult {
     use communitas_core::recovery::{Language, validate_mnemonic};
 
@@ -5261,21 +5307,15 @@ async fn execute_validate_mnemonic(args: &Value) -> ToolCallResult {
         }));
     }
 
-    // Normalize whitespace and count words
-    let normalized: String = mnemonic_words
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-        .to_lowercase();
-
+    let normalized = normalize_mnemonic(mnemonic_words);
     let word_count = normalized.split_whitespace().count();
 
     // Validate word count first
-    if ![12, 15, 18, 21, 24].contains(&word_count) {
+    if !VALID_WORD_COUNTS.contains(&word_count) {
         return json_result(&json!({
             "valid": false,
             "word_count": word_count,
-            "error": format!("Invalid word count: {}. Must be 12, 15, 18, 21, or 24", word_count)
+            "error": format!("Invalid word count: {}. BIP39 requires 12, 15, 18, 21, or 24 words", word_count)
         }));
     }
 

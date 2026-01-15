@@ -4,8 +4,6 @@
 //
 // IMPORTANT: Keep this file in sync with flutter_api.dart types.
 
-import 'package:flutter/foundation.dart';
-
 /// Generate a random four-word identity.
 /// On web, this is not available - use bridge API instead.
 Future<String> generateIdWords() async {

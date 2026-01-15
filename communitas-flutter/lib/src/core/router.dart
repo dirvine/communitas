@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../features/auth/presentation/login_screen.dart';
 import '../features/auth/presentation/create_identity_screen.dart';
+import '../features/auth/presentation/recover_identity_screen.dart';
 import '../features/home/presentation/home_screen.dart';
 import '../features/entities/presentation/entity_detail_screen.dart';
 import '../features/messaging/presentation/chat_screen.dart';
@@ -20,6 +21,7 @@ class Routes {
 
   static const String login = '/login';
   static const String createIdentity = '/create-identity';
+  static const String recoverIdentity = '/recover-identity';
   static const String home = '/';
   static const String entityDetail = '/entity/:type/:id';
   static const String entityChat = '/entity/:type/:id/chat';
@@ -58,7 +60,8 @@ final routerProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) {
       final isLoggedIn = notifier.isAuthenticated;
       final isLoggingIn = state.matchedLocation == Routes.login ||
-          state.matchedLocation == Routes.createIdentity;
+          state.matchedLocation == Routes.createIdentity ||
+          state.matchedLocation == Routes.recoverIdentity;
 
       // If not logged in and not on auth pages, redirect to login
       if (!isLoggedIn && !isLoggingIn) {
@@ -83,6 +86,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: Routes.createIdentity,
         name: 'createIdentity',
         builder: (context, state) => const CreateIdentityScreen(),
+      ),
+      GoRoute(
+        path: Routes.recoverIdentity,
+        name: 'recoverIdentity',
+        builder: (context, state) => const RecoverIdentityScreen(),
       ),
 
       // Main app routes (require auth)

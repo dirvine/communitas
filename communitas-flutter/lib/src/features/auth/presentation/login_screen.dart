@@ -158,6 +158,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 onPressed: () => context.go(Routes.createIdentity),
                 child: const Text('Create new identity'),
               ),
+
+              // Recover existing identity
+              TextButton(
+                onPressed: () => context.go(Routes.recoverIdentity),
+                child: const Text('Recover existing identity'),
+              ),
             ],
           ),
         ),

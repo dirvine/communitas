@@ -184,6 +184,58 @@ pub fn list_tools(authenticated: bool) -> Vec<Tool> {
                 "required": ["backup_data", "password"]
             }),
         },
+        // Recovery tools (ADR-016) - pre-auth for identity creation/recovery
+        Tool {
+            name: "create_identity".to_string(),
+            description: "Create a new identity with BIP39 recovery phrase. Returns mnemonic words that MUST be written down for backup.".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "word_count": {
+                        "type": "integer",
+                        "description": "Number of mnemonic words (12, 15, 18, 21, or 24). Default: 24 for maximum security.",
+                        "enum": [12, 15, 18, 21, 24],
+                        "default": 24
+                    },
+                    "passphrase": {
+                        "type": "string",
+                        "description": "Optional additional passphrase (BIP39 '25th word') for extra security"
+                    }
+                }
+            }),
+        },
+        Tool {
+            name: "recover_identity".to_string(),
+            description: "Recover an identity from a BIP39 recovery phrase. Use the same mnemonic words from initial backup.".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "mnemonic_words": {
+                        "type": "string",
+                        "description": "Space-separated BIP39 mnemonic words (12-24 words)"
+                    },
+                    "passphrase": {
+                        "type": "string",
+                        "description": "Optional passphrase if one was used during identity creation"
+                    }
+                },
+                "required": ["mnemonic_words"]
+            }),
+        },
+        Tool {
+            name: "validate_mnemonic".to_string(),
+            description: "Validate a BIP39 mnemonic phrase without deriving keys. Quick check for word validity and checksum.".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "mnemonic_words": {
+                        "type": "string",
+                        "description": "Space-separated BIP39 mnemonic words to validate"
+                    }
+                },
+                "required": ["mnemonic_words"]
+            }),
+        },
     ];
 
     // If not authenticated, only return pre-auth tools
@@ -1694,6 +1746,9 @@ pub async fn call_tool(app: &CommunitasApp, name: &str, args: Option<Value>) -> 
         return result;
     }
     if let Some(result) = dispatch_social_tools(app, name, &args).await {
+        return result;
+    }
+    if let Some(result) = dispatch_recovery_tools(name, &args).await {
         return result;
     }
     if let Some(result) = dispatch_misc_tools(app, name, &args).await {
@@ -5073,5 +5128,167 @@ async fn execute_metrics_summary() -> ToolCallResult {
             }
         })),
         Err(e) => error_result(&format!("Failed to get metrics summary: {}", e)),
+    }
+}
+
+// ============================================================================
+// Recovery Tools (ADR-016) - Identity Creation and Recovery
+// ============================================================================
+
+/// Dispatcher for recovery-related tools.
+/// These tools do not require authentication as they're used to create/recover identity.
+async fn dispatch_recovery_tools(name: &str, args: &Value) -> Option<ToolCallResult> {
+    match name {
+        "create_identity" => Some(execute_create_identity(args).await),
+        "recover_identity" => Some(execute_recover_identity(args).await),
+        "validate_mnemonic" => Some(execute_validate_mnemonic(args).await),
+        _ => None,
+    }
+}
+
+/// Create a new identity with BIP39 mnemonic.
+///
+/// Returns mnemonic words for backup, four-word identity, and public keys.
+/// SECURITY: Never returns private keys - only public keys are included.
+async fn execute_create_identity(args: &Value) -> ToolCallResult {
+    use communitas_core::recovery::{RecoveryConfig, create_new_identity};
+
+    // Extract optional parameters
+    let word_count = args
+        .get("word_count")
+        .and_then(|v| v.as_u64())
+        .map(|v| v as usize)
+        .unwrap_or(24);
+
+    let passphrase = args.get("passphrase").and_then(|v| v.as_str());
+
+    // Validate word count
+    if ![12, 15, 18, 21, 24].contains(&word_count) {
+        return error_result(&format!(
+            "Invalid word_count: {}. Must be 12, 15, 18, 21, or 24",
+            word_count
+        ));
+    }
+
+    // Build configuration
+    let config = RecoveryConfig::default().with_word_count(word_count);
+
+    // Create identity
+    match create_new_identity(&config, passphrase) {
+        Ok((mnemonic, keys)) => {
+            // Convert mnemonic to word array
+            let mnemonic_words: Vec<String> = mnemonic.words().map(String::from).collect();
+
+            // Encode public keys as base64
+            let public_signing_key = BASE64_STANDARD.encode(keys.verifying_key_bytes());
+            let public_encryption_key = BASE64_STANDARD.encode(keys.encapsulation_key_bytes());
+
+            json_result(&json!({
+                "mnemonic_words": mnemonic_words,
+                "four_words": keys.four_words,
+                "public_signing_key": public_signing_key,
+                "public_encryption_key": public_encryption_key,
+                "warning": "IMPORTANT: Write down your recovery phrase and store it safely offline. \
+                           This phrase is the ONLY way to recover your identity if you lose access. \
+                           Never share it with anyone. Never store it digitally."
+            }))
+        }
+        Err(e) => error_result(&format!("Failed to create identity: {}", e)),
+    }
+}
+
+/// Recover an identity from a BIP39 mnemonic phrase.
+///
+/// Returns four-word identity and public keys.
+/// SECURITY: Never returns private keys - only public keys are included.
+async fn execute_recover_identity(args: &Value) -> ToolCallResult {
+    use communitas_core::recovery::{Language, recover_identity};
+
+    // Extract required mnemonic
+    let mnemonic_words = match args.get("mnemonic_words").and_then(|v| v.as_str()) {
+        Some(words) => words.trim(),
+        None => return error_result("mnemonic_words is required"),
+    };
+
+    if mnemonic_words.is_empty() {
+        return error_result("mnemonic_words cannot be empty");
+    }
+
+    let passphrase = args.get("passphrase").and_then(|v| v.as_str());
+
+    // Normalize whitespace (handle extra spaces, newlines, etc.)
+    let normalized: String = mnemonic_words
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_lowercase();
+
+    // Recover identity
+    match recover_identity(&normalized, Language::English, passphrase) {
+        Ok(keys) => {
+            // Encode public keys as base64
+            let public_signing_key = BASE64_STANDARD.encode(keys.verifying_key_bytes());
+            let public_encryption_key = BASE64_STANDARD.encode(keys.encapsulation_key_bytes());
+
+            json_result(&json!({
+                "four_words": keys.four_words,
+                "public_signing_key": public_signing_key,
+                "public_encryption_key": public_encryption_key,
+                "success": true
+            }))
+        }
+        Err(e) => error_result(&format!("Failed to recover identity: {}", e)),
+    }
+}
+
+/// Validate a BIP39 mnemonic phrase without deriving keys.
+///
+/// Quick check for word validity and checksum. Does not derive any keys.
+async fn execute_validate_mnemonic(args: &Value) -> ToolCallResult {
+    use communitas_core::recovery::{Language, validate_mnemonic};
+
+    // Extract required mnemonic
+    let mnemonic_words = match args.get("mnemonic_words").and_then(|v| v.as_str()) {
+        Some(words) => words.trim(),
+        None => return error_result("mnemonic_words is required"),
+    };
+
+    if mnemonic_words.is_empty() {
+        return json_result(&json!({
+            "valid": false,
+            "word_count": 0,
+            "error": "Mnemonic cannot be empty"
+        }));
+    }
+
+    // Normalize whitespace and count words
+    let normalized: String = mnemonic_words
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_lowercase();
+
+    let word_count = normalized.split_whitespace().count();
+
+    // Validate word count first
+    if ![12, 15, 18, 21, 24].contains(&word_count) {
+        return json_result(&json!({
+            "valid": false,
+            "word_count": word_count,
+            "error": format!("Invalid word count: {}. Must be 12, 15, 18, 21, or 24", word_count)
+        }));
+    }
+
+    // Validate mnemonic (words and checksum)
+    match validate_mnemonic(&normalized, Language::English) {
+        Ok(_) => json_result(&json!({
+            "valid": true,
+            "word_count": word_count
+        })),
+        Err(e) => json_result(&json!({
+            "valid": false,
+            "word_count": word_count,
+            "error": e.to_string()
+        })),
     }
 }

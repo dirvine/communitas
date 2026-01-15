@@ -29,3 +29,6 @@ pub use keys::{IdentityKeys, create_new_identity, derive_identity_keys, recover_
 pub use mnemonic::{
     RecoveryConfig, generate_recovery_mnemonic, mnemonic_to_words, validate_mnemonic,
 };
+
+// Re-export bip39::Language for consumers who need to specify language
+pub use bip39::Language;

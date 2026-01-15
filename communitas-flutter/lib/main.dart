@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+// Export CommunitasApp for use by tests and external code
+export 'src/app.dart' show CommunitasApp;
 import 'src/app.dart';
 
 // Conditional imports for native-only features

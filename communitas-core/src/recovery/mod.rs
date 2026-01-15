@@ -15,4 +15,6 @@ pub mod error;
 pub mod mnemonic;
 
 pub use error::{RecoveryError, RecoveryResult};
-pub use mnemonic::RecoveryConfig;
+pub use mnemonic::{
+    RecoveryConfig, generate_recovery_mnemonic, mnemonic_to_words, validate_mnemonic,
+};

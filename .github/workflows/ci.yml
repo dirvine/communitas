@@ -63,10 +63,14 @@ jobs:
 
       - name: Rust clippy policy
         run: |
-          # Run clippy with practical checks
+          # Run clippy with practical checks on library crates
           # Note: unwrap_used/expect_used excluded - too restrictive for test code,
           # better caught in code review per CLAUDE.md policy
-          cargo clippy --workspace --exclude communitas-desktop --all-features -- \
+          # Excluded: communitas-desktop (requires Tauri), distributed-test-orchestrator (CLI tool)
+          cargo clippy --workspace \
+            --exclude communitas-desktop \
+            --exclude distributed-test-orchestrator \
+            --all-features -- \
             -D clippy::panic \
             -D clippy::todo \
             -D clippy::unimplemented \

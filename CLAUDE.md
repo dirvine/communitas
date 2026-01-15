@@ -172,6 +172,20 @@ Bootstrap and seed nodes for network support:
 - **Build Failures**: Ensure Rust 1.85+ and Flutter 3.27+ installed
 - **Binding Generation**: Run flutter_rust_bridge code generation after Rust changes
 
+### Windows Build Issues
+The project requires CMake and Visual Studio Build Tools on Windows because `ant-quic` depends on `aws-lc-rs` (FIPS 140-3 certified cryptography), which compiles C code.
+
+**Prerequisites:**
+- Visual Studio 2022 Build Tools with C++ workload
+- CMake 3.20+ (in PATH)
+- Rust with MSVC toolchain (default on Windows)
+
+**Known limitations:**
+- `cargo build --all-targets` fails due to `libfuzzer-sys` (Linux-only). Use `cargo build --release` instead.
+- First build is slow (~1-3 minutes) while compiling AWS Libcrypto.
+
+See [docs/development/windows-build.md](docs/development/windows-build.md) for detailed Windows setup.
+
 ### Debug Modes
 ```bash
 # Rust debugging

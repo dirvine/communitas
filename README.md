@@ -32,9 +32,23 @@ Technical implementation verified through comprehensive integration testing (37 
 ## Quick Start
 
 ### Prerequisites
+
+**All Platforms:**
 - Flutter 3.27+
 - Rust 1.85+
-- Platform-specific dependencies (see Flutter docs)
+
+**Windows Additional Requirements:**
+- Visual Studio 2022 Build Tools (C++ workload)
+- CMake 3.20+ (required by aws-lc-sys for FIPS-certified cryptography)
+- See [Windows Build Guide](docs/development/windows-build.md) for detailed setup
+
+**macOS:**
+- Xcode Command Line Tools
+- CMake (via Homebrew: `brew install cmake`)
+
+**Linux:**
+- Build essentials, CMake, and platform libraries
+- See Flutter docs for GTK/WebKit dependencies
 
 ### Development Setup
 ```bash

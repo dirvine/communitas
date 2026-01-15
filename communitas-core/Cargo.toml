@@ -67,6 +67,7 @@ log = "0.4"
 
 # Cryptography and security
 blake3 = "1.0"
+bip39 = { version = "2", default-features = false, features = ["std", "zeroize"] }
 hex = "0.4"
 rand = "0.8"
 rand_chacha = "0.3"  # For deterministic key generation from identity seed

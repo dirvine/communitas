@@ -53,6 +53,7 @@ pub mod peer_presence; // Network-wide peer discovery (ADR-014)
 pub mod permissions; // Granular per-resource permission system // Invite service with CRDT persistence
 // pub mod messaging; // TODO: Refactor in Sprint 3 for gossip pubsub
 pub mod presence_service;
+pub mod recovery; // Vault recovery with BIP-39 mnemonic phrases (ADR-016)
 pub mod resource_limits; // Resource management and limits (MESH_CAPABILITIES.md §8.3)
 pub mod retry_utils; // Exponential backoff for resilient retries (MESH_CAPABILITIES.md §3.2)
 pub mod security;
@@ -109,3 +110,6 @@ pub use invite_service::{InviteRequest, InviteService, InviteServiceError, Invit
 pub use peer_presence::{
     PresenceCache, PresenceError, PresenceQuery, PresenceRecord, PresenceResponse, PresenceResult,
 };
+
+// Re-export recovery types for vault backup/restore (ADR-016)
+pub use recovery::{RecoveryConfig, RecoveryError, RecoveryResult};

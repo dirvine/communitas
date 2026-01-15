@@ -148,6 +148,12 @@ clear-and-*.js
 *_TESTING.md
 Sprint-*.md
 TASK_*.md
+TEST_*.md
+TEST_*.txt
+
+# Claude Code session files
+.claude/vps-test.yaml
+.planning/
 
 # Python
 __pycache__/

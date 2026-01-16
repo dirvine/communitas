@@ -83,6 +83,9 @@ jobs:
       contents: write
     needs: create-release
     runs-on: macos-latest
+    env:
+      HAS_SIGNING_SECRETS: ${{ secrets.MACOS_CERTIFICATE != '' }}
+      HAS_NOTARIZATION_SECRETS: ${{ secrets.MACOS_NOTARIZATION_APPLE_ID != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -119,7 +122,7 @@ jobs:
         run: flutter build macos --release
 
       - name: Import signing certificate
-        if: secrets.MACOS_CERTIFICATE != ''
+        if: env.HAS_SIGNING_SECRETS == 'true'
         env:
           MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
           MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
@@ -142,7 +145,7 @@ jobs:
           rm $RUNNER_TEMP/certificate.p12
 
       - name: Sign app bundle
-        if: secrets.MACOS_CERTIFICATE != ''
+        if: env.HAS_SIGNING_SECRETS == 'true'
         env:
           MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
           MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
@@ -183,7 +186,7 @@ jobs:
           ls -la "$DMG_NAME"
 
       - name: Sign DMG
-        if: secrets.MACOS_CERTIFICATE != ''
+        if: env.HAS_SIGNING_SECRETS == 'true'
         env:
           MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
           MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
@@ -196,7 +199,7 @@ jobs:
           echo "DMG signed successfully"
 
       - name: Notarize DMG
-        if: secrets.MACOS_NOTARIZATION_APPLE_ID != '' && secrets.MACOS_CERTIFICATE != ''
+        if: env.HAS_SIGNING_SECRETS == 'true' && env.HAS_NOTARIZATION_SECRETS == 'true'
         env:
           MACOS_NOTARIZATION_APPLE_ID: ${{ secrets.MACOS_NOTARIZATION_APPLE_ID }}
           MACOS_NOTARIZATION_PASSWORD: ${{ secrets.MACOS_NOTARIZATION_PASSWORD }}
@@ -226,7 +229,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload unsigned artifact (if no signing)
-        if: secrets.MACOS_CERTIFICATE == ''
+        if: env.HAS_SIGNING_SECRETS != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: Communitas-macOS-unsigned

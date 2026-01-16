@@ -56,7 +56,7 @@ pub struct Entity {
     /// Network four-word identity if this entity is linked to the P2P network
     #[serde(skip_serializing_if = "Option::is_none")]
     pub network_four_words: Option<String>,
-    /// True if this is a local-only placeholder (no network identity yet)
+    /// True if this is local-only (no network identity yet)
     #[serde(default)]
     pub is_local_only: bool,
     /// Timestamp when entity was linked to a network identity
@@ -68,7 +68,7 @@ pub struct Entity {
 }
 
 impl Entity {
-    /// Create a new local-only entity (placeholder without network identity)
+    /// Create a new local-only entity without a network identity
     pub fn new_local(
         name: String,
         entity_type: EntityType,

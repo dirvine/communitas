@@ -15,63 +15,38 @@ The `communitas-core` crate provides the core functionality for identity managem
 **Cargo.toml**:
 ```toml
 [dependencies]
-communitas-core = "0.3.17"
-saorsa-pqc = "0.2.0"
-ant-quic = "0.20.0"
-four-word-networking = "0.1.0"
+communitas-core = "0.1.54"
 ```
 
 ---
 
 ## communitas-core API
 
-### CoreContext
+### CommunitasApp
 
-Primary entry point for core functionality.
+Primary entry point for core functionality (command/query API).
 
 ```rust
-use communitas_core::{CoreContext, types::DeviceType};
+use communitas_core::app::CommunitasApp;
+use communitas_core::command::{Command, Query};
 
-pub struct CoreContext {
-    // Internal fields omitted
-}
-
-impl CoreContext {
-    /// Initialize core context with identity
-    pub async fn new(
-        four_words: &str,
-        display_name: &str,
-        device_name: &str,
-        device_type: DeviceType,
-    ) -> Result<Self>;
-
-    /// Create a new group
-    pub async fn create_group(&mut self, name: &str) -> Result<Group>;
-
-    /// Send a message to a channel
-    pub async fn send_message(
-        &mut self,
-        channel_id: &str,
-        content: &str,
-        thread_id: Option<&str>,
-    ) -> Result<Message>;
-
-    /// Get or create a direct message channel
-    pub async fn get_dm_channel(&mut self, peer: &str) -> Result<Channel>;
-}
-```
-
-**Example**:
-```rust
-let mut context = CoreContext::new(
-    "ocean-forest-moon-star",
-    "Alice",
-    "MacBook Pro",
-    DeviceType::Desktop,
+let app = CommunitasApp::new(
+    "ocean-forest-moon-star".to_string(),
+    "Alice".to_string(),
+    "MacBook Pro".to_string(),
+    "/path/to/storage".to_string(),
 ).await?;
 
-let group = context.create_group("Engineering").await?;
-println!("Created group: {}", group.id);
+// Create an entity
+app.execute(Command::CreateEntity {
+    name: "Engineering".to_string(),
+    entity_type: communitas_core::EntityType::Group,
+    description: None,
+    initial_members: vec![],
+}).await?;
+
+// Query profile
+let profile = app.query(Query::GetProfile).await?;
 ```
 
 ---
@@ -527,9 +502,8 @@ mod tests {
 
 ## See Also
 
-- [Tauri Commands API](tauri-commands.md) - Desktop IPC interface
-- [Frontend API](frontend-api.md) - TypeScript/React APIs
-- [Bridge API](bridge-api.md) - HTTP/REST interface
+- [Flutter FFI API](README.md) - flutter_rust_bridge surface
+- [MCP Server](../../communitas-mcp/README.md) - AI agent interface
 - [Security Architecture](../architecture/security.md) - Cryptography details
 - [crates.io documentation](https://docs.rs/communitas-core)
 

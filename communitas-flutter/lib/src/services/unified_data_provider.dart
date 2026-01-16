@@ -7,7 +7,7 @@ import '../demo/demo_data.dart';
 import '../features/auth/providers/auth_provider.dart';
 import 'ffi_provider.dart';
 
-/// Unified entity model for both demo and bridge data.
+/// Unified entity model for both demo and FFI data.
 class UnifiedEntity {
   final String id;
   final String type;
@@ -39,18 +39,6 @@ class UnifiedEntity {
     );
   }
 
-  factory UnifiedEntity.fromBridge(Map<String, dynamic> json) {
-    return UnifiedEntity(
-      id: json['id'] as String? ?? '',
-      type: json['entity_type'] as String? ?? json['type'] as String? ?? 'unknown',
-      name: json['name'] as String? ?? 'Unnamed',
-      role: json['role'] as String? ?? 'member',
-      description: json['description'] as String? ?? '',
-      memberCount: json['member_count'] as int? ?? 0,
-      parentId: json['parent_id'] as String?,
-    );
-  }
-
   /// Create from FFI FlutterEntity type.
   factory UnifiedEntity.fromFfi(FlutterEntity entity) {
     return UnifiedEntity(
@@ -65,7 +53,7 @@ class UnifiedEntity {
   }
 }
 
-/// Unified contact model for both demo and bridge data.
+/// Unified contact model for both demo and FFI data.
 class UnifiedContact {
   /// Hex-encoded ML-DSA-65 public key (THE identity).
   final String pubkeyHex;
@@ -82,23 +70,26 @@ class UnifiedContact {
 
   factory UnifiedContact.fromDemo(DemoContact demo) {
     return UnifiedContact(
-      // Use fourWords as placeholder for pubkeyHex in demo mode
+      // Demo mode: use fourWords as stand-in for pubkeyHex
       pubkeyHex: demo.fourWords,
       displayName: demo.displayName,
       status: demo.status,
     );
   }
 
-  factory UnifiedContact.fromBridge(Map<String, dynamic> json) {
+  /// Create from FFI FlutterContact type.
+  factory UnifiedContact.fromFfi(FlutterContact contact) {
     return UnifiedContact(
-      pubkeyHex: json['pubkey_hex'] as String? ?? json['four_words'] as String? ?? '',
-      displayName: json['display_name'] as String? ?? json['four_words'] as String? ?? '',
-      status: json['status'] as String? ?? 'offline',
+      pubkeyHex: contact.id,
+      displayName: contact.displayName.isNotEmpty
+          ? contact.displayName
+          : (contact.fourWords ?? contact.id),
+      status: contact.isOnline ? 'online' : 'offline',
     );
   }
 }
 
-/// Unified message model for both demo and bridge data.
+/// Unified message model for both demo and FFI data.
 class UnifiedMessage {
   final String id;
   final String senderId;
@@ -106,6 +97,9 @@ class UnifiedMessage {
   final String content;
   final String timestamp;
   final Map<String, int> reactions;
+  final Set<String> userReactions;
+  final DateTime? editedAt;
+  final String? replyToId;
   final bool hasThread;
   final int threadReplyCount;
 
@@ -116,9 +110,40 @@ class UnifiedMessage {
     required this.content,
     required this.timestamp,
     required this.reactions,
+    this.userReactions = const {},
+    this.editedAt,
+    this.replyToId,
     this.hasThread = false,
     this.threadReplyCount = 0,
   });
+
+  UnifiedMessage copyWith({
+    String? id,
+    String? senderId,
+    String? senderName,
+    String? content,
+    String? timestamp,
+    Map<String, int>? reactions,
+    Set<String>? userReactions,
+    DateTime? editedAt,
+    String? replyToId,
+    bool? hasThread,
+    int? threadReplyCount,
+  }) {
+    return UnifiedMessage(
+      id: id ?? this.id,
+      senderId: senderId ?? this.senderId,
+      senderName: senderName ?? this.senderName,
+      content: content ?? this.content,
+      timestamp: timestamp ?? this.timestamp,
+      reactions: reactions ?? this.reactions,
+      userReactions: userReactions ?? this.userReactions,
+      editedAt: editedAt ?? this.editedAt,
+      replyToId: replyToId ?? this.replyToId,
+      hasThread: hasThread ?? this.hasThread,
+      threadReplyCount: threadReplyCount ?? this.threadReplyCount,
+    );
+  }
 
   factory UnifiedMessage.fromDemo(DemoMessage demo) {
     return UnifiedMessage(
@@ -128,23 +153,43 @@ class UnifiedMessage {
       content: demo.content,
       timestamp: demo.timestamp,
       reactions: demo.reactions,
+      userReactions: const {},
+      editedAt: null,
+      replyToId: null,
       hasThread: demo.hasThread,
       threadReplyCount: demo.threadReplyCount,
     );
   }
 
-  factory UnifiedMessage.fromBridge(Map<String, dynamic> json) {
+  /// Create from FFI FlutterMessage type.
+  factory UnifiedMessage.fromFfi(FlutterMessage message) {
+    final reactionMap = <String, int>{};
+    final userReactions = <String>{};
+    for (final reaction in message.reactions) {
+      reactionMap[reaction.emoji] = reaction.count;
+      if (reaction.userReacted) {
+        userReactions.add(reaction.emoji);
+      }
+    }
+
+    final editedAt = message.editedAt != null
+        ? DateTime.fromMillisecondsSinceEpoch(message.editedAt!.toInt())
+        : null;
+
     return UnifiedMessage(
-      id: json['id'] as String? ?? '',
-      senderId: json['sender_id'] as String? ?? json['four_words'] as String? ?? '',
-      senderName: json['sender_name'] as String? ?? json['display_name'] as String? ?? 'Unknown',
-      content: json['content'] as String? ?? '',
-      timestamp: json['timestamp'] as String? ?? '',
-      reactions: (json['reactions'] as Map<String, dynamic>?)?.map(
-        (k, v) => MapEntry(k, v as int),
-      ) ?? {},
-      hasThread: json['has_thread'] as bool? ?? false,
-      threadReplyCount: json['thread_reply_count'] as int? ?? 0,
+      id: message.id,
+      senderId: message.author,
+      senderName: message.author,
+      content: message.text,
+      timestamp: DateTime.fromMillisecondsSinceEpoch(
+        message.timestamp.toInt(),
+      ).toIso8601String(),
+      reactions: reactionMap,
+      userReactions: userReactions,
+      editedAt: editedAt,
+      replyToId: message.replyToId,
+      hasThread: false,
+      threadReplyCount: 0,
     );
   }
 }
@@ -156,7 +201,7 @@ class UnifiedMessage {
 /// Provider for user identity info.
 ///
 /// Returns pubkeyHex (permanent identity) and displayName (shown in UI).
-final unifiedIdentityProvider = Provider<({String pubkeyHex, String displayName})>((ref) {
+final unifiedIdentityProvider = Provider<({String pubkeyHex, String displayName, String? fourWords})>((ref) {
   final auth = ref.watch(authNotifierProvider);
 
   if (auth.isAuthenticated) {
@@ -165,13 +210,15 @@ final unifiedIdentityProvider = Provider<({String pubkeyHex, String displayName}
     return (
       pubkeyHex: pubkeyHex,
       displayName: auth.displayName ?? 'Unknown User',
+      fourWords: auth.fourWords,
     );
   }
 
-  // Fallback to demo identity (using fourWords as placeholder for pubkeyHex)
+  // Fallback to demo identity (using fourWords as stand-in for pubkeyHex)
   return (
     pubkeyHex: DemoData.demoIdentity.fourWords,
     displayName: DemoData.demoIdentity.displayName,
+    fourWords: DemoData.demoIdentity.fourWords,
   );
 });
 
@@ -245,23 +292,90 @@ final unifiedGroupsProvider = FutureProvider<List<UnifiedEntity>>((ref) async {
 
 /// Provider for all contacts.
 ///
-/// TODO: FFI method for listing contacts not yet available.
-/// Currently uses demo data for all modes.
 final unifiedContactsProvider = FutureProvider<List<UnifiedContact>>((ref) async {
-  // Demo mode or FFI fallback: use demo data
-  // TODO: Add FFI method for contacts when available in Rust
-  return DemoData.contacts.map((e) => UnifiedContact.fromDemo(e)).toList();
+  if (kDemoMode && kIsWeb) {
+    return DemoData.contacts.map((e) => UnifiedContact.fromDemo(e)).toList();
+  }
+
+  final api = ref.watch(communitasApiProvider);
+  if (api == null) {
+    return DemoData.contacts.map((e) => UnifiedContact.fromDemo(e)).toList();
+  }
+
+  try {
+    final contacts = await api.contactsList();
+    return contacts.map(UnifiedContact.fromFfi).toList();
+  } catch (e) {
+    debugPrint('Error fetching contacts via FFI: $e');
+    return [];
+  }
 });
 
 /// Provider for messages in a channel.
 ///
-/// TODO: FFI method for listing messages not yet available.
-/// Currently uses demo data for all modes.
 final unifiedMessagesProvider = FutureProvider.family<List<UnifiedMessage>, String>((ref, channelId) async {
-  // Demo mode or FFI fallback: use demo data
-  // TODO: Add FFI method for message history when available in Rust
-  return DemoData.messages.map((e) => UnifiedMessage.fromDemo(e)).toList();
+  if (kDemoMode && kIsWeb) {
+    final demoMessages = DemoData.messages.map((e) => UnifiedMessage.fromDemo(e)).toList();
+    return _applyThreadCounts(demoMessages);
+  }
+
+  final api = ref.watch(communitasApiProvider);
+  if (api == null) {
+    final demoMessages = DemoData.messages.map((e) => UnifiedMessage.fromDemo(e)).toList();
+    return _applyThreadCounts(demoMessages);
+  }
+
+  try {
+    final messages = await api.messageList(entityId: channelId);
+    return _applyThreadCounts(messages.map(UnifiedMessage.fromFfi).toList());
+  } catch (e) {
+    debugPrint('Error fetching messages via FFI: $e');
+    return [];
+  }
 });
+
+/// Provider for direct messages with a peer.
+final unifiedDirectMessagesProvider =
+    FutureProvider.family<List<UnifiedMessage>, String>((ref, peerId) async {
+  if (kDemoMode && kIsWeb) {
+    return DemoData.messages.map((e) => UnifiedMessage.fromDemo(e)).toList();
+  }
+
+  final api = ref.watch(communitasApiProvider);
+  if (api == null) {
+    return DemoData.messages.map((e) => UnifiedMessage.fromDemo(e)).toList();
+  }
+
+  try {
+    final messages = await api.messageListDirect(otherPeerId: peerId);
+    return messages.map(UnifiedMessage.fromFfi).toList();
+  } catch (e) {
+    debugPrint('Error fetching direct messages via FFI: $e');
+    return [];
+  }
+});
+
+List<UnifiedMessage> _applyThreadCounts(List<UnifiedMessage> messages) {
+  if (messages.isEmpty) return messages;
+
+  final replyCounts = <String, int>{};
+  for (final message in messages) {
+    final parentId = message.replyToId;
+    if (parentId != null && parentId.isNotEmpty) {
+      replyCounts[parentId] = (replyCounts[parentId] ?? 0) + 1;
+    }
+  }
+
+  return messages
+      .map((message) {
+        final count = replyCounts[message.id] ?? 0;
+        return message.copyWith(
+          hasThread: count > 0,
+          threadReplyCount: count,
+        );
+      })
+      .toList();
+}
 
 /// Provider for entities by type.
 final unifiedEntitiesByTypeProvider = FutureProvider.family<List<UnifiedEntity>, String>((ref, type) async {

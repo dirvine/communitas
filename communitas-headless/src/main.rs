@@ -8,8 +8,6 @@ use anyhow::{Context, Result, anyhow};
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use clap::Parser;
-// TODO: Re-enable when bootstrap_integration is available in communitas-core
-// use communitas_core::bootstrap_integration::{BootstrapConfig, EnhancedBootstrapManager};
 // Cryptography module with real ML-DSA-87 implementation
 mod crypto;
 // Ed25519 for QUIC transport layer (ant-quic requirement)
@@ -35,8 +33,6 @@ use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use tokio::signal;
-// TODO: Re-enable when bootstrap_integration and communitas_container are available
-// use tokio::sync::RwLock as AsyncRwLock;
 use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
 
@@ -903,24 +899,6 @@ async fn connect_to_peer(addr_str: String) -> Result<()> {
                         info!("Stored connection {} (total: {})", conn_id, conns.len());
                     }
 
-                    // TODO: Re-enable when bootstrap_integration is available
-                    // Update bootstrap manager with successful connection
-                    // {
-                    //     let manager_guard = BOOTSTRAP_MANAGER.read().await;
-                    //     if let Some(manager) = manager_guard.as_ref() {
-                    //         let manager_clone = manager.clone();
-                    //         let addr_str = socket_addr.to_string();
-
-                    //         tokio::spawn(async move {
-                    //             if let Err(e) = manager_clone.add_bootstrap_node(&addr_str).await {
-                    //                 warn!("Failed to update bootstrap cache: {}", e);
-                    //             } else {
-                    //                 debug!("Added peer {} to bootstrap cache", addr_str);
-                    //             }
-                    //         });
-                    //     }
-                    // }
-
                     Ok(())
                 }
                 Err(e) => Err(anyhow::anyhow!("Connection failed: {}", e)),
@@ -1207,40 +1185,10 @@ use ant_quic::crypto::raw_public_keys::key_utils::public_key_to_bytes;
 use ant_quic::high_level::Endpoint as QuicEndpoint;
 use std::sync::Arc as StdArc;
 // ant-quic send streams provide write_all via their API; no extra trait import needed
-// TODO: Re-enable when communitas_container is available
-// use communitas_container as cc;
-
-// TODO: Re-enable when communitas_container is available
-// #[derive(Serialize, Deserialize)]
-// struct DeltaRequest<'a> {
-//     from_root_hex: Option<&'a str>,
-//     want_since_count: Option<u64>,
-// }
-
-// #[derive(Serialize, Deserialize)]
-// struct DeltaResponse {
-//     ops: Vec<cc::Op>,
-// }
-
-// Very small in-memory op log for demo/testing. Not persisted.
-// static OP_LOG: Lazy<AsyncRwLock<Vec<cc::Op>>> = Lazy::new(|| AsyncRwLock::new(Vec::new()));
-
 // Global connection tracking
 use ant_quic::HighLevelConnection;
 static ACTIVE_CONNECTIONS: Lazy<Arc<RwLock<HashMap<String, HighLevelConnection>>>> =
     Lazy::new(|| Arc::new(RwLock::new(HashMap::new())));
-// TODO: Re-enable when bootstrap_integration is available
-// static BOOTSTRAP_MANAGER: Lazy<Arc<AsyncRwLock<Option<Arc<EnhancedBootstrapManager>>>>> =
-//     Lazy::new(|| Arc::new(AsyncRwLock::new(None)));
-
-// TODO: Re-enable when communitas_container is available
-// async fn ops_since(count: u64) -> Vec<cc::Op> {
-//     let r = OP_LOG.read().await;
-//     if (count as usize) >= r.len() {
-//         return Vec::new();
-//     }
-//     r[count as usize..].to_vec()
-// }
 
 #[allow(dead_code)]
 async fn start_quic_delta_server(
@@ -1343,10 +1291,6 @@ async fn start_quic_delta_server(
                                         conns.len()
                                     );
                                 }
-
-                                // TODO: Re-enable when communitas_container is available
-                                // Accept a single bi-directional stream for request/response
-                                // match conn.accept_bi().await { ... }
                             }
                             Err(e) => warn!("incoming failed: {e}"),
                         }

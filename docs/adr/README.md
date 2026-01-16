@@ -84,6 +84,6 @@ Relevant commits, RFCs, code paths.
 ## Related Documentation
 
 - [Architecture Overview](../architecture/README.md)
-- [CRDT Architecture](../CRDT_ARCHITECTURE.md)
-- [Mesh Capabilities](../MESH_CAPABILITIES.md)
+- [CRDT System](../architecture/crdt-system.md)
+- [Offline Handling](../architecture/offline-handling.md)
 - [API Documentation](../api/README.md)

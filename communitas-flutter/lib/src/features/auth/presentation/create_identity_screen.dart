@@ -192,7 +192,7 @@ class _CreateIdentityScreenState extends ConsumerState<CreateIdentityScreen> {
     try {
       String fourWords;
       if (kDemoMode) {
-        // Demo mode: use placeholder
+        // Demo mode: use a fixed demo identity
         await Future.delayed(const Duration(milliseconds: 500));
         fourWords = 'ocean-forest-moon-star';
       } else {

@@ -4,6 +4,7 @@
 //! and multi-group scenarios over real network.
 
 use communitas_core::test_harness::TestHarness;
+use saorsa_gossip_presence::PresenceStatus;
 use saorsa_gossip_types::{PresenceRecord, TopicId};
 use std::time::Duration;
 
@@ -73,7 +74,7 @@ async fn test_advertise_and_discover() {
     }
 
     // THEN: Node B should discover Node A via presence
-    let _presence_b = {
+    let presence_b = {
         let node = node_b.read().await;
         node.presence
             .as_ref()
@@ -81,10 +82,25 @@ async fn test_advertise_and_discover() {
             .clone()
     };
 
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    {
+        let presence_guard = presence_b.write().await;
+        presence_guard
+            .handle_beacon(topic_id, peer_id_a, beacon.clone())
+            .await
+            .expect("handle beacon failed");
+    }
 
-    // TODO: Query presence for four_words_a
-    // TODO: Verify Node B can discover Node A
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    {
+        let presence_guard = presence_b.read().await;
+        let status = presence_guard.get_status(peer_id_a, topic_id).await;
+        assert_eq!(status, PresenceStatus::Online);
+    }
+
+    let records = presence_guard.get_group_presence(topic_id).await;
+    let record = records.get(&peer_id_a).expect("record missing");
+    assert_eq!(record.four_words.as_deref(), Some(four_words_a.as_str()));
 
     harness.cleanup().await.expect("cleanup failed");
 }
@@ -144,13 +160,32 @@ async fn test_presence_ttl_expiry() {
             .expect("handle beacon failed");
     }
 
-    // Verify present initially
-    // TODO: Query presence and verify found
+    let presence_b = {
+        let node = node_b.read().await;
+        node.presence
+            .as_ref()
+            .expect("presence not initialized")
+            .clone()
+    };
+
+    {
+        let presence_guard = presence_b.write().await;
+        presence_guard
+            .handle_beacon(topic_id, peer_id_a, beacon.clone())
+            .await
+            .expect("handle beacon failed");
+    }
+
+    let presence_guard = presence_b.read().await;
+    let status = presence_guard.get_status(peer_id_a, topic_id).await;
+    assert_eq!(status, PresenceStatus::Online);
 
     // THEN: After TTL expires, should not be discoverable
     tokio::time::sleep(Duration::from_secs(2)).await;
 
-    // TODO: Query presence and verify NOT found
+    let presence_guard = presence_b.read().await;
+    let status = presence_guard.get_status(peer_id_a, topic_id).await;
+    assert_eq!(status, PresenceStatus::Offline);
 
     harness.cleanup().await.expect("cleanup failed");
 }
@@ -208,8 +243,12 @@ async fn test_multi_group_presence() {
             .expect("handle beacon failed");
     }
 
-    // THEN: Should be discoverable in both groups
-    // TODO: Verify presence in both topic1 and topic2
+    let presence_guard = presence_a.read().await;
+    let records_1 = presence_guard.get_group_presence(topic1).await;
+    let records_2 = presence_guard.get_group_presence(topic2).await;
+
+    assert!(records_1.contains_key(&peer_id_a));
+    assert!(records_2.contains_key(&peer_id_a));
 
     harness.cleanup().await.expect("cleanup failed");
 }
@@ -271,9 +310,22 @@ async fn test_presence_with_packet_loss() {
     }
 
     // THEN: Eventually all should discover each other despite packet loss
-    tokio::time::sleep(Duration::from_secs(3)).await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
 
-    // TODO: Verify all nodes see all presence beacons
+    for i in 0..3 {
+        let node = harness.get_node(i).await.expect("node not found");
+        let presence = {
+            let node_guard = node.read().await;
+            node_guard
+                .presence
+                .as_ref()
+                .expect("presence not initialized")
+                .clone()
+        };
+        let presence_guard = presence.read().await;
+        let records = presence_guard.get_group_presence(topic_id).await;
+        assert_eq!(records.len(), 3, "node {} should see all peers", i);
+    }
 
     harness.cleanup().await.expect("cleanup failed");
 }
@@ -309,19 +361,110 @@ async fn test_presence_during_partition() {
         .expect("partition failed");
 
     // WHEN: Nodes advertise in their partitions
-    // TODO: Advertise presence in both partitions
+    let partitions = vec![vec![0usize, 1], vec![2usize, 3]];
+    for partition in &partitions {
+        for &sender_id in partition {
+            let sender = harness.get_node(sender_id).await.expect("node not found");
+            let sender_guard = sender.read().await;
+            let beacon = PresenceRecord::with_four_words(
+                [0u8; 32],
+                vec![sender_guard.bootstrap_addr()],
+                900,
+                sender_guard.four_words.clone(),
+            );
+            let peer_id = sender_guard.peer_id;
+            drop(sender_guard);
+
+            for &receiver_id in partition {
+                let receiver = harness.get_node(receiver_id).await.expect("node not found");
+                let presence = {
+                    let receiver_guard = receiver.read().await;
+                    receiver_guard
+                        .presence
+                        .as_ref()
+                        .expect("presence not initialized")
+                        .clone()
+                };
+                let presence_guard = presence.write().await;
+                presence_guard
+                    .handle_beacon(topic_id, peer_id, beacon.clone())
+                    .await
+                    .expect("handle beacon failed");
+            }
+        }
+    }
 
     // THEN: Partition A should only see [0,1], Partition B only [2,3]
-    // TODO: Verify isolation
+    for (idx, partition) in partitions.iter().enumerate() {
+        for &node_id in partition {
+            let node = harness.get_node(node_id).await.expect("node not found");
+            let presence = {
+                let node_guard = node.read().await;
+                node_guard
+                    .presence
+                    .as_ref()
+                    .expect("presence not initialized")
+                    .clone()
+            };
+            let records = presence.read().await.get_group_presence(topic_id).await;
+            assert_eq!(
+                records.len(),
+                partition.len(),
+                "partition {} node {} should only see its partition",
+                idx,
+                node_id
+            );
+        }
+    }
 
     // Heal network
     harness.heal().await.expect("heal failed");
 
     // Re-advertise after healing
-    // TODO: Advertise again
+    for sender_id in 0..4 {
+        let sender = harness.get_node(sender_id).await.expect("node not found");
+        let sender_guard = sender.read().await;
+        let beacon = PresenceRecord::with_four_words(
+            [0u8; 32],
+            vec![sender_guard.bootstrap_addr()],
+            900,
+            sender_guard.four_words.clone(),
+        );
+        let peer_id = sender_guard.peer_id;
+        drop(sender_guard);
+
+        for receiver_id in 0..4 {
+            let receiver = harness.get_node(receiver_id).await.expect("node not found");
+            let presence = {
+                let receiver_guard = receiver.read().await;
+                receiver_guard
+                    .presence
+                    .as_ref()
+                    .expect("presence not initialized")
+                    .clone()
+            };
+            let presence_guard = presence.write().await;
+            presence_guard
+                .handle_beacon(topic_id, peer_id, beacon.clone())
+                .await
+                .expect("handle beacon failed");
+        }
+    }
 
     // THEN: All should see all after healing
-    // TODO: Verify convergence
+    for node_id in 0..4 {
+        let node = harness.get_node(node_id).await.expect("node not found");
+        let presence = {
+            let node_guard = node.read().await;
+            node_guard
+                .presence
+                .as_ref()
+                .expect("presence not initialized")
+                .clone()
+        };
+        let records = presence.read().await.get_group_presence(topic_id).await;
+        assert_eq!(records.len(), 4, "node {} should see all peers", node_id);
+    }
 
     harness.cleanup().await.expect("cleanup failed");
 }

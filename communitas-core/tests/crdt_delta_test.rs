@@ -1,17 +1,45 @@
-#[cfg(test)]
-mod tests {
-    // TODO: Update CRDT delta tests to work with current Yrs API and sync module
-    // Current test has import issues:
-    // - encode_state_v1/decode_state_v1 functions don't exist in current yrs
-    // - crdt::sync module doesn't exist in current structure
-    // - Arc<Doc> doesn't have get_text method directly
+use yrs::updates::decoder::Decode;
+use yrs::{Doc, GetString, Transact, Update};
 
-    #[tokio::test]
-    async fn test_crdt_placeholder() {
-        // Placeholder test to maintain test structure
-        // Future implementation should test:
-        // - Delta sync vs full document sync
-        // - Yrs CRDT integration
-        // - Document merging and conflict resolution
+#[tokio::test]
+async fn test_crdt_delta_sync_applies_updates() {
+    let doc_a = Doc::new();
+    let text_a = doc_a.get_or_insert_text("body");
+
+    {
+        let mut txn = doc_a.transact_mut();
+        text_a.insert(&mut txn, 0, "Hello");
     }
+
+    let full_update = doc_a
+        .transact()
+        .encode_state_as_update_v1(&yrs::StateVector::default());
+
+    let doc_b = Doc::new();
+    {
+        let update = Update::decode_v1(&full_update).expect("decode full update");
+        let mut txn = doc_b.transact_mut();
+        txn.apply_update(update);
+    }
+
+    let text_b = doc_b.get_or_insert_text("body");
+    let txn_b = doc_b.transact();
+    assert_eq!(text_b.get_string(&txn_b), "Hello");
+
+    {
+        let mut txn = doc_a.transact_mut();
+        text_a.insert(&mut txn, 5, " World");
+    }
+
+    let state_b = doc_b.transact().state_vector();
+    let delta_update = doc_a.transact().encode_state_as_update_v1(&state_b);
+
+    {
+        let update = Update::decode_v1(&delta_update).expect("decode delta update");
+        let mut txn = doc_b.transact_mut();
+        txn.apply_update(update);
+    }
+
+    let txn_b = doc_b.transact();
+    assert_eq!(text_b.get_string(&txn_b), "Hello World");
 }

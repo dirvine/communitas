@@ -21,7 +21,6 @@ const ALL_TOOLS: &[&str] = &[
     "import_vault",
     "get_session",
     "logout",
-    "get_unread_count",
     "create_entity",
     "update_entity",
     "delete_entity",
@@ -33,7 +32,6 @@ const ALL_TOOLS: &[&str] = &[
     "add_reaction",
     "remove_reaction",
     "get_reactions",
-    "create_custom_reaction",
     "get_available_reactions",
     "create_kanban_board",
     "create_kanban_column",
@@ -89,11 +87,6 @@ const ALL_TOOLS: &[&str] = &[
     "end_call",
     "upload_with_metadata",
     "get_media_metadata",
-    "create_poll",
-    "vote_in_poll",
-    "share_location",
-    "create_story",
-    "start_presentation",
     "share_screen",
     "set_presence",
     "get_presence",
@@ -104,7 +97,6 @@ const ALL_TOOLS: &[&str] = &[
     "network_status",
     "network_peers",
     "network_request_external_address",
-    "network_disconnect",
     "create_contact",
     "update_contact",
     "delete_contact",
@@ -1747,9 +1739,6 @@ async fn test_full_tool_coverage() {
         .await;
     covered.insert("authenticate_token");
 
-    node.call_tool("get_unread_count", json!({})).await;
-    covered.insert("get_unread_count");
-
     node.call_tool("delete_vault", json!({"vault_id": "test-vault"}))
         .await;
     covered.insert("delete_vault");
@@ -1809,24 +1798,33 @@ async fn test_full_tool_coverage() {
         .await;
     covered.insert("accept_invite");
 
-    // Reaction tools
-    node.call_tool(
-        "create_custom_reaction",
-        json!({"entity_id": ch_id, "name": "custom-emoji", "url": "https://example.com/emoji.png"}),
-    )
-    .await;
-    covered.insert("create_custom_reaction");
+    // Voice/call tools
+    node.call_tool("network_start", json!({})).await;
+    covered.insert("network_start");
 
-    // Voice/call tools (stubs - will return errors but count as covered)
-    node.call_tool("start_voice_call", json!({"entity_id": ch_id}))
+    let call = node
+        .call_tool(
+            "start_voice_call",
+            json!({"entity_id": ch_id, "video_enabled": false}),
+        )
         .await;
     covered.insert("start_voice_call");
+    let call_id = call
+        .parsed
+        .as_ref()
+        .and_then(|v| v.get("call_id"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("test-call");
 
-    node.call_tool("join_call", json!({"call_id": "test-call"}))
+    node.call_tool("join_call", json!({"call_id": call_id}))
         .await;
     covered.insert("join_call");
 
-    node.call_tool("end_call", json!({"call_id": "test-call"}))
+    node.call_tool("share_screen", json!({"call_id": call_id, "enabled": true}))
+        .await;
+    covered.insert("share_screen");
+
+    node.call_tool("end_call", json!({"call_id": call_id}))
         .await;
     covered.insert("end_call");
 
@@ -1851,53 +1849,7 @@ async fn test_full_tool_coverage() {
     .await;
     covered.insert("get_media_metadata");
 
-    // Poll tools
-    node.call_tool(
-        "create_poll",
-        json!({
-            "entity_id": ch_id,
-            "question": "What's the best language?",
-            "options": ["Rust", "TypeScript", "Python"]
-        }),
-    )
-    .await;
-    covered.insert("create_poll");
-
-    node.call_tool(
-        "vote_in_poll",
-        json!({"entity_id": ch_id, "poll_id": "test-poll", "option_index": 0}),
-    )
-    .await;
-    covered.insert("vote_in_poll");
-
-    // Location/story tools
-    node.call_tool(
-        "share_location",
-        json!({"entity_id": ch_id, "latitude": 51.5074, "longitude": -0.1278}),
-    )
-    .await;
-    covered.insert("share_location");
-
-    node.call_tool(
-        "create_story",
-        json!({"content": "This is a test story", "media_url": "https://example.com/image.jpg"}),
-    )
-    .await;
-    covered.insert("create_story");
-
-    // Presentation tools
-    node.call_tool("start_presentation", json!({"entity_id": ch_id}))
-        .await;
-    covered.insert("start_presentation");
-
-    node.call_tool("share_screen", json!({"entity_id": ch_id}))
-        .await;
-    covered.insert("share_screen");
-
     // Network tools
-    node.call_tool("network_start", json!({})).await;
-    covered.insert("network_start");
-
     node.call_tool("network_connect", json!({"address": "127.0.0.1:8080"}))
         .await;
     covered.insert("network_connect");
@@ -1905,10 +1857,6 @@ async fn test_full_tool_coverage() {
     node.call_tool("network_request_external_address", json!({}))
         .await;
     covered.insert("network_request_external_address");
-
-    node.call_tool("network_disconnect", json!({"peer_id": "test-peer"}))
-        .await;
-    covered.insert("network_disconnect");
 
     node.call_tool("network_stop", json!({})).await;
     covered.insert("network_stop");

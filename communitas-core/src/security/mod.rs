@@ -1,4 +1,4 @@
-//! Security module for Communitas Tauri backend
+//! Security module for Communitas core
 //!
 //! This module provides security-related functionality including
 //! authentication middleware, input validation, rate limiting, and secure storage.

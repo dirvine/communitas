@@ -688,31 +688,31 @@ gossip_context.publish(topic, diff).await?;
 
 ## API Integration
 
-### Backend Commands (Tauri)
+### Backend Commands (Core/FFI)
 
 **Member Management**:
 ```rust
-// communitas-desktop/src/member_commands.rs
+// communitas-core/src/flutter_api.rs
 
-#[tauri::command]
+// FFI boundary
 pub async fn core_member_add(
     entity_id: String,
     member_four_words: String,
     role: String,  // "owner" | "admin" | "member"
 ) -> Result<bool, String>
 
-#[tauri::command]
+// FFI boundary
 pub async fn core_member_remove(
     entity_id: String,
     member_four_words: String,
 ) -> Result<bool, String>
 
-#[tauri::command]
+// FFI boundary
 pub async fn core_member_list(
     entity_id: String,
 ) -> Result<Vec<MemberInfo>, String>
 
-#[tauri::command]
+// FFI boundary
 pub async fn core_member_update_role(
     entity_id: String,
     member_four_words: String,
@@ -722,20 +722,20 @@ pub async fn core_member_update_role(
 
 **Message Operations**:
 ```rust
-#[tauri::command]
+// FFI boundary
 pub async fn send_message(
     channel_id: String,
     content: String,
     attachments: Vec<AttachmentInfo>,
 ) -> Result<Message, String>
 
-#[tauri::command]
+// FFI boundary
 pub async fn edit_message(
     message_id: String,
     new_content: String,
 ) -> Result<bool, String>
 
-#[tauri::command]
+// FFI boundary
 pub async fn delete_message(
     message_id: String,
 ) -> Result<bool, String>
@@ -743,17 +743,15 @@ pub async fn delete_message(
 
 ### Frontend Integration
 
-**React Context**:
-```typescript
-const { messages, sendMessage, editMessage, deleteMessage } = useChat(channelId);
+**Flutter (Riverpod + FFI)**:
+```dart
+final messages = await ref.watch(unifiedMessagesProvider(channelId).future);
 
-// Send message (works offline)
-await sendMessage({
-  content: 'Hello, World!',
-  attachments: []
-});
-
-// Messages update automatically via CRDT sync
+await ref.read(ffiMessageControllerProvider.notifier).sendMessage(
+  entityId: channelId,
+  entityType: FlutterEntityType.channel,
+  text: 'Hello, World!',
+);
 ```
 
 ## Testing Strategy
@@ -829,7 +827,7 @@ async fn test_multi_node_sync() {
 ### Phase 1: Core Member Management ✅
 - ✅ Implement `core` document with members
 - ✅ Event-driven tombstone pruning
-- ✅ Tauri commands: add/remove/list/update_role
+- ✅ Core/FFI commands: add/remove/list/update_role
 - ✅ Frontend integration
 
 ### Phase 2: Chat Integration
@@ -904,7 +902,7 @@ tokio::spawn(async move {
 ## See Also
 
 - [Architecture Overview](README.md) - System architecture
-- [Core Components](core-components.md) - Component details
+- [Architecture Overview](README.md) - Component details
 - [Gossip Protocol](gossip-protocol.md) - P2P networking
 - [Storage](storage.md) - Persistence layer
 - [Yrs Documentation](https://docs.rs/yrs/) - Yrs CRDT library

@@ -592,7 +592,7 @@ CREATE TABLE cached_peers (
 ### Example 1: Sending a Message
 
 ```
-Application (Tauri)
+Application (GUI/FFI)
     ↓ gossip_send_direct_message(four_words, msg)
 Coordinator
     ↓ find_contact(four_words) → PeerId
@@ -610,7 +610,7 @@ ant-quic
 ### Example 2: Bootstrapping via Friend
 
 ```
-Application (Tauri)
+Application (GUI/FFI)
     ↓ gossip_add_bootstrap_peer(friend_four_words)
 Coordinator
     ↓ add_cached_peer(friend_peer)
@@ -635,7 +635,7 @@ Membership
 ### Example 3: Publishing a Site
 
 ```
-Application (Tauri)
+Application (GUI/FFI)
     ↓ gossip_site_publish(assets)
 Coordinator → SitePublisher
     ↓ build_manifest() → site_id
@@ -734,56 +734,46 @@ BLAKE3 verification
 ```rust
 // communitas-desktop/src/core_cmds.rs
 
-#[tauri::command]
+// FFI boundary
 pub async fn gossip_initialize(
     four_words: String,
     display_name: String,
     device_name: String
 ) -> Result<(), String>
 
-#[tauri::command]
+// FFI boundary
 pub async fn gossip_send_message(
     recipient: String,
     message: String
 ) -> Result<(), String>
 
-#[tauri::command]
+// FFI boundary
 pub async fn gossip_add_bootstrap_peer(
     four_words: String
 ) -> Result<(), String>
 
-#[tauri::command]
+// FFI boundary
 pub async fn gossip_get_online_peers() -> Result<Vec<PeerInfo>, String>
 ```
 
-### Frontend Integration
+### Frontend Integration (Flutter FFI)
 
-```typescript
-import { invoke } from '@tauri-apps/api/tauri';
-
-// Initialize gossip network
-await invoke('gossip_initialize', {
+```dart
+final api = await CommunitasApi.create(
   fourWords: 'ocean-forest-moon-star',
   displayName: 'Alice',
-  deviceName: 'MacBook Pro'
-});
+  deviceName: 'MacBook Pro',
+  storagePath: '/path/to/storage',
+);
 
-// Send message
-await invoke('gossip_send_message', {
-  recipient: 'bob-charlie-delta-echo',
-  message: 'Hello, Bob!'
-});
-
-// Add friend for bootstrap
-await invoke('gossip_add_bootstrap_peer', {
-  fourWords: 'bob-charlie-delta-echo'
-});
+await api.gossipStart();
+await api.gossipConnectToPeer(fourWords: 'bob-charlie-delta-echo');
 ```
 
 ## See Also
 
 - [Architecture Overview](README.md) - System architecture
-- [Core Components](core-components.md) - Component details
+- [Architecture Overview](README.md) - Component details
 - [CRDT System](crdt-system.md) - Data synchronization
 - [Networking](networking.md) - Network protocols
 - [Security](security.md) - Security model

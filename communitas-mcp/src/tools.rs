@@ -6,82 +6,9 @@
 //!
 //! Exposes Communitas commands and queries as MCP tools that AI agents can invoke.
 
-use crate::node::{DhtOps, NodeConfig, NodeState};
 use crate::presence::{PresenceOperations, PresenceStatus, PresenceSubscription, PresenceUpdate};
-use crate::presentation::{PresentationOperations, ScreenRegion, Slide};
 use crate::protocol::{Tool, ToolCallResult, ToolContent};
-use crate::social::{LocationOperations, PollOperations, StoryOperations};
-use crate::webrtc::{CallRequest, WebRtcOperations};
 use base64::prelude::*;
-use bytes::Bytes;
-use std::sync::Arc;
-use tokio::sync::RwLock;
-
-// Global node state for DHT operations
-lazy_static::lazy_static! {
-    static ref NODE_STATE: Arc<RwLock<NodeState>> = {
-        Arc::new(RwLock::new(NodeState::new(NodeConfig::default())))
-    };
-}
-
-/// Initialize the DHT node if platform conditions allow
-///
-/// This should be called at MCP server startup. On desktop platforms,
-/// the node auto-starts. On mobile, it only starts when charging + WiFi.
-pub async fn initialize_node() -> anyhow::Result<()> {
-    let mut node = NODE_STATE.write().await;
-
-    // Check if node should auto-start based on platform
-    if should_auto_start_node() {
-        tracing::info!("Auto-starting DHT node (platform conditions met)");
-        node.start().await?;
-    } else {
-        tracing::info!("Skipping DHT node auto-start (platform conditions not met)");
-    }
-
-    Ok(())
-}
-
-/// Gracefully shutdown the DHT node
-///
-/// This should be called when the MCP server is shutting down.
-/// Handles departure announcement and data transfer to peers.
-pub async fn shutdown_node() -> anyhow::Result<()> {
-    let mut node = NODE_STATE.write().await;
-
-    if node.is_running() {
-        tracing::info!("Gracefully shutting down DHT node");
-        node.stop().await?;
-    }
-
-    Ok(())
-}
-
-/// Determine if the node should auto-start based on platform
-fn should_auto_start_node() -> bool {
-    #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
-    {
-        // Desktop: always auto-start
-        true
-    }
-    #[cfg(any(target_os = "ios", target_os = "android"))]
-    {
-        // Mobile: only when conditions are right
-        // TODO: Implement platform-specific checks (charging + WiFi)
-        false
-    }
-    #[cfg(not(any(
-        target_os = "macos",
-        target_os = "windows",
-        target_os = "linux",
-        target_os = "ios",
-        target_os = "android"
-    )))]
-    {
-        // Unknown platform: conservative default
-        false
-    }
-}
 
 use communitas_core::{
     app::CommunitasApp,
@@ -256,17 +183,6 @@ pub fn list_tools(authenticated: bool) -> Vec<Tool> {
             description: "End current session".to_string(),
             input_schema: json!({ "type": "object", "properties": {} }),
         },
-        Tool {
-            name: "get_unread_count".to_string(),
-            description: "Get unread messages count".to_string(),
-            input_schema: json!({
-                "type": "object",
-                "properties": {
-                    "entity_ids": {"type": "array", "items": {"type": "string"}, "description": "Entity IDs to check"}
-                },
-                "required": ["entity_ids"]
-            }),
-        },
         // Entity tools
         Tool {
             name: "create_entity".to_string(),
@@ -420,21 +336,8 @@ pub fn list_tools(authenticated: bool) -> Vec<Tool> {
             }),
         },
         Tool {
-            name: "create_custom_reaction".to_string(),
-            description: "Create a custom emoji reaction".to_string(),
-            input_schema: json!({
-                "type": "object",
-                "properties": {
-                    "entity_id": {"type": "string", "description": "Entity ID to add the reaction to"},
-                    "emoji": {"type": "string", "description": "Emoji character or URL"},
-                    "short_name": {"type": "string", "description": "Short name for the reaction (e.g. 'rocket')"}
-                },
-                "required": ["entity_id", "emoji", "short_name"]
-            }),
-        },
-        Tool {
             name: "get_available_reactions".to_string(),
-            description: "Get list of available reactions (standard + custom) for an entity".to_string(),
+            description: "Get list of available standard reactions for an entity".to_string(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -1070,13 +973,12 @@ pub fn list_tools(authenticated: bool) -> Vec<Tool> {
         // WebRTC Calling tools
         Tool {
             name: "start_voice_call".to_string(),
-            description: "Start a voice/video call with an entity or users".to_string(),
+            description: "Start a voice or video call for an entity".to_string(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
                     "entity_id": {"type": "string", "description": "Entity ID (channel/group) to call"},
-                    "participant_ids": {"type": "array", "items": {"type": "string"}, "description": "Specific users to invite (optional)"},
-                    "video_enabled": {"type": "boolean", "description": "Enable video (default: true)", "default": true}
+                    "video_enabled": {"type": "boolean", "description": "Enable video (default: false)", "default": false}
                 },
                 "required": ["entity_id"]
             }),
@@ -1132,100 +1034,14 @@ pub fn list_tools(authenticated: bool) -> Vec<Tool> {
                 "required": ["entity_id", "disk_type", "path"]
             }),
         },
-        // Social tools (Polls, Location, Stories)
-        Tool {
-            name: "create_poll".to_string(),
-            description: "Create a poll".to_string(),
-            input_schema: json!({
-                "type": "object",
-                "properties": {
-                    "entity_id": {"type": "string", "description": "Entity ID"},
-                    "question": {"type": "string", "description": "Poll question"},
-                    "options": {"type": "array", "items": {"type": "string"}, "description": "Poll options"},
-                    "allows_multiple": {"type": "boolean", "description": "Allow multiple choices", "default": false},
-                    "duration_hours": {"type": "integer", "description": "Duration in hours"}
-                },
-                "required": ["entity_id", "question", "options"]
-            }),
-        },
-        Tool {
-            name: "vote_in_poll".to_string(),
-            description: "Vote in a poll".to_string(),
-            input_schema: json!({
-                "type": "object",
-                "properties": {
-                    "poll_id": {"type": "string", "description": "Poll ID"},
-                    "option_id": {"type": "string", "description": "Option ID to vote for"}
-                },
-                "required": ["poll_id", "option_id"]
-            }),
-        },
-        Tool {
-            name: "share_location".to_string(),
-            description: "Share location".to_string(),
-            input_schema: json!({
-                "type": "object",
-                "properties": {
-                    "entity_id": {"type": "string", "description": "Entity ID"},
-                    "latitude": {"type": "number", "description": "Latitude"},
-                    "longitude": {"type": "number", "description": "Longitude"},
-                    "is_live": {"type": "boolean", "description": "Is live location", "default": false},
-                    "duration_minutes": {"type": "integer", "description": "Duration for live location"}
-                },
-                "required": ["entity_id", "latitude", "longitude"]
-            }),
-        },
-        Tool {
-            name: "create_story".to_string(),
-            description: "Create an ephemeral story".to_string(),
-            input_schema: json!({
-                "type": "object",
-                "properties": {
-                    "entity_id": {"type": "string", "description": "Entity ID"},
-                    "text": {"type": "string", "description": "Story text"},
-                    "media_paths": {"type": "array", "items": {"type": "string"}, "description": "Paths to media files"},
-                    "expires_hours": {"type": "integer", "description": "Expiration in hours", "default": 24}
-                },
-                "required": ["entity_id", "text"]
-            }),
-        },
-        // Presentation tools
-        Tool {
-            name: "start_presentation".to_string(),
-            description: "Start a presentation".to_string(),
-            input_schema: json!({
-                "type": "object",
-                "properties": {
-                    "entity_id": {"type": "string", "description": "Entity ID"},
-                    "slides": {"type": "array", "items": {
-                        "type": "object",
-                        "properties": {
-                            "title": {"type": "string"},
-                            "content": {"type": "string"}
-                        },
-                        "required": ["title", "content"]
-                    }, "description": "List of slides"}
-                },
-                "required": ["entity_id", "slides"]
-            }),
-        },
         Tool {
             name: "share_screen".to_string(),
-            description: "Share screen in a call".to_string(),
+            description: "Start or stop screen sharing in a call".to_string(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
                     "call_id": {"type": "string", "description": "Call ID"},
-                    "region": {
-                        "type": "object",
-                        "properties": {
-                            "x": {"type": "integer"},
-                            "y": {"type": "integer"},
-                            "width": {"type": "integer"},
-                            "height": {"type": "integer"}
-                        },
-                        "description": "Screen region to share (optional, defaults to full screen)"
-                    }
+                    "enabled": {"type": "boolean", "description": "Set true to start sharing, false to stop", "default": true}
                 },
                 "required": ["call_id"]
             }),
@@ -1338,17 +1154,6 @@ pub fn list_tools(authenticated: bool) -> Vec<Tool> {
                 "required": ["words"]
             }),
         },
-        Tool {
-            name: "network_disconnect".to_string(),
-            description: "Disconnect from a specific peer by their four-word identity".to_string(),
-            input_schema: json!({
-                "type": "object",
-                "properties": {
-                    "peer_four_words": {"type": "string", "description": "Four-word identity of the peer to disconnect from"}
-                },
-                "required": ["peer_four_words"]
-            }),
-        },
         // Peer Presence Tools (ADR-014: Network-wide peer discovery)
         Tool {
             name: "announce_presence".to_string(),
@@ -1388,127 +1193,6 @@ pub fn list_tools(authenticated: bool) -> Vec<Tool> {
                     "pubkey": {"type": "string", "description": "Public key of the peer to look up (hex or base64 encoded)"}
                 },
                 "required": ["pubkey"]
-            }),
-        },
-        // DHT tools (Distributed Hash Table storage via saorsa-node)
-        Tool {
-            name: "dht_start".to_string(),
-            description: "Start the embedded DHT node for distributed storage. Desktop: auto-starts, Mobile: requires charging+WiFi.".to_string(),
-            input_schema: json!({
-                "type": "object",
-                "properties": {
-                    "listen_port": {"type": "integer", "description": "Port to listen on (default: 10000)"}
-                }
-            }),
-        },
-        Tool {
-            name: "dht_stop".to_string(),
-            description: "Gracefully shutdown the DHT node. Announces departure and transfers data ownership.".to_string(),
-            input_schema: json!({
-                "type": "object",
-                "properties": {}
-            }),
-        },
-        Tool {
-            name: "dht_status".to_string(),
-            description: "Get DHT node status including uptime, storage usage, and connected peers.".to_string(),
-            input_schema: json!({
-                "type": "object",
-                "properties": {}
-            }),
-        },
-        Tool {
-            name: "dht_store".to_string(),
-            description: "Store data in the DHT. Returns the content address (XorName) where data was stored.".to_string(),
-            input_schema: json!({
-                "type": "object",
-                "properties": {
-                    "data": {"type": "string", "description": "Base64-encoded data to store"},
-                    "content_type": {"type": "string", "description": "MIME type of the content (optional)"}
-                },
-                "required": ["data"]
-            }),
-        },
-        Tool {
-            name: "dht_retrieve".to_string(),
-            description: "Retrieve data from the DHT by its content address.".to_string(),
-            input_schema: json!({
-                "type": "object",
-                "properties": {
-                    "address": {"type": "string", "description": "Content address (XorName) to retrieve"}
-                },
-                "required": ["address"]
-            }),
-        },
-        Tool {
-            name: "dht_exists".to_string(),
-            description: "Check if content exists at the given addresses.".to_string(),
-            input_schema: json!({
-                "type": "object",
-                "properties": {
-                    "addresses": {"type": "array", "items": {"type": "string"}, "description": "List of content addresses to check"}
-                },
-                "required": ["addresses"]
-            }),
-        },
-        Tool {
-            name: "dht_network_stats".to_string(),
-            description: "Get statistics about the DHT network.".to_string(),
-            input_schema: json!({
-                "type": "object",
-                "properties": {}
-            }),
-        },
-        Tool {
-            name: "dht_closest_peers".to_string(),
-            description: "Find peers closest to a given address in the DHT keyspace.".to_string(),
-            input_schema: json!({
-                "type": "object",
-                "properties": {
-                    "address": {"type": "string", "description": "Address to find closest peers for"}
-                },
-                "required": ["address"]
-            }),
-        },
-        // DHT Metrics tools (from saorsa-core's DhtMetricsAggregator)
-        Tool {
-            name: "dht_health_metrics".to_string(),
-            description: "Get comprehensive DHT health metrics including routing table, replication, and latency stats.".to_string(),
-            input_schema: json!({
-                "type": "object",
-                "properties": {}
-            }),
-        },
-        Tool {
-            name: "trust_metrics".to_string(),
-            description: "Get EigenTrust reputation metrics including peer trust scores and convergence status.".to_string(),
-            input_schema: json!({
-                "type": "object",
-                "properties": {}
-            }),
-        },
-        Tool {
-            name: "security_metrics".to_string(),
-            description: "Get security metrics including Sybil/eclipse attack detection scores and enforcement status.".to_string(),
-            input_schema: json!({
-                "type": "object",
-                "properties": {}
-            }),
-        },
-        Tool {
-            name: "placement_metrics".to_string(),
-            description: "Get storage placement metrics including geographic diversity, capacity, and replication health.".to_string(),
-            input_schema: json!({
-                "type": "object",
-                "properties": {}
-            }),
-        },
-        Tool {
-            name: "metrics_summary".to_string(),
-            description: "Get a quick health summary with overall scores for security, DHT, trust, and placement.".to_string(),
-            input_schema: json!({
-                "type": "object",
-                "properties": {}
             }),
         },
         // Contact tools
@@ -1742,9 +1426,6 @@ pub async fn call_tool(app: &CommunitasApp, name: &str, args: Option<Value>) -> 
     if let Some(result) = dispatch_network_tools(app, name, &args).await {
         return result;
     }
-    if let Some(result) = dispatch_dht_tools(name, &args).await {
-        return result;
-    }
     if let Some(result) = dispatch_social_tools(app, name, &args).await {
         return result;
     }
@@ -1769,7 +1450,6 @@ async fn dispatch_session_tools(
 ) -> Option<ToolCallResult> {
     match name {
         "get_session" => Some(execute_get_session(app).await),
-        "get_unread_count" => Some(execute_get_unread_count(app, args.clone()).await),
         "get_profile" => Some(execute_get_profile(app).await),
         "update_profile" => Some(execute_update_profile(app, args.clone()).await),
         _ => None,
@@ -1816,7 +1496,6 @@ async fn dispatch_message_tools(
         "add_reaction" => Some(execute_add_reaction(app, args.clone()).await),
         "remove_reaction" => Some(execute_remove_reaction(app, args.clone()).await),
         "get_reactions" => Some(execute_get_reactions(app, args.clone()).await),
-        "create_custom_reaction" => Some(execute_create_custom_reaction(app, args.clone()).await),
         "get_available_reactions" => Some(execute_get_available_reactions(app, args.clone()).await),
         // Thread operations
         "create_thread" => Some(execute_create_thread(app, args.clone()).await),
@@ -1922,7 +1601,6 @@ async fn dispatch_network_tools(
         "network_start" => Some(execute_network_start(app, args.clone()).await),
         "network_stop" => Some(execute_network_stop(app).await),
         "network_connect" => Some(execute_network_connect(app, args.clone()).await),
-        "network_disconnect" => Some(execute_network_disconnect(app, args.clone()).await),
         "network_status" => Some(execute_network_status(app).await),
         "network_peers" => Some(execute_network_peers(app).await),
         "network_request_external_address" => Some(execute_request_external_address(app).await),
@@ -1933,26 +1611,6 @@ async fn dispatch_network_tools(
         "query_presence" => Some(execute_query_presence(app, args.clone()).await),
         "get_our_presence" => Some(execute_get_our_presence(app).await),
         "get_cached_presence" => Some(execute_get_cached_presence(app, args.clone()).await),
-        _ => None,
-    }
-}
-
-async fn dispatch_dht_tools(name: &str, args: &Value) -> Option<ToolCallResult> {
-    match name {
-        "dht_start" => Some(execute_dht_start(args.clone()).await),
-        "dht_stop" => Some(execute_dht_stop().await),
-        "dht_status" => Some(execute_dht_status().await),
-        "dht_store" => Some(execute_dht_store(args.clone()).await),
-        "dht_retrieve" => Some(execute_dht_retrieve(args.clone()).await),
-        "dht_exists" => Some(execute_dht_exists(args.clone()).await),
-        "dht_network_stats" => Some(execute_dht_network_stats().await),
-        "dht_closest_peers" => Some(execute_dht_closest_peers(args.clone()).await),
-        // Metrics tools (from saorsa-core's DhtMetricsAggregator)
-        "dht_health_metrics" => Some(execute_dht_health_metrics().await),
-        "trust_metrics" => Some(execute_trust_metrics().await),
-        "security_metrics" => Some(execute_security_metrics().await),
-        "placement_metrics" => Some(execute_placement_metrics().await),
-        "metrics_summary" => Some(execute_metrics_summary().await),
         _ => None,
     }
 }
@@ -1971,13 +1629,6 @@ async fn dispatch_social_tools(
         "start_voice_call" => Some(execute_start_voice_call(app, args.clone()).await),
         "join_call" => Some(execute_join_call(app, args.clone()).await),
         "end_call" => Some(execute_end_call(app, args.clone()).await),
-        // Polls, location, stories
-        "create_poll" => Some(execute_create_poll(app, args.clone()).await),
-        "vote_in_poll" => Some(execute_vote_in_poll(app, args.clone()).await),
-        "share_location" => Some(execute_share_location(app, args.clone()).await),
-        "create_story" => Some(execute_create_story(app, args.clone()).await),
-        // Presentations
-        "start_presentation" => Some(execute_start_presentation(app, args.clone()).await),
         "share_screen" => Some(execute_share_screen(app, args.clone()).await),
         _ => None,
     }
@@ -2425,28 +2076,10 @@ async fn execute_get_reactions(app: &CommunitasApp, args: Value) -> ToolCallResu
     }
 }
 
-async fn execute_create_custom_reaction(_app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let entity_id = require_str!(args, "entity_id");
-    let emoji = require_str!(args, "emoji");
-    let short_name = require_str!(args, "short_name");
-
-    // TODO: Implement actual storage logic in CommunitasCore
-
-    json_result(&json!({
-        "success": true,
-        "message": format!("Custom reaction '{}' created", short_name),
-        "reaction": {
-            "entity_id": entity_id,
-            "emoji": emoji,
-            "short_name": short_name
-        }
-    }))
-}
-
 async fn execute_get_available_reactions(_app: &CommunitasApp, args: Value) -> ToolCallResult {
     let entity_id = require_str!(args, "entity_id");
 
-    // Return standard reactions plus any custom ones for this entity
+    // Return standard reactions for this entity.
     let standard_reactions = vec![
         json!({"emoji": "👍", "short_name": "+1"}),
         json!({"emoji": "👎", "short_name": "-1"}),
@@ -2457,8 +2090,6 @@ async fn execute_get_available_reactions(_app: &CommunitasApp, args: Value) -> T
         json!({"emoji": "🚀", "short_name": "rocket"}),
         json!({"emoji": "👀", "short_name": "eyes"}),
     ];
-
-    // TODO: Fetch custom reactions from entity storage
 
     json_result(&json!({
         "entity_id": entity_id,
@@ -2937,47 +2568,62 @@ async fn execute_subscribe_to_presence(app: &CommunitasApp, args: Value) -> Tool
 
 async fn execute_start_voice_call(app: &CommunitasApp, args: Value) -> ToolCallResult {
     let entity_id = require_str!(args, "entity_id");
-    let participant_ids = str_array_or_default(&args, "participant_ids");
-    let video_enabled = bool_or(&args, "video_enabled", true);
+    let video_enabled = bool_or(&args, "video_enabled", false);
 
-    let request = CallRequest {
-        entity_id,
-        participant_ids,
+    let cmd = Command::StartCall {
+        entity_id: entity_id.clone(),
         video_enabled,
     };
 
-    // Get user ID
-    let initiator_id = match app.query(communitas_core::command::Query::GetProfile).await {
-        Ok(communitas_core::command::QueryResponse::Profile { four_words, .. }) => four_words,
-        _ => return error_result("Failed to get user profile"),
-    };
-
-    match WebRtcOperations::start_call(app, request, initiator_id) {
-        Ok(session) => json_result(&json!({ "call_session": session })),
-        Err(e) => error_result(&format!("Failed to start call: {}", e)),
+    match app.execute(cmd).await {
+        Ok(events) => {
+            if let Some((call_id, entity_id)) = events.iter().find_map(|e| match e {
+                Event::CallStarted { call_id, entity_id } => {
+                    Some((call_id.clone(), entity_id.clone()))
+                }
+                _ => None,
+            }) {
+                json_result(&json!({
+                    "success": true,
+                    "call_id": call_id,
+                    "entity_id": entity_id
+                }))
+            } else {
+                success_result("Call started")
+            }
+        }
+        Err(e) => error_result(&format!("Failed to start call: {}", e.message)),
     }
 }
 
 async fn execute_join_call(app: &CommunitasApp, args: Value) -> ToolCallResult {
     let call_id = require_str!(args, "call_id");
-
-    let user_id = match app.query(communitas_core::command::Query::GetProfile).await {
-        Ok(communitas_core::command::QueryResponse::Profile { four_words, .. }) => four_words,
-        _ => return error_result("Failed to get user profile"),
+    let cmd = Command::JoinCall {
+        call_id: call_id.clone(),
     };
 
-    match WebRtcOperations::join_call(app, call_id, user_id) {
-        Ok(_) => success_result("Joined call successfully"),
-        Err(e) => error_result(&format!("Failed to join call: {}", e)),
+    match app.execute(cmd).await {
+        Ok(_) => json_result(&json!({
+            "success": true,
+            "call_id": call_id
+        })),
+        Err(e) => error_result(&format!("Failed to join call: {}", e.message)),
     }
 }
 
 async fn execute_end_call(app: &CommunitasApp, args: Value) -> ToolCallResult {
     let call_id = require_str!(args, "call_id");
 
-    match WebRtcOperations::end_call(app, call_id) {
-        Ok(_) => success_result("Call ended"),
-        Err(e) => error_result(&format!("Failed to end call: {}", e)),
+    let cmd = Command::LeaveCall {
+        call_id: call_id.clone(),
+    };
+
+    match app.execute(cmd).await {
+        Ok(_) => json_result(&json!({
+            "success": true,
+            "call_id": call_id
+        })),
+        Err(e) => error_result(&format!("Failed to end call: {}", e.message)),
     }
 }
 
@@ -3053,130 +2699,27 @@ async fn execute_get_media_metadata(app: &CommunitasApp, args: Value) -> ToolCal
     }
 }
 
-async fn execute_create_poll(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let entity_id = require_str!(args, "entity_id");
-    let question = require_str!(args, "question");
-    let options = str_array_or_default(&args, "options");
-    if options.is_empty() {
-        return error_result("options required");
-    }
-    let allows_multiple = bool_or(&args, "allows_multiple", false);
-    let duration_hours = args["duration_hours"].as_u64();
-
-    match PollOperations::create_poll(
-        app,
-        entity_id,
-        question,
-        options,
-        allows_multiple,
-        duration_hours,
-    ) {
-        Ok(poll) => json_result(&json!({ "poll": poll })),
-        Err(e) => error_result(&format!("Failed to create poll: {}", e)),
-    }
-}
-
-async fn execute_vote_in_poll(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let poll_id = require_str!(args, "poll_id");
-    let option_id = require_str!(args, "option_id");
-
-    // Get user ID
-    let user_id = match app.query(communitas_core::command::Query::GetProfile).await {
-        Ok(communitas_core::command::QueryResponse::Profile { four_words, .. }) => four_words,
-        _ => return error_result("Failed to get user profile"),
-    };
-
-    match PollOperations::vote(app, poll_id, option_id, user_id) {
-        Ok(_) => success_result("Voted successfully"),
-        Err(e) => error_result(&format!("Failed to vote: {}", e)),
-    }
-}
-
-async fn execute_share_location(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let entity_id = require_str!(args, "entity_id");
-    let latitude = match args["latitude"].as_f64() {
-        Some(f) => f,
-        None => return error_result("latitude required"),
-    };
-    let longitude = match args["longitude"].as_f64() {
-        Some(f) => f,
-        None => return error_result("longitude required"),
-    };
-    let is_live = bool_or(&args, "is_live", false);
-    let duration_minutes = args["duration_minutes"].as_u64();
-
-    // Get user ID
-    let user_id = match app.query(communitas_core::command::Query::GetProfile).await {
-        Ok(communitas_core::command::QueryResponse::Profile { four_words, .. }) => four_words,
-        _ => return error_result("Failed to get user profile"),
-    };
-
-    match LocationOperations::share_location(
-        app,
-        entity_id,
-        user_id,
-        latitude,
-        longitude,
-        is_live,
-        duration_minutes,
-    ) {
-        Ok(loc) => json_result(&json!({ "location": loc })),
-        Err(e) => error_result(&format!("Failed to share location: {}", e)),
-    }
-}
-
-async fn execute_create_story(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let entity_id = require_str!(args, "entity_id");
-    let text = require_str!(args, "text");
-    let media_paths = str_array_or_default(&args, "media_paths");
-    let expires_hours = args["expires_hours"].as_u64().unwrap_or(24);
-
-    // Get user ID
-    let author_id = match app.query(communitas_core::command::Query::GetProfile).await {
-        Ok(communitas_core::command::QueryResponse::Profile { four_words, .. }) => four_words,
-        _ => return error_result("Failed to get user profile"),
-    };
-
-    match StoryOperations::create_story(app, entity_id, author_id, text, media_paths, expires_hours)
-    {
-        Ok(story) => json_result(&json!({ "story": story })),
-        Err(e) => error_result(&format!("Failed to create story: {}", e)),
-    }
-}
-
-async fn execute_start_presentation(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let entity_id = require_str!(args, "entity_id");
-    let slides: Vec<Slide> = match serde_json::from_value(args["slides"].clone()) {
-        Ok(s) => s,
-        Err(_) => return error_result("Invalid slides format"),
-    };
-
-    // Get user ID
-    let presenter_id = match app.query(communitas_core::command::Query::GetProfile).await {
-        Ok(communitas_core::command::QueryResponse::Profile { four_words, .. }) => four_words,
-        _ => return error_result("Failed to get user profile"),
-    };
-
-    match PresentationOperations::start_presentation(app, entity_id, presenter_id, slides) {
-        Ok(session) => json_result(&json!({ "session": session })),
-        Err(e) => error_result(&format!("Failed to start presentation: {}", e)),
-    }
-}
-
 async fn execute_share_screen(app: &CommunitasApp, args: Value) -> ToolCallResult {
     let call_id = require_str!(args, "call_id");
-    let region: Option<ScreenRegion> = if let Some(r) = args.get("region") {
-        match serde_json::from_value(r.clone()) {
-            Ok(reg) => Some(reg),
-            Err(_) => return error_result("Invalid region format"),
+    let enabled = bool_or(&args, "enabled", true);
+
+    let cmd = if enabled {
+        Command::StartScreenShare {
+            call_id: call_id.clone(),
         }
     } else {
-        None
+        Command::StopScreenShare {
+            call_id: call_id.clone(),
+        }
     };
 
-    match PresentationOperations::share_screen(app, call_id, region) {
-        Ok(_) => success_result("Screen sharing started"),
-        Err(e) => error_result(&format!("Failed to share screen: {}", e)),
+    match app.execute(cmd).await {
+        Ok(_) => json_result(&json!({
+            "success": true,
+            "call_id": call_id,
+            "screen_share": if enabled { "started" } else { "stopped" }
+        })),
+        Err(e) => error_result(&format!("Failed to update screen share: {}", e.message)),
     }
 }
 
@@ -3195,24 +2738,6 @@ async fn execute_get_session(app: &CommunitasApp) -> ToolCallResult {
         })),
         _ => error_result("Failed to get session info"),
     }
-}
-
-async fn execute_get_unread_count(_app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let entity_ids = match args["entity_ids"].as_array() {
-        Some(arr) => arr
-            .iter()
-            .filter_map(|v| v.as_str().map(|s| s.to_string()))
-            .collect::<Vec<_>>(),
-        None => return error_result("entity_ids required"),
-    };
-
-    // TODO: Implement actual unread count query in Core
-    let mut unread_counts = serde_json::Map::new();
-    for id in entity_ids {
-        unread_counts.insert(id, json!(0));
-    }
-
-    json_result(&json!({ "unread_counts": unread_counts }))
 }
 
 async fn execute_list_pending_invites(app: &CommunitasApp) -> ToolCallResult {
@@ -4571,17 +4096,6 @@ async fn execute_get_thread_messages(app: &CommunitasApp, args: Value) -> ToolCa
 
 // Note: health_check and core_status are handled as pre-auth tools in server.rs
 
-/// Network disconnect - disconnect from a specific peer
-async fn execute_network_disconnect(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let _peer_four_words = require_str!(args, "peer_four_words");
-
-    // Note: CoreContext P2PNode doesn't currently expose disconnect_peer method
-    // For now, just return success matching bridge behavior
-    // TODO: Add disconnect_peer method to CoreContext when needed
-    let _ = app; // Suppress unused warning until implemented
-    success_result("Disconnected from peer")
-}
-
 /// Update Kanban board name or description
 async fn execute_update_kanban_board(app: &CommunitasApp, args: Value) -> ToolCallResult {
     let board_id = require_str!(args, "board_id");
@@ -4763,372 +4277,6 @@ async fn execute_workspace_init(app: &CommunitasApp, args: Value) -> ToolCallRes
         },
         "columns": column_ids
     }))
-}
-
-// ============================================================================
-// DHT Tool Executors
-// ============================================================================
-
-async fn execute_dht_start(args: Value) -> ToolCallResult {
-    let listen_port = args["listen_port"].as_u64().map(|p| p as u16);
-
-    let mut node = NODE_STATE.write().await;
-
-    // Update config if port specified
-    if let Some(port) = listen_port {
-        node.config.listen_port = port;
-    }
-
-    match node.start().await {
-        Ok(()) => {
-            let status = node.status();
-            json_result(&json!({
-                "success": true,
-                "message": "DHT node started",
-                "status": {
-                    "running": status.running,
-                    "listen_port": status.listen_port,
-                    "storage_quota_gb": status.storage_quota_bytes / (1024 * 1024 * 1024)
-                }
-            }))
-        }
-        Err(e) => error_result(&format!("Failed to start DHT node: {}", e)),
-    }
-}
-
-async fn execute_dht_stop() -> ToolCallResult {
-    let mut node = NODE_STATE.write().await;
-
-    match node.stop().await {
-        Ok(()) => success_result("DHT node stopped"),
-        Err(e) => error_result(&format!("Failed to stop DHT node: {}", e)),
-    }
-}
-
-async fn execute_dht_status() -> ToolCallResult {
-    let node = NODE_STATE.read().await;
-    let status = node.status();
-
-    json_result(&json!({
-        "running": status.running,
-        "uptime_secs": status.uptime_secs,
-        "storage_used_bytes": status.storage_used_bytes,
-        "storage_quota_bytes": status.storage_quota_bytes,
-        "storage_used_percent": if status.storage_quota_bytes > 0 {
-            (status.storage_used_bytes as f64 / status.storage_quota_bytes as f64) * 100.0
-        } else {
-            0.0
-        },
-        "connected_peers": status.connected_peers,
-        "listen_port": status.listen_port
-    }))
-}
-
-async fn execute_dht_store(args: Value) -> ToolCallResult {
-    let data_b64 = match args["data"].as_str() {
-        Some(d) => d,
-        None => return error_result("Missing required parameter: data"),
-    };
-
-    // Decode base64
-    let data = match BASE64_STANDARD.decode(data_b64) {
-        Ok(d) => Bytes::from(d),
-        Err(e) => return error_result(&format!("Invalid base64 data: {}", e)),
-    };
-
-    let dht = DhtOps::new(Arc::clone(&NODE_STATE));
-
-    match dht.store(data).await {
-        Ok(address) => json_result(&json!({
-            "success": true,
-            "address": address,
-            "message": "Data stored in DHT"
-        })),
-        Err(e) => error_result(&format!("Failed to store data: {}", e)),
-    }
-}
-
-async fn execute_dht_retrieve(args: Value) -> ToolCallResult {
-    let address = match args["address"].as_str() {
-        Some(a) => a,
-        None => return error_result("Missing required parameter: address"),
-    };
-
-    let dht = DhtOps::new(Arc::clone(&NODE_STATE));
-
-    match dht.retrieve(address).await {
-        Ok(Some(data)) => {
-            let encoded = BASE64_STANDARD.encode(&data);
-            json_result(&json!({
-                "success": true,
-                "address": address,
-                "data": encoded,
-                "size_bytes": data.len()
-            }))
-        }
-        Ok(None) => json_result(&json!({
-            "success": false,
-            "address": address,
-            "message": "Content not found"
-        })),
-        Err(e) => error_result(&format!("Failed to retrieve data: {}", e)),
-    }
-}
-
-async fn execute_dht_exists(args: Value) -> ToolCallResult {
-    let addresses: Vec<String> = match args["addresses"].as_array() {
-        Some(arr) => arr
-            .iter()
-            .filter_map(|v| v.as_str().map(String::from))
-            .collect(),
-        None => return error_result("Missing required parameter: addresses"),
-    };
-
-    if addresses.is_empty() {
-        return error_result("addresses array cannot be empty");
-    }
-
-    let dht = DhtOps::new(Arc::clone(&NODE_STATE));
-
-    match dht.check_exists(&addresses).await {
-        Ok(results) => {
-            let entries: Vec<_> = addresses
-                .iter()
-                .zip(results.iter())
-                .map(|(addr, exists)| {
-                    json!({
-                        "address": addr,
-                        "exists": exists
-                    })
-                })
-                .collect();
-
-            json_result(&json!({
-                "success": true,
-                "results": entries
-            }))
-        }
-        Err(e) => error_result(&format!("Failed to check existence: {}", e)),
-    }
-}
-
-async fn execute_dht_network_stats() -> ToolCallResult {
-    let dht = DhtOps::new(Arc::clone(&NODE_STATE));
-
-    match dht.network_stats().await {
-        Ok(stats) => json_result(&json!({
-            "total_nodes": stats.total_nodes,
-            "reachable_nodes": stats.reachable_nodes,
-            "stored_chunks": stats.stored_chunks,
-            "total_storage_bytes": stats.total_storage_bytes
-        })),
-        Err(e) => error_result(&format!("Failed to get network stats: {}", e)),
-    }
-}
-
-async fn execute_dht_closest_peers(args: Value) -> ToolCallResult {
-    let address = match args["address"].as_str() {
-        Some(a) => a,
-        None => return error_result("Missing required parameter: address"),
-    };
-
-    let dht = DhtOps::new(Arc::clone(&NODE_STATE));
-
-    match dht.closest_peers(address).await {
-        Ok(peers) => {
-            let peer_list: Vec<_> = peers
-                .iter()
-                .map(|p| {
-                    json!({
-                        "peer_id": p.peer_id,
-                        "address": p.address,
-                        "distance": p.distance
-                    })
-                })
-                .collect();
-
-            json_result(&json!({
-                "success": true,
-                "address": address,
-                "peers": peer_list
-            }))
-        }
-        Err(e) => error_result(&format!("Failed to find closest peers: {}", e)),
-    }
-}
-
-// =============================================================================
-// DHT Metrics Tools (from saorsa-core's DhtMetricsAggregator)
-// =============================================================================
-
-async fn execute_dht_health_metrics() -> ToolCallResult {
-    let dht = DhtOps::new(Arc::clone(&NODE_STATE));
-
-    match dht.dht_health_metrics().await {
-        Ok(metrics) => json_result(&json!({
-            "routing_table": {
-                "size": metrics.routing_table_size,
-                "buckets_filled": metrics.buckets_filled,
-                "bucket_fullness": metrics.bucket_fullness
-            },
-            "replication": {
-                "factor": metrics.replication_factor,
-                "health": metrics.replication_health,
-                "under_replicated_keys": metrics.under_replicated_keys
-            },
-            "latency": {
-                "p50_ms": metrics.lookup_latency_p50_ms,
-                "p95_ms": metrics.lookup_latency_p95_ms,
-                "p99_ms": metrics.lookup_latency_p99_ms,
-                "avg_hops": metrics.lookup_hops_avg
-            },
-            "operations": {
-                "total": metrics.operations_total,
-                "success": metrics.operations_success_total,
-                "failed": metrics.operations_failed_total,
-                "success_rate": metrics.success_rate
-            },
-            "maintenance": {
-                "bucket_refreshes": metrics.bucket_refresh_total,
-                "liveness_checks": metrics.liveness_checks_total,
-                "liveness_failures": metrics.liveness_failures_total
-            }
-        })),
-        Err(e) => error_result(&format!("Failed to get DHT health metrics: {}", e)),
-    }
-}
-
-async fn execute_trust_metrics() -> ToolCallResult {
-    let dht = DhtOps::new(Arc::clone(&NODE_STATE));
-
-    match dht.trust_metrics().await {
-        Ok(metrics) => json_result(&json!({
-            "eigentrust": {
-                "average": metrics.eigentrust_avg,
-                "min": metrics.eigentrust_min,
-                "max": metrics.eigentrust_max,
-                "epochs_total": metrics.eigentrust_epochs_total,
-                "low_trust_nodes": metrics.low_trust_nodes
-            },
-            "witness_validation": {
-                "receipts_issued": metrics.witness_receipts_issued_total,
-                "receipts_verified": metrics.witness_receipts_verified_total,
-                "receipts_rejected": metrics.witness_receipts_rejected_total
-            },
-            "interactions": {
-                "total": metrics.interactions_recorded_total,
-                "positive": metrics.positive_interactions_total,
-                "negative": metrics.negative_interactions_total
-            },
-            "distribution": metrics.trust_distribution
-        })),
-        Err(e) => error_result(&format!("Failed to get trust metrics: {}", e)),
-    }
-}
-
-async fn execute_security_metrics() -> ToolCallResult {
-    let dht = DhtOps::new(Arc::clone(&NODE_STATE));
-
-    match dht.security_metrics().await {
-        Ok(metrics) => json_result(&json!({
-            "attack_detection": {
-                "eclipse_score": metrics.eclipse_score,
-                "sybil_score": metrics.sybil_score,
-                "collusion_score": metrics.collusion_score,
-                "routing_manipulation_score": metrics.routing_manipulation_score
-            },
-            "attack_events": {
-                "eclipse_attempts": metrics.eclipse_attempts_total,
-                "sybil_nodes_detected": metrics.sybil_nodes_detected_total,
-                "collusion_groups_detected": metrics.collusion_groups_detected_total
-            },
-            "bft_mode": {
-                "active": metrics.bft_mode_active,
-                "escalations": metrics.bft_escalations_total
-            },
-            "sibling_broadcast": {
-                "validated": metrics.sibling_broadcasts_validated_total,
-                "rejected": metrics.sibling_broadcasts_rejected_total,
-                "overlap_ratio": metrics.sibling_overlap_ratio
-            },
-            "close_group": {
-                "validations": metrics.close_group_validations_total,
-                "consensus_failures": metrics.close_group_consensus_failures_total
-            },
-            "witness": {
-                "validations": metrics.witness_validations_total,
-                "failures": metrics.witness_failures_total
-            },
-            "eviction": {
-                "total": metrics.nodes_evicted_total,
-                "by_reason": metrics.eviction_by_reason
-            },
-            "churn": {
-                "rate_5m": metrics.churn_rate_5m,
-                "high_churn_alerts": metrics.high_churn_alerts_total
-            }
-        })),
-        Err(e) => error_result(&format!("Failed to get security metrics: {}", e)),
-    }
-}
-
-async fn execute_placement_metrics() -> ToolCallResult {
-    let dht = DhtOps::new(Arc::clone(&NODE_STATE));
-
-    match dht.placement_metrics().await {
-        Ok(metrics) => json_result(&json!({
-            "storage": {
-                "total_bytes": metrics.total_stored_bytes,
-                "total_records": metrics.total_records,
-                "storage_nodes": metrics.storage_nodes
-            },
-            "geographic": {
-                "diversity_score": metrics.geographic_diversity,
-                "regions_covered": metrics.regions_covered
-            },
-            "capacity": {
-                "total_bytes": metrics.total_capacity_bytes,
-                "used_ratio": metrics.used_capacity_ratio,
-                "overloaded_nodes": metrics.overloaded_nodes
-            },
-            "load_balancing": {
-                "score": metrics.load_balance_score,
-                "rebalance_operations": metrics.rebalance_operations_total
-            },
-            "audits": {
-                "total": metrics.audits_total,
-                "failures": metrics.audit_failures_total
-            }
-        })),
-        Err(e) => error_result(&format!("Failed to get placement metrics: {}", e)),
-    }
-}
-
-async fn execute_metrics_summary() -> ToolCallResult {
-    let dht = DhtOps::new(Arc::clone(&NODE_STATE));
-
-    match dht.metrics_summary().await {
-        Ok(summary) => json_result(&json!({
-            "health_scores": {
-                "overall": summary.overall_health_score,
-                "security": summary.security_score,
-                "dht": summary.dht_health_score,
-                "trust": summary.trust_score,
-                "placement": summary.placement_score
-            },
-            "active_alerts": summary.active_alerts,
-            "status": if summary.overall_health_score >= 0.9 {
-                "healthy"
-            } else if summary.overall_health_score >= 0.7 {
-                "degraded"
-            } else if summary.overall_health_score >= 0.5 {
-                "unhealthy"
-            } else {
-                "critical"
-            }
-        })),
-        Err(e) => error_result(&format!("Failed to get metrics summary: {}", e)),
-    }
 }
 
 // ============================================================================

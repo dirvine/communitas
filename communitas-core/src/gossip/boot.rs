@@ -18,6 +18,8 @@ use super::context::GossipContext;
 use anyhow::{Context, Result};
 use bytes::Bytes;
 use saorsa_gossip_transport::{GossipStreamType, GossipTransport};
+use std::collections::HashSet;
+use std::net::SocketAddr;
 use std::sync::Arc;
 use tracing::{debug, info, warn};
 
@@ -27,12 +29,38 @@ use crate::retry_utils::{RetryConfig, retry_dial};
 /// Boot sequence orchestrator
 pub struct GossipBootSequence {
     context: GossipContext,
+    boot_data: BootData,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct BootData {
+    favourites: Vec<String>,
+    entities: Vec<(String, String)>,
+    introducers: Vec<String>,
 }
 
 impl GossipBootSequence {
     /// Create a new boot sequence
     pub fn new(context: GossipContext) -> Self {
-        Self { context }
+        Self {
+            context,
+            boot_data: BootData::default(),
+        }
+    }
+
+    pub fn with_favourites(mut self, favourites: Vec<String>) -> Self {
+        self.boot_data.favourites = favourites;
+        self
+    }
+
+    pub fn with_entities(mut self, entities: Vec<(String, String)>) -> Self {
+        self.boot_data.entities = entities;
+        self
+    }
+
+    pub fn with_introducers(mut self, introducers: Vec<String>) -> Self {
+        self.boot_data.introducers = introducers;
+        self
     }
 
     /// Execute the complete boot sequence per SPEC.md §2
@@ -98,9 +126,14 @@ impl GossipBootSequence {
 
     /// Load favourite contacts from persistent storage
     async fn load_favourites_from_storage(&self) -> Result<Vec<String>> {
-        // TODO: Load from encrypted storage
-        // For now, return empty list (will be populated as users add favourites)
-        Ok(vec![])
+        let favourites = self
+            .boot_data
+            .favourites
+            .iter()
+            .filter(|fw| !fw.trim().is_empty())
+            .cloned()
+            .collect();
+        Ok(favourites)
     }
 
     /// Use optional introducer nodes for cold start
@@ -112,12 +145,11 @@ impl GossipBootSequence {
         // IPs via conn_words(), but the previous values were USER identities (random dictionary
         // words hashed one-way to seeds), NOT connection identities (encoded IPs).
         // User identities cannot be decoded back to IP addresses.
-        let bootstrap_nodes = vec![
-            "142.93.199.50:11000".to_string(), // saorsa-2: DigitalOcean NYC1 bootstrap
-            "147.182.234.192:11000".to_string(), // saorsa-3: DigitalOcean SFO3 bootstrap
-            "206.189.7.117:11000".to_string(), // saorsa-4: DigitalOcean AMS3 test node
-            "144.126.230.161:11000".to_string(), // saorsa-5: DigitalOcean LON1 test node
-        ];
+        let bootstrap_nodes = if self.boot_data.introducers.is_empty() {
+            super::discovery::IntroducerConfig::default().addresses
+        } else {
+            self.boot_data.introducers.clone()
+        };
 
         // Seed peer cache with bootstrap nodes for fast boot
         {
@@ -208,29 +240,120 @@ impl GossipBootSequence {
         let four_words_str = four_words.to_string();
         let discovery = self.context.discovery.clone();
         let anti_entropy = self.context.anti_entropy.clone();
+        let transport = self.context.transport.clone();
+        let peer_cache = self.context.peer_cache.clone();
+        let contact_store = self.context.contact_store.clone();
 
         retry_dial(four_words, retry_config, || {
             let four_words = four_words_str.clone();
             let discovery = discovery.clone();
             let anti_entropy = anti_entropy.clone();
+            let transport = transport.clone();
+            let peer_cache = peer_cache.clone();
+            let contact_store = contact_store.clone();
             async move {
-                // Use FOAF discovery to find contact
-                match discovery.find_contact(&four_words).await {
-                    Ok(peer_id) => {
-                        info!(
-                            "Found contact {} via FOAF discovery: {:?}",
-                            four_words, peer_id
-                        );
-                        // Register peer for CRDT anti-entropy sync
-                        anti_entropy.add_peer(peer_id).await;
-                        info!("Registered peer {:?} for CRDT sync", peer_id);
-                        // TODO: Actual dial using transport with peer_id
-                        Ok(())
+                let discovery_result = discovery.find_contact_with_hints(&four_words).await?;
+                let peer_id = discovery_result.peer_id;
+
+                let mut candidates: Vec<SocketAddr> = Vec::new();
+
+                // Contact store endpoint (if any)
+                if let Some(contact) = contact_store.get(&four_words).await
+                    && let Some(addr) = contact.get_valid_endpoint()
+                {
+                    candidates.push(addr);
+                }
+
+                // Address hints from discovery (presence/FOAF)
+                for hint in &discovery_result.addr_hints {
+                    if let Ok(addr) = hint.parse::<SocketAddr>() {
+                        candidates.push(addr);
+                        continue;
                     }
-                    Err(e) => {
-                        warn!("Failed to find contact {} via FOAF: {}", four_words, e);
-                        Err(e)
+                    if let Ok(addr) = crate::identity::conn_from_words(hint) {
+                        candidates.push(addr);
+                        continue;
                     }
+                    let normalized = hint.replace('-', " ");
+                    if normalized != *hint
+                        && let Ok(addr) = crate::identity::conn_from_words(&normalized)
+                    {
+                        candidates.push(addr);
+                    }
+                }
+
+                // Address hints from peer cache
+                {
+                    let cache = peer_cache.read().await;
+                    for addr in cache.get_addr_hints(peer_id) {
+                        candidates.push(addr);
+                    }
+                }
+
+                // Deduplicate
+                let mut seen = HashSet::new();
+                candidates.retain(|addr| seen.insert(*addr));
+
+                if candidates.is_empty() {
+                    return Err(anyhow::anyhow!(
+                        "No address hints available for contact {}",
+                        four_words
+                    ));
+                }
+
+                let mut last_error = None;
+                for addr in candidates {
+                    match transport.dial(peer_id, addr).await {
+                        Ok(_) => {
+                            info!(
+                                "Connected to contact {} at {} (peer {:?})",
+                                four_words, addr, peer_id
+                            );
+                            anti_entropy.add_peer(peer_id).await;
+
+                            // Update peer cache
+                            if let Err(e) =
+                                peer_cache.write().await.update_success(peer_id, addr).await
+                            {
+                                warn!("Failed to update peer cache for {}: {}", addr, e);
+                            }
+
+                            // Update contact store
+                            if contact_store.exists(&four_words).await {
+                                if let Err(e) =
+                                    contact_store.record_success(&four_words, addr).await
+                                {
+                                    warn!("Failed to record contact success: {}", e);
+                                }
+                            } else {
+                                let mut record =
+                                    super::contact_storage::ContactRecord::new(four_words.clone());
+                                record.record_success(addr);
+                                if let Err(e) = contact_store.add(record).await {
+                                    warn!("Failed to add contact for {}: {}", four_words, e);
+                                }
+                            }
+
+                            return Ok(());
+                        }
+                        Err(e) => {
+                            warn!("Dial to {} at {} failed: {}", four_words, addr, e);
+                            last_error = Some(e);
+                        }
+                    }
+                }
+
+                // Record failure once
+                if contact_store.exists(&four_words).await
+                    && let Err(e) = contact_store.record_failure(&four_words).await
+                {
+                    warn!("Failed to record contact failure: {}", e);
+                }
+
+                if let Some(err) = last_error {
+                    Err(err)
+                } else {
+                    Err(anyhow::anyhow!("Failed to dial contact {}", four_words))
                 }
             }
         })
@@ -263,7 +386,12 @@ impl GossipBootSequence {
 
         // If no seeds, use introducer nodes
         if seeds.is_empty() {
-            // TODO: Get introducer addresses from config
+            let introducers = if self.boot_data.introducers.is_empty() {
+                super::discovery::IntroducerConfig::default().addresses
+            } else {
+                self.boot_data.introducers.clone()
+            };
+            seeds.extend(introducers);
         }
 
         Ok(seeds)
@@ -292,9 +420,7 @@ impl GossipBootSequence {
 
     /// Load entities (channels, projects, orgs) from storage
     async fn load_entities_from_storage(&self) -> Result<Vec<(String, String)>> {
-        // TODO: Load from encrypted storage
-        // Returns vec of (entity_id, entity_type) tuples
-        Ok(vec![])
+        Ok(self.boot_data.entities.clone())
     }
 
     /// Step 5: Start presence beacons and CRDT anti-entropy
@@ -501,19 +627,21 @@ impl GossipBootSequence {
     async fn start_watchdog_monitoring(&self) -> Result<()> {
         // Get reference to watchdog and coordinator
         let watchdog = Arc::clone(&self.context.watchdog);
-        let coordinator = Arc::clone(&self.context.coordinator);
+        let transport = Arc::clone(&self.context.transport);
+        let membership = Arc::clone(&self.context.membership);
 
         // Define health check function that pings bootstrap/coordinator
         let health_check = move || {
-            let _coordinator = coordinator.clone();
+            let transport = transport.clone();
+            let membership = membership.clone();
             async move {
-                // Try to ping coordinator or bootstrap nodes
-                // For now, we'll check if we have any active peers as a proxy
-                // TODO: Implement actual coordinator health check
+                let active_peers = membership.read().await.active_view();
+                if !active_peers.is_empty() {
+                    return true;
+                }
 
-                // Placeholder: Always return true for now to avoid false positives
-                // In production, this should ping _coordinator.health_check()
-                true
+                let connected = transport.connected_peers().await;
+                !connected.is_empty()
             }
         };
 

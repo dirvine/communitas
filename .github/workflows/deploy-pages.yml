@@ -147,7 +147,7 @@ jobs:
             <span class="tech-badge">P2P</span>
             <span class="tech-badge">CRDT</span>
             <span class="tech-badge">Rust</span>
-            <span class="tech-badge">Tauri</span>
+            <span class="tech-badge">Flutter</span>
         </p>
     </div>
 
@@ -171,38 +171,38 @@ jobs:
         </div>
 
         <div class="doc-card">
-            <h3>📖 User Guides</h3>
-            <p>Getting started guides, tutorials, and best practices</p>
+            <h3>📖 App Specification</h3>
+            <p>Product requirements, UX expectations, and feature scope</p>
             <span class="status status-complete">Complete</span>
             <div>
-                <a href="guides/">View Guides →</a>
+                <a href="APP_SPECIFICATION.md">View App Spec →</a>
             </div>
         </div>
 
         <div class="doc-card">
-            <h3>🛠️ Development</h3>
-            <p>Development setup, contributing, and code documentation</p>
+            <h3>🧪 Testing</h3>
+            <p>Multi-node scenarios and test harness documentation</p>
             <span class="status status-complete">Complete</span>
             <div>
-                <a href="development/">View Dev Docs →</a>
+                <a href="testing/">View Testing →</a>
             </div>
         </div>
 
         <div class="doc-card">
-            <h3>🏃 Operations</h3>
-            <p>Deployment, monitoring, and operational procedures</p>
+            <h3>🏗️ Infrastructure</h3>
+            <p>Deployment, environments, and infrastructure layout</p>
             <span class="status status-in-progress">In Progress</span>
             <div>
-                <a href="operations/">View Operations →</a>
+                <a href="infrastructure/INFRASTRUCTURE.md">View Infrastructure →</a>
             </div>
         </div>
 
         <div class="doc-card">
-            <h3>📊 CRDT Architecture</h3>
+            <h3>📊 CRDT System</h3>
             <p>Distributed synchronization and conflict resolution</p>
             <span class="status status-complete">Complete</span>
             <div>
-                <a href="CRDT_ARCHITECTURE.md">CRDT Docs →</a>
+                <a href="architecture/crdt-system.md">CRDT Docs →</a>
             </div>
         </div>
     </div>
@@ -214,11 +214,11 @@ git clone https://github.com/saorsalabs/communitas.git
 cd communitas
 
 # Install dependencies
-npm install
-cargo build
+cargo build -p communitas-core
+cd communitas-flutter && flutter pub get
 
 # Start development
-npm run tauri:dev</code></pre>
+flutter run -d macos</code></pre>
     </div>
 
     <footer style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #e0e0e0; text-align: center; color: #666;">

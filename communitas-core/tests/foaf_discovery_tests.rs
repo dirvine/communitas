@@ -10,7 +10,7 @@
 //! 4. Introducer node cold start
 //! 5. Complete discovery flow without DHT
 
-use communitas_core::gossip::discovery::{FoafDiscovery, IntroducerConfig};
+use communitas_core::gossip::discovery::{FoafDiscovery, IntroducerConfig, cold_start_discovery};
 use saorsa_gossip_types::PeerId;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -498,20 +498,20 @@ async fn test_introducer_node_connection() {
 #[tokio::test]
 async fn test_introducer_config_empty_addresses() {
     // GIVEN: Empty introducer config
-    let _config = IntroducerConfig {
+    let config = IntroducerConfig {
         addresses: vec![],
         timeout_secs: 10,
     };
 
-    // TODO: Mock transport
-    // let transport = create_mock_transport();
+    let transport = QuicTransport::new(TransportConfig::default());
 
     // WHEN: Attempting cold start with no introducers
-    // let peers = cold_start_discovery(config, &transport).await;
+    let peers = cold_start_discovery(config, &transport)
+        .await
+        .expect("cold start");
 
     // THEN: Should return empty list (not an error - graceful degradation)
-    // assert!(peers.is_ok());
-    // assert_eq!(peers.unwrap().len(), 0);
+    assert_eq!(peers.len(), 0);
 }
 
 #[tokio::test]
@@ -550,52 +550,89 @@ async fn test_introducer_node_timeout() {
 // ============================================================================
 
 #[tokio::test]
-#[ignore] // TODO: Implement full discovery integration
 async fn test_complete_discovery_flow() {
-    // GIVEN: Complete network setup
-    let _discovery = FoafDiscovery::new();
+    let (presence_mgr, groups_map) = create_mock_presence().await;
+    let topic_id = TopicId::new([1u8; 32]);
+    let alice_peer = test_peer_id(10);
+    let bob_peer = test_peer_id(11);
 
-    // Scenario:
-    // 1. User starts with empty cache (new device)
-    // 2. Connects to introducer node
-    // 3. Joins group "general"
-    // 4. Sees presence beacon from Alice
-    // 5. Adds Alice to cache
-    // 6. Queries Alice via FOAF for Bob
-    // 7. Finds Bob and adds to cache
-    // 8. Direct lookup from cache for subsequent queries
+    add_mock_presence(
+        &presence_mgr,
+        &groups_map,
+        topic_id,
+        alice_peer,
+        "alice-alpha-beta-gamma",
+    )
+    .await;
 
-    // TODO: Implement complete flow
+    let transport = Arc::new(MockFoafTransport::new());
+    transport
+        .add_knowledge(alice_peer, "bob-bravo-charlie-delta".to_string(), bob_peer)
+        .await;
 
-    // WHEN: Looking for Bob
-    // let found = discovery.find_contact("bob-bravo-charlie-delta").await;
+    let discovery =
+        FoafDiscovery::with_config(Some(presence_mgr), Some(transport), test_peer_id(1), 2);
 
-    // THEN: Should find via complete discovery chain
-    // assert!(found.is_ok());
+    discovery
+        .add_contact("alice-alpha-beta-gamma".to_string(), alice_peer)
+        .await;
 
-    // AND: Bob should now be in cache
-    // let cached = discovery.find_contact("bob-bravo-charlie-delta").await;
-    // assert!(cached.is_ok()); // Should be instant from cache
+    let found_alice = discovery
+        .find_contact("alice-alpha-beta-gamma")
+        .await
+        .expect("find alice");
+    assert_eq!(found_alice, alice_peer);
+
+    let found_bob = discovery
+        .find_contact("bob-bravo-charlie-delta")
+        .await
+        .expect("find bob");
+    assert_eq!(found_bob, bob_peer);
+
+    let cached_bob = discovery
+        .find_contact("bob-bravo-charlie-delta")
+        .await
+        .expect("find bob from cache");
+    assert_eq!(cached_bob, bob_peer);
 }
 
 #[tokio::test]
-#[ignore] // TODO: Implement discovery fallback chain
 async fn test_discovery_fallback_chain() {
-    // GIVEN: Discovery with multiple strategies
-    let _discovery = FoafDiscovery::new();
+    let (presence_mgr, groups_map) = create_mock_presence().await;
+    let topic_id = TopicId::new([2u8; 32]);
+    let alice_peer = test_peer_id(12);
+    let target_peer = test_peer_id(13);
 
-    // Strategy order:
-    // 1. Check cache (empty)
-    // 2. Check presence in shared groups (not found)
-    // 3. Query FOAF (found at 2-hop)
+    add_mock_presence(
+        &presence_mgr,
+        &groups_map,
+        topic_id,
+        alice_peer,
+        "alice-alpha-beta-gamma",
+    )
+    .await;
 
-    // TODO: Setup network with FOAF data only (not in presence)
+    let transport = Arc::new(MockFoafTransport::new());
+    transport
+        .add_knowledge(
+            alice_peer,
+            "distant-contact-two-hops".to_string(),
+            target_peer,
+        )
+        .await;
 
-    // WHEN: Looking for contact
-    // let found = discovery.find_contact("distant-contact-two-hops").await;
+    let discovery =
+        FoafDiscovery::with_config(Some(presence_mgr), Some(transport), test_peer_id(1), 2);
 
-    // THEN: Should fall through to FOAF and find
-    // assert!(found.is_ok());
+    discovery
+        .add_contact("alice-alpha-beta-gamma".to_string(), alice_peer)
+        .await;
+
+    let found = discovery
+        .find_contact("distant-contact-two-hops")
+        .await
+        .expect("find via foaf");
+    assert_eq!(found, target_peer);
 }
 
 // ============================================================================

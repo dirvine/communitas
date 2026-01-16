@@ -230,7 +230,7 @@ pub async fn get_messages(entity_id: &str, limit: usize) -> Result<Vec<Message>>
 
 ## References
 
-- CRDT Architecture: `docs/CRDT_ARCHITECTURE.md`
+- CRDT Architecture: `docs/architecture/crdt-system.md`
 - Implementation: `communitas-core/src/crdt/`
 - Yrs Documentation: https://docs.rs/yrs/
 - Yjs Project: https://yjs.dev/

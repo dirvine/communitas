@@ -25,7 +25,7 @@ Communitas implements a hierarchical resilience model spanning process-local to 
 - **Multi-Transport Discovery**: Operates across loopback, LAN broadcast, NAT-traversed WAN, and direct public IP without central coordination
 - **Catastrophic Failure Recovery**: System continues operation in local-only mode during global infrastructure failures, automatically resuming WAN operations upon restoration
 
-Technical implementation verified through comprehensive integration testing (37 passing tests covering watchdog monitoring, exponential backoff retry, and resource limit enforcement). See [MESH_CAPABILITIES.md](docs/MESH_CAPABILITIES.md) for formal specification.
+Technical implementation verified through comprehensive integration testing (watchdog monitoring, exponential backoff retry, and resource limit enforcement). See [Offline Handling](docs/architecture/offline-handling.md) and [Networking](docs/architecture/networking.md) for formal specifications.
 
 ---
 
@@ -58,7 +58,9 @@ cd communitas
 # Flutter app development
 cd communitas-flutter
 flutter pub get
-flutter run -d macos  # or: -d chrome, -d linux, -d windows
+flutter run -d macos  # or: -d linux, -d windows, -d ios, -d android
+# Web demo (FFI not available in browser)
+flutter run -d chrome --dart-define=DEMO_MODE=true
 ```
 
 ### Testing
@@ -119,49 +121,42 @@ cargo test
 
 ## Documentation
 
-### Getting Started
-- **[Getting Started Guide](docs/guides/getting-started.md)**: Complete setup and first steps
-- **[Authentication Guide](docs/guides/authentication.md)**: Login, passkeys, and security
-- **[Four-Word Addresses](docs/guides/four-word-addresses.md)**: Understanding identity system
-
-### Architecture & Design
-- **[DESIGN.md](DESIGN.md)**: System architecture and technical design
-- **[MESH_CAPABILITIES.md](docs/MESH_CAPABILITIES.md)**: Network resilience specification and failure scenarios
-- **[Architecture Overview](docs/architecture/)**: Detailed architecture documentation
-- **[CRDT System](docs/CRDT_ARCHITECTURE.md)**: Conflict-free replicated data types and eventual consistency
-- **[Gossip Protocol](docs/GOSSIP_OVERLAY.md)**: P2P communication layer (HyParView, SWIM, Plumtree)
+### Product & Architecture
+- **[App Specification](docs/APP_SPECIFICATION.md)**: Product requirements and UX expectations
+- **[Architecture Overview](docs/architecture/README.md)**: System architecture (Flutter + Rust core + gossip)
+- **[CRDT System](docs/architecture/crdt-system.md)**: Yrs document model and sync
+- **[Gossip Protocol](docs/architecture/gossip-protocol.md)**: P2P membership + dissemination
+- **[Networking](docs/architecture/networking.md)**: QUIC transport, NAT traversal, resilience
+- **[Offline Handling](docs/architecture/offline-handling.md)**: Auto-queue and recovery flow
+- **[Security](docs/architecture/security.md)**: PQC, vaults, threat model
+- **[Storage](docs/architecture/storage.md)**: Virtual disks and content addressing
+- **[ADR Index](docs/adr/README.md)**: Architecture decisions
 
 ### API Reference
+- **[API Overview](docs/api/README.md)**: FFI, core, MCP surfaces
 - **[Core API](docs/api/core-api.md)**: Rust core library API
-- **[MCP API](docs/api/mcp-api.md)**: AI agent interface
+- **[MCP API](communitas-mcp/README.md)**: AI agent interface (stdio/HTTP)
 
-### Deployment Guides
+### Deployment & Ops
 - **[Headless Service](communitas-headless/README.md)**: systemd, launchd, JSON-RPC API
 - **[Testnet Deployment](finalise/DEPLOY_TESTNET.md)**: Complete network deployment
+- **[Infrastructure](docs/infrastructure/INFRASTRUCTURE.md)**: Infra layout and environments
 
 ### Development
-- **[Contributing Guide](docs/development/contributing.md)**: How to contribute
-- **[Coding Standards](docs/development/coding-standards.md)**: Code style and quality
-- **[Testing Guide](docs/guides/testing.md)**: Test strategy and examples
-- **[Troubleshooting](docs/development/troubleshooting.md)**: Common issues and solutions
-
-### Operations
-- **[Monitoring](docs/operations/monitoring.md)**: Prometheus, Grafana, metrics
-- **[Security Policy](docs/operations/security-policy.md)**: Security guidelines
-- **[Incident Response](docs/operations/incident-response.md)**: Emergency procedures
-
-### For AI Assistants
+- **[Contributing Guide](CONTRIBUTING.md)**: How to contribute
+- **[Windows Build](docs/development/windows-build.md)**: Windows setup notes
 - **[CLAUDE.md](CLAUDE.md)**: Project context for LLM helpers
-- **[Agent Automation](docs/development/AGENTS.md)**: Automated development workflows
 
 ---
 
 ## Project Structure
 
 ### Applications
-- **[communitas-flutter/](communitas-flutter/)**: Cross-platform Flutter application (macOS, iOS, Android, Linux, Windows, Web)
+- **[communitas-flutter/](communitas-flutter/)**: Cross-platform Flutter application (macOS, iOS, Android, Linux, Windows; web demo only)
 - **[communitas-headless/](communitas-headless/)**: Headless daemon for system services ([README](communitas-headless/README.md))
 - **[communitas-mcp/](communitas-mcp/)**: MCP server for AI agent control (stdio + HTTPS with ML-DSA-65)
+
+Flutter is the only supported GUI; MCP is the integration surface for other local apps and automations.
 
 ### Core Libraries
 - **[communitas-core/](communitas-core/)**: Shared Rust business logic and P2P networking
@@ -169,11 +164,12 @@ cargo test
 
 ### Documentation
 - **[docs/](docs/)**: Comprehensive project documentation
-  - **[guides/](docs/guides/)**: User and developer guides
   - **[architecture/](docs/architecture/)**: System architecture documentation
   - **[api/](docs/api/)**: API reference documentation
   - **[development/](docs/development/)**: Development setup and standards
-  - **[operations/](docs/operations/)**: Deployment and operations guides
+  - **[testing/](docs/testing/)**: Multi-node testing and scenarios
+  - **[infrastructure/](docs/infrastructure/)**: Deployment and infrastructure
+  - **[adr/](docs/adr/)**: Architecture decision records
 
 ### Key Commands
 ```bash
@@ -184,7 +180,8 @@ flutter run -d macos
 
 # Production Build
 flutter build macos --release
-flutter build web --release
+# Web demo build only (no native FFI in browser)
+flutter build web --release --dart-define=DEMO_MODE=true
 
 # Quality Checks
 flutter analyze && cargo clippy --all-features
@@ -200,11 +197,12 @@ communitas-headless --config /etc/communitas/headless.toml
 Communitas supports multiple deployment scenarios for different use cases:
 
 ### Flutter Application (End Users)
-Full-featured cross-platform application for macOS, iOS, Android, Linux, Windows, and Web.
+Full-featured cross-platform application for macOS, iOS, Android, Linux, and Windows.
 ```bash
 cd communitas-flutter
 flutter build macos --release
-flutter build web --release
+# Web demo build only (FFI not available in browser)
+flutter build web --release --dart-define=DEMO_MODE=true
 ```
 See [communitas-flutter/](communitas-flutter/) for details.
 
@@ -246,7 +244,7 @@ final entity = await findEntity("ocean-blue-eagle-star");
 - **Desktop Nodes**: Full participants with UI (Flutter macOS/Linux/Windows)
 - **Mobile Nodes**: Full participants on iOS and Android
 - **Headless Nodes**: Bootstrap/seed nodes for network infrastructure
-- **Web Clients**: Browser-based access via Flutter Web
+- **Web Clients**: Demo-only Flutter Web builds (no native FFI in browser)
 
 ---
 

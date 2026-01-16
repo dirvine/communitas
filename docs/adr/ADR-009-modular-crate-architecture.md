@@ -143,9 +143,8 @@ pub mod webrtc;            // Voice/video
 ```
 
 **No dependencies on**:
-- Tauri (desktop-specific)
+- GUI runtimes or frameworks
 - Platform APIs (keyring, notifications)
-- UI frameworks
 
 ### Flutter FFI Bindings (flutter_rust_bridge)
 
@@ -242,7 +241,7 @@ flutter build android --release
 - **Fast compilation**: Change in TUI doesn't rebuild desktop
 - **Clean boundaries**: Core has no UI dependencies
 - **Multiple targets**: Same core for desktop, mobile, CLI
-- **Independent testing**: Test core without Tauri
+- **Independent testing**: Test core without a GUI runtime
 - **Selective features**: Minimal builds for embedded
 
 ### Trade-offs

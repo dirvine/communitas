@@ -21,7 +21,7 @@
 //! - Anti-entropy stats
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::time::Duration;
 
 /// Telemetry data for a gossip topic
@@ -70,20 +70,44 @@ pub struct ScoreDistribution {
 /// Telemetry collector
 pub struct TelemetryCollector {
     topic_metrics: HashMap<String, TopicMetrics>,
+    latency_samples: HashMap<String, VecDeque<u64>>,
 }
+
+const MAX_LATENCY_SAMPLES: usize = 512;
 
 impl TelemetryCollector {
     /// Create a new telemetry collector
     pub fn new() -> Self {
         Self {
             topic_metrics: HashMap::new(),
+            latency_samples: HashMap::new(),
         }
     }
 
     /// Record message delivery latency
-    pub fn record_latency(&mut self, _topic_id: &str, latency: Duration) {
-        // TODO: Implement P50/P95 calculation
-        let _latency_ms = latency.as_millis() as u64;
+    pub fn record_latency(&mut self, topic_id: &str, latency: Duration) {
+        let latency_ms = latency.as_millis() as u64;
+
+        let metrics = self
+            .topic_metrics
+            .entry(topic_id.to_string())
+            .or_insert_with(|| TopicMetrics::new(topic_id));
+
+        let samples = self
+            .latency_samples
+            .entry(topic_id.to_string())
+            .or_default();
+
+        samples.push_back(latency_ms);
+        if samples.len() > MAX_LATENCY_SAMPLES {
+            samples.pop_front();
+        }
+
+        let mut sorted: Vec<u64> = samples.iter().copied().collect();
+        sorted.sort_unstable();
+
+        metrics.latency_p50_ms = percentile(&sorted, 0.50);
+        metrics.latency_p95_ms = percentile(&sorted, 0.95);
     }
 
     /// Record message sent
@@ -175,6 +199,15 @@ impl TopicMetrics {
             items_synced: 0,
         }
     }
+}
+
+fn percentile(sorted: &[u64], pct: f64) -> u64 {
+    if sorted.is_empty() {
+        return 0;
+    }
+    let clamped = pct.clamp(0.0, 1.0);
+    let idx = ((sorted.len().saturating_sub(1)) as f64 * clamped).round() as usize;
+    sorted[idx.min(sorted.len() - 1)]
 }
 
 #[cfg(test)]

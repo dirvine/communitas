@@ -260,6 +260,6 @@ ocean-forest-moon-star.communitas/index.html
 
 - Implementation: `communitas-core/src/disk_service.rs`
 - Storage: `communitas-core/src/storage/`
-- CRDT Architecture: `docs/CRDT_ARCHITECTURE.md`
+- CRDT Architecture: `docs/architecture/crdt-system.md`
 - Related ADR: [ADR-004 Entity Hierarchy](ADR-004-entity-hierarchy-model.md)
 - Related ADR: [ADR-011 Encrypted Vault Storage](ADR-011-encrypted-vault-storage.md)

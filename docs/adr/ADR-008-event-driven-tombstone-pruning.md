@@ -265,7 +265,7 @@ Per tombstone:
 
 ## References
 
-- CRDT Architecture: `docs/CRDT_ARCHITECTURE.md`
+- CRDT Architecture: `docs/architecture/crdt-system.md`
 - Implementation: `communitas-core/src/crdt/`
 - Related ADR: [ADR-003 Yrs CRDT](ADR-003-yrs-crdt-synchronization.md)
 - Related ADR: [ADR-002 Local-First](ADR-002-local-first-architecture.md)

@@ -6,6 +6,7 @@ import '../../../../main.dart';
 import '../../../core/router.dart';
 import '../../../core/theme/colors.dart';
 import '../providers/auth_provider.dart';
+import '../../../bindings/api_exports.dart';
 
 /// Recover identity from BIP39 mnemonic phrase (ADR-016).
 class RecoverIdentityScreen extends ConsumerStatefulWidget {
@@ -313,7 +314,7 @@ class _RecoverIdentityScreenState extends ConsumerState<RecoverIdentityScreen> {
     });
 
     try {
-      if (kDemoMode) {
+      if (kIsWeb) {
         // Demo mode: simulate validation
         await Future.delayed(const Duration(milliseconds: 500));
 
@@ -331,28 +332,28 @@ class _RecoverIdentityScreenState extends ConsumerState<RecoverIdentityScreen> {
           });
         }
       } else {
-        // Native mode: validate via FFI
-        // TODO: Call native validation when bindings are ready
         final normalizedMnemonic = words.join(' ');
-        // ignore: unused_local_variable
-        final passphrase = _passphraseController.text.isNotEmpty
-            ? _passphraseController.text
+        final passphrase = _passphraseController.text.trim().isNotEmpty
+            ? _passphraseController.text.trim()
             : null;
 
-        // For now, use demo fallback until bindings ready
-        // When ready: validateMnemonic(normalizedMnemonic, passphrase)
-        await Future.delayed(const Duration(milliseconds: 500));
-        if (normalizedMnemonic.startsWith('abandon abandon abandon')) {
-          setState(() {
-            _recoveredFourWords = 'recovered-identity-four-words';
-            _isValidating = false;
-          });
-        } else {
+        final isValid = await validateRecoveryMnemonic(mnemonic: normalizedMnemonic);
+        if (!isValid) {
           setState(() {
             _validationError = 'Invalid mnemonic phrase';
             _isValidating = false;
           });
+          return;
         }
+
+        final preview = await previewIdentityFromMnemonic(
+          mnemonic: normalizedMnemonic,
+          passphrase: passphrase,
+        );
+        setState(() {
+          _recoveredFourWords = preview.fourWords;
+          _isValidating = false;
+        });
       }
     } catch (e) {
       debugPrint('Validation error: $e');

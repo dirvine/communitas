@@ -41,31 +41,6 @@ async fn test_handshake_success() {
 }
 
 #[tokio::test]
-#[ignore] // Requires SPKI pinning implementation
-async fn test_spki_pinning_reject() {
-    // GIVEN: Node A with SPKI pinning enabled
-    let harness = TestHarness::new(2).await.expect("harness creation failed");
-
-    // Get node A and configure SPKI pinning
-    let _node_a = harness.get_node(0).await.expect("node A not found");
-    // TODO: Call sync_set_quic_pinned_spki on node A with wrong SPKI
-
-    // WHEN: Node B tries to connect (with different SPKI)
-    harness.mesh().await.expect("mesh setup failed");
-
-    // THEN: Connection should be rejected
-    tokio::time::sleep(Duration::from_secs(2)).await;
-
-    {
-        let _network = harness.network.read().await;
-        // Connection should fail due to SPKI mismatch
-        // TODO: Verify connection was rejected
-    } // network guard dropped here
-
-    harness.cleanup().await.expect("cleanup failed");
-}
-
-#[tokio::test]
 async fn test_reconnect_after_drop() {
     // GIVEN: Two connected nodes
     let harness = TestHarness::new(2).await.expect("harness creation failed");

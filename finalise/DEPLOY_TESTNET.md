@@ -94,18 +94,18 @@ RestartSec=30
 WantedBy=multi-user.target
 ```
 
-`/etc/systemd/system/communitas-bootstrap.service` (for bootstrap nodes – set a distinct instance id/storage root):
+`/etc/systemd/system/communitas-seed.service` (for seed/introducer nodes – set a distinct instance id/storage root):
 ```ini
 [Unit]
-Description=Communitas Bootstrap Node
+Description=Communitas Seed Node
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 User=communitas
-Environment=COMMUNITAS_INSTANCE=bootstrap-node-1
-Environment=COMMUNITAS_CONFIG=/etc/communitas/bootstrap-node-1/config.toml
-Environment=COMMUNITAS_STORAGE=/var/lib/communitas/bootstrap-node-1
+Environment=COMMUNITAS_INSTANCE=seed-node-1
+Environment=COMMUNITAS_CONFIG=/etc/communitas/seed-node-1/config.toml
+Environment=COMMUNITAS_STORAGE=/var/lib/communitas/seed-node-1
 ExecStartPre=/usr/bin/install -d -o communitas -g communitas ${COMMUNITAS_STORAGE}
 ExecStart=/opt/communitas/bin/communitas-headless \\
     --instance-id=${COMMUNITAS_INSTANCE} \\

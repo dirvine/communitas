@@ -402,6 +402,20 @@ impl PeerCache {
         entries.into_iter().take(limit).collect()
     }
 
+    /// Get a peer cache entry by peer id.
+    pub fn get_entry(&self, peer_id: PeerId) -> Option<PeerCacheEntry> {
+        let cache = self.read_cache().ok()?;
+        let peer_id_str = hex::encode(peer_id.as_bytes());
+        cache.peers.get(&peer_id_str).cloned()
+    }
+
+    /// Get address hints for a peer id.
+    pub fn get_addr_hints(&self, peer_id: PeerId) -> Vec<SocketAddr> {
+        self.get_entry(peer_id)
+            .map(|entry| entry.addr_hints)
+            .unwrap_or_default()
+    }
+
     /// Prune peers with high failure rates
     pub async fn prune_failed(&mut self, threshold_ratio: f64) -> Result<()> {
         let mut cache = self.read_cache()?;
@@ -443,8 +457,8 @@ impl PeerCache {
         let mut cache = self.read_cache()?;
 
         // Parse four-word address to get socket address
-        // For now, we use a placeholder peer_id derived from four-words
-        // In production, this would resolve the four-word address to actual peer_id
+        // For now, we derive a temporary peer_id from four-words.
+        // Replace with resolved peer_id once identity resolution is available.
         let peer_id_bytes = blake3::hash(four_words.as_bytes());
         let peer_id = PeerId::new(*peer_id_bytes.as_bytes());
         let peer_id_str = hex::encode(peer_id.as_bytes());

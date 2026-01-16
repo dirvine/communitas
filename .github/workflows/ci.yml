@@ -157,7 +157,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: web
+          - platform: web # demo-only build (FFI not available in browser)
             os: ubuntu-latest
           - platform: macos
             os: macos-latest

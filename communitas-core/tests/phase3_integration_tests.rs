@@ -8,7 +8,9 @@
 // - Local-only mode dial decisions
 // - Config-based limit loading
 
-use communitas_core::{ConnectivityWatchdog, ResourceLimitError, ResourceLimits, WatchdogConfig};
+use communitas_core::{
+    ConnectivityWatchdog, GossipContext, ResourceLimitError, ResourceLimits, WatchdogConfig,
+};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Duration;
@@ -87,16 +89,39 @@ async fn test_watchdog_starts_monitoring_bootstrap() {
 /// Test that GossipContext provides method to check if WAN dials should be attempted
 #[tokio::test]
 async fn test_gossip_context_respects_local_only_mode() {
-    // This test verifies that GossipContext exposes a method to check
-    // whether WAN operations should be attempted based on watchdog state
+    let ctx = GossipContext::initialize(
+        "ocean-forest-moon-star".to_string(),
+        "Alice".to_string(),
+        "Desktop".to_string(),
+        None,
+    )
+    .await
+    .expect("context init");
 
-    // For now, this is a placeholder that will guide implementation
-    // We expect a method like: context.should_attempt_wan_dial()
+    assert!(
+        ctx.should_attempt_wan_operations(),
+        "WAN operations should be allowed by default"
+    );
 
-    // TODO: Once GossipContext has should_attempt_wan_dial(), implement this test
-    // Expected behavior:
-    // - When watchdog.is_local_only_mode() == true → should_attempt_wan_dial() == false
-    // - When watchdog.is_local_only_mode() == false → should_attempt_wan_dial() == true
+    ctx.set_local_only_mode(true);
+    assert!(
+        ctx.is_local_only_mode(),
+        "Context should be in local-only mode after override"
+    );
+    assert!(
+        !ctx.should_attempt_wan_operations(),
+        "WAN operations should be disabled in local-only mode"
+    );
+
+    ctx.set_local_only_mode(false);
+    assert!(
+        !ctx.is_local_only_mode(),
+        "Context should exit local-only mode after override"
+    );
+    assert!(
+        ctx.should_attempt_wan_operations(),
+        "WAN operations should be re-enabled after recovery"
+    );
 }
 
 /// Test that membership layer enforces peer connection limits

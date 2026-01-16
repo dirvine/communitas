@@ -176,6 +176,7 @@ impl MessageSyncService {
             local_state: Some(LocalMessageState {
                 status: Some(MessageStatus::Sent),
                 reactions: Vec::new(),
+                edited_at: None,
                 thread_count: None,
                 latest_reply_by: None,
             }),
@@ -320,6 +321,17 @@ impl MessageSyncService {
                 if message.metadata.id == message_id {
                     message.content.text = new_text;
                     let edited_at = chrono::Utc::now().timestamp_millis() as u64;
+                    let local_state =
+                        message
+                            .local_state
+                            .get_or_insert_with(|| LocalMessageState {
+                                status: None,
+                                reactions: Vec::new(),
+                                edited_at: None,
+                                thread_count: None,
+                                latest_reply_by: None,
+                            });
+                    local_state.edited_at = Some(edited_at);
                     info!("✏️ Message edited: {} (entity: {})", message_id, entity_id);
                     return Ok(edited_at);
                 }
@@ -348,6 +360,7 @@ impl MessageSyncService {
                             .get_or_insert_with(|| LocalMessageState {
                                 status: None,
                                 reactions: Vec::new(),
+                                edited_at: None,
                                 thread_count: None,
                                 latest_reply_by: None,
                             });

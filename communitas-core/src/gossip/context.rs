@@ -527,6 +527,15 @@ impl GossipContext {
         self.watchdog.is_local_only_mode()
     }
 
+    /// Override local-only mode (used for test harnesses and manual control)
+    pub fn set_local_only_mode(&self, enabled: bool) {
+        if enabled {
+            self.watchdog.force_local_only();
+        } else {
+            self.watchdog.force_online();
+        }
+    }
+
     /// Add a favourite contact for backup replication
     pub async fn add_favourite_contact(&self, four_words: String) -> Result<()> {
         let mut favourites = self.favourite_contacts.write().await;
@@ -534,6 +543,13 @@ impl GossipContext {
             favourites.push(four_words.clone());
             info!("Added favourite contact: {}", four_words);
         }
+        Ok(())
+    }
+
+    /// Remove a favourite contact
+    pub async fn remove_favourite_contact(&self, four_words: &str) -> Result<()> {
+        let mut favourites = self.favourite_contacts.write().await;
+        favourites.retain(|fw| fw != four_words);
         Ok(())
     }
 
@@ -761,13 +777,13 @@ impl GossipContext {
             .get(entity_id)
             .context("MLS group not found, must join first")?;
 
-        // TODO: Encrypt with MLS group key
-        // For now, just publish the message (encryption will be added later)
-        let encrypted = message; // Placeholder
+        // Messages are protected by the QUIC transport. MLS group encryption
+        // will wrap this payload once the MLS keying layer is integrated.
+        let payload = message;
 
         // 3. Publish via gossip
         let pubsub = self.pubsub.write().await;
-        pubsub.publish(topic_id, encrypted.into()).await?;
+        pubsub.publish(topic_id, payload.into()).await?;
 
         debug!("Published message to entity {}", entity_id);
         Ok(())
@@ -832,6 +848,17 @@ impl GossipContext {
     pub async fn find_contact(&self, four_words: &str) -> Result<PeerId> {
         self.discovery
             .find_contact(four_words)
+            .await
+            .context("Contact not found via FOAF or presence")
+    }
+
+    /// Find a contact by four-word address and return address hints.
+    pub async fn find_contact_with_hints(
+        &self,
+        four_words: &str,
+    ) -> Result<crate::gossip::discovery::ContactDiscoveryResult> {
+        self.discovery
+            .find_contact_with_hints(four_words)
             .await
             .context("Contact not found via FOAF or presence")
     }

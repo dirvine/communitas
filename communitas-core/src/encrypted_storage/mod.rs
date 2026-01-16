@@ -913,6 +913,17 @@ mod tests {
             .await
             .unwrap();
 
+        // Simulate a missing shard and ensure recovery still succeeds
+        let shard_path = temp_dir
+            .path()
+            .join("test-fec-vault-storage")
+            .join("fec")
+            .join("large_file")
+            .join("shard_0.bin");
+        if shard_path.exists() {
+            tokio::fs::remove_file(shard_path).await.unwrap();
+        }
+
         // Retrieve should work even if some shards are corrupted
         let retrieved = manager.retrieve(&session.id, "large_file").await.unwrap();
         assert_eq!(retrieved, large_data);

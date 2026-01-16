@@ -13,6 +13,7 @@ mod sync_barrier;
 use anyhow::{Context, Result};
 use clap::Parser;
 use std::path::PathBuf;
+use std::time::Instant;
 use tracing::{info, Level};
 use tracing_subscriber::FmtSubscriber;
 
@@ -177,6 +178,7 @@ async fn run_scenario(
     for test_case in &config.test_cases {
         info!("Running test case: {} - {}", test_case.id, test_case.name);
 
+        let start = Instant::now();
         let result = run_test_case(
             test_case,
             nodes,
@@ -185,6 +187,7 @@ async fn run_scenario(
             context.clone(),
         )
         .await;
+        let duration_ms = start.elapsed().as_millis() as u64;
 
         let passed = result.is_ok();
         let error_message = result.as_ref().err().map(|e| e.to_string());
@@ -204,7 +207,7 @@ async fn run_scenario(
             test_name: test_case.name.clone(),
             passed,
             error_message,
-            duration_ms: 0, // TODO: track timing
+            duration_ms,
         });
 
         // Sync barrier between test cases

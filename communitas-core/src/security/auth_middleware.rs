@@ -1,4 +1,4 @@
-//! Authentication middleware for Tauri commands
+//! Authentication middleware for core command adapters
 //!
 //! This module provides:
 //! - Session-based authentication
@@ -326,7 +326,7 @@ pub mod permissions {
     }
 }
 
-/// Macro for protecting Tauri commands with authentication
+/// Macro for protecting adapter commands with authentication
 #[macro_export]
 macro_rules! require_auth {
     ($auth_middleware:expr, $session_id:expr, $permission:expr) => {
@@ -337,7 +337,7 @@ macro_rules! require_auth {
     };
 }
 
-/// Macro for protecting Tauri commands with session validation only
+/// Macro for protecting adapter commands with session validation only
 #[macro_export]
 macro_rules! require_session {
     ($auth_middleware:expr, $session_id:expr) => {

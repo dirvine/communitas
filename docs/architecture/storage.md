@@ -1423,7 +1423,7 @@ pub fn get_key(service: &str, account: &str) -> Result<String> {
 
 - [Security](security.md) - Cryptography and security model
 - [CRDT System](crdt-system.md) - Real-time collaborative documents
-- [Core Components](core-components.md) - System component overview
+- [Architecture Overview](README.md) - System component overview
 - [Architecture README](README.md) - Architecture overview
 
 ---

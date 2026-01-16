@@ -57,6 +57,13 @@ pub struct FoafDiscovery {
     query_timeout_ms: u64,
 }
 
+/// Result of a contact discovery lookup with address hints.
+#[derive(Debug, Clone)]
+pub struct ContactDiscoveryResult {
+    pub peer_id: PeerId,
+    pub addr_hints: Vec<String>,
+}
+
 impl Default for FoafDiscovery {
     fn default() -> Self {
         Self::new()
@@ -110,15 +117,43 @@ impl FoafDiscovery {
     /// Strategy:
     /// 1. Check local cache
     /// 2. Check presence in shared groups (requires PresenceManager)
-    /// 3. TODO: Query FOAF (up to max_hops) - network protocol not yet implemented
+    /// 3. Query FOAF (up to max_hops) via transport if configured
     /// 4. Return error if not found
     pub async fn find_contact(&self, four_words: &str) -> Result<PeerId> {
+        let result = self.find_contact_with_hints(four_words).await?;
+        Ok(result.peer_id)
+    }
+
+    /// Find a contact by four-word address and return address hints if available.
+    pub async fn find_contact_with_hints(
+        &self,
+        four_words: &str,
+    ) -> Result<ContactDiscoveryResult> {
         // Step 1: Check local cache
         {
             let contacts = self.local_contacts.read().await;
             if let Some(peer_id) = contacts.get(four_words) {
                 debug!("Found {} in local cache", four_words);
-                return Ok(*peer_id);
+
+                let mut hints = Vec::new();
+                if let Some(presence) = &self.presence {
+                    let presence_guard = presence.read().await;
+                    let groups = presence_guard.get_groups().await;
+                    for topic_id in groups {
+                        let presence_records = presence_guard.get_group_presence(topic_id).await;
+                        if let Some(record) = presence_records.get(peer_id)
+                            && !record.is_expired()
+                        {
+                            hints = record.addr_hints.clone();
+                            break;
+                        }
+                    }
+                }
+
+                return Ok(ContactDiscoveryResult {
+                    peer_id: *peer_id,
+                    addr_hints: hints,
+                });
             }
         }
 
@@ -147,7 +182,10 @@ impl FoafDiscovery {
                         // Add to cache for faster future lookups
                         let mut contacts = self.local_contacts.write().await;
                         contacts.insert(four_words.to_string(), peer_id);
-                        return Ok(peer_id);
+                        return Ok(ContactDiscoveryResult {
+                            peer_id,
+                            addr_hints: record.addr_hints.clone(),
+                        });
                     }
                 }
             }
@@ -202,7 +240,10 @@ impl FoafDiscovery {
                 let mut cache = self.local_contacts.write().await;
                 cache.insert(four_words.to_string(), response.peer_id);
 
-                return Ok(response.peer_id);
+                return Ok(ContactDiscoveryResult {
+                    peer_id: response.peer_id,
+                    addr_hints: response.addr_hints.clone(),
+                });
             }
 
             debug!("FOAF query returned no results for {}", four_words);

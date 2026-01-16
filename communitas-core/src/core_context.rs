@@ -28,9 +28,8 @@ use communitas_kanban::KanbanService;
 use rand::rngs::OsRng;
 use saorsa_pqc::dsa_traits::{SerDes, Signer, Verifier};
 use saorsa_pqc::ml_dsa_87::{PrivateKey, PublicKey, try_keygen_with_rng};
-use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tracing::{info, warn};
 
@@ -94,10 +93,6 @@ pub struct CoreContext {
     /// Handles P2P networking, membership, pubsub, presence, and discovery
     pub gossip: Option<Arc<crate::gossip::GossipContext>>,
 
-    /// Group keys for channels/projects/orgs (MLS-based)
-    /// Maps group ID to group keypair
-    pub group_keys: HashMap<String, GroupKeyPairPlaceholder>,
-
     /// Per-entity virtual disk service (Private, Public, Shared disks)
     pub disk_service: Arc<EntityDiskService>,
 
@@ -131,20 +126,12 @@ impl std::fmt::Debug for CoreContext {
             .field("public_key", &"<key_bytes>")
             .field("doc_replicator", &"<active>")
             .field("gossip", &self.gossip.as_ref().map(|_| "<active>"))
-            .field("group_keys", &self.group_keys)
             .field("disk_service", &"<active>")
             .field("webrtc", &self.webrtc.as_ref().map(|_| "<active>"))
             .field("kanban_service", &"<active>")
             .field("invite_service", &"<active>")
             .finish()
     }
-}
-
-/// Placeholder for group keypairs (will use MLS in future)
-#[derive(Debug, Clone)]
-pub struct GroupKeyPairPlaceholder {
-    pub group_id: String,
-    // Will be replaced with actual MLS group key material
 }
 
 impl CoreContext {
@@ -344,7 +331,6 @@ impl CoreContext {
             connection_identity: None,
             external_address: None,
             gossip: None,
-            group_keys: HashMap::new(),
             disk_service,
             webrtc: None, // Initialized when networking starts
             kanban_service,
@@ -395,10 +381,45 @@ impl CoreContext {
         .await
         .map_err(|e| format!("Failed to initialize gossip: {}", e))?;
 
+        // Load persisted contacts and favourites before boot
+        let mut favourite_contacts: Vec<String> = Vec::new();
+        match Self::load_contact_records(&self.profile.storage_dir).await {
+            Ok(records) => {
+                if !records.is_empty() {
+                    gossip_ctx.contact_store.import(records.clone()).await;
+                    favourite_contacts = records
+                        .into_iter()
+                        .filter(|record| record.is_favourite)
+                        .filter_map(|record| record.four_words)
+                        .collect();
+
+                    let mut favourites_guard = gossip_ctx.favourite_contacts.write().await;
+                    *favourites_guard = favourite_contacts.clone();
+                }
+            }
+            Err(e) => {
+                warn!("Failed to load persisted contacts: {}", e);
+            }
+        }
+
+        // Load entities for boot sequence topic subscriptions
+        let boot_entities = match self.entity_service.list_entities().await {
+            Ok(entities) => entities
+                .into_iter()
+                .map(|entity| (entity.id, entity.entity_type.as_str().to_string()))
+                .collect::<Vec<_>>(),
+            Err(e) => {
+                warn!("Failed to load entities for boot: {}", e);
+                Vec::new()
+            }
+        };
+
         // Execute gossip boot sequence (SPEC.md §2)
         // This enables: membership, topic subscriptions, presence, and CRDT anti-entropy
         info!("Executing gossip boot sequence (5 steps)");
-        let mut boot_sequence = crate::gossip::GossipBootSequence::new(gossip_ctx);
+        let mut boot_sequence = crate::gossip::GossipBootSequence::new(gossip_ctx)
+            .with_favourites(favourite_contacts)
+            .with_entities(boot_entities);
         boot_sequence
             .execute()
             .await
@@ -749,7 +770,7 @@ impl CoreContext {
     /// Logs received peers for debugging and potential future connection attempts.
     /// Direct cache integration requires PeerIds which are not included in the response.
     fn handle_peer_list_response(
-        _gossip: Arc<crate::gossip::GossipContext>,
+        gossip: Arc<crate::gossip::GossipContext>,
         response: crate::crdt::PeerListResponse,
     ) {
         let handle = tokio::spawn(async move {
@@ -767,9 +788,27 @@ impl CoreContext {
                 );
             }
 
-            // TODO: To properly add peers to cache, we need PeerIds
-            // The cache API requires: cache.update_success(peer_id, addr)
-            // For now, these addresses can be tried directly when connecting
+            if response.peers.is_empty() {
+                return;
+            }
+
+            let mut cache = gossip.peer_cache.write().await;
+            for peer_info in &response.peers {
+                match peer_info.addr.parse::<SocketAddr>() {
+                    Ok(addr) => {
+                        if let Err(e) = cache.add_bootstrap_addr(addr, false) {
+                            warn!("Failed to add peer {} to bootstrap cache: {}", addr, e);
+                            continue;
+                        }
+                        if let Err(e) = cache.record_bootstrap_success(&addr) {
+                            warn!("Failed to record bootstrap success for {}: {}", addr, e);
+                        }
+                    }
+                    Err(e) => {
+                        warn!("Invalid peer address '{}': {}", peer_info.addr, e);
+                    }
+                }
+            }
         });
 
         // Monitor the task for panics
@@ -1028,15 +1067,6 @@ impl CoreContext {
         Ok(message_id)
     }
 
-    /// Add a group key for a channel/project/org
-    ///
-    /// # Arguments
-    /// * `group_id` - Group identifier
-    /// * `key` - Group key material (placeholder for now)
-    pub fn add_group_key(&mut self, group_id: String, key: GroupKeyPairPlaceholder) {
-        self.group_keys.insert(group_id, key);
-    }
-
     /// Get the ML-DSA-87 public key for this identity
     pub fn get_public_key(&self) -> &PublicKey {
         &self.public_key
@@ -1079,6 +1109,43 @@ impl CoreContext {
     /// Get the storage directory for this profile
     pub fn storage_dir(&self) -> &PathBuf {
         &self.profile.storage_dir
+    }
+
+    fn contacts_file_path(storage_dir: &Path) -> PathBuf {
+        storage_dir.join("contacts.json")
+    }
+
+    pub(crate) async fn load_contact_records(
+        storage_dir: &Path,
+    ) -> Result<Vec<crate::gossip::contact_storage::ContactRecord>, String> {
+        let path = Self::contacts_file_path(storage_dir);
+        if !path.exists() {
+            return Ok(Vec::new());
+        }
+
+        let data = tokio::fs::read_to_string(&path)
+            .await
+            .map_err(|e| format!("Failed to read contacts file: {}", e))?;
+        serde_json::from_str(&data).map_err(|e| format!("Failed to parse contacts file: {}", e))
+    }
+
+    pub(crate) async fn persist_contact_records(
+        storage_dir: &Path,
+        records: &[crate::gossip::contact_storage::ContactRecord],
+    ) -> Result<(), String> {
+        let path = Self::contacts_file_path(storage_dir);
+        if let Some(parent) = path.parent() {
+            tokio::fs::create_dir_all(parent)
+                .await
+                .map_err(|e| format!("Failed to create contacts directory: {}", e))?;
+        }
+
+        let data = serde_json::to_string_pretty(records)
+            .map_err(|e| format!("Failed to serialize contacts: {}", e))?;
+        tokio::fs::write(&path, data)
+            .await
+            .map_err(|e| format!("Failed to write contacts file: {}", e))?;
+        Ok(())
     }
 
     /// Check if networking is active
@@ -1198,30 +1265,6 @@ mod tests {
         // Verify signature fails with wrong message
         let wrong_message = b"wrong message";
         assert!(!context.verify(wrong_message, &signature));
-    }
-
-    #[tokio::test]
-    async fn test_group_key_management() {
-        let temp_dir = TempDir::new().unwrap();
-
-        let mut context = CoreContext::initialize(
-            "ocean-forest-moon-star".to_string(),
-            "Test User".to_string(),
-            "Test Device".to_string(),
-            DeviceType::Desktop,
-            temp_dir.path().to_path_buf(),
-        )
-        .await
-        .unwrap();
-
-        let group_id = "test-group".to_string();
-        let key = GroupKeyPairPlaceholder {
-            group_id: group_id.clone(),
-        };
-
-        context.add_group_key(group_id.clone(), key);
-
-        assert!(context.group_keys.contains_key(&group_id));
     }
 
     #[tokio::test]

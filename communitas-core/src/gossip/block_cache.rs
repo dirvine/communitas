@@ -16,13 +16,15 @@
 //! ## Storage Layout
 //! ```
 //! <storage_dir>/blocks/
-//!   ├── metadata.db (SQLite: hash → metadata, pin status, access time)
+//!   ├── metadata.json (hash → metadata, pin status, access time)
 //!   └── blobs/
 //!       ├── 01/23/0123456789abcdef... (first 2 bytes for sharding)
 //!       └── ab/cd/abcdefg...
 //! ```
 
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -54,6 +56,14 @@ struct BlockMetadata {
     pinned: bool,
 
     /// Expiration timestamp (Unix milliseconds, 0 = never)
+    expires_at: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct BlockMetadataRecord {
+    size: u64,
+    last_access: u64,
+    pinned: bool,
     expires_at: u64,
 }
 
@@ -103,9 +113,63 @@ impl BlockCache {
         Ok(cache)
     }
 
+    fn metadata_path(&self) -> PathBuf {
+        self.storage_dir.join("blocks").join("metadata.json")
+    }
+
+    async fn load_metadata_records(&self) -> Result<HashMap<[u8; 32], BlockMetadataRecord>> {
+        let path = self.metadata_path();
+        if !path.exists() {
+            return Ok(HashMap::new());
+        }
+
+        let data = fs::read_to_string(&path).await?;
+        let raw: HashMap<String, BlockMetadataRecord> = serde_json::from_str(&data)?;
+        let mut records = HashMap::new();
+
+        for (hash_hex, record) in raw {
+            if let Ok(bytes) = hex::decode(&hash_hex)
+                && let Ok(hash) = bytes.as_slice().try_into()
+            {
+                records.insert(hash, record);
+            }
+        }
+
+        Ok(records)
+    }
+
+    async fn persist_metadata(&self) -> Result<()> {
+        let index = self.index.read().await;
+        let mut raw: HashMap<String, BlockMetadataRecord> = HashMap::new();
+
+        for (hash, meta) in index.iter() {
+            raw.insert(
+                hex::encode(hash),
+                BlockMetadataRecord {
+                    size: meta.size,
+                    last_access: meta.last_access,
+                    pinned: meta.pinned,
+                    expires_at: meta.expires_at,
+                },
+            );
+        }
+
+        let data = serde_json::to_string_pretty(&raw)?;
+        let path = self.metadata_path();
+        fs::write(path, data).await?;
+        Ok(())
+    }
+
     /// Load block index from disk
     async fn load_index(&self) -> Result<()> {
         let blobs_dir = self.storage_dir.join("blocks").join("blobs");
+        let persisted = match self.load_metadata_records().await {
+            Ok(records) => records,
+            Err(e) => {
+                warn!("Failed to load block metadata: {}", e);
+                HashMap::new()
+            }
+        };
 
         let mut total_size = 0u64;
         let mut loaded_count = 0;
@@ -145,12 +209,21 @@ impl BlockCache {
                             .unwrap_or(std::time::Duration::from_secs(0))
                             .as_millis() as u64;
 
+                        let (pinned, recorded_last_access, recorded_expires) = persisted
+                            .get(&hash)
+                            .map(|record| (record.pinned, record.last_access, record.expires_at))
+                            .unwrap_or((
+                                false,
+                                last_access,
+                                last_access + self.block_ttl.as_millis() as u64,
+                            ));
+
                         let block_meta = BlockMetadata {
                             hash,
                             size,
-                            last_access,
-                            pinned: false, // TODO: Load from metadata.db
-                            expires_at: last_access + self.block_ttl.as_millis() as u64,
+                            last_access: recorded_last_access,
+                            pinned,
+                            expires_at: if pinned { 0 } else { recorded_expires },
                         };
 
                         let mut index = self.index.write().await;
@@ -167,6 +240,8 @@ impl BlockCache {
             "Loaded {} blocks ({} bytes) from cache",
             loaded_count, total_size
         );
+
+        self.persist_metadata().await?;
 
         Ok(())
     }
@@ -233,6 +308,9 @@ impl BlockCache {
         index.insert(hash, metadata);
 
         *self.current_size.write().await += size;
+        drop(index);
+
+        self.persist_metadata().await?;
 
         debug!(
             "Stored block {} ({} bytes, pinned: {})",
@@ -286,6 +364,8 @@ impl BlockCache {
             return Ok(None);
         }
 
+        self.persist_metadata().await?;
+
         Ok(Some(block))
     }
 
@@ -296,6 +376,8 @@ impl BlockCache {
             metadata.pinned = true;
             metadata.expires_at = 0; // Never expires
         }
+        drop(index);
+        self.persist_metadata().await?;
         Ok(())
     }
 
@@ -307,6 +389,8 @@ impl BlockCache {
             let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis() as u64;
             metadata.expires_at = now + self.block_ttl.as_millis() as u64;
         }
+        drop(index);
+        self.persist_metadata().await?;
         Ok(())
     }
 
@@ -322,6 +406,8 @@ impl BlockCache {
                 fs::remove_file(&path).await.ok();
             }
         }
+        drop(index);
+        self.persist_metadata().await?;
         Ok(())
     }
 

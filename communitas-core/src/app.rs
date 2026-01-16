@@ -52,26 +52,85 @@
 //! ```
 
 use crate::command::{
-    Command, CommandError, CommandResult, DiskTypeArg, Event, Query, QueryError, QueryResponse,
-    QueryResult, Subscription,
+    CallResponse, ContactResponse, DiskStatsResponse, EntityResponse, FileInfoResponse,
+    InviteResponse, MemberResponse, MessageResponse, PresenceResponse, ReactionResponse,
+    SyncStateResponse, WebsiteResponse,
 };
 use crate::command::{
-    ContactResponse, DiskStatsResponse, EntityResponse, FileInfoResponse, InviteResponse,
-    MemberResponse, MessageResponse, ReactionResponse, SyncStateResponse, WebsiteResponse,
+    Command, CommandError, CommandResult, DiskTypeArg, Event, Query, QueryError, QueryResponse,
+    QueryResult, Subscription,
 };
 use crate::core_context::CoreContext;
 use crate::crdt::EntityType;
 use crate::disk_service::DiskType;
 use crate::identity::conn_words;
+use crate::legacy_crdt::{Attachment, AttachmentType};
 use crate::peer_presence::PresenceCache;
 use crate::types::DeviceType;
-use std::collections::HashMap;
-use std::path::PathBuf;
+use saorsa_gossip_types::PeerId;
+use saorsa_pqc::dsa_traits::SerDes;
+use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::{RwLock, broadcast};
 use tracing::{info, warn};
 use uuid::Uuid;
 use yrs::{Map, ReadTxn, Transact};
+
+fn attachments_from_strings(raw: Option<Vec<String>>) -> Option<Vec<Attachment>> {
+    let attachments: Vec<Attachment> = raw
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|item| !item.trim().is_empty())
+        .map(|item| {
+            let name = Path::new(&item)
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("attachment")
+                .to_string();
+            Attachment {
+                attachment_type: AttachmentType::File,
+                url: item,
+                name,
+                size: 0,
+            }
+        })
+        .collect();
+
+    if attachments.is_empty() {
+        None
+    } else {
+        Some(attachments)
+    }
+}
+
+async fn presence_by_four_words(
+    presence: &saorsa_gossip_presence::PresenceManager,
+) -> HashMap<String, i64> {
+    let mut map = HashMap::new();
+    let groups = presence.get_groups().await;
+
+    for topic_id in groups {
+        let records = presence.get_group_presence(topic_id).await;
+        for record in records.values() {
+            if record.is_expired() {
+                continue;
+            }
+            if let Some(four_words) = &record.four_words {
+                let since = record.since as i64;
+                map.entry(four_words.clone())
+                    .and_modify(|existing| {
+                        if since > *existing {
+                            *existing = since;
+                        }
+                    })
+                    .or_insert(since);
+            }
+        }
+    }
+
+    map
+}
 
 /// The main Communitas application
 ///
@@ -128,6 +187,22 @@ impl CommunitasApp {
             subscriptions: Arc::new(RwLock::new(HashMap::new())),
             presence_cache: Arc::new(RwLock::new(PresenceCache::new())),
         })
+    }
+
+    async fn persist_contacts(
+        &self,
+        command_type: &str,
+        storage_dir: &Path,
+        contact_store: &crate::gossip::contact_storage::ContactStore,
+    ) -> Result<(), CommandError> {
+        let records = contact_store.export().await;
+        CoreContext::persist_contact_records(storage_dir, &records)
+            .await
+            .map_err(|e| CommandError {
+                command_type: command_type.to_string(),
+                message: e,
+                code: "CONTACT_PERSIST_FAILED".to_string(),
+            })
     }
 
     /// Execute a command and return resulting events
@@ -256,24 +331,50 @@ impl CommunitasApp {
             }
 
             Command::AnnouncePresence => {
-                // For now, return a placeholder - full implementation requires gossip integration
-                // This will be expanded when we integrate with the gossip broadcast system
                 let ctx = self.context.read().await;
+                let gossip = ctx.gossip.as_ref().ok_or_else(|| CommandError {
+                    command_type: command_type.clone(),
+                    message: "Networking not started".to_string(),
+                    code: "GOSSIP_NOT_AVAILABLE".to_string(),
+                })?;
+
+                let (public_key, private_key) =
+                    gossip.get_sites_signing_keys().map_err(|e| CommandError {
+                        command_type: command_type.clone(),
+                        message: format!("Failed to load identity keypair: {e}"),
+                        code: "IDENTITY_KEYPAIR_FAILED".to_string(),
+                    })?;
+
                 let connection_words = ctx
                     .external_address
+                    .or(ctx.listen_address)
                     .map(|addr| {
                         crate::identity::conn_words(&addr).unwrap_or_else(|_| "unknown".to_string())
                     })
                     .unwrap_or_else(|| "no-address".to_string());
 
-                let timestamp = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map(|d| d.as_secs())
-                    .unwrap_or(0);
+                let record = crate::peer_presence::PresenceRecord::new(
+                    &public_key,
+                    &private_key,
+                    connection_words.clone(),
+                )
+                .map_err(|e| CommandError {
+                    command_type: command_type.clone(),
+                    message: format!("Failed to sign presence record: {e}"),
+                    code: "PRESENCE_SIGN_FAILED".to_string(),
+                })?;
+
+                {
+                    let mut cache = self.presence_cache.write().await;
+                    cache.insert(record);
+                }
 
                 let event = Event::PresenceAnnounced {
                     connection_words,
-                    timestamp,
+                    timestamp: std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_secs())
+                        .unwrap_or(0),
                 };
                 self.broadcast_event(event.clone());
                 Ok(vec![event])
@@ -291,8 +392,59 @@ impl CommunitasApp {
                 }
                 drop(cache);
 
-                // No cached record - in full implementation, would broadcast query to gossip
-                // For now, return empty events (query sent but no immediate response)
+                let ctx = self.context.read().await;
+                let gossip = match ctx.gossip.as_ref() {
+                    Some(gossip) => gossip,
+                    None => return Ok(vec![]),
+                };
+
+                let peer_id = PeerId::from_pubkey(&target_pubkey);
+                let presence = gossip.presence.read().await;
+                let groups = presence.get_groups().await;
+                let mut best_record = None;
+
+                for topic_id in groups {
+                    let records = presence.get_group_presence(topic_id).await;
+                    if let Some(record) = records.get(&peer_id) {
+                        if record.is_expired() {
+                            continue;
+                        }
+                        let should_replace = best_record
+                            .as_ref()
+                            .map(|existing: &saorsa_gossip_types::PresenceRecord| {
+                                record.since > existing.since
+                            })
+                            .unwrap_or(true);
+                        if should_replace {
+                            best_record = Some(record.clone());
+                        }
+                    }
+                }
+
+                if let Some(record) = best_record {
+                    let connection_words = record
+                        .addr_hints
+                        .iter()
+                        .find_map(|hint| hint.parse::<std::net::SocketAddr>().ok())
+                        .and_then(|addr| crate::identity::conn_words(&addr).ok())
+                        .unwrap_or_else(|| "unknown".to_string());
+
+                    let unsigned = crate::peer_presence::PresenceRecord::new_unsigned(
+                        target_pubkey.clone(),
+                        connection_words,
+                        record.since,
+                    );
+
+                    {
+                        let mut cache = self.presence_cache.write().await;
+                        cache.insert(unsigned.clone());
+                    }
+
+                    let event = Event::PeerPresenceReceived { record: unsigned };
+                    self.broadcast_event(event.clone());
+                    return Ok(vec![event]);
+                }
+
                 Ok(vec![])
             }
 
@@ -649,13 +801,14 @@ impl CommunitasApp {
                 text,
                 author,
                 reply_to_id,
-                attachments: _attachments, // TODO: Convert Vec<String> to Vec<Attachment>
+                attachments: raw_attachments,
             } => {
                 let ctx = self.context.read().await;
+                let attachments = attachments_from_strings(raw_attachments);
                 let content = crate::crdt::MessageContent {
                     text: text.clone(),
                     author: author.clone(),
-                    attachments: None, // Attachment conversion not yet implemented
+                    attachments,
                 };
                 let message = ctx
                     .message_service
@@ -1220,8 +1373,7 @@ impl CommunitasApp {
 
             // ================================================================
             // WebRTC Commands
-            // Note: WebRTC integration requires proper CallId conversion and
-            // MediaConstraints. These commands are stubs for now.
+            // WebRTC integration uses CallId conversion and MediaConstraints.
             // ================================================================
             Command::StartCall {
                 entity_id,
@@ -1454,6 +1606,7 @@ impl CommunitasApp {
                 is_favourite,
             } => {
                 let ctx = self.context.read().await;
+                let storage_dir = ctx.profile.storage_dir.clone();
                 let gossip = ctx.gossip.as_ref().ok_or_else(|| CommandError {
                     command_type: command_type.clone(),
                     message: "Networking not started - contacts require gossip context".to_string(),
@@ -1482,6 +1635,20 @@ impl CommunitasApp {
                         code: "CREATE_CONTACT_FAILED".to_string(),
                     })?;
 
+                if is_favourite && let Some(ref fw) = four_words {
+                    gossip
+                        .add_favourite_contact(fw.clone())
+                        .await
+                        .map_err(|e| CommandError {
+                            command_type: command_type.clone(),
+                            message: format!("Failed to add favourite: {}", e),
+                            code: "SET_FAVOURITE_FAILED".to_string(),
+                        })?;
+                }
+
+                self.persist_contacts(&command_type, &storage_dir, &gossip.contact_store)
+                    .await?;
+
                 let event = Event::ContactCreated {
                     contact_id,
                     display_name,
@@ -1497,6 +1664,7 @@ impl CommunitasApp {
                 is_favourite,
             } => {
                 let ctx = self.context.read().await;
+                let storage_dir = ctx.profile.storage_dir.clone();
                 let gossip = ctx.gossip.as_ref().ok_or_else(|| CommandError {
                     command_type: command_type.clone(),
                     message: "Networking not started".to_string(),
@@ -1525,6 +1693,8 @@ impl CommunitasApp {
                 }
 
                 // Save updated contact
+                let updated_four_words = contact.four_words.clone();
+                let updated_is_favourite = contact.is_favourite;
                 gossip
                     .contact_store
                     .update(contact)
@@ -1534,6 +1704,41 @@ impl CommunitasApp {
                         message: format!("Failed to update contact: {}", e),
                         code: "UPDATE_CONTACT_FAILED".to_string(),
                     })?;
+
+                if let Some(fav_update) = is_favourite {
+                    if let Some(ref fw) = updated_four_words {
+                        if fav_update {
+                            gossip
+                                .add_favourite_contact(fw.clone())
+                                .await
+                                .map_err(|e| CommandError {
+                                    command_type: command_type.clone(),
+                                    message: format!("Failed to add favourite: {}", e),
+                                    code: "SET_FAVOURITE_FAILED".to_string(),
+                                })?;
+                        } else {
+                            gossip.remove_favourite_contact(fw).await.map_err(|e| {
+                                CommandError {
+                                    command_type: command_type.clone(),
+                                    message: format!("Failed to remove favourite: {}", e),
+                                    code: "REMOVE_FAVOURITE_FAILED".to_string(),
+                                }
+                            })?;
+                        }
+                    }
+                } else if updated_is_favourite && let Some(ref fw) = updated_four_words {
+                    gossip
+                        .add_favourite_contact(fw.clone())
+                        .await
+                        .map_err(|e| CommandError {
+                            command_type: command_type.clone(),
+                            message: format!("Failed to add favourite: {}", e),
+                            code: "SET_FAVOURITE_FAILED".to_string(),
+                        })?;
+                }
+
+                self.persist_contacts(&command_type, &storage_dir, &gossip.contact_store)
+                    .await?;
 
                 let event = Event::ContactUpdated {
                     contact_id,
@@ -1546,11 +1751,21 @@ impl CommunitasApp {
 
             Command::DeleteContact { contact_id } => {
                 let ctx = self.context.read().await;
+                let storage_dir = ctx.profile.storage_dir.clone();
                 let gossip = ctx.gossip.as_ref().ok_or_else(|| CommandError {
                     command_type: command_type.clone(),
                     message: "Networking not started".to_string(),
                     code: "GOSSIP_NOT_AVAILABLE".to_string(),
                 })?;
+
+                let removed_contact = gossip.contact_store.get_by_id(&contact_id).await;
+                let removed_four_words = removed_contact
+                    .as_ref()
+                    .and_then(|contact| contact.four_words.clone());
+                let removed_favourite = removed_contact
+                    .as_ref()
+                    .map(|contact| contact.is_favourite)
+                    .unwrap_or(false);
 
                 gossip
                     .contact_store
@@ -1562,6 +1777,20 @@ impl CommunitasApp {
                         code: "DELETE_CONTACT_FAILED".to_string(),
                     })?;
 
+                if removed_favourite && let Some(fw) = removed_four_words {
+                    gossip
+                        .remove_favourite_contact(&fw)
+                        .await
+                        .map_err(|e| CommandError {
+                            command_type: command_type.clone(),
+                            message: format!("Failed to remove favourite: {}", e),
+                            code: "REMOVE_FAVOURITE_FAILED".to_string(),
+                        })?;
+                }
+
+                self.persist_contacts(&command_type, &storage_dir, &gossip.contact_store)
+                    .await?;
+
                 let event = Event::ContactDeleted { contact_id };
                 self.broadcast_event(event.clone());
                 Ok(vec![event])
@@ -1572,13 +1801,14 @@ impl CommunitasApp {
                 four_words,
             } => {
                 let ctx = self.context.read().await;
+                let storage_dir = ctx.profile.storage_dir.clone();
                 let gossip = ctx.gossip.as_ref().ok_or_else(|| CommandError {
                     command_type: command_type.clone(),
                     message: "Networking not started".to_string(),
                     code: "GOSSIP_NOT_AVAILABLE".to_string(),
                 })?;
 
-                gossip
+                let linked_contact = gossip
                     .contact_store
                     .link_contact(&contact_id, &four_words)
                     .await
@@ -1587,6 +1817,22 @@ impl CommunitasApp {
                         message: format!("Failed to link contact: {}", e),
                         code: "LINK_CONTACT_FAILED".to_string(),
                     })?;
+
+                if linked_contact.is_favourite
+                    && let Some(fw) = linked_contact.four_words.clone()
+                {
+                    gossip
+                        .add_favourite_contact(fw.clone())
+                        .await
+                        .map_err(|e| CommandError {
+                            command_type: command_type.clone(),
+                            message: format!("Failed to add favourite: {}", e),
+                            code: "SET_FAVOURITE_FAILED".to_string(),
+                        })?;
+                }
+
+                self.persist_contacts(&command_type, &storage_dir, &gossip.contact_store)
+                    .await?;
 
                 let event = Event::ContactLinked {
                     contact_id,
@@ -1598,6 +1844,7 @@ impl CommunitasApp {
 
             Command::SetFavouriteContact { four_words } => {
                 let ctx = self.context.read().await;
+                let storage_dir = ctx.profile.storage_dir.clone();
                 let gossip = ctx.gossip.as_ref().ok_or_else(|| CommandError {
                     command_type: command_type.clone(),
                     message: "Networking not started".to_string(),
@@ -1627,6 +1874,18 @@ impl CommunitasApp {
                         code: "SET_FAVOURITE_FAILED".to_string(),
                     })?;
 
+                gossip
+                    .add_favourite_contact(four_words.clone())
+                    .await
+                    .map_err(|e| CommandError {
+                        command_type: command_type.clone(),
+                        message: format!("Failed to add favourite: {}", e),
+                        code: "SET_FAVOURITE_FAILED".to_string(),
+                    })?;
+
+                self.persist_contacts(&command_type, &storage_dir, &gossip.contact_store)
+                    .await?;
+
                 let event = Event::ContactFavouriteSet { four_words };
                 self.broadcast_event(event.clone());
                 Ok(vec![event])
@@ -1634,6 +1893,7 @@ impl CommunitasApp {
 
             Command::RemoveFavouriteContact { four_words } => {
                 let ctx = self.context.read().await;
+                let storage_dir = ctx.profile.storage_dir.clone();
                 let gossip = ctx.gossip.as_ref().ok_or_else(|| CommandError {
                     command_type: command_type.clone(),
                     message: "Networking not started".to_string(),
@@ -1662,6 +1922,18 @@ impl CommunitasApp {
                         message: format!("Failed to remove favourite: {}", e),
                         code: "REMOVE_FAVOURITE_FAILED".to_string(),
                     })?;
+
+                gossip
+                    .remove_favourite_contact(&four_words)
+                    .await
+                    .map_err(|e| CommandError {
+                        command_type: command_type.clone(),
+                        message: format!("Failed to remove favourite: {}", e),
+                        code: "REMOVE_FAVOURITE_FAILED".to_string(),
+                    })?;
+
+                self.persist_contacts(&command_type, &storage_dir, &gossip.contact_store)
+                    .await?;
 
                 let event = Event::ContactFavouriteRemoved { four_words };
                 self.broadcast_event(event.clone());
@@ -2107,34 +2379,7 @@ impl CommunitasApp {
                         code: "MESSAGE_NOT_FOUND".to_string(),
                     })?;
 
-                let reactions = message
-                    .local_state
-                    .as_ref()
-                    .map(|ls| {
-                        ls.reactions
-                            .iter()
-                            .map(|r| ReactionResponse {
-                                emoji: r.emoji.clone(),
-                                count: r.count,
-                                user_reacted: r.user_reacted.unwrap_or(false),
-                                peer_ids: r.peer_ids.clone(),
-                            })
-                            .collect()
-                    })
-                    .unwrap_or_default();
-
-                let response = MessageResponse {
-                    id: message.metadata.id,
-                    entity_id: message.metadata.entity_id,
-                    author: message.metadata.author_peer_id,
-                    text: message.content.text,
-                    timestamp: message.metadata.timestamp as i64,
-                    reply_to_id: message.metadata.reply_to_id,
-                    reactions,
-                    edited_at: None,
-                };
-
-                Ok(QueryResponse::Message(response))
+                Ok(QueryResponse::Message(map_message_response(message)))
             }
 
             Query::GetEntityMessages { entity_id } => {
@@ -2152,16 +2397,7 @@ impl CommunitasApp {
                 let responses: Vec<MessageResponse> = sync_response
                     .messages
                     .into_iter()
-                    .map(|m| MessageResponse {
-                        id: m.metadata.id,
-                        entity_id: m.metadata.entity_id,
-                        author: m.metadata.author_peer_id,
-                        text: m.content.text,
-                        timestamp: m.metadata.timestamp as i64,
-                        reply_to_id: m.metadata.reply_to_id,
-                        reactions: vec![],
-                        edited_at: None,
-                    })
+                    .map(map_message_response)
                     .collect();
 
                 Ok(QueryResponse::Messages(responses))
@@ -2182,19 +2418,8 @@ impl CommunitasApp {
                         code: "GET_THREAD_FAILED".to_string(),
                     })?;
 
-                let responses: Vec<MessageResponse> = messages
-                    .into_iter()
-                    .map(|m| MessageResponse {
-                        id: m.metadata.id,
-                        entity_id: m.metadata.entity_id,
-                        author: m.metadata.author_peer_id,
-                        text: m.content.text,
-                        timestamp: m.metadata.timestamp as i64,
-                        reply_to_id: m.metadata.reply_to_id,
-                        reactions: vec![],
-                        edited_at: None,
-                    })
-                    .collect();
+                let responses: Vec<MessageResponse> =
+                    messages.into_iter().map(map_message_response).collect();
 
                 Ok(QueryResponse::Messages(responses))
             }
@@ -2214,16 +2439,7 @@ impl CommunitasApp {
                 let responses: Vec<MessageResponse> = sync_response
                     .messages
                     .into_iter()
-                    .map(|m| MessageResponse {
-                        id: m.metadata.id,
-                        entity_id: m.metadata.entity_id,
-                        author: m.metadata.author_peer_id,
-                        text: m.content.text,
-                        timestamp: m.metadata.timestamp as i64,
-                        reply_to_id: m.metadata.reply_to_id,
-                        reactions: vec![],
-                        edited_at: None,
-                    })
+                    .map(map_message_response)
                     .collect();
 
                 Ok(QueryResponse::Messages(responses))
@@ -2234,20 +2450,21 @@ impl CommunitasApp {
                 entity_type,
             } => {
                 let ctx = self.context.read().await;
-
-                // Get message count for the entity
-                let message_count = ctx
+                let sync_state = ctx
                     .message_service
-                    .get_entity_messages(entity_id.clone())
+                    .get_entity_sync_state(entity_id.clone(), entity_type)
                     .await
-                    .map(|sr| sr.messages.len())
-                    .unwrap_or(0);
+                    .map_err(|e| QueryError {
+                        query_type: query_type.clone(),
+                        message: format!("{}", e),
+                        code: "GET_SYNC_STATE_FAILED".to_string(),
+                    })?;
 
                 Ok(QueryResponse::SyncState(SyncStateResponse {
-                    entity_id,
-                    entity_type,
-                    message_count,
-                    last_sync_time: 0, // TODO: Track actual sync times
+                    entity_id: sync_state.entity_id,
+                    entity_type: sync_state.entity_type,
+                    message_count: sync_state.message_count,
+                    last_sync_time: sync_state.last_sync_time,
                 }))
             }
 
@@ -2288,9 +2505,45 @@ impl CommunitasApp {
             }
 
             Query::ListSentInvites => {
-                // Note: InviteService doesn't have list_invites_sent_by yet
-                // Return empty list for now
-                Ok(QueryResponse::InviteList(vec![]))
+                let ctx = self.context.read().await;
+                let user_id = ctx.four_words.clone();
+
+                let entities =
+                    ctx.entity_service
+                        .list_entities()
+                        .await
+                        .map_err(|e| QueryError {
+                            query_type: query_type.clone(),
+                            message: format!("Failed to list entities: {}", e),
+                            code: "LIST_ENTITIES_FAILED".to_string(),
+                        })?;
+
+                let mut sent_invites = Vec::new();
+                for entity in entities {
+                    match ctx
+                        .invite_service
+                        .list_entity_invites(&user_id, entity.entity_type, &entity.id)
+                        .await
+                    {
+                        Ok(invites) => {
+                            sent_invites.extend(
+                                invites
+                                    .into_iter()
+                                    .filter(|invite| invite.creator_id == user_id),
+                            );
+                        }
+                        Err(err) => {
+                            warn!(
+                                "Skipping invites for entity {} due to error: {}",
+                                entity.id, err
+                            );
+                        }
+                    }
+                }
+
+                let responses: Vec<InviteResponse> =
+                    sent_invites.iter().map(invite_to_response).collect();
+                Ok(QueryResponse::InviteList(responses))
             }
 
             // ================================================================
@@ -2432,6 +2685,32 @@ impl CommunitasApp {
                 Ok(QueryResponse::KanbanBoardList(board_responses))
             }
 
+            Query::ListKanbanColumns { board_id } => {
+                let ctx = self.context.read().await;
+                let columns =
+                    ctx.kanban_service
+                        .list_columns(&board_id)
+                        .map_err(|e| QueryError {
+                            query_type: query_type.clone(),
+                            message: format!("{}", e),
+                            code: "LIST_COLUMNS_FAILED".to_string(),
+                        })?;
+
+                let responses: Vec<crate::command::KanbanColumnResponse> = columns
+                    .into_iter()
+                    .map(|column| crate::command::KanbanColumnResponse {
+                        id: column.id,
+                        board_id: column.board_id,
+                        name: column.name,
+                        position: column.position,
+                        color: column.color,
+                        wip_limit: column.wip_limit,
+                    })
+                    .collect();
+
+                Ok(QueryResponse::KanbanColumns(responses))
+            }
+
             Query::GetKanbanCard { board_id, card_id } => {
                 let ctx = self.context.read().await;
                 let card = ctx
@@ -2531,40 +2810,137 @@ impl CommunitasApp {
             // ================================================================
             // Presence Queries
             // ================================================================
-            Query::GetPresence { peer_id: _ } => {
-                // Presence queries require entity context in GossipContext
-                // TODO: Implement per-peer presence lookup
-                Err(QueryError {
-                    query_type,
-                    message: "Presence lookup not implemented".to_string(),
-                    code: "NOT_IMPLEMENTED".to_string(),
-                })
+            Query::GetPresence { peer_id } => {
+                let ctx = self.context.read().await;
+                let gossip = ctx.gossip.as_ref().ok_or_else(|| QueryError {
+                    query_type: query_type.clone(),
+                    message: "Networking not started".to_string(),
+                    code: "GOSSIP_NOT_AVAILABLE".to_string(),
+                })?;
+
+                let presence = gossip.presence.read().await;
+                let mut status = "unknown".to_string();
+                let mut last_seen = 0i64;
+
+                if peer_id.contains('-') {
+                    let index = presence_by_four_words(&presence).await;
+                    if let Some(seen) = index.get(&peer_id) {
+                        status = "online".to_string();
+                        last_seen = *seen;
+                    } else {
+                        status = "offline".to_string();
+                    }
+                } else if let Ok(bytes) = hex::decode(&peer_id)
+                    && bytes.len() == 32
+                {
+                    let mut arr = [0u8; 32];
+                    arr.copy_from_slice(&bytes);
+                    let peer = PeerId::new(arr);
+                    let groups = presence.get_groups().await;
+                    let mut seen_any = false;
+                    let mut latest = None;
+
+                    for topic_id in groups {
+                        let records = presence.get_group_presence(topic_id).await;
+                        if let Some(record) = records.get(&peer) {
+                            seen_any = true;
+                            if record.is_expired() {
+                                continue;
+                            }
+                            let since = record.since as i64;
+                            let should_replace =
+                                latest.map(|existing| since > existing).unwrap_or(true);
+                            if should_replace {
+                                latest = Some(since);
+                            }
+                        }
+                    }
+
+                    if let Some(seen) = latest {
+                        status = "online".to_string();
+                        last_seen = seen;
+                    } else if seen_any {
+                        status = "offline".to_string();
+                    }
+                }
+
+                Ok(QueryResponse::Presence(PresenceResponse {
+                    peer_id,
+                    status,
+                    last_seen,
+                }))
             }
 
             Query::ListOnlinePeers => {
-                // list_online_peers requires entity_id parameter in GossipContext
-                // TODO: Implement global online peers list
-                Ok(QueryResponse::PeerList(vec![]))
+                let ctx = self.context.read().await;
+                let gossip = ctx.gossip.as_ref().ok_or_else(|| QueryError {
+                    query_type: query_type.clone(),
+                    message: "Networking not started".to_string(),
+                    code: "GOSSIP_NOT_AVAILABLE".to_string(),
+                })?;
+
+                let presence = gossip.presence.read().await;
+                let groups = presence.get_groups().await;
+                let mut peers = HashSet::new();
+
+                for topic_id in groups {
+                    for peer_id in presence.get_online_peers(topic_id).await {
+                        peers.insert(peer_id);
+                    }
+                }
+
+                let peer_list = peers
+                    .into_iter()
+                    .map(|peer_id| hex::encode(peer_id.as_bytes()))
+                    .collect();
+
+                Ok(QueryResponse::PeerList(peer_list))
             }
 
             Query::GetOurPresenceRecord => {
-                // Get our current connection words
                 let ctx = self.context.read().await;
-                let connection_words = ctx.external_address.map(|addr| {
+                let gossip = ctx.gossip.as_ref().ok_or_else(|| QueryError {
+                    query_type: query_type.clone(),
+                    message: "Networking not started".to_string(),
+                    code: "GOSSIP_NOT_AVAILABLE".to_string(),
+                })?;
+
+                let (public_key, private_key) =
+                    gossip.get_sites_signing_keys().map_err(|e| QueryError {
+                        query_type: query_type.clone(),
+                        message: format!("Failed to load identity keypair: {e}"),
+                        code: "IDENTITY_KEYPAIR_FAILED".to_string(),
+                    })?;
+
+                let pubkey_bytes = public_key.clone().into_bytes().to_vec();
+                if let Some(cached) = self.presence_cache.read().await.get(&pubkey_bytes) {
+                    return Ok(QueryResponse::OurPresenceRecord(Some(
+                        cached.record.clone(),
+                    )));
+                }
+
+                let connection_words = ctx.external_address.or(ctx.listen_address).map(|addr| {
                     crate::identity::conn_words(&addr).unwrap_or_else(|_| "unknown".to_string())
                 });
 
                 match connection_words {
                     Some(words) => {
-                        // Create a record (without signing for now - that requires keypair access)
-                        let record = crate::peer_presence::PresenceRecord::new_unsigned(
-                            vec![], // Would be our pubkey
-                            words,
-                            std::time::SystemTime::now()
-                                .duration_since(std::time::UNIX_EPOCH)
-                                .map(|d| d.as_secs())
-                                .unwrap_or(0),
-                        );
+                        let record = crate::peer_presence::PresenceRecord::new(
+                            &public_key,
+                            &private_key,
+                            words.clone(),
+                        )
+                        .map_err(|e| QueryError {
+                            query_type: query_type.clone(),
+                            message: format!("Failed to sign presence record: {e}"),
+                            code: "PRESENCE_SIGN_FAILED".to_string(),
+                        })?;
+
+                        {
+                            let mut cache = self.presence_cache.write().await;
+                            cache.insert(record.clone());
+                        }
+
                         Ok(QueryResponse::OurPresenceRecord(Some(record)))
                     }
                     None => Ok(QueryResponse::OurPresenceRecord(None)),
@@ -2581,15 +2957,64 @@ impl CommunitasApp {
             // WebRTC Queries
             // ================================================================
             Query::ListActiveCalls => {
-                // WebRTC service doesn't expose list_active_calls yet
-                // TODO: Implement call list in CommunitasWebRtcService
-                Ok(QueryResponse::CallList(vec![]))
+                let ctx = self.context.read().await;
+                let webrtc = ctx.webrtc.as_ref().ok_or_else(|| QueryError {
+                    query_type: query_type.clone(),
+                    message: "WebRTC not initialized".to_string(),
+                    code: "WEBRTC_NOT_AVAILABLE".to_string(),
+                })?;
+
+                let calls = webrtc.list_active_calls().await;
+                let responses = calls
+                    .into_iter()
+                    .map(|call| {
+                        let started_at = call
+                            .started_at
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .map(|d| d.as_secs() as i64)
+                            .unwrap_or(0);
+
+                        CallResponse {
+                            id: call.call_id.to_string(),
+                            entity_id: String::new(),
+                            participant_count: 2,
+                            started_at,
+                        }
+                    })
+                    .collect();
+
+                Ok(QueryResponse::CallList(responses))
             }
 
-            Query::GetCallParticipants { call_id: _ } => {
-                // WebRTC service doesn't expose get_call_participants yet
-                // TODO: Implement participants query in CommunitasWebRtcService
-                Ok(QueryResponse::CallParticipants(vec![]))
+            Query::GetCallParticipants { call_id } => {
+                let ctx = self.context.read().await;
+                let webrtc = ctx.webrtc.as_ref().ok_or_else(|| QueryError {
+                    query_type: query_type.clone(),
+                    message: "WebRTC not initialized".to_string(),
+                    code: "WEBRTC_NOT_AVAILABLE".to_string(),
+                })?;
+
+                let uuid = uuid::Uuid::parse_str(&call_id).map_err(|e| QueryError {
+                    query_type: query_type.clone(),
+                    message: format!("Invalid call id: {e}"),
+                    code: "INVALID_CALL_ID".to_string(),
+                })?;
+
+                let participants = webrtc
+                    .get_call_participants(crate::webrtc::CallId(uuid))
+                    .await
+                    .map_err(|e| QueryError {
+                        query_type: query_type.clone(),
+                        message: format!("Failed to get participants: {e}"),
+                        code: "CALL_PARTICIPANTS_FAILED".to_string(),
+                    })?;
+
+                let list = participants
+                    .into_iter()
+                    .map(|identity| identity.four_words)
+                    .collect();
+
+                Ok(QueryResponse::CallParticipants(list))
             }
 
             // ================================================================
@@ -2614,14 +3039,26 @@ impl CommunitasApp {
                         code: "CONTACT_NOT_FOUND".to_string(),
                     })?;
 
+                let presence_index = {
+                    let presence = gossip.presence.read().await;
+                    presence_by_four_words(&presence).await
+                };
+
+                let (is_online, last_seen) = contact
+                    .four_words
+                    .as_ref()
+                    .and_then(|four_words| presence_index.get(four_words).copied())
+                    .map(|seen| (true, Some(seen)))
+                    .unwrap_or((false, contact.last_online_at.map(|t| t as i64)));
+
                 Ok(QueryResponse::Contact(ContactResponse {
                     id: contact.id.clone(),
                     display_name: contact.effective_name(),
                     four_words: contact.four_words.clone(),
                     is_favourite: contact.is_favourite,
-                    is_online: false, // TODO: Check presence
+                    is_online,
                     created_at: contact.created_at as i64,
-                    last_seen: contact.last_online_at.map(|t| t as i64),
+                    last_seen,
                 }))
             }
 
@@ -2634,17 +3071,30 @@ impl CommunitasApp {
                 })?;
 
                 let contacts = gossip.contact_store.all().await;
+                let presence_index = {
+                    let presence = gossip.presence.read().await;
+                    presence_by_four_words(&presence).await
+                };
 
                 let responses: Vec<ContactResponse> = contacts
                     .into_iter()
-                    .map(|contact| ContactResponse {
-                        id: contact.id.clone(),
-                        display_name: contact.effective_name(),
-                        four_words: contact.four_words.clone(),
-                        is_favourite: contact.is_favourite,
-                        is_online: false, // TODO: Check presence
-                        created_at: contact.created_at as i64,
-                        last_seen: contact.last_online_at.map(|t| t as i64),
+                    .map(|contact| {
+                        let (is_online, last_seen) = contact
+                            .four_words
+                            .as_ref()
+                            .and_then(|four_words| presence_index.get(four_words).copied())
+                            .map(|seen| (true, Some(seen)))
+                            .unwrap_or((false, contact.last_online_at.map(|t| t as i64)));
+
+                        ContactResponse {
+                            id: contact.id.clone(),
+                            display_name: contact.effective_name(),
+                            four_words: contact.four_words.clone(),
+                            is_favourite: contact.is_favourite,
+                            is_online,
+                            created_at: contact.created_at as i64,
+                            last_seen,
+                        }
                     })
                     .collect();
 
@@ -2660,17 +3110,30 @@ impl CommunitasApp {
                 })?;
 
                 let favourites = gossip.contact_store.favourites().await;
+                let presence_index = {
+                    let presence = gossip.presence.read().await;
+                    presence_by_four_words(&presence).await
+                };
 
                 let responses: Vec<ContactResponse> = favourites
                     .into_iter()
-                    .map(|contact| ContactResponse {
-                        id: contact.id.clone(),
-                        display_name: contact.effective_name(),
-                        four_words: contact.four_words.clone(),
-                        is_favourite: true,
-                        is_online: false, // TODO: Check presence
-                        created_at: contact.created_at as i64,
-                        last_seen: contact.last_online_at.map(|t| t as i64),
+                    .map(|contact| {
+                        let (is_online, last_seen) = contact
+                            .four_words
+                            .as_ref()
+                            .and_then(|four_words| presence_index.get(four_words).copied())
+                            .map(|seen| (true, Some(seen)))
+                            .unwrap_or((false, contact.last_online_at.map(|t| t as i64)));
+
+                        ContactResponse {
+                            id: contact.id.clone(),
+                            display_name: contact.effective_name(),
+                            four_words: contact.four_words.clone(),
+                            is_favourite: true,
+                            is_online,
+                            created_at: contact.created_at as i64,
+                            last_seen,
+                        }
                     })
                     .collect();
 
@@ -2687,6 +3150,10 @@ impl CommunitasApp {
 
                 // Simple search - filter all contacts by display name or four_words
                 let all_contacts = gossip.contact_store.all().await;
+                let presence_index = {
+                    let presence = gossip.presence.read().await;
+                    presence_by_four_words(&presence).await
+                };
                 let query_lower = query.to_lowercase();
 
                 let results: Vec<ContactResponse> = all_contacts
@@ -2697,14 +3164,23 @@ impl CommunitasApp {
                                 .as_ref()
                                 .is_some_and(|fw| fw.to_lowercase().contains(&query_lower))
                     })
-                    .map(|contact| ContactResponse {
-                        id: contact.id.clone(),
-                        display_name: contact.effective_name(),
-                        four_words: contact.four_words.clone(),
-                        is_favourite: contact.is_favourite,
-                        is_online: false, // TODO: Check presence
-                        created_at: contact.created_at as i64,
-                        last_seen: contact.last_online_at.map(|t| t as i64),
+                    .map(|contact| {
+                        let (is_online, last_seen) = contact
+                            .four_words
+                            .as_ref()
+                            .and_then(|four_words| presence_index.get(four_words).copied())
+                            .map(|seen| (true, Some(seen)))
+                            .unwrap_or((false, contact.last_online_at.map(|t| t as i64)));
+
+                        ContactResponse {
+                            id: contact.id.clone(),
+                            display_name: contact.effective_name(),
+                            four_words: contact.four_words.clone(),
+                            is_favourite: contact.is_favourite,
+                            is_online,
+                            created_at: contact.created_at as i64,
+                            last_seen,
+                        }
                     })
                     .collect();
 
@@ -2889,6 +3365,37 @@ fn invite_to_response(invite: &crate::invite::Invite) -> InviteResponse {
         message: invite.message.clone(),
         created_at: invite.created_at,
         expires_at: invite.expires_at,
+    }
+}
+
+fn map_message_response(message: crate::crdt::CRDTMessage) -> MessageResponse {
+    let reactions = message
+        .local_state
+        .as_ref()
+        .map(|ls| {
+            ls.reactions
+                .iter()
+                .map(|r| ReactionResponse {
+                    emoji: r.emoji.clone(),
+                    count: r.count,
+                    user_reacted: r.user_reacted.unwrap_or(false),
+                    peer_ids: r.peer_ids.clone(),
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let edited_at = message.local_state.as_ref().and_then(|ls| ls.edited_at);
+
+    MessageResponse {
+        id: message.metadata.id,
+        entity_id: message.metadata.entity_id,
+        author: message.metadata.author_peer_id,
+        text: message.content.text,
+        timestamp: message.metadata.timestamp as i64,
+        reply_to_id: message.metadata.reply_to_id,
+        reactions,
+        edited_at,
     }
 }
 

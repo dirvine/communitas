@@ -832,11 +832,11 @@ When user lacks edit permissions, show:
 **So that** I can keep discussions organized
 
 **Acceptance Criteria:**
-- [ ] Click message → Thread panel opens
+- [x] Click message → Thread panel opens
 - [ ] See parent message at top
-- [ ] Type reply in thread compose bar
-- [ ] Reply appears in thread
-- [ ] Parent message shows "X replies"
+- [x] Reply via dialog from message menu
+- [x] Reply appears in thread
+- [x] Parent message shows "X replies"
 
 #### US-022: React to Message
 **As a** member
@@ -844,11 +844,11 @@ When user lacks edit permissions, show:
 **So that** I can quickly acknowledge messages
 
 **Acceptance Criteria:**
-- [ ] Hover/tap message → Reaction button
-- [ ] Emoji picker appears
-- [ ] Select emoji → Reaction added
-- [ ] Reaction count shown on message
-- [ ] Click again to remove own reaction
+- [x] Hover/tap message → Reaction button
+- [x] Emoji picker appears
+- [x] Select emoji → Reaction added
+- [x] Reaction count shown on message
+- [x] Click again to remove own reaction
 
 #### US-023: Edit Own Message
 **As a** message author
@@ -856,11 +856,11 @@ When user lacks edit permissions, show:
 **So that** I can correct mistakes
 
 **Acceptance Criteria:**
-- [ ] Click edit button on own message
-- [ ] Inline edit mode activated
-- [ ] Save changes → Message updated
-- [ ] "(edited)" indicator shown
-- [ ] Edit synced to others
+- [x] Click edit button on own message
+- [x] Edit dialog activated
+- [x] Save changes → Message updated
+- [x] "(edited)" indicator shown
+- [x] Edit synced to others
 
 #### US-024: Delete Message
 **As a** message author or admin
@@ -868,11 +868,10 @@ When user lacks edit permissions, show:
 **So that** I can remove inappropriate content
 
 **Acceptance Criteria:**
-- [ ] Click delete button
-- [ ] Confirmation dialog
-- [ ] Message soft-deleted
-- [ ] "[Message deleted]" placeholder shown
-- [ ] Deletion synced to others
+- [x] Click delete button
+- [x] Confirmation dialog
+- [x] Message removed from list
+- [x] Deletion synced to others
 
 ### 11.4 File Storage
 

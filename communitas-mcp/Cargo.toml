@@ -50,8 +50,6 @@ uuid.workspace = true
 blake3 = "1.5"
 rand = "0.8"
 lazy_static = "1.4"
-bytes = "1.5"
-dirs = "5"
 hex = "0.4"
 
 # Web framework for HTTP transport

@@ -6,6 +6,8 @@ import '../../core/router.dart';
 import '../../core/theme/colors.dart';
 import '../../features/auth/providers/auth_provider.dart';
 import '../../services/unified_data_provider.dart';
+import '../../services/ffi_provider.dart';
+import '../../bindings/api_exports.dart';
 
 /// Main navigation sidebar for desktop layout.
 ///
@@ -70,6 +72,10 @@ class _SidebarState extends ConsumerState<Sidebar> {
                         'My Organizations',
                         'myOrganizations',
                         _buildMyOrganizations(),
+                        onAdd: () => _showCreateEntityDialog(
+                          context,
+                          FlutterEntityType.organisation,
+                        ),
                       ),
 
                       // My Communities (Member/Admin role)
@@ -77,6 +83,10 @@ class _SidebarState extends ConsumerState<Sidebar> {
                         'My Communities',
                         'myCommunities',
                         _buildMyCommunities(),
+                        onAdd: () => _showCreateEntityDialog(
+                          context,
+                          FlutterEntityType.project,
+                        ),
                       ),
 
                       // Personal Space
@@ -84,6 +94,10 @@ class _SidebarState extends ConsumerState<Sidebar> {
                         'Personal',
                         'personal',
                         _buildPersonalSpace(),
+                        onAdd: () => _showCreateEntityDialog(
+                          context,
+                          FlutterEntityType.group,
+                        ),
                       ),
 
                       // Direct Messages
@@ -91,6 +105,7 @@ class _SidebarState extends ConsumerState<Sidebar> {
                         'Direct Messages',
                         'directMessages',
                         _buildDirectMessages(),
+                        onAdd: () => _showCreateContactDialog(context),
                       ),
                     ],
                   ),
@@ -103,7 +118,7 @@ class _SidebarState extends ConsumerState<Sidebar> {
     );
   }
 
-  Widget _buildSection(String title, String sectionKey, Widget child) {
+  Widget _buildSection(String title, String sectionKey, Widget child, {VoidCallback? onAdd}) {
     final isExpanded = _expandedSections[sectionKey] ?? true;
 
     return Column(
@@ -139,16 +154,16 @@ class _SidebarState extends ConsumerState<Sidebar> {
                   ),
                 ),
                 const Spacer(),
-                GestureDetector(
-                  onTap: () {
-                    // TODO: Show create entity dialog
-                  },
-                  child: Icon(
-                    Icons.add,
-                    color: CommunitasColors.cream.withAlpha(128),
-                    size: 16,
+                if (onAdd != null)
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    onPressed: onAdd,
+                    icon: Icon(
+                      Icons.add,
+                      color: CommunitasColors.cream.withAlpha(128),
+                      size: 16,
+                    ),
                   ),
-                ),
               ],
             ),
           ),
@@ -273,7 +288,7 @@ class _SidebarState extends ConsumerState<Sidebar> {
     );
   }
 
-  /// Build entity item with async child loading (for bridge mode).
+  /// Build entity item with async child loading (FFI/demo).
   Widget _buildEntityItemAsync({
     required BuildContext context,
     required UnifiedEntity entity,
@@ -694,9 +709,222 @@ class _SidebarState extends ConsumerState<Sidebar> {
     );
   }
 
+  Future<void> _showCreateEntityDialog(
+    BuildContext context,
+    FlutterEntityType defaultType,
+  ) async {
+    final nameController = TextEditingController();
+    final descriptionController = TextEditingController();
+    FlutterEntityType selectedType = defaultType;
+    String? selectedParentId;
+
+    List<UnifiedEntity> orgs = [];
+    try {
+      orgs = await ref.read(unifiedOrganizationsProvider.future);
+    } catch (_) {}
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            final needsParent =
+                selectedType == FlutterEntityType.project ||
+                selectedType == FlutterEntityType.channel;
+
+            return AlertDialog(
+              title: const Text('Create entity'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: nameController,
+                      decoration: const InputDecoration(labelText: 'Name'),
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<FlutterEntityType>(
+                      value: selectedType,
+                      decoration: const InputDecoration(labelText: 'Type'),
+                      items: const [
+                        DropdownMenuItem(
+                          value: FlutterEntityType.organisation,
+                          child: Text('Organization'),
+                        ),
+                        DropdownMenuItem(
+                          value: FlutterEntityType.project,
+                          child: Text('Project'),
+                        ),
+                        DropdownMenuItem(
+                          value: FlutterEntityType.channel,
+                          child: Text('Channel'),
+                        ),
+                        DropdownMenuItem(
+                          value: FlutterEntityType.group,
+                          child: Text('Group'),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        if (value == null) return;
+                        setState(() {
+                          selectedType = value;
+                          if (selectedType == FlutterEntityType.organisation ||
+                              selectedType == FlutterEntityType.group) {
+                            selectedParentId = null;
+                          }
+                        });
+                      },
+                    ),
+                    if (needsParent) ...[
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        value: selectedParentId,
+                        decoration:
+                            const InputDecoration(labelText: 'Parent org'),
+                        items: orgs
+                            .map((org) => DropdownMenuItem(
+                                  value: org.id,
+                                  child: Text(org.name),
+                                ))
+                            .toList(),
+                        onChanged: (value) {
+                          setState(() {
+                            selectedParentId = value;
+                          });
+                        },
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: descriptionController,
+                      decoration:
+                          const InputDecoration(labelText: 'Description'),
+                      maxLines: 2,
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () async {
+                    final name = nameController.text.trim();
+                    if (name.isEmpty) return;
+
+                    final controller =
+                        ref.read(ffiEntityControllerProvider.notifier);
+                    await controller.createEntity(
+                      name: name,
+                      entityType: selectedType,
+                      description: descriptionController.text.trim().isEmpty
+                          ? null
+                          : descriptionController.text.trim(),
+                      parentOrgId: selectedParentId,
+                    );
+
+                    ref.invalidate(unifiedOrganizationsProvider);
+                    ref.invalidate(unifiedProjectsProvider);
+                    ref.invalidate(unifiedChannelsProvider);
+                    ref.invalidate(unifiedGroupsProvider);
+
+                    Navigator.of(context).pop();
+                  },
+                  child: const Text('Create'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    nameController.dispose();
+    descriptionController.dispose();
+  }
+
+  Future<void> _showCreateContactDialog(BuildContext context) async {
+    final nameController = TextEditingController();
+    final fourWordsController = TextEditingController();
+    bool favourite = false;
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('Add contact'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: nameController,
+                    decoration:
+                        const InputDecoration(labelText: 'Display name'),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: fourWordsController,
+                    decoration: const InputDecoration(
+                      labelText: 'Four words (optional)',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SwitchListTile(
+                    title: const Text('Favorite'),
+                    value: favourite,
+                    onChanged: (value) {
+                      setState(() {
+                        favourite = value;
+                      });
+                    },
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () async {
+                    final displayName = nameController.text.trim();
+                    if (displayName.isEmpty) return;
+
+                    final api = ref.read(communitasApiProvider);
+                    if (api != null) {
+                      await api.contactCreate(
+                        displayName: displayName,
+                        fourWords: fourWordsController.text.trim().isEmpty
+                            ? null
+                            : fourWordsController.text.trim(),
+                        isFavourite: favourite,
+                      );
+                    }
+
+                    ref.invalidate(unifiedContactsProvider);
+                    Navigator.of(context).pop();
+                  },
+                  child: const Text('Add'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    nameController.dispose();
+    fourWordsController.dispose();
+  }
+
   // Helper methods
   IconData _getEntityIcon(String type) {
     switch (type) {
+      case 'organisation':
       case 'organization': return Icons.business;
       case 'project': return Icons.folder;
       case 'channel': return Icons.tag;
@@ -707,6 +935,7 @@ class _SidebarState extends ConsumerState<Sidebar> {
 
   Color _getEntityColor(String type) {
     switch (type) {
+      case 'organisation':
       case 'organization': return CommunitasColors.organization;
       case 'project': return CommunitasColors.project;
       case 'channel': return CommunitasColors.channel;

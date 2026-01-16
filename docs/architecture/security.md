@@ -1259,7 +1259,7 @@ pub fn verify_peer(
 2. ✅ Migrate serde_cbor to ciborium
 3. ✅ Replace fxhash with rustc-hash
 4. ✅ Implement rate limiting on authentication
-5. ✅ Add CSRF protection to Tauri commands
+5. ✅ Add CSRF protection to HTTP/MCP endpoints
 
 #### Short-Term (1-3 months)
 1. ⏳ Implement account lockout after failed attempts
@@ -1386,7 +1386,7 @@ let mut password = vec![0u8; 32];
 
 - [Storage Architecture](storage.md) - Encrypted vaults and key management
 - [Networking Architecture](networking.md) - QUIC transport and NAT traversal
-- [Core Components](core-components.md) - System component overview
+- [Architecture Overview](README.md) - System component overview
 - [Architecture README](README.md) - Architecture overview
 - [SECURITY_AUDIT_REPORT.md](../../SECURITY_AUDIT_REPORT.md) - Complete security audit
 

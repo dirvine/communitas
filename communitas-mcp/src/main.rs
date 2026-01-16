@@ -23,15 +23,11 @@
 //! Queries are exposed as MCP resources for reading application state.
 
 mod http;
-mod node;
 mod presence;
-mod presentation;
 mod protocol;
 mod server;
-mod social;
 mod tls;
 mod tools;
-mod webrtc;
 
 use anyhow::Result;
 use clap::Parser;

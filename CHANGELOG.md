@@ -2,6 +2,8 @@
 
 All notable changes to the Communitas app will be documented in this file.
 
+> Note: entries prior to the Flutter+FFI pivot refer to legacy Tauri/React integrations.
+
 ## [0.2.8] - 2025-08-13
 
 ### Added

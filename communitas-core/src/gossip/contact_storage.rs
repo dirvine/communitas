@@ -69,7 +69,7 @@ pub struct ContactRecord {
     /// Whether this contact is marked as favourite
     pub is_favourite: bool,
 
-    /// Whether this is a local-only placeholder (no network identity yet)
+    /// Whether this is local-only (no network identity yet)
     #[serde(default)]
     pub is_local_only: bool,
 
@@ -119,7 +119,7 @@ impl ContactRecord {
         }
     }
 
-    /// Create a new local-only contact (placeholder without network identity)
+    /// Create a new local-only contact without a network identity
     pub fn new_local(display_name: String) -> Self {
         Self {
             id: uuid::Uuid::new_v4().to_string(),

@@ -14,7 +14,7 @@ The Flutter application initially used an HTTP bridge (`bridge_client.dart` and 
 2. **Deployment complexity**: Required separate Rust bridge server process
 3. **Web-centric design**: Built around a pattern that primarily benefits web builds
 4. **Authentication duplication**: Separate auth for bridge vs. app identity
-5. **No web support anyway**: We don't target web builds, making HTTP unnecessary
+5. **No web support anyway**: We don't target web builds (web is demo-only), making HTTP unnecessary
 
 ### Requirements
 
@@ -157,8 +157,8 @@ All FFI providers can now call api methods
 | `lib/src/services/unified_data_provider.dart` | Updated to use FFI |
 | `lib/src/features/network/providers/presence_provider.dart` | Updated to use FFI |
 | `lib/src/features/messaging/presentation/chat_screen.dart` | Updated identity reference |
-| `lib/src/services/bridge_client.dart` | **Deprecated** |
-| `lib/src/services/bridge_provider.dart` | **Deprecated** |
+| `lib/src/services/bridge_client.dart` | **Removed** |
+| `lib/src/services/bridge_provider.dart` | **Removed** |
 
 ## Consequences
 
@@ -178,14 +178,10 @@ All FFI providers can now call api methods
 
 ### Migration Path
 
-The HTTP bridge is deprecated but not removed, allowing gradual migration:
+The HTTP bridge has been removed. All runtime communication is now via FFI.
 
 ```dart
-// Old (deprecated)
-final client = ref.watch(bridgeClientProvider);
-final orgs = await client.listOrganisations();
-
-// New (preferred)
+// New (FFI-first)
 final orgs = await ref.watch(ffiOrganizationsProvider.future);
 // Or via unified provider:
 final orgs = await ref.watch(unifiedOrganizationsProvider.future);
@@ -223,7 +219,7 @@ final unifiedOrganizationsProvider = FutureProvider<List<UnifiedEntity>>((ref) a
 ## References
 
 - flutter_rust_bridge: https://cjycode.com/flutter_rust_bridge/
-- Previous: `lib/src/services/bridge_provider.dart` (deprecated)
+- Previous: `lib/src/services/bridge_provider.dart` (removed)
 - FFI bindings: `lib/src/bindings/flutter_api.dart`
 - Auth provider: `lib/src/features/auth/providers/auth_provider.dart`
 - See also: [ADR-018](ADR-018-mcp-external-integration.md) for MCP access by external apps

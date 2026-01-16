@@ -7,5 +7,4 @@
 //! This module exports the internal types needed for testing.
 
 pub mod auth;
-pub mod node;
 pub mod token;

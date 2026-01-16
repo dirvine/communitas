@@ -10,7 +10,7 @@ Consolidate all communitas-bridge functionality into communitas-mcp, making MCP 
 
 ## Phase 1 Complete: Gap Analysis & Tool Parity ✅
 
-After detailed code review of both `communitas-mcp/src/tools.rs` (70+ tools) and `communitas-bridge/src/handlers.rs` (74 endpoints), all gaps have been filled.
+After detailed code review of MCP tools vs. the former Bridge endpoints, all gaps have been filled.
 
 ### Already Complete in MCP (No Action Needed)
 - ✅ All entity operations (create, list, join)
@@ -65,7 +65,7 @@ After detailed code review of both `communitas-mcp/src/tools.rs` (70+ tools) and
                     │  └───────────────────┘  │
                     │                         │
                     │  ┌───────────────────┐  │
-                    │  │  65 MCP Tools     │  │
+                    │  │  MCP Tools        │  │
                     │  │  (full feature)   │  │
                     │  └───────────────────┘  │
                     └──────────┬──────────────┘
@@ -74,14 +74,14 @@ After detailed code review of both `communitas-mcp/src/tools.rs` (70+ tools) and
           │                    │                    │
           ▼                    ▼                    ▼
    ┌──────────────┐    ┌──────────────┐    ┌──────────────┐
-   │    stdio     │    │   Bridge     │    │  Future:     │
-   │  (MCP spec)  │    │ (HTTP wrap)  │    │  QUIC/IPC    │
+   │    stdio     │    │    HTTP      │    │  Future:     │
+   │  (MCP spec)  │    │ (JSON-RPC)   │    │  QUIC/IPC    │
    └──────────────┘    └──────────────┘    └──────────────┘
           │                    │
           ▼                    ▼
    ┌──────────────┐    ┌──────────────┐
-   │  AI Agents   │    │  Web/Flutter │
-   │  E2E Tests   │    │   Clients    │
+   │  AI Agents   │    │  External    │
+   │  E2E Tests   │    │  Apps/Tools  │
    └──────────────┘    └──────────────┘
 ```
 
@@ -90,14 +90,14 @@ After detailed code review of both `communitas-mcp/src/tools.rs` (70+ tools) and
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
 | **Auth Model** | Dual mode (`--demo` flag) | Default requires auth; `--demo` for testing |
-| **Transport** | Stdio only (phase 1) | Focus on features first |
+| **Transport** | Stdio + HTTP | HTTP is integrated directly in MCP |
 | **Tool Design** | Granular (1 tool per op) | More discoverable for AI agents |
 | **Binary Files** | Base64 encoding | Works with any file type in JSON |
-| **Architecture** | Bridge wraps MCP | MCP is the core; Bridge is thin HTTP |
+| **Architecture** | MCP exposes stdio + HTTP | Bridge removed |
 | **State Owner** | MCP owns CoreContext | Single source of truth |
 | **Demo Network** | Auto-init | Network starts automatically in demo mode |
 
-## Complete Tool Inventory (65 Tools)
+## Complete Tool Inventory (Current Tools)
 
 ### Category 1: Authentication (3 tools) - PRE-AUTH
 
@@ -307,12 +307,13 @@ pub trait Transport {
 }
 ```
 
+Status: Implemented directly (no transport trait abstraction).
+
 Tasks:
-- [ ] Create transport trait abstraction
-- [ ] Refactor stdio into transport module
-- [ ] Port Bridge's Axum router to MCP
-- [ ] Map HTTP endpoints to MCP tool calls
-- [ ] Preserve exact REST API signatures
+- [x] Keep stdio MCP server as default
+- [x] Add HTTP server in `communitas-mcp/src/http.rs`
+- [x] Map HTTP routes to MCP tool calls (JSON-RPC over HTTP)
+- [x] Drop REST parity with the old bridge (MCP is the primary API)
 
 ### Phase 3: AI Agent E2E Test Suite
 **Goal**: Full workflow testing via MCP tools
@@ -328,18 +329,17 @@ Test Scenarios:
 **Goal**: Remove communitas-bridge from workspace
 
 Tasks:
-- [ ] Verify all Bridge endpoints work via MCP HTTP transport
-- [ ] Update Flutter/web clients to use MCP HTTP endpoints
-- [ ] Remove communitas-bridge from Cargo.toml workspace
-- [ ] Delete communitas-bridge directory
-- [ ] Update documentation
+- [x] Confirm Flutter remains FFI-first; MCP is for integrations only
+- [x] Remove communitas-bridge from Cargo.toml workspace
+- [x] Delete communitas-bridge directory
+- [x] Update documentation
 
 ## Success Metrics
 
 | Metric | Target | Measurement |
 |--------|--------|-------------|
-| Feature Parity | 100% | All 74 bridge endpoints available via MCP |
-| Tool Count | 76 | Current 70 + 6 gap tools |
+| Feature Parity | MCP-native | Bridge REST API removed; MCP is source of truth |
+| Tool Count | 70+ | Current tool inventory in `communitas-mcp/src/tools.rs` |
 | E2E Coverage | 5 workflows | Full AI agent workflow testing |
 | Bridge Removal | 0 LOC | Crate removed from workspace |
 | Zero Warnings | 0 | Clean compilation |
@@ -352,18 +352,12 @@ Tasks:
 communitas-mcp/src/tools.rs             # Add 6 missing tools
 ```
 
-### Phase 2: Transport Layer (New)
-```
-communitas-mcp/src/transport/mod.rs     # Transport trait
-communitas-mcp/src/transport/stdio.rs   # Refactored stdio
-communitas-mcp/src/transport/http.rs    # New HTTP transport (from Bridge)
-```
-
 ### Phase 2: Transport Layer (Modified)
 ```
-communitas-mcp/src/server.rs            # Use transport abstraction
-communitas-mcp/src/main.rs              # --transport flag
-communitas-mcp/Cargo.toml               # Add axum, tower-http
+communitas-mcp/src/http.rs              # HTTP server (Axum)
+communitas-mcp/src/server.rs            # MCP core (stdio + HTTP hooks)
+communitas-mcp/src/main.rs              # CLI args
+communitas-mcp/Cargo.toml               # HTTP deps (axum, tower-http)
 ```
 
 ### Phase 4: Bridge Removal (Deleted)

@@ -11,7 +11,6 @@ use saorsa_pqc::dsa_traits::{SerDes, Signer, Verifier};
 use saorsa_pqc::ml_dsa_87::{PrivateKey, PublicKey, try_keygen_with_rng};
 use zeroize::Zeroize;
 
-// TODO: Use in main.rs integration
 #[allow(dead_code)]
 const KEYRING_SERVICE: &str = "communitas-headless";
 
@@ -41,7 +40,7 @@ pub fn generate_mldsa87_keypair() -> Result<(Vec<u8>, Vec<u8>)> {
 /// Sign a message with ML-DSA-87 private key
 ///
 /// Returns signature bytes (4627 bytes for ML-DSA-87)
-#[allow(dead_code)] // TODO: Use in main.rs integration
+#[allow(dead_code)]
 pub fn sign_mldsa87(sk: &[u8], message: &[u8]) -> Result<Vec<u8>> {
     // Deserialize private key
     let sk_array: [u8; 4896] = sk.try_into().map_err(|_| {
@@ -65,7 +64,7 @@ pub fn sign_mldsa87(sk: &[u8], message: &[u8]) -> Result<Vec<u8>> {
 /// Verify an ML-DSA-87 signature
 ///
 /// Returns true if signature is valid, false otherwise
-#[allow(dead_code)] // TODO: Use in main.rs integration
+#[allow(dead_code)]
 pub fn verify_mldsa87(pk: &[u8], message: &[u8], signature: &[u8]) -> Result<bool> {
     // Deserialize public key
     let pk_array: [u8; 2592] = pk.try_into().map_err(|_| {
@@ -93,7 +92,7 @@ pub fn verify_mldsa87(pk: &[u8], message: &[u8], signature: &[u8]) -> Result<boo
 /// Save ML-DSA-87 keys to platform keychain
 ///
 /// Keys are stored with identity as the username, base64-encoded
-#[allow(dead_code)] // TODO: Use in main.rs integration
+#[allow(dead_code)]
 pub fn save_keys_to_keystore(identity: &str, pk: &[u8], sk: &[u8]) -> Result<()> {
     // Create keyring entry for public key
     let pk_entry = Entry::new(KEYRING_SERVICE, &format!("mldsa_pk:{}", identity))
@@ -124,7 +123,7 @@ pub fn save_keys_to_keystore(identity: &str, pk: &[u8], sk: &[u8]) -> Result<()>
 /// Load ML-DSA-87 keys from platform keychain
 ///
 /// Returns (public_key_bytes, private_key_bytes)
-#[allow(dead_code)] // TODO: Use in main.rs integration
+#[allow(dead_code)]
 pub fn load_keys_from_keystore(identity: &str) -> Result<(Vec<u8>, Vec<u8>)> {
     // Create keyring entries
     let pk_entry = Entry::new(KEYRING_SERVICE, &format!("mldsa_pk:{}", identity))
@@ -179,7 +178,7 @@ pub fn load_keys_from_keystore(identity: &str) -> Result<(Vec<u8>, Vec<u8>)> {
 /// Generate an identity hash for keystore lookups
 ///
 /// Uses BLAKE3 hash of the identity string to create a hex identifier
-#[allow(dead_code)] // TODO: Use in main.rs integration
+#[allow(dead_code)]
 pub fn identity_hash(identity: &str) -> String {
     let mut hasher = Hasher::new();
     hasher.update(identity.as_bytes());
@@ -190,7 +189,7 @@ pub fn identity_hash(identity: &str) -> String {
 /// Delete keys from keystore for a given identity
 ///
 /// Useful for key rotation or cleanup
-#[allow(dead_code)] // TODO: Use in main.rs integration
+#[allow(dead_code)]
 pub fn delete_keys_from_keystore(identity: &str) -> Result<()> {
     let pk_entry = Entry::new(KEYRING_SERVICE, &format!("mldsa_pk:{}", identity))
         .context("Failed to create keyring entry for public key")?;

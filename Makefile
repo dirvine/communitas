@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: dev-testnet lint build-tauri test
+.PHONY: dev-testnet lint test
 
 dev-testnet:
 	@echo "Launching 5 local IPv4-only nodes with churn+loss (simulated)"
@@ -9,10 +9,6 @@ dev-testnet:
 lint:
 	cargo fmt --all
 	cargo clippy --all-features -- -D clippy::panic -D clippy::unwrap_used -D clippy::expect_used
-
-build-tauri:
-	@echo "Reproducible Tauri build (macOS)"
-	cargo build --release -p communitas-tauri
 
 test:
 	cargo test --workspace -- --nocapture

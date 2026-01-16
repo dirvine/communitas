@@ -880,17 +880,81 @@ impl McpServer {
                     .map_err(|e| JsonRpcError::internal_error(&e.to_string()))?
             }
             "communitas://contacts" => {
-                // TODO: Implement contacts query
-                serde_json::json!({"contacts": []}).to_string()
+                let response = app
+                    .query(communitas_core::command::Query::ListContacts)
+                    .await
+                    .map_err(|e| JsonRpcError::internal_error(&e.message))?;
+                match response {
+                    communitas_core::command::QueryResponse::ContactList(contacts) => {
+                        let list: Vec<serde_json::Value> = contacts
+                            .into_iter()
+                            .map(|c| {
+                                serde_json::json!({
+                                    "id": c.id,
+                                    "display_name": c.display_name,
+                                    "four_words": c.four_words,
+                                    "is_favourite": c.is_favourite,
+                                    "is_online": c.is_online,
+                                    "created_at": c.created_at,
+                                    "last_seen": c.last_seen
+                                })
+                            })
+                            .collect();
+                        serde_json::to_string_pretty(&serde_json::json!({ "contacts": list }))
+                            .map_err(|e| JsonRpcError::internal_error(&e.to_string()))?
+                    }
+                    _ => {
+                        return Err(JsonRpcError::internal_error(
+                            "Unexpected response type for contacts",
+                        ));
+                    }
+                }
             }
             "communitas://network" => {
-                // TODO: Implement network status query
-                serde_json::json!({
-                    "status": "not_started",
-                    "peers": [],
-                    "connection_info": null
-                })
-                .to_string()
+                let is_active = match app
+                    .query(communitas_core::command::Query::IsNetworkingActive)
+                    .await
+                {
+                    Ok(communitas_core::command::QueryResponse::Bool(active)) => active,
+                    _ => false,
+                };
+                let connection_identity = match app
+                    .query(communitas_core::command::Query::GetConnectionIdentity)
+                    .await
+                {
+                    Ok(communitas_core::command::QueryResponse::OptionalString(value)) => value,
+                    _ => None,
+                };
+                let connection_words = match app
+                    .query(communitas_core::command::Query::GetConnectionWords)
+                    .await
+                {
+                    Ok(communitas_core::command::QueryResponse::OptionalString(value)) => value,
+                    _ => None,
+                };
+                let external_address = match app
+                    .query(communitas_core::command::Query::GetExternalAddress)
+                    .await
+                {
+                    Ok(communitas_core::command::QueryResponse::OptionalString(value)) => value,
+                    _ => None,
+                };
+                let peers = match app
+                    .query(communitas_core::command::Query::ListOnlinePeers)
+                    .await
+                {
+                    Ok(communitas_core::command::QueryResponse::PeerList(list)) => list,
+                    _ => Vec::new(),
+                };
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "status": if is_active { "active" } else { "inactive" },
+                    "connection_identity": connection_identity,
+                    "connection_words": connection_words,
+                    "external_address": external_address,
+                    "peers": peers,
+                    "peer_count": peers.len()
+                }))
+                .map_err(|e| JsonRpcError::internal_error(&e.to_string()))?
             }
             uri => {
                 return Err(JsonRpcError::invalid_params(&format!(
@@ -916,14 +980,6 @@ impl McpServer {
 /// Run the MCP server
 pub async fn run(args: Args) -> Result<()> {
     let mut server = McpServer::new(args);
-
-    // Initialize DHT node (auto-starts on desktop, conditional on mobile)
-    if let Err(e) = tools::initialize_node().await {
-        warn!(
-            "Failed to initialize DHT node: {}. Continuing without DHT.",
-            e
-        );
-    }
 
     let stdin = tokio::io::stdin();
     let mut stdout = tokio::io::stdout();
@@ -977,11 +1033,6 @@ pub async fn run(args: Args) -> Result<()> {
                 break;
             }
         }
-    }
-
-    // Gracefully shutdown DHT node
-    if let Err(e) = tools::shutdown_node().await {
-        warn!("Error during DHT node shutdown: {}", e);
     }
 
     info!("MCP Server shutting down");

@@ -4,7 +4,7 @@ Comprehensive technical architecture documentation for the Communitas local-firs
 
 ## Overview
 
-Communitas is a **local-first, post-quantum secure collaboration platform** that combines messaging, file sharing, voice/video calling, and web publishing into a single decentralized application. Built with Rust and Tauri v2, it provides offline-capable functionality with real-time synchronization when connected.
+Communitas is a **local-first, post-quantum secure collaboration platform** that combines messaging, file sharing, voice/video calling, and web publishing into a single decentralized application. Built with Rust and Flutter (FFI via `flutter_rust_bridge`), it provides offline-capable functionality with real-time synchronization when connected.
 
 ### Core Principles
 
@@ -18,19 +18,12 @@ Communitas is a **local-first, post-quantum secure collaboration platform** that
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│              FRONTEND (React + TypeScript)                  │
-│  - Modern UI with Material-UI components                   │
-│  - Vite build with HMR development                         │
-│  - React Context for state management                      │
+│                FRONTEND (Flutter)                           │
+│  - Cross-platform UI (macOS, iOS, Android, Linux, Windows)  │
+│  - Riverpod state management                                │
+│  - Thin GUI over core capabilities                          │
 └─────────────────────────────────────────────────────────────┘
-                           ↓ Tauri IPC
-┌─────────────────────────────────────────────────────────────┐
-│           DESKTOP APPLICATION (Tauri v2)                    │
-│  - Cross-platform: Windows, macOS, Linux                   │
-│  - System integration: keyring, notifications              │
-│  - WebAuthn/Passkey support                                │
-└─────────────────────────────────────────────────────────────┘
-                           ↓ Core API
+                           ↓ FFI (flutter_rust_bridge)
 ┌─────────────────────────────────────────────────────────────┐
 │              CORE LIBRARY (Rust)                            │
 │                                                             │
@@ -90,11 +83,9 @@ Communitas is a **local-first, post-quantum secure collaboration platform** that
 This architecture documentation is organized into the following sections:
 
 ### Core Components
-- **[Core Components](core-components.md)** - Detailed overview of all system components
-  - Frontend architecture (React, Vite, Context)
-  - Backend architecture (Tauri, Rust core)
-  - Core library modules (identity, storage, messaging)
-  - Platform integrations (keyring, notifications)
+- **Core library modules**: identity, storage, messaging, permissions, networking
+- **Flutter UI**: thin presentation layer over FFI bindings
+- **Platform integrations**: keyring, notifications, OS services
 
 ### Data & Storage
 - **[CRDT System](crdt-system.md)** - Conflict-free replicated data types
@@ -232,60 +223,41 @@ See [Gossip Protocol](gossip-protocol.md) for details.
 ## Technology Stack
 
 ### Frontend
-- **Framework**: React 18 with TypeScript
-- **Build Tool**: Vite with Hot Module Replacement
-- **UI Components**: Material-UI (MUI)
-- **State Management**: React Context + hooks
-- **Routing**: React Router
-- **Testing**: Vitest + jsdom
+- **Framework**: Flutter (Dart)
+- **State Management**: Riverpod
+- **Routing**: GoRouter
+- **FFI**: flutter_rust_bridge (native bindings)
+- **Testing**: flutter test
 
-### Backend
-- **Desktop Framework**: Tauri v2
-- **Core Language**: Rust 2024 edition
-- **Storage**: libSQL (Turso) with embedded mode
+### Core
+- **Language**: Rust 2024 edition
 - **CRDT**: Yrs (Yjs Rust port)
-- **Networking**: ant-quic (QUIC transport)
+- **Networking**: ant-quic + saorsa-gossip
 - **Crypto**: saorsa-pqc (post-quantum)
 
 ### Infrastructure
-- **Containers**: Docker, Kubernetes, Helm
 - **Service Management**: systemd, launchd
 - **Monitoring**: Prometheus, Grafana
 - **CI/CD**: GitHub Actions
-- **Package Manager**: Cargo (Rust), npm (JavaScript)
+- **Package Manager**: Cargo + Flutter tooling
 
 ## Development Environment
 
 ### Prerequisites
 - Rust 1.85+
-- Node.js 20+
-- Platform-specific dependencies for Tauri v2
+- Flutter 3.27+
+- Platform-specific dependencies for Flutter desktop/mobile
 
 ### Quick Start
-```bash
-# Clone repository
-git clone https://github.com/dirvine/communitas.git
-cd communitas
-
-# Install dependencies
-npm install
-
-# Build and run development mode
-npm run build
-npm run tauri dev
-```
-
-See the main [README.md](../../README.md) for complete setup instructions.
+See the main [README.md](../../README.md) for setup instructions.
 
 ## Deployment Options
 
-### Desktop Application
-Native application for Windows, macOS, and Linux:
-- Binary distribution via GitHub Releases
-- DMG (macOS), MSI (Windows), AppImage/DEB (Linux)
-- Auto-updater for seamless updates
-
-See [communitas-desktop/README.md](../../communitas-desktop/README.md)
+### Flutter Application
+Native application for Windows, macOS, Linux, iOS, and Android:
+- Build via Flutter toolchain
+- Native binaries packaged per platform
+- Web build supported only for demo mode
 
 ### Headless Daemon
 Server deployment for bots and background services:
@@ -303,13 +275,13 @@ Docker and Kubernetes for cloud deployment:
 
 See the [communitas-headless](../../communitas-headless/README.md) crate for deployment details.
 
-### Bootstrap Nodes
+### Seed/Bootstrap Nodes
 Network infrastructure for peer discovery:
-- Gossip-based bootstrap service
-- Geographic routing optimization
+- Run `communitas-headless` with dedicated instance/config for introducer roles
+- Gossip-based bootstrap seeding
 - High availability deployment
 
-See [bootstrap-node/README.md](../../bootstrap-node/README.md)
+See [communitas-headless/README.md](../../communitas-headless/README.md)
 
 ## Performance Characteristics
 
@@ -349,7 +321,7 @@ See [Security Architecture](security.md) for complete analysis.
 ## Testing Strategy
 
 ### Unit Tests
-- Frontend: Vitest for React components
+- Frontend: Flutter widget/unit tests
 - Backend: Cargo tests for Rust modules
 - Coverage target: >85%
 
@@ -397,8 +369,7 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for how to contribute to Communitas
 - [Main README](../../README.md) - Getting started and development workflow
 
 ### External Resources
-- [saorsa-core on crates.io](https://crates.io/crates/saorsa-core)
-- [Tauri v2 Documentation](https://v2.tauri.app/)
+- [flutter_rust_bridge](https://github.com/fzyzcjy/flutter_rust_bridge)
 - [Yrs CRDT Documentation](https://docs.rs/yrs/)
 - [ant-quic Transport](https://github.com/maidsafe/ant-quic)
 

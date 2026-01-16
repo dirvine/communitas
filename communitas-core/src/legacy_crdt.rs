@@ -214,6 +214,8 @@ pub struct LocalMessageState {
     pub status: Option<MessageStatus>,
     #[serde(default)]
     pub reactions: Vec<Reaction>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub edited_at: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub thread_count: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -405,6 +407,7 @@ impl PeerListResponse {
 /// - Peer list responses (reply with known healthy peers)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[allow(clippy::large_enum_variant)]
 pub enum GossipMessageType {
     /// Regular chat/entity message
     Chat(CRDTMessage),

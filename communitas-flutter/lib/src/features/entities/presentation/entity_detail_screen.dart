@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../../core/router.dart';
 import '../../../core/theme/colors.dart';
 import '../../../shared/widgets/sidebar.dart';
 import '../../../shared/widgets/adaptive_layout.dart';
 import '../../../services/unified_data_provider.dart';
 
-/// Entity detail screen with tabs (Chat, Drive, Board, Documents, Details).
+/// Entity detail screen with quick actions (Chat, Drive, Board).
 class EntityDetailScreen extends ConsumerWidget {
   final String entityType;
   final String entityId;
@@ -23,65 +25,20 @@ class EntityDetailScreen extends ConsumerWidget {
 
     return AdaptiveLayout(
       sidebar: const Sidebar(),
-      body: DefaultTabController(
-        length: entityType == 'project' ? 5 : 4,
-        child: Scaffold(
-          appBar: AppBar(
-            title: entityAsync.when(
-              loading: () => const Text('Loading...'),
-              error: (_, __) => Text('Entity $entityId'),
-              data: (entity) => Text(entity?.name ?? 'Unknown Entity'),
-            ),
-            bottom: TabBar(
-              tabs: [
-                const Tab(icon: Icon(Icons.chat), text: 'Chat'),
-                const Tab(icon: Icon(Icons.folder), text: 'Drive'),
-                if (entityType == 'project')
-                  const Tab(icon: Icon(Icons.view_kanban), text: 'Board'),
-                const Tab(icon: Icon(Icons.description), text: 'Docs'),
-                const Tab(icon: Icon(Icons.info_outline), text: 'Details'),
-              ],
-            ),
-          ),
-          body: TabBarView(
-            children: [
-              _buildChatTab(),
-              _buildDriveTab(),
-              if (entityType == 'project') _buildBoardTab(),
-              _buildDocsTab(),
-              _buildDetailsTab(ref),
-            ],
+      body: Scaffold(
+        appBar: AppBar(
+          title: entityAsync.when(
+            loading: () => const Text('Loading...'),
+            error: (_, __) => Text('Entity $entityId'),
+            data: (entity) => Text(entity?.name ?? 'Unknown Entity'),
           ),
         ),
+        body: _buildDetailsBody(context, ref),
       ),
     );
   }
 
-  Widget _buildChatTab() {
-    return const Center(
-      child: Text('Chat content here'),
-    );
-  }
-
-  Widget _buildDriveTab() {
-    return const Center(
-      child: Text('Drive content here'),
-    );
-  }
-
-  Widget _buildBoardTab() {
-    return const Center(
-      child: Text('Kanban board here'),
-    );
-  }
-
-  Widget _buildDocsTab() {
-    return const Center(
-      child: Text('Documents here'),
-    );
-  }
-
-  Widget _buildDetailsTab(WidgetRef ref) {
+  Widget _buildDetailsBody(BuildContext context, WidgetRef ref) {
     final entityAsync = ref.watch(unifiedEntityByIdProvider((type: entityType, id: entityId)));
 
     return entityAsync.when(
@@ -157,10 +114,62 @@ class EntityDetailScreen extends ConsumerWidget {
                   ],
                 ),
               ),
+              const SizedBox(height: 24),
+              Text(
+                'Actions',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 12),
+              _buildActionTile(
+                context,
+                icon: Icons.chat,
+                label: 'Open Chat',
+                onTap: () => context.go(
+                  Routes.entityChat.replaceAll(':type', entityType).replaceAll(':id', entityId),
+                ),
+              ),
+              _buildActionTile(
+                context,
+                icon: Icons.folder,
+                label: 'Open Drive',
+                onTap: () => context.go(
+                  Routes.entityDrive.replaceAll(':type', entityType).replaceAll(':id', entityId),
+                ),
+              ),
+              if (entityType == 'project')
+                _buildActionTile(
+                  context,
+                  icon: Icons.view_kanban,
+                  label: 'Open Kanban Board',
+                  onTap: () => context.go(
+                    Routes.projectBoard.replaceAll(':id', entityId),
+                  ),
+                ),
             ],
           ),
         );
       },
+    );
+  }
+
+  Widget _buildActionTile(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: CommunitasColors.moss,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: ListTile(
+        leading: Icon(icon, color: CommunitasColors.jade),
+        title: Text(label),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: onTap,
+      ),
     );
   }
 
@@ -191,6 +200,7 @@ class EntityDetailScreen extends ConsumerWidget {
   IconData _getEntityIcon() {
     switch (entityType) {
       case 'organization':
+      case 'organisation':
         return Icons.business;
       case 'project':
         return Icons.folder;

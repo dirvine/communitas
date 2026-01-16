@@ -309,7 +309,7 @@ impl Default for RateLimiters {
     }
 }
 
-/// Macro for checking rate limits in Tauri commands
+/// Macro for checking rate limits in adapter commands
 #[macro_export]
 macro_rules! check_rate_limit {
     ($rate_limiter:expr, $key:expr) => {

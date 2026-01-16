@@ -25,8 +25,7 @@ mixin _$FlutterEvent {
     required TResult Function(String entityId) entityCreated,
     required TResult Function(String entityId) entityUpdated,
     required TResult Function(String messageId, String entityId) messageSent,
-    required TResult Function(String messageId, String entityId)
-        messageReceived,
+    required TResult Function(String messageId, String entityId) messageReceived,
     required TResult Function(String inviteId) inviteCreated,
     required TResult Function(String inviteId) inviteAccepted,
     required TResult Function(String entityId, String path) fileWritten,
@@ -71,18 +70,14 @@ mixin _$FlutterEvent {
       throw _privateConstructorUsedError;
   @optionalTypeArgs
   TResult map<TResult extends Object?>({
-    required TResult Function(FlutterEvent_NetworkingStarted value)
-        networkingStarted,
-    required TResult Function(FlutterEvent_NetworkingStopped value)
-        networkingStopped,
+    required TResult Function(FlutterEvent_NetworkingStarted value) networkingStarted,
+    required TResult Function(FlutterEvent_NetworkingStopped value) networkingStopped,
     required TResult Function(FlutterEvent_PeerConnected value) peerConnected,
-    required TResult Function(FlutterEvent_PeerDisconnected value)
-        peerDisconnected,
+    required TResult Function(FlutterEvent_PeerDisconnected value) peerDisconnected,
     required TResult Function(FlutterEvent_EntityCreated value) entityCreated,
     required TResult Function(FlutterEvent_EntityUpdated value) entityUpdated,
     required TResult Function(FlutterEvent_MessageSent value) messageSent,
-    required TResult Function(FlutterEvent_MessageReceived value)
-        messageReceived,
+    required TResult Function(FlutterEvent_MessageReceived value) messageReceived,
     required TResult Function(FlutterEvent_InviteCreated value) inviteCreated,
     required TResult Function(FlutterEvent_InviteAccepted value) inviteAccepted,
     required TResult Function(FlutterEvent_FileWritten value) fileWritten,
@@ -129,14 +124,12 @@ mixin _$FlutterEvent {
 
 /// @nodoc
 abstract class $FlutterEventCopyWith<$Res> {
-  factory $FlutterEventCopyWith(
-          FlutterEvent value, $Res Function(FlutterEvent) then) =
+  factory $FlutterEventCopyWith(FlutterEvent value, $Res Function(FlutterEvent) then) =
       _$FlutterEventCopyWithImpl<$Res, FlutterEvent>;
 }
 
 /// @nodoc
-class _$FlutterEventCopyWithImpl<$Res, $Val extends FlutterEvent>
-    implements $FlutterEventCopyWith<$Res> {
+class _$FlutterEventCopyWithImpl<$Res, $Val extends FlutterEvent> implements $FlutterEventCopyWith<$Res> {
   _$FlutterEventCopyWithImpl(this._value, this._then);
 
   // ignore: unused_field
@@ -151,8 +144,7 @@ class _$FlutterEventCopyWithImpl<$Res, $Val extends FlutterEvent>
 /// @nodoc
 abstract class _$$FlutterEvent_NetworkingStartedImplCopyWith<$Res> {
   factory _$$FlutterEvent_NetworkingStartedImplCopyWith(
-          _$FlutterEvent_NetworkingStartedImpl value,
-          $Res Function(_$FlutterEvent_NetworkingStartedImpl) then) =
+          _$FlutterEvent_NetworkingStartedImpl value, $Res Function(_$FlutterEvent_NetworkingStartedImpl) then) =
       __$$FlutterEvent_NetworkingStartedImplCopyWithImpl<$Res>;
   @useResult
   $Res call({String address});
@@ -160,12 +152,10 @@ abstract class _$$FlutterEvent_NetworkingStartedImplCopyWith<$Res> {
 
 /// @nodoc
 class __$$FlutterEvent_NetworkingStartedImplCopyWithImpl<$Res>
-    extends _$FlutterEventCopyWithImpl<$Res,
-        _$FlutterEvent_NetworkingStartedImpl>
+    extends _$FlutterEventCopyWithImpl<$Res, _$FlutterEvent_NetworkingStartedImpl>
     implements _$$FlutterEvent_NetworkingStartedImplCopyWith<$Res> {
   __$$FlutterEvent_NetworkingStartedImplCopyWithImpl(
-      _$FlutterEvent_NetworkingStartedImpl _value,
-      $Res Function(_$FlutterEvent_NetworkingStartedImpl) _then)
+      _$FlutterEvent_NetworkingStartedImpl _value, $Res Function(_$FlutterEvent_NetworkingStartedImpl) _then)
       : super(_value, _then);
 
   /// Create a copy of FlutterEvent
@@ -186,10 +176,8 @@ class __$$FlutterEvent_NetworkingStartedImplCopyWithImpl<$Res>
 
 /// @nodoc
 
-class _$FlutterEvent_NetworkingStartedImpl
-    extends FlutterEvent_NetworkingStarted {
-  const _$FlutterEvent_NetworkingStartedImpl({required this.address})
-      : super._();
+class _$FlutterEvent_NetworkingStartedImpl extends FlutterEvent_NetworkingStarted {
+  const _$FlutterEvent_NetworkingStartedImpl({required this.address}) : super._();
 
   @override
   final String address;
@@ -215,10 +203,8 @@ class _$FlutterEvent_NetworkingStartedImpl
   @JsonKey(includeFromJson: false, includeToJson: false)
   @override
   @pragma('vm:prefer-inline')
-  _$$FlutterEvent_NetworkingStartedImplCopyWith<
-          _$FlutterEvent_NetworkingStartedImpl>
-      get copyWith => __$$FlutterEvent_NetworkingStartedImplCopyWithImpl<
-          _$FlutterEvent_NetworkingStartedImpl>(this, _$identity);
+  _$$FlutterEvent_NetworkingStartedImplCopyWith<_$FlutterEvent_NetworkingStartedImpl> get copyWith =>
+      __$$FlutterEvent_NetworkingStartedImplCopyWithImpl<_$FlutterEvent_NetworkingStartedImpl>(this, _$identity);
 
   @override
   @optionalTypeArgs
@@ -230,8 +216,7 @@ class _$FlutterEvent_NetworkingStartedImpl
     required TResult Function(String entityId) entityCreated,
     required TResult Function(String entityId) entityUpdated,
     required TResult Function(String messageId, String entityId) messageSent,
-    required TResult Function(String messageId, String entityId)
-        messageReceived,
+    required TResult Function(String messageId, String entityId) messageReceived,
     required TResult Function(String inviteId) inviteCreated,
     required TResult Function(String inviteId) inviteAccepted,
     required TResult Function(String entityId, String path) fileWritten,
@@ -288,18 +273,14 @@ class _$FlutterEvent_NetworkingStartedImpl
   @override
   @optionalTypeArgs
   TResult map<TResult extends Object?>({
-    required TResult Function(FlutterEvent_NetworkingStarted value)
-        networkingStarted,
-    required TResult Function(FlutterEvent_NetworkingStopped value)
-        networkingStopped,
+    required TResult Function(FlutterEvent_NetworkingStarted value) networkingStarted,
+    required TResult Function(FlutterEvent_NetworkingStopped value) networkingStopped,
     required TResult Function(FlutterEvent_PeerConnected value) peerConnected,
-    required TResult Function(FlutterEvent_PeerDisconnected value)
-        peerDisconnected,
+    required TResult Function(FlutterEvent_PeerDisconnected value) peerDisconnected,
     required TResult Function(FlutterEvent_EntityCreated value) entityCreated,
     required TResult Function(FlutterEvent_EntityUpdated value) entityUpdated,
     required TResult Function(FlutterEvent_MessageSent value) messageSent,
-    required TResult Function(FlutterEvent_MessageReceived value)
-        messageReceived,
+    required TResult Function(FlutterEvent_MessageReceived value) messageReceived,
     required TResult Function(FlutterEvent_InviteCreated value) inviteCreated,
     required TResult Function(FlutterEvent_InviteAccepted value) inviteAccepted,
     required TResult Function(FlutterEvent_FileWritten value) fileWritten,
@@ -355,8 +336,7 @@ class _$FlutterEvent_NetworkingStartedImpl
 }
 
 abstract class FlutterEvent_NetworkingStarted extends FlutterEvent {
-  const factory FlutterEvent_NetworkingStarted(
-      {required final String address}) = _$FlutterEvent_NetworkingStartedImpl;
+  const factory FlutterEvent_NetworkingStarted({required final String address}) = _$FlutterEvent_NetworkingStartedImpl;
   const FlutterEvent_NetworkingStarted._() : super._();
 
   String get address;
@@ -364,27 +344,23 @@ abstract class FlutterEvent_NetworkingStarted extends FlutterEvent {
   /// Create a copy of FlutterEvent
   /// with the given fields replaced by the non-null parameter values.
   @JsonKey(includeFromJson: false, includeToJson: false)
-  _$$FlutterEvent_NetworkingStartedImplCopyWith<
-          _$FlutterEvent_NetworkingStartedImpl>
-      get copyWith => throw _privateConstructorUsedError;
+  _$$FlutterEvent_NetworkingStartedImplCopyWith<_$FlutterEvent_NetworkingStartedImpl> get copyWith =>
+      throw _privateConstructorUsedError;
 }
 
 /// @nodoc
 abstract class _$$FlutterEvent_NetworkingStoppedImplCopyWith<$Res> {
   factory _$$FlutterEvent_NetworkingStoppedImplCopyWith(
-          _$FlutterEvent_NetworkingStoppedImpl value,
-          $Res Function(_$FlutterEvent_NetworkingStoppedImpl) then) =
+          _$FlutterEvent_NetworkingStoppedImpl value, $Res Function(_$FlutterEvent_NetworkingStoppedImpl) then) =
       __$$FlutterEvent_NetworkingStoppedImplCopyWithImpl<$Res>;
 }
 
 /// @nodoc
 class __$$FlutterEvent_NetworkingStoppedImplCopyWithImpl<$Res>
-    extends _$FlutterEventCopyWithImpl<$Res,
-        _$FlutterEvent_NetworkingStoppedImpl>
+    extends _$FlutterEventCopyWithImpl<$Res, _$FlutterEvent_NetworkingStoppedImpl>
     implements _$$FlutterEvent_NetworkingStoppedImplCopyWith<$Res> {
   __$$FlutterEvent_NetworkingStoppedImplCopyWithImpl(
-      _$FlutterEvent_NetworkingStoppedImpl _value,
-      $Res Function(_$FlutterEvent_NetworkingStoppedImpl) _then)
+      _$FlutterEvent_NetworkingStoppedImpl _value, $Res Function(_$FlutterEvent_NetworkingStoppedImpl) _then)
       : super(_value, _then);
 
   /// Create a copy of FlutterEvent
@@ -393,8 +369,7 @@ class __$$FlutterEvent_NetworkingStoppedImplCopyWithImpl<$Res>
 
 /// @nodoc
 
-class _$FlutterEvent_NetworkingStoppedImpl
-    extends FlutterEvent_NetworkingStopped {
+class _$FlutterEvent_NetworkingStoppedImpl extends FlutterEvent_NetworkingStopped {
   const _$FlutterEvent_NetworkingStoppedImpl() : super._();
 
   @override
@@ -405,8 +380,7 @@ class _$FlutterEvent_NetworkingStoppedImpl
   @override
   bool operator ==(Object other) {
     return identical(this, other) ||
-        (other.runtimeType == runtimeType &&
-            other is _$FlutterEvent_NetworkingStoppedImpl);
+        (other.runtimeType == runtimeType && other is _$FlutterEvent_NetworkingStoppedImpl);
   }
 
   @override
@@ -422,8 +396,7 @@ class _$FlutterEvent_NetworkingStoppedImpl
     required TResult Function(String entityId) entityCreated,
     required TResult Function(String entityId) entityUpdated,
     required TResult Function(String messageId, String entityId) messageSent,
-    required TResult Function(String messageId, String entityId)
-        messageReceived,
+    required TResult Function(String messageId, String entityId) messageReceived,
     required TResult Function(String inviteId) inviteCreated,
     required TResult Function(String inviteId) inviteAccepted,
     required TResult Function(String entityId, String path) fileWritten,
@@ -480,18 +453,14 @@ class _$FlutterEvent_NetworkingStoppedImpl
   @override
   @optionalTypeArgs
   TResult map<TResult extends Object?>({
-    required TResult Function(FlutterEvent_NetworkingStarted value)
-        networkingStarted,
-    required TResult Function(FlutterEvent_NetworkingStopped value)
-        networkingStopped,
+    required TResult Function(FlutterEvent_NetworkingStarted value) networkingStarted,
+    required TResult Function(FlutterEvent_NetworkingStopped value) networkingStopped,
     required TResult Function(FlutterEvent_PeerConnected value) peerConnected,
-    required TResult Function(FlutterEvent_PeerDisconnected value)
-        peerDisconnected,
+    required TResult Function(FlutterEvent_PeerDisconnected value) peerDisconnected,
     required TResult Function(FlutterEvent_EntityCreated value) entityCreated,
     required TResult Function(FlutterEvent_EntityUpdated value) entityUpdated,
     required TResult Function(FlutterEvent_MessageSent value) messageSent,
-    required TResult Function(FlutterEvent_MessageReceived value)
-        messageReceived,
+    required TResult Function(FlutterEvent_MessageReceived value) messageReceived,
     required TResult Function(FlutterEvent_InviteCreated value) inviteCreated,
     required TResult Function(FlutterEvent_InviteAccepted value) inviteAccepted,
     required TResult Function(FlutterEvent_FileWritten value) fileWritten,
@@ -547,16 +516,14 @@ class _$FlutterEvent_NetworkingStoppedImpl
 }
 
 abstract class FlutterEvent_NetworkingStopped extends FlutterEvent {
-  const factory FlutterEvent_NetworkingStopped() =
-      _$FlutterEvent_NetworkingStoppedImpl;
+  const factory FlutterEvent_NetworkingStopped() = _$FlutterEvent_NetworkingStoppedImpl;
   const FlutterEvent_NetworkingStopped._() : super._();
 }
 
 /// @nodoc
 abstract class _$$FlutterEvent_PeerConnectedImplCopyWith<$Res> {
   factory _$$FlutterEvent_PeerConnectedImplCopyWith(
-          _$FlutterEvent_PeerConnectedImpl value,
-          $Res Function(_$FlutterEvent_PeerConnectedImpl) then) =
+          _$FlutterEvent_PeerConnectedImpl value, $Res Function(_$FlutterEvent_PeerConnectedImpl) then) =
       __$$FlutterEvent_PeerConnectedImplCopyWithImpl<$Res>;
   @useResult
   $Res call({String peerId});
@@ -567,8 +534,7 @@ class __$$FlutterEvent_PeerConnectedImplCopyWithImpl<$Res>
     extends _$FlutterEventCopyWithImpl<$Res, _$FlutterEvent_PeerConnectedImpl>
     implements _$$FlutterEvent_PeerConnectedImplCopyWith<$Res> {
   __$$FlutterEvent_PeerConnectedImplCopyWithImpl(
-      _$FlutterEvent_PeerConnectedImpl _value,
-      $Res Function(_$FlutterEvent_PeerConnectedImpl) _then)
+      _$FlutterEvent_PeerConnectedImpl _value, $Res Function(_$FlutterEvent_PeerConnectedImpl) _then)
       : super(_value, _then);
 
   /// Create a copy of FlutterEvent
@@ -616,9 +582,8 @@ class _$FlutterEvent_PeerConnectedImpl extends FlutterEvent_PeerConnected {
   @JsonKey(includeFromJson: false, includeToJson: false)
   @override
   @pragma('vm:prefer-inline')
-  _$$FlutterEvent_PeerConnectedImplCopyWith<_$FlutterEvent_PeerConnectedImpl>
-      get copyWith => __$$FlutterEvent_PeerConnectedImplCopyWithImpl<
-          _$FlutterEvent_PeerConnectedImpl>(this, _$identity);
+  _$$FlutterEvent_PeerConnectedImplCopyWith<_$FlutterEvent_PeerConnectedImpl> get copyWith =>
+      __$$FlutterEvent_PeerConnectedImplCopyWithImpl<_$FlutterEvent_PeerConnectedImpl>(this, _$identity);
 
   @override
   @optionalTypeArgs
@@ -630,8 +595,7 @@ class _$FlutterEvent_PeerConnectedImpl extends FlutterEvent_PeerConnected {
     required TResult Function(String entityId) entityCreated,
     required TResult Function(String entityId) entityUpdated,
     required TResult Function(String messageId, String entityId) messageSent,
-    required TResult Function(String messageId, String entityId)
-        messageReceived,
+    required TResult Function(String messageId, String entityId) messageReceived,
     required TResult Function(String inviteId) inviteCreated,
     required TResult Function(String inviteId) inviteAccepted,
     required TResult Function(String entityId, String path) fileWritten,
@@ -688,18 +652,14 @@ class _$FlutterEvent_PeerConnectedImpl extends FlutterEvent_PeerConnected {
   @override
   @optionalTypeArgs
   TResult map<TResult extends Object?>({
-    required TResult Function(FlutterEvent_NetworkingStarted value)
-        networkingStarted,
-    required TResult Function(FlutterEvent_NetworkingStopped value)
-        networkingStopped,
+    required TResult Function(FlutterEvent_NetworkingStarted value) networkingStarted,
+    required TResult Function(FlutterEvent_NetworkingStopped value) networkingStopped,
     required TResult Function(FlutterEvent_PeerConnected value) peerConnected,
-    required TResult Function(FlutterEvent_PeerDisconnected value)
-        peerDisconnected,
+    required TResult Function(FlutterEvent_PeerDisconnected value) peerDisconnected,
     required TResult Function(FlutterEvent_EntityCreated value) entityCreated,
     required TResult Function(FlutterEvent_EntityUpdated value) entityUpdated,
     required TResult Function(FlutterEvent_MessageSent value) messageSent,
-    required TResult Function(FlutterEvent_MessageReceived value)
-        messageReceived,
+    required TResult Function(FlutterEvent_MessageReceived value) messageReceived,
     required TResult Function(FlutterEvent_InviteCreated value) inviteCreated,
     required TResult Function(FlutterEvent_InviteAccepted value) inviteAccepted,
     required TResult Function(FlutterEvent_FileWritten value) fileWritten,
@@ -755,8 +715,7 @@ class _$FlutterEvent_PeerConnectedImpl extends FlutterEvent_PeerConnected {
 }
 
 abstract class FlutterEvent_PeerConnected extends FlutterEvent {
-  const factory FlutterEvent_PeerConnected({required final String peerId}) =
-      _$FlutterEvent_PeerConnectedImpl;
+  const factory FlutterEvent_PeerConnected({required final String peerId}) = _$FlutterEvent_PeerConnectedImpl;
   const FlutterEvent_PeerConnected._() : super._();
 
   String get peerId;
@@ -764,15 +723,14 @@ abstract class FlutterEvent_PeerConnected extends FlutterEvent {
   /// Create a copy of FlutterEvent
   /// with the given fields replaced by the non-null parameter values.
   @JsonKey(includeFromJson: false, includeToJson: false)
-  _$$FlutterEvent_PeerConnectedImplCopyWith<_$FlutterEvent_PeerConnectedImpl>
-      get copyWith => throw _privateConstructorUsedError;
+  _$$FlutterEvent_PeerConnectedImplCopyWith<_$FlutterEvent_PeerConnectedImpl> get copyWith =>
+      throw _privateConstructorUsedError;
 }
 
 /// @nodoc
 abstract class _$$FlutterEvent_PeerDisconnectedImplCopyWith<$Res> {
   factory _$$FlutterEvent_PeerDisconnectedImplCopyWith(
-          _$FlutterEvent_PeerDisconnectedImpl value,
-          $Res Function(_$FlutterEvent_PeerDisconnectedImpl) then) =
+          _$FlutterEvent_PeerDisconnectedImpl value, $Res Function(_$FlutterEvent_PeerDisconnectedImpl) then) =
       __$$FlutterEvent_PeerDisconnectedImplCopyWithImpl<$Res>;
   @useResult
   $Res call({String peerId});
@@ -780,12 +738,10 @@ abstract class _$$FlutterEvent_PeerDisconnectedImplCopyWith<$Res> {
 
 /// @nodoc
 class __$$FlutterEvent_PeerDisconnectedImplCopyWithImpl<$Res>
-    extends _$FlutterEventCopyWithImpl<$Res,
-        _$FlutterEvent_PeerDisconnectedImpl>
+    extends _$FlutterEventCopyWithImpl<$Res, _$FlutterEvent_PeerDisconnectedImpl>
     implements _$$FlutterEvent_PeerDisconnectedImplCopyWith<$Res> {
   __$$FlutterEvent_PeerDisconnectedImplCopyWithImpl(
-      _$FlutterEvent_PeerDisconnectedImpl _value,
-      $Res Function(_$FlutterEvent_PeerDisconnectedImpl) _then)
+      _$FlutterEvent_PeerDisconnectedImpl _value, $Res Function(_$FlutterEvent_PeerDisconnectedImpl) _then)
       : super(_value, _then);
 
   /// Create a copy of FlutterEvent
@@ -806,8 +762,7 @@ class __$$FlutterEvent_PeerDisconnectedImplCopyWithImpl<$Res>
 
 /// @nodoc
 
-class _$FlutterEvent_PeerDisconnectedImpl
-    extends FlutterEvent_PeerDisconnected {
+class _$FlutterEvent_PeerDisconnectedImpl extends FlutterEvent_PeerDisconnected {
   const _$FlutterEvent_PeerDisconnectedImpl({required this.peerId}) : super._();
 
   @override
@@ -834,10 +789,8 @@ class _$FlutterEvent_PeerDisconnectedImpl
   @JsonKey(includeFromJson: false, includeToJson: false)
   @override
   @pragma('vm:prefer-inline')
-  _$$FlutterEvent_PeerDisconnectedImplCopyWith<
-          _$FlutterEvent_PeerDisconnectedImpl>
-      get copyWith => __$$FlutterEvent_PeerDisconnectedImplCopyWithImpl<
-          _$FlutterEvent_PeerDisconnectedImpl>(this, _$identity);
+  _$$FlutterEvent_PeerDisconnectedImplCopyWith<_$FlutterEvent_PeerDisconnectedImpl> get copyWith =>
+      __$$FlutterEvent_PeerDisconnectedImplCopyWithImpl<_$FlutterEvent_PeerDisconnectedImpl>(this, _$identity);
 
   @override
   @optionalTypeArgs
@@ -849,8 +802,7 @@ class _$FlutterEvent_PeerDisconnectedImpl
     required TResult Function(String entityId) entityCreated,
     required TResult Function(String entityId) entityUpdated,
     required TResult Function(String messageId, String entityId) messageSent,
-    required TResult Function(String messageId, String entityId)
-        messageReceived,
+    required TResult Function(String messageId, String entityId) messageReceived,
     required TResult Function(String inviteId) inviteCreated,
     required TResult Function(String inviteId) inviteAccepted,
     required TResult Function(String entityId, String path) fileWritten,
@@ -907,18 +859,14 @@ class _$FlutterEvent_PeerDisconnectedImpl
   @override
   @optionalTypeArgs
   TResult map<TResult extends Object?>({
-    required TResult Function(FlutterEvent_NetworkingStarted value)
-        networkingStarted,
-    required TResult Function(FlutterEvent_NetworkingStopped value)
-        networkingStopped,
+    required TResult Function(FlutterEvent_NetworkingStarted value) networkingStarted,
+    required TResult Function(FlutterEvent_NetworkingStopped value) networkingStopped,
     required TResult Function(FlutterEvent_PeerConnected value) peerConnected,
-    required TResult Function(FlutterEvent_PeerDisconnected value)
-        peerDisconnected,
+    required TResult Function(FlutterEvent_PeerDisconnected value) peerDisconnected,
     required TResult Function(FlutterEvent_EntityCreated value) entityCreated,
     required TResult Function(FlutterEvent_EntityUpdated value) entityUpdated,
     required TResult Function(FlutterEvent_MessageSent value) messageSent,
-    required TResult Function(FlutterEvent_MessageReceived value)
-        messageReceived,
+    required TResult Function(FlutterEvent_MessageReceived value) messageReceived,
     required TResult Function(FlutterEvent_InviteCreated value) inviteCreated,
     required TResult Function(FlutterEvent_InviteAccepted value) inviteAccepted,
     required TResult Function(FlutterEvent_FileWritten value) fileWritten,
@@ -974,8 +922,7 @@ class _$FlutterEvent_PeerDisconnectedImpl
 }
 
 abstract class FlutterEvent_PeerDisconnected extends FlutterEvent {
-  const factory FlutterEvent_PeerDisconnected({required final String peerId}) =
-      _$FlutterEvent_PeerDisconnectedImpl;
+  const factory FlutterEvent_PeerDisconnected({required final String peerId}) = _$FlutterEvent_PeerDisconnectedImpl;
   const FlutterEvent_PeerDisconnected._() : super._();
 
   String get peerId;
@@ -983,16 +930,14 @@ abstract class FlutterEvent_PeerDisconnected extends FlutterEvent {
   /// Create a copy of FlutterEvent
   /// with the given fields replaced by the non-null parameter values.
   @JsonKey(includeFromJson: false, includeToJson: false)
-  _$$FlutterEvent_PeerDisconnectedImplCopyWith<
-          _$FlutterEvent_PeerDisconnectedImpl>
-      get copyWith => throw _privateConstructorUsedError;
+  _$$FlutterEvent_PeerDisconnectedImplCopyWith<_$FlutterEvent_PeerDisconnectedImpl> get copyWith =>
+      throw _privateConstructorUsedError;
 }
 
 /// @nodoc
 abstract class _$$FlutterEvent_EntityCreatedImplCopyWith<$Res> {
   factory _$$FlutterEvent_EntityCreatedImplCopyWith(
-          _$FlutterEvent_EntityCreatedImpl value,
-          $Res Function(_$FlutterEvent_EntityCreatedImpl) then) =
+          _$FlutterEvent_EntityCreatedImpl value, $Res Function(_$FlutterEvent_EntityCreatedImpl) then) =
       __$$FlutterEvent_EntityCreatedImplCopyWithImpl<$Res>;
   @useResult
   $Res call({String entityId});
@@ -1003,8 +948,7 @@ class __$$FlutterEvent_EntityCreatedImplCopyWithImpl<$Res>
     extends _$FlutterEventCopyWithImpl<$Res, _$FlutterEvent_EntityCreatedImpl>
     implements _$$FlutterEvent_EntityCreatedImplCopyWith<$Res> {
   __$$FlutterEvent_EntityCreatedImplCopyWithImpl(
-      _$FlutterEvent_EntityCreatedImpl _value,
-      $Res Function(_$FlutterEvent_EntityCreatedImpl) _then)
+      _$FlutterEvent_EntityCreatedImpl _value, $Res Function(_$FlutterEvent_EntityCreatedImpl) _then)
       : super(_value, _then);
 
   /// Create a copy of FlutterEvent
@@ -1041,8 +985,7 @@ class _$FlutterEvent_EntityCreatedImpl extends FlutterEvent_EntityCreated {
     return identical(this, other) ||
         (other.runtimeType == runtimeType &&
             other is _$FlutterEvent_EntityCreatedImpl &&
-            (identical(other.entityId, entityId) ||
-                other.entityId == entityId));
+            (identical(other.entityId, entityId) || other.entityId == entityId));
   }
 
   @override
@@ -1053,9 +996,8 @@ class _$FlutterEvent_EntityCreatedImpl extends FlutterEvent_EntityCreated {
   @JsonKey(includeFromJson: false, includeToJson: false)
   @override
   @pragma('vm:prefer-inline')
-  _$$FlutterEvent_EntityCreatedImplCopyWith<_$FlutterEvent_EntityCreatedImpl>
-      get copyWith => __$$FlutterEvent_EntityCreatedImplCopyWithImpl<
-          _$FlutterEvent_EntityCreatedImpl>(this, _$identity);
+  _$$FlutterEvent_EntityCreatedImplCopyWith<_$FlutterEvent_EntityCreatedImpl> get copyWith =>
+      __$$FlutterEvent_EntityCreatedImplCopyWithImpl<_$FlutterEvent_EntityCreatedImpl>(this, _$identity);
 
   @override
   @optionalTypeArgs
@@ -1067,8 +1009,7 @@ class _$FlutterEvent_EntityCreatedImpl extends FlutterEvent_EntityCreated {
     required TResult Function(String entityId) entityCreated,
     required TResult Function(String entityId) entityUpdated,
     required TResult Function(String messageId, String entityId) messageSent,
-    required TResult Function(String messageId, String entityId)
-        messageReceived,
+    required TResult Function(String messageId, String entityId) messageReceived,
     required TResult Function(String inviteId) inviteCreated,
     required TResult Function(String inviteId) inviteAccepted,
     required TResult Function(String entityId, String path) fileWritten,
@@ -1125,18 +1066,14 @@ class _$FlutterEvent_EntityCreatedImpl extends FlutterEvent_EntityCreated {
   @override
   @optionalTypeArgs
   TResult map<TResult extends Object?>({
-    required TResult Function(FlutterEvent_NetworkingStarted value)
-        networkingStarted,
-    required TResult Function(FlutterEvent_NetworkingStopped value)
-        networkingStopped,
+    required TResult Function(FlutterEvent_NetworkingStarted value) networkingStarted,
+    required TResult Function(FlutterEvent_NetworkingStopped value) networkingStopped,
     required TResult Function(FlutterEvent_PeerConnected value) peerConnected,
-    required TResult Function(FlutterEvent_PeerDisconnected value)
-        peerDisconnected,
+    required TResult Function(FlutterEvent_PeerDisconnected value) peerDisconnected,
     required TResult Function(FlutterEvent_EntityCreated value) entityCreated,
     required TResult Function(FlutterEvent_EntityUpdated value) entityUpdated,
     required TResult Function(FlutterEvent_MessageSent value) messageSent,
-    required TResult Function(FlutterEvent_MessageReceived value)
-        messageReceived,
+    required TResult Function(FlutterEvent_MessageReceived value) messageReceived,
     required TResult Function(FlutterEvent_InviteCreated value) inviteCreated,
     required TResult Function(FlutterEvent_InviteAccepted value) inviteAccepted,
     required TResult Function(FlutterEvent_FileWritten value) fileWritten,
@@ -1192,8 +1129,7 @@ class _$FlutterEvent_EntityCreatedImpl extends FlutterEvent_EntityCreated {
 }
 
 abstract class FlutterEvent_EntityCreated extends FlutterEvent {
-  const factory FlutterEvent_EntityCreated({required final String entityId}) =
-      _$FlutterEvent_EntityCreatedImpl;
+  const factory FlutterEvent_EntityCreated({required final String entityId}) = _$FlutterEvent_EntityCreatedImpl;
   const FlutterEvent_EntityCreated._() : super._();
 
   String get entityId;
@@ -1201,15 +1137,14 @@ abstract class FlutterEvent_EntityCreated extends FlutterEvent {
   /// Create a copy of FlutterEvent
   /// with the given fields replaced by the non-null parameter values.
   @JsonKey(includeFromJson: false, includeToJson: false)
-  _$$FlutterEvent_EntityCreatedImplCopyWith<_$FlutterEvent_EntityCreatedImpl>
-      get copyWith => throw _privateConstructorUsedError;
+  _$$FlutterEvent_EntityCreatedImplCopyWith<_$FlutterEvent_EntityCreatedImpl> get copyWith =>
+      throw _privateConstructorUsedError;
 }
 
 /// @nodoc
 abstract class _$$FlutterEvent_EntityUpdatedImplCopyWith<$Res> {
   factory _$$FlutterEvent_EntityUpdatedImplCopyWith(
-          _$FlutterEvent_EntityUpdatedImpl value,
-          $Res Function(_$FlutterEvent_EntityUpdatedImpl) then) =
+          _$FlutterEvent_EntityUpdatedImpl value, $Res Function(_$FlutterEvent_EntityUpdatedImpl) then) =
       __$$FlutterEvent_EntityUpdatedImplCopyWithImpl<$Res>;
   @useResult
   $Res call({String entityId});
@@ -1220,8 +1155,7 @@ class __$$FlutterEvent_EntityUpdatedImplCopyWithImpl<$Res>
     extends _$FlutterEventCopyWithImpl<$Res, _$FlutterEvent_EntityUpdatedImpl>
     implements _$$FlutterEvent_EntityUpdatedImplCopyWith<$Res> {
   __$$FlutterEvent_EntityUpdatedImplCopyWithImpl(
-      _$FlutterEvent_EntityUpdatedImpl _value,
-      $Res Function(_$FlutterEvent_EntityUpdatedImpl) _then)
+      _$FlutterEvent_EntityUpdatedImpl _value, $Res Function(_$FlutterEvent_EntityUpdatedImpl) _then)
       : super(_value, _then);
 
   /// Create a copy of FlutterEvent
@@ -1258,8 +1192,7 @@ class _$FlutterEvent_EntityUpdatedImpl extends FlutterEvent_EntityUpdated {
     return identical(this, other) ||
         (other.runtimeType == runtimeType &&
             other is _$FlutterEvent_EntityUpdatedImpl &&
-            (identical(other.entityId, entityId) ||
-                other.entityId == entityId));
+            (identical(other.entityId, entityId) || other.entityId == entityId));
   }
 
   @override
@@ -1270,9 +1203,8 @@ class _$FlutterEvent_EntityUpdatedImpl extends FlutterEvent_EntityUpdated {
   @JsonKey(includeFromJson: false, includeToJson: false)
   @override
   @pragma('vm:prefer-inline')
-  _$$FlutterEvent_EntityUpdatedImplCopyWith<_$FlutterEvent_EntityUpdatedImpl>
-      get copyWith => __$$FlutterEvent_EntityUpdatedImplCopyWithImpl<
-          _$FlutterEvent_EntityUpdatedImpl>(this, _$identity);
+  _$$FlutterEvent_EntityUpdatedImplCopyWith<_$FlutterEvent_EntityUpdatedImpl> get copyWith =>
+      __$$FlutterEvent_EntityUpdatedImplCopyWithImpl<_$FlutterEvent_EntityUpdatedImpl>(this, _$identity);
 
   @override
   @optionalTypeArgs
@@ -1284,8 +1216,7 @@ class _$FlutterEvent_EntityUpdatedImpl extends FlutterEvent_EntityUpdated {
     required TResult Function(String entityId) entityCreated,
     required TResult Function(String entityId) entityUpdated,
     required TResult Function(String messageId, String entityId) messageSent,
-    required TResult Function(String messageId, String entityId)
-        messageReceived,
+    required TResult Function(String messageId, String entityId) messageReceived,
     required TResult Function(String inviteId) inviteCreated,
     required TResult Function(String inviteId) inviteAccepted,
     required TResult Function(String entityId, String path) fileWritten,
@@ -1342,18 +1273,14 @@ class _$FlutterEvent_EntityUpdatedImpl extends FlutterEvent_EntityUpdated {
   @override
   @optionalTypeArgs
   TResult map<TResult extends Object?>({
-    required TResult Function(FlutterEvent_NetworkingStarted value)
-        networkingStarted,
-    required TResult Function(FlutterEvent_NetworkingStopped value)
-        networkingStopped,
+    required TResult Function(FlutterEvent_NetworkingStarted value) networkingStarted,
+    required TResult Function(FlutterEvent_NetworkingStopped value) networkingStopped,
     required TResult Function(FlutterEvent_PeerConnected value) peerConnected,
-    required TResult Function(FlutterEvent_PeerDisconnected value)
-        peerDisconnected,
+    required TResult Function(FlutterEvent_PeerDisconnected value) peerDisconnected,
     required TResult Function(FlutterEvent_EntityCreated value) entityCreated,
     required TResult Function(FlutterEvent_EntityUpdated value) entityUpdated,
     required TResult Function(FlutterEvent_MessageSent value) messageSent,
-    required TResult Function(FlutterEvent_MessageReceived value)
-        messageReceived,
+    required TResult Function(FlutterEvent_MessageReceived value) messageReceived,
     required TResult Function(FlutterEvent_InviteCreated value) inviteCreated,
     required TResult Function(FlutterEvent_InviteAccepted value) inviteAccepted,
     required TResult Function(FlutterEvent_FileWritten value) fileWritten,
@@ -1409,8 +1336,7 @@ class _$FlutterEvent_EntityUpdatedImpl extends FlutterEvent_EntityUpdated {
 }
 
 abstract class FlutterEvent_EntityUpdated extends FlutterEvent {
-  const factory FlutterEvent_EntityUpdated({required final String entityId}) =
-      _$FlutterEvent_EntityUpdatedImpl;
+  const factory FlutterEvent_EntityUpdated({required final String entityId}) = _$FlutterEvent_EntityUpdatedImpl;
   const FlutterEvent_EntityUpdated._() : super._();
 
   String get entityId;
@@ -1418,15 +1344,14 @@ abstract class FlutterEvent_EntityUpdated extends FlutterEvent {
   /// Create a copy of FlutterEvent
   /// with the given fields replaced by the non-null parameter values.
   @JsonKey(includeFromJson: false, includeToJson: false)
-  _$$FlutterEvent_EntityUpdatedImplCopyWith<_$FlutterEvent_EntityUpdatedImpl>
-      get copyWith => throw _privateConstructorUsedError;
+  _$$FlutterEvent_EntityUpdatedImplCopyWith<_$FlutterEvent_EntityUpdatedImpl> get copyWith =>
+      throw _privateConstructorUsedError;
 }
 
 /// @nodoc
 abstract class _$$FlutterEvent_MessageSentImplCopyWith<$Res> {
   factory _$$FlutterEvent_MessageSentImplCopyWith(
-          _$FlutterEvent_MessageSentImpl value,
-          $Res Function(_$FlutterEvent_MessageSentImpl) then) =
+          _$FlutterEvent_MessageSentImpl value, $Res Function(_$FlutterEvent_MessageSentImpl) then) =
       __$$FlutterEvent_MessageSentImplCopyWithImpl<$Res>;
   @useResult
   $Res call({String messageId, String entityId});
@@ -1437,8 +1362,7 @@ class __$$FlutterEvent_MessageSentImplCopyWithImpl<$Res>
     extends _$FlutterEventCopyWithImpl<$Res, _$FlutterEvent_MessageSentImpl>
     implements _$$FlutterEvent_MessageSentImplCopyWith<$Res> {
   __$$FlutterEvent_MessageSentImplCopyWithImpl(
-      _$FlutterEvent_MessageSentImpl _value,
-      $Res Function(_$FlutterEvent_MessageSentImpl) _then)
+      _$FlutterEvent_MessageSentImpl _value, $Res Function(_$FlutterEvent_MessageSentImpl) _then)
       : super(_value, _then);
 
   /// Create a copy of FlutterEvent
@@ -1465,9 +1389,7 @@ class __$$FlutterEvent_MessageSentImplCopyWithImpl<$Res>
 /// @nodoc
 
 class _$FlutterEvent_MessageSentImpl extends FlutterEvent_MessageSent {
-  const _$FlutterEvent_MessageSentImpl(
-      {required this.messageId, required this.entityId})
-      : super._();
+  const _$FlutterEvent_MessageSentImpl({required this.messageId, required this.entityId}) : super._();
 
   @override
   final String messageId;
@@ -1484,10 +1406,8 @@ class _$FlutterEvent_MessageSentImpl extends FlutterEvent_MessageSent {
     return identical(this, other) ||
         (other.runtimeType == runtimeType &&
             other is _$FlutterEvent_MessageSentImpl &&
-            (identical(other.messageId, messageId) ||
-                other.messageId == messageId) &&
-            (identical(other.entityId, entityId) ||
-                other.entityId == entityId));
+            (identical(other.messageId, messageId) || other.messageId == messageId) &&
+            (identical(other.entityId, entityId) || other.entityId == entityId));
   }
 
   @override
@@ -1498,9 +1418,8 @@ class _$FlutterEvent_MessageSentImpl extends FlutterEvent_MessageSent {
   @JsonKey(includeFromJson: false, includeToJson: false)
   @override
   @pragma('vm:prefer-inline')
-  _$$FlutterEvent_MessageSentImplCopyWith<_$FlutterEvent_MessageSentImpl>
-      get copyWith => __$$FlutterEvent_MessageSentImplCopyWithImpl<
-          _$FlutterEvent_MessageSentImpl>(this, _$identity);
+  _$$FlutterEvent_MessageSentImplCopyWith<_$FlutterEvent_MessageSentImpl> get copyWith =>
+      __$$FlutterEvent_MessageSentImplCopyWithImpl<_$FlutterEvent_MessageSentImpl>(this, _$identity);
 
   @override
   @optionalTypeArgs
@@ -1512,8 +1431,7 @@ class _$FlutterEvent_MessageSentImpl extends FlutterEvent_MessageSent {
     required TResult Function(String entityId) entityCreated,
     required TResult Function(String entityId) entityUpdated,
     required TResult Function(String messageId, String entityId) messageSent,
-    required TResult Function(String messageId, String entityId)
-        messageReceived,
+    required TResult Function(String messageId, String entityId) messageReceived,
     required TResult Function(String inviteId) inviteCreated,
     required TResult Function(String inviteId) inviteAccepted,
     required TResult Function(String entityId, String path) fileWritten,
@@ -1570,18 +1488,14 @@ class _$FlutterEvent_MessageSentImpl extends FlutterEvent_MessageSent {
   @override
   @optionalTypeArgs
   TResult map<TResult extends Object?>({
-    required TResult Function(FlutterEvent_NetworkingStarted value)
-        networkingStarted,
-    required TResult Function(FlutterEvent_NetworkingStopped value)
-        networkingStopped,
+    required TResult Function(FlutterEvent_NetworkingStarted value) networkingStarted,
+    required TResult Function(FlutterEvent_NetworkingStopped value) networkingStopped,
     required TResult Function(FlutterEvent_PeerConnected value) peerConnected,
-    required TResult Function(FlutterEvent_PeerDisconnected value)
-        peerDisconnected,
+    required TResult Function(FlutterEvent_PeerDisconnected value) peerDisconnected,
     required TResult Function(FlutterEvent_EntityCreated value) entityCreated,
     required TResult Function(FlutterEvent_EntityUpdated value) entityUpdated,
     required TResult Function(FlutterEvent_MessageSent value) messageSent,
-    required TResult Function(FlutterEvent_MessageReceived value)
-        messageReceived,
+    required TResult Function(FlutterEvent_MessageReceived value) messageReceived,
     required TResult Function(FlutterEvent_InviteCreated value) inviteCreated,
     required TResult Function(FlutterEvent_InviteAccepted value) inviteAccepted,
     required TResult Function(FlutterEvent_FileWritten value) fileWritten,
@@ -1637,9 +1551,8 @@ class _$FlutterEvent_MessageSentImpl extends FlutterEvent_MessageSent {
 }
 
 abstract class FlutterEvent_MessageSent extends FlutterEvent {
-  const factory FlutterEvent_MessageSent(
-      {required final String messageId,
-      required final String entityId}) = _$FlutterEvent_MessageSentImpl;
+  const factory FlutterEvent_MessageSent({required final String messageId, required final String entityId}) =
+      _$FlutterEvent_MessageSentImpl;
   const FlutterEvent_MessageSent._() : super._();
 
   String get messageId;
@@ -1648,15 +1561,14 @@ abstract class FlutterEvent_MessageSent extends FlutterEvent {
   /// Create a copy of FlutterEvent
   /// with the given fields replaced by the non-null parameter values.
   @JsonKey(includeFromJson: false, includeToJson: false)
-  _$$FlutterEvent_MessageSentImplCopyWith<_$FlutterEvent_MessageSentImpl>
-      get copyWith => throw _privateConstructorUsedError;
+  _$$FlutterEvent_MessageSentImplCopyWith<_$FlutterEvent_MessageSentImpl> get copyWith =>
+      throw _privateConstructorUsedError;
 }
 
 /// @nodoc
 abstract class _$$FlutterEvent_MessageReceivedImplCopyWith<$Res> {
   factory _$$FlutterEvent_MessageReceivedImplCopyWith(
-          _$FlutterEvent_MessageReceivedImpl value,
-          $Res Function(_$FlutterEvent_MessageReceivedImpl) then) =
+          _$FlutterEvent_MessageReceivedImpl value, $Res Function(_$FlutterEvent_MessageReceivedImpl) then) =
       __$$FlutterEvent_MessageReceivedImplCopyWithImpl<$Res>;
   @useResult
   $Res call({String messageId, String entityId});
@@ -1667,8 +1579,7 @@ class __$$FlutterEvent_MessageReceivedImplCopyWithImpl<$Res>
     extends _$FlutterEventCopyWithImpl<$Res, _$FlutterEvent_MessageReceivedImpl>
     implements _$$FlutterEvent_MessageReceivedImplCopyWith<$Res> {
   __$$FlutterEvent_MessageReceivedImplCopyWithImpl(
-      _$FlutterEvent_MessageReceivedImpl _value,
-      $Res Function(_$FlutterEvent_MessageReceivedImpl) _then)
+      _$FlutterEvent_MessageReceivedImpl _value, $Res Function(_$FlutterEvent_MessageReceivedImpl) _then)
       : super(_value, _then);
 
   /// Create a copy of FlutterEvent
@@ -1695,9 +1606,7 @@ class __$$FlutterEvent_MessageReceivedImplCopyWithImpl<$Res>
 /// @nodoc
 
 class _$FlutterEvent_MessageReceivedImpl extends FlutterEvent_MessageReceived {
-  const _$FlutterEvent_MessageReceivedImpl(
-      {required this.messageId, required this.entityId})
-      : super._();
+  const _$FlutterEvent_MessageReceivedImpl({required this.messageId, required this.entityId}) : super._();
 
   @override
   final String messageId;
@@ -1714,10 +1623,8 @@ class _$FlutterEvent_MessageReceivedImpl extends FlutterEvent_MessageReceived {
     return identical(this, other) ||
         (other.runtimeType == runtimeType &&
             other is _$FlutterEvent_MessageReceivedImpl &&
-            (identical(other.messageId, messageId) ||
-                other.messageId == messageId) &&
-            (identical(other.entityId, entityId) ||
-                other.entityId == entityId));
+            (identical(other.messageId, messageId) || other.messageId == messageId) &&
+            (identical(other.entityId, entityId) || other.entityId == entityId));
   }
 
   @override
@@ -1728,10 +1635,8 @@ class _$FlutterEvent_MessageReceivedImpl extends FlutterEvent_MessageReceived {
   @JsonKey(includeFromJson: false, includeToJson: false)
   @override
   @pragma('vm:prefer-inline')
-  _$$FlutterEvent_MessageReceivedImplCopyWith<
-          _$FlutterEvent_MessageReceivedImpl>
-      get copyWith => __$$FlutterEvent_MessageReceivedImplCopyWithImpl<
-          _$FlutterEvent_MessageReceivedImpl>(this, _$identity);
+  _$$FlutterEvent_MessageReceivedImplCopyWith<_$FlutterEvent_MessageReceivedImpl> get copyWith =>
+      __$$FlutterEvent_MessageReceivedImplCopyWithImpl<_$FlutterEvent_MessageReceivedImpl>(this, _$identity);
 
   @override
   @optionalTypeArgs
@@ -1743,8 +1648,7 @@ class _$FlutterEvent_MessageReceivedImpl extends FlutterEvent_MessageReceived {
     required TResult Function(String entityId) entityCreated,
     required TResult Function(String entityId) entityUpdated,
     required TResult Function(String messageId, String entityId) messageSent,
-    required TResult Function(String messageId, String entityId)
-        messageReceived,
+    required TResult Function(String messageId, String entityId) messageReceived,
     required TResult Function(String inviteId) inviteCreated,
     required TResult Function(String inviteId) inviteAccepted,
     required TResult Function(String entityId, String path) fileWritten,
@@ -1801,18 +1705,14 @@ class _$FlutterEvent_MessageReceivedImpl extends FlutterEvent_MessageReceived {
   @override
   @optionalTypeArgs
   TResult map<TResult extends Object?>({
-    required TResult Function(FlutterEvent_NetworkingStarted value)
-        networkingStarted,
-    required TResult Function(FlutterEvent_NetworkingStopped value)
-        networkingStopped,
+    required TResult Function(FlutterEvent_NetworkingStarted value) networkingStarted,
+    required TResult Function(FlutterEvent_NetworkingStopped value) networkingStopped,
     required TResult Function(FlutterEvent_PeerConnected value) peerConnected,
-    required TResult Function(FlutterEvent_PeerDisconnected value)
-        peerDisconnected,
+    required TResult Function(FlutterEvent_PeerDisconnected value) peerDisconnected,
     required TResult Function(FlutterEvent_EntityCreated value) entityCreated,
     required TResult Function(FlutterEvent_EntityUpdated value) entityUpdated,
     required TResult Function(FlutterEvent_MessageSent value) messageSent,
-    required TResult Function(FlutterEvent_MessageReceived value)
-        messageReceived,
+    required TResult Function(FlutterEvent_MessageReceived value) messageReceived,
     required TResult Function(FlutterEvent_InviteCreated value) inviteCreated,
     required TResult Function(FlutterEvent_InviteAccepted value) inviteAccepted,
     required TResult Function(FlutterEvent_FileWritten value) fileWritten,
@@ -1868,9 +1768,8 @@ class _$FlutterEvent_MessageReceivedImpl extends FlutterEvent_MessageReceived {
 }
 
 abstract class FlutterEvent_MessageReceived extends FlutterEvent {
-  const factory FlutterEvent_MessageReceived(
-      {required final String messageId,
-      required final String entityId}) = _$FlutterEvent_MessageReceivedImpl;
+  const factory FlutterEvent_MessageReceived({required final String messageId, required final String entityId}) =
+      _$FlutterEvent_MessageReceivedImpl;
   const FlutterEvent_MessageReceived._() : super._();
 
   String get messageId;
@@ -1879,16 +1778,14 @@ abstract class FlutterEvent_MessageReceived extends FlutterEvent {
   /// Create a copy of FlutterEvent
   /// with the given fields replaced by the non-null parameter values.
   @JsonKey(includeFromJson: false, includeToJson: false)
-  _$$FlutterEvent_MessageReceivedImplCopyWith<
-          _$FlutterEvent_MessageReceivedImpl>
-      get copyWith => throw _privateConstructorUsedError;
+  _$$FlutterEvent_MessageReceivedImplCopyWith<_$FlutterEvent_MessageReceivedImpl> get copyWith =>
+      throw _privateConstructorUsedError;
 }
 
 /// @nodoc
 abstract class _$$FlutterEvent_InviteCreatedImplCopyWith<$Res> {
   factory _$$FlutterEvent_InviteCreatedImplCopyWith(
-          _$FlutterEvent_InviteCreatedImpl value,
-          $Res Function(_$FlutterEvent_InviteCreatedImpl) then) =
+          _$FlutterEvent_InviteCreatedImpl value, $Res Function(_$FlutterEvent_InviteCreatedImpl) then) =
       __$$FlutterEvent_InviteCreatedImplCopyWithImpl<$Res>;
   @useResult
   $Res call({String inviteId});
@@ -1899,8 +1796,7 @@ class __$$FlutterEvent_InviteCreatedImplCopyWithImpl<$Res>
     extends _$FlutterEventCopyWithImpl<$Res, _$FlutterEvent_InviteCreatedImpl>
     implements _$$FlutterEvent_InviteCreatedImplCopyWith<$Res> {
   __$$FlutterEvent_InviteCreatedImplCopyWithImpl(
-      _$FlutterEvent_InviteCreatedImpl _value,
-      $Res Function(_$FlutterEvent_InviteCreatedImpl) _then)
+      _$FlutterEvent_InviteCreatedImpl _value, $Res Function(_$FlutterEvent_InviteCreatedImpl) _then)
       : super(_value, _then);
 
   /// Create a copy of FlutterEvent
@@ -1937,8 +1833,7 @@ class _$FlutterEvent_InviteCreatedImpl extends FlutterEvent_InviteCreated {
     return identical(this, other) ||
         (other.runtimeType == runtimeType &&
             other is _$FlutterEvent_InviteCreatedImpl &&
-            (identical(other.inviteId, inviteId) ||
-                other.inviteId == inviteId));
+            (identical(other.inviteId, inviteId) || other.inviteId == inviteId));
   }
 
   @override
@@ -1949,9 +1844,8 @@ class _$FlutterEvent_InviteCreatedImpl extends FlutterEvent_InviteCreated {
   @JsonKey(includeFromJson: false, includeToJson: false)
   @override
   @pragma('vm:prefer-inline')
-  _$$FlutterEvent_InviteCreatedImplCopyWith<_$FlutterEvent_InviteCreatedImpl>
-      get copyWith => __$$FlutterEvent_InviteCreatedImplCopyWithImpl<
-          _$FlutterEvent_InviteCreatedImpl>(this, _$identity);
+  _$$FlutterEvent_InviteCreatedImplCopyWith<_$FlutterEvent_InviteCreatedImpl> get copyWith =>
+      __$$FlutterEvent_InviteCreatedImplCopyWithImpl<_$FlutterEvent_InviteCreatedImpl>(this, _$identity);
 
   @override
   @optionalTypeArgs
@@ -1963,8 +1857,7 @@ class _$FlutterEvent_InviteCreatedImpl extends FlutterEvent_InviteCreated {
     required TResult Function(String entityId) entityCreated,
     required TResult Function(String entityId) entityUpdated,
     required TResult Function(String messageId, String entityId) messageSent,
-    required TResult Function(String messageId, String entityId)
-        messageReceived,
+    required TResult Function(String messageId, String entityId) messageReceived,
     required TResult Function(String inviteId) inviteCreated,
     required TResult Function(String inviteId) inviteAccepted,
     required TResult Function(String entityId, String path) fileWritten,
@@ -2021,18 +1914,14 @@ class _$FlutterEvent_InviteCreatedImpl extends FlutterEvent_InviteCreated {
   @override
   @optionalTypeArgs
   TResult map<TResult extends Object?>({
-    required TResult Function(FlutterEvent_NetworkingStarted value)
-        networkingStarted,
-    required TResult Function(FlutterEvent_NetworkingStopped value)
-        networkingStopped,
+    required TResult Function(FlutterEvent_NetworkingStarted value) networkingStarted,
+    required TResult Function(FlutterEvent_NetworkingStopped value) networkingStopped,
     required TResult Function(FlutterEvent_PeerConnected value) peerConnected,
-    required TResult Function(FlutterEvent_PeerDisconnected value)
-        peerDisconnected,
+    required TResult Function(FlutterEvent_PeerDisconnected value) peerDisconnected,
     required TResult Function(FlutterEvent_EntityCreated value) entityCreated,
     required TResult Function(FlutterEvent_EntityUpdated value) entityUpdated,
     required TResult Function(FlutterEvent_MessageSent value) messageSent,
-    required TResult Function(FlutterEvent_MessageReceived value)
-        messageReceived,
+    required TResult Function(FlutterEvent_MessageReceived value) messageReceived,
     required TResult Function(FlutterEvent_InviteCreated value) inviteCreated,
     required TResult Function(FlutterEvent_InviteAccepted value) inviteAccepted,
     required TResult Function(FlutterEvent_FileWritten value) fileWritten,
@@ -2088,8 +1977,7 @@ class _$FlutterEvent_InviteCreatedImpl extends FlutterEvent_InviteCreated {
 }
 
 abstract class FlutterEvent_InviteCreated extends FlutterEvent {
-  const factory FlutterEvent_InviteCreated({required final String inviteId}) =
-      _$FlutterEvent_InviteCreatedImpl;
+  const factory FlutterEvent_InviteCreated({required final String inviteId}) = _$FlutterEvent_InviteCreatedImpl;
   const FlutterEvent_InviteCreated._() : super._();
 
   String get inviteId;
@@ -2097,15 +1985,14 @@ abstract class FlutterEvent_InviteCreated extends FlutterEvent {
   /// Create a copy of FlutterEvent
   /// with the given fields replaced by the non-null parameter values.
   @JsonKey(includeFromJson: false, includeToJson: false)
-  _$$FlutterEvent_InviteCreatedImplCopyWith<_$FlutterEvent_InviteCreatedImpl>
-      get copyWith => throw _privateConstructorUsedError;
+  _$$FlutterEvent_InviteCreatedImplCopyWith<_$FlutterEvent_InviteCreatedImpl> get copyWith =>
+      throw _privateConstructorUsedError;
 }
 
 /// @nodoc
 abstract class _$$FlutterEvent_InviteAcceptedImplCopyWith<$Res> {
   factory _$$FlutterEvent_InviteAcceptedImplCopyWith(
-          _$FlutterEvent_InviteAcceptedImpl value,
-          $Res Function(_$FlutterEvent_InviteAcceptedImpl) then) =
+          _$FlutterEvent_InviteAcceptedImpl value, $Res Function(_$FlutterEvent_InviteAcceptedImpl) then) =
       __$$FlutterEvent_InviteAcceptedImplCopyWithImpl<$Res>;
   @useResult
   $Res call({String inviteId});
@@ -2116,8 +2003,7 @@ class __$$FlutterEvent_InviteAcceptedImplCopyWithImpl<$Res>
     extends _$FlutterEventCopyWithImpl<$Res, _$FlutterEvent_InviteAcceptedImpl>
     implements _$$FlutterEvent_InviteAcceptedImplCopyWith<$Res> {
   __$$FlutterEvent_InviteAcceptedImplCopyWithImpl(
-      _$FlutterEvent_InviteAcceptedImpl _value,
-      $Res Function(_$FlutterEvent_InviteAcceptedImpl) _then)
+      _$FlutterEvent_InviteAcceptedImpl _value, $Res Function(_$FlutterEvent_InviteAcceptedImpl) _then)
       : super(_value, _then);
 
   /// Create a copy of FlutterEvent
@@ -2154,8 +2040,7 @@ class _$FlutterEvent_InviteAcceptedImpl extends FlutterEvent_InviteAccepted {
     return identical(this, other) ||
         (other.runtimeType == runtimeType &&
             other is _$FlutterEvent_InviteAcceptedImpl &&
-            (identical(other.inviteId, inviteId) ||
-                other.inviteId == inviteId));
+            (identical(other.inviteId, inviteId) || other.inviteId == inviteId));
   }
 
   @override
@@ -2166,9 +2051,8 @@ class _$FlutterEvent_InviteAcceptedImpl extends FlutterEvent_InviteAccepted {
   @JsonKey(includeFromJson: false, includeToJson: false)
   @override
   @pragma('vm:prefer-inline')
-  _$$FlutterEvent_InviteAcceptedImplCopyWith<_$FlutterEvent_InviteAcceptedImpl>
-      get copyWith => __$$FlutterEvent_InviteAcceptedImplCopyWithImpl<
-          _$FlutterEvent_InviteAcceptedImpl>(this, _$identity);
+  _$$FlutterEvent_InviteAcceptedImplCopyWith<_$FlutterEvent_InviteAcceptedImpl> get copyWith =>
+      __$$FlutterEvent_InviteAcceptedImplCopyWithImpl<_$FlutterEvent_InviteAcceptedImpl>(this, _$identity);
 
   @override
   @optionalTypeArgs
@@ -2180,8 +2064,7 @@ class _$FlutterEvent_InviteAcceptedImpl extends FlutterEvent_InviteAccepted {
     required TResult Function(String entityId) entityCreated,
     required TResult Function(String entityId) entityUpdated,
     required TResult Function(String messageId, String entityId) messageSent,
-    required TResult Function(String messageId, String entityId)
-        messageReceived,
+    required TResult Function(String messageId, String entityId) messageReceived,
     required TResult Function(String inviteId) inviteCreated,
     required TResult Function(String inviteId) inviteAccepted,
     required TResult Function(String entityId, String path) fileWritten,
@@ -2238,18 +2121,14 @@ class _$FlutterEvent_InviteAcceptedImpl extends FlutterEvent_InviteAccepted {
   @override
   @optionalTypeArgs
   TResult map<TResult extends Object?>({
-    required TResult Function(FlutterEvent_NetworkingStarted value)
-        networkingStarted,
-    required TResult Function(FlutterEvent_NetworkingStopped value)
-        networkingStopped,
+    required TResult Function(FlutterEvent_NetworkingStarted value) networkingStarted,
+    required TResult Function(FlutterEvent_NetworkingStopped value) networkingStopped,
     required TResult Function(FlutterEvent_PeerConnected value) peerConnected,
-    required TResult Function(FlutterEvent_PeerDisconnected value)
-        peerDisconnected,
+    required TResult Function(FlutterEvent_PeerDisconnected value) peerDisconnected,
     required TResult Function(FlutterEvent_EntityCreated value) entityCreated,
     required TResult Function(FlutterEvent_EntityUpdated value) entityUpdated,
     required TResult Function(FlutterEvent_MessageSent value) messageSent,
-    required TResult Function(FlutterEvent_MessageReceived value)
-        messageReceived,
+    required TResult Function(FlutterEvent_MessageReceived value) messageReceived,
     required TResult Function(FlutterEvent_InviteCreated value) inviteCreated,
     required TResult Function(FlutterEvent_InviteAccepted value) inviteAccepted,
     required TResult Function(FlutterEvent_FileWritten value) fileWritten,
@@ -2305,8 +2184,7 @@ class _$FlutterEvent_InviteAcceptedImpl extends FlutterEvent_InviteAccepted {
 }
 
 abstract class FlutterEvent_InviteAccepted extends FlutterEvent {
-  const factory FlutterEvent_InviteAccepted({required final String inviteId}) =
-      _$FlutterEvent_InviteAcceptedImpl;
+  const factory FlutterEvent_InviteAccepted({required final String inviteId}) = _$FlutterEvent_InviteAcceptedImpl;
   const FlutterEvent_InviteAccepted._() : super._();
 
   String get inviteId;
@@ -2314,15 +2192,14 @@ abstract class FlutterEvent_InviteAccepted extends FlutterEvent {
   /// Create a copy of FlutterEvent
   /// with the given fields replaced by the non-null parameter values.
   @JsonKey(includeFromJson: false, includeToJson: false)
-  _$$FlutterEvent_InviteAcceptedImplCopyWith<_$FlutterEvent_InviteAcceptedImpl>
-      get copyWith => throw _privateConstructorUsedError;
+  _$$FlutterEvent_InviteAcceptedImplCopyWith<_$FlutterEvent_InviteAcceptedImpl> get copyWith =>
+      throw _privateConstructorUsedError;
 }
 
 /// @nodoc
 abstract class _$$FlutterEvent_FileWrittenImplCopyWith<$Res> {
   factory _$$FlutterEvent_FileWrittenImplCopyWith(
-          _$FlutterEvent_FileWrittenImpl value,
-          $Res Function(_$FlutterEvent_FileWrittenImpl) then) =
+          _$FlutterEvent_FileWrittenImpl value, $Res Function(_$FlutterEvent_FileWrittenImpl) then) =
       __$$FlutterEvent_FileWrittenImplCopyWithImpl<$Res>;
   @useResult
   $Res call({String entityId, String path});
@@ -2333,8 +2210,7 @@ class __$$FlutterEvent_FileWrittenImplCopyWithImpl<$Res>
     extends _$FlutterEventCopyWithImpl<$Res, _$FlutterEvent_FileWrittenImpl>
     implements _$$FlutterEvent_FileWrittenImplCopyWith<$Res> {
   __$$FlutterEvent_FileWrittenImplCopyWithImpl(
-      _$FlutterEvent_FileWrittenImpl _value,
-      $Res Function(_$FlutterEvent_FileWrittenImpl) _then)
+      _$FlutterEvent_FileWrittenImpl _value, $Res Function(_$FlutterEvent_FileWrittenImpl) _then)
       : super(_value, _then);
 
   /// Create a copy of FlutterEvent
@@ -2361,9 +2237,7 @@ class __$$FlutterEvent_FileWrittenImplCopyWithImpl<$Res>
 /// @nodoc
 
 class _$FlutterEvent_FileWrittenImpl extends FlutterEvent_FileWritten {
-  const _$FlutterEvent_FileWrittenImpl(
-      {required this.entityId, required this.path})
-      : super._();
+  const _$FlutterEvent_FileWrittenImpl({required this.entityId, required this.path}) : super._();
 
   @override
   final String entityId;
@@ -2380,8 +2254,7 @@ class _$FlutterEvent_FileWrittenImpl extends FlutterEvent_FileWritten {
     return identical(this, other) ||
         (other.runtimeType == runtimeType &&
             other is _$FlutterEvent_FileWrittenImpl &&
-            (identical(other.entityId, entityId) ||
-                other.entityId == entityId) &&
+            (identical(other.entityId, entityId) || other.entityId == entityId) &&
             (identical(other.path, path) || other.path == path));
   }
 
@@ -2393,9 +2266,8 @@ class _$FlutterEvent_FileWrittenImpl extends FlutterEvent_FileWritten {
   @JsonKey(includeFromJson: false, includeToJson: false)
   @override
   @pragma('vm:prefer-inline')
-  _$$FlutterEvent_FileWrittenImplCopyWith<_$FlutterEvent_FileWrittenImpl>
-      get copyWith => __$$FlutterEvent_FileWrittenImplCopyWithImpl<
-          _$FlutterEvent_FileWrittenImpl>(this, _$identity);
+  _$$FlutterEvent_FileWrittenImplCopyWith<_$FlutterEvent_FileWrittenImpl> get copyWith =>
+      __$$FlutterEvent_FileWrittenImplCopyWithImpl<_$FlutterEvent_FileWrittenImpl>(this, _$identity);
 
   @override
   @optionalTypeArgs
@@ -2407,8 +2279,7 @@ class _$FlutterEvent_FileWrittenImpl extends FlutterEvent_FileWritten {
     required TResult Function(String entityId) entityCreated,
     required TResult Function(String entityId) entityUpdated,
     required TResult Function(String messageId, String entityId) messageSent,
-    required TResult Function(String messageId, String entityId)
-        messageReceived,
+    required TResult Function(String messageId, String entityId) messageReceived,
     required TResult Function(String inviteId) inviteCreated,
     required TResult Function(String inviteId) inviteAccepted,
     required TResult Function(String entityId, String path) fileWritten,
@@ -2465,18 +2336,14 @@ class _$FlutterEvent_FileWrittenImpl extends FlutterEvent_FileWritten {
   @override
   @optionalTypeArgs
   TResult map<TResult extends Object?>({
-    required TResult Function(FlutterEvent_NetworkingStarted value)
-        networkingStarted,
-    required TResult Function(FlutterEvent_NetworkingStopped value)
-        networkingStopped,
+    required TResult Function(FlutterEvent_NetworkingStarted value) networkingStarted,
+    required TResult Function(FlutterEvent_NetworkingStopped value) networkingStopped,
     required TResult Function(FlutterEvent_PeerConnected value) peerConnected,
-    required TResult Function(FlutterEvent_PeerDisconnected value)
-        peerDisconnected,
+    required TResult Function(FlutterEvent_PeerDisconnected value) peerDisconnected,
     required TResult Function(FlutterEvent_EntityCreated value) entityCreated,
     required TResult Function(FlutterEvent_EntityUpdated value) entityUpdated,
     required TResult Function(FlutterEvent_MessageSent value) messageSent,
-    required TResult Function(FlutterEvent_MessageReceived value)
-        messageReceived,
+    required TResult Function(FlutterEvent_MessageReceived value) messageReceived,
     required TResult Function(FlutterEvent_InviteCreated value) inviteCreated,
     required TResult Function(FlutterEvent_InviteAccepted value) inviteAccepted,
     required TResult Function(FlutterEvent_FileWritten value) fileWritten,
@@ -2532,9 +2399,8 @@ class _$FlutterEvent_FileWrittenImpl extends FlutterEvent_FileWritten {
 }
 
 abstract class FlutterEvent_FileWritten extends FlutterEvent {
-  const factory FlutterEvent_FileWritten(
-      {required final String entityId,
-      required final String path}) = _$FlutterEvent_FileWrittenImpl;
+  const factory FlutterEvent_FileWritten({required final String entityId, required final String path}) =
+      _$FlutterEvent_FileWrittenImpl;
   const FlutterEvent_FileWritten._() : super._();
 
   String get entityId;
@@ -2543,15 +2409,14 @@ abstract class FlutterEvent_FileWritten extends FlutterEvent {
   /// Create a copy of FlutterEvent
   /// with the given fields replaced by the non-null parameter values.
   @JsonKey(includeFromJson: false, includeToJson: false)
-  _$$FlutterEvent_FileWrittenImplCopyWith<_$FlutterEvent_FileWrittenImpl>
-      get copyWith => throw _privateConstructorUsedError;
+  _$$FlutterEvent_FileWrittenImplCopyWith<_$FlutterEvent_FileWrittenImpl> get copyWith =>
+      throw _privateConstructorUsedError;
 }
 
 /// @nodoc
 abstract class _$$FlutterEvent_FileDeletedImplCopyWith<$Res> {
   factory _$$FlutterEvent_FileDeletedImplCopyWith(
-          _$FlutterEvent_FileDeletedImpl value,
-          $Res Function(_$FlutterEvent_FileDeletedImpl) then) =
+          _$FlutterEvent_FileDeletedImpl value, $Res Function(_$FlutterEvent_FileDeletedImpl) then) =
       __$$FlutterEvent_FileDeletedImplCopyWithImpl<$Res>;
   @useResult
   $Res call({String entityId, String path});
@@ -2562,8 +2427,7 @@ class __$$FlutterEvent_FileDeletedImplCopyWithImpl<$Res>
     extends _$FlutterEventCopyWithImpl<$Res, _$FlutterEvent_FileDeletedImpl>
     implements _$$FlutterEvent_FileDeletedImplCopyWith<$Res> {
   __$$FlutterEvent_FileDeletedImplCopyWithImpl(
-      _$FlutterEvent_FileDeletedImpl _value,
-      $Res Function(_$FlutterEvent_FileDeletedImpl) _then)
+      _$FlutterEvent_FileDeletedImpl _value, $Res Function(_$FlutterEvent_FileDeletedImpl) _then)
       : super(_value, _then);
 
   /// Create a copy of FlutterEvent
@@ -2590,9 +2454,7 @@ class __$$FlutterEvent_FileDeletedImplCopyWithImpl<$Res>
 /// @nodoc
 
 class _$FlutterEvent_FileDeletedImpl extends FlutterEvent_FileDeleted {
-  const _$FlutterEvent_FileDeletedImpl(
-      {required this.entityId, required this.path})
-      : super._();
+  const _$FlutterEvent_FileDeletedImpl({required this.entityId, required this.path}) : super._();
 
   @override
   final String entityId;
@@ -2609,8 +2471,7 @@ class _$FlutterEvent_FileDeletedImpl extends FlutterEvent_FileDeleted {
     return identical(this, other) ||
         (other.runtimeType == runtimeType &&
             other is _$FlutterEvent_FileDeletedImpl &&
-            (identical(other.entityId, entityId) ||
-                other.entityId == entityId) &&
+            (identical(other.entityId, entityId) || other.entityId == entityId) &&
             (identical(other.path, path) || other.path == path));
   }
 
@@ -2622,9 +2483,8 @@ class _$FlutterEvent_FileDeletedImpl extends FlutterEvent_FileDeleted {
   @JsonKey(includeFromJson: false, includeToJson: false)
   @override
   @pragma('vm:prefer-inline')
-  _$$FlutterEvent_FileDeletedImplCopyWith<_$FlutterEvent_FileDeletedImpl>
-      get copyWith => __$$FlutterEvent_FileDeletedImplCopyWithImpl<
-          _$FlutterEvent_FileDeletedImpl>(this, _$identity);
+  _$$FlutterEvent_FileDeletedImplCopyWith<_$FlutterEvent_FileDeletedImpl> get copyWith =>
+      __$$FlutterEvent_FileDeletedImplCopyWithImpl<_$FlutterEvent_FileDeletedImpl>(this, _$identity);
 
   @override
   @optionalTypeArgs
@@ -2636,8 +2496,7 @@ class _$FlutterEvent_FileDeletedImpl extends FlutterEvent_FileDeleted {
     required TResult Function(String entityId) entityCreated,
     required TResult Function(String entityId) entityUpdated,
     required TResult Function(String messageId, String entityId) messageSent,
-    required TResult Function(String messageId, String entityId)
-        messageReceived,
+    required TResult Function(String messageId, String entityId) messageReceived,
     required TResult Function(String inviteId) inviteCreated,
     required TResult Function(String inviteId) inviteAccepted,
     required TResult Function(String entityId, String path) fileWritten,
@@ -2694,18 +2553,14 @@ class _$FlutterEvent_FileDeletedImpl extends FlutterEvent_FileDeleted {
   @override
   @optionalTypeArgs
   TResult map<TResult extends Object?>({
-    required TResult Function(FlutterEvent_NetworkingStarted value)
-        networkingStarted,
-    required TResult Function(FlutterEvent_NetworkingStopped value)
-        networkingStopped,
+    required TResult Function(FlutterEvent_NetworkingStarted value) networkingStarted,
+    required TResult Function(FlutterEvent_NetworkingStopped value) networkingStopped,
     required TResult Function(FlutterEvent_PeerConnected value) peerConnected,
-    required TResult Function(FlutterEvent_PeerDisconnected value)
-        peerDisconnected,
+    required TResult Function(FlutterEvent_PeerDisconnected value) peerDisconnected,
     required TResult Function(FlutterEvent_EntityCreated value) entityCreated,
     required TResult Function(FlutterEvent_EntityUpdated value) entityUpdated,
     required TResult Function(FlutterEvent_MessageSent value) messageSent,
-    required TResult Function(FlutterEvent_MessageReceived value)
-        messageReceived,
+    required TResult Function(FlutterEvent_MessageReceived value) messageReceived,
     required TResult Function(FlutterEvent_InviteCreated value) inviteCreated,
     required TResult Function(FlutterEvent_InviteAccepted value) inviteAccepted,
     required TResult Function(FlutterEvent_FileWritten value) fileWritten,
@@ -2761,9 +2616,8 @@ class _$FlutterEvent_FileDeletedImpl extends FlutterEvent_FileDeleted {
 }
 
 abstract class FlutterEvent_FileDeleted extends FlutterEvent {
-  const factory FlutterEvent_FileDeleted(
-      {required final String entityId,
-      required final String path}) = _$FlutterEvent_FileDeletedImpl;
+  const factory FlutterEvent_FileDeleted({required final String entityId, required final String path}) =
+      _$FlutterEvent_FileDeletedImpl;
   const FlutterEvent_FileDeleted._() : super._();
 
   String get entityId;
@@ -2772,25 +2626,23 @@ abstract class FlutterEvent_FileDeleted extends FlutterEvent {
   /// Create a copy of FlutterEvent
   /// with the given fields replaced by the non-null parameter values.
   @JsonKey(includeFromJson: false, includeToJson: false)
-  _$$FlutterEvent_FileDeletedImplCopyWith<_$FlutterEvent_FileDeletedImpl>
-      get copyWith => throw _privateConstructorUsedError;
+  _$$FlutterEvent_FileDeletedImplCopyWith<_$FlutterEvent_FileDeletedImpl> get copyWith =>
+      throw _privateConstructorUsedError;
 }
 
 /// @nodoc
 abstract class _$$FlutterEvent_ErrorImplCopyWith<$Res> {
-  factory _$$FlutterEvent_ErrorImplCopyWith(_$FlutterEvent_ErrorImpl value,
-          $Res Function(_$FlutterEvent_ErrorImpl) then) =
+  factory _$$FlutterEvent_ErrorImplCopyWith(
+          _$FlutterEvent_ErrorImpl value, $Res Function(_$FlutterEvent_ErrorImpl) then) =
       __$$FlutterEvent_ErrorImplCopyWithImpl<$Res>;
   @useResult
   $Res call({String code, String message});
 }
 
 /// @nodoc
-class __$$FlutterEvent_ErrorImplCopyWithImpl<$Res>
-    extends _$FlutterEventCopyWithImpl<$Res, _$FlutterEvent_ErrorImpl>
+class __$$FlutterEvent_ErrorImplCopyWithImpl<$Res> extends _$FlutterEventCopyWithImpl<$Res, _$FlutterEvent_ErrorImpl>
     implements _$$FlutterEvent_ErrorImplCopyWith<$Res> {
-  __$$FlutterEvent_ErrorImplCopyWithImpl(_$FlutterEvent_ErrorImpl _value,
-      $Res Function(_$FlutterEvent_ErrorImpl) _then)
+  __$$FlutterEvent_ErrorImplCopyWithImpl(_$FlutterEvent_ErrorImpl _value, $Res Function(_$FlutterEvent_ErrorImpl) _then)
       : super(_value, _then);
 
   /// Create a copy of FlutterEvent
@@ -2817,8 +2669,7 @@ class __$$FlutterEvent_ErrorImplCopyWithImpl<$Res>
 /// @nodoc
 
 class _$FlutterEvent_ErrorImpl extends FlutterEvent_Error {
-  const _$FlutterEvent_ErrorImpl({required this.code, required this.message})
-      : super._();
+  const _$FlutterEvent_ErrorImpl({required this.code, required this.message}) : super._();
 
   @override
   final String code;
@@ -2848,8 +2699,7 @@ class _$FlutterEvent_ErrorImpl extends FlutterEvent_Error {
   @override
   @pragma('vm:prefer-inline')
   _$$FlutterEvent_ErrorImplCopyWith<_$FlutterEvent_ErrorImpl> get copyWith =>
-      __$$FlutterEvent_ErrorImplCopyWithImpl<_$FlutterEvent_ErrorImpl>(
-          this, _$identity);
+      __$$FlutterEvent_ErrorImplCopyWithImpl<_$FlutterEvent_ErrorImpl>(this, _$identity);
 
   @override
   @optionalTypeArgs
@@ -2861,8 +2711,7 @@ class _$FlutterEvent_ErrorImpl extends FlutterEvent_Error {
     required TResult Function(String entityId) entityCreated,
     required TResult Function(String entityId) entityUpdated,
     required TResult Function(String messageId, String entityId) messageSent,
-    required TResult Function(String messageId, String entityId)
-        messageReceived,
+    required TResult Function(String messageId, String entityId) messageReceived,
     required TResult Function(String inviteId) inviteCreated,
     required TResult Function(String inviteId) inviteAccepted,
     required TResult Function(String entityId, String path) fileWritten,
@@ -2919,18 +2768,14 @@ class _$FlutterEvent_ErrorImpl extends FlutterEvent_Error {
   @override
   @optionalTypeArgs
   TResult map<TResult extends Object?>({
-    required TResult Function(FlutterEvent_NetworkingStarted value)
-        networkingStarted,
-    required TResult Function(FlutterEvent_NetworkingStopped value)
-        networkingStopped,
+    required TResult Function(FlutterEvent_NetworkingStarted value) networkingStarted,
+    required TResult Function(FlutterEvent_NetworkingStopped value) networkingStopped,
     required TResult Function(FlutterEvent_PeerConnected value) peerConnected,
-    required TResult Function(FlutterEvent_PeerDisconnected value)
-        peerDisconnected,
+    required TResult Function(FlutterEvent_PeerDisconnected value) peerDisconnected,
     required TResult Function(FlutterEvent_EntityCreated value) entityCreated,
     required TResult Function(FlutterEvent_EntityUpdated value) entityUpdated,
     required TResult Function(FlutterEvent_MessageSent value) messageSent,
-    required TResult Function(FlutterEvent_MessageReceived value)
-        messageReceived,
+    required TResult Function(FlutterEvent_MessageReceived value) messageReceived,
     required TResult Function(FlutterEvent_InviteCreated value) inviteCreated,
     required TResult Function(FlutterEvent_InviteAccepted value) inviteAccepted,
     required TResult Function(FlutterEvent_FileWritten value) fileWritten,
@@ -2986,9 +2831,8 @@ class _$FlutterEvent_ErrorImpl extends FlutterEvent_Error {
 }
 
 abstract class FlutterEvent_Error extends FlutterEvent {
-  const factory FlutterEvent_Error(
-      {required final String code,
-      required final String message}) = _$FlutterEvent_ErrorImpl;
+  const factory FlutterEvent_Error({required final String code, required final String message}) =
+      _$FlutterEvent_ErrorImpl;
   const FlutterEvent_Error._() : super._();
 
   String get code;
@@ -2997,6 +2841,5 @@ abstract class FlutterEvent_Error extends FlutterEvent {
   /// Create a copy of FlutterEvent
   /// with the given fields replaced by the non-null parameter values.
   @JsonKey(includeFromJson: false, includeToJson: false)
-  _$$FlutterEvent_ErrorImplCopyWith<_$FlutterEvent_ErrorImpl> get copyWith =>
-      throw _privateConstructorUsedError;
+  _$$FlutterEvent_ErrorImplCopyWith<_$FlutterEvent_ErrorImpl> get copyWith => throw _privateConstructorUsedError;
 }

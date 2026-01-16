@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../services/bridge_provider.dart';
+import '../../../bindings/api_exports.dart';
 import '../../../services/ffi_provider.dart';
 import '../../../services/unified_data_provider.dart';
 
@@ -17,19 +17,35 @@ import '../../../services/unified_data_provider.dart';
 /// Uses HTTP API to get connection words from Rust backend.
 /// Falls back to null if the API is unavailable.
 final connectionWordsProvider = FutureProvider<String?>((ref) async {
-  final client = ref.watch(bridgeClientProvider);
-  return client.getConnectionWords();
+  final api = ref.watch(communitasApiProvider);
+  if (api == null) return null;
+  try {
+    return await api.gossipGetConnectionWords();
+  } catch (e) {
+    return null;
+  }
 });
 
 /// Our current presence record (ADR-014).
 ///
 /// Contains connection_words, timestamp, and signature.
 ///
-/// TODO: Add presence record API to Rust FFI.
 final ourPresenceRecordProvider =
     FutureProvider<Map<String, dynamic>?>((ref) async {
-  // TODO: When FFI exposes presence record, implement here
-  return null;
+  final api = ref.watch(communitasApiProvider);
+  if (api == null) return null;
+  try {
+    final record = await api.presenceGetOurRecord();
+    if (record == null) return null;
+    return {
+      'pubkey_hex': record.pubkeyHex,
+      'connection_words': record.connectionWords,
+      'timestamp': record.timestamp,
+      'is_verified': record.isVerified,
+    };
+  } catch (e) {
+    return null;
+  }
 });
 
 /// Presence information model.
@@ -97,11 +113,24 @@ class PeerPresenceRecord {
 
 /// Query peer presence by pubkey.
 ///
-/// TODO: Add peer presence query to Rust FFI.
 final peerPresenceProvider =
     FutureProvider.family<PeerPresenceRecord?, String>((ref, pubkeyHex) async {
-  // TODO: When FFI exposes peer presence query, implement here
-  return null;
+  final api = ref.watch(communitasApiProvider);
+  if (api == null) return null;
+  try {
+    final record = await api.presenceQueryPeer(pubkeyHex: pubkeyHex);
+    if (record == null) return null;
+    return PeerPresenceRecord(
+      pubkeyHex: record.pubkeyHex,
+      connectionWords: record.connectionWords,
+      timestamp: DateTime.fromMillisecondsSinceEpoch(
+        record.timestamp.toInt() * 1000,
+      ),
+      isVerified: record.isVerified,
+    );
+  } catch (e) {
+    return null;
+  }
 });
 
 // ============================================================
@@ -115,13 +144,17 @@ class PresenceController extends StateNotifier<AsyncValue<void>> {
   PresenceController(this._ref) : super(const AsyncValue.data(null));
 
   /// Announce our presence to the network.
-  ///
-  /// TODO: Add presence announcement to Rust FFI.
   Future<bool> announcePresence() async {
     state = const AsyncValue.loading();
     try {
-      // TODO: When FFI exposes presence announcement, implement here
-      // For now, just refresh network info
+      final api = _ref.read(communitasApiProvider);
+      if (api == null) {
+        state = AsyncValue.error('Not authenticated', StackTrace.current);
+        return false;
+      }
+
+      await api.presenceAnnounce();
+      _ref.invalidate(ourPresenceRecordProvider);
       _ref.invalidate(ffiNetworkInfoProvider);
       state = const AsyncValue.data(null);
       return true;
@@ -195,12 +228,35 @@ class PeerInfo {
 
 /// Provider for connected peers with full info.
 ///
-/// TODO: Add peer list API to Rust FFI.
-/// Currently returns empty list; use ffiPeerCountProvider for count.
 final connectedPeersProvider = FutureProvider<List<PeerInfo>>((ref) async {
-  // TODO: When FFI exposes peer list, implement here
-  // For now, we can only get peer count from network info
-  return [];
+  final api = ref.watch(communitasApiProvider);
+  if (api == null) return [];
+
+  try {
+    final peers = await api.presenceListOnlinePeers();
+    if (peers.isEmpty) return [];
+
+    final contacts = await ref.watch(unifiedContactsProvider.future);
+    return peers.map((pubkeyHex) {
+      UnifiedContact? contact;
+      for (final candidate in contacts) {
+        if (candidate.pubkeyHex == pubkeyHex) {
+          contact = candidate;
+          break;
+        }
+      }
+
+      return PeerInfo(
+        pubkeyHex: pubkeyHex,
+        displayName: contact?.displayName,
+        connectionType: 'gossip',
+        latency: null,
+        isOnline: true,
+      );
+    }).toList();
+  } catch (e) {
+    return [];
+  }
 });
 
 // ============================================================
@@ -237,6 +293,6 @@ final networkStatusProvider = FutureProvider<NetworkStatus>((ref) async {
     bootstrapNodesConnected: networkInfo?.bootstrapConnected == true ? 1 : 0,
     externalAddress: networkInfo?.externalAddress,
     connectionWords: connectionWords,
-    natType: null, // TODO: Add natType to FlutterNetworkInfo
+    natType: null,
   );
 });

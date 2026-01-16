@@ -36,6 +36,8 @@ pub struct CallState {
     pub is_audio_enabled: bool,
     /// Is screen sharing active
     pub is_screen_sharing: bool,
+    /// Call start time
+    pub started_at: std::time::SystemTime,
 }
 
 /// Media device information
@@ -208,6 +210,7 @@ impl CommunitasWebRtcService {
             is_video_enabled: constraints.has_video(),
             is_audio_enabled: constraints.has_audio(),
             is_screen_sharing: false,
+            started_at: std::time::SystemTime::now(),
         };
 
         // Store call state
@@ -274,6 +277,7 @@ impl CommunitasWebRtcService {
                 is_video_enabled: constraints.has_video(),
                 is_audio_enabled: constraints.has_audio(),
                 is_screen_sharing: false,
+                started_at: std::time::SystemTime::now(),
             };
 
             {
@@ -583,6 +587,22 @@ impl CommunitasWebRtcService {
         Ok(Vec::new())
     }
 
+    /// List active calls
+    pub async fn list_active_calls(&self) -> Vec<CallState> {
+        let calls = self.active_calls.read().await;
+        calls.values().cloned().collect()
+    }
+
+    /// Get call participants for an active call
+    pub async fn get_call_participants(&self, call_id: CallId) -> Result<Vec<CommunitasIdentity>> {
+        let calls = self.active_calls.read().await;
+        let call = calls
+            .get(&call_id)
+            .ok_or_else(|| anyhow!("Call not found"))?;
+
+        Ok(vec![self.local_identity.clone(), call.target.clone()])
+    }
+
     /// Subscribe to call events
     ///
     /// # Returns
@@ -601,8 +621,8 @@ impl CommunitasWebRtcService {
 mod tests {
     use super::*;
 
-    // Note: Full integration tests would require setting up a complete gossip context
-    // For now, these are placeholders
+    // Note: Full integration tests require setting up a complete gossip context.
+    // These are unit-level checks only.
 
     #[test]
     fn test_call_id_generation() {

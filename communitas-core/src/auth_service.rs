@@ -1,7 +1,7 @@
 //! Shared Authentication Service
 //!
-//! This module provides a unified authentication service that can be used by all UI frontends
-//! (Tauri Desktop, TUI, Web, etc.). It encapsulates all business logic for:
+//! This module provides a unified authentication service that can be used by all frontends
+//! (Flutter FFI, CLI, MCP, headless, etc.). It encapsulates all business logic for:
 //! - Multi-identity management
 //! - Vault creation and authentication
 //! - Passkey/biometric support
@@ -132,6 +132,20 @@ impl AuthService {
     /// List all available vaults
     pub async fn list_vaults(&self) -> Result<Vec<VaultInfo>> {
         self.storage_manager.list_vaults().await
+    }
+
+    /// Export vault for backup
+    pub async fn export_vault(&self, session_id: &str, include_data: bool) -> Result<Vec<u8>> {
+        self.storage_manager
+            .export_vault(session_id, include_data)
+            .await
+    }
+
+    /// Import vault from backup
+    pub async fn import_vault(&mut self, backup_data: &[u8], password: &str) -> Result<String> {
+        self.storage_manager
+            .import_vault(backup_data, password)
+            .await
     }
 
     /// Get recent identities (sorted by last used, max 10)

@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../core/router.dart';
 
 /// Adaptive layout that shows sidebar on desktop and bottom nav on mobile.
 class AdaptiveLayout extends StatelessWidget {
@@ -44,10 +47,16 @@ class AdaptiveLayout extends StatelessWidget {
   }
 
   Widget _buildBottomNav(BuildContext context) {
+    final location = GoRouter.of(context).location;
+    final selectedIndex = _indexForLocation(location);
+
     return NavigationBar(
-      selectedIndex: 0,
+      selectedIndex: selectedIndex,
       onDestinationSelected: (index) {
-        // TODO: Handle navigation
+        final route = _routeForIndex(index);
+        if (route != null) {
+          context.go(route);
+        }
       },
       destinations: const [
         NavigationDestination(
@@ -76,5 +85,38 @@ class AdaptiveLayout extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  int _indexForLocation(String location) {
+    if (location.startsWith(Routes.messages) || location.startsWith('/entity')) {
+      return 1;
+    }
+    if (location.startsWith(Routes.projects) || location.startsWith('/project')) {
+      return 2;
+    }
+    if (location.startsWith(Routes.contacts) || location.startsWith('/contact')) {
+      return 3;
+    }
+    if (location.startsWith(Routes.more) || location.startsWith(Routes.network)) {
+      return 4;
+    }
+    return 0;
+  }
+
+  String? _routeForIndex(int index) {
+    switch (index) {
+      case 0:
+        return Routes.home;
+      case 1:
+        return Routes.messages;
+      case 2:
+        return Routes.projects;
+      case 3:
+        return Routes.contacts;
+      case 4:
+        return Routes.more;
+      default:
+        return Routes.home;
+    }
   }
 }

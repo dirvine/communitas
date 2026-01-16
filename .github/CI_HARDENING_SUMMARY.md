@@ -38,14 +38,14 @@ Scanning for password/api_key/secret/token patterns
 
 **Components**:
 - **Rust Tests**: Unit, integration, and doc tests across Ubuntu, macOS, Windows
-- **Tauri Commands Testing**: Validates all Tauri commands have test coverage
-- **Frontend Tests**: TypeScript type checking and test execution
-- **Integration Tests**: P2P networking and DHT storage validation
+- **Core Command/FFI Coverage**: Validates core command surface has test coverage
+- **Frontend Tests**: Flutter analyze and test execution
+- **Integration Tests**: P2P networking and gossip validation
 - **Security Validation**: Runtime encryption compliance checks
 
 **Quality Gates**:
 - Minimum 80% code coverage required
-- 100% Tauri command test coverage
+- Command/FFI coverage targets enforced
 - All tests must pass across platforms
 
 ### 3. Dependency Management (`dependency-management.yml`)
@@ -70,7 +70,7 @@ Scanning for password/api_key/secret/token patterns
 
 **Benchmarks**:
 - **Encryption Performance**: Tests across 1KB to 1MB data sizes
-- **P2P Network Performance**: DHT and WebRTC-over-QUIC validation
+- **P2P Network Performance**: Gossip and WebRTC-over-QUIC validation
 - **Build Performance**: Frontend and Rust build time monitoring
 - **Binary Size Analysis**: Release binary and bundle size tracking
 
@@ -169,7 +169,7 @@ Comprehensive security guidelines covering:
 
 ❌ **Quality violations**:
 - Code coverage below 80%
-- Missing tests for Tauri commands
+- Missing tests for core command/FFI surface
 - Compilation failures
 - Failed integration tests
 

@@ -986,6 +986,9 @@ pub enum Query {
     /// List Kanban boards for an entity
     ListKanbanBoards { entity_id: String },
 
+    /// List Kanban columns for a board
+    ListKanbanColumns { board_id: String },
+
     /// Get a Kanban card
     GetKanbanCard { board_id: String, card_id: String },
 
@@ -1115,6 +1118,9 @@ pub enum QueryResponse {
 
     /// List of Kanban boards
     KanbanBoardList(Vec<KanbanBoardResponse>),
+
+    /// List of Kanban columns
+    KanbanColumns(Vec<KanbanColumnResponse>),
 
     /// Kanban card
     KanbanCard(KanbanCardResponse),
@@ -1251,6 +1257,17 @@ pub struct KanbanBoardResponse {
     pub name: String,
     pub description: Option<String>,
     pub column_count: usize,
+}
+
+/// Kanban column response data
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KanbanColumnResponse {
+    pub id: String,
+    pub board_id: String,
+    pub name: String,
+    pub position: u32,
+    pub color: Option<String>,
+    pub wip_limit: Option<u32>,
 }
 
 /// Kanban card response data

@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/colors.dart';
 import '../../../shared/widgets/sidebar.dart';
 import '../../../shared/widgets/adaptive_layout.dart';
-import '../../../demo/demo_data.dart';
+import '../../../services/ffi_provider.dart';
+import '../../../services/unified_data_provider.dart';
 
 /// Direct message chat screen for 1:1 contact conversations.
 class ContactChatScreen extends ConsumerStatefulWidget {
@@ -23,16 +23,6 @@ class ContactChatScreen extends ConsumerStatefulWidget {
 class _ContactChatScreenState extends ConsumerState<ContactChatScreen> {
   final _messageController = TextEditingController();
 
-  DemoContact? get contact {
-    try {
-      return DemoData.contacts.firstWhere(
-        (c) => c.fourWords == widget.fourWords,
-      );
-    } catch (_) {
-      return null;
-    }
-  }
-
   @override
   void dispose() {
     _messageController.dispose();
@@ -41,7 +31,20 @@ class _ContactChatScreenState extends ConsumerState<ContactChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final contactData = contact;
+    final contactsAsync = ref.watch(unifiedContactsProvider);
+    final contactData = contactsAsync.maybeWhen(
+      data: (contacts) {
+        for (final contact in contacts) {
+          if (contact.pubkeyHex == widget.fourWords) {
+            return contact;
+          }
+        }
+        return null;
+      },
+      orElse: () => null,
+    );
+    final messagesAsync =
+        ref.watch(unifiedDirectMessagesProvider(widget.fourWords));
 
     return AdaptiveLayout(
       sidebar: const Sidebar(),
@@ -103,17 +106,13 @@ class _ContactChatScreenState extends ConsumerState<ContactChatScreen> {
           actions: [
             IconButton(
               icon: const Icon(Icons.phone),
-              onPressed: () {
-                context.go('/call/${widget.fourWords}');
-              },
-              tooltip: 'Voice call',
+              onPressed: _showCallsUnavailable,
+              tooltip: 'Voice call (coming soon)',
             ),
             IconButton(
               icon: const Icon(Icons.videocam),
-              onPressed: () {
-                context.go('/call/${widget.fourWords}');
-              },
-              tooltip: 'Video call',
+              onPressed: _showCallsUnavailable,
+              tooltip: 'Video call (coming soon)',
             ),
             IconButton(
               icon: const Icon(Icons.more_vert),
@@ -123,30 +122,43 @@ class _ContactChatScreenState extends ConsumerState<ContactChatScreen> {
         ),
         body: Column(
           children: [
-            // Messages (placeholder)
             Expanded(
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.chat_bubble_outline,
-                      size: 64,
-                      color: CommunitasColors.cream.withOpacity(0.3),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Start a conversation with ${contactData?.displayName ?? "this contact"}',
-                      style: TextStyle(
-                        color: CommunitasColors.cream.withOpacity(0.5),
+              child: messagesAsync.when(
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (e, _) => Center(child: Text('Error loading messages: $e')),
+                data: (messages) {
+                  if (messages.isEmpty) {
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.chat_bubble_outline,
+                            size: 64,
+                            color: CommunitasColors.cream.withOpacity(0.3),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Start a conversation with ${contactData?.displayName ?? "this contact"}',
+                            style: TextStyle(
+                              color: CommunitasColors.cream.withOpacity(0.5),
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                  ],
-                ),
+                    );
+                  }
+
+                  return ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: messages.length,
+                    itemBuilder: (context, index) {
+                      return _buildMessageTile(messages[index]);
+                    },
+                  );
+                },
               ),
             ),
-
-            // Message input
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -173,13 +185,109 @@ class _ContactChatScreenState extends ConsumerState<ContactChatScreen> {
                   IconButton(
                     icon: const Icon(Icons.send),
                     color: CommunitasColors.jade,
-                    onPressed: () {},
+                    onPressed: _sendMessage,
                   ),
                 ],
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildMessageTile(UnifiedMessage message) {
+    final identity = ref.watch(unifiedIdentityProvider);
+    final isMe = message.senderId == identity.pubkeyHex ||
+        message.senderId == identity.fourWords ||
+        message.senderName == identity.displayName;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: isMe ? CommunitasColors.jade : CommunitasColors.fern,
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Center(
+              child: Text(
+                message.senderName[0].toUpperCase(),
+                style: const TextStyle(
+                  color: CommunitasColors.cream,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      message.senderName,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      message.timestamp,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: CommunitasColors.cream.withOpacity(0.5),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(message.content),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _sendMessage() async {
+    final text = _messageController.text.trim();
+    if (text.isEmpty) return;
+
+    _messageController.clear();
+
+    if (!_ensureFfiAvailable()) return;
+
+    final sender = ref.read(ffiMessageControllerProvider.notifier);
+    await sender.sendDirectMessage(
+      recipients: [widget.fourWords],
+      text: text,
+    );
+    ref.invalidate(unifiedDirectMessagesProvider(widget.fourWords));
+  }
+
+  bool _ensureFfiAvailable() {
+    final api = ref.read(communitasApiProvider);
+    if (api == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Messaging is unavailable without the native backend.'),
+        ),
+      );
+      return false;
+    }
+    return true;
+  }
+
+  void _showCallsUnavailable() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Calls are not yet available in the Flutter UI.'),
       ),
     );
   }

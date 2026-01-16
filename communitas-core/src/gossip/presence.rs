@@ -215,11 +215,4 @@ impl PresenceWrapper {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    #[tokio::test]
-    async fn test_presence_ttl() {
-        // Test that presence expires after TTL
-        // This is a placeholder - full implementation requires saorsa-gossip integration
-    }
-}
+// Tests for PresenceWrapper live in integration coverage where gossip context is available.

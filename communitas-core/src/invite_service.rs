@@ -973,7 +973,7 @@ mod tests {
     use super::*;
 
     // Test helper: mock EntityService that tracks members
-    // Note: This is a placeholder - full integration tests will use the real EntityService
+    // Integration tests should exercise the real EntityService.
     #[allow(dead_code)]
     struct MockEntityService {
         members: RwLock<HashMap<String, HashMap<String, String>>>, // entity_key -> member_id -> role

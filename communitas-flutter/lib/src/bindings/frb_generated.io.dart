@@ -10,33 +10,27 @@ import 'flutter_api.dart';
 import 'frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated_io.dart';
 
-abstract class CommunitasRustApiImplPlatform
-    extends BaseApiImpl<CommunitasRustWire> {
-  CommunitasRustApiImplPlatform({
+abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
+  RustLibApiImplPlatform({
     required super.handler,
     required super.wire,
     required super.generalizedFrbRustBinding,
     required super.portManager,
   });
 
-  CrossPlatformFinalizerArg
-      get rust_arc_decrement_strong_count_CommunitasApiPtr => wire
-          ._rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApiPtr;
+  CrossPlatformFinalizerArg get rust_arc_decrement_strong_count_CommunitasApiPtr => wire
+      ._rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApiPtr;
 
   @protected
-  CommunitasApi
-      dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
-          dynamic raw);
+  CommunitasApi dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
+      dynamic raw);
 
   @protected
-  CommunitasApi
-      dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
-          dynamic raw);
+  CommunitasApi dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
+      dynamic raw);
 
   @protected
-  CommunitasApi
-      dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
-          dynamic raw);
+  CommunitasApi dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(dynamic raw);
 
   @protected
   String dco_decode_String(dynamic raw);
@@ -45,10 +39,34 @@ abstract class CommunitasRustApiImplPlatform
   bool dco_decode_bool(dynamic raw);
 
   @protected
+  bool dco_decode_box_autoadd_bool(dynamic raw);
+
+  @protected
+  FlutterPresenceRecord dco_decode_box_autoadd_flutter_presence_record(dynamic raw);
+
+  @protected
   FlutterSessionInfo dco_decode_box_autoadd_flutter_session_info(dynamic raw);
 
   @protected
+  PlatformInt64 dco_decode_box_autoadd_i_64(dynamic raw);
+
+  @protected
   int dco_decode_box_autoadd_u_16(dynamic raw);
+
+  @protected
+  int dco_decode_box_autoadd_u_32(dynamic raw);
+
+  @protected
+  BigInt dco_decode_box_autoadd_u_64(dynamic raw);
+
+  @protected
+  FlutterContact dco_decode_flutter_contact(dynamic raw);
+
+  @protected
+  FlutterDiskStats dco_decode_flutter_disk_stats(dynamic raw);
+
+  @protected
+  FlutterDiskType dco_decode_flutter_disk_type(dynamic raw);
 
   @protected
   FlutterEntity dco_decode_flutter_entity(dynamic raw);
@@ -60,7 +78,34 @@ abstract class CommunitasRustApiImplPlatform
   FlutterEvent dco_decode_flutter_event(dynamic raw);
 
   @protected
+  FlutterFileInfo dco_decode_flutter_file_info(dynamic raw);
+
+  @protected
+  FlutterKanbanBoard dco_decode_flutter_kanban_board(dynamic raw);
+
+  @protected
+  FlutterKanbanCard dco_decode_flutter_kanban_card(dynamic raw);
+
+  @protected
+  FlutterKanbanColumn dco_decode_flutter_kanban_column(dynamic raw);
+
+  @protected
+  FlutterMessage dco_decode_flutter_message(dynamic raw);
+
+  @protected
   FlutterNetworkInfo dco_decode_flutter_network_info(dynamic raw);
+
+  @protected
+  FlutterPresenceRecord dco_decode_flutter_presence_record(dynamic raw);
+
+  @protected
+  FlutterPresenceStatus dco_decode_flutter_presence_status(dynamic raw);
+
+  @protected
+  FlutterReaction dco_decode_flutter_reaction(dynamic raw);
+
+  @protected
+  FlutterRecoveredIdentity dco_decode_flutter_recovered_identity(dynamic raw);
 
   @protected
   FlutterSessionInfo dco_decode_flutter_session_info(dynamic raw);
@@ -78,13 +123,40 @@ abstract class CommunitasRustApiImplPlatform
   PlatformInt64 dco_decode_i_64(dynamic raw);
 
   @protected
+  List<String> dco_decode_list_String(dynamic raw);
+
+  @protected
+  List<FlutterContact> dco_decode_list_flutter_contact(dynamic raw);
+
+  @protected
   List<FlutterEntity> dco_decode_list_flutter_entity(dynamic raw);
 
   @protected
   List<FlutterEvent> dco_decode_list_flutter_event(dynamic raw);
 
   @protected
+  List<FlutterFileInfo> dco_decode_list_flutter_file_info(dynamic raw);
+
+  @protected
+  List<FlutterKanbanBoard> dco_decode_list_flutter_kanban_board(dynamic raw);
+
+  @protected
+  List<FlutterKanbanCard> dco_decode_list_flutter_kanban_card(dynamic raw);
+
+  @protected
+  List<FlutterKanbanColumn> dco_decode_list_flutter_kanban_column(dynamic raw);
+
+  @protected
+  List<FlutterMessage> dco_decode_list_flutter_message(dynamic raw);
+
+  @protected
+  List<FlutterReaction> dco_decode_list_flutter_reaction(dynamic raw);
+
+  @protected
   List<FlutterVaultInfo> dco_decode_list_flutter_vault_info(dynamic raw);
+
+  @protected
+  List<int> dco_decode_list_prim_u_8_loose(dynamic raw);
 
   @protected
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
@@ -93,11 +165,25 @@ abstract class CommunitasRustApiImplPlatform
   String? dco_decode_opt_String(dynamic raw);
 
   @protected
-  FlutterSessionInfo? dco_decode_opt_box_autoadd_flutter_session_info(
-      dynamic raw);
+  bool? dco_decode_opt_box_autoadd_bool(dynamic raw);
+
+  @protected
+  FlutterPresenceRecord? dco_decode_opt_box_autoadd_flutter_presence_record(dynamic raw);
+
+  @protected
+  FlutterSessionInfo? dco_decode_opt_box_autoadd_flutter_session_info(dynamic raw);
+
+  @protected
+  PlatformInt64? dco_decode_opt_box_autoadd_i_64(dynamic raw);
 
   @protected
   int? dco_decode_opt_box_autoadd_u_16(dynamic raw);
+
+  @protected
+  int? dco_decode_opt_box_autoadd_u_32(dynamic raw);
+
+  @protected
+  BigInt? dco_decode_opt_box_autoadd_u_64(dynamic raw);
 
   @protected
   int dco_decode_u_16(dynamic raw);
@@ -118,19 +204,16 @@ abstract class CommunitasRustApiImplPlatform
   BigInt dco_decode_usize(dynamic raw);
 
   @protected
-  CommunitasApi
-      sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
-          SseDeserializer deserializer);
+  CommunitasApi sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
+      SseDeserializer deserializer);
 
   @protected
-  CommunitasApi
-      sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
-          SseDeserializer deserializer);
+  CommunitasApi sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
+      SseDeserializer deserializer);
 
   @protected
-  CommunitasApi
-      sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
-          SseDeserializer deserializer);
+  CommunitasApi sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
+      SseDeserializer deserializer);
 
   @protected
   String sse_decode_String(SseDeserializer deserializer);
@@ -139,33 +222,79 @@ abstract class CommunitasRustApiImplPlatform
   bool sse_decode_bool(SseDeserializer deserializer);
 
   @protected
-  FlutterSessionInfo sse_decode_box_autoadd_flutter_session_info(
-      SseDeserializer deserializer);
+  bool sse_decode_box_autoadd_bool(SseDeserializer deserializer);
+
+  @protected
+  FlutterPresenceRecord sse_decode_box_autoadd_flutter_presence_record(SseDeserializer deserializer);
+
+  @protected
+  FlutterSessionInfo sse_decode_box_autoadd_flutter_session_info(SseDeserializer deserializer);
+
+  @protected
+  PlatformInt64 sse_decode_box_autoadd_i_64(SseDeserializer deserializer);
 
   @protected
   int sse_decode_box_autoadd_u_16(SseDeserializer deserializer);
 
   @protected
+  int sse_decode_box_autoadd_u_32(SseDeserializer deserializer);
+
+  @protected
+  BigInt sse_decode_box_autoadd_u_64(SseDeserializer deserializer);
+
+  @protected
+  FlutterContact sse_decode_flutter_contact(SseDeserializer deserializer);
+
+  @protected
+  FlutterDiskStats sse_decode_flutter_disk_stats(SseDeserializer deserializer);
+
+  @protected
+  FlutterDiskType sse_decode_flutter_disk_type(SseDeserializer deserializer);
+
+  @protected
   FlutterEntity sse_decode_flutter_entity(SseDeserializer deserializer);
 
   @protected
-  FlutterEntityType sse_decode_flutter_entity_type(
-      SseDeserializer deserializer);
+  FlutterEntityType sse_decode_flutter_entity_type(SseDeserializer deserializer);
 
   @protected
   FlutterEvent sse_decode_flutter_event(SseDeserializer deserializer);
 
   @protected
-  FlutterNetworkInfo sse_decode_flutter_network_info(
-      SseDeserializer deserializer);
+  FlutterFileInfo sse_decode_flutter_file_info(SseDeserializer deserializer);
 
   @protected
-  FlutterSessionInfo sse_decode_flutter_session_info(
-      SseDeserializer deserializer);
+  FlutterKanbanBoard sse_decode_flutter_kanban_board(SseDeserializer deserializer);
 
   @protected
-  FlutterUserProfile sse_decode_flutter_user_profile(
-      SseDeserializer deserializer);
+  FlutterKanbanCard sse_decode_flutter_kanban_card(SseDeserializer deserializer);
+
+  @protected
+  FlutterKanbanColumn sse_decode_flutter_kanban_column(SseDeserializer deserializer);
+
+  @protected
+  FlutterMessage sse_decode_flutter_message(SseDeserializer deserializer);
+
+  @protected
+  FlutterNetworkInfo sse_decode_flutter_network_info(SseDeserializer deserializer);
+
+  @protected
+  FlutterPresenceRecord sse_decode_flutter_presence_record(SseDeserializer deserializer);
+
+  @protected
+  FlutterPresenceStatus sse_decode_flutter_presence_status(SseDeserializer deserializer);
+
+  @protected
+  FlutterReaction sse_decode_flutter_reaction(SseDeserializer deserializer);
+
+  @protected
+  FlutterRecoveredIdentity sse_decode_flutter_recovered_identity(SseDeserializer deserializer);
+
+  @protected
+  FlutterSessionInfo sse_decode_flutter_session_info(SseDeserializer deserializer);
+
+  @protected
+  FlutterUserProfile sse_decode_flutter_user_profile(SseDeserializer deserializer);
 
   @protected
   FlutterVaultInfo sse_decode_flutter_vault_info(SseDeserializer deserializer);
@@ -177,16 +306,40 @@ abstract class CommunitasRustApiImplPlatform
   PlatformInt64 sse_decode_i_64(SseDeserializer deserializer);
 
   @protected
-  List<FlutterEntity> sse_decode_list_flutter_entity(
-      SseDeserializer deserializer);
+  List<String> sse_decode_list_String(SseDeserializer deserializer);
 
   @protected
-  List<FlutterEvent> sse_decode_list_flutter_event(
-      SseDeserializer deserializer);
+  List<FlutterContact> sse_decode_list_flutter_contact(SseDeserializer deserializer);
 
   @protected
-  List<FlutterVaultInfo> sse_decode_list_flutter_vault_info(
-      SseDeserializer deserializer);
+  List<FlutterEntity> sse_decode_list_flutter_entity(SseDeserializer deserializer);
+
+  @protected
+  List<FlutterEvent> sse_decode_list_flutter_event(SseDeserializer deserializer);
+
+  @protected
+  List<FlutterFileInfo> sse_decode_list_flutter_file_info(SseDeserializer deserializer);
+
+  @protected
+  List<FlutterKanbanBoard> sse_decode_list_flutter_kanban_board(SseDeserializer deserializer);
+
+  @protected
+  List<FlutterKanbanCard> sse_decode_list_flutter_kanban_card(SseDeserializer deserializer);
+
+  @protected
+  List<FlutterKanbanColumn> sse_decode_list_flutter_kanban_column(SseDeserializer deserializer);
+
+  @protected
+  List<FlutterMessage> sse_decode_list_flutter_message(SseDeserializer deserializer);
+
+  @protected
+  List<FlutterReaction> sse_decode_list_flutter_reaction(SseDeserializer deserializer);
+
+  @protected
+  List<FlutterVaultInfo> sse_decode_list_flutter_vault_info(SseDeserializer deserializer);
+
+  @protected
+  List<int> sse_decode_list_prim_u_8_loose(SseDeserializer deserializer);
 
   @protected
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
@@ -195,11 +348,25 @@ abstract class CommunitasRustApiImplPlatform
   String? sse_decode_opt_String(SseDeserializer deserializer);
 
   @protected
-  FlutterSessionInfo? sse_decode_opt_box_autoadd_flutter_session_info(
-      SseDeserializer deserializer);
+  bool? sse_decode_opt_box_autoadd_bool(SseDeserializer deserializer);
+
+  @protected
+  FlutterPresenceRecord? sse_decode_opt_box_autoadd_flutter_presence_record(SseDeserializer deserializer);
+
+  @protected
+  FlutterSessionInfo? sse_decode_opt_box_autoadd_flutter_session_info(SseDeserializer deserializer);
+
+  @protected
+  PlatformInt64? sse_decode_opt_box_autoadd_i_64(SseDeserializer deserializer);
 
   @protected
   int? sse_decode_opt_box_autoadd_u_16(SseDeserializer deserializer);
+
+  @protected
+  int? sse_decode_opt_box_autoadd_u_32(SseDeserializer deserializer);
+
+  @protected
+  BigInt? sse_decode_opt_box_autoadd_u_64(SseDeserializer deserializer);
 
   @protected
   int sse_decode_u_16(SseDeserializer deserializer);
@@ -220,305 +387,16 @@ abstract class CommunitasRustApiImplPlatform
   BigInt sse_decode_usize(SseDeserializer deserializer);
 
   @protected
-  ffi.Pointer<wire_cst_list_prim_u_8_strict> cst_encode_String(String raw) {
-    // Codec=Cst (C-struct based), see doc to use other codecs
-    return cst_encode_list_prim_u_8_strict(utf8.encoder.convert(raw));
-  }
+  void sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
+      CommunitasApi self, SseSerializer serializer);
 
   @protected
-  ffi.Pointer<wire_cst_flutter_session_info>
-      cst_encode_box_autoadd_flutter_session_info(FlutterSessionInfo raw) {
-    // Codec=Cst (C-struct based), see doc to use other codecs
-    final ptr = wire.cst_new_box_autoadd_flutter_session_info();
-    cst_api_fill_to_wire_flutter_session_info(raw, ptr.ref);
-    return ptr;
-  }
+  void sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
+      CommunitasApi self, SseSerializer serializer);
 
   @protected
-  ffi.Pointer<ffi.Uint16> cst_encode_box_autoadd_u_16(int raw) {
-    // Codec=Cst (C-struct based), see doc to use other codecs
-    return wire.cst_new_box_autoadd_u_16(cst_encode_u_16(raw));
-  }
-
-  @protected
-  int cst_encode_i_64(PlatformInt64 raw) {
-    // Codec=Cst (C-struct based), see doc to use other codecs
-    return raw.toInt();
-  }
-
-  @protected
-  ffi.Pointer<wire_cst_list_flutter_entity> cst_encode_list_flutter_entity(
-      List<FlutterEntity> raw) {
-    // Codec=Cst (C-struct based), see doc to use other codecs
-    final ans = wire.cst_new_list_flutter_entity(raw.length);
-    for (var i = 0; i < raw.length; ++i) {
-      cst_api_fill_to_wire_flutter_entity(raw[i], ans.ref.ptr[i]);
-    }
-    return ans;
-  }
-
-  @protected
-  ffi.Pointer<wire_cst_list_flutter_event> cst_encode_list_flutter_event(
-      List<FlutterEvent> raw) {
-    // Codec=Cst (C-struct based), see doc to use other codecs
-    final ans = wire.cst_new_list_flutter_event(raw.length);
-    for (var i = 0; i < raw.length; ++i) {
-      cst_api_fill_to_wire_flutter_event(raw[i], ans.ref.ptr[i]);
-    }
-    return ans;
-  }
-
-  @protected
-  ffi.Pointer<wire_cst_list_flutter_vault_info>
-      cst_encode_list_flutter_vault_info(List<FlutterVaultInfo> raw) {
-    // Codec=Cst (C-struct based), see doc to use other codecs
-    final ans = wire.cst_new_list_flutter_vault_info(raw.length);
-    for (var i = 0; i < raw.length; ++i) {
-      cst_api_fill_to_wire_flutter_vault_info(raw[i], ans.ref.ptr[i]);
-    }
-    return ans;
-  }
-
-  @protected
-  ffi.Pointer<wire_cst_list_prim_u_8_strict> cst_encode_list_prim_u_8_strict(
-      Uint8List raw) {
-    // Codec=Cst (C-struct based), see doc to use other codecs
-    final ans = wire.cst_new_list_prim_u_8_strict(raw.length);
-    ans.ref.ptr.asTypedList(raw.length).setAll(0, raw);
-    return ans;
-  }
-
-  @protected
-  ffi.Pointer<wire_cst_list_prim_u_8_strict> cst_encode_opt_String(
-      String? raw) {
-    // Codec=Cst (C-struct based), see doc to use other codecs
-    return raw == null ? ffi.nullptr : cst_encode_String(raw);
-  }
-
-  @protected
-  ffi.Pointer<wire_cst_flutter_session_info>
-      cst_encode_opt_box_autoadd_flutter_session_info(FlutterSessionInfo? raw) {
-    // Codec=Cst (C-struct based), see doc to use other codecs
-    return raw == null
-        ? ffi.nullptr
-        : cst_encode_box_autoadd_flutter_session_info(raw);
-  }
-
-  @protected
-  ffi.Pointer<ffi.Uint16> cst_encode_opt_box_autoadd_u_16(int? raw) {
-    // Codec=Cst (C-struct based), see doc to use other codecs
-    return raw == null ? ffi.nullptr : cst_encode_box_autoadd_u_16(raw);
-  }
-
-  @protected
-  int cst_encode_u_64(BigInt raw) {
-    // Codec=Cst (C-struct based), see doc to use other codecs
-    return raw.toSigned(64).toInt();
-  }
-
-  @protected
-  int cst_encode_usize(BigInt raw) {
-    // Codec=Cst (C-struct based), see doc to use other codecs
-    return raw.toSigned(64).toInt();
-  }
-
-  @protected
-  void cst_api_fill_to_wire_box_autoadd_flutter_session_info(
-      FlutterSessionInfo apiObj,
-      ffi.Pointer<wire_cst_flutter_session_info> wireObj) {
-    cst_api_fill_to_wire_flutter_session_info(apiObj, wireObj.ref);
-  }
-
-  @protected
-  void cst_api_fill_to_wire_flutter_entity(
-      FlutterEntity apiObj, wire_cst_flutter_entity wireObj) {
-    wireObj.id = cst_encode_String(apiObj.id);
-    wireObj.name = cst_encode_String(apiObj.name);
-    wireObj.entity_type = cst_encode_flutter_entity_type(apiObj.entityType);
-    wireObj.description = cst_encode_opt_String(apiObj.description);
-    wireObj.created_by = cst_encode_String(apiObj.createdBy);
-    wireObj.created_at = cst_encode_i_64(apiObj.createdAt);
-    wireObj.member_count = cst_encode_usize(apiObj.memberCount);
-    wireObj.parent_org_id = cst_encode_opt_String(apiObj.parentOrgId);
-    wireObj.network_four_words = cst_encode_opt_String(apiObj.networkFourWords);
-    wireObj.is_local_only = cst_encode_bool(apiObj.isLocalOnly);
-  }
-
-  @protected
-  void cst_api_fill_to_wire_flutter_event(
-      FlutterEvent apiObj, wire_cst_flutter_event wireObj) {
-    if (apiObj is FlutterEvent_NetworkingStarted) {
-      var pre_address = cst_encode_String(apiObj.address);
-      wireObj.tag = 0;
-      wireObj.kind.NetworkingStarted.address = pre_address;
-      return;
-    }
-    if (apiObj is FlutterEvent_NetworkingStopped) {
-      wireObj.tag = 1;
-      return;
-    }
-    if (apiObj is FlutterEvent_PeerConnected) {
-      var pre_peer_id = cst_encode_String(apiObj.peerId);
-      wireObj.tag = 2;
-      wireObj.kind.PeerConnected.peer_id = pre_peer_id;
-      return;
-    }
-    if (apiObj is FlutterEvent_PeerDisconnected) {
-      var pre_peer_id = cst_encode_String(apiObj.peerId);
-      wireObj.tag = 3;
-      wireObj.kind.PeerDisconnected.peer_id = pre_peer_id;
-      return;
-    }
-    if (apiObj is FlutterEvent_EntityCreated) {
-      var pre_entity_id = cst_encode_String(apiObj.entityId);
-      wireObj.tag = 4;
-      wireObj.kind.EntityCreated.entity_id = pre_entity_id;
-      return;
-    }
-    if (apiObj is FlutterEvent_EntityUpdated) {
-      var pre_entity_id = cst_encode_String(apiObj.entityId);
-      wireObj.tag = 5;
-      wireObj.kind.EntityUpdated.entity_id = pre_entity_id;
-      return;
-    }
-    if (apiObj is FlutterEvent_MessageSent) {
-      var pre_message_id = cst_encode_String(apiObj.messageId);
-      var pre_entity_id = cst_encode_String(apiObj.entityId);
-      wireObj.tag = 6;
-      wireObj.kind.MessageSent.message_id = pre_message_id;
-      wireObj.kind.MessageSent.entity_id = pre_entity_id;
-      return;
-    }
-    if (apiObj is FlutterEvent_MessageReceived) {
-      var pre_message_id = cst_encode_String(apiObj.messageId);
-      var pre_entity_id = cst_encode_String(apiObj.entityId);
-      wireObj.tag = 7;
-      wireObj.kind.MessageReceived.message_id = pre_message_id;
-      wireObj.kind.MessageReceived.entity_id = pre_entity_id;
-      return;
-    }
-    if (apiObj is FlutterEvent_InviteCreated) {
-      var pre_invite_id = cst_encode_String(apiObj.inviteId);
-      wireObj.tag = 8;
-      wireObj.kind.InviteCreated.invite_id = pre_invite_id;
-      return;
-    }
-    if (apiObj is FlutterEvent_InviteAccepted) {
-      var pre_invite_id = cst_encode_String(apiObj.inviteId);
-      wireObj.tag = 9;
-      wireObj.kind.InviteAccepted.invite_id = pre_invite_id;
-      return;
-    }
-    if (apiObj is FlutterEvent_FileWritten) {
-      var pre_entity_id = cst_encode_String(apiObj.entityId);
-      var pre_path = cst_encode_String(apiObj.path);
-      wireObj.tag = 10;
-      wireObj.kind.FileWritten.entity_id = pre_entity_id;
-      wireObj.kind.FileWritten.path = pre_path;
-      return;
-    }
-    if (apiObj is FlutterEvent_FileDeleted) {
-      var pre_entity_id = cst_encode_String(apiObj.entityId);
-      var pre_path = cst_encode_String(apiObj.path);
-      wireObj.tag = 11;
-      wireObj.kind.FileDeleted.entity_id = pre_entity_id;
-      wireObj.kind.FileDeleted.path = pre_path;
-      return;
-    }
-    if (apiObj is FlutterEvent_Error) {
-      var pre_code = cst_encode_String(apiObj.code);
-      var pre_message = cst_encode_String(apiObj.message);
-      wireObj.tag = 12;
-      wireObj.kind.Error.code = pre_code;
-      wireObj.kind.Error.message = pre_message;
-      return;
-    }
-  }
-
-  @protected
-  void cst_api_fill_to_wire_flutter_network_info(
-      FlutterNetworkInfo apiObj, wire_cst_flutter_network_info wireObj) {
-    wireObj.is_active = cst_encode_bool(apiObj.isActive);
-    wireObj.bound_port = cst_encode_opt_box_autoadd_u_16(apiObj.boundPort);
-    wireObj.peer_count = cst_encode_u_32(apiObj.peerCount);
-    wireObj.external_address = cst_encode_opt_String(apiObj.externalAddress);
-    wireObj.bootstrap_connected = cst_encode_bool(apiObj.bootstrapConnected);
-  }
-
-  @protected
-  void cst_api_fill_to_wire_flutter_session_info(
-      FlutterSessionInfo apiObj, wire_cst_flutter_session_info wireObj) {
-    wireObj.session_id = cst_encode_String(apiObj.sessionId);
-    wireObj.four_words = cst_encode_String(apiObj.fourWords);
-    wireObj.display_name = cst_encode_String(apiObj.displayName);
-  }
-
-  @protected
-  void cst_api_fill_to_wire_flutter_user_profile(
-      FlutterUserProfile apiObj, wire_cst_flutter_user_profile wireObj) {
-    wireObj.four_words = cst_encode_String(apiObj.fourWords);
-    wireObj.display_name = cst_encode_String(apiObj.displayName);
-    wireObj.device_name = cst_encode_String(apiObj.deviceName);
-    wireObj.device_type = cst_encode_String(apiObj.deviceType);
-  }
-
-  @protected
-  void cst_api_fill_to_wire_flutter_vault_info(
-      FlutterVaultInfo apiObj, wire_cst_flutter_vault_info wireObj) {
-    wireObj.four_words = cst_encode_String(apiObj.fourWords);
-    wireObj.display_name = cst_encode_String(apiObj.displayName);
-    wireObj.created_at = cst_encode_u_64(apiObj.createdAt);
-    wireObj.last_accessed = cst_encode_u_64(apiObj.lastAccessed);
-    wireObj.size_bytes = cst_encode_u_64(apiObj.sizeBytes);
-  }
-
-  @protected
-  int cst_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
-      CommunitasApi raw);
-
-  @protected
-  int cst_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
-      CommunitasApi raw);
-
-  @protected
-  int cst_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
-      CommunitasApi raw);
-
-  @protected
-  bool cst_encode_bool(bool raw);
-
-  @protected
-  int cst_encode_flutter_entity_type(FlutterEntityType raw);
-
-  @protected
-  int cst_encode_i_32(int raw);
-
-  @protected
-  int cst_encode_u_16(int raw);
-
-  @protected
-  int cst_encode_u_32(int raw);
-
-  @protected
-  int cst_encode_u_8(int raw);
-
-  @protected
-  void cst_encode_unit(void raw);
-
-  @protected
-  void
-      sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
-          CommunitasApi self, SseSerializer serializer);
-
-  @protected
-  void
-      sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
-          CommunitasApi self, SseSerializer serializer);
-
-  @protected
-  void
-      sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
-          CommunitasApi self, SseSerializer serializer);
+  void sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
+      CommunitasApi self, SseSerializer serializer);
 
   @protected
   void sse_encode_String(String self, SseSerializer serializer);
@@ -527,37 +405,82 @@ abstract class CommunitasRustApiImplPlatform
   void sse_encode_bool(bool self, SseSerializer serializer);
 
   @protected
-  void sse_encode_box_autoadd_flutter_session_info(
-      FlutterSessionInfo self, SseSerializer serializer);
+  void sse_encode_box_autoadd_bool(bool self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_flutter_presence_record(FlutterPresenceRecord self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_flutter_session_info(FlutterSessionInfo self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_i_64(PlatformInt64 self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_u_16(int self, SseSerializer serializer);
 
   @protected
+  void sse_encode_box_autoadd_u_32(int self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_u_64(BigInt self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_flutter_contact(FlutterContact self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_flutter_disk_stats(FlutterDiskStats self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_flutter_disk_type(FlutterDiskType self, SseSerializer serializer);
+
+  @protected
   void sse_encode_flutter_entity(FlutterEntity self, SseSerializer serializer);
 
   @protected
-  void sse_encode_flutter_entity_type(
-      FlutterEntityType self, SseSerializer serializer);
+  void sse_encode_flutter_entity_type(FlutterEntityType self, SseSerializer serializer);
 
   @protected
   void sse_encode_flutter_event(FlutterEvent self, SseSerializer serializer);
 
   @protected
-  void sse_encode_flutter_network_info(
-      FlutterNetworkInfo self, SseSerializer serializer);
+  void sse_encode_flutter_file_info(FlutterFileInfo self, SseSerializer serializer);
 
   @protected
-  void sse_encode_flutter_session_info(
-      FlutterSessionInfo self, SseSerializer serializer);
+  void sse_encode_flutter_kanban_board(FlutterKanbanBoard self, SseSerializer serializer);
 
   @protected
-  void sse_encode_flutter_user_profile(
-      FlutterUserProfile self, SseSerializer serializer);
+  void sse_encode_flutter_kanban_card(FlutterKanbanCard self, SseSerializer serializer);
 
   @protected
-  void sse_encode_flutter_vault_info(
-      FlutterVaultInfo self, SseSerializer serializer);
+  void sse_encode_flutter_kanban_column(FlutterKanbanColumn self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_flutter_message(FlutterMessage self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_flutter_network_info(FlutterNetworkInfo self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_flutter_presence_record(FlutterPresenceRecord self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_flutter_presence_status(FlutterPresenceStatus self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_flutter_reaction(FlutterReaction self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_flutter_recovered_identity(FlutterRecoveredIdentity self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_flutter_session_info(FlutterSessionInfo self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_flutter_user_profile(FlutterUserProfile self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_flutter_vault_info(FlutterVaultInfo self, SseSerializer serializer);
 
   @protected
   void sse_encode_i_32(int self, SseSerializer serializer);
@@ -566,30 +489,67 @@ abstract class CommunitasRustApiImplPlatform
   void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer);
 
   @protected
-  void sse_encode_list_flutter_entity(
-      List<FlutterEntity> self, SseSerializer serializer);
+  void sse_encode_list_String(List<String> self, SseSerializer serializer);
 
   @protected
-  void sse_encode_list_flutter_event(
-      List<FlutterEvent> self, SseSerializer serializer);
+  void sse_encode_list_flutter_contact(List<FlutterContact> self, SseSerializer serializer);
 
   @protected
-  void sse_encode_list_flutter_vault_info(
-      List<FlutterVaultInfo> self, SseSerializer serializer);
+  void sse_encode_list_flutter_entity(List<FlutterEntity> self, SseSerializer serializer);
 
   @protected
-  void sse_encode_list_prim_u_8_strict(
-      Uint8List self, SseSerializer serializer);
+  void sse_encode_list_flutter_event(List<FlutterEvent> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_flutter_file_info(List<FlutterFileInfo> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_flutter_kanban_board(List<FlutterKanbanBoard> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_flutter_kanban_card(List<FlutterKanbanCard> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_flutter_kanban_column(List<FlutterKanbanColumn> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_flutter_message(List<FlutterMessage> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_flutter_reaction(List<FlutterReaction> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_flutter_vault_info(List<FlutterVaultInfo> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_prim_u_8_loose(List<int> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_prim_u_8_strict(Uint8List self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_String(String? self, SseSerializer serializer);
 
   @protected
-  void sse_encode_opt_box_autoadd_flutter_session_info(
-      FlutterSessionInfo? self, SseSerializer serializer);
+  void sse_encode_opt_box_autoadd_bool(bool? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_flutter_presence_record(FlutterPresenceRecord? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_flutter_session_info(FlutterSessionInfo? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_i_64(PlatformInt64? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_box_autoadd_u_16(int? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_u_32(int? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_u_64(BigInt? self, SseSerializer serializer);
 
   @protected
   void sse_encode_u_16(int self, SseSerializer serializer);
@@ -612,751 +572,16 @@ abstract class CommunitasRustApiImplPlatform
 
 // Section: wire_class
 
-// ignore_for_file: camel_case_types, non_constant_identifier_names, avoid_positional_boolean_parameters, annotate_overrides, constant_identifier_names
-// AUTO GENERATED FILE, DO NOT EDIT.
-//
-// Generated by `package:ffigen`.
-// ignore_for_file: type=lint, unused_import
-
-/// generated by flutter_rust_bridge
-class CommunitasRustWire implements BaseWire {
-  factory CommunitasRustWire.fromExternalLibrary(ExternalLibrary lib) =>
-      CommunitasRustWire(lib.ffiDynamicLibrary);
+class RustLibWire implements BaseWire {
+  factory RustLibWire.fromExternalLibrary(ExternalLibrary lib) => RustLibWire(lib.ffiDynamicLibrary);
 
   /// Holds the symbol lookup function.
-  final ffi.Pointer<T> Function<T extends ffi.NativeType>(String symbolName)
-      _lookup;
+  final ffi.Pointer<T> Function<T extends ffi.NativeType>(String symbolName) _lookup;
 
   /// The symbols are looked up in [dynamicLibrary].
-  CommunitasRustWire(ffi.DynamicLibrary dynamicLibrary)
-      : _lookup = dynamicLibrary.lookup;
+  RustLibWire(ffi.DynamicLibrary dynamicLibrary) : _lookup = dynamicLibrary.lookup;
 
-  /// The symbols are looked up with [lookup].
-  CommunitasRustWire.fromLookup(
-    ffi.Pointer<T> Function<T extends ffi.NativeType>(String symbolName) lookup,
-  ) : _lookup = lookup;
-
-  void store_dart_post_cobject(DartPostCObjectFnType ptr) {
-    return _store_dart_post_cobject(ptr);
-  }
-
-  late final _store_dart_post_cobjectPtr =
-      _lookup<ffi.NativeFunction<ffi.Void Function(DartPostCObjectFnType)>>(
-    'store_dart_post_cobject',
-  );
-  late final _store_dart_post_cobject = _store_dart_post_cobjectPtr
-      .asFunction<void Function(DartPostCObjectFnType)>();
-
-  void wire__crate__flutter_api__CommunitasApi_auth_create_vault(
-    int port_,
-    int that,
-    ffi.Pointer<wire_cst_list_prim_u_8_strict> four_words,
-    ffi.Pointer<wire_cst_list_prim_u_8_strict> display_name,
-    ffi.Pointer<wire_cst_list_prim_u_8_strict> password,
-  ) {
-    return _wire__crate__flutter_api__CommunitasApi_auth_create_vault(
-      port_,
-      that,
-      four_words,
-      display_name,
-      password,
-    );
-  }
-
-  late final _wire__crate__flutter_api__CommunitasApi_auth_create_vaultPtr =
-      _lookup<
-          ffi.NativeFunction<
-              ffi.Void Function(
-                ffi.Int64,
-                ffi.UintPtr,
-                ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-                ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-                ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-              )>>(
-    'frbgen_communitas_wire__crate__flutter_api__CommunitasApi_auth_create_vault',
-  );
-  late final _wire__crate__flutter_api__CommunitasApi_auth_create_vault =
-      _wire__crate__flutter_api__CommunitasApi_auth_create_vaultPtr.asFunction<
-          void Function(
-            int,
-            int,
-            ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-            ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-            ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-          )>();
-
-  void wire__crate__flutter_api__CommunitasApi_auth_delete_vault(
-    int port_,
-    int that,
-    ffi.Pointer<wire_cst_list_prim_u_8_strict> four_words,
-    ffi.Pointer<wire_cst_list_prim_u_8_strict> password,
-  ) {
-    return _wire__crate__flutter_api__CommunitasApi_auth_delete_vault(
-      port_,
-      that,
-      four_words,
-      password,
-    );
-  }
-
-  late final _wire__crate__flutter_api__CommunitasApi_auth_delete_vaultPtr =
-      _lookup<
-          ffi.NativeFunction<
-              ffi.Void Function(
-                ffi.Int64,
-                ffi.UintPtr,
-                ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-                ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-              )>>(
-    'frbgen_communitas_wire__crate__flutter_api__CommunitasApi_auth_delete_vault',
-  );
-  late final _wire__crate__flutter_api__CommunitasApi_auth_delete_vault =
-      _wire__crate__flutter_api__CommunitasApi_auth_delete_vaultPtr.asFunction<
-          void Function(
-            int,
-            int,
-            ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-            ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-          )>();
-
-  void wire__crate__flutter_api__CommunitasApi_auth_get_current_session(
-    int port_,
-    int that,
-  ) {
-    return _wire__crate__flutter_api__CommunitasApi_auth_get_current_session(
-      port_,
-      that,
-    );
-  }
-
-  late final _wire__crate__flutter_api__CommunitasApi_auth_get_current_sessionPtr =
-      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Int64, ffi.UintPtr)>>(
-    'frbgen_communitas_wire__crate__flutter_api__CommunitasApi_auth_get_current_session',
-  );
-  late final _wire__crate__flutter_api__CommunitasApi_auth_get_current_session =
-      _wire__crate__flutter_api__CommunitasApi_auth_get_current_sessionPtr
-          .asFunction<void Function(int, int)>();
-
-  void wire__crate__flutter_api__CommunitasApi_auth_list_vaults(
-    int port_,
-    int that,
-  ) {
-    return _wire__crate__flutter_api__CommunitasApi_auth_list_vaults(
-      port_,
-      that,
-    );
-  }
-
-  late final _wire__crate__flutter_api__CommunitasApi_auth_list_vaultsPtr =
-      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Int64, ffi.UintPtr)>>(
-    'frbgen_communitas_wire__crate__flutter_api__CommunitasApi_auth_list_vaults',
-  );
-  late final _wire__crate__flutter_api__CommunitasApi_auth_list_vaults =
-      _wire__crate__flutter_api__CommunitasApi_auth_list_vaultsPtr
-          .asFunction<void Function(int, int)>();
-
-  void wire__crate__flutter_api__CommunitasApi_auth_login(
-    int port_,
-    int that,
-    ffi.Pointer<wire_cst_list_prim_u_8_strict> four_words,
-    ffi.Pointer<wire_cst_list_prim_u_8_strict> password,
-  ) {
-    return _wire__crate__flutter_api__CommunitasApi_auth_login(
-      port_,
-      that,
-      four_words,
-      password,
-    );
-  }
-
-  late final _wire__crate__flutter_api__CommunitasApi_auth_loginPtr = _lookup<
-          ffi.NativeFunction<
-              ffi.Void Function(
-                ffi.Int64,
-                ffi.UintPtr,
-                ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-                ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-              )>>(
-      'frbgen_communitas_wire__crate__flutter_api__CommunitasApi_auth_login');
-  late final _wire__crate__flutter_api__CommunitasApi_auth_login =
-      _wire__crate__flutter_api__CommunitasApi_auth_loginPtr.asFunction<
-          void Function(
-            int,
-            int,
-            ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-            ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-          )>();
-
-  void wire__crate__flutter_api__CommunitasApi_auth_logout(
-    int port_,
-    int that,
-  ) {
-    return _wire__crate__flutter_api__CommunitasApi_auth_logout(port_, that);
-  }
-
-  late final _wire__crate__flutter_api__CommunitasApi_auth_logoutPtr =
-      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Int64, ffi.UintPtr)>>(
-    'frbgen_communitas_wire__crate__flutter_api__CommunitasApi_auth_logout',
-  );
-  late final _wire__crate__flutter_api__CommunitasApi_auth_logout =
-      _wire__crate__flutter_api__CommunitasApi_auth_logoutPtr
-          .asFunction<void Function(int, int)>();
-
-  void wire__crate__flutter_api__CommunitasApi_auth_vault_exists(
-    int port_,
-    int that,
-    ffi.Pointer<wire_cst_list_prim_u_8_strict> four_words,
-  ) {
-    return _wire__crate__flutter_api__CommunitasApi_auth_vault_exists(
-      port_,
-      that,
-      four_words,
-    );
-  }
-
-  late final _wire__crate__flutter_api__CommunitasApi_auth_vault_existsPtr =
-      _lookup<
-          ffi.NativeFunction<
-              ffi.Void Function(
-                ffi.Int64,
-                ffi.UintPtr,
-                ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-              )>>(
-    'frbgen_communitas_wire__crate__flutter_api__CommunitasApi_auth_vault_exists',
-  );
-  late final _wire__crate__flutter_api__CommunitasApi_auth_vault_exists =
-      _wire__crate__flutter_api__CommunitasApi_auth_vault_existsPtr.asFunction<
-          void Function(
-              int, int, ffi.Pointer<wire_cst_list_prim_u_8_strict>)>();
-
-  void wire__crate__flutter_api__CommunitasApi_create(
-    int port_,
-    ffi.Pointer<wire_cst_list_prim_u_8_strict> four_words,
-    ffi.Pointer<wire_cst_list_prim_u_8_strict> display_name,
-    ffi.Pointer<wire_cst_list_prim_u_8_strict> device_name,
-    ffi.Pointer<wire_cst_list_prim_u_8_strict> storage_path,
-  ) {
-    return _wire__crate__flutter_api__CommunitasApi_create(
-      port_,
-      four_words,
-      display_name,
-      device_name,
-      storage_path,
-    );
-  }
-
-  late final _wire__crate__flutter_api__CommunitasApi_createPtr = _lookup<
-          ffi.NativeFunction<
-              ffi.Void Function(
-                ffi.Int64,
-                ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-                ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-                ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-                ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-              )>>(
-      'frbgen_communitas_wire__crate__flutter_api__CommunitasApi_create');
-  late final _wire__crate__flutter_api__CommunitasApi_create =
-      _wire__crate__flutter_api__CommunitasApi_createPtr.asFunction<
-          void Function(
-            int,
-            ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-            ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-            ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-            ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-          )>();
-
-  void wire__crate__flutter_api__CommunitasApi_entity_add_member(
-    int port_,
-    int that,
-    int entity_type,
-    ffi.Pointer<wire_cst_list_prim_u_8_strict> entity_id,
-    ffi.Pointer<wire_cst_list_prim_u_8_strict> member_id,
-    ffi.Pointer<wire_cst_list_prim_u_8_strict> role,
-  ) {
-    return _wire__crate__flutter_api__CommunitasApi_entity_add_member(
-      port_,
-      that,
-      entity_type,
-      entity_id,
-      member_id,
-      role,
-    );
-  }
-
-  late final _wire__crate__flutter_api__CommunitasApi_entity_add_memberPtr =
-      _lookup<
-          ffi.NativeFunction<
-              ffi.Void Function(
-                ffi.Int64,
-                ffi.UintPtr,
-                ffi.Int32,
-                ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-                ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-                ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-              )>>(
-    'frbgen_communitas_wire__crate__flutter_api__CommunitasApi_entity_add_member',
-  );
-  late final _wire__crate__flutter_api__CommunitasApi_entity_add_member =
-      _wire__crate__flutter_api__CommunitasApi_entity_add_memberPtr.asFunction<
-          void Function(
-            int,
-            int,
-            int,
-            ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-            ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-            ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-          )>();
-
-  void wire__crate__flutter_api__CommunitasApi_entity_create(
-    int port_,
-    int that,
-    ffi.Pointer<wire_cst_list_prim_u_8_strict> name,
-    int entity_type,
-    ffi.Pointer<wire_cst_list_prim_u_8_strict> description,
-    ffi.Pointer<wire_cst_list_prim_u_8_strict> _parent_org_id,
-  ) {
-    return _wire__crate__flutter_api__CommunitasApi_entity_create(
-      port_,
-      that,
-      name,
-      entity_type,
-      description,
-      _parent_org_id,
-    );
-  }
-
-  late final _wire__crate__flutter_api__CommunitasApi_entity_createPtr =
-      _lookup<
-          ffi.NativeFunction<
-              ffi.Void Function(
-                ffi.Int64,
-                ffi.UintPtr,
-                ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-                ffi.Int32,
-                ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-                ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-              )>>(
-    'frbgen_communitas_wire__crate__flutter_api__CommunitasApi_entity_create',
-  );
-  late final _wire__crate__flutter_api__CommunitasApi_entity_create =
-      _wire__crate__flutter_api__CommunitasApi_entity_createPtr.asFunction<
-          void Function(
-            int,
-            int,
-            ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-            int,
-            ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-            ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-          )>();
-
-  void wire__crate__flutter_api__CommunitasApi_entity_get(
-    int port_,
-    int that,
-    ffi.Pointer<wire_cst_list_prim_u_8_strict> entity_id,
-  ) {
-    return _wire__crate__flutter_api__CommunitasApi_entity_get(
-      port_,
-      that,
-      entity_id,
-    );
-  }
-
-  late final _wire__crate__flutter_api__CommunitasApi_entity_getPtr = _lookup<
-          ffi.NativeFunction<
-              ffi.Void Function(
-                ffi.Int64,
-                ffi.UintPtr,
-                ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-              )>>(
-      'frbgen_communitas_wire__crate__flutter_api__CommunitasApi_entity_get');
-  late final _wire__crate__flutter_api__CommunitasApi_entity_get =
-      _wire__crate__flutter_api__CommunitasApi_entity_getPtr.asFunction<
-          void Function(
-              int, int, ffi.Pointer<wire_cst_list_prim_u_8_strict>)>();
-
-  void wire__crate__flutter_api__CommunitasApi_entity_list(
-    int port_,
-    int that,
-  ) {
-    return _wire__crate__flutter_api__CommunitasApi_entity_list(port_, that);
-  }
-
-  late final _wire__crate__flutter_api__CommunitasApi_entity_listPtr =
-      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Int64, ffi.UintPtr)>>(
-    'frbgen_communitas_wire__crate__flutter_api__CommunitasApi_entity_list',
-  );
-  late final _wire__crate__flutter_api__CommunitasApi_entity_list =
-      _wire__crate__flutter_api__CommunitasApi_entity_listPtr
-          .asFunction<void Function(int, int)>();
-
-  void wire__crate__flutter_api__CommunitasApi_entity_list_by_type(
-    int port_,
-    int that,
-    int entity_type,
-  ) {
-    return _wire__crate__flutter_api__CommunitasApi_entity_list_by_type(
-      port_,
-      that,
-      entity_type,
-    );
-  }
-
-  late final _wire__crate__flutter_api__CommunitasApi_entity_list_by_typePtr =
-      _lookup<
-          ffi.NativeFunction<
-              ffi.Void Function(ffi.Int64, ffi.UintPtr, ffi.Int32)>>(
-    'frbgen_communitas_wire__crate__flutter_api__CommunitasApi_entity_list_by_type',
-  );
-  late final _wire__crate__flutter_api__CommunitasApi_entity_list_by_type =
-      _wire__crate__flutter_api__CommunitasApi_entity_list_by_typePtr
-          .asFunction<void Function(int, int, int)>();
-
-  void wire__crate__flutter_api__CommunitasApi_entity_remove_member(
-    int port_,
-    int that,
-    int entity_type,
-    ffi.Pointer<wire_cst_list_prim_u_8_strict> entity_id,
-    ffi.Pointer<wire_cst_list_prim_u_8_strict> member_id,
-  ) {
-    return _wire__crate__flutter_api__CommunitasApi_entity_remove_member(
-      port_,
-      that,
-      entity_type,
-      entity_id,
-      member_id,
-    );
-  }
-
-  late final _wire__crate__flutter_api__CommunitasApi_entity_remove_memberPtr =
-      _lookup<
-          ffi.NativeFunction<
-              ffi.Void Function(
-                ffi.Int64,
-                ffi.UintPtr,
-                ffi.Int32,
-                ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-                ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-              )>>(
-    'frbgen_communitas_wire__crate__flutter_api__CommunitasApi_entity_remove_member',
-  );
-  late final _wire__crate__flutter_api__CommunitasApi_entity_remove_member =
-      _wire__crate__flutter_api__CommunitasApi_entity_remove_memberPtr
-          .asFunction<
-              void Function(
-                int,
-                int,
-                int,
-                ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-                ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-              )>();
-
-  void wire__crate__flutter_api__CommunitasApi_get_profile(
-    int port_,
-    int that,
-  ) {
-    return _wire__crate__flutter_api__CommunitasApi_get_profile(port_, that);
-  }
-
-  late final _wire__crate__flutter_api__CommunitasApi_get_profilePtr =
-      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Int64, ffi.UintPtr)>>(
-    'frbgen_communitas_wire__crate__flutter_api__CommunitasApi_get_profile',
-  );
-  late final _wire__crate__flutter_api__CommunitasApi_get_profile =
-      _wire__crate__flutter_api__CommunitasApi_get_profilePtr
-          .asFunction<void Function(int, int)>();
-
-  void wire__crate__flutter_api__CommunitasApi_gossip_connect_to_peer(
-    int port_,
-    int that,
-    ffi.Pointer<wire_cst_list_prim_u_8_strict> four_words,
-  ) {
-    return _wire__crate__flutter_api__CommunitasApi_gossip_connect_to_peer(
-      port_,
-      that,
-      four_words,
-    );
-  }
-
-  late final _wire__crate__flutter_api__CommunitasApi_gossip_connect_to_peerPtr =
-      _lookup<
-          ffi.NativeFunction<
-              ffi.Void Function(
-                ffi.Int64,
-                ffi.UintPtr,
-                ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-              )>>(
-    'frbgen_communitas_wire__crate__flutter_api__CommunitasApi_gossip_connect_to_peer',
-  );
-  late final _wire__crate__flutter_api__CommunitasApi_gossip_connect_to_peer =
-      _wire__crate__flutter_api__CommunitasApi_gossip_connect_to_peerPtr
-          .asFunction<
-              void Function(
-                  int, int, ffi.Pointer<wire_cst_list_prim_u_8_strict>)>();
-
-  void wire__crate__flutter_api__CommunitasApi_gossip_get_network_info(
-    int port_,
-    int that,
-  ) {
-    return _wire__crate__flutter_api__CommunitasApi_gossip_get_network_info(
-      port_,
-      that,
-    );
-  }
-
-  late final _wire__crate__flutter_api__CommunitasApi_gossip_get_network_infoPtr =
-      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Int64, ffi.UintPtr)>>(
-    'frbgen_communitas_wire__crate__flutter_api__CommunitasApi_gossip_get_network_info',
-  );
-  late final _wire__crate__flutter_api__CommunitasApi_gossip_get_network_info =
-      _wire__crate__flutter_api__CommunitasApi_gossip_get_network_infoPtr
-          .asFunction<void Function(int, int)>();
-
-  void wire__crate__flutter_api__CommunitasApi_gossip_start(
-    int port_,
-    int that,
-    ffi.Pointer<ffi.Uint16> port,
-  ) {
-    return _wire__crate__flutter_api__CommunitasApi_gossip_start(
-      port_,
-      that,
-      port,
-    );
-  }
-
-  late final _wire__crate__flutter_api__CommunitasApi_gossip_startPtr = _lookup<
-      ffi.NativeFunction<
-          ffi.Void Function(ffi.Int64, ffi.UintPtr, ffi.Pointer<ffi.Uint16>)>>(
-    'frbgen_communitas_wire__crate__flutter_api__CommunitasApi_gossip_start',
-  );
-  late final _wire__crate__flutter_api__CommunitasApi_gossip_start =
-      _wire__crate__flutter_api__CommunitasApi_gossip_startPtr
-          .asFunction<void Function(int, int, ffi.Pointer<ffi.Uint16>)>();
-
-  void wire__crate__flutter_api__CommunitasApi_gossip_stop(
-    int port_,
-    int that,
-  ) {
-    return _wire__crate__flutter_api__CommunitasApi_gossip_stop(port_, that);
-  }
-
-  late final _wire__crate__flutter_api__CommunitasApi_gossip_stopPtr =
-      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Int64, ffi.UintPtr)>>(
-    'frbgen_communitas_wire__crate__flutter_api__CommunitasApi_gossip_stop',
-  );
-  late final _wire__crate__flutter_api__CommunitasApi_gossip_stop =
-      _wire__crate__flutter_api__CommunitasApi_gossip_stopPtr
-          .asFunction<void Function(int, int)>();
-
-  void wire__crate__flutter_api__CommunitasApi_invite_accept(
-    int port_,
-    int that,
-    ffi.Pointer<wire_cst_list_prim_u_8_strict> invite_id,
-  ) {
-    return _wire__crate__flutter_api__CommunitasApi_invite_accept(
-      port_,
-      that,
-      invite_id,
-    );
-  }
-
-  late final _wire__crate__flutter_api__CommunitasApi_invite_acceptPtr =
-      _lookup<
-          ffi.NativeFunction<
-              ffi.Void Function(
-                ffi.Int64,
-                ffi.UintPtr,
-                ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-              )>>(
-    'frbgen_communitas_wire__crate__flutter_api__CommunitasApi_invite_accept',
-  );
-  late final _wire__crate__flutter_api__CommunitasApi_invite_accept =
-      _wire__crate__flutter_api__CommunitasApi_invite_acceptPtr.asFunction<
-          void Function(
-              int, int, ffi.Pointer<wire_cst_list_prim_u_8_strict>)>();
-
-  void wire__crate__flutter_api__CommunitasApi_invite_create(
-    int port_,
-    int that,
-    ffi.Pointer<wire_cst_list_prim_u_8_strict> recipient_id,
-    int entity_type,
-    ffi.Pointer<wire_cst_list_prim_u_8_strict> entity_id,
-    ffi.Pointer<wire_cst_list_prim_u_8_strict> role,
-    ffi.Pointer<wire_cst_list_prim_u_8_strict> message,
-  ) {
-    return _wire__crate__flutter_api__CommunitasApi_invite_create(
-      port_,
-      that,
-      recipient_id,
-      entity_type,
-      entity_id,
-      role,
-      message,
-    );
-  }
-
-  late final _wire__crate__flutter_api__CommunitasApi_invite_createPtr =
-      _lookup<
-          ffi.NativeFunction<
-              ffi.Void Function(
-                ffi.Int64,
-                ffi.UintPtr,
-                ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-                ffi.Int32,
-                ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-                ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-                ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-              )>>(
-    'frbgen_communitas_wire__crate__flutter_api__CommunitasApi_invite_create',
-  );
-  late final _wire__crate__flutter_api__CommunitasApi_invite_create =
-      _wire__crate__flutter_api__CommunitasApi_invite_createPtr.asFunction<
-          void Function(
-            int,
-            int,
-            ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-            int,
-            ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-            ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-            ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-          )>();
-
-  void wire__crate__flutter_api__CommunitasApi_invite_reject(
-    int port_,
-    int that,
-    ffi.Pointer<wire_cst_list_prim_u_8_strict> invite_id,
-  ) {
-    return _wire__crate__flutter_api__CommunitasApi_invite_reject(
-      port_,
-      that,
-      invite_id,
-    );
-  }
-
-  late final _wire__crate__flutter_api__CommunitasApi_invite_rejectPtr =
-      _lookup<
-          ffi.NativeFunction<
-              ffi.Void Function(
-                ffi.Int64,
-                ffi.UintPtr,
-                ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-              )>>(
-    'frbgen_communitas_wire__crate__flutter_api__CommunitasApi_invite_reject',
-  );
-  late final _wire__crate__flutter_api__CommunitasApi_invite_reject =
-      _wire__crate__flutter_api__CommunitasApi_invite_rejectPtr.asFunction<
-          void Function(
-              int, int, ffi.Pointer<wire_cst_list_prim_u_8_strict>)>();
-
-  void wire__crate__flutter_api__CommunitasApi_invite_revoke(
-    int port_,
-    int that,
-    ffi.Pointer<wire_cst_list_prim_u_8_strict> invite_id,
-  ) {
-    return _wire__crate__flutter_api__CommunitasApi_invite_revoke(
-      port_,
-      that,
-      invite_id,
-    );
-  }
-
-  late final _wire__crate__flutter_api__CommunitasApi_invite_revokePtr =
-      _lookup<
-          ffi.NativeFunction<
-              ffi.Void Function(
-                ffi.Int64,
-                ffi.UintPtr,
-                ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-              )>>(
-    'frbgen_communitas_wire__crate__flutter_api__CommunitasApi_invite_revoke',
-  );
-  late final _wire__crate__flutter_api__CommunitasApi_invite_revoke =
-      _wire__crate__flutter_api__CommunitasApi_invite_revokePtr.asFunction<
-          void Function(
-              int, int, ffi.Pointer<wire_cst_list_prim_u_8_strict>)>();
-
-  void wire__crate__flutter_api__CommunitasApi_message_send(
-    int port_,
-    int that,
-    ffi.Pointer<wire_cst_list_prim_u_8_strict> entity_id,
-    int entity_type,
-    ffi.Pointer<wire_cst_list_prim_u_8_strict> text,
-    ffi.Pointer<wire_cst_list_prim_u_8_strict> reply_to_id,
-  ) {
-    return _wire__crate__flutter_api__CommunitasApi_message_send(
-      port_,
-      that,
-      entity_id,
-      entity_type,
-      text,
-      reply_to_id,
-    );
-  }
-
-  late final _wire__crate__flutter_api__CommunitasApi_message_sendPtr = _lookup<
-      ffi.NativeFunction<
-          ffi.Void Function(
-            ffi.Int64,
-            ffi.UintPtr,
-            ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-            ffi.Int32,
-            ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-            ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-          )>>(
-    'frbgen_communitas_wire__crate__flutter_api__CommunitasApi_message_send',
-  );
-  late final _wire__crate__flutter_api__CommunitasApi_message_send =
-      _wire__crate__flutter_api__CommunitasApi_message_sendPtr.asFunction<
-          void Function(
-            int,
-            int,
-            ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-            int,
-            ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-            ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-          )>();
-
-  void wire__crate__flutter_api__CommunitasApi_update_display_name(
-    int port_,
-    int that,
-    ffi.Pointer<wire_cst_list_prim_u_8_strict> display_name,
-  ) {
-    return _wire__crate__flutter_api__CommunitasApi_update_display_name(
-      port_,
-      that,
-      display_name,
-    );
-  }
-
-  late final _wire__crate__flutter_api__CommunitasApi_update_display_namePtr =
-      _lookup<
-          ffi.NativeFunction<
-              ffi.Void Function(
-                ffi.Int64,
-                ffi.UintPtr,
-                ffi.Pointer<wire_cst_list_prim_u_8_strict>,
-              )>>(
-    'frbgen_communitas_wire__crate__flutter_api__CommunitasApi_update_display_name',
-  );
-  late final _wire__crate__flutter_api__CommunitasApi_update_display_name =
-      _wire__crate__flutter_api__CommunitasApi_update_display_namePtr
-          .asFunction<
-              void Function(
-                  int, int, ffi.Pointer<wire_cst_list_prim_u_8_strict>)>();
-
-  void wire__crate__flutter_api__generate_id_words(int port_) {
-    return _wire__crate__flutter_api__generate_id_words(port_);
-  }
-
-  late final _wire__crate__flutter_api__generate_id_wordsPtr =
-      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Int64)>>(
-    'frbgen_communitas_wire__crate__flutter_api__generate_id_words',
-  );
-  late final _wire__crate__flutter_api__generate_id_words =
-      _wire__crate__flutter_api__generate_id_wordsPtr
-          .asFunction<void Function(int)>();
-
-  void
-      rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
+  void rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
     ffi.Pointer<ffi.Void> ptr,
   ) {
     return _rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
@@ -1366,14 +591,12 @@ class CommunitasRustWire implements BaseWire {
 
   late final _rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApiPtr =
       _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<ffi.Void>)>>(
-    'frbgen_communitas_rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi',
-  );
+          'frbgen_communitas_rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi');
   late final _rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi =
       _rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApiPtr
           .asFunction<void Function(ffi.Pointer<ffi.Void>)>();
 
-  void
-      rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
+  void rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
     ffi.Pointer<ffi.Void> ptr,
   ) {
     return _rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
@@ -1383,297 +606,8 @@ class CommunitasRustWire implements BaseWire {
 
   late final _rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApiPtr =
       _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<ffi.Void>)>>(
-    'frbgen_communitas_rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi',
-  );
+          'frbgen_communitas_rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi');
   late final _rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi =
       _rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApiPtr
           .asFunction<void Function(ffi.Pointer<ffi.Void>)>();
-
-  ffi.Pointer<wire_cst_flutter_session_info>
-      cst_new_box_autoadd_flutter_session_info() {
-    return _cst_new_box_autoadd_flutter_session_info();
-  }
-
-  late final _cst_new_box_autoadd_flutter_session_infoPtr = _lookup<
-          ffi.NativeFunction<
-              ffi.Pointer<wire_cst_flutter_session_info> Function()>>(
-      'frbgen_communitas_cst_new_box_autoadd_flutter_session_info');
-  late final _cst_new_box_autoadd_flutter_session_info =
-      _cst_new_box_autoadd_flutter_session_infoPtr
-          .asFunction<ffi.Pointer<wire_cst_flutter_session_info> Function()>();
-
-  ffi.Pointer<ffi.Uint16> cst_new_box_autoadd_u_16(int value) {
-    return _cst_new_box_autoadd_u_16(value);
-  }
-
-  late final _cst_new_box_autoadd_u_16Ptr =
-      _lookup<ffi.NativeFunction<ffi.Pointer<ffi.Uint16> Function(ffi.Uint16)>>(
-    'frbgen_communitas_cst_new_box_autoadd_u_16',
-  );
-  late final _cst_new_box_autoadd_u_16 = _cst_new_box_autoadd_u_16Ptr
-      .asFunction<ffi.Pointer<ffi.Uint16> Function(int)>();
-
-  ffi.Pointer<wire_cst_list_flutter_entity> cst_new_list_flutter_entity(
-    int len,
-  ) {
-    return _cst_new_list_flutter_entity(len);
-  }
-
-  late final _cst_new_list_flutter_entityPtr = _lookup<
-      ffi.NativeFunction<
-          ffi.Pointer<wire_cst_list_flutter_entity> Function(
-              ffi.Int32)>>('frbgen_communitas_cst_new_list_flutter_entity');
-  late final _cst_new_list_flutter_entity = _cst_new_list_flutter_entityPtr
-      .asFunction<ffi.Pointer<wire_cst_list_flutter_entity> Function(int)>();
-
-  ffi.Pointer<wire_cst_list_flutter_event> cst_new_list_flutter_event(int len) {
-    return _cst_new_list_flutter_event(len);
-  }
-
-  late final _cst_new_list_flutter_eventPtr = _lookup<
-      ffi.NativeFunction<
-          ffi.Pointer<wire_cst_list_flutter_event> Function(
-              ffi.Int32)>>('frbgen_communitas_cst_new_list_flutter_event');
-  late final _cst_new_list_flutter_event = _cst_new_list_flutter_eventPtr
-      .asFunction<ffi.Pointer<wire_cst_list_flutter_event> Function(int)>();
-
-  ffi.Pointer<wire_cst_list_flutter_vault_info> cst_new_list_flutter_vault_info(
-    int len,
-  ) {
-    return _cst_new_list_flutter_vault_info(len);
-  }
-
-  late final _cst_new_list_flutter_vault_infoPtr = _lookup<
-      ffi.NativeFunction<
-          ffi.Pointer<wire_cst_list_flutter_vault_info> Function(
-              ffi.Int32)>>('frbgen_communitas_cst_new_list_flutter_vault_info');
-  late final _cst_new_list_flutter_vault_info =
-      _cst_new_list_flutter_vault_infoPtr.asFunction<
-          ffi.Pointer<wire_cst_list_flutter_vault_info> Function(int)>();
-
-  ffi.Pointer<wire_cst_list_prim_u_8_strict> cst_new_list_prim_u_8_strict(
-    int len,
-  ) {
-    return _cst_new_list_prim_u_8_strict(len);
-  }
-
-  late final _cst_new_list_prim_u_8_strictPtr = _lookup<
-      ffi.NativeFunction<
-          ffi.Pointer<wire_cst_list_prim_u_8_strict> Function(
-              ffi.Int32)>>('frbgen_communitas_cst_new_list_prim_u_8_strict');
-  late final _cst_new_list_prim_u_8_strict = _cst_new_list_prim_u_8_strictPtr
-      .asFunction<ffi.Pointer<wire_cst_list_prim_u_8_strict> Function(int)>();
-
-  int dummy_method_to_enforce_bundling() {
-    return _dummy_method_to_enforce_bundling();
-  }
-
-  late final _dummy_method_to_enforce_bundlingPtr =
-      _lookup<ffi.NativeFunction<ffi.Int64 Function()>>(
-    'dummy_method_to_enforce_bundling',
-  );
-  late final _dummy_method_to_enforce_bundling =
-      _dummy_method_to_enforce_bundlingPtr.asFunction<int Function()>();
-}
-
-typedef DartPort = ffi.Int64;
-typedef DartDartPort = int;
-typedef DartPostCObjectFnTypeFunction = ffi.Bool Function(
-    DartPort port_id, ffi.Pointer<ffi.Void> message);
-typedef DartDartPostCObjectFnTypeFunction = bool Function(
-    DartDartPort port_id, ffi.Pointer<ffi.Void> message);
-typedef DartPostCObjectFnType
-    = ffi.Pointer<ffi.NativeFunction<DartPostCObjectFnTypeFunction>>;
-
-final class wire_cst_list_prim_u_8_strict extends ffi.Struct {
-  external ffi.Pointer<ffi.Uint8> ptr;
-
-  @ffi.Int32()
-  external int len;
-}
-
-final class wire_cst_flutter_session_info extends ffi.Struct {
-  external ffi.Pointer<wire_cst_list_prim_u_8_strict> session_id;
-
-  external ffi.Pointer<wire_cst_list_prim_u_8_strict> four_words;
-
-  external ffi.Pointer<wire_cst_list_prim_u_8_strict> display_name;
-}
-
-final class wire_cst_flutter_entity extends ffi.Struct {
-  external ffi.Pointer<wire_cst_list_prim_u_8_strict> id;
-
-  external ffi.Pointer<wire_cst_list_prim_u_8_strict> name;
-
-  @ffi.Int32()
-  external int entity_type;
-
-  external ffi.Pointer<wire_cst_list_prim_u_8_strict> description;
-
-  external ffi.Pointer<wire_cst_list_prim_u_8_strict> created_by;
-
-  @ffi.Int64()
-  external int created_at;
-
-  @ffi.UintPtr()
-  external int member_count;
-
-  external ffi.Pointer<wire_cst_list_prim_u_8_strict> parent_org_id;
-
-  external ffi.Pointer<wire_cst_list_prim_u_8_strict> network_four_words;
-
-  @ffi.Bool()
-  external bool is_local_only;
-}
-
-final class wire_cst_list_flutter_entity extends ffi.Struct {
-  external ffi.Pointer<wire_cst_flutter_entity> ptr;
-
-  @ffi.Int32()
-  external int len;
-}
-
-final class wire_cst_FlutterEvent_NetworkingStarted extends ffi.Struct {
-  external ffi.Pointer<wire_cst_list_prim_u_8_strict> address;
-}
-
-final class wire_cst_FlutterEvent_PeerConnected extends ffi.Struct {
-  external ffi.Pointer<wire_cst_list_prim_u_8_strict> peer_id;
-}
-
-final class wire_cst_FlutterEvent_PeerDisconnected extends ffi.Struct {
-  external ffi.Pointer<wire_cst_list_prim_u_8_strict> peer_id;
-}
-
-final class wire_cst_FlutterEvent_EntityCreated extends ffi.Struct {
-  external ffi.Pointer<wire_cst_list_prim_u_8_strict> entity_id;
-}
-
-final class wire_cst_FlutterEvent_EntityUpdated extends ffi.Struct {
-  external ffi.Pointer<wire_cst_list_prim_u_8_strict> entity_id;
-}
-
-final class wire_cst_FlutterEvent_MessageSent extends ffi.Struct {
-  external ffi.Pointer<wire_cst_list_prim_u_8_strict> message_id;
-
-  external ffi.Pointer<wire_cst_list_prim_u_8_strict> entity_id;
-}
-
-final class wire_cst_FlutterEvent_MessageReceived extends ffi.Struct {
-  external ffi.Pointer<wire_cst_list_prim_u_8_strict> message_id;
-
-  external ffi.Pointer<wire_cst_list_prim_u_8_strict> entity_id;
-}
-
-final class wire_cst_FlutterEvent_InviteCreated extends ffi.Struct {
-  external ffi.Pointer<wire_cst_list_prim_u_8_strict> invite_id;
-}
-
-final class wire_cst_FlutterEvent_InviteAccepted extends ffi.Struct {
-  external ffi.Pointer<wire_cst_list_prim_u_8_strict> invite_id;
-}
-
-final class wire_cst_FlutterEvent_FileWritten extends ffi.Struct {
-  external ffi.Pointer<wire_cst_list_prim_u_8_strict> entity_id;
-
-  external ffi.Pointer<wire_cst_list_prim_u_8_strict> path;
-}
-
-final class wire_cst_FlutterEvent_FileDeleted extends ffi.Struct {
-  external ffi.Pointer<wire_cst_list_prim_u_8_strict> entity_id;
-
-  external ffi.Pointer<wire_cst_list_prim_u_8_strict> path;
-}
-
-final class wire_cst_FlutterEvent_Error extends ffi.Struct {
-  external ffi.Pointer<wire_cst_list_prim_u_8_strict> code;
-
-  external ffi.Pointer<wire_cst_list_prim_u_8_strict> message;
-}
-
-final class FlutterEventKind extends ffi.Union {
-  external wire_cst_FlutterEvent_NetworkingStarted NetworkingStarted;
-
-  external wire_cst_FlutterEvent_PeerConnected PeerConnected;
-
-  external wire_cst_FlutterEvent_PeerDisconnected PeerDisconnected;
-
-  external wire_cst_FlutterEvent_EntityCreated EntityCreated;
-
-  external wire_cst_FlutterEvent_EntityUpdated EntityUpdated;
-
-  external wire_cst_FlutterEvent_MessageSent MessageSent;
-
-  external wire_cst_FlutterEvent_MessageReceived MessageReceived;
-
-  external wire_cst_FlutterEvent_InviteCreated InviteCreated;
-
-  external wire_cst_FlutterEvent_InviteAccepted InviteAccepted;
-
-  external wire_cst_FlutterEvent_FileWritten FileWritten;
-
-  external wire_cst_FlutterEvent_FileDeleted FileDeleted;
-
-  external wire_cst_FlutterEvent_Error Error;
-}
-
-final class wire_cst_flutter_event extends ffi.Struct {
-  @ffi.Int32()
-  external int tag;
-
-  external FlutterEventKind kind;
-}
-
-final class wire_cst_list_flutter_event extends ffi.Struct {
-  external ffi.Pointer<wire_cst_flutter_event> ptr;
-
-  @ffi.Int32()
-  external int len;
-}
-
-final class wire_cst_flutter_vault_info extends ffi.Struct {
-  external ffi.Pointer<wire_cst_list_prim_u_8_strict> four_words;
-
-  external ffi.Pointer<wire_cst_list_prim_u_8_strict> display_name;
-
-  @ffi.Uint64()
-  external int created_at;
-
-  @ffi.Uint64()
-  external int last_accessed;
-
-  @ffi.Uint64()
-  external int size_bytes;
-}
-
-final class wire_cst_list_flutter_vault_info extends ffi.Struct {
-  external ffi.Pointer<wire_cst_flutter_vault_info> ptr;
-
-  @ffi.Int32()
-  external int len;
-}
-
-final class wire_cst_flutter_network_info extends ffi.Struct {
-  @ffi.Bool()
-  external bool is_active;
-
-  external ffi.Pointer<ffi.Uint16> bound_port;
-
-  @ffi.Uint32()
-  external int peer_count;
-
-  external ffi.Pointer<wire_cst_list_prim_u_8_strict> external_address;
-
-  @ffi.Bool()
-  external bool bootstrap_connected;
-}
-
-final class wire_cst_flutter_user_profile extends ffi.Struct {
-  external ffi.Pointer<wire_cst_list_prim_u_8_strict> four_words;
-
-  external ffi.Pointer<wire_cst_list_prim_u_8_strict> display_name;
-
-  external ffi.Pointer<wire_cst_list_prim_u_8_strict> device_name;
-
-  external ffi.Pointer<wire_cst_list_prim_u_8_strict> device_type;
 }

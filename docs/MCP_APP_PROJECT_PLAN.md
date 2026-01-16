@@ -448,222 +448,29 @@ async fn test_cross_node_messaging() {
 
 ---
 
-## Phase 4: Thin Client Applications (Week 4-6)
+## Phase 4: Thin Client Applications (Superseded)
 
-### Goal
-Minimal UI layers that talk only to MCP server.
+### Status
+This phase has been superseded by the **FFI-first Flutter architecture**.
 
-### Tasks
+### Current Direction
+- Flutter uses direct FFI (`flutter_rust_bridge`) to `communitas-core`.
+- MCP remains the integration layer for AI agents and local automation.
+- Web UI is demo-only; no production web client is planned.
 
-#### 4.1 Flutter Thin Client
-```dart
-// communitas_flutter/lib/mcp_client.dart
-
-class McpClient {
-  final String serverAddress;
-  QuicConnection? _connection;
-  
-  Future<void> connect() async {
-    _connection = await QuicConnection.connect(serverAddress);
-  }
-  
-  Future<Map<String, dynamic>> callTool(String name, Map<String, dynamic> args) async {
-    final request = {
-      'jsonrpc': '2.0',
-      'id': _nextId++,
-      'method': 'tools/call',
-      'params': {
-        'name': name,
-        'arguments': args,
-      },
-    };
-    
-    await _connection!.send(jsonEncode(request));
-    final response = await _connection!.receive();
-    return jsonDecode(response);
-  }
-}
-```
-
-#### 4.2 Web Client (localhost)
-```html
-<!-- communitas-web/index.html -->
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Communitas</title>
-    <script src="mcp-client.js"></script>
-</head>
-<body>
-    <div id="app">
-        <!-- Minimal UI, all logic via MCP -->
-    </div>
-    <script>
-        const mcp = new McpClient('ws://localhost:4433');
-        
-        async function login(fourWords, password) {
-            return await mcp.callTool('authenticate', {
-                four_words: fourWords,
-                password: password
-            });
-        }
-        
-        async function sendMessage(entityId, text) {
-            return await mcp.callTool('send_message', {
-                entity_id: entityId,
-                entity_type: 'group',
-                text: text
-            });
-        }
-    </script>
-</body>
-</html>
-```
-
-#### 4.3 TUI Client (already exists, enhance)
-```rust
-// communitas-tui/src/main.rs
-
-// Refactor to use MCP client instead of direct CommunitasApp
-struct TuiApp {
-    mcp: McpClient,
-    state: AppState,
-}
-
-impl TuiApp {
-    async fn new() -> Result<Self> {
-        let mcp = McpClient::connect_embedded().await?;
-        Ok(Self {
-            mcp,
-            state: AppState::Login,
-        })
-    }
-}
-```
-
-#### 4.4 AI-Only Mode (headless + MCP)
-```rust
-// communitas-mcp/src/main.rs
-
-#[derive(Parser)]
-struct Args {
-    /// Transport mode
-    #[arg(long)]
-    transport: TransportMode,
-    
-    /// Pre-authenticate with these credentials (for AI-only mode)
-    #[arg(long)]
-    auto_auth: Option<String>,  // "four.word.id:password"
-}
-
-// AI connects, server is pre-authenticated, pure tool calls
-```
-
-#### 4.5 Swift Client (for macOS)
-```swift
-// communitas-swift/McpClient.swift
-
-class McpClient {
-    private let transport: McpTransport
-    
-    init(embedded: Bool = true) {
-        if embedded {
-            transport = EmbeddedTransport()
-        } else {
-            transport = QuicTransport(address: "localhost:4433")
-        }
-    }
-    
-    func callTool(_ name: String, arguments: [String: Any]) async throws -> [String: Any] {
-        let request: [String: Any] = [
-            "jsonrpc": "2.0",
-            "id": nextId(),
-            "method": "tools/call",
-            "params": [
-                "name": name,
-                "arguments": arguments
-            ]
-        ]
-        
-        let response = try await transport.sendAndReceive(request)
-        return response
-    }
-}
-```
-
-### Deliverable
-Thin clients for Flutter, Web, TUI, and Swift, all talking to MCP server.
+See `docs/MCP_THIN_GUI_ARCHITECTURE.md` for the authoritative model.
 
 ---
 
-## Phase 5: Presentation Layer Features (Week 6-8)
+## Phase 5: Presentation Layer Features (Removed)
 
-### Goal
-Add the minimal presentation-specific features to MCP server.
+### Status
+Removed from MCP scope. Presentation features live in the Flutter GUI or dedicated
+client apps; MCP stays headless for automation and AI integrations.
 
-### Tasks
-
-#### 5.1 Markdown Rendering Resource
-```rust
-// Resource for rendered markdown
-Resource {
-    uri: "communitas://render/markdown/{file_path}",
-    name: "Rendered Markdown",
-    description: "Get markdown file rendered as HTML",
-    mime_type: "text/html",
-}
-```
-
-#### 5.2 Media Streaming Tools
-```rust
-Tool {
-    name: "start_voice_call",
-    description: "Initiate a voice call with a contact or group",
-    input_schema: json!({
-        "type": "object",
-        "properties": {
-            "entity_id": {"type": "string"},
-            "video_enabled": {"type": "boolean", "default": false}
-        },
-        "required": ["entity_id"]
-    }),
-}
-
-Tool {
-    name: "get_media_stream",
-    description: "Get WebRTC connection info for active call",
-    input_schema: json!({...}),
-}
-```
-
-#### 5.3 Presentation Mode
-```rust
-Tool {
-    name: "enter_presentation_mode",
-    description: "Enter presentation mode for a document",
-    input_schema: json!({
-        "type": "object",
-        "properties": {
-            "file_path": {"type": "string"},
-            "entity_id": {"type": "string"}
-        },
-        "required": ["file_path"]
-    }),
-}
-
-// Returns presentation state that thin client renders
-QueryResponse::PresentationState {
-    current_slide: usize,
-    total_slides: usize,
-    rendered_content: String,  // HTML
-    speaker_notes: Option<String>,
-}
-```
-
-### Deliverable
-MCP server supports video/voice, markdown rendering, presentation mode.
-
----
+### Rationale
+- Flutter + FFI is the only supported GUI path.
+- MCP should stay thin and API-focused (no presentation rendering pipeline).
 
 ## Summary Timeline
 
@@ -672,15 +479,15 @@ MCP server supports video/voice, markdown rendering, presentation mode.
 | 1. Authentication | Week 1-2 | Auth-required MCP server |
 | 2. Multi-Transport | Week 2-3 | Embedded + IPC + QUIC transports |
 | 3. Testing Infra | Week 3-4 | 8 nodes deployed, integration tests |
-| 4. Thin Clients | Week 4-6 | Flutter, Web, TUI, Swift clients |
-| 5. Presentation | Week 6-8 | Media, markdown, presentation mode |
+| 4. Thin Clients | Week 4-6 | Flutter GUI via FFI (web demo-only) |
+| 5. Presentation | N/A | Removed from MCP scope |
 
 ## Success Criteria
 
 1. **Authentication**: `authenticate` tool required before any other tool works
 2. **Multi-Transport**: Same MCP server works embedded in app and over network
 3. **Testing**: 8 test accounts across VPS can communicate via MCP
-4. **Thin Clients**: All UIs are <1000 LOC, purely MCP-driven
+4. **Thin Clients**: Flutter GUI uses FFI; MCP remains for automation/external apps
 5. **AI-Ready**: Claude can connect and operate Communitas via MCP
 
 ## Files Changed/Created

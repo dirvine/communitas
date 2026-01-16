@@ -4,7 +4,6 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'bridge_provider.dart';
 import 'canvas_client.dart';
 
 // Re-export canvas client types for convenience
@@ -20,11 +19,7 @@ final canvasWsUrlProvider = StateProvider<String>((ref) {
   const envUrl = String.fromEnvironment('CANVAS_WS_URL', defaultValue: '');
   if (envUrl.isNotEmpty) return envUrl;
 
-  // Derive from bridge URL
-  final bridgeUrl = ref.watch(bridgeUrlProvider);
-  return bridgeUrl
-      .replaceFirst('http://', 'ws://')
-      .replaceFirst('https://', 'wss://');
+  return 'ws://localhost:9473/ws';
 });
 
 /// Provider for the canvas HTTP URL.
@@ -32,7 +27,7 @@ final canvasHttpUrlProvider = StateProvider<String>((ref) {
   const envUrl = String.fromEnvironment('CANVAS_HTTP_URL', defaultValue: '');
   if (envUrl.isNotEmpty) return envUrl;
 
-  return ref.watch(bridgeUrlProvider);
+  return 'http://localhost:9473';
 });
 
 // ============================================================

@@ -4,8 +4,10 @@
 //! Local storage management with DHT integration
 
 use anyhow::{Context, Result, bail};
+use flate2::{Compression, read::ZlibDecoder, write::ZlibEncoder};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info};
@@ -223,8 +225,11 @@ impl LocalStorageManager {
             tokio::fs::create_dir_all(parent).await?;
         }
 
+        let (stored_data, compression_info) = self.prepare_storage_bytes(data)?;
+        let stored_size = stored_data.len();
+
         // Write data to file
-        tokio::fs::write(&file_path, data)
+        tokio::fs::write(&file_path, &stored_data)
             .await
             .context("Failed to write personal data to file")?;
 
@@ -235,12 +240,12 @@ impl LocalStorageManager {
                 user_id: user_id.to_string(),
             },
             file_path: file_path.clone(),
-            size: data.len(),
+            size: stored_size,
             hash: blake3::hash(data).to_string(),
             created_at: chrono::Utc::now(),
             last_accessed: chrono::Utc::now(),
-            encryption_info: None,  // Encryption handled at higher level
-            compression_info: None, // TODO: Add compression
+            encryption_info: None, // Encryption handled at higher level
+            compression_info,
         };
 
         // Update index
@@ -252,7 +257,7 @@ impl LocalStorageManager {
         // Update stats
         {
             let mut stats = self.usage_stats.write().await;
-            stats.personal_data_size += data.len();
+            stats.personal_data_size += stored_size;
             stats.total_files += 1;
         }
 
@@ -282,9 +287,11 @@ impl LocalStorageManager {
         };
 
         // Read file
-        let data = tokio::fs::read(&metadata.file_path)
+        let stored_data = tokio::fs::read(&metadata.file_path)
             .await
             .context("Failed to read personal data file")?;
+
+        let data = self.restore_storage_bytes(&stored_data, metadata.compression_info.as_ref())?;
 
         // Verify integrity
         let current_hash = blake3::hash(&data).to_string();
@@ -422,6 +429,15 @@ impl LocalStorageManager {
 
     /// Store DHT data (from other nodes)
     pub async fn store_dht_data(&self, key: &str, data: &[u8]) -> Result<()> {
+        self.store_dht_data_with_owner(key, None, data).await
+    }
+
+    pub async fn store_dht_data_with_owner(
+        &self,
+        key: &str,
+        owner: Option<&str>,
+        data: &[u8],
+    ) -> Result<()> {
         let item_id = format!("dht:{}", key);
         let safe_filename = key
             .chars()
@@ -438,8 +454,11 @@ impl LocalStorageManager {
             .dht_cache
             .join(format!("{}.data", safe_filename));
 
+        let (stored_data, compression_info) = self.prepare_storage_bytes(data)?;
+        let stored_size = stored_data.len();
+
         // Write data to file
-        tokio::fs::write(&file_path, data)
+        tokio::fs::write(&file_path, &stored_data)
             .await
             .context("Failed to write DHT data to file")?;
 
@@ -448,15 +467,15 @@ impl LocalStorageManager {
             item_id: item_id.clone(),
             item_type: StorageItemType::DHTData {
                 key: key.to_string(),
-                owner: "unknown".to_string(), // TODO: Extract from DHT metadata
+                owner: owner.unwrap_or("unknown").to_string(),
             },
             file_path: file_path.clone(),
-            size: data.len(),
+            size: stored_size,
             hash: blake3::hash(data).to_string(),
             created_at: chrono::Utc::now(),
             last_accessed: chrono::Utc::now(),
             encryption_info: None,
-            compression_info: None,
+            compression_info,
         };
 
         // Update index
@@ -468,7 +487,7 @@ impl LocalStorageManager {
         // Update stats
         {
             let mut stats = self.usage_stats.write().await;
-            stats.dht_cache_size += data.len();
+            stats.dht_cache_size += stored_size;
             stats.total_files += 1;
         }
 
@@ -492,9 +511,11 @@ impl LocalStorageManager {
         };
 
         // Read file
-        let data = tokio::fs::read(&metadata.file_path)
+        let stored_data = tokio::fs::read(&metadata.file_path)
             .await
             .context("Failed to read DHT data file")?;
+
+        let data = self.restore_storage_bytes(&stored_data, metadata.compression_info.as_ref())?;
 
         // Verify integrity
         let current_hash = blake3::hash(&data).to_string();
@@ -823,6 +844,56 @@ impl LocalStorageManager {
         }
 
         Ok(metadata.size)
+    }
+
+    fn prepare_storage_bytes(&self, data: &[u8]) -> Result<(Vec<u8>, Option<CompressionInfo>)> {
+        if data.is_empty() {
+            return Ok((Vec::new(), None));
+        }
+
+        let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
+        encoder
+            .write_all(data)
+            .context("Failed to write data to compressor")?;
+        let compressed = encoder.finish().context("Failed to finish compression")?;
+
+        if compressed.len() < data.len() {
+            let ratio = compressed.len() as f32 / data.len() as f32;
+            let info = CompressionInfo {
+                algorithm: "zlib".to_string(),
+                original_size: data.len(),
+                compressed_size: compressed.len(),
+                compression_ratio: ratio,
+            };
+            Ok((compressed, Some(info)))
+        } else {
+            Ok((data.to_vec(), None))
+        }
+    }
+
+    fn restore_storage_bytes(
+        &self,
+        stored: &[u8],
+        compression_info: Option<&CompressionInfo>,
+    ) -> Result<Vec<u8>> {
+        match compression_info {
+            Some(info) => {
+                let mut decoder = ZlibDecoder::new(stored);
+                let mut out = Vec::with_capacity(info.original_size);
+                decoder
+                    .read_to_end(&mut out)
+                    .context("Failed to decompress data")?;
+                if out.len() != info.original_size {
+                    bail!(
+                        "Decompressed size mismatch (expected {}, got {})",
+                        info.original_size,
+                        out.len()
+                    );
+                }
+                Ok(out)
+            }
+            None => Ok(stored.to_vec()),
+        }
     }
 }
 

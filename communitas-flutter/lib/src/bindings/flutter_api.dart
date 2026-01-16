@@ -8,106 +8,118 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'flutter_api.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `block_on`, `execute_command`, `execute_query`, `get_or_init_auth`, `to_dart_error`
-// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `FlutterDiskType`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
+// These functions are ignored because they are not marked as `pub`: `execute_command_raw`, `execute_command`, `execute_query`, `map_event`, `split_four_words`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
 
 /// Generate a random four-word identity
-Future<String> generateIdWords() =>
-    CommunitasRust.instance.api.crateFlutterApiGenerateIdWords();
+Future<String> generateIdWords() => RustLib.instance.api.crateFlutterApiGenerateIdWords();
 
-// Rust type: RustOpaqueNom<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<CommunitasApi>>
+Future<bool> validateRecoveryMnemonic({required String mnemonic}) =>
+    RustLib.instance.api.crateFlutterApiValidateRecoveryMnemonic(mnemonic: mnemonic);
+
+Future<FlutterRecoveredIdentity> previewIdentityFromMnemonic({required String mnemonic, String? passphrase}) =>
+    RustLib.instance.api.crateFlutterApiPreviewIdentityFromMnemonic(mnemonic: mnemonic, passphrase: passphrase);
+
+Future<FlutterRecoveredIdentity> recoverIdentityFromMnemonic({required String mnemonic, String? passphrase}) =>
+    RustLib.instance.api.crateFlutterApiRecoverIdentityFromMnemonic(mnemonic: mnemonic, passphrase: passphrase);
+
+// Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<CommunitasApi>>
 abstract class CommunitasApi implements RustOpaqueInterface {
-  /// Create a new vault with the given identity
-  Future<String> authCreateVault(
-      {required String fourWords,
-      required String displayName,
-      required String password});
+  Future<String> authCreateVault({required String fourWords, required String displayName, required String password});
 
-  /// Delete a vault
-  Future<void> authDeleteVault(
-      {required String fourWords, required String password});
+  Future<void> authDeleteVault({required String fourWords, required String password});
 
-  /// Get the current session info
+  Future<String> authExportVault({required bool includeData});
+
   Future<FlutterSessionInfo?> authGetCurrentSession();
 
-  /// List all available vaults
+  Future<String> authImportVault({required String backupBase64, required String password});
+
   Future<List<FlutterVaultInfo>> authListVaults();
 
-  /// Login to an existing vault
-  Future<FlutterSessionInfo> authLogin(
-      {required String fourWords, required String password});
+  Future<FlutterSessionInfo> authLogin({required String fourWords, required String password});
 
-  /// Logout from the current session
   Future<void> authLogout();
 
-  /// Check if a vault exists
   Future<bool> authVaultExists({required String fourWords});
 
+  Future<List<FlutterEvent>> contactCreate({required String displayName, String? fourWords, required bool isFavourite});
+
+  Future<List<FlutterEvent>> contactDelete({required String contactId});
+
+  Future<FlutterContact> contactGet({required String contactId});
+
+  Future<List<FlutterEvent>> contactLink({required String contactId, required String fourWords});
+
+  Future<List<FlutterEvent>> contactRemoveFavourite({required String fourWords});
+
+  Future<List<FlutterEvent>> contactSetFavourite({required String fourWords});
+
+  Future<List<FlutterEvent>> contactUpdate({required String contactId, String? displayName, bool? isFavourite});
+
+  Future<List<FlutterContact>> contactsList();
+
+  Future<List<FlutterContact>> contactsListFavourites();
+
+  Future<List<FlutterContact>> contactsSearch({required String query});
+
   /// Initialize the API with the given identity and storage path
-  ///
-  /// This creates a new CommunitasApp instance and returns the API wrapper.
-  /// Returns an error string if initialization fails, or the API on success.
   static Future<CommunitasApi> create(
           {required String fourWords,
           required String displayName,
           required String deviceName,
           required String storagePath}) =>
-      CommunitasRust.instance.api.crateFlutterApiCommunitasApiCreate(
-          fourWords: fourWords,
-          displayName: displayName,
-          deviceName: deviceName,
-          storagePath: storagePath);
+      RustLib.instance.api.crateFlutterApiCommunitasApiCreate(
+          fourWords: fourWords, displayName: displayName, deviceName: deviceName, storagePath: storagePath);
 
-  /// Add a member to an entity
+  Future<List<FlutterEvent>> diskCreateDirectory(
+      {required String entityId, required FlutterDiskType diskType, required String path});
+
+  Future<List<FlutterEvent>> diskDeleteFile(
+      {required String entityId, required FlutterDiskType diskType, required String path});
+
+  Future<FlutterDiskStats> diskGetStats({required String entityId, required FlutterDiskType diskType});
+
+  Future<List<FlutterFileInfo>> diskListFiles(
+      {required String entityId, required FlutterDiskType diskType, required String path});
+
+  Future<Uint8List> diskReadFile({required String entityId, required FlutterDiskType diskType, required String path});
+
+  Future<List<FlutterEvent>> diskWriteFile(
+      {required String entityId, required FlutterDiskType diskType, required String path, required List<int> data});
+
   Future<List<FlutterEvent>> entityAddMember(
       {required FlutterEntityType entityType,
       required String entityId,
       required String memberId,
       required String role});
 
-  /// Create a new entity
   Future<List<FlutterEvent>> entityCreate(
-      {required String name,
-      required FlutterEntityType entityType,
-      String? description,
-      String? parentOrgId});
+      {required String name, required FlutterEntityType entityType, String? description, String? parentOrgId});
 
-  /// Get an entity by ID
   Future<FlutterEntity> entityGet({required String entityId});
 
-  /// List all entities
   Future<List<FlutterEntity>> entityList();
 
-  /// List entities by type
-  Future<List<FlutterEntity>> entityListByType(
-      {required FlutterEntityType entityType});
+  Future<List<FlutterEntity>> entityListByType({required FlutterEntityType entityType});
 
-  /// Remove a member from an entity
   Future<List<FlutterEvent>> entityRemoveMember(
-      {required FlutterEntityType entityType,
-      required String entityId,
-      required String memberId});
+      {required FlutterEntityType entityType, required String entityId, required String memberId});
 
-  /// Get the current user profile
   Future<FlutterUserProfile> getProfile();
 
-  /// Connect to a peer by four words
   Future<List<FlutterEvent>> gossipConnectToPeer({required String fourWords});
 
-  /// Get network information
+  Future<String?> gossipGetConnectionWords();
+
   Future<FlutterNetworkInfo> gossipGetNetworkInfo();
 
-  /// Start the gossip network
   Future<List<FlutterEvent>> gossipStart({int? port});
 
-  /// Stop the gossip network
   Future<List<FlutterEvent>> gossipStop();
 
-  /// Accept an invite
   Future<List<FlutterEvent>> inviteAccept({required String inviteId});
 
-  /// Create an invite
   Future<List<FlutterEvent>> inviteCreate(
       {required String recipientId,
       required FlutterEntityType entityType,
@@ -115,21 +127,170 @@ abstract class CommunitasApi implements RustOpaqueInterface {
       required String role,
       String? message});
 
-  /// Reject an invite
   Future<List<FlutterEvent>> inviteReject({required String inviteId});
 
-  /// Revoke an invite (sender only)
   Future<List<FlutterEvent>> inviteRevoke({required String inviteId});
 
-  /// Send a message to an entity
-  Future<List<FlutterEvent>> messageSend(
+  Future<FlutterKanbanBoard> kanbanCreateBoard(
+      {required String entityId, required String boardName, String? description});
+
+  Future<FlutterKanbanCard> kanbanCreateCard(
+      {required String boardId,
+      required String columnId,
+      required String title,
+      String? description,
+      String? assignee});
+
+  Future<FlutterKanbanColumn> kanbanCreateColumn({required String boardId, required String columnName, int? position});
+
+  Future<List<FlutterEvent>> kanbanDeleteCard({required String boardId, required String cardId});
+
+  Future<FlutterKanbanBoard> kanbanGetBoard({required String boardId});
+
+  Future<List<FlutterKanbanBoard>> kanbanListBoards({required String entityId});
+
+  Future<List<FlutterKanbanCard>> kanbanListCards(
+      {required String boardId, String? columnId, String? state, String? assigneeId, String? tagId});
+
+  Future<List<FlutterKanbanColumn>> kanbanListColumns({required String boardId});
+
+  Future<List<FlutterEvent>> kanbanMoveCard(
+      {required String boardId, required String cardId, required String targetColumnId, int? position});
+
+  Future<List<FlutterEvent>> kanbanUpdateCard(
+      {required String boardId, required String cardId, String? title, String? description, String? assignee});
+
+  Future<List<FlutterEvent>> messageAddReaction(
       {required String entityId,
       required FlutterEntityType entityType,
-      required String text,
-      String? replyToId});
+      required String messageId,
+      required String emoji});
 
-  /// Update display name
+  Future<List<FlutterEvent>> messageDelete(
+      {required String entityId, required FlutterEntityType entityType, required String messageId});
+
+  Future<List<FlutterEvent>> messageEdit(
+      {required String entityId,
+      required FlutterEntityType entityType,
+      required String messageId,
+      required String newText});
+
+  Future<FlutterMessage> messageGet({required String entityId, required String messageId});
+
+  Future<List<FlutterMessage>> messageList({required String entityId});
+
+  Future<List<FlutterMessage>> messageListDirect({required String otherPeerId});
+
+  Future<List<FlutterMessage>> messageListThread({required String entityId, required String parentMessageId});
+
+  Future<List<FlutterEvent>> messageRemoveReaction(
+      {required String entityId,
+      required FlutterEntityType entityType,
+      required String messageId,
+      required String emoji});
+
+  Future<List<FlutterEvent>> messageSend(
+      {required String entityId, required FlutterEntityType entityType, required String text, String? replyToId});
+
+  Future<List<FlutterEvent>> messageSendDirect({required List<String> recipients, required String text});
+
+  Future<List<FlutterEvent>> presenceAnnounce();
+
+  Future<FlutterPresenceRecord?> presenceGetCachedPeer({required String pubkeyHex});
+
+  Future<FlutterPresenceRecord?> presenceGetOurRecord();
+
+  Future<FlutterPresenceStatus> presenceGetStatus({required String peerId});
+
+  Future<List<String>> presenceListOnlinePeers();
+
+  Future<FlutterPresenceRecord?> presenceQueryPeer({required String pubkeyHex});
+
   Future<List<FlutterEvent>> updateDisplayName({required String displayName});
+}
+
+/// Contact response data
+class FlutterContact {
+  final String id;
+  final String displayName;
+  final String? fourWords;
+  final bool isFavourite;
+  final bool isOnline;
+  final PlatformInt64 createdAt;
+  final PlatformInt64? lastSeen;
+
+  const FlutterContact({
+    required this.id,
+    required this.displayName,
+    this.fourWords,
+    required this.isFavourite,
+    required this.isOnline,
+    required this.createdAt,
+    this.lastSeen,
+  });
+
+  @override
+  int get hashCode =>
+      id.hashCode ^
+      displayName.hashCode ^
+      fourWords.hashCode ^
+      isFavourite.hashCode ^
+      isOnline.hashCode ^
+      createdAt.hashCode ^
+      lastSeen.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is FlutterContact &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          displayName == other.displayName &&
+          fourWords == other.fourWords &&
+          isFavourite == other.isFavourite &&
+          isOnline == other.isOnline &&
+          createdAt == other.createdAt &&
+          lastSeen == other.lastSeen;
+}
+
+/// Disk stats response data
+class FlutterDiskStats {
+  final String entityId;
+  final FlutterDiskType diskType;
+  final BigInt usedBytes;
+  final int fileCount;
+  final int dirCount;
+
+  const FlutterDiskStats({
+    required this.entityId,
+    required this.diskType,
+    required this.usedBytes,
+    required this.fileCount,
+    required this.dirCount,
+  });
+
+  @override
+  int get hashCode =>
+      entityId.hashCode ^ diskType.hashCode ^ usedBytes.hashCode ^ fileCount.hashCode ^ dirCount.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is FlutterDiskStats &&
+          runtimeType == other.runtimeType &&
+          entityId == other.entityId &&
+          diskType == other.diskType &&
+          usedBytes == other.usedBytes &&
+          fileCount == other.fileCount &&
+          dirCount == other.dirCount;
+}
+
+/// Disk type enumeration
+enum FlutterDiskType {
+  private,
+  public,
+  shared,
+  ;
 }
 
 /// Entity information
@@ -205,8 +366,7 @@ sealed class FlutterEvent with _$FlutterEvent {
   const factory FlutterEvent.networkingStarted({
     required String address,
   }) = FlutterEvent_NetworkingStarted;
-  const factory FlutterEvent.networkingStopped() =
-      FlutterEvent_NetworkingStopped;
+  const factory FlutterEvent.networkingStopped() = FlutterEvent_NetworkingStopped;
   const factory FlutterEvent.peerConnected({
     required String peerId,
   }) = FlutterEvent_PeerConnected;
@@ -227,12 +387,44 @@ sealed class FlutterEvent with _$FlutterEvent {
     required String messageId,
     required String entityId,
   }) = FlutterEvent_MessageReceived;
+  const factory FlutterEvent.directMessageSent({
+    required List<String> messageIds,
+    required List<String> recipients,
+  }) = FlutterEvent_DirectMessageSent;
+  const factory FlutterEvent.messageDeleted({
+    required String messageId,
+    required String entityId,
+  }) = FlutterEvent_MessageDeleted;
+  const factory FlutterEvent.messageEdited({
+    required String messageId,
+    required String entityId,
+    required String newText,
+    required BigInt editedAt,
+  }) = FlutterEvent_MessageEdited;
+  const factory FlutterEvent.reactionAdded({
+    required String messageId,
+    required String entityId,
+    required String emoji,
+    required String reactorId,
+  }) = FlutterEvent_ReactionAdded;
+  const factory FlutterEvent.reactionRemoved({
+    required String messageId,
+    required String entityId,
+    required String emoji,
+    required String reactorId,
+  }) = FlutterEvent_ReactionRemoved;
   const factory FlutterEvent.inviteCreated({
     required String inviteId,
   }) = FlutterEvent_InviteCreated;
   const factory FlutterEvent.inviteAccepted({
     required String inviteId,
   }) = FlutterEvent_InviteAccepted;
+  const factory FlutterEvent.inviteRejected({
+    required String inviteId,
+  }) = FlutterEvent_InviteRejected;
+  const factory FlutterEvent.inviteRevoked({
+    required String inviteId,
+  }) = FlutterEvent_InviteRevoked;
   const factory FlutterEvent.fileWritten({
     required String entityId,
     required String path,
@@ -245,6 +437,186 @@ sealed class FlutterEvent with _$FlutterEvent {
     required String code,
     required String message,
   }) = FlutterEvent_Error;
+}
+
+/// File info response data
+class FlutterFileInfo {
+  final String path;
+  final String name;
+  final bool isDirectory;
+  final BigInt sizeBytes;
+  final PlatformInt64 modifiedAt;
+
+  const FlutterFileInfo({
+    required this.path,
+    required this.name,
+    required this.isDirectory,
+    required this.sizeBytes,
+    required this.modifiedAt,
+  });
+
+  @override
+  int get hashCode => path.hashCode ^ name.hashCode ^ isDirectory.hashCode ^ sizeBytes.hashCode ^ modifiedAt.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is FlutterFileInfo &&
+          runtimeType == other.runtimeType &&
+          path == other.path &&
+          name == other.name &&
+          isDirectory == other.isDirectory &&
+          sizeBytes == other.sizeBytes &&
+          modifiedAt == other.modifiedAt;
+}
+
+/// Kanban board response data
+class FlutterKanbanBoard {
+  final String id;
+  final String entityId;
+  final String name;
+  final String? description;
+  final int columnCount;
+
+  const FlutterKanbanBoard({
+    required this.id,
+    required this.entityId,
+    required this.name,
+    this.description,
+    required this.columnCount,
+  });
+
+  @override
+  int get hashCode => id.hashCode ^ entityId.hashCode ^ name.hashCode ^ description.hashCode ^ columnCount.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is FlutterKanbanBoard &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          entityId == other.entityId &&
+          name == other.name &&
+          description == other.description &&
+          columnCount == other.columnCount;
+}
+
+/// Kanban card response data
+class FlutterKanbanCard {
+  final String id;
+  final String columnId;
+  final String title;
+  final String? description;
+  final String? assignee;
+  final int position;
+
+  const FlutterKanbanCard({
+    required this.id,
+    required this.columnId,
+    required this.title,
+    this.description,
+    this.assignee,
+    required this.position,
+  });
+
+  @override
+  int get hashCode =>
+      id.hashCode ^ columnId.hashCode ^ title.hashCode ^ description.hashCode ^ assignee.hashCode ^ position.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is FlutterKanbanCard &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          columnId == other.columnId &&
+          title == other.title &&
+          description == other.description &&
+          assignee == other.assignee &&
+          position == other.position;
+}
+
+/// Kanban column response data
+class FlutterKanbanColumn {
+  final String id;
+  final String boardId;
+  final String name;
+  final int position;
+  final String? color;
+  final int? wipLimit;
+
+  const FlutterKanbanColumn({
+    required this.id,
+    required this.boardId,
+    required this.name,
+    required this.position,
+    this.color,
+    this.wipLimit,
+  });
+
+  @override
+  int get hashCode =>
+      id.hashCode ^ boardId.hashCode ^ name.hashCode ^ position.hashCode ^ color.hashCode ^ wipLimit.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is FlutterKanbanColumn &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          boardId == other.boardId &&
+          name == other.name &&
+          position == other.position &&
+          color == other.color &&
+          wipLimit == other.wipLimit;
+}
+
+/// Message response data
+class FlutterMessage {
+  final String id;
+  final String entityId;
+  final String author;
+  final String text;
+  final PlatformInt64 timestamp;
+  final String? replyToId;
+  final List<FlutterReaction> reactions;
+  final BigInt? editedAt;
+
+  const FlutterMessage({
+    required this.id,
+    required this.entityId,
+    required this.author,
+    required this.text,
+    required this.timestamp,
+    this.replyToId,
+    required this.reactions,
+    this.editedAt,
+  });
+
+  @override
+  int get hashCode =>
+      id.hashCode ^
+      entityId.hashCode ^
+      author.hashCode ^
+      text.hashCode ^
+      timestamp.hashCode ^
+      replyToId.hashCode ^
+      reactions.hashCode ^
+      editedAt.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is FlutterMessage &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          entityId == other.entityId &&
+          author == other.author &&
+          text == other.text &&
+          timestamp == other.timestamp &&
+          replyToId == other.replyToId &&
+          reactions == other.reactions &&
+          editedAt == other.editedAt;
 }
 
 /// Network status information
@@ -283,6 +655,108 @@ class FlutterNetworkInfo {
           bootstrapConnected == other.bootstrapConnected;
 }
 
+/// Presence record exposed to Flutter
+class FlutterPresenceRecord {
+  final String pubkeyHex;
+  final String connectionWords;
+  final BigInt timestamp;
+  final bool isVerified;
+
+  const FlutterPresenceRecord({
+    required this.pubkeyHex,
+    required this.connectionWords,
+    required this.timestamp,
+    required this.isVerified,
+  });
+
+  @override
+  int get hashCode => pubkeyHex.hashCode ^ connectionWords.hashCode ^ timestamp.hashCode ^ isVerified.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is FlutterPresenceRecord &&
+          runtimeType == other.runtimeType &&
+          pubkeyHex == other.pubkeyHex &&
+          connectionWords == other.connectionWords &&
+          timestamp == other.timestamp &&
+          isVerified == other.isVerified;
+}
+
+/// Presence status for a peer (online/offline/unknown)
+class FlutterPresenceStatus {
+  final String peerId;
+  final String status;
+  final PlatformInt64 lastSeen;
+
+  const FlutterPresenceStatus({
+    required this.peerId,
+    required this.status,
+    required this.lastSeen,
+  });
+
+  @override
+  int get hashCode => peerId.hashCode ^ status.hashCode ^ lastSeen.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is FlutterPresenceStatus &&
+          runtimeType == other.runtimeType &&
+          peerId == other.peerId &&
+          status == other.status &&
+          lastSeen == other.lastSeen;
+}
+
+class FlutterReaction {
+  final String emoji;
+  final int count;
+  final bool userReacted;
+  final List<String> peerIds;
+
+  const FlutterReaction({
+    required this.emoji,
+    required this.count,
+    required this.userReacted,
+    required this.peerIds,
+  });
+
+  @override
+  int get hashCode => emoji.hashCode ^ count.hashCode ^ userReacted.hashCode ^ peerIds.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is FlutterReaction &&
+          runtimeType == other.runtimeType &&
+          emoji == other.emoji &&
+          count == other.count &&
+          userReacted == other.userReacted &&
+          peerIds == other.peerIds;
+}
+
+/// Identity recovery preview/result
+class FlutterRecoveredIdentity {
+  final String fourWords;
+  final String pubkeyHex;
+
+  const FlutterRecoveredIdentity({
+    required this.fourWords,
+    required this.pubkeyHex,
+  });
+
+  @override
+  int get hashCode => fourWords.hashCode ^ pubkeyHex.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is FlutterRecoveredIdentity &&
+          runtimeType == other.runtimeType &&
+          fourWords == other.fourWords &&
+          pubkeyHex == other.pubkeyHex;
+}
+
 /// Session information
 class FlutterSessionInfo {
   final String sessionId;
@@ -296,8 +770,7 @@ class FlutterSessionInfo {
   });
 
   @override
-  int get hashCode =>
-      sessionId.hashCode ^ fourWords.hashCode ^ displayName.hashCode;
+  int get hashCode => sessionId.hashCode ^ fourWords.hashCode ^ displayName.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -324,11 +797,7 @@ class FlutterUserProfile {
   });
 
   @override
-  int get hashCode =>
-      fourWords.hashCode ^
-      displayName.hashCode ^
-      deviceName.hashCode ^
-      deviceType.hashCode;
+  int get hashCode => fourWords.hashCode ^ displayName.hashCode ^ deviceName.hashCode ^ deviceType.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -359,11 +828,7 @@ class FlutterVaultInfo {
 
   @override
   int get hashCode =>
-      fourWords.hashCode ^
-      displayName.hashCode ^
-      createdAt.hashCode ^
-      lastAccessed.hashCode ^
-      sizeBytes.hashCode;
+      fourWords.hashCode ^ displayName.hashCode ^ createdAt.hashCode ^ lastAccessed.hashCode ^ sizeBytes.hashCode;
 
   @override
   bool operator ==(Object other) =>

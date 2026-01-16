@@ -114,14 +114,6 @@ pub async fn run_http(args: Args) -> Result<()> {
 
     let state = Arc::new(HttpServerState::new(args.clone()));
 
-    // Initialize DHT node (auto-starts on desktop, conditional on mobile)
-    if let Err(e) = tools::initialize_node().await {
-        warn!(
-            "Failed to initialize DHT node: {}. Continuing without DHT.",
-            e
-        );
-    }
-
     // Initialize demo mode if enabled
     if args.demo {
         initialize_demo_mode(&state).await?;
@@ -135,11 +127,6 @@ pub async fn run_http(args: Args) -> Result<()> {
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;
 
-    // Gracefully shutdown DHT node
-    if let Err(e) = tools::shutdown_node().await {
-        warn!("Error during DHT node shutdown: {}", e);
-    }
-
     Ok(())
 }
 
@@ -152,14 +139,6 @@ pub async fn run_https(args: Args, tls_config: ServerTlsConfig) -> Result<()> {
         .parse()?;
 
     let state = Arc::new(HttpServerState::new(args.clone()));
-
-    // Initialize DHT node (auto-starts on desktop, conditional on mobile)
-    if let Err(e) = tools::initialize_node().await {
-        warn!(
-            "Failed to initialize DHT node: {}. Continuing without DHT.",
-            e
-        );
-    }
 
     // Initialize demo mode if enabled
     if args.demo {
@@ -179,11 +158,6 @@ pub async fn run_https(args: Args, tls_config: ServerTlsConfig) -> Result<()> {
     )
     .serve(app.into_make_service())
     .await?;
-
-    // Gracefully shutdown DHT node
-    if let Err(e) = tools::shutdown_node().await {
-        warn!("Error during DHT node shutdown: {}", e);
-    }
 
     Ok(())
 }

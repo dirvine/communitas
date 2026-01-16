@@ -47,7 +47,7 @@ flutter run -d chrome
 
 # Build for release
 flutter build macos --release
-flutter build web --release
+flutter build web --release --dart-define=DEMO_MODE=true
 ```
 
 ### Rust Development

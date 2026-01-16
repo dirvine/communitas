@@ -94,11 +94,15 @@ local-ip-address = "0.6"
 dirs = "5.0"
 keyring = "3.2"
 tempfile = "3.0"
+flutter_rust_bridge = "=2.11.1"
 
 
 
 # Compression
 flate2 = "1.0"
+
+# Erasure coding
+reed-solomon-erasure = "6.0.0"
 
 # File operations
 mime_guess = "2.0"
@@ -121,4 +125,3 @@ libfuzzer-sys = "0.4"
 # [[bin]]
 # name = "fuzz_crdt_sync"
 # path = "fuzz/fuzz_targets/crdt_sync.rs"
-

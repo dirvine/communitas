@@ -1047,27 +1047,11 @@ impl Default for NetworkConfig {
 }
 ```
 
-### Tauri Configuration
+### App Configuration
 
-**File**: `communitas-desktop/tauri.conf.json`
+Network settings are configured via TOML files and defaults in `communitas-core`.
 
-```json
-{
-  "network": {
-    "maxPeers": 50,
-    "idleTimeoutSecs": 60,
-    "keepaliveIntervalSecs": 20,
-    "enableUpnp": true,
-    "retryPolicy": {
-      "initialDelaySecs": 1,
-      "maxDelaySecs": 60,
-      "multiplier": 2.0,
-      "maxAttempts": 10,
-      "jitter": 0.2
-    }
-  }
-}
-```
+**Example**: `config/production-network.toml`
 
 ### Environment Variables
 
@@ -1196,19 +1180,17 @@ Best provider:
   - Latency: 25ms
 ```
 
-#### Tauri DevTools
+#### Flutter FFI (Debug)
 
-```javascript
-// Check network status from frontend
-const status = await invoke('get_network_status');
-console.log('Network status:', status);
+```dart
+// Check network status from Flutter via FFI
+final status = await api.getNetworkInfo();
+print('Network status: $status');
 
 // Connect to a peer via four-words
-const connected = await invoke('connect_via_four_words', {
-  fourWords: 'ocean-forest-moon-star'
-});
+await api.connectByWords('ocean-forest-moon-star');
 
-// Get endpoint four-words
+// Get endpoint connection words
 const endpoint = await invoke('get_endpoint_four_words');
 console.log('Our endpoint:', endpoint);
 ```
@@ -1336,7 +1318,7 @@ Using native QUIC NAT traversal:
 
 - [Gossip Protocol](gossip-protocol.md) - P2P communication layer
 - [Security](security.md) - Cryptography and security model
-- [Core Components](core-components.md) - System component overview
+- [Architecture Overview](README.md) - System component overview
 - [Architecture README](README.md) - Architecture overview
 
 ---

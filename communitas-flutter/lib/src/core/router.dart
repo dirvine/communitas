@@ -11,8 +11,11 @@ import '../features/messaging/presentation/chat_screen.dart';
 import '../features/kanban/presentation/kanban_board_screen.dart';
 import '../features/drive/presentation/drive_browser_screen.dart';
 import '../features/contacts/presentation/contact_chat_screen.dart';
-import '../features/calls/presentation/active_call_screen.dart';
 import '../features/network/presentation/network_panel_screen.dart';
+import '../features/navigation/presentation/messages_list_screen.dart';
+import '../features/navigation/presentation/projects_list_screen.dart';
+import '../features/navigation/presentation/contacts_list_screen.dart';
+import '../features/navigation/presentation/more_screen.dart';
 import '../features/auth/providers/auth_provider.dart';
 
 /// Navigation routes for Communitas
@@ -23,12 +26,15 @@ class Routes {
   static const String createIdentity = '/create-identity';
   static const String recoverIdentity = '/recover-identity';
   static const String home = '/';
+  static const String messages = '/messages';
+  static const String projects = '/projects';
+  static const String contacts = '/contacts';
+  static const String more = '/more';
   static const String entityDetail = '/entity/:type/:id';
   static const String entityChat = '/entity/:type/:id/chat';
   static const String entityDrive = '/entity/:type/:id/drive';
   static const String projectBoard = '/project/:id/board';
   static const String contactChat = '/contact/:fourWords/chat';
-  static const String activeCall = '/call/:fourWords';
   static const String network = '/network';
 }
 
@@ -100,6 +106,26 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const HomeScreen(),
       ),
       GoRoute(
+        path: Routes.messages,
+        name: 'messages',
+        builder: (context, state) => const MessagesListScreen(),
+      ),
+      GoRoute(
+        path: Routes.projects,
+        name: 'projects',
+        builder: (context, state) => const ProjectsListScreen(),
+      ),
+      GoRoute(
+        path: Routes.contacts,
+        name: 'contacts',
+        builder: (context, state) => const ContactsListScreen(),
+      ),
+      GoRoute(
+        path: Routes.more,
+        name: 'more',
+        builder: (context, state) => const MoreScreen(),
+      ),
+      GoRoute(
         path: Routes.entityDetail,
         name: 'entityDetail',
         builder: (context, state) {
@@ -140,14 +166,6 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) {
           final fourWords = state.pathParameters['fourWords']!;
           return ContactChatScreen(fourWords: fourWords);
-        },
-      ),
-      GoRoute(
-        path: Routes.activeCall,
-        name: 'activeCall',
-        builder: (context, state) {
-          final fourWords = state.pathParameters['fourWords']!;
-          return ActiveCallScreen(fourWords: fourWords);
         },
       ),
       GoRoute(

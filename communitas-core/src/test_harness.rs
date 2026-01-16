@@ -11,7 +11,8 @@
  * - Presence, FOAF, gossip, and sync integration
  */
 use crate::core_context::CoreContext;
-use anyhow::{Context as _, Result};
+use crate::types::DeviceType;
+use anyhow::{Context, Result};
 use saorsa_gossip_groups::GroupContext;
 use saorsa_gossip_presence::PresenceManager;
 use saorsa_gossip_transport::{QuicTransport, TransportConfig};
@@ -152,8 +153,19 @@ impl TestNode {
             PresenceManager::new(self.peer_id, self.transport.clone(), groups_map.clone());
         self.presence = Some(Arc::new(RwLock::new(presence_mgr)));
 
-        // TODO: Initialize CoreContext when we have the constructor ready
-        // For now, mark as initialized
+        let storage_dir = self.temp_dir.path().join("core");
+        let core = CoreContext::initialize(
+            self.four_words.clone(),
+            format!("Test Node {}", self.id),
+            format!("test-node-{}", self.id),
+            DeviceType::Desktop,
+            storage_dir,
+        )
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to initialize CoreContext: {e}"))?;
+
+        self.core = Some(Arc::new(core));
+
         info!("TestNode {} core initialized", self.id);
         Ok(())
     }

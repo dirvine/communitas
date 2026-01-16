@@ -3,6 +3,7 @@
 ## Status
 
 Accepted (2025-12-24)
+Updated (2025-01-15) - Replaced HTTP bridge with FFI, added Flutter
 
 ## Context
 
@@ -41,24 +42,30 @@ Organize Communitas as a **Cargo workspace** with specialized crates:
 communitas/
 ├── Cargo.toml                    # Workspace root
 ├── communitas-core/              # Core library (no UI, no platform)
-├── communitas-desktop/           # Tauri desktop application
-├── communitas-headless/          # Headless daemon
-├── communitas-bindings/          # UniFFI bindings for mobile
-├── communitas-mcp/               # MCP server for AI agents
+├── communitas-flutter/           # Flutter cross-platform application
+├── communitas-headless/          # Headless daemon / bootstrap nodes
+├── communitas-mcp/               # MCP server for AI agents (stdio + HTTPS)
 ├── communitas-kanban/            # CRDT-based Kanban system
-└── communitas-app/               # iOS/Android (planned)
+└── communitas-p2p-test/          # P2P testing utilities
 ```
 
 ### Crate Responsibilities
 
 | Crate | Purpose | Dependencies |
 |-------|---------|--------------|
-| **communitas-core** | Business logic, CRDT, storage, crypto | saorsa-*, yrs |
-| **communitas-desktop** | Tauri commands, desktop integration | core, tauri |
-| **communitas-headless** | Server mode, CLI, webhooks | core, tokio |
-| **communitas-bindings** | Swift/Kotlin FFI | core, uniffi |
+| **communitas-core** | Business logic, CRDT, storage, crypto, FFI | saorsa-*, yrs, flutter_rust_bridge |
+| **communitas-flutter** | Cross-platform UI (macOS, iOS, Android, Windows, Linux) | core (via FFI) |
+| **communitas-headless** | Bootstrap nodes, CLI, server mode | core, tokio |
 | **communitas-mcp** | MCP server for AI agents (stdio + HTTPS) | core, axum |
 | **communitas-kanban** | CRDT-based Kanban boards | core, yrs |
+
+### Communication Patterns
+
+| Component | Access Method | Use Case |
+|-----------|--------------|----------|
+| **Flutter App** | FFI via flutter_rust_bridge | GUI operations, user interactions |
+| **AI Agents** | MCP over stdio/HTTP | Claude Code, external tools |
+| **Headless Node** | Direct Rust API | Bootstrap, network infrastructure |
 
 ### Dependency Graph
 
@@ -81,24 +88,26 @@ communitas/
 │                    │ • Storage        │                            │
 │                    │ • Gossip         │                            │
 │                    │ • Crypto         │                            │
+│                    │ • FFI bindings   │                            │
 │                    └──────────────────┘                            │
-│                      │    │    │    │                              │
-│          ┌───────────┘    │    │    └───────────┐                  │
-│          ▼                ▼    ▼                ▼                  │
-│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌───────────┐ │
-│  │ communitas-  │ │ communitas-  │ │ communitas-  │ │communitas-│ │
-│  │   desktop    │ │   headless   │ │     tui      │ │ bindings  │ │
-│  │              │ │              │ │              │ │           │ │
-│  │ Tauri + UI   │ │ CLI + Server │ │ Terminal UI  │ │ UniFFI    │ │
-│  └──────────────┘ └──────────────┘ └──────────────┘ └───────────┘ │
-│                              │                              │      │
-│                              ▼                              ▼      │
-│                    ┌──────────────┐               ┌──────────────┐│
-│                    │ communitas-  │               │ communitas-  ││
-│                    │   bridge     │               │     app      ││
-│                    │              │               │              ││
-│                    │ HTTP API     │               │ iOS/Android  ││
-│                    └──────────────┘               └──────────────┘│
+│                      │         │         │                          │
+│          ┌───────────┘         │         └───────────┐              │
+│          ▼                     ▼                     ▼              │
+│  ┌──────────────┐     ┌──────────────┐     ┌──────────────┐        │
+│  │ communitas-  │     │ communitas-  │     │ communitas-  │        │
+│  │   flutter    │     │   headless   │     │     mcp      │        │
+│  │              │     │              │     │              │        │
+│  │ Cross-plat   │     │ Bootstrap    │     │ AI Agents    │        │
+│  │ GUI (FFI)    │     │ Nodes, CLI   │     │ stdio/HTTP   │        │
+│  └──────────────┘     └──────────────┘     └──────────────┘        │
+│          │                                         │                │
+│          │ flutter_rust_bridge                     │ MCP JSON-RPC   │
+│          ▼                                         ▼                │
+│  ┌──────────────┐                         ┌──────────────┐         │
+│  │   Flutter    │                         │ AI Tools     │         │
+│  │   Dart UI    │                         │ Claude,      │         │
+│  │              │                         │ Canvas, etc  │         │
+│  └──────────────┘                         └──────────────┘         │
 │                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -138,33 +147,36 @@ pub mod webrtc;            // Voice/video
 - Platform APIs (keyring, notifications)
 - UI frameworks
 
-### communitas-bindings (UniFFI)
+### Flutter FFI Bindings (flutter_rust_bridge)
 
-Exposes core functionality to Swift/Kotlin:
+Exposes core functionality to Dart via FFI:
 
 ```rust
-// communitas-bindings/src/lib.rs
+// communitas-core/src/flutter_api.rs
 
-#[uniffi::export]
-impl CommunitasClient {
-    // Identity
-    pub fn initialize(&self, four_words: String, ...) -> Result<(), ClientError>;
+#[flutter_rust_bridge::frb]
+impl CommunitasApi {
+    // Authentication
+    pub async fn auth_login(&self, four_words: String, passphrase: String) -> Result<FlutterLoginResult>;
+    pub async fn auth_logout(&self) -> Result<()>;
 
     // Entities
-    pub fn entity_create(&self, ...) -> Result<String, ClientError>;
-    pub fn entity_list(&self, ...) -> Result<Vec<SwiftEntity>, ClientError>;
+    pub async fn entity_list(&self) -> Result<Vec<FlutterEntity>>;
+    pub async fn entity_list_by_type(&self, entity_type: FlutterEntityType) -> Result<Vec<FlutterEntity>>;
+    pub async fn entity_create(&self, name: String, entity_type: FlutterEntityType) -> Result<Vec<FlutterEvent>>;
 
     // Messaging
-    pub fn message_send(&self, ...) -> Result<String, ClientError>;
+    pub async fn message_send(&self, entity_id: String, text: String) -> Result<Vec<FlutterEvent>>;
 
-    // Invites
-    pub fn invite_create(&self, ...) -> Result<SwiftInvite, ClientError>;
+    // Networking
+    pub async fn gossip_get_network_info(&self) -> Result<FlutterNetworkInfo>;
+    pub async fn gossip_connect_to_peer(&self, four_words: String) -> Result<Vec<FlutterEvent>>;
 }
 ```
 
-Generated bindings:
-- `communitas.swift` for iOS
-- `communitas.kt` for Android (planned)
+Generated bindings in `communitas-flutter/lib/src/bindings/`:
+- `flutter_api.dart` - Main API class
+- `api_exports.dart` - Type exports
 
 ### Feature Flags
 
@@ -196,7 +208,6 @@ crdt = ["yrs"]
 members = [
     "communitas-core",
     "communitas-headless",
-    "communitas-bindings",
     "communitas-mcp",
     "communitas-kanban",
     "communitas-p2p-test",
@@ -208,6 +219,20 @@ resolver = "2"
 communitas-core = { path = "communitas-core" }
 tokio = { version = "1.40", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
+flutter_rust_bridge = "2.x"
+```
+
+### Flutter Build Configuration
+
+```bash
+# Generate FFI bindings after Rust API changes
+cd communitas-flutter
+flutter_rust_bridge_codegen generate
+
+# Build for specific platform
+flutter build macos --release
+flutter build ios --release
+flutter build android --release
 ```
 
 ## Consequences
@@ -266,5 +291,8 @@ cargo test -p communitas-core --features minimal
 
 - Workspace: `Cargo.toml` (root)
 - Core crate: `communitas-core/`
-- Bindings: `communitas-bindings/`
-- UniFFI docs: https://mozilla.github.io/uniffi-rs/
+- Flutter app: `communitas-flutter/`
+- FFI bindings: `communitas-flutter/lib/src/bindings/`
+- flutter_rust_bridge docs: https://cjycode.com/flutter_rust_bridge/
+- See also: [ADR-017](ADR-017-flutter-rust-ffi-integration.md) (FFI integration details)
+- See also: [ADR-018](ADR-018-mcp-external-integration.md) (MCP for external tools)

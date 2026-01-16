@@ -509,6 +509,21 @@ impl CoreContext {
                         );
                         Self::handle_sync_response(message_service, entity_id_clone, sync_response);
                     }
+                    Ok(crate::crdt::GossipMessageType::PeerListRequest(request)) => {
+                        info!(
+                            "Received peer list request for {} peers from peer {:?}",
+                            request.max_peers, sender_peer_id
+                        );
+                        Self::handle_peer_list_request(gossip_clone, sender_peer_id, request);
+                    }
+                    Ok(crate::crdt::GossipMessageType::PeerListResponse(response)) => {
+                        info!(
+                            "Received peer list response with {} peers from peer {:?}",
+                            response.peers.len(),
+                            sender_peer_id
+                        );
+                        Self::handle_peer_list_response(gossip_clone, response);
+                    }
                     Err(_) => {
                         // Try legacy CRDTMessage format for backwards compatibility
                         match serde_json::from_slice::<crate::crdt::CRDTMessage>(&message_bytes) {
@@ -654,6 +669,114 @@ impl CoreContext {
                 "Sync response processed for {}: {} accepted, {} rejected",
                 entity_id, accepted, rejected
             );
+        });
+    }
+
+    /// Handle peer list request - respond with healthy peers from peer cache
+    ///
+    /// Selects best peers using quality scoring from the peer cache
+    /// and publishes them to the peer discovery topic.
+    fn handle_peer_list_request(
+        gossip: Arc<crate::gossip::GossipContext>,
+        _sender_peer_id: saorsa_gossip_types::PeerId,
+        request: crate::crdt::PeerListRequest,
+    ) {
+        let handle = tokio::spawn(async move {
+            // Get peer count and top peers from the peer cache
+            let cache_guard = gossip.peer_cache.read().await;
+            let peer_count = cache_guard.len();
+            let selected = cache_guard.get_top_peers(request.max_peers as usize);
+            drop(cache_guard);
+
+            // Convert to PeerInfo for response, logging peers without addresses
+            let mut skipped_peers = 0usize;
+            let peers: Vec<crate::crdt::PeerInfo> = selected
+                .iter()
+                .filter_map(|p| {
+                    if let Some(addr) = p.addr_hints.first() {
+                        Some(crate::crdt::PeerInfo::new(addr.to_string()))
+                    } else {
+                        skipped_peers += 1;
+                        None
+                    }
+                })
+                .collect();
+
+            if skipped_peers > 0 {
+                warn!(
+                    "Skipped {} peers with no address hints when building peer list response",
+                    skipped_peers
+                );
+            }
+
+            let response_peer_count = peers.len();
+
+            info!(
+                "Sending peer list response with {} peers (of {} known)",
+                response_peer_count, peer_count
+            );
+
+            // Wrap in GossipMessageType and serialize
+            let gossip_msg =
+                crate::crdt::GossipMessageType::PeerListResponse(crate::crdt::PeerListResponse {
+                    peers,
+                    total_known_peers: peer_count,
+                });
+
+            match serde_json::to_vec(&gossip_msg) {
+                Ok(bytes) => {
+                    // Publish to a well-known peer discovery topic
+                    if let Err(e) = gossip.publish_to_entity("_peer_discovery", bytes).await {
+                        warn!("Failed to send peer list response: {}", e);
+                    }
+                }
+                Err(e) => {
+                    warn!("Failed to serialize peer list response: {}", e);
+                }
+            }
+        });
+
+        // Monitor the task for panics
+        tokio::spawn(async move {
+            if let Err(e) = handle.await {
+                warn!("handle_peer_list_request task panicked: {}", e);
+            }
+        });
+    }
+
+    /// Handle peer list response - process received peers
+    ///
+    /// Logs received peers for debugging and potential future connection attempts.
+    /// Direct cache integration requires PeerIds which are not included in the response.
+    fn handle_peer_list_response(
+        _gossip: Arc<crate::gossip::GossipContext>,
+        response: crate::crdt::PeerListResponse,
+    ) {
+        let handle = tokio::spawn(async move {
+            info!(
+                "Received {} peers from peer list response (remote knows {} total)",
+                response.peers.len(),
+                response.total_known_peers
+            );
+
+            // Log each peer for debugging
+            for peer_info in &response.peers {
+                info!(
+                    "  - Peer: {} (score: {:.2})",
+                    peer_info.addr, peer_info.score
+                );
+            }
+
+            // TODO: To properly add peers to cache, we need PeerIds
+            // The cache API requires: cache.update_success(peer_id, addr)
+            // For now, these addresses can be tried directly when connecting
+        });
+
+        // Monitor the task for panics
+        tokio::spawn(async move {
+            if let Err(e) = handle.await {
+                warn!("handle_peer_list_response task panicked: {}", e);
+            }
         });
     }
 

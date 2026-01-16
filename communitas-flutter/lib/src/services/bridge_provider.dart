@@ -1,9 +1,32 @@
+// =============================================================================
+// DEPRECATED: This file is deprecated in favor of ffi_provider.dart
+// =============================================================================
+//
+// The HTTP bridge approach has been replaced with direct FFI bindings via
+// flutter_rust_bridge. For native apps (macOS, iOS, Android, Windows, Linux),
+// use ffi_provider.dart instead.
+//
+// This file is kept temporarily for backwards compatibility and will be
+// removed in a future version.
+//
+// Migration guide:
+// - bridgeClientProvider -> communitasApiProvider (from ffi_provider.dart)
+// - bridgeStatusProvider -> ffiNetworkStatusProvider
+// - channelsProvider -> ffiChannelsProvider
+// - organisationsProvider -> ffiOrganizationsProvider
+// - projectsProvider -> ffiProjectsProvider
+// - groupsProvider -> ffiGroupsProvider
+// - peersProvider -> ffiNetworkInfoProvider (for peer count)
+// - connectionInfoProvider -> ffiNetworkInfoProvider
+//
+// =============================================================================
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'bridge_client.dart';
 
 // ============================================================
-// Bridge Configuration
+// Bridge Configuration (DEPRECATED - use ffi_provider.dart)
 // ============================================================
 
 /// Provider for the bridge server URL.

@@ -1,7 +1,22 @@
+// =============================================================================
+// DEPRECATED: This file is deprecated in favor of direct FFI bindings
+// =============================================================================
+//
+// The HTTP bridge approach has been replaced with direct FFI bindings via
+// flutter_rust_bridge (CommunitasApi class). For native apps, use
+// ffi_provider.dart instead of this HTTP client.
+//
+// This file is kept temporarily for backwards compatibility and will be
+// removed in a future version when all HTTP endpoints are migrated to FFI.
+//
+// =============================================================================
+
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 /// HTTP client for communicating with the Communitas Bridge server.
+///
+/// @deprecated Use CommunitasApi (FFI) directly instead of HTTP bridge.
 ///
 /// The bridge server provides a REST API for all Communitas operations,
 /// allowing the Flutter web app to interact with the Rust backend.

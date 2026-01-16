@@ -26,6 +26,8 @@ ADRs document significant architectural decisions made in the project. Each reco
 | [ADR-014](ADR-014-peer-discovery-presence.md) | Peer Discovery & Presence | Accepted | 2025-01-10 |
 | [ADR-015](ADR-015-bootstrap-process.md) | Bootstrap Process | Accepted | 2025-01-10 |
 | [ADR-016](ADR-016-identity-recovery-system.md) | Identity Recovery System | Proposed | 2025-01-15 |
+| [ADR-017](ADR-017-flutter-rust-ffi-integration.md) | Flutter-Rust FFI Integration | Accepted | 2025-01-15 |
+| [ADR-018](ADR-018-mcp-external-integration.md) | MCP External Integration Architecture | Accepted | 2025-01-15 |
 
 ## Key ADR Relationships
 
@@ -47,6 +49,11 @@ ADRs document significant architectural decisions made in the project. Each reco
 - **ADR-003** (Yrs CRDT) → conflict-free data synchronization
 - **ADR-004** (Entity Hierarchy) → organizational data model
 - **ADR-005** (Virtual Disk) → distributed file storage
+
+### Integration & Architecture
+- **ADR-009** (Modular Crate Architecture) → workspace structure, crate boundaries
+- **ADR-017** (Flutter-Rust FFI Integration) → flutter_rust_bridge bindings, provider hierarchy
+- **ADR-018** (MCP External Integration) → AI agent access, saorsa-canvas integration
 
 ## ADR Template
 

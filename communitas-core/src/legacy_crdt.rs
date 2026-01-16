@@ -269,12 +269,140 @@ pub struct EntitySyncState {
     pub out_of_order_messages: Vec<String>,
 }
 
+// ============================================================================
+// Peer Discovery Messages (Phase 2: Bootstrap Node Enhancement)
+// ============================================================================
+
+/// Information about a peer for sharing in peer lists
+///
+/// Contains the essential information needed to connect to and evaluate a peer.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PeerInfo {
+    /// Socket address (IP:port) for connecting to this peer
+    pub addr: String,
+
+    /// Quality score (0.0-1.0) based on connection success rate and latency
+    /// Higher is better. Peers with scores below 0.3 should be avoided.
+    pub score: f64,
+
+    /// NAT type classification (if known)
+    /// - "open" = directly reachable
+    /// - "symmetric" = requires relay
+    /// - "unknown" = not yet determined
+    #[serde(default)]
+    pub nat_class: Option<String>,
+
+    /// Peer roles/capabilities (if known)
+    /// - "bootstrap" = can serve as introducer node
+    /// - "relay" = can relay for NAT-restricted peers
+    #[serde(default)]
+    pub roles: Vec<String>,
+}
+
+impl PeerInfo {
+    /// Create a new PeerInfo with just an address
+    pub fn new(addr: impl Into<String>) -> Self {
+        Self {
+            addr: addr.into(),
+            score: 0.5, // Default neutral score
+            nat_class: None,
+            roles: Vec::new(),
+        }
+    }
+
+    /// Create with full information
+    pub fn with_details(
+        addr: impl Into<String>,
+        score: f64,
+        nat_class: Option<String>,
+        roles: Vec<String>,
+    ) -> Self {
+        Self {
+            addr: addr.into(),
+            score: score.clamp(0.0, 1.0),
+            nat_class,
+            roles,
+        }
+    }
+}
+
+/// Request for a list of known peers
+///
+/// Sent by new nodes to bootstrap nodes to discover additional peers.
+/// Bootstrap nodes respond with their best-quality cached peers.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PeerListRequest {
+    /// Maximum number of peers to return (typically 10-20)
+    pub max_peers: u8,
+
+    /// Optional: request only peers with specific roles
+    #[serde(default)]
+    pub required_roles: Vec<String>,
+
+    /// Optional: requester's NAT class to filter compatible peers
+    #[serde(default)]
+    pub requester_nat_class: Option<String>,
+}
+
+impl PeerListRequest {
+    /// Create a simple request for N peers
+    pub fn new(max_peers: u8) -> Self {
+        Self {
+            max_peers,
+            required_roles: Vec::new(),
+            requester_nat_class: None,
+        }
+    }
+
+    /// Create a request filtering for specific roles
+    pub fn with_roles(max_peers: u8, roles: Vec<String>) -> Self {
+        Self {
+            max_peers,
+            required_roles: roles,
+            requester_nat_class: None,
+        }
+    }
+}
+
+/// Response containing a list of known peers
+///
+/// Returned by bootstrap nodes in response to PeerListRequest.
+/// Peers are sorted by quality score (best first).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PeerListResponse {
+    /// List of peers, sorted by quality score (best first)
+    pub peers: Vec<PeerInfo>,
+
+    /// Total number of peers known by the responder (for diagnostics)
+    pub total_known_peers: usize,
+}
+
+impl PeerListResponse {
+    /// Create a response with the given peers
+    pub fn new(peers: Vec<PeerInfo>, total_known_peers: usize) -> Self {
+        Self {
+            peers,
+            total_known_peers,
+        }
+    }
+
+    /// Create an empty response
+    pub fn empty() -> Self {
+        Self {
+            peers: Vec::new(),
+            total_known_peers: 0,
+        }
+    }
+}
+
 /// Gossip message type wrapper
 ///
 /// Wraps different message types sent over the gossip network:
 /// - Chat messages (regular CRDTMessage)
 /// - Sync requests (when a peer needs historical messages)
 /// - Sync responses (reply with historical messages)
+/// - Peer list requests (when a node needs to discover peers)
+/// - Peer list responses (reply with known healthy peers)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum GossipMessageType {
@@ -286,6 +414,12 @@ pub enum GossipMessageType {
 
     /// Response with historical messages
     SyncResponse(SyncResponse),
+
+    /// Request for a list of known peers (bootstrap node enhancement)
+    PeerListRequest(PeerListRequest),
+
+    /// Response with list of healthy peers sorted by quality score
+    PeerListResponse(PeerListResponse),
 }
 
 /// Sort messages in causal order

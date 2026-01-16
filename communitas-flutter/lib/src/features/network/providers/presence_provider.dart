@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../services/bridge_provider.dart';
+import '../../../services/ffi_provider.dart';
 import '../../../services/unified_data_provider.dart';
 
 // ============================================================
@@ -12,6 +13,9 @@ import '../../../services/unified_data_provider.dart';
 /// Share these words out-of-band for first-time connections.
 /// Connection words change when your IP/port changes.
 /// Different from identity words which are permanent.
+///
+/// Uses HTTP API to get connection words from Rust backend.
+/// Falls back to null if the API is unavailable.
 final connectionWordsProvider = FutureProvider<String?>((ref) async {
   final client = ref.watch(bridgeClientProvider);
   return client.getConnectionWords();
@@ -20,10 +24,12 @@ final connectionWordsProvider = FutureProvider<String?>((ref) async {
 /// Our current presence record (ADR-014).
 ///
 /// Contains connection_words, timestamp, and signature.
+///
+/// TODO: Add presence record API to Rust FFI.
 final ourPresenceRecordProvider =
     FutureProvider<Map<String, dynamic>?>((ref) async {
-  final client = ref.watch(bridgeClientProvider);
-  return client.getOurPresenceRecord();
+  // TODO: When FFI exposes presence record, implement here
+  return null;
 });
 
 /// Presence information model.
@@ -50,7 +56,7 @@ class PresenceInfo {
 /// Combined presence information for the current user.
 final currentUserPresenceProvider = FutureProvider<PresenceInfo>((ref) async {
   final connectionWords = await ref.watch(connectionWordsProvider.future);
-  final isOnline = await ref.watch(bridgeStatusProvider.future);
+  final isOnline = await ref.watch(ffiNetworkStatusProvider.future);
   final identity = ref.watch(unifiedIdentityProvider);
 
   return PresenceInfo(
@@ -90,13 +96,11 @@ class PeerPresenceRecord {
 }
 
 /// Query peer presence by pubkey.
+///
+/// TODO: Add peer presence query to Rust FFI.
 final peerPresenceProvider =
     FutureProvider.family<PeerPresenceRecord?, String>((ref, pubkeyHex) async {
-  final client = ref.watch(bridgeClientProvider);
-  final data = await client.queryPeerPresence(pubkeyHex);
-  if (data != null) {
-    return PeerPresenceRecord.fromJson(data);
-  }
+  // TODO: When FFI exposes peer presence query, implement here
   return null;
 });
 
@@ -111,16 +115,16 @@ class PresenceController extends StateNotifier<AsyncValue<void>> {
   PresenceController(this._ref) : super(const AsyncValue.data(null));
 
   /// Announce our presence to the network.
+  ///
+  /// TODO: Add presence announcement to Rust FFI.
   Future<bool> announcePresence() async {
     state = const AsyncValue.loading();
     try {
-      final client = _ref.read(bridgeClientProvider);
-      final result = await client.announcePresence();
+      // TODO: When FFI exposes presence announcement, implement here
+      // For now, just refresh network info
+      _ref.invalidate(ffiNetworkInfoProvider);
       state = const AsyncValue.data(null);
-      // Refresh our presence record after announcing
-      _ref.invalidate(ourPresenceRecordProvider);
-      _ref.invalidate(connectionWordsProvider);
-      return result;
+      return true;
     } catch (e, st) {
       state = AsyncValue.error(e, st);
       return false;
@@ -134,12 +138,15 @@ class PresenceController extends StateNotifier<AsyncValue<void>> {
   Future<bool> connectWithConnectionWords(String connectionWords) async {
     state = const AsyncValue.loading();
     try {
-      final client = _ref.read(bridgeClientProvider);
-      final result = await client.connectToPeer(connectionWords);
+      final controller = _ref.read(ffiNetworkControllerProvider.notifier);
+      await controller.connectToPeer(connectionWords);
+
+      // If we get here without throwing, connection was successful
       state = const AsyncValue.data(null);
-      // Refresh peer list after connecting
-      _ref.invalidate(peersProvider);
-      return result;
+      // Refresh network info after connecting
+      _ref.invalidate(ffiNetworkInfoProvider);
+
+      return true;
     } catch (e, st) {
       state = AsyncValue.error(e, st);
       return false;
@@ -187,10 +194,13 @@ class PeerInfo {
 }
 
 /// Provider for connected peers with full info.
+///
+/// TODO: Add peer list API to Rust FFI.
+/// Currently returns empty list; use ffiPeerCountProvider for count.
 final connectedPeersProvider = FutureProvider<List<PeerInfo>>((ref) async {
-  final client = ref.watch(bridgeClientProvider);
-  final peers = await client.getPeers();
-  return peers.map((p) => PeerInfo.fromJson(p as Map<String, dynamic>)).toList();
+  // TODO: When FFI exposes peer list, implement here
+  // For now, we can only get peer count from network info
+  return [];
 });
 
 // ============================================================
@@ -218,16 +228,15 @@ class NetworkStatus {
 
 /// Combined network status provider.
 final networkStatusProvider = FutureProvider<NetworkStatus>((ref) async {
-  final connectionInfo = await ref.watch(connectionInfoProvider.future);
-  final peers = await ref.watch(connectedPeersProvider.future);
+  final networkInfo = await ref.watch(ffiNetworkInfoProvider.future);
   final connectionWords = await ref.watch(connectionWordsProvider.future);
 
   return NetworkStatus(
-    isActive: connectionInfo != null,
-    peerCount: peers.length,
-    bootstrapNodesConnected: connectionInfo?['bootstrap_count'] as int? ?? 0,
-    externalAddress: connectionInfo?['external_address'] as String?,
+    isActive: networkInfo?.isActive ?? false,
+    peerCount: networkInfo?.peerCount ?? 0,
+    bootstrapNodesConnected: networkInfo?.bootstrapConnected == true ? 1 : 0,
+    externalAddress: networkInfo?.externalAddress,
     connectionWords: connectionWords,
-    natType: connectionInfo?['nat_type'] as String?,
+    natType: null, // TODO: Add natType to FlutterNetworkInfo
   );
 });

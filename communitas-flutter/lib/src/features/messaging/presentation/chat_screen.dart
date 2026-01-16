@@ -166,7 +166,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   Widget _buildMessage(UnifiedMessage message) {
     final identity = ref.watch(unifiedIdentityProvider);
-    final isMe = message.senderId == identity.fourWords;
+    final isMe = message.senderId == identity.pubkeyHex;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),

@@ -1,9 +1,11 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../main.dart' show kDemoMode;
+import '../bindings/api_exports.dart';
 import '../demo/demo_data.dart';
 import '../features/auth/providers/auth_provider.dart';
-import 'bridge_provider.dart';
+import 'ffi_provider.dart';
 
 /// Unified entity model for both demo and bridge data.
 class UnifiedEntity {
@@ -46,6 +48,19 @@ class UnifiedEntity {
       description: json['description'] as String? ?? '',
       memberCount: json['member_count'] as int? ?? 0,
       parentId: json['parent_id'] as String?,
+    );
+  }
+
+  /// Create from FFI FlutterEntity type.
+  factory UnifiedEntity.fromFfi(FlutterEntity entity) {
+    return UnifiedEntity(
+      id: entity.id,
+      type: entity.entityType.name,
+      name: entity.name,
+      role: 'member', // Role is determined by membership, not entity
+      description: entity.description ?? '',
+      memberCount: entity.memberCount.toInt(),
+      parentId: entity.parentOrgId,
     );
   }
 }
@@ -162,97 +177,89 @@ final unifiedIdentityProvider = Provider<({String pubkeyHex, String displayName}
 
 /// Provider for all organizations.
 final unifiedOrganizationsProvider = FutureProvider<List<UnifiedEntity>>((ref) async {
-  if (kBridgeMode) {
-    try {
-      final orgs = await ref.watch(organisationsProvider.future);
-      return orgs.map((json) => UnifiedEntity.fromBridge(json as Map<String, dynamic>)).toList();
-    } catch (e) {
-      debugPrint('Error fetching organizations from bridge: $e');
-      return [];
-    }
+  // Demo mode: use demo data
+  if (kDemoMode) {
+    return DemoData.organizations.map((e) => UnifiedEntity.fromDemo(e)).toList();
   }
 
-  // Demo mode
-  return DemoData.organizations.map((e) => UnifiedEntity.fromDemo(e)).toList();
+  // FFI mode: use direct Rust bindings
+  try {
+    final orgs = await ref.watch(ffiOrganizationsProvider.future);
+    return orgs.map((e) => UnifiedEntity.fromFfi(e)).toList();
+  } catch (e) {
+    debugPrint('Error fetching organizations via FFI: $e');
+    return [];
+  }
 });
 
 /// Provider for all projects.
 final unifiedProjectsProvider = FutureProvider<List<UnifiedEntity>>((ref) async {
-  if (kBridgeMode) {
-    try {
-      final projects = await ref.watch(projectsProvider.future);
-      return projects.map((json) => UnifiedEntity.fromBridge(json as Map<String, dynamic>)).toList();
-    } catch (e) {
-      debugPrint('Error fetching projects from bridge: $e');
-      return [];
-    }
+  // Demo mode: use demo data
+  if (kDemoMode) {
+    return DemoData.projects.map((e) => UnifiedEntity.fromDemo(e)).toList();
   }
 
-  // Demo mode
-  return DemoData.projects.map((e) => UnifiedEntity.fromDemo(e)).toList();
+  // FFI mode: use direct Rust bindings
+  try {
+    final projects = await ref.watch(ffiProjectsProvider.future);
+    return projects.map((e) => UnifiedEntity.fromFfi(e)).toList();
+  } catch (e) {
+    debugPrint('Error fetching projects via FFI: $e');
+    return [];
+  }
 });
 
 /// Provider for all channels.
 final unifiedChannelsProvider = FutureProvider<List<UnifiedEntity>>((ref) async {
-  if (kBridgeMode) {
-    try {
-      final channels = await ref.watch(channelsProvider.future);
-      return channels.map((json) => UnifiedEntity.fromBridge(json as Map<String, dynamic>)).toList();
-    } catch (e) {
-      debugPrint('Error fetching channels from bridge: $e');
-      return [];
-    }
+  // Demo mode: use demo data
+  if (kDemoMode) {
+    return DemoData.channels.map((e) => UnifiedEntity.fromDemo(e)).toList();
   }
 
-  // Demo mode
-  return DemoData.channels.map((e) => UnifiedEntity.fromDemo(e)).toList();
+  // FFI mode: use direct Rust bindings
+  try {
+    final channels = await ref.watch(ffiChannelsProvider.future);
+    return channels.map((e) => UnifiedEntity.fromFfi(e)).toList();
+  } catch (e) {
+    debugPrint('Error fetching channels via FFI: $e');
+    return [];
+  }
 });
 
 /// Provider for all groups.
 final unifiedGroupsProvider = FutureProvider<List<UnifiedEntity>>((ref) async {
-  if (kBridgeMode) {
-    try {
-      final groups = await ref.watch(groupsProvider.future);
-      return groups.map((json) => UnifiedEntity.fromBridge(json as Map<String, dynamic>)).toList();
-    } catch (e) {
-      debugPrint('Error fetching groups from bridge: $e');
-      return [];
-    }
+  // Demo mode: use demo data
+  if (kDemoMode) {
+    return DemoData.groups.map((e) => UnifiedEntity.fromDemo(e)).toList();
   }
 
-  // Demo mode
-  return DemoData.groups.map((e) => UnifiedEntity.fromDemo(e)).toList();
+  // FFI mode: use direct Rust bindings
+  try {
+    final groups = await ref.watch(ffiGroupsProvider.future);
+    return groups.map((e) => UnifiedEntity.fromFfi(e)).toList();
+  } catch (e) {
+    debugPrint('Error fetching groups via FFI: $e');
+    return [];
+  }
 });
 
 /// Provider for all contacts.
+///
+/// TODO: FFI method for listing contacts not yet available.
+/// Currently uses demo data for all modes.
 final unifiedContactsProvider = FutureProvider<List<UnifiedContact>>((ref) async {
-  if (kBridgeMode) {
-    try {
-      final contacts = await ref.watch(contactsProvider.future);
-      return contacts.map((json) => UnifiedContact.fromBridge(json as Map<String, dynamic>)).toList();
-    } catch (e) {
-      debugPrint('Error fetching contacts from bridge: $e');
-      return [];
-    }
-  }
-
-  // Demo mode
+  // Demo mode or FFI fallback: use demo data
+  // TODO: Add FFI method for contacts when available in Rust
   return DemoData.contacts.map((e) => UnifiedContact.fromDemo(e)).toList();
 });
 
 /// Provider for messages in a channel.
+///
+/// TODO: FFI method for listing messages not yet available.
+/// Currently uses demo data for all modes.
 final unifiedMessagesProvider = FutureProvider.family<List<UnifiedMessage>, String>((ref, channelId) async {
-  if (kBridgeMode) {
-    try {
-      final messages = await ref.watch(messagesProvider(channelId).future);
-      return messages.map((json) => UnifiedMessage.fromBridge(json as Map<String, dynamic>)).toList();
-    } catch (e) {
-      debugPrint('Error fetching messages from bridge: $e');
-      return [];
-    }
-  }
-
-  // Demo mode
+  // Demo mode or FFI fallback: use demo data
+  // TODO: Add FFI method for message history when available in Rust
   return DemoData.messages.map((e) => UnifiedMessage.fromDemo(e)).toList();
 });
 

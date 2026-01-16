@@ -93,6 +93,6 @@ pub use operations::{Counter, LWWRegister, LamportTimestamp, ORSet, Tombstone};
 // Re-export legacy CRDT types for backwards compatibility during migration
 pub use crate::legacy_crdt::{
     CRDTMessage, ClockOrdering, EntitySyncState, EntityType, GossipMessageType, LocalMessageState,
-    MessageContent, MessageMetadata, MessageStatus, MissingRange, Reaction, SyncRequest,
-    SyncResponse, VectorClock, sort_messages_causally,
+    MessageContent, MessageMetadata, MessageStatus, MissingRange, PeerInfo, PeerListRequest,
+    PeerListResponse, Reaction, SyncRequest, SyncResponse, VectorClock, sort_messages_causally,
 };

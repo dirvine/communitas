@@ -4281,9 +4281,9 @@ dependencies = [
 
 [[package]]
 name = "saorsa-gossip-transport"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1848e750766e6e193e490385343ff06ad3a352bd28bfb36c3ffd241a6f5ee24c"
+checksum = "e30ad37e69a22962c05360f95dbc0effd5ace816def3c2de7214c3ccd53bc3f8"
 dependencies = [
  "ant-quic 0.18.0",
  "anyhow",

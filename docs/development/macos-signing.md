@@ -16,11 +16,13 @@ Configure these secrets in your GitHub repository settings (Settings > Secrets a
 
 | Secret Name | Description |
 |-------------|-------------|
-| `MACOS_CERTIFICATE_APPLICATION` | Base64-encoded Developer ID Application certificate (.p12) |
+| `MACOS_CERTIFICATE` | Base64-encoded Developer ID Application certificate (.p12) |
 | `MACOS_CERTIFICATE_PASSWORD` | Password for the .p12 certificate file |
-| `APPLE_ID` | Apple ID email used for notarization |
-| `APPLE_ID_PASSWORD` | App-specific password (NOT your Apple ID password) |
-| `APPLE_TEAM_ID` | Your Apple Developer Team ID (10 characters) |
+| `KEYCHAIN_PASSWORD` | Password for the temporary keychain used during signing |
+| `MACOS_SIGNING_IDENTITY` | Full signing identity string (e.g., "Developer ID Application: Your Name (TEAM_ID)") |
+| `MACOS_NOTARIZATION_APPLE_ID` | Apple ID email used for notarization |
+| `MACOS_NOTARIZATION_PASSWORD` | App-specific password (NOT your Apple ID password) |
+| `MACOS_NOTARIZATION_TEAM_ID` | Your Apple Developer Team ID (10 characters) |
 
 ## Getting the Certificates
 
@@ -48,7 +50,21 @@ Configure these secrets in your GitHub repository settings (Settings > Secrets a
 base64 -i DeveloperIDApplication.p12 | pbcopy
 ```
 
-This copies the base64 string to your clipboard. Paste it as `MACOS_CERTIFICATE_APPLICATION` secret.
+This copies the base64 string to your clipboard. Paste it as `MACOS_CERTIFICATE` secret.
+
+### 4. Get Signing Identity
+
+Find your full signing identity:
+```bash
+security find-identity -v -p codesigning
+```
+
+Look for a line like:
+```
+"Developer ID Application: Your Company Name (ABCD123456)"
+```
+
+Use this full string as `MACOS_SIGNING_IDENTITY`.
 
 ## Getting App-Specific Password
 
@@ -56,7 +72,7 @@ This copies the base64 string to your clipboard. Paste it as `MACOS_CERTIFICATE_
 2. Sign in and go to Security > App-Specific Passwords
 3. Click "Generate an app-specific password"
 4. Name it "GitHub Actions Notarization"
-5. Copy the generated password as `APPLE_ID_PASSWORD`
+5. Copy the generated password as `MACOS_NOTARIZATION_PASSWORD`
 
 **Important**: This is NOT your Apple ID password. It's a separate app-specific password.
 

@@ -19,9 +19,8 @@ communitas-core = { version = "0.1.20", path = "../communitas-core" }
 
 # Networking - use published crate with wildcard address fix
 ant-quic = "^0.8.17"
-# Post-Quantum Cryptography
+# Post-Quantum Cryptography (ML-DSA-87 for application identity)
 saorsa-pqc = "0.3.12"
-fips204 = "0.4"
 four-word-networking = "2.6"
 rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs"] }
 

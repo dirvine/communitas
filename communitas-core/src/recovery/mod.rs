@@ -14,7 +14,7 @@
 //! ## Key Derivation
 //!
 //! The recovery system uses deterministic key derivation from BIP39 mnemonics:
-//! - ML-DSA-65 signing keys for identity authentication
+//! - ML-DSA-87 signing keys for identity authentication (Level 5 PQC, 192-bit quantum security)
 //! - ML-KEM-768 encapsulation keys for message encryption
 //! - Four-word identity derived from the public signing key
 //!

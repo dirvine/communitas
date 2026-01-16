@@ -138,7 +138,7 @@ impl CoreContext {
     /// Initialize a new CoreContext from a four-word identity
     ///
     /// This creates a new profile with:
-    /// - Generated ML-DSA-65 keypair (post-quantum signatures)
+    /// - Generated ML-DSA-87 keypair (post-quantum signatures, Level 5 security)
     /// - Four-word user identity derived from public key
     /// - Local storage directory
     ///

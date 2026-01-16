@@ -50,7 +50,7 @@ final ourPresenceRecordProvider =
 
 /// Presence information model.
 class PresenceInfo {
-  /// Hex-encoded ML-DSA-65 public key (THE identity).
+  /// Hex-encoded ML-DSA-87 public key (THE identity, Level 5 PQC).
   final String pubkeyHex;
 
   /// User-chosen display name (shown in UI).
@@ -198,7 +198,7 @@ final presenceControllerProvider =
 
 /// Peer information with presence data.
 class PeerInfo {
-  /// Hex-encoded ML-DSA-65 public key (THE identity).
+  /// Hex-encoded ML-DSA-87 public key (THE identity, Level 5 PQC).
   final String pubkeyHex;
 
   /// User-chosen display name (shown in UI).

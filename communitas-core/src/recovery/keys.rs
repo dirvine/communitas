@@ -17,7 +17,7 @@ use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 use saorsa_pqc::dsa_traits::{KeyGen as DsaKeyGen, SerDes as DsaSerDes};
 use saorsa_pqc::kem_traits::{KeyGen as KemKeyGen, SerDes as KemSerDes};
-use saorsa_pqc::ml_dsa_65;
+use saorsa_pqc::ml_dsa_87;
 use saorsa_pqc::ml_kem_768;
 use zeroize::Zeroize;
 
@@ -27,18 +27,18 @@ use super::error::{RecoveryError, RecoveryResult};
 mod derivation {
     /// Master key derivation context
     pub const MASTER_KEY: &str = "communitas:identity:master:v1";
-    /// ML-DSA-65 signing key derivation context
-    pub const MLDSA65: &str = "communitas:mldsa65:v1";
+    /// ML-DSA-87 signing key derivation context (Level 5 security)
+    pub const MLDSA87: &str = "communitas:mldsa87:v1";
     /// ML-KEM-768 encryption key derivation context
     pub const MLKEM768: &str = "communitas:mlkem768:v1";
 }
 
-/// ML-DSA-65 key sizes
-mod mldsa65_sizes {
+/// ML-DSA-87 key sizes (Level 5 security, 192-bit quantum resistance)
+mod mldsa87_sizes {
     /// Public key size in bytes
-    pub const PUBLIC_KEY: usize = 1952;
+    pub const PUBLIC_KEY: usize = 2592;
     /// Private key size in bytes
-    pub const PRIVATE_KEY: usize = 4032;
+    pub const PRIVATE_KEY: usize = 4896;
 }
 
 /// ML-KEM-768 key sizes
@@ -51,17 +51,17 @@ mod mlkem768_sizes {
 
 /// Identity keys derived from a BIP39 mnemonic.
 ///
-/// Contains both ML-DSA-65 signing keys for identity/authentication
+/// Contains both ML-DSA-87 signing keys for identity/authentication (Level 5 security)
 /// and ML-KEM-768 keys for key encapsulation/encryption.
 #[derive(Clone)]
 pub struct IdentityKeys {
     /// Four-word identity derived from the ML-DSA public key (e.g., "ocean-forest-moon-star")
     pub four_words: String,
 
-    /// ML-DSA-65 signing key (private key, 4032 bytes)
+    /// ML-DSA-87 signing key (private key, 4896 bytes, Level 5 PQC)
     signing_key_bytes: Vec<u8>,
 
-    /// ML-DSA-65 verifying key (public key, 1952 bytes)
+    /// ML-DSA-87 verifying key (public key, 2592 bytes, Level 5 PQC)
     verifying_key_bytes: Vec<u8>,
 
     /// ML-KEM-768 decapsulation key (private key, 2400 bytes)
@@ -72,13 +72,13 @@ pub struct IdentityKeys {
 }
 
 impl IdentityKeys {
-    /// Get the ML-DSA-65 signing key bytes (private key).
+    /// Get the ML-DSA-87 signing key bytes (private key, 4896 bytes).
     #[must_use]
     pub fn signing_key_bytes(&self) -> &[u8] {
         &self.signing_key_bytes
     }
 
-    /// Get the ML-DSA-65 verifying key bytes (public key).
+    /// Get the ML-DSA-87 verifying key bytes (public key, 2592 bytes).
     #[must_use]
     pub fn verifying_key_bytes(&self) -> &[u8] {
         &self.verifying_key_bytes
@@ -96,43 +96,43 @@ impl IdentityKeys {
         &self.encapsulation_key_bytes
     }
 
-    /// Parse the ML-DSA-65 signing key from stored bytes.
+    /// Parse the ML-DSA-87 signing key from stored bytes.
     ///
     /// # Errors
     /// Returns error if the stored bytes are invalid.
-    pub fn signing_key(&self) -> RecoveryResult<ml_dsa_65::PrivateKey> {
-        let bytes: [u8; mldsa65_sizes::PRIVATE_KEY] =
+    pub fn signing_key(&self) -> RecoveryResult<ml_dsa_87::PrivateKey> {
+        let bytes: [u8; mldsa87_sizes::PRIVATE_KEY] =
             self.signing_key_bytes.as_slice().try_into().map_err(|_| {
                 RecoveryError::KeyDerivationFailed(format!(
-                    "Invalid ML-DSA-65 private key length: expected {}, got {}",
-                    mldsa65_sizes::PRIVATE_KEY,
+                    "Invalid ML-DSA-87 private key length: expected {}, got {}",
+                    mldsa87_sizes::PRIVATE_KEY,
                     self.signing_key_bytes.len()
                 ))
             })?;
 
-        ml_dsa_65::PrivateKey::try_from_bytes(bytes)
-            .map_err(|e| RecoveryError::KeyDerivationFailed(format!("Invalid ML-DSA-65 key: {e}")))
+        ml_dsa_87::PrivateKey::try_from_bytes(bytes)
+            .map_err(|e| RecoveryError::KeyDerivationFailed(format!("Invalid ML-DSA-87 key: {e}")))
     }
 
-    /// Parse the ML-DSA-65 verifying key from stored bytes.
+    /// Parse the ML-DSA-87 verifying key from stored bytes.
     ///
     /// # Errors
     /// Returns error if the stored bytes are invalid.
-    pub fn verifying_key(&self) -> RecoveryResult<ml_dsa_65::PublicKey> {
-        let bytes: [u8; mldsa65_sizes::PUBLIC_KEY] = self
+    pub fn verifying_key(&self) -> RecoveryResult<ml_dsa_87::PublicKey> {
+        let bytes: [u8; mldsa87_sizes::PUBLIC_KEY] = self
             .verifying_key_bytes
             .as_slice()
             .try_into()
             .map_err(|_| {
                 RecoveryError::KeyDerivationFailed(format!(
-                    "Invalid ML-DSA-65 public key length: expected {}, got {}",
-                    mldsa65_sizes::PUBLIC_KEY,
+                    "Invalid ML-DSA-87 public key length: expected {}, got {}",
+                    mldsa87_sizes::PUBLIC_KEY,
                     self.verifying_key_bytes.len()
                 ))
             })?;
 
-        ml_dsa_65::PublicKey::try_from_bytes(bytes)
-            .map_err(|e| RecoveryError::KeyDerivationFailed(format!("Invalid ML-DSA-65 key: {e}")))
+        ml_dsa_87::PublicKey::try_from_bytes(bytes)
+            .map_err(|e| RecoveryError::KeyDerivationFailed(format!("Invalid ML-DSA-87 key: {e}")))
     }
 
     /// Parse the ML-KEM-768 decapsulation key from stored bytes.
@@ -208,9 +208,9 @@ impl std::fmt::Debug for IdentityKeys {
 
 /// Derive all identity keys from a BIP39 mnemonic.
 ///
-/// This function deterministically derives ML-DSA-65 signing keys and ML-KEM-768
-/// encapsulation keys from a BIP39 mnemonic phrase. The same mnemonic and passphrase
-/// always produce identical keys.
+/// This function deterministically derives ML-DSA-87 signing keys (Level 5 security)
+/// and ML-KEM-768 encapsulation keys from a BIP39 mnemonic phrase. The same mnemonic
+/// and passphrase always produce identical keys.
 ///
 /// # Key Derivation Chain
 ///
@@ -219,8 +219,8 @@ impl std::fmt::Debug for IdentityKeys {
 ///     │
 ///     └──► BLAKE3-KDF("communitas:identity:master:v1") → 32-byte master key
 ///          │
-///          ├──► BLAKE3-KDF("communitas:mldsa65:v1") → ML-DSA-65 seed
-///          │    └──► ChaCha20Rng → ML-DSA-65 keypair
+///          ├──► BLAKE3-KDF("communitas:mldsa87:v1") → ML-DSA-87 seed
+///          │    └──► ChaCha20Rng → ML-DSA-87 keypair (Level 5)
 ///          │
 ///          └──► BLAKE3-KDF("communitas:mlkem768:v1") → ML-KEM-768 seed
 ///               └──► ChaCha20Rng → ML-KEM-768 keypair
@@ -234,14 +234,14 @@ impl std::fmt::Debug for IdentityKeys {
 /// # Returns
 ///
 /// Returns `IdentityKeys` containing:
-/// - ML-DSA-65 signing and verifying keys
+/// - ML-DSA-87 signing and verifying keys (Level 5, 192-bit quantum security)
 /// - ML-KEM-768 encapsulation and decapsulation keys
 /// - Four-word identity derived from the public signing key
 ///
 /// # Errors
 ///
 /// Returns `RecoveryError::KeyDerivationFailed` if:
-/// - ML-DSA-65 key generation fails
+/// - ML-DSA-87 key generation fails
 /// - ML-KEM-768 key generation fails
 /// - Four-word identity generation fails
 ///
@@ -273,15 +273,15 @@ pub fn derive_identity_keys(
     // Zeroize BIP39 seed immediately after deriving master key
     seed.zeroize();
 
-    // Derive ML-DSA-65 signing keypair
-    let mut mldsa_seed = blake3::derive_key(derivation::MLDSA65, &master_key);
+    // Derive ML-DSA-87 signing keypair (Level 5 security)
+    let mut mldsa_seed = blake3::derive_key(derivation::MLDSA87, &master_key);
     let mut mldsa_rng = ChaCha20Rng::from_seed(mldsa_seed);
 
     // Zeroize ML-DSA seed after creating RNG
     mldsa_seed.zeroize();
 
-    let (verifying_key, signing_key) = ml_dsa_65::KG::try_keygen_with_rng(&mut mldsa_rng)
-        .map_err(|e| RecoveryError::KeyDerivationFailed(format!("ML-DSA-65 keygen failed: {e}")))?;
+    let (verifying_key, signing_key) = ml_dsa_87::KG::try_keygen_with_rng(&mut mldsa_rng)
+        .map_err(|e| RecoveryError::KeyDerivationFailed(format!("ML-DSA-87 keygen failed: {e}")))?;
 
     let signing_key_bytes = signing_key.into_bytes().to_vec();
     let verifying_key_bytes = verifying_key.clone().into_bytes().to_vec();
@@ -317,7 +317,7 @@ pub fn derive_identity_keys(
     })
 }
 
-/// Derive a four-word identity from an ML-DSA-65 public key.
+/// Derive a four-word identity from an ML-DSA-87 public key.
 ///
 /// The four words are derived by:
 /// 1. Hashing the public key with BLAKE3 to get 32 bytes
@@ -326,7 +326,7 @@ pub fn derive_identity_keys(
 ///
 /// # Arguments
 ///
-/// * `pubkey_bytes` - The ML-DSA-65 public key bytes (1952 bytes)
+/// * `pubkey_bytes` - The ML-DSA-87 public key bytes (2592 bytes)
 ///
 /// # Returns
 ///
@@ -522,9 +522,9 @@ mod tests {
         let mnemonic = get_test_mnemonic();
         let keys = derive_identity_keys(&mnemonic, None).unwrap();
 
-        // Verify ML-DSA-65 key sizes
-        assert_eq!(keys.signing_key_bytes.len(), mldsa65_sizes::PRIVATE_KEY);
-        assert_eq!(keys.verifying_key_bytes.len(), mldsa65_sizes::PUBLIC_KEY);
+        // Verify ML-DSA-87 key sizes
+        assert_eq!(keys.signing_key_bytes.len(), mldsa87_sizes::PRIVATE_KEY);
+        assert_eq!(keys.verifying_key_bytes.len(), mldsa87_sizes::PUBLIC_KEY);
 
         // Verify ML-KEM-768 key sizes
         assert_eq!(
@@ -663,8 +663,8 @@ mod tests {
         let keys = derive_identity_keys(&mnemonic, None).unwrap();
 
         // Should work correctly
-        assert_eq!(keys.signing_key_bytes.len(), mldsa65_sizes::PRIVATE_KEY);
-        assert_eq!(keys.verifying_key_bytes.len(), mldsa65_sizes::PUBLIC_KEY);
+        assert_eq!(keys.signing_key_bytes.len(), mldsa87_sizes::PRIVATE_KEY);
+        assert_eq!(keys.verifying_key_bytes.len(), mldsa87_sizes::PUBLIC_KEY);
     }
 
     #[test]
@@ -678,8 +678,8 @@ mod tests {
         assert_eq!(mnemonic.word_count(), 24);
 
         // Verify keys are valid
-        assert_eq!(keys.signing_key_bytes.len(), mldsa65_sizes::PRIVATE_KEY);
-        assert_eq!(keys.verifying_key_bytes.len(), mldsa65_sizes::PUBLIC_KEY);
+        assert_eq!(keys.signing_key_bytes.len(), mldsa87_sizes::PRIVATE_KEY);
+        assert_eq!(keys.verifying_key_bytes.len(), mldsa87_sizes::PUBLIC_KEY);
         assert_eq!(
             keys.decapsulation_key_bytes.len(),
             mlkem768_sizes::DECAPSULATION_KEY
@@ -718,8 +718,8 @@ mod tests {
         let keys = recover_identity(TEST_MNEMONIC, Language::English, None).unwrap();
 
         // Should produce valid keys
-        assert_eq!(keys.signing_key_bytes.len(), mldsa65_sizes::PRIVATE_KEY);
-        assert_eq!(keys.verifying_key_bytes.len(), mldsa65_sizes::PUBLIC_KEY);
+        assert_eq!(keys.signing_key_bytes.len(), mldsa87_sizes::PRIVATE_KEY);
+        assert_eq!(keys.verifying_key_bytes.len(), mldsa87_sizes::PUBLIC_KEY);
 
         // Verify four-word identity format
         let parts: Vec<&str> = keys.four_words.split('-').collect();

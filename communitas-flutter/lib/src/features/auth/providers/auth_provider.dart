@@ -14,7 +14,7 @@ const String kDemoUserFourWords = 'demo-user-test-mode';
 class AuthState {
   final bool isAuthenticated;
 
-  /// Hex-encoded ML-DSA-65 public key (THE identity).
+  /// Hex-encoded ML-DSA-87 public key (THE identity, Level 5 PQC).
   final String? pubkeyHex;
 
   /// Legacy: Four words used for vault storage filename.

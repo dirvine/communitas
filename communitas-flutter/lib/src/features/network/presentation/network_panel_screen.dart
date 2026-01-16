@@ -10,7 +10,7 @@ import '../providers/presence_provider.dart';
 /// Network status panel showing P2P connectivity, presence, and connection words.
 ///
 /// This screen implements the identity/presence system from ADR-012, ADR-013, ADR-014:
-/// - pubkeyHex: Permanent WHO you are (ML-DSA-65 public key)
+/// - pubkeyHex: Permanent WHO you are (ML-DSA-87 public key, Level 5 PQC)
 /// - Connection Words: Ephemeral WHERE you are (IP:port encoded as 4 words)
 /// - Display Name: User-chosen name shown in UI
 /// - Presence: Network-wide peer discovery via signed records

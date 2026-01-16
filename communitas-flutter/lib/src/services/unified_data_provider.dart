@@ -55,7 +55,7 @@ class UnifiedEntity {
 
 /// Unified contact model for both demo and FFI data.
 class UnifiedContact {
-  /// Hex-encoded ML-DSA-65 public key (THE identity).
+  /// Hex-encoded ML-DSA-87 public key (THE identity, Level 5 PQC).
   final String pubkeyHex;
 
   /// User-chosen display name (shown in UI).

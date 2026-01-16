@@ -11,7 +11,7 @@ Future<void> initializePlatform() async {
   try {
     final lib = _loadNativeLibrary();
     if (lib != null) {
-      await CommunitasRust.init(externalLibrary: lib);
+      await RustLib.init(externalLibrary: lib);
       debugPrint('Rust bridge initialized successfully');
     } else {
       debugPrint('Could not find native library, running in demo mode');

@@ -47,7 +47,7 @@ class AdaptiveLayout extends StatelessWidget {
   }
 
   Widget _buildBottomNav(BuildContext context) {
-    final location = GoRouter.of(context).location;
+    final location = GoRouterState.of(context).uri.path;
     final selectedIndex = _indexForLocation(location);
 
     return NavigationBar(

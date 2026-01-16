@@ -857,11 +857,7 @@ class FlutterDiskStats {
 
   @override
   int get hashCode =>
-      entityId.hashCode ^
-      diskType.hashCode ^
-      usedBytes.hashCode ^
-      fileCount.hashCode ^
-      dirCount.hashCode;
+      entityId.hashCode ^ diskType.hashCode ^ usedBytes.hashCode ^ fileCount.hashCode ^ dirCount.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -899,12 +895,7 @@ class FlutterFileInfo {
   });
 
   @override
-  int get hashCode =>
-      path.hashCode ^
-      name.hashCode ^
-      isDirectory.hashCode ^
-      sizeBytes.hashCode ^
-      modifiedAt.hashCode;
+  int get hashCode => path.hashCode ^ name.hashCode ^ isDirectory.hashCode ^ sizeBytes.hashCode ^ modifiedAt.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -935,8 +926,7 @@ class FlutterKanbanBoard {
   });
 
   @override
-  int get hashCode =>
-      id.hashCode ^ entityId.hashCode ^ name.hashCode ^ description.hashCode ^ columnCount.hashCode;
+  int get hashCode => id.hashCode ^ entityId.hashCode ^ name.hashCode ^ description.hashCode ^ columnCount.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -970,12 +960,7 @@ class FlutterKanbanCard {
 
   @override
   int get hashCode =>
-      id.hashCode ^
-      columnId.hashCode ^
-      title.hashCode ^
-      description.hashCode ^
-      assignee.hashCode ^
-      position.hashCode;
+      id.hashCode ^ columnId.hashCode ^ title.hashCode ^ description.hashCode ^ assignee.hashCode ^ position.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -1010,12 +995,7 @@ class FlutterKanbanColumn {
 
   @override
   int get hashCode =>
-      id.hashCode ^
-      boardId.hashCode ^
-      name.hashCode ^
-      position.hashCode ^
-      color.hashCode ^
-      wipLimit.hashCode;
+      id.hashCode ^ boardId.hashCode ^ name.hashCode ^ position.hashCode ^ color.hashCode ^ wipLimit.hashCode;
 
   @override
   bool operator ==(Object other) =>

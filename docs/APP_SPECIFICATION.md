@@ -4,7 +4,7 @@
 **Status**: Definitive
 **Last Updated**: 2025-12-31
 
-This document is the **definitive source of truth** for all Communitas GUI implementations (Flutter, Swift).
+This document is the **definitive source of truth** for the Communitas Flutter GUI.
 
 ---
 
@@ -44,8 +44,7 @@ Communitas is a **local-first, PQC-ready collaboration platform** that merges th
 
 | Platform | GUI Framework | Status |
 |----------|---------------|--------|
-| macOS | Swift/SwiftUI | Active |
-| macOS | Flutter | Planned |
+| macOS | Flutter | Active |
 | iOS | Flutter | Planned |
 | Android | Flutter | Planned |
 | Linux | Flutter | Planned |
@@ -87,7 +86,7 @@ Organisation
 | `description` | String? | No | Optional description |
 | `entityType` | Enum | Yes | Organisation/Project/Channel/Group |
 | `parentOrgId` | UUID? | No | Parent organization (if nested) |
-| `createdBy` | String | Yes | Creator's four-word identity |
+| `createdBy` | String | Yes | Creator's public-key identity (pubkey_hex) |
 | `createdAt` | Timestamp | Yes | Creation time |
 | `memberCount` | Int | Yes | Number of members |
 | `isLocalOnly` | Bool | Yes | Not synced to network |
@@ -107,14 +106,14 @@ Organisation
 
 ## 3. Authentication & Identity
 
-### 3.1 Four-Word Identity System
+### 3.1 Identity & Connection Words
 
-**Format**: `word-word-word-word` (e.g., `ocean-forest-moon-star`)
+**Identity**: Public key (hex-encoded ML-DSA-65). This is the permanent identity (WHO).\n\n**Connection Words**: `word-word-word-word` (e.g., `ocean-forest-moon-star`) encode an IP:port for peer connection (WHERE). This uses the `four-word-networking` crate and is not an identity.
 
 | Property | Value |
 |----------|-------|
 | Word count | 4 |
-| Entropy | 48+ bits |
+| Purpose | Connection encoding (IP:port) |
 | Dictionary | four-word-networking crate |
 | Validation | Checksum built-in |
 | Case | Lowercase normalized |
@@ -253,9 +252,9 @@ When user lacks edit permissions, show:
 
 #### 5.1.3 Create Identity Screen
 - **Route**: `/create-identity`
-- **Purpose**: Generate new four-word identity
+- **Purpose**: Generate new identity keypair (public key + display name)
 - **Components**:
-  - Generated four-word identity (read-only, with copy button)
+  - Generated public-key identity (read-only, with copy button)
   - "Regenerate" button
   - Display name input (required)
   - Password input with strength indicator
@@ -271,7 +270,7 @@ When user lacks edit permissions, show:
 - **Route**: `/vault-management`
 - **Purpose**: Manage stored identities
 - **Components**:
-  - List of vaults (four-word, display name, last accessed)
+  - List of vaults (pubkey fingerprint, display name, last accessed)
   - Enable/disable biometric per vault
   - Delete vault (requires password confirmation)
 
@@ -289,7 +288,7 @@ When user lacks edit permissions, show:
 
 | Section | Content | Collapsible |
 |---------|---------|-------------|
-| Profile Header | Avatar, name, four-word, network status | No |
+| Profile Header | Avatar, name, pubkey fingerprint, network status | No |
 | My Organizations | Entities where role = Owner | Yes |
 | My Communities | Entities where role != Owner | Yes |
 | Personal | Personal entities (isPersonal = true) | Yes |
@@ -379,12 +378,12 @@ When user lacks edit permissions, show:
 |----------|------|----------|-------------|
 | `id` | UUID | Yes | Unique identifier |
 | `entityId` | UUID | Yes | Parent entity |
-| `author` | String | Yes | Sender's four-word |
+| `author` | String | Yes | Sender's public-key identity |
 | `authorDisplayName` | String | Yes | Sender's display name |
 | `text` | String | Yes | Message content (markdown) |
 | `timestamp` | Int64 | Yes | Unix timestamp (seconds) |
 | `replyToId` | UUID? | No | Parent message (for threads) |
-| `reactions` | Map<String, List<String>> | No | emoji → list of reactor four-words |
+| `reactions` | Map<String, List<String>> | No | emoji → list of reactor identities |
 | `isEdited` | Bool | No | Has been modified |
 | `isDeleted` | Bool | No | Soft deleted |
 
@@ -419,7 +418,7 @@ When user lacks edit permissions, show:
 
 #### 6.2.4 @Mentions
 - Type `@` → Show member list
-- Select member → Insert `@four-word`
+- Select member → Insert `@identity`
 - Mentioned users receive notification
 - Render as clickable link
 
@@ -521,7 +520,7 @@ When user lacks edit permissions, show:
 | `column` | String | Yes | Current column ID |
 | `title` | String | Yes | Card title (1-200 chars) |
 | `description` | String? | No | Markdown description |
-| `assignee` | String? | No | Assigned member's four-word |
+| `assignee` | String? | No | Assigned member identity |
 | `priority` | Enum | Yes | Low/Normal/High/Urgent |
 | `position` | Int | Yes | Order within column |
 | `commentCount` | Int | Yes | Number of comments |
@@ -617,7 +616,7 @@ When user lacks edit permissions, show:
 │                             │
 │     [Caller Avatar]         │
 │     Caller Display Name     │
-│     caller-four-words       │
+│     caller-identity         │
 │                             │
 │  [Reject (Red)] [Accept (Green)]  │
 │                             │
@@ -694,7 +693,7 @@ When user lacks edit permissions, show:
 │ ┌─────────────────────────────────┐ │
 │ │ ocean-forest-moon-star          │ │
 │ │   198.51.100.1:50000 (2m ago)   │ │
-│ │ bright-river-swift-eagle        │ │
+│ │ bright-river-nimble-eagle       │ │
 │ │   198.51.100.2:50001 (5m ago)   │ │
 │ └─────────────────────────────────┘ │
 │                                     │
@@ -710,11 +709,11 @@ When user lacks edit permissions, show:
 
 #### US-001: Create New Identity
 **As a** new user
-**I want to** generate a four-word identity
+**I want to** generate a new identity
 **So that** I can join the network with a memorable, verifiable address
 
 **Acceptance Criteria:**
-- [ ] System generates valid four-word identity from dictionary
+- [ ] System generates a new public-key identity and display name
 - [ ] User can regenerate until satisfied
 - [ ] User must set display name (1-50 chars)
 - [ ] User must set password (min 8 chars)
@@ -789,13 +788,13 @@ When user lacks edit permissions, show:
 
 #### US-012: Invite Member to Entity
 **As an** entity owner/admin
-**I want to** invite members by their four-word identity
+**I want to** invite members by their identity or invite token
 **So that** they can collaborate
 
 **Acceptance Criteria:**
 - [ ] Open entity details → Members tab
 - [ ] Click "Invite Member"
-- [ ] Enter four-word identity
+- [ ] Enter identity (pubkey_hex or invite token)
 - [ ] Select role (Admin/Member/Guest)
 - [ ] Invitation sent via network
 - [ ] Member added on acceptance
@@ -1026,7 +1025,7 @@ Display Name: Demo User
 
 | Name | Four Words | Status |
 |------|------------|--------|
-| Alice Chen | bright-ocean-swift-eagle | Online |
+| Alice Chen | bright-ocean-nimble-eagle | Online |
 | Bob Smith | calm-river-ancient-oak | Away |
 | Local Contact | (none) | Offline |
 
@@ -1082,7 +1081,7 @@ Bootstrap: 2/2 connected
 | Error | Display | Recovery |
 |-------|---------|----------|
 | No connectivity | "Offline - changes will sync when online" | Auto-retry |
-| Peer unreachable | "Unable to reach [four-word]" | Retry button |
+| Peer unreachable | "Unable to reach [connection words]" | Retry button |
 | Bootstrap failed | "Cannot connect to network" | Check connection |
 
 ### 13.3 Entity Errors

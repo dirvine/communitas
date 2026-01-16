@@ -2,7 +2,7 @@
 
 All notable changes to the Communitas app will be documented in this file.
 
-> Note: entries prior to the Flutter+FFI pivot refer to legacy Tauri/React integrations.
+> Note: entries prior to the Flutter+FFI pivot refer to legacy (pre-Flutter) UI integrations.
 
 ## [0.2.8] - 2025-08-13
 
@@ -14,7 +14,7 @@ All notable changes to the Communitas app will be documented in this file.
   - Universal entity system supporting individuals, organizations, projects, groups, and channels
   - Foundation for decentralized markdown web with human-readable addressing
   
-- **Enhanced Identity Commands**: 10 new Tauri commands for identity management
+- **Enhanced Identity Commands**: 10 new legacy UI commands for identity management
   - `generate_four_word_identity` - Generate new four-word identities using four-word-networking crate
   - `validate_four_word_identity` - Validate format and dictionary membership
   - `check_identity_availability` - Check if identity is claimed
@@ -48,7 +48,7 @@ All notable changes to the Communitas app will be documented in this file.
   - Individuals tab for member directory
   - Unified search across all entity types
   
-- **Backend Integration**: Improved service layer with Tauri backend
+- **Backend Integration**: Improved service layer with legacy UI backend
   - `create_organization_dht` command for organization creation
   - `create_group_dht` command for group creation
   - `create_project_dht` command for project creation

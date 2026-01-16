@@ -30,7 +30,7 @@ Communitas needs an architecture that:
 - Shared code across deployment targets
 - Independent testing of components
 - Minimal dependency coupling
-- Support for UniFFI bindings (Swift/Kotlin)
+- Support for FFI bindings (Flutter via flutter_rust_bridge)
 
 ## Decision
 

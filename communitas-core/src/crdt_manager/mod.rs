@@ -2,7 +2,7 @@
 //
 // Licensed under the AGPL-3.0 license
 
-//! CRDT Manager - Manages Yrs documents with libSQL persistence
+//! CRDT Manager - Manages Yrs documents with filesystem persistence
 //!
 //! This module provides the core CRDT functionality for collaborative editing
 //! shared between desktop and headless nodes.

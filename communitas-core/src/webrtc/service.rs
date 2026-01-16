@@ -427,7 +427,7 @@ impl CommunitasWebRtcService {
     ///
     /// Note: Full track muting requires platform-specific implementation.
     /// This currently updates state and logs the change. The actual track
-    /// control will be handled by the Swift layer using AVFoundation.
+    /// control is handled by the platform host layer (e.g., Flutter desktop/mobile).
     pub async fn set_video_enabled(&self, call_id: CallId, enabled: bool) -> Result<()> {
         info!("Setting video enabled={} for call {}", enabled, call_id);
 
@@ -463,7 +463,7 @@ impl CommunitasWebRtcService {
     ///
     /// Note: Full track muting requires platform-specific implementation.
     /// This currently updates state and logs the change. The actual track
-    /// control will be handled by the Swift layer using AVFoundation.
+    /// control is handled by the platform host layer (e.g., Flutter desktop/mobile).
     pub async fn set_audio_enabled(&self, call_id: CallId, enabled: bool) -> Result<()> {
         info!("Setting audio enabled={} for call {}", enabled, call_id);
 
@@ -497,10 +497,10 @@ impl CommunitasWebRtcService {
     /// * `call_id` - The ID of the call
     ///
     /// Note: Screen capture requires platform-specific implementation.
-    /// On macOS, this will be handled by Swift using ScreenCaptureKit.
+    /// On macOS, ScreenCaptureKit is used by the host layer.
     /// On other platforms, platform-specific screen capture APIs are required.
     /// This method updates the call state; the actual screen capture track
-    /// will be added by the Swift layer through the media stream manager.
+    /// is added by the platform host layer through the media stream manager.
     pub async fn start_screen_share(&self, call_id: CallId) -> Result<()> {
         info!("Starting screen share for call {}", call_id);
 
@@ -520,7 +520,7 @@ impl CommunitasWebRtcService {
             call.target.clone()
         };
 
-        // Note: The actual screen capture track is added by the Swift layer
+        // Note: The actual screen capture track is added by the host layer
         // using ScreenCaptureKit on macOS. The Rust layer tracks the state
         // and will signal the remote peer when the track is added.
 
@@ -537,9 +537,9 @@ impl CommunitasWebRtcService {
     /// # Arguments
     /// * `call_id` - The ID of the call
     ///
-    /// Note: Screen capture is handled by the platform layer (Swift/ScreenCaptureKit).
+    /// Note: Screen capture is handled by the platform host layer.
     /// This method updates the call state; the actual screen capture track
-    /// will be removed by the Swift layer through the media stream manager.
+    /// is removed by the host layer through the media stream manager.
     pub async fn stop_screen_share(&self, call_id: CallId) -> Result<()> {
         info!("Stopping screen share for call {}", call_id);
 
@@ -559,7 +559,7 @@ impl CommunitasWebRtcService {
             call.target.clone()
         };
 
-        // Note: The actual screen capture track is removed by the Swift layer.
+        // Note: The actual screen capture track is removed by the host layer.
         // The Rust layer tracks the state and will signal the remote peer
         // when the track is removed.
 

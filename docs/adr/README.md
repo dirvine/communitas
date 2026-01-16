@@ -10,7 +10,7 @@ ADRs document significant architectural decisions made in the project. Each reco
 
 | ADR | Title | Status | Date |
 |-----|-------|--------|------|
-| [ADR-001](ADR-001-four-word-identity-system.md) | Four-Word Identity System | Accepted | 2025-12-24 |
+| [ADR-001](ADR-001-four-word-identity-system.md) | Four-Word Identity System | Superseded | 2025-01-15 |
 | [ADR-002](ADR-002-local-first-architecture.md) | Local-First Architecture | Accepted | 2025-12-24 |
 | [ADR-003](ADR-003-yrs-crdt-synchronization.md) | Yrs CRDT Synchronization | Accepted | 2025-12-24 |
 | [ADR-004](ADR-004-entity-hierarchy-model.md) | Entity Hierarchy Model | Accepted | 2025-12-24 |
@@ -32,7 +32,7 @@ ADRs document significant architectural decisions made in the project. Each reco
 ## Key ADR Relationships
 
 ### Identity & Security
-- **ADR-001** (Four-Word Identity) → defines human-readable identity format
+- **ADR-001** (Four-Word Identity) → superseded; four-word networking now used only for connection words
 - **ADR-006** (Post-Quantum Cryptography) → ML-DSA-65, ML-KEM-768 algorithms
 - **ADR-011** (Encrypted Vault Storage) → local key storage with PBKDF2
 - **ADR-012** (Identity Packet System) → identity packet structure

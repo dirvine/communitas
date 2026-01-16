@@ -24,7 +24,7 @@ Communitas implements a comprehensive security architecture with post-quantum cr
 - [Cryptography](#cryptography)
 - [Authentication](#authentication)
 - [Session Management](#session-management)
-- [Four-Word Address Security](#four-word-address-security)
+- [Connection Word Security](#connection-word-security)
 - [Encryption Policies](#encryption-policies)
 - [Platform Integration](#platform-integration)
 - [Input Validation](#input-validation)
@@ -168,19 +168,18 @@ Multiple security layers protect against attacks:
 - Keylog passwords
 - **Mitigation**: Use strong device security, biometric authentication
 
-#### 5. Four-Word Collision Attack
-**Capabilities**: Attempt to generate similar four-word addresses
+#### 5. Connection Word Collision Attack
+**Capabilities**: Attempt to generate similar connection words to misdirect peer dialing
 
 **Mitigations**:
 - ✅ Dictionary validation (limited word set)
 - ✅ Visual differentiation enforcement
-- ✅ Cryptographic binding (ML-DSA public key → four words)
-- ✅ User verification workflow
+- ✅ Contextual verification (show resolved IP/port before dialing)
+- ✅ User confirmation workflow
 
 **Protected**: ✅ Attackers cannot:
 - Generate confusable addresses (dictionary enforces distinctness)
-- Spoof addresses (cryptographic binding)
-- Phish users (visual verification)
+- Trick users into dialing unintended peers (verification + context)
 
 ### Attack Scenarios
 
@@ -480,7 +479,7 @@ pub async fn create_vault(
     password: &str,
     display_name: &str,
 ) -> Result<String> {
-    // 1. Validate four-word address
+    // 1. Validate connection words
     validate_four_words(four_words)?;
 
     // 2. Check password strength
@@ -754,37 +753,33 @@ impl SessionManager {
 - **Secure storage**: Encrypted on disk
 - **Zeroization**: Keys cleared on logout
 
-## Four-Word Address Security
+## Connection Word Security
 
 ### Overview
 
-Four-word addresses provide **human-verifiable security** without DNS or PKI infrastructure.
+Connection words provide **human-verifiable sharing** of IP:port without DNS or PKI infrastructure.
 
 **Example**: `ocean-forest-moon-star`
 
 ### Security Properties
 
-#### 1. Cryptographic Binding
+#### 1. Address Binding
 
 ```rust
-/// Derive four-word address from ML-DSA public key
-pub fn public_key_to_four_words(public_key: &[u8]) -> Result<String> {
-    // Hash public key with BLAKE3
-    let hash = blake3::hash(public_key);
-
-    // Convert to four-word address
-    let four_words = encode_four_words(hash.as_bytes())?;
-
-    Ok(four_words)
+/// Encode SocketAddr as connection words
+pub fn socket_addr_to_connection_words(addr: &SocketAddr) -> Result<String> {
+    // Convert IP:port into a four-word (or longer) connection string
+    let words = conn_words(addr)?;
+    Ok(words)
 }
 ```
 
-**Binding**: Four-word address ↔ ML-DSA public key (1:1 mapping)
+**Binding**: Connection words ↔ IP:port (1:1 mapping)
 
 #### 2. Dictionary Validation
 
 ```rust
-pub fn validate_four_words(address: &str) -> Result<()> {
+pub fn validate_connection_words(address: &str) -> Result<()> {
     let words: Vec<&str> = address.split('-').collect();
 
     if words.len() != 4 {
@@ -1012,7 +1007,7 @@ pub struct InputValidator {
 }
 
 impl InputValidator {
-    /// Validate four-word address
+    /// Validate connection words
     pub fn validate_four_words(&self, input: &str) -> Result<()> {
         // Length check
         if input.len() > 100 {
@@ -1022,11 +1017,11 @@ impl InputValidator {
         // Pattern check: word-word-word-word
         let pattern = r"^[a-z]+-[a-z]+-[a-z]+-[a-z]+$";
         if !Regex::new(pattern)?.is_match(input) {
-            return Err(anyhow!("Invalid four-word format"));
+            return Err(anyhow!("Invalid connection word format"));
         }
 
         // Dictionary validation
-        validate_four_words(input)?;
+        validate_connection_words(input)?;
 
         Ok(())
     }
@@ -1327,7 +1322,7 @@ let mut password = vec![0u8; 32];
 4. **Network**: Avoid public WiFi, use VPN if necessary
 5. **Updates**: Keep Communitas and OS updated
 6. **Backups**: Regular encrypted backups of vaults
-7. **Verification**: Verify four-word addresses before sending sensitive data
+7. **Verification**: Verify connection words before dialing or sharing endpoints
 
 ## Future Enhancements
 

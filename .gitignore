@@ -193,11 +193,6 @@ bridge-data/
 .mcp.json
 .mcp.json.backup
 
-# Swift
-communitas-swift/.build/
-communitas-swift/CommunitasApp/.build/
-communitas-swift/CommunitasKit/.build/
-communitas-swift/*.app/
 communitas-swift/CommunitasBindings.xcframework/
 communitas-swift/Frameworks/
 **/workspace-state.json

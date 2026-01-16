@@ -86,14 +86,14 @@ cargo test
 - **Internet Collapse Detection**: 10-second watchdog monitoring with automatic local-only mode activation
 - **Exponential Backoff Retry**: Jittered retry strategies prevent thundering herd during recovery (100ms → 60s backoff)
 - **Multi-Layer Connectivity**: Hierarchical degradation from global internet → NAT-traversed WAN → LAN broadcast → loopback
-- **Resource Limit Enforcement**: Configurable peer connection limits (default: 50), memory caps (2GB), and connection timeouts prevent resource exhaustion
+- **Resource Limits (Partial Enforcement)**: Configurable peer connection limits (default: 50), memory caps (2GB), and connection timeouts; enforcement is being integrated across subsystems
 
 ### Cryptographic Security (Post-Quantum)
 - **ML-DSA-87 Signatures**: NIST FIPS 204 quantum-resistant digital signatures for user identity (192-bit quantum security, Level 5)
 - **ML-DSA-65 Signatures**: NIST FIPS 204 signatures for site/gossip identity (128-bit quantum security, Level 3)
 - **ML-KEM-768 Key Exchange**: NIST FIPS 203 quantum-resistant key encapsulation for session establishment
 - **ChaCha20-Poly1305 AEAD**: Authenticated encryption for all data at rest and in transit
-- **Four-Word Addressing**: Human-memorable cryptographic identifiers (e.g., `ocean-blue-eagle-star`) solving Zooko's Triangle
+- **Connection Words (four-word networking)**: Human-memorable encoding of IP:port for sharing peer connection info
 - **Zero Central Authority**: Fully decentralized trust model with cryptographic verification replacing DNS/PKI
 
 ### CRDT-Based Eventual Consistency
@@ -227,17 +227,14 @@ Complete guide: [communitas-mcp/README.md](communitas-mcp/README.md)
 
 ## Network & Identity
 
-### Four-Word Addressing Example
+### Connection Words Example
 ```dart
-// Create new organization with just display name
-final result = await createOrganization(
-  displayName: "Acme Corporation",
-);
-// → { fourWords: "ocean-blue-eagle-star", entityId: "org-abc123" }
+// Share a connection address with a friend (IP:port encoded as words)
+final connectionWords = await getMyConnectionWords();
+// → "ocean-blue-eagle-star"
 
-// Others can find it using the four-words
-final entity = await findEntity("ocean-blue-eagle-star");
-// → Access organization workspace, channels, shared storage
+// Friend uses the connection words to dial directly
+await connectToPeer(connectionWords);
 ```
 
 ### Network Participation
@@ -311,7 +308,7 @@ final entity = await findEntity("ocean-blue-eagle-star");
 ### Network Resilience Testing
 - **Partition Tolerance**: Verified through integration tests with simulated network failures
 - **Exponential Backoff**: Jittered retry strategies prevent cascading failures
-- **Resource Limits**: Enforced connection limits (50 peers), memory caps (2GB), timeouts (30s)
+- **Resource Limits**: Configured connection limits (50 peers), memory caps (2GB), timeouts (30s); enforcement is in progress
 
 ---
 

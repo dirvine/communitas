@@ -18,7 +18,6 @@ Configure these secrets in your GitHub repository settings (Settings > Secrets a
 |-------------|-------------|
 | `MACOS_CERTIFICATE` | Base64-encoded Developer ID Application certificate (.p12) |
 | `MACOS_CERTIFICATE_PASSWORD` | Password for the .p12 certificate file |
-| `KEYCHAIN_PASSWORD` | Password for the temporary keychain used during signing |
 | `MACOS_SIGNING_IDENTITY` | Full signing identity string (e.g., "Developer ID Application: Your Name (TEAM_ID)") |
 | `MACOS_NOTARIZATION_APPLE_ID` | Apple ID email used for notarization |
 | `MACOS_NOTARIZATION_PASSWORD` | App-specific password (NOT your Apple ID password) |

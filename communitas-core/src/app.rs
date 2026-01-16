@@ -15,7 +15,7 @@
 //!
 //! ```text
 //! ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐
-//! │   Iced GUI  │  │  Swift GUI  │  │ MCP Server  │  │     CLI     │
+//! │   Iced GUI  │  │ Flutter GUI │  │ MCP Server  │  │     CLI     │
 //! │  (Adapter)  │  │  (Adapter)  │  │  (Adapter)  │  │  (Adapter)  │
 //! └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘
 //!        │                │                │                │

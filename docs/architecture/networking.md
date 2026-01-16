@@ -13,7 +13,11 @@ Communitas uses a sophisticated multi-layered networking architecture built on Q
 - **Discovery**: Rendezvous shards (65k shards, DHT-free)
 - **NAT Traversal**: Coordinator-based hole punching and reflection
 - **Resilience**: Connection migration, automatic retry, offline fallback
-- **Addressing**: Four-word identities for human-readable peer addressing
+- **Addressing**: Connection words (four-word networking) for IP:port sharing
+
+**Terminology**:
+- **Identity**: hex-encoded ML-DSA public key (pubkey_hex)
+- **Connection words**: four-word networking encoding of IP:port for peer dialing
 
 ## Table of Contents
 
@@ -78,7 +82,7 @@ Central orchestrator for all networking operations.
 
 ```rust
 pub struct GossipContext {
-    /// User identity (four-word) → ML-DSA identity + alias
+    /// User identity (public key) and optional connection words (address encoding)
     pub identity: Identity,
     pub four_words: String,
 

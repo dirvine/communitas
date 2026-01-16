@@ -119,14 +119,14 @@ jobs:
         run: flutter build macos --release
 
       - name: Import signing certificate
-        if: env.MACOS_CERTIFICATE != ''
+        if: secrets.MACOS_CERTIFICATE != ''
         env:
           MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
           MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
-          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
         run: |
-          # Create temp keychain
+          # Create temp keychain with random password
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
 
           security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
           security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
@@ -142,7 +142,7 @@ jobs:
           rm $RUNNER_TEMP/certificate.p12
 
       - name: Sign app bundle
-        if: env.MACOS_CERTIFICATE != ''
+        if: secrets.MACOS_CERTIFICATE != ''
         env:
           MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
           MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
@@ -183,7 +183,7 @@ jobs:
           ls -la "$DMG_NAME"
 
       - name: Sign DMG
-        if: env.MACOS_CERTIFICATE != ''
+        if: secrets.MACOS_CERTIFICATE != ''
         env:
           MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
           MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
@@ -196,7 +196,7 @@ jobs:
           echo "DMG signed successfully"
 
       - name: Notarize DMG
-        if: env.MACOS_NOTARIZATION_APPLE_ID != '' && env.MACOS_CERTIFICATE != ''
+        if: secrets.MACOS_NOTARIZATION_APPLE_ID != '' && secrets.MACOS_CERTIFICATE != ''
         env:
           MACOS_NOTARIZATION_APPLE_ID: ${{ secrets.MACOS_NOTARIZATION_APPLE_ID }}
           MACOS_NOTARIZATION_PASSWORD: ${{ secrets.MACOS_NOTARIZATION_PASSWORD }}
@@ -226,7 +226,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload unsigned artifact (if no signing)
-        if: env.MACOS_CERTIFICATE == ''
+        if: secrets.MACOS_CERTIFICATE == ''
         uses: actions/upload-artifact@v4
         with:
           name: Communitas-macOS-unsigned

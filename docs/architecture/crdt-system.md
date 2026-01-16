@@ -10,10 +10,16 @@ Communitas uses a **modular CRDT architecture** where each entity (group, channe
 - ✅ **Bounded document sizes** - Each concern has independent size limits
 - ✅ **Efficient sync** - Update members without syncing messages
 - ✅ **Event-driven tombstone pruning** - No periodic cleanup tasks
-- ✅ **SQL fallback path** - Large datasets materialize to SQL automatically
+- ✅ **SQL materialization (planned)** - Large datasets can be materialized to SQL in a future layer
 - ✅ **Automatic conflict resolution** - Yrs handles merging via CRDT semantics
 
 ## Storage Architecture
+
+### Implementation Status (Current)
+
+CRDT state is currently persisted to the filesystem (`.yrs` + `.meta` files) by
+`communitas-core/src/crdt_manager`. The SQL materialization layer described below is
+planned and not part of the current runtime.
 
 ### Three-Tier Storage Model
 
@@ -22,7 +28,7 @@ Communitas uses a **modular CRDT architecture** where each entity (group, channe
 │              COMMUNITAS STORAGE LAYER                          │
 │                                                                 │
 │  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────┐ │
-│  │  Virtual Disks   │  │  CRDT Documents  │  │  SQL Cache   │ │
+│  │  Virtual Disks   │  │  CRDT Documents  │  │ SQL (Planned)│ │
 │  │  (Markdown)      │  │  (Yrs State)     │  │  (Queries)   │ │
 │  │                  │  │                  │  │              │ │
 │  │  • Private       │  │  • Members       │  │  • Old msgs  │ │
@@ -32,9 +38,9 @@ Communitas uses a **modular CRDT architecture** where each entity (group, channe
 │  └──────────────────┘  └──────────────────┘  └──────────────┘ │
 │         ↕                      ↕                      ↕         │
 │  ┌─────────────────────────────────────────────────────────┐  │
-│  │  libSQL Database (Turso)                               │  │
-│  │  • crdt_documents (Yrs state blobs)                    │  │
-│  │  • Materialized views (when CRDT exceeds thresholds)   │  │
+│  │  Filesystem Persistence (current)                      │  │
+│  │  • .yrs (Yrs state blobs)                               │  │
+│  │  • .meta (JSON metadata)                                │  │
 │  └─────────────────────────────────────────────────────────┘  │
 └────────────────────────────────────────────────────────────────┘
 ```
@@ -74,11 +80,11 @@ Virtual Disks:
 - Chat messages and threads
 - Domain-specific data (kanban, issues)
 
-**Format**: Yrs binary state stored in libSQL
+**Format**: Yrs binary state stored on the filesystem (`.yrs` files)
 **Sync Protocol**: State vectors and incremental updates
 **Conflict Resolution**: Automatic via Yrs CRDT semantics
 
-#### 3. SQL Cache (Materialized Views)
+#### 3. SQL Cache (Materialized Views) — Planned
 
 **Purpose**: Read-optimized queries for large datasets
 
@@ -86,6 +92,9 @@ Virtual Disks:
 - Read-optimized queries
 - Historical data (old messages, archived cards)
 - Aggregations and reports
+
+**Note**: The SQL fallback thresholds and schemas below are design targets for a future
+materialization layer. They are not implemented in the current runtime.
 
 **Trigger**: CRDT document exceeds size threshold
 **Access**: Unified read interface (transparent to application)
@@ -487,7 +496,7 @@ pub async fn prune_tombstones(doc_id: &str, concern: &str) -> Result<Vec<String>
 
 **Worst case**: 1000 tombstones × 100 members = ~2.2MB overhead (rare and temporary)
 
-## SQL Fallback Strategy
+## SQL Fallback Strategy (Planned)
 
 ### Size Thresholds
 

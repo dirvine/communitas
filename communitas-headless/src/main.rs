@@ -1,5 +1,5 @@
 // Communitas Headless Node
-// This binary runs a headless Communitas node using saorsa-core APIs
+// This binary runs a headless Communitas node using saorsa-gossip-based APIs
 
 // Security: CLI tools may use unwrap in controlled contexts
 // Core library crates maintain strict no-unwrap policies
@@ -182,7 +182,7 @@ struct UpdateConfig {
     /// Enable auto-update
     auto_update: bool,
 
-    /// Jitter range in seconds (0 disables jitter, default 0 for saorsa-core 0.3.18+)
+    /// Jitter range in seconds (0 disables jitter)
     jitter_secs: u64,
 }
 
@@ -227,7 +227,7 @@ fn default_config_with_storage(base_dir: PathBuf) -> Config {
             channel: "stable".to_string(),
             check_interval_secs: 21600, // 6 hours
             auto_update: true,
-            jitter_secs: 0, // No jitter needed for saorsa-core 0.3.18+
+            jitter_secs: 0,
         },
     }
 }

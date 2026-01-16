@@ -13,7 +13,13 @@ Communitas implements a sophisticated multi-layered storage architecture designe
 - **Hashing**: BLAKE3 for content addressing and integrity
 - **Error Correction**: Reed-Solomon FEC for resilience
 - **Platform Integration**: System keyring (macOS Keychain, Windows DPAPI, Linux Secret Service)
-- **Database**: libSQL (Turso) for SQL materialization
+- **Persistence**: Filesystem-backed Yrs state + JSON metadata (libSQL materialization planned)
+
+## Implementation Status (Current)
+
+The current implementation persists CRDT state to the filesystem (`.yrs` + `.meta` files) via
+`communitas-core/src/crdt_manager`. References to libSQL below describe a planned materialization
+layer, not the current runtime behavior.
 
 ## Table of Contents
 
@@ -65,7 +71,7 @@ Communitas implements a sophisticated multi-layered storage architecture designe
 ┌─────────────────────────────────────────────────────────────┐
 │               PLATFORM STORAGE LAYER                        │
 │  macOS: Keychain | Windows: DPAPI | Linux: Secret Service  │
-│              Filesystem + libSQL database                   │
+│              Filesystem + (planned) SQL materialization      │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -1417,7 +1423,7 @@ pub fn get_key(service: &str, account: &str) -> Result<String> {
 - **pbkdf2**: Password-based key derivation
 - **reed-solomon**: Error correction codes
 - **keyring**: Platform keyring integration
-- **libSQL**: SQL database (Turso embedded)
+- **libSQL (planned)**: SQL materialization layer (Turso embedded)
 
 ### Related Documentation
 

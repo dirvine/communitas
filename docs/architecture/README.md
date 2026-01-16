@@ -113,7 +113,7 @@ This architecture documentation is organized into the following sections:
 
 ### Storage & Content
 - **[Storage](storage.md)** - Data persistence and retrieval
-  - libSQL database architecture
+  - Filesystem-backed CRDT persistence (libSQL materialization planned)
   - Virtual disk implementation
   - Content addressing with BLAKE3
   - Access control policies
@@ -122,7 +122,7 @@ This architecture documentation is organized into the following sections:
 ### Security
 - **[Security](security.md)** - Cryptography and security model
   - Post-quantum cryptography (ML-DSA, ML-KEM)
-  - Four-word address security
+  - Connection word security (IP:port encoding)
   - Authentication methods (passwords, passkeys)
   - Session management
   - Encryption policies
@@ -134,7 +134,7 @@ For detailed rationale behind architectural decisions, see our ADRs:
 
 | ADR | Title | Description |
 |-----|-------|-------------|
-| [ADR-001](../adr/ADR-001-four-word-identity-system.md) | Four-Word Identity System | Human-readable decentralized addressing |
+| [ADR-001](../adr/ADR-001-four-word-identity-system.md) | Four-Word Identity System | Superseded; four-word networking now used only for connection words |
 | [ADR-002](../adr/ADR-002-local-first-architecture.md) | Local-First Architecture | Offline-capable with sync |
 | [ADR-003](../adr/ADR-003-yrs-crdt-synchronization.md) | Yrs CRDT Synchronization | Conflict-free collaborative data |
 | [ADR-004](../adr/ADR-004-entity-hierarchy-model.md) | Entity Hierarchy Model | Unified entity taxonomy |
@@ -143,36 +143,35 @@ For detailed rationale behind architectural decisions, see our ADRs:
 | [ADR-007](../adr/ADR-007-gossip-overlay-networking.md) | Gossip Overlay Networking | P2P via HyParView/Plumtree/SWIM |
 | [ADR-008](../adr/ADR-008-event-driven-tombstone-pruning.md) | Event-Driven Tombstone Pruning | CRDT cleanup on sync |
 | [ADR-009](../adr/ADR-009-modular-crate-architecture.md) | Modular Crate Architecture | Cargo workspace structure |
-| [ADR-010](../adr/ADR-010-cross-organization-invites.md) | Cross-Organization Invites | Four-word invite system |
+| [ADR-010](../adr/ADR-010-cross-organization-invites.md) | Cross-Organization Invites | Identity-based invite system |
 | [ADR-011](../adr/ADR-011-encrypted-vault-storage.md) | Encrypted Vault Storage | Multi-layer local encryption |
 
 See the [ADR Index](../adr/README.md) for more details and templates for new ADRs.
 
 ## Key Concepts
 
-### Four-Word Addresses
+### Connection Words (Four-Word Networking)
 
-Every entity in Communitas has a four-word address (e.g., "ocean-forest-moon-star"):
+Communitas uses four-word networking **only** to encode connection endpoints (IP:port) for easy sharing:
 - **Human-Readable**: Easy to remember and share
 - **Verifiable**: Dictionary validation prevents typos and phishing
-- **Universal**: Works for users, groups, channels, projects, organizations
-- **Cryptographically Bound**: Derived from ML-DSA public keys
-- **Decentralized**: No central registry or DNS required
+- **Ephemeral**: Represents a connection address, not a user identity
 
-See [ADR-001](../adr/ADR-001-four-word-identity-system.md) for complete design details.
+Identity is the **public key** (pubkey_hex). Connection words are a separate, shareable network address.
+See [ADR-001](../adr/ADR-001-four-word-identity-system.md) for details.
 
 ### Entities
 
 Communitas is built around the concept of **entities**:
 
-- **👤 Users**: Personal identities with four-word addresses
+- **👤 Users**: Personal identities (public-key based)
 - **👥 Groups**: Collaborative spaces with shared resources
 - **🏢 Organizations**: Multi-channel communication hubs
 - **📁 Projects**: Structured workspaces with task management
 - **📢 Channels**: Topic-focused discussion spaces
 
 Each entity has:
-- Unique four-word address
+- Unique identity (public key or entity ID)
 - Three virtual disks (Private, Public, Shared)
 - CRDT documents for real-time collaboration
 - Optional website root for DNS-free publishing
@@ -262,8 +261,7 @@ Native application for Windows, macOS, Linux, iOS, and Android:
 ### Headless Daemon
 Server deployment for bots and background services:
 - systemd/launchd service integration
-- JSON-RPC API for remote control
-- Webhook system for events
+- Metrics/health endpoint for monitoring
 
 See [communitas-headless/README.md](../../communitas-headless/README.md)
 

@@ -6,6 +6,10 @@ Comprehensive guide to Communitas' P2P networking layer built on the Saorsa Goss
 
 Communitas uses **Saorsa Gossip** - a layered peer-to-peer communication system built on QUIC transport. It provides decentralized messaging, peer discovery, presence tracking, and content distribution without central servers.
 
+**Terminology**:
+- **Identity**: hex-encoded ML-DSA public key (pubkey_hex)
+- **Connection words**: four-word networking encoding of IP:port for peer dialing
+
 ### Key Features
 
 - **Decentralized**: No central servers or single points of failure
@@ -36,7 +40,7 @@ Communitas uses **Saorsa Gossip** - a layered peer-to-peer communication system 
 │  ┌──────────────────┐  ┌──────────────────┐               │
 │  │ Identity         │  │ Groups           │               │
 │  │ v0.1.6           │  │ v0.1.6           │               │
-│  │ - Four-word IDs  │  │ - MLS support    │               │
+│  │ - Public keys    │  │ - MLS support    │               │
 │  │ - ML-DSA sigs    │  │ - Membership     │               │
 │  └──────────────────┘  └──────────────────┘               │
 │                                                             │
@@ -148,12 +152,12 @@ pub struct GossipContext {
 
 ### 2. Identity Management
 
-**Purpose**: Four-word address management with post-quantum signatures
+**Purpose**: Public-key identity management with post-quantum signatures
 
 **Location**: `saorsa-gossip-identity` (v0.1.6)
 
 **Features**:
-- Four-word address ↔ cryptographic identity
+- Public-key identity management
 - ML-DSA signature creation/verification
 - Identity persistence
 
@@ -161,8 +165,8 @@ pub struct GossipContext {
 ```rust
 use saorsa_gossip_identity::Identity;
 
-// Create identity from four-word address
-let identity = Identity::from_four_words("ocean-forest-moon-star")?;
+// Create identity from public key (pseudocode)
+let identity = Identity::from_public_key(pubkey)?;
 
 // Sign message
 let signature = identity.sign(message_bytes)?;
@@ -574,7 +578,7 @@ for peer in cached.take(5) {
 
 ### Cache Persistence
 
-**Storage**: Local filesystem or libSQL database
+**Storage**: Local filesystem (libSQL materialization planned)
 
 **Schema**:
 ```sql

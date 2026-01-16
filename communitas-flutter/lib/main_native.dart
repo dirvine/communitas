@@ -8,17 +8,19 @@ import 'src/bindings/frb_generated.dart';
 
 /// Initialize native platform features (Rust bridge).
 Future<void> initializePlatform() async {
+  final lib = _loadNativeLibrary();
   try {
-    final lib = _loadNativeLibrary();
     if (lib != null) {
       await RustLib.init(externalLibrary: lib);
-      debugPrint('Rust bridge initialized successfully');
+      debugPrint('Rust bridge initialized successfully (external library)');
     } else {
-      debugPrint('Could not find native library, running in demo mode');
+      await RustLib.init();
+      debugPrint('Rust bridge initialized successfully (default loader)');
     }
   } catch (e) {
-    debugPrint('Failed to initialize Rust bridge: $e');
-    // Continue in demo mode if Rust bridge fails
+    throw FlutterError(
+      'Failed to initialize Rust bridge. Build the native library or run with DEMO_MODE=true. Error: $e',
+    );
   }
 }
 

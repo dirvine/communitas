@@ -37,7 +37,8 @@ saorsa-gossip-pubsub = "0.2.2"
 saorsa-gossip-coordinator = "0.2.2"
 saorsa-gossip-rendezvous = "0.2.2"
 saorsa-gossip-runtime = "0.2.2"
-openh264-sys2 = "0.9.0"
+# Security: openh264-sys2 0.9.x requires rustc 1.88+, using 0.8.0 until CI upgrades
+openh264-sys2 = "0.8.0"
 
 # Real-time multimedia (WebRTC over QUIC)
 saorsa-webrtc-core = "0.2.1"

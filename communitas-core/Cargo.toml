@@ -30,8 +30,8 @@ saorsa-gossip-runtime.workspace = true
 saorsa-webrtc-core.workspace = true
 saorsa-webrtc-codecs.workspace = true
 
-# Security: Force upgrade of openh264-sys2 to fix RUSTSEC-2025-0008
-# This overrides the vulnerable 0.7.1 version from saorsa-webrtc-codecs
+# OpenH264: Using 0.8.0 until CI upgrades to rustc 1.88+ (0.9.x requires 1.88)
+# TODO: Upgrade to 0.9.x when CI rustc is updated to fix RUSTSEC-2025-0008
 openh264-sys2.workspace = true
 
 # Post-quantum cryptography - saorsa-pqc re-exports fips203/fips204

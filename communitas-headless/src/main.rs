@@ -1570,14 +1570,20 @@ async fn start_quic_delta_server(
         let (pk, sk) = generate_mldsa65_keypair()
             .map_err(|e| anyhow::anyhow!("generate ML-DSA-65 keypair: {e}"))?;
         if let Some(parent) = secret_key_path.parent() {
-            tokio::fs::create_dir_all(parent).await.ok();
+            tokio::fs::create_dir_all(parent)
+                .await
+                .context("create key directory")?;
         }
-        let _ = tokio::fs::write(&public_key_path, pk.as_bytes()).await;
-        let _ = tokio::fs::write(&secret_key_path, sk.as_bytes()).await;
+        tokio::fs::write(&public_key_path, pk.as_bytes())
+            .await
+            .context("write transport public key")?;
+        tokio::fs::write(&secret_key_path, sk.as_bytes())
+            .await
+            .context("write transport secret key")?;
         #[cfg(unix)]
         {
-            let _ =
-                std::fs::set_permissions(&secret_key_path, std::fs::Permissions::from_mode(0o600));
+            std::fs::set_permissions(&secret_key_path, std::fs::Permissions::from_mode(0o600))
+                .context("set secret key permissions")?;
         }
         (pk, sk)
     };
@@ -1663,4 +1669,541 @@ async fn start_quic_delta_server(
     });
 
     Ok(actual_addr)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
+
+    // ==================== decode_update_public_keys tests ====================
+
+    #[test]
+    fn test_decode_update_public_keys_valid() {
+        // 32 bytes = AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= in base64
+        let valid_key = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=".to_string();
+        let result = decode_update_public_keys(&[valid_key]).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0], [0u8; 32]);
+    }
+
+    #[test]
+    fn test_decode_update_public_keys_multiple() {
+        let key1 = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=".to_string();
+        let key2 = "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=".to_string();
+        let result = decode_update_public_keys(&[key1, key2]).unwrap();
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0], [0u8; 32]);
+        assert_eq!(result[1], [1u8; 32]);
+    }
+
+    #[test]
+    fn test_decode_update_public_keys_empty_string_skipped() {
+        let valid_key = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=".to_string();
+        let result =
+            decode_update_public_keys(&[valid_key, "".to_string(), "  ".to_string()]).unwrap();
+        assert_eq!(result.len(), 1);
+    }
+
+    #[test]
+    fn test_decode_update_public_keys_invalid_base64() {
+        let invalid = "not-valid-base64!!!".to_string();
+        let result = decode_update_public_keys(&[invalid]);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("base64 decode"));
+    }
+
+    #[test]
+    fn test_decode_update_public_keys_wrong_length() {
+        // 16 bytes instead of 32
+        let short_key = "AAAAAAAAAAAAAAAAAAAAAA==".to_string();
+        let result = decode_update_public_keys(&[short_key]);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("expected 32 bytes")
+        );
+    }
+
+    #[test]
+    fn test_decode_update_public_keys_whitespace_trimmed() {
+        let key_with_whitespace = "  AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=  ".to_string();
+        let result = decode_update_public_keys(&[key_with_whitespace]).unwrap();
+        assert_eq!(result.len(), 1);
+    }
+
+    // ==================== is_hex_sha256 tests ====================
+
+    #[test]
+    fn test_is_hex_sha256_valid() {
+        let valid = "a".repeat(64);
+        assert!(is_hex_sha256(&valid));
+    }
+
+    #[test]
+    fn test_is_hex_sha256_valid_mixed_case() {
+        let valid = "aAbBcCdDeEfF0123456789".to_string() + &"0".repeat(42);
+        assert!(is_hex_sha256(&valid));
+    }
+
+    #[test]
+    fn test_is_hex_sha256_too_short() {
+        let short = "a".repeat(63);
+        assert!(!is_hex_sha256(&short));
+    }
+
+    #[test]
+    fn test_is_hex_sha256_too_long() {
+        let long = "a".repeat(65);
+        assert!(!is_hex_sha256(&long));
+    }
+
+    #[test]
+    fn test_is_hex_sha256_non_hex_chars() {
+        let invalid = "g".repeat(64); // 'g' is not a hex digit
+        assert!(!is_hex_sha256(&invalid));
+    }
+
+    #[test]
+    fn test_is_hex_sha256_empty() {
+        assert!(!is_hex_sha256(""));
+    }
+
+    // ==================== matches_asset_name tests ====================
+
+    #[test]
+    fn test_matches_asset_name_exact() {
+        assert!(matches_asset_name("binary.tar.gz", "binary.tar.gz"));
+    }
+
+    #[test]
+    fn test_matches_asset_name_with_leading_asterisk() {
+        assert!(matches_asset_name("*binary.tar.gz", "binary.tar.gz"));
+    }
+
+    #[test]
+    fn test_matches_asset_name_with_quotes() {
+        assert!(matches_asset_name("\"binary.tar.gz\"", "binary.tar.gz"));
+        assert!(matches_asset_name("'binary.tar.gz'", "binary.tar.gz"));
+    }
+
+    #[test]
+    fn test_matches_asset_name_with_whitespace() {
+        assert!(matches_asset_name("  binary.tar.gz  ", "binary.tar.gz"));
+    }
+
+    #[test]
+    fn test_matches_asset_name_with_path() {
+        assert!(matches_asset_name(
+            "./path/to/binary.tar.gz",
+            "binary.tar.gz"
+        ));
+    }
+
+    #[test]
+    fn test_matches_asset_name_no_match() {
+        assert!(!matches_asset_name("other.tar.gz", "binary.tar.gz"));
+    }
+
+    // ==================== parse_checksum_for_asset tests ====================
+
+    #[test]
+    fn test_parse_checksum_bsd_style() {
+        // BSD style: SHA256 (filename) = hash
+        let hash = "a".repeat(64);
+        let contents = format!("SHA256 (binary.tar.gz) = {}", hash);
+        let result = parse_checksum_for_asset(&contents, "binary.tar.gz").unwrap();
+        assert_eq!(result, hash);
+    }
+
+    #[test]
+    fn test_parse_checksum_standard_format() {
+        // Standard format: hash  filename
+        let hash = "b".repeat(64);
+        let contents = format!("{}  binary.tar.gz", hash);
+        let result = parse_checksum_for_asset(&contents, "binary.tar.gz").unwrap();
+        assert_eq!(result, hash);
+    }
+
+    #[test]
+    fn test_parse_checksum_hash_then_filename() {
+        // hash filename (single space)
+        let hash = "c".repeat(64);
+        let contents = format!("{} binary.tar.gz", hash);
+        let result = parse_checksum_for_asset(&contents, "binary.tar.gz").unwrap();
+        assert_eq!(result, hash);
+    }
+
+    #[test]
+    fn test_parse_checksum_filename_then_hash() {
+        // Some formats put filename first: binary.tar.gz hash
+        let hash = "d".repeat(64);
+        let contents = format!("binary.tar.gz {}", hash);
+        let result = parse_checksum_for_asset(&contents, "binary.tar.gz").unwrap();
+        assert_eq!(result, hash);
+    }
+
+    #[test]
+    fn test_parse_checksum_hash_only_single_line() {
+        // Single line with just hash (for per-asset checksum files)
+        let hash = "e".repeat(64);
+        let result = parse_checksum_for_asset(&hash, "binary.tar.gz").unwrap();
+        assert_eq!(result, hash);
+    }
+
+    #[test]
+    fn test_parse_checksum_ignores_comments() {
+        let hash = "f".repeat(64);
+        let contents = format!(
+            "# This is a comment\n\
+             # Another comment\n\
+             {}  binary.tar.gz",
+            hash
+        );
+        let result = parse_checksum_for_asset(&contents, "binary.tar.gz").unwrap();
+        assert_eq!(result, hash);
+    }
+
+    #[test]
+    fn test_parse_checksum_ignores_empty_lines() {
+        let hash = "0".repeat(64);
+        let contents = format!("\n\n{}  binary.tar.gz\n\n", hash);
+        let result = parse_checksum_for_asset(&contents, "binary.tar.gz").unwrap();
+        assert_eq!(result, hash);
+    }
+
+    #[test]
+    fn test_parse_checksum_multiple_entries() {
+        let hash1 = "1".repeat(64);
+        let hash2 = "2".repeat(64);
+        let contents = format!(
+            "{}  other.tar.gz\n\
+             {}  binary.tar.gz",
+            hash1, hash2
+        );
+        let result = parse_checksum_for_asset(&contents, "binary.tar.gz").unwrap();
+        assert_eq!(result, hash2);
+    }
+
+    #[test]
+    fn test_parse_checksum_not_found() {
+        let hash = "3".repeat(64);
+        let contents = format!("{}  other.tar.gz", hash);
+        let result = parse_checksum_for_asset(&contents, "binary.tar.gz");
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("No SHA256 checksum")
+        );
+    }
+
+    #[test]
+    fn test_parse_checksum_lowercase_output() {
+        // Input with uppercase hex should be lowercased
+        let hash = "ABCDEF".to_string() + &"0".repeat(58);
+        let contents = format!("{}  binary.tar.gz", hash);
+        let result = parse_checksum_for_asset(&contents, "binary.tar.gz").unwrap();
+        assert_eq!(result, hash.to_ascii_lowercase());
+    }
+
+    #[test]
+    fn test_parse_checksum_with_asterisk_prefix() {
+        // Some tools use *filename for binary mode
+        let hash = "4".repeat(64);
+        let contents = format!("{} *binary.tar.gz", hash);
+        let result = parse_checksum_for_asset(&contents, "binary.tar.gz").unwrap();
+        assert_eq!(result, hash);
+    }
+
+    // ==================== sha256_hex_for_file tests ====================
+
+    #[test]
+    fn test_sha256_hex_for_file_empty() {
+        let file = NamedTempFile::new().unwrap();
+        let result = sha256_hex_for_file(file.path()).unwrap();
+        // SHA256 of empty file is well-known
+        assert_eq!(
+            result,
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
+    }
+
+    #[test]
+    fn test_sha256_hex_for_file_known_content() {
+        let mut file = NamedTempFile::new().unwrap();
+        file.write_all(b"hello world").unwrap();
+        file.flush().unwrap();
+        let result = sha256_hex_for_file(file.path()).unwrap();
+        // SHA256 of "hello world" is well-known
+        assert_eq!(
+            result,
+            "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"
+        );
+    }
+
+    #[test]
+    fn test_sha256_hex_for_file_large_content() {
+        let mut file = NamedTempFile::new().unwrap();
+        // Write more than one buffer (8192 bytes) to test chunked reading
+        let data = vec![0xABu8; 20000];
+        file.write_all(&data).unwrap();
+        file.flush().unwrap();
+        let result = sha256_hex_for_file(file.path()).unwrap();
+        // Just verify it returns a valid 64-char hex string
+        assert_eq!(result.len(), 64);
+        assert!(result.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn test_sha256_hex_for_file_not_found() {
+        let result = sha256_hex_for_file(Path::new("/nonexistent/path/to/file"));
+        assert!(result.is_err());
+    }
+
+    // ==================== Integration tests ====================
+
+    #[test]
+    fn test_checksum_verification_flow() {
+        // Simulate the full checksum verification flow
+        let mut file = NamedTempFile::new().unwrap();
+        file.write_all(b"test binary content").unwrap();
+        file.flush().unwrap();
+
+        // Compute actual hash
+        let actual_hash = sha256_hex_for_file(file.path()).unwrap();
+
+        // Create checksum file content
+        let checksum_content = format!("{}  binary.tar.gz", actual_hash);
+
+        // Parse and verify
+        let expected_hash = parse_checksum_for_asset(&checksum_content, "binary.tar.gz").unwrap();
+        assert_eq!(actual_hash, expected_hash);
+    }
+
+    // ==================== ML-DSA-65 Transport Key Persistence Tests ====================
+
+    use saorsa_gossip_transport::quic::crypto::raw_public_keys::key_utils::{
+        MlDsa65PublicKey, MlDsa65SecretKey, generate_keypair as generate_mldsa65_keypair,
+    };
+
+    #[test]
+    fn test_mldsa65_keypair_generation() {
+        let result = generate_mldsa65_keypair();
+        assert!(
+            result.is_ok(),
+            "ML-DSA-65 keypair generation should succeed"
+        );
+
+        let (pk, sk) = result.unwrap();
+        // ML-DSA-65 public key is 1952 bytes
+        assert_eq!(
+            pk.as_bytes().len(),
+            1952,
+            "ML-DSA-65 public key should be 1952 bytes"
+        );
+        // ML-DSA-65 secret key is 4032 bytes
+        assert_eq!(
+            sk.as_bytes().len(),
+            4032,
+            "ML-DSA-65 secret key should be 4032 bytes"
+        );
+    }
+
+    #[test]
+    fn test_mldsa65_keypair_uniqueness() {
+        let (pk1, sk1) = generate_mldsa65_keypair().unwrap();
+        let (pk2, sk2) = generate_mldsa65_keypair().unwrap();
+
+        assert_ne!(
+            pk1.as_bytes(),
+            pk2.as_bytes(),
+            "Generated public keys should be unique"
+        );
+        assert_ne!(
+            sk1.as_bytes(),
+            sk2.as_bytes(),
+            "Generated secret keys should be unique"
+        );
+    }
+
+    #[test]
+    fn test_mldsa65_public_key_roundtrip() {
+        let (pk, _sk) = generate_mldsa65_keypair().unwrap();
+        let bytes = pk.as_bytes().to_vec();
+
+        let restored = MlDsa65PublicKey::from_bytes(&bytes);
+        assert!(
+            restored.is_ok(),
+            "Public key deserialization should succeed"
+        );
+
+        let restored_pk = restored.unwrap();
+        assert_eq!(
+            pk.as_bytes(),
+            restored_pk.as_bytes(),
+            "Restored public key should match original"
+        );
+    }
+
+    #[test]
+    fn test_mldsa65_secret_key_roundtrip() {
+        let (_pk, sk) = generate_mldsa65_keypair().unwrap();
+        let bytes = sk.as_bytes().to_vec();
+
+        let restored = MlDsa65SecretKey::from_bytes(&bytes);
+        assert!(
+            restored.is_ok(),
+            "Secret key deserialization should succeed"
+        );
+
+        let restored_sk = restored.unwrap();
+        assert_eq!(
+            sk.as_bytes(),
+            restored_sk.as_bytes(),
+            "Restored secret key should match original"
+        );
+    }
+
+    #[test]
+    fn test_mldsa65_public_key_invalid_length() {
+        // Too short
+        let short_bytes = vec![0u8; 100];
+        let result = MlDsa65PublicKey::from_bytes(&short_bytes);
+        assert!(result.is_err(), "Should reject short public key");
+
+        // Too long
+        let long_bytes = vec![0u8; 2000];
+        let result = MlDsa65PublicKey::from_bytes(&long_bytes);
+        assert!(result.is_err(), "Should reject long public key");
+    }
+
+    #[test]
+    fn test_mldsa65_secret_key_invalid_length() {
+        // Too short
+        let short_bytes = vec![0u8; 100];
+        let result = MlDsa65SecretKey::from_bytes(&short_bytes);
+        assert!(result.is_err(), "Should reject short secret key");
+
+        // Too long
+        let long_bytes = vec![0u8; 5000];
+        let result = MlDsa65SecretKey::from_bytes(&long_bytes);
+        assert!(result.is_err(), "Should reject long secret key");
+    }
+
+    #[test]
+    fn test_mldsa65_key_file_persistence() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let public_key_path = temp_dir.path().join("transport_mldsa65.pub");
+        let secret_key_path = temp_dir.path().join("transport_mldsa65.key");
+
+        // Generate keypair
+        let (pk, sk) = generate_mldsa65_keypair().unwrap();
+
+        // Write to files
+        std::fs::write(&public_key_path, pk.as_bytes()).unwrap();
+        std::fs::write(&secret_key_path, sk.as_bytes()).unwrap();
+
+        // Read back
+        let pk_bytes = std::fs::read(&public_key_path).unwrap();
+        let sk_bytes = std::fs::read(&secret_key_path).unwrap();
+
+        // Verify sizes
+        assert_eq!(pk_bytes.len(), 1952);
+        assert_eq!(sk_bytes.len(), 4032);
+
+        // Restore and verify
+        let restored_pk = MlDsa65PublicKey::from_bytes(&pk_bytes).unwrap();
+        let restored_sk = MlDsa65SecretKey::from_bytes(&sk_bytes).unwrap();
+
+        assert_eq!(pk.as_bytes(), restored_pk.as_bytes());
+        assert_eq!(sk.as_bytes(), restored_sk.as_bytes());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_mldsa65_secret_key_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let secret_key_path = temp_dir.path().join("transport_mldsa65.key");
+
+        let (_pk, sk) = generate_mldsa65_keypair().unwrap();
+        std::fs::write(&secret_key_path, sk.as_bytes()).unwrap();
+
+        // Set restrictive permissions (0o600 = owner read/write only)
+        std::fs::set_permissions(&secret_key_path, std::fs::Permissions::from_mode(0o600)).unwrap();
+
+        let metadata = std::fs::metadata(&secret_key_path).unwrap();
+        let mode = metadata.permissions().mode() & 0o777;
+        assert_eq!(
+            mode, 0o600,
+            "Secret key should have restrictive permissions"
+        );
+    }
+
+    #[test]
+    fn test_mldsa65_key_persistence_roundtrip_integrity() {
+        // Simulate the full persistence flow from start_quic_delta_server
+        let temp_dir = tempfile::tempdir().unwrap();
+        let public_key_path = temp_dir.path().join("transport_mldsa65.pub");
+        let secret_key_path = temp_dir.path().join("transport_mldsa65.key");
+
+        // First run: generate and persist
+        let (original_pk, original_sk) = generate_mldsa65_keypair().unwrap();
+        std::fs::write(&public_key_path, original_pk.as_bytes()).unwrap();
+        std::fs::write(&secret_key_path, original_sk.as_bytes()).unwrap();
+
+        // Second run: load from disk
+        let pk_bytes = std::fs::read(&public_key_path).unwrap();
+        let sk_bytes = std::fs::read(&secret_key_path).unwrap();
+        let loaded_pk = MlDsa65PublicKey::from_bytes(&pk_bytes).unwrap();
+        let loaded_sk = MlDsa65SecretKey::from_bytes(&sk_bytes).unwrap();
+
+        // Verify loaded keys match originals
+        assert_eq!(
+            original_pk.as_bytes(),
+            loaded_pk.as_bytes(),
+            "Loaded public key must match original"
+        );
+        assert_eq!(
+            original_sk.as_bytes(),
+            loaded_sk.as_bytes(),
+            "Loaded secret key must match original"
+        );
+    }
+
+    #[test]
+    fn test_mldsa65_nonexistent_key_files() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let public_key_path = temp_dir.path().join("nonexistent.pub");
+        let secret_key_path = temp_dir.path().join("nonexistent.key");
+
+        // Verify files don't exist
+        assert!(!public_key_path.exists());
+        assert!(!secret_key_path.exists());
+
+        // Reading should fail
+        assert!(std::fs::read(&public_key_path).is_err());
+        assert!(std::fs::read(&secret_key_path).is_err());
+    }
+
+    #[test]
+    fn test_mldsa65_keys_not_all_zeros() {
+        let (pk, sk) = generate_mldsa65_keypair().unwrap();
+
+        // Keys should not be all zeros
+        assert!(
+            pk.as_bytes().iter().any(|&b| b != 0),
+            "Public key should not be all zeros"
+        );
+        assert!(
+            sk.as_bytes().iter().any(|&b| b != 0),
+            "Secret key should not be all zeros"
+        );
+    }
 }

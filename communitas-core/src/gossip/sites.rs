@@ -258,7 +258,7 @@ impl SiteManifest {
             .public_key
             .as_slice()
             .try_into()
-            .map_err(|_| anyhow::anyhow!("Public key is not 2592 bytes"))?;
+            .map_err(|_| anyhow::anyhow!("Public key is not 1952 bytes"))?;
         let public_key = PublicKey::try_from_bytes(pk_array)
             .map_err(|e| anyhow::anyhow!("Invalid public key: {}", e))?;
 

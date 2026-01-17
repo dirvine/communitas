@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use sysinfo::{System, get_current_pid};
 use thiserror::Error;
+use tracing::warn;
 
 /// Resource limit errors
 #[derive(Error, Debug)]
@@ -112,13 +113,8 @@ pub struct ResourceLimits {
 
 impl Default for ResourceLimits {
     fn default() -> Self {
-        Self::from_config(ResourceLimitsConfig::default())
-    }
-}
-
-impl ResourceLimits {
-    /// Create resource limits from configuration
-    pub fn from_config(config: ResourceLimitsConfig) -> Self {
+        // Direct construction to avoid recursion with from_config fallback
+        let config = ResourceLimitsConfig::default();
         Self {
             max_peer_connections: config.max_peer_connections,
             max_relay_connections: config.max_relay_connections,
@@ -128,6 +124,66 @@ impl ResourceLimits {
             anti_entropy_max_interval: Duration::from_secs(config.anti_entropy_max_interval_secs),
             upload_rate_limit_mbps: config.max_upload_rate_mbps,
             download_rate_limit_mbps: config.max_download_rate_mbps,
+        }
+    }
+}
+
+impl ResourceLimits {
+    /// Create resource limits from configuration with validation.
+    ///
+    /// Returns `Err` if the configuration is invalid (e.g., zero limits,
+    /// document size exceeds memory limit).
+    pub fn try_from_config(config: ResourceLimitsConfig) -> ResourceLimitResult<Self> {
+        // Validate: peer connections must be positive
+        if config.max_peer_connections == 0 {
+            return Err(ResourceLimitError::PeerLimitExceeded {
+                current: 0,
+                limit: 0,
+            });
+        }
+
+        // Validate: memory must be positive
+        if config.max_memory_mb == 0 {
+            return Err(ResourceLimitError::MemoryLimitExceeded {
+                current: 0,
+                limit_mb: 0,
+            });
+        }
+
+        // Validate: document limit should not exceed memory limit
+        if config.crdt_document_limit_mb > config.max_memory_mb {
+            return Err(ResourceLimitError::MemoryLimitExceeded {
+                current: config.crdt_document_limit_mb,
+                limit_mb: config.max_memory_mb,
+            });
+        }
+
+        Ok(Self {
+            max_peer_connections: config.max_peer_connections,
+            max_relay_connections: config.max_relay_connections,
+            max_memory_mb: config.max_memory_mb,
+            crdt_document_limit_mb: config.crdt_document_limit_mb,
+            connection_timeout: Duration::from_secs(config.connection_timeout_secs),
+            anti_entropy_max_interval: Duration::from_secs(config.anti_entropy_max_interval_secs),
+            upload_rate_limit_mbps: config.max_upload_rate_mbps,
+            download_rate_limit_mbps: config.max_download_rate_mbps,
+        })
+    }
+
+    /// Create resource limits from configuration.
+    ///
+    /// Logs a warning and uses safe defaults if validation fails.
+    /// For stricter error handling, use [`try_from_config`].
+    pub fn from_config(config: ResourceLimitsConfig) -> Self {
+        match Self::try_from_config(config) {
+            Ok(limits) => limits,
+            Err(e) => {
+                warn!(
+                    "Invalid resource limits configuration: {}. Using safe defaults.",
+                    e
+                );
+                Self::default()
+            }
         }
     }
 
@@ -289,8 +345,13 @@ impl ResourceLimits {
     }
 
     /// Measure current usage with a provided peer count
+    ///
+    /// If memory monitoring is unavailable, uses max_memory_mb as a conservative
+    /// fallback to prevent bypassing memory limits.
     pub fn measure_usage_with_peers(&self, peer_connections: usize) -> ResourceUsage {
-        let memory_mb = current_process_memory_mb();
+        // Use max_memory_mb as conservative fallback if measurement fails
+        // This prevents silently bypassing memory limits when monitoring unavailable
+        let memory_mb = current_process_memory_mb().unwrap_or(self.max_memory_mb);
         ResourceUsage {
             peer_connections,
             memory_mb,
@@ -305,17 +366,26 @@ impl ResourceLimits {
     }
 }
 
-fn current_process_memory_mb() -> usize {
+fn current_process_memory_mb() -> Option<usize> {
     let pid = match get_current_pid() {
         Ok(pid) => pid,
-        Err(_) => return 0,
+        Err(e) => {
+            warn!(
+                "Failed to get current process ID for memory monitoring: {}",
+                e
+            );
+            return None;
+        }
     };
     let mut system = System::new();
     system.refresh_processes();
-    system
-        .process(pid)
-        .map(|process| (process.memory() / 1024) as usize)
-        .unwrap_or(0)
+    match system.process(pid) {
+        Some(process) => Some((process.memory() / 1024) as usize),
+        None => {
+            warn!("Failed to find current process in system info for memory monitoring");
+            None
+        }
+    }
 }
 
 #[cfg(test)]
@@ -333,21 +403,102 @@ mod tests {
     }
 
     #[test]
-    fn test_zero_limits() {
+    fn test_try_from_config_valid() {
+        let config = ResourceLimitsConfig::default();
+        let result = ResourceLimits::try_from_config(config);
+        assert!(result.is_ok());
+        let limits = result.unwrap();
+        assert_eq!(limits.max_peer_connections, 50);
+        assert_eq!(limits.max_memory_mb, 2048);
+    }
+
+    #[test]
+    fn test_try_from_config_zero_peer_connections() {
         let config = ResourceLimitsConfig {
             max_peer_connections: 0,
-            max_relay_connections: 0,
-            max_memory_mb: 0,
-            crdt_document_limit_mb: 0,
-            connection_timeout_secs: 1,
-            anti_entropy_max_interval_secs: 1,
-            max_upload_rate_mbps: None,
-            max_download_rate_mbps: None,
+            ..ResourceLimitsConfig::default()
         };
+        let result = ResourceLimits::try_from_config(config);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            ResourceLimitError::PeerLimitExceeded { .. }
+        ));
+    }
 
+    #[test]
+    fn test_try_from_config_zero_memory() {
+        let config = ResourceLimitsConfig {
+            max_memory_mb: 0,
+            ..ResourceLimitsConfig::default()
+        };
+        let result = ResourceLimits::try_from_config(config);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            ResourceLimitError::MemoryLimitExceeded { .. }
+        ));
+    }
+
+    #[test]
+    fn test_try_from_config_document_exceeds_memory() {
+        let config = ResourceLimitsConfig {
+            max_memory_mb: 100,
+            crdt_document_limit_mb: 200,
+            ..ResourceLimitsConfig::default()
+        };
+        let result = ResourceLimits::try_from_config(config);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            ResourceLimitError::MemoryLimitExceeded { .. }
+        ));
+    }
+
+    #[test]
+    fn test_from_config_invalid_falls_back_to_defaults() {
+        let config = ResourceLimitsConfig {
+            max_peer_connections: 0,
+            max_memory_mb: 0,
+            ..ResourceLimitsConfig::default()
+        };
+        // from_config should fall back to defaults instead of panicking
         let limits = ResourceLimits::from_config(config);
+        // Should have default values, not zeros
+        assert_eq!(limits.max_peer_connections, 50);
+        assert_eq!(limits.max_memory_mb, 2048);
+    }
 
-        assert!(limits.enforce_peer_limit(0).is_err());
-        assert!(limits.enforce_memory_limit(1).is_err());
+    #[test]
+    fn test_from_config_valid_uses_provided_values() {
+        let config = ResourceLimitsConfig {
+            max_peer_connections: 100,
+            max_memory_mb: 4096,
+            ..ResourceLimitsConfig::default()
+        };
+        let limits = ResourceLimits::from_config(config);
+        assert_eq!(limits.max_peer_connections, 100);
+        assert_eq!(limits.max_memory_mb, 4096);
+    }
+
+    #[test]
+    fn test_default_is_valid() {
+        let limits = ResourceLimits::default();
+        // Should be able to validate successfully
+        assert!(limits.validate().is_ok());
+        assert_eq!(limits.max_peer_connections, 50);
+        assert_eq!(limits.max_memory_mb, 2048);
+    }
+
+    #[test]
+    fn test_low_resource_is_valid() {
+        let limits = ResourceLimits::low_resource();
+        assert!(limits.validate().is_ok());
+    }
+
+    #[test]
+    fn test_high_performance_is_valid() {
+        let limits = ResourceLimits::high_performance();
+        assert!(limits.validate().is_ok());
     }
 }

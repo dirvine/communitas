@@ -105,7 +105,7 @@ fn test_verify_fails_with_wrong_key() {
 }
 
 #[test]
-// #[ignore]
+#[ignore] // Requires real system keyring (macOS Keychain, Secret Service) - run manually
 fn test_keystore_persistence() {
     let identity = "test-headless-node-alpha";
     let (pk, sk) = crypto::generate_mldsa87_keypair().expect("Key generation failed");
@@ -123,7 +123,7 @@ fn test_keystore_persistence() {
 }
 
 #[test]
-// #[ignore]
+#[ignore] // Requires real system keyring (macOS Keychain, Secret Service) - run manually
 fn test_keystore_roundtrip_with_signing() {
     let identity = "test-headless-node-beta";
 
@@ -153,7 +153,7 @@ fn test_keystore_load_nonexistent_identity() {
 }
 
 #[test]
-// #[ignore]
+#[ignore] // Requires real system keyring (macOS Keychain, Secret Service) - run manually
 fn test_key_zeroization_on_drop() {
     // This test ensures sensitive key material is zeroized
     // when dropped (security requirement)

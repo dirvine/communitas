@@ -240,7 +240,7 @@ impl GossipBootSequence {
                 "Resource limits prevent dialing contact {}: {}",
                 four_words, err
             );
-            return Ok(());
+            return Err(anyhow::anyhow!(err));
         }
 
         // Phase 2 TDD: Use retry_dial with exponential backoff (MESH_CAPABILITIES.md §3.2)

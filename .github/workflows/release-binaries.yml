@@ -25,7 +25,7 @@ jobs:
     - uses: actions/checkout@v4
 
     - name: Install Rust stable
-      uses: dtolnay/rust-toolchain@stable
+      uses: dtolnay/rust-toolchain@1.86.0
 
     - name: Install system dependencies
       run: |
@@ -80,7 +80,7 @@ jobs:
     - uses: actions/checkout@v4
 
     - name: Install Rust stable
-      uses: dtolnay/rust-toolchain@stable
+      uses: dtolnay/rust-toolchain@1.86.0
       with:
         targets: aarch64-apple-darwin,x86_64-apple-darwin
 
@@ -120,7 +120,7 @@ jobs:
     - uses: actions/checkout@v4
 
     - name: Install Rust stable
-      uses: dtolnay/rust-toolchain@stable
+      uses: dtolnay/rust-toolchain@1.86.0
 
     - name: Build binaries
       run: |

@@ -304,10 +304,12 @@ impl Default for IntroducerConfig {
     fn default() -> Self {
         Self {
             // Production bootstrap nodes (saorsa network)
+            // saorsa-1 (77.42.75.115) is for dashboard/website, not bootstrap
             addresses: vec![
-                "77.42.75.115:11000".to_string(), // saorsa-1: Dublin bootstrap (primary)
-                "142.93.199.50:11000".to_string(), // saorsa-2: DigitalOcean NYC1 bootstrap
-                "147.182.234.192:11000".to_string(), // saorsa-3: DigitalOcean SFO3 bootstrap
+                "142.93.199.50:11000".to_string(),   // saorsa-2: DigitalOcean NYC1
+                "147.182.234.192:11000".to_string(), // saorsa-3: DigitalOcean SFO3
+                "206.189.7.117:11000".to_string(),   // saorsa-4: DigitalOcean
+                "144.126.230.161:11000".to_string(), // saorsa-5: DigitalOcean
             ],
             timeout_secs: 10,
         }

@@ -10,6 +10,15 @@ import re
 import sys
 
 
+def replace_first_after(text: str, marker: str, old: str, new: str) -> str:
+    idx = text.find(marker)
+    if idx == -1:
+        return text
+    segment = text[idx:]
+    segment = segment.replace(old, new, 1)
+    return text[:idx] + segment
+
+
 def sanitize(path: Path) -> None:
     text = path.read_text()
 
@@ -76,6 +85,37 @@ def sanitize(path: Path) -> None:
             "    clippy::needless_borrow\n)",
             "    clippy::needless_borrow,\n    clippy::not_unsafe_ptr_arg_deref\n)",
         )
+
+    text = replace_first_after(
+        text,
+        "impl SseDecode for crate::flutter_api::FlutterEvent",
+        "            _ => {\n                unimplemented!(\"\");\n            }\n",
+        "            other => {\n                return crate::flutter_api::FlutterEvent::Error {\n                    code: \"unknown_event\".to_string(),\n                    message: format!(\"Unknown FlutterEvent tag: {}\", other),\n                };\n            }\n",
+    )
+    text = replace_first_after(
+        text,
+        "impl flutter_rust_bridge::IntoDart for crate::flutter_api::FlutterEvent",
+        "            _ => {\n                unimplemented!(\"\");\n            }\n",
+        "",
+    )
+    text = replace_first_after(
+        text,
+        "impl SseEncode for crate::flutter_api::FlutterDiskType",
+        "                _ => {\n                    unimplemented!(\"\");\n                }\n",
+        "",
+    )
+    text = replace_first_after(
+        text,
+        "impl SseEncode for crate::flutter_api::FlutterEntityType",
+        "                _ => {\n                    unimplemented!(\"\");\n                }\n",
+        "",
+    )
+    text = replace_first_after(
+        text,
+        "impl SseEncode for crate::flutter_api::FlutterEvent",
+        "            _ => {\n                unimplemented!(\"\");\n            }\n",
+        "",
+    )
 
     path.write_text(text)
 

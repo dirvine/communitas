@@ -57,12 +57,20 @@ hex = "0.4"
 blake3 = "1.0"
 zeroize = "1.7"
 keyring = "3.2"
+sha2 = "0.10"
+tempfile = "3.0"
 # Ed25519 for QUIC transport layer (ant-quic requirement)
 # Application-layer identity uses ML-DSA-87 from crypto module
 ed25519-dalek = "2"
 
-# Self-update functionality
-self_update = "0.41"
+# Self-update functionality (signed archives)
+self_update = { version = "0.41", features = [
+    "signatures",
+    "archive-tar",
+    "archive-zip",
+    "compression-flate2",
+    "compression-zip-deflate",
+] }
 
 # Network
 reqwest = { version = "0.12", features = ["json"] }
@@ -71,6 +79,3 @@ local-ip-address = "0.6"
 # Utils
 once_cell = "1.19"
 chrono = { version = "0.4", features = ["serde"] }
-
-[dev-dependencies]
-tempfile = "3.0"

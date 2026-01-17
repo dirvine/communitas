@@ -9,6 +9,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
+use sysinfo::{System, get_current_pid};
 use thiserror::Error;
 
 /// Resource limit errors
@@ -287,15 +288,34 @@ impl ResourceLimits {
         Ok(())
     }
 
-    /// Get current resource usage from system
-    pub fn measure_current_usage(&self) -> ResourceUsage {
+    /// Measure current usage with a provided peer count
+    pub fn measure_usage_with_peers(&self, peer_connections: usize) -> ResourceUsage {
+        let memory_mb = current_process_memory_mb();
         ResourceUsage {
-            peer_connections: 0,
-            memory_mb: 0,
+            peer_connections,
+            memory_mb,
             upload_rate_mbps: 0.0,
             download_rate_mbps: 0.0,
         }
     }
+
+    /// Get current resource usage from system
+    pub fn measure_current_usage(&self) -> ResourceUsage {
+        self.measure_usage_with_peers(0)
+    }
+}
+
+fn current_process_memory_mb() -> usize {
+    let pid = match get_current_pid() {
+        Ok(pid) => pid,
+        Err(_) => return 0,
+    };
+    let mut system = System::new();
+    system.refresh_processes();
+    system
+        .process(pid)
+        .map(|process| (process.memory() / 1024) as usize)
+        .unwrap_or(0)
 }
 
 #[cfg(test)]

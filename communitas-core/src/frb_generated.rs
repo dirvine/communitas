@@ -4805,8 +4805,11 @@ impl SseDecode for crate::flutter_api::FlutterEvent {
                     message: var_message,
                 };
             }
-            _ => {
-                unimplemented!("");
+            other => {
+                return crate::flutter_api::FlutterEvent::Error {
+                    code: "unknown_event".to_string(),
+                    message: format!("Unknown FlutterEvent tag: {}", other),
+                };
             }
         }
     }
@@ -6088,9 +6091,6 @@ impl flutter_rust_bridge::IntoDart for crate::flutter_api::FlutterEvent {
                 message.into_into_dart().into_dart(),
             ]
             .into_dart(),
-            _ => {
-                unimplemented!("");
-            }
         }
     }
 }
@@ -6477,9 +6477,6 @@ impl SseEncode for crate::flutter_api::FlutterDiskType {
                 crate::flutter_api::FlutterDiskType::Private => 0,
                 crate::flutter_api::FlutterDiskType::Public => 1,
                 crate::flutter_api::FlutterDiskType::Shared => 2,
-                _ => {
-                    unimplemented!("");
-                }
             },
             serializer,
         );
@@ -6512,9 +6509,6 @@ impl SseEncode for crate::flutter_api::FlutterEntityType {
                 crate::flutter_api::FlutterEntityType::Project => 2,
                 crate::flutter_api::FlutterEntityType::Organisation => 3,
                 crate::flutter_api::FlutterEntityType::Person => 4,
-                _ => {
-                    unimplemented!("");
-                }
             },
             serializer,
         );
@@ -6646,9 +6640,6 @@ impl SseEncode for crate::flutter_api::FlutterEvent {
                 <i32>::sse_encode(19, serializer);
                 <String>::sse_encode(code, serializer);
                 <String>::sse_encode(message, serializer);
-            }
-            _ => {
-                unimplemented!("");
             }
         }
     }

@@ -95,6 +95,7 @@ dirs = "5.0"
 keyring = "3.2"
 tempfile = "3.0"
 flutter_rust_bridge = "=2.11.1"
+sysinfo = "0.30"
 
 
 

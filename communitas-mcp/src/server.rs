@@ -977,6 +977,83 @@ impl McpServer {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::protocol::{ClientCapabilities, ClientInfo};
+
+    fn test_args() -> Args {
+        Args {
+            demo: false,
+            storage_dir: None,
+            four_words: None,
+            display_name: "Test".to_string(),
+            http: false,
+            tls: false,
+            listen: None,
+            no_client_auth: true,
+        }
+    }
+
+    fn init_request(id: i64) -> JsonRpcRequest {
+        let params = InitializeParams {
+            protocol_version: "2024-11-05".to_string(),
+            capabilities: ClientCapabilities::default(),
+            client_info: ClientInfo {
+                name: "test".to_string(),
+                version: "0.1".to_string(),
+            },
+        };
+        JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            id: Some(serde_json::json!(id)),
+            method: "initialize".to_string(),
+            params: Some(serde_json::to_value(params).unwrap()),
+        }
+    }
+
+    fn tool_call_request(id: i64, name: &str) -> JsonRpcRequest {
+        JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            id: Some(serde_json::json!(id)),
+            method: "tools/call".to_string(),
+            params: Some(serde_json::json!({
+                "name": name,
+                "arguments": {}
+            })),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_tools_call_requires_initialize() {
+        let mut server = McpServer::new(test_args());
+        let response = server
+            .handle_request(tool_call_request(1, "get_profile"))
+            .await
+            .expect("Expected response");
+        let error = response.error.expect("Expected error response");
+        assert_eq!(error.code, -32600);
+    }
+
+    #[tokio::test]
+    async fn test_tools_call_requires_auth_after_init() {
+        let mut server = McpServer::new(test_args());
+        let _ = server.handle_request(init_request(1)).await;
+
+        let response = server
+            .handle_request(tool_call_request(2, "get_profile"))
+            .await
+            .expect("Expected response");
+        let error = response.error.expect("Expected error response");
+        assert_eq!(error.code, -32600);
+        assert!(
+            error.message.contains("Authentication required"),
+            "Unexpected error message: {}",
+            error.message
+        );
+    }
+}
+
 /// Run the MCP server
 pub async fn run(args: Args) -> Result<()> {
     let mut server = McpServer::new(args);

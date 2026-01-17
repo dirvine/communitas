@@ -450,6 +450,15 @@ impl GossipContext {
         crate::conn_words(&addr)
     }
 
+    /// Enforce configured resource limits based on current usage.
+    pub async fn enforce_resource_limits(&self) -> Result<(), crate::ResourceLimitError> {
+        let peer_connections = self.transport.connected_peers().await.len();
+        let usage = self
+            .resource_limits
+            .measure_usage_with_peers(peer_connections);
+        self.resource_limits.check_all(&usage)
+    }
+
     /// Get ML-DSA-65 keypair for Sites protocol (signing manifests and name records)
     ///
     /// Converts from saorsa_gossip_identity types to saorsa_pqc::ml_dsa_65 types
@@ -1190,6 +1199,14 @@ impl GossipContext {
     /// Establish a connection to a specific address (bootstrap)
     pub async fn dial_address(&self, addr: std::net::SocketAddr) -> Result<()> {
         use saorsa_gossip_transport::GossipTransport;
+
+        if let Err(err) = self.enforce_resource_limits().await {
+            warn!(
+                "Resource limits prevent dialing bootstrap {}: {}",
+                addr, err
+            );
+            return Err(anyhow::anyhow!(err));
+        }
 
         // Use transport layer to establish actual QUIC connection
         info!("Dialing bootstrap node at {} via transport", addr);

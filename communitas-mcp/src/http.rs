@@ -17,7 +17,13 @@ use crate::protocol::{
 use crate::tls::{ServerTlsConfig, ServerTlsConfigBuilder, TlsConfigError};
 use crate::tools;
 use anyhow::Result;
-use axum::{Json, Router, extract::State, http::StatusCode, routing::post};
+use axum::{
+    Json, Router,
+    body::Bytes,
+    extract::{DefaultBodyLimit, State},
+    http::StatusCode,
+    routing::post,
+};
 use base64::Engine;
 use communitas_core::app::CommunitasApp;
 use communitas_core::identity::generate_id_words;
@@ -32,6 +38,8 @@ use std::time::SystemTime;
 use tokio::sync::RwLock;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::{error, info, warn};
+
+const MAX_BODY_BYTES: usize = 2 * 1024 * 1024;
 
 /// HTTP server state
 pub struct HttpServerState {
@@ -193,6 +201,7 @@ fn create_router(state: Arc<HttpServerState>) -> Router {
     Router::new()
         .route("/mcp", post(handle_mcp_request))
         .route("/health", axum::routing::get(handle_health))
+        .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
         .layer(
             CorsLayer::new()
                 .allow_origin(Any)
@@ -205,8 +214,31 @@ fn create_router(state: Arc<HttpServerState>) -> Router {
 /// Handle MCP JSON-RPC request
 async fn handle_mcp_request(
     State(state): State<Arc<HttpServerState>>,
-    Json(request): Json<JsonRpcRequest>,
+    body: Bytes,
 ) -> (StatusCode, Json<JsonRpcResponse>) {
+    let value: Value = match serde_json::from_slice(&body) {
+        Ok(value) => value,
+        Err(_) => {
+            return (
+                StatusCode::OK,
+                Json(JsonRpcResponse::error(None, JsonRpcError::parse_error())),
+            );
+        }
+    };
+
+    let request: JsonRpcRequest = match serde_json::from_value(value) {
+        Ok(request) => request,
+        Err(err) => {
+            return (
+                StatusCode::OK,
+                Json(JsonRpcResponse::error(
+                    None,
+                    JsonRpcError::invalid_request(&err.to_string()),
+                )),
+            );
+        }
+    };
+
     match handle_request_inner(&state, request).await {
         Ok(Some(response)) => (StatusCode::OK, Json(response)),
         Ok(None) => {
@@ -264,6 +296,59 @@ async fn handle_request_inner(
         Ok(value) => JsonRpcResponse::success(request.id, value),
         Err(error) => JsonRpcResponse::error(request.id, error),
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::body::Body;
+    use http::Request;
+    use tower::ServiceExt;
+
+    fn test_args() -> Args {
+        Args {
+            demo: false,
+            storage_dir: None,
+            four_words: None,
+            display_name: "Test".to_string(),
+            http: true,
+            tls: false,
+            listen: None,
+            no_client_auth: true,
+        }
+    }
+
+    async fn response_json(router: Router, body: &'static str) -> serde_json::Value {
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/mcp")
+                    .header("content-type", "application/json")
+                    .body(Body::from(body))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let bytes = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        serde_json::from_slice(&bytes).unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_parse_error_response() {
+        let state = Arc::new(HttpServerState::new(test_args()));
+        let router = create_router(state);
+        let json = response_json(router, "{invalid json").await;
+        assert_eq!(json["error"]["code"], -32700);
+    }
+
+    #[tokio::test]
+    async fn test_invalid_request_response() {
+        let state = Arc::new(HttpServerState::new(test_args()));
+        let router = create_router(state);
+        let json = response_json(router, r#"{"jsonrpc":"2.0","id":1}"#).await;
+        assert_eq!(json["error"]["code"], -32600);
+    }
 }
 
 /// Initialize demo mode

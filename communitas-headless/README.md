@@ -85,6 +85,8 @@ channel = "stable"
 check_interval_secs = 21600
 auto_update = true
 jitter_secs = 0
+public_keys_base64 = []
+require_checksum = true
 ```
 
 ## CLI Usage

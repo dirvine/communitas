@@ -235,6 +235,14 @@ impl GossipBootSequence {
             return Ok(()); // Non-fatal, just skip the dial
         }
 
+        if let Err(err) = self.context.enforce_resource_limits().await {
+            warn!(
+                "Resource limits prevent dialing contact {}: {}",
+                four_words, err
+            );
+            return Ok(());
+        }
+
         // Phase 2 TDD: Use retry_dial with exponential backoff (MESH_CAPABILITIES.md §3.2)
         let retry_config = RetryConfig::default();
         let four_words_str = four_words.to_string();

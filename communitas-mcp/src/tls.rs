@@ -634,4 +634,39 @@ mod tests {
         assert_eq!(len, 1000);
         assert_eq!(consumed, 3);
     }
+
+    #[test]
+    fn test_invalid_spki_rejected() {
+        let (public_key, _secret_key) = generate_keypair().unwrap();
+        let mut spki = create_spki(&public_key).unwrap();
+        spki.pop();
+        let err = extract_key_from_spki(&spki).unwrap_err();
+        assert!(matches!(err, TlsConfigError::InvalidPublicKey(_)));
+    }
+
+    #[test]
+    fn test_client_verifier_accepts_trusted_key() {
+        let (public_key, _secret_key) = generate_keypair().unwrap();
+        let spki = create_spki(&public_key).unwrap();
+        let cert = CertificateDer::from(spki);
+        let verifier = RawPublicKeyClientVerifier::new(vec![public_key]);
+        let result = verifier.verify_client_cert(&cert, &[], UnixTime::now());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_client_verifier_rejects_unknown_key() {
+        let (public_key, _secret_key) = generate_keypair().unwrap();
+        let (other_public_key, _other_secret_key) = generate_keypair().unwrap();
+        let spki = create_spki(&public_key).unwrap();
+        let cert = CertificateDer::from(spki);
+        let verifier = RawPublicKeyClientVerifier::new(vec![other_public_key]);
+        let result = verifier.verify_client_cert(&cert, &[], UnixTime::now());
+        assert!(matches!(
+            result,
+            Err(TlsError::InvalidCertificate(
+                CertificateError::UnknownIssuer
+            ))
+        ));
+    }
 }

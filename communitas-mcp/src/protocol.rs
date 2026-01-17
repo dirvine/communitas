@@ -277,4 +277,13 @@ mod tests {
         assert!(json.contains("jsonrpc"));
         assert!(json.contains("result"));
     }
+
+    #[test]
+    fn test_error_codes() {
+        assert_eq!(JsonRpcError::parse_error().code, -32700);
+        assert_eq!(JsonRpcError::invalid_request("x").code, -32600);
+        assert_eq!(JsonRpcError::method_not_found("x").code, -32601);
+        assert_eq!(JsonRpcError::invalid_params("x").code, -32602);
+        assert_eq!(JsonRpcError::internal_error("x").code, -32603);
+    }
 }

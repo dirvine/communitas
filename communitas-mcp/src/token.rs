@@ -33,6 +33,12 @@ impl TokenManager {
             }
             let mut secret = [0u8; SECRET_SIZE];
             secret.copy_from_slice(&data);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let perms = std::fs::Permissions::from_mode(0o600);
+                fs::set_permissions(path, perms).await?;
+            }
             Ok(secret)
         } else {
             let mut secret = [0u8; SECRET_SIZE];
@@ -44,6 +50,13 @@ impl TokenManager {
 
             let mut file = fs::File::create(path).await?;
             file.write_all(&secret).await?;
+            file.flush().await?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let perms = std::fs::Permissions::from_mode(0o600);
+                fs::set_permissions(path, perms).await?;
+            }
             Ok(secret)
         }
     }
@@ -190,5 +203,27 @@ mod tests {
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 
         assert!(manager.verify_token(&token).is_err());
+    }
+
+    #[tokio::test]
+    async fn test_secret_persists_across_restarts() {
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let manager = TokenManager::new(temp_dir.path().to_path_buf())
+            .await
+            .expect("Failed to create token manager");
+
+        let token = manager
+            .create_token("issuer-1", "delegate-1", vec![Scope::ReadMessages], 24)
+            .expect("Failed to create token");
+
+        let manager2 = TokenManager::new(temp_dir.path().to_path_buf())
+            .await
+            .expect("Failed to create token manager");
+
+        let verified = manager2
+            .verify_token(&token)
+            .expect("Token should verify with persisted secret");
+        assert_eq!(verified.issuer, "issuer-1");
+        assert_eq!(verified.delegate_name, "delegate-1");
     }
 }

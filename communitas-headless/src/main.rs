@@ -21,14 +21,17 @@ use once_cell::sync::Lazy;
 // Removed: four_word_networking::FourWordAddress - using communitas_core::identity instead
 // PQC crypto implementation provided by crypto module
 
+use reqwest::header::{ACCEPT, HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::convert::TryInto;
 use std::env;
-use std::io::ErrorKind;
+use std::io::{ErrorKind, Read};
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
+use tempfile::TempDir;
 use tokio::signal;
 use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
@@ -36,8 +39,330 @@ use tracing_subscriber::EnvFilter;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
+use self_update::update::{Release, ReleaseAsset, ReleaseUpdate};
+
+fn decode_update_public_keys(keys: &[String]) -> Result<Vec<[u8; 32]>> {
+    let mut parsed = Vec::new();
+    for key in keys {
+        let trimmed = key.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let bytes = BASE64
+            .decode(trimmed.as_bytes())
+            .map_err(|e| anyhow!("Invalid update public key (base64 decode failed): {e}"))?;
+        if bytes.len() != 32 {
+            return Err(anyhow!(
+                "Invalid update public key length: expected 32 bytes, got {}",
+                bytes.len()
+            ));
+        }
+        let mut key_bytes = [0u8; 32];
+        key_bytes.copy_from_slice(&bytes);
+        parsed.push(key_bytes);
+    }
+    Ok(parsed)
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn build_download_headers(update: &dyn ReleaseUpdate) -> Result<HeaderMap> {
+    let mut headers = update.api_headers(&update.auth_token())?;
+    headers.insert(ACCEPT, HeaderValue::from_static("application/octet-stream"));
+    Ok(headers)
+}
+
+fn download_asset_bytes(update: &dyn ReleaseUpdate, asset: &ReleaseAsset) -> Result<Vec<u8>> {
+    let mut download = self_update::Download::from_url(&asset.download_url);
+    download.set_headers(build_download_headers(update)?);
+    let mut buffer = Vec::new();
+    download
+        .download_to(&mut buffer)
+        .with_context(|| format!("Failed to download {}", asset.name))?;
+    Ok(buffer)
+}
+
+fn download_asset_to_file(
+    update: &dyn ReleaseUpdate,
+    asset: &ReleaseAsset,
+    dest: &Path,
+) -> Result<()> {
+    let mut file = std::fs::File::create(dest)
+        .with_context(|| format!("Failed to create download destination {}", dest.display()))?;
+    let mut download = self_update::Download::from_url(&asset.download_url);
+    download.set_headers(build_download_headers(update)?);
+    download.show_progress(update.show_download_progress());
+    download.set_progress_style(update.progress_template(), update.progress_chars());
+    download
+        .download_to(&mut file)
+        .with_context(|| format!("Failed to download {}", asset.name))?;
+    Ok(())
+}
+
+fn is_hex_sha256(value: &str) -> bool {
+    if value.len() != 64 {
+        return false;
+    }
+    value.bytes().all(|b| b.is_ascii_hexdigit())
+}
+
+fn matches_asset_name(token: &str, asset_name: &str) -> bool {
+    let trimmed = token
+        .trim()
+        .trim_start_matches('*')
+        .trim_matches('"')
+        .trim_matches('\'');
+    trimmed.ends_with(asset_name)
+}
+
+fn parse_checksum_for_asset(contents: &str, asset_name: &str) -> Result<String> {
+    let mut hash_only_candidate = None;
+    let mut meaningful_lines = 0;
+
+    for line in contents.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        meaningful_lines += 1;
+
+        if let Some(eq_idx) = trimmed.rfind('=') {
+            let (left, right) = trimmed.split_at(eq_idx);
+            if left.contains(asset_name) {
+                let hash = right.trim_start_matches('=').trim();
+                if is_hex_sha256(hash) {
+                    return Ok(hash.to_ascii_lowercase());
+                }
+            }
+        }
+
+        let parts: Vec<&str> = trimmed.split_whitespace().collect();
+        if parts.is_empty() {
+            continue;
+        }
+
+        if parts.len() == 1 {
+            if is_hex_sha256(parts[0]) {
+                hash_only_candidate = Some(parts[0].to_ascii_lowercase());
+            }
+            continue;
+        }
+
+        if is_hex_sha256(parts[0])
+            && parts
+                .iter()
+                .skip(1)
+                .any(|p| matches_asset_name(p, asset_name))
+        {
+            return Ok(parts[0].to_ascii_lowercase());
+        }
+
+        let last = parts[parts.len() - 1];
+        if is_hex_sha256(last)
+            && parts
+                .iter()
+                .take(parts.len() - 1)
+                .any(|p| matches_asset_name(p, asset_name))
+        {
+            return Ok(last.to_ascii_lowercase());
+        }
+    }
+
+    if meaningful_lines == 1
+        && let Some(hash) = hash_only_candidate
+    {
+        return Ok(hash);
+    }
+
+    Err(anyhow!(
+        "No SHA256 checksum entry found for asset {}",
+        asset_name
+    ))
+}
+
+fn find_checksum_asset(release: &Release, asset_name: &str) -> Option<ReleaseAsset> {
+    let direct_candidates = [
+        format!("{}.sha256", asset_name),
+        format!("{}.sha256.txt", asset_name),
+        format!("{}.sha256sum", asset_name),
+        format!("{}.sha256sums", asset_name),
+    ];
+    for candidate in direct_candidates {
+        if let Some(asset) = release.assets.iter().find(|a| a.name == candidate) {
+            return Some(asset.clone());
+        }
+    }
+
+    let general_candidates = [
+        "SHA256SUMS",
+        "SHA256SUMS.txt",
+        "sha256sums",
+        "sha256sums.txt",
+        "sha256.txt",
+    ];
+    for candidate in general_candidates {
+        if let Some(asset) = release
+            .assets
+            .iter()
+            .find(|a| a.name.eq_ignore_ascii_case(candidate))
+        {
+            return Some(asset.clone());
+        }
+    }
+
+    release
+        .assets
+        .iter()
+        .find(|asset| {
+            let lower = asset.name.to_ascii_lowercase();
+            lower.contains("sha256") && lower.contains("sum")
+        })
+        .cloned()
+}
+
+fn sha256_hex_for_file(path: &Path) -> Result<String> {
+    let mut file =
+        std::fs::File::open(path).with_context(|| format!("Failed to open {}", path.display()))?;
+    let mut hasher = Sha256::new();
+    let mut buffer = [0u8; 8192];
+    loop {
+        let read = file.read(&mut buffer)?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+    Ok(hex::encode(hasher.finalize()))
+}
+
+fn replace_var(mut input: String, var: &str, value: &str) -> String {
+    let patterns = [
+        format!("{{{{{}}}}}", var),
+        format!("{{{{ {}}}}}", var),
+        format!("{{{{{} }}}}", var),
+        format!("{{{{ {} }}}}", var),
+    ];
+    for pattern in patterns {
+        input = input.replace(&pattern, value);
+    }
+    input
+}
+
+fn resolve_bin_path_in_archive(
+    template: &str,
+    bin_name: &str,
+    target: &str,
+    version: &str,
+) -> String {
+    let mut path = template.to_string();
+    path = replace_var(path, "bin", bin_name);
+    path = replace_var(path, "target", target);
+    path = replace_var(path, "version", version);
+    path
+}
+
+fn extract_and_replace(
+    update: &dyn ReleaseUpdate,
+    release: &Release,
+    archive_path: &Path,
+    tmp_dir: &Path,
+) -> Result<()> {
+    let bin_path_template = update.bin_path_in_archive();
+    let bin_path = resolve_bin_path_in_archive(
+        &bin_path_template,
+        &update.bin_name(),
+        &update.target(),
+        &release.version,
+    );
+    self_update::Extract::from_source(archive_path)
+        .extract_file(tmp_dir, &bin_path)
+        .with_context(|| format!("Failed to extract {}", bin_path))?;
+    let new_exe = tmp_dir.join(&bin_path);
+    self_update::self_replace::self_replace(new_exe).context("Failed to replace binary")?;
+    Ok(())
+}
+
+fn try_self_update_with_checksum(
+    owner: &str,
+    name: &str,
+    require_checksum: bool,
+) -> Result<Option<String>> {
+    use self_update::cargo_crate_version;
+
+    let mut cfg = self_update::backends::github::Update::configure();
+    cfg.repo_owner(owner)
+        .repo_name(name)
+        .bin_name("communitas-headless")
+        .current_version(cargo_crate_version!())
+        .no_confirm(true);
+
+    let update = cfg.build()?;
+    let release = match update.target_version() {
+        None => {
+            let latest = update.get_latest_release()?;
+            if !self_update::version::bump_is_greater(&update.current_version(), &latest.version)? {
+                return Ok(None);
+            }
+            latest
+        }
+        Some(ver) => update.get_release_version(&ver)?,
+    };
+
+    let target = update.target();
+    let target_asset = release
+        .asset_for(&target, update.identifier().as_deref())
+        .ok_or_else(|| anyhow!("No asset found for target: {}", target))?;
+
+    let checksum_asset = find_checksum_asset(&release, &target_asset.name);
+    let expected_checksum = if let Some(asset) = checksum_asset {
+        let checksum_bytes = download_asset_bytes(update.as_ref(), &asset)?;
+        let checksum_text =
+            String::from_utf8(checksum_bytes).context("Checksum asset is not valid UTF-8")?;
+        Some(parse_checksum_for_asset(
+            &checksum_text,
+            &target_asset.name,
+        )?)
+    } else {
+        if require_checksum {
+            return Err(anyhow!(
+                "No SHA256 checksum asset found for {}",
+                target_asset.name
+            ));
+        }
+        warn!(
+            "No checksum asset found for {}; proceeding without SHA256 verification",
+            target_asset.name
+        );
+        None
+    };
+
+    let tmp_dir = TempDir::new().context("Failed to create temporary update directory")?;
+    let archive_path = tmp_dir.path().join(&target_asset.name);
+    download_asset_to_file(update.as_ref(), &target_asset, &archive_path)?;
+
+    if let Some(expected) = expected_checksum {
+        let actual = sha256_hex_for_file(&archive_path)?;
+        if actual != expected {
+            return Err(anyhow!(
+                "SHA256 mismatch for {} (expected {}, got {})",
+                target_asset.name,
+                expected,
+                actual
+            ));
+        }
+    }
+
+    extract_and_replace(update.as_ref(), &release, &archive_path, tmp_dir.path())?;
+    Ok(Some(release.version))
+}
+
 /// Try to self-update the binary using GitHub releases
-pub fn try_self_update() -> Result<Option<String>> {
+pub fn try_self_update(
+    verifying_keys: Vec<[u8; 32]>,
+    require_checksum: bool,
+) -> Result<Option<String>> {
     use self_update::cargo_crate_version;
     let owner =
         std::env::var("COMMUNITAS_UPDATE_REPO_OWNER").unwrap_or_else(|_| "dirvine".to_string());
@@ -45,31 +370,36 @@ pub fn try_self_update() -> Result<Option<String>> {
         std::env::var("COMMUNITAS_UPDATE_REPO_NAME").unwrap_or_else(|_| "communitas".to_string());
 
     // Primary attempt
-    let mut cfg = self_update::backends::github::Update::configure();
-    let builder = cfg
-        .repo_owner(&owner)
-        .repo_name(&name)
-        .bin_name("communitas-headless")
-        .current_version(cargo_crate_version!());
-    match builder.build()?.update() {
-        Ok(status) => Ok(Some(status.version().to_string())),
+    let update_attempt = |repo_owner: &str| -> Result<Option<String>> {
+        if verifying_keys.is_empty() {
+            warn!("Self-update signature verification disabled (no public keys configured)");
+            return try_self_update_with_checksum(repo_owner, &name, require_checksum);
+        }
+
+        let mut cfg = self_update::backends::github::Update::configure();
+        cfg.repo_owner(repo_owner)
+            .repo_name(&name)
+            .bin_name("communitas-headless")
+            .current_version(cargo_crate_version!())
+            .no_confirm(true)
+            .verifying_keys(verifying_keys.clone());
+        let status = cfg.build()?.update()?;
+        if status.updated() {
+            Ok(Some(status.version().to_string()))
+        } else {
+            Ok(None)
+        }
+    };
+
+    match update_attempt(&owner) {
+        Ok(result) => Ok(result),
         Err(e1) => {
-            // Optional fallback repo (if the project lives under a different owner)
             let fallback_owner = if owner == "dirvine" {
                 "david-irvine"
             } else {
                 "dirvine"
             };
-            let mut cfg2 = self_update::backends::github::Update::configure();
-            let b2 = cfg2
-                .repo_owner(fallback_owner)
-                .repo_name(&name)
-                .bin_name("communitas-headless")
-                .current_version(cargo_crate_version!());
-            match b2.build()?.update() {
-                Ok(status) => Ok(Some(status.version().to_string())),
-                Err(_e2) => Err(e1.into()),
-            }
+            update_attempt(fallback_owner).map_err(|_| e1)
         }
     }
 }
@@ -181,6 +511,14 @@ struct UpdateConfig {
 
     /// Jitter range in seconds (0 disables jitter)
     jitter_secs: u64,
+
+    /// Base64-encoded public keys for signed update verification
+    #[serde(default)]
+    public_keys_base64: Vec<String>,
+
+    /// Require SHA256 checksum verification when signatures are unavailable
+    #[serde(default = "default_true")]
+    require_checksum: bool,
 }
 
 impl Default for Config {
@@ -225,6 +563,8 @@ fn default_config_with_storage(base_dir: PathBuf) -> Config {
             check_interval_secs: 21600, // 6 hours
             auto_update: true,
             jitter_secs: 0,
+            public_keys_base64: vec![],
+            require_checksum: true,
         },
     }
 }
@@ -909,23 +1249,6 @@ async fn connect_to_peer(addr_str: String) -> Result<()> {
 use communitas_core::{CoreContext, types::DeviceType};
 
 async fn run_node(args: Args) -> Result<()> {
-    // Self-update mode: do not start services
-    if args.self_update {
-        // Run the blocking self-update in a spawn_blocking task
-        match tokio::task::spawn_blocking(try_self_update).await {
-            Ok(Ok(Some(ver))) => {
-                tracing::info!("updated-to={}", ver);
-            }
-            Ok(Ok(None)) => tracing::info!("no-update"),
-            Ok(Err(e)) => {
-                tracing::error!("self-update error: {:#}", e);
-            }
-            Err(e) => {
-                tracing::error!("spawn error: {:#}", e);
-            }
-        }
-        return Ok(());
-    }
     let instance_id = args
         .instance_id
         .as_deref()
@@ -944,6 +1267,29 @@ async fn run_node(args: Args) -> Result<()> {
         default_config_with_storage(storage_default.clone()),
     )
     .await?;
+    let update_keys = decode_update_public_keys(&config.update.public_keys_base64)?;
+
+    // Self-update mode: do not start services
+    if args.self_update {
+        // Run the blocking self-update in a spawn_blocking task
+        let update_keys = update_keys.clone();
+        let require_checksum = config.update.require_checksum;
+        match tokio::task::spawn_blocking(move || try_self_update(update_keys, require_checksum))
+            .await
+        {
+            Ok(Ok(Some(ver))) => {
+                tracing::info!("updated-to={}", ver);
+            }
+            Ok(Ok(None)) => tracing::info!("no-update"),
+            Ok(Err(e)) => {
+                tracing::error!("self-update error: {:#}", e);
+            }
+            Err(e) => {
+                tracing::error!("spawn error: {:#}", e);
+            }
+        }
+        return Ok(());
+    }
     let mut config_dirty = false;
     info!(
         "Loaded configuration from {} (instance {})",
@@ -1035,7 +1381,11 @@ async fn run_node(args: Args) -> Result<()> {
     if config.update.auto_update {
         info!("Checking for updates...");
         // Run the blocking self-update in a spawn_blocking task
-        match tokio::task::spawn_blocking(try_self_update).await {
+        let update_keys = update_keys.clone();
+        let require_checksum = config.update.require_checksum;
+        match tokio::task::spawn_blocking(move || try_self_update(update_keys, require_checksum))
+            .await
+        {
             Ok(Ok(Some(new_version))) => {
                 info!("Successfully updated to version {}", new_version);
                 info!("Please restart the application to use the new version");

@@ -2,6 +2,9 @@
 //!
 //! These tests verify the expected behavior of recovery tools.
 
+// Alias communitas_bindings (the actual lib name) as communitas_core
+extern crate communitas_bindings as communitas_core;
+
 use serde_json::{Value, json};
 
 // =============================================================================

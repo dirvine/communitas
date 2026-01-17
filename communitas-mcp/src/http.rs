@@ -303,6 +303,7 @@ mod tests {
     use super::*;
     use axum::body::Body;
     use http::Request;
+    use http_body_util::BodyExt;
     use tower::ServiceExt;
 
     fn test_args() -> Args {
@@ -330,7 +331,7 @@ mod tests {
             )
             .await
             .unwrap();
-        let bytes = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let bytes = response.into_body().collect().await.unwrap().to_bytes();
         serde_json::from_slice(&bytes).unwrap()
     }
 

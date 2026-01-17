@@ -50,7 +50,7 @@ The MCP server IS the app. Everything else is presentation.
 ### What Exists
 - `communitas-mcp/` - MCP server with stdio transport, 20+ tools
 - `communitas-core/` - CommunitasApp with full business logic
-- `AuthService` - Vault-based auth with four-word + password
+- `AuthService` - Vault-based auth with public-key identity + password
 - 9 VPS nodes globally distributed for testing
 
 ### Gaps
@@ -93,7 +93,7 @@ enum McpServerState {
 // Tools available before authentication
 Tool {
     name: "authenticate",
-    description: "Authenticate with four-word identity and password",
+    description: "Authenticate with public-key identity and password",
     input_schema: json!({
         "type": "object",
         "properties": {
@@ -136,7 +136,7 @@ Tool {
 ```rust
 #[derive(Serialize, Deserialize)]
 struct DelegateToken {
-    issuer: String,           // four-word identity
+    issuer: String,           // public-key identity (pubkey_hex)
     delegate_name: String,    // "my-claude-agent"
     scopes: Vec<Scope>,
     issued_at: DateTime<Utc>,
@@ -228,7 +228,7 @@ impl IpcTransport {
 }
 ```
 
-**QUIC (network, uses ant-quic)**
+**QUIC (network, uses saorsa-gossip-transport::quic)**
 ```rust
 pub struct QuicTransport {
     connection: Connection,
@@ -322,7 +322,7 @@ Deploy 8 MCP servers across VPS for full integration testing.
 ```rust
 // communitas-mcp/src/test_accounts.rs
 
-/// Generate N test accounts with predictable four-word identities
+/// Generate N test accounts with predictable identities
 pub fn generate_test_accounts(count: usize) -> Vec<TestAccount> {
     // Use deterministic seed for reproducible tests
     let accounts = vec![
@@ -522,8 +522,8 @@ communitas-mcp/Cargo.toml                     # Dependencies
 # Existing...
 
 # Transport
-tokio-unix = "0.1"              # Unix sockets
-ant-quic = { path = "..." }     # QUIC transport
+tokio-unix = "0.1"                     # Unix sockets
+saorsa-gossip-transport = "0.2.2"      # QUIC transport (re-exports ant-quic as quic)
 
 # Auth
 jsonwebtoken = "9"              # Token signing

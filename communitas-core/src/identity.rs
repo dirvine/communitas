@@ -9,9 +9,8 @@
 //! Identity and connection encoding using four-word-networking
 //!
 //! This module provides helpers for:
-//! - Converting public keys to four-word user identities
-//! - Converting SocketAddrs to four-word connection identities
-//! - Parsing four-word strings back to SocketAddrs
+//! - Connection words (IP:port encoding) for friend-to-friend dialing
+//! - Legacy four-word identity helpers kept for backward compatibility
 
 use four_word_networking::FourWordAdaptiveEncoder;
 use std::net::SocketAddr;
@@ -35,10 +34,10 @@ pub enum IdentityError {
 
 pub type IdentityResult<T> = Result<T, IdentityError>;
 
-/// Generate a random four-word identity
+/// Generate a random four-word string (legacy identity helper)
 ///
-/// Generates 4 valid random words from the four-word-networking dictionary
-/// to create a new user identity like "ocean-forest-moon-star".
+/// Generates 4 valid random words from the four-word-networking dictionary.
+/// This is retained for backward compatibility and is not used for identity.
 ///
 /// # Returns
 /// Four-word identity string with valid dictionary words
@@ -68,7 +67,7 @@ pub fn generate_id_words() -> IdentityResult<String> {
     Ok(words.join("-"))
 }
 
-/// Derive a deterministic seed from a four-word identity
+/// Derive a deterministic seed from a four-word string (legacy)
 ///
 /// Takes a four-word identity and produces a deterministic 32-byte seed
 /// that can be used to generate cryptographic keys. Same identity always
@@ -107,7 +106,7 @@ pub fn identity_to_seed(identity: &str) -> IdentityResult<[u8; 32]> {
     Ok(*hash.as_bytes())
 }
 
-/// Validate a four-word identity
+/// Validate a four-word string (legacy identity validation)
 ///
 /// Checks that all 4 words are valid dictionary words from four-word-networking.
 ///

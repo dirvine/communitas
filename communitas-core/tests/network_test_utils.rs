@@ -279,21 +279,18 @@ impl TestNode {
             .map_err(|e| format!("Failed to add self to peer discovery: {}", e))?;
 
         // Also add to peer cache with Sites address hints for transport routing
-        {
-            let mut self_cache = self.ctx.peer_cache.write().await;
-            self_cache
-                .update_success(other.peer_id(), other_sites_addr)
-                .await
-                .map_err(|e| format!("Failed to update peer cache: {}", e))?;
-        }
+        self.ctx
+            .peer_cache
+            .record_success(other.peer_id(), other_sites_addr)
+            .await
+            .map_err(|e| format!("Failed to update peer cache: {}", e))?;
 
-        {
-            let mut other_cache = other.ctx.peer_cache.write().await;
-            other_cache
-                .update_success(self.peer_id(), self_sites_addr)
-                .await
-                .map_err(|e| format!("Failed to update peer cache: {}", e))?;
-        }
+        other
+            .ctx
+            .peer_cache
+            .record_success(self.peer_id(), self_sites_addr)
+            .await
+            .map_err(|e| format!("Failed to update peer cache: {}", e))?;
 
         // CRITICAL: Establish direct connection between Sites transports
         // The Sites transport has its own peer routing that needs to be primed

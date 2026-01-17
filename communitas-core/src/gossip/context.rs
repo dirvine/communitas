@@ -84,13 +84,13 @@ pub struct GossipContext {
     pub favourite_contacts: Arc<RwLock<Vec<String>>>, // four-word addresses
 
     /// Peer cache for fast boot (SPEC2.md §6)
-    pub peer_cache: Arc<RwLock<super::peer_cache::PeerCache>>,
+    pub peer_cache: Arc<super::peer_cache::PeerCache>,
 
     /// Coordinator client for NAT traversal (SPEC2.md §2, §8, §9)
-    pub coordinator: Arc<super::coordinator::CoordinatorClient>,
+    pub coordinator: Arc<super::CoordinatorClient>,
 
     /// Rendezvous client for global user discovery (SPEC2.md §4, §9)
-    pub rendezvous: Arc<super::rendezvous::RendezvousClient>,
+    pub rendezvous: Arc<super::RendezvousClient>,
 
     /// Site publisher for publishing content-addressed sites
     pub site_publisher: Option<Arc<super::sites::SitePublisher>>,
@@ -159,11 +159,12 @@ impl GossipContext {
 
         // 1. Load or create ML-DSA identity
         // Use system data directory to avoid triggering file watchers in dev mode
-        let keystore_path = dirs::data_local_dir()
+        let data_root = dirs::data_local_dir()
             .ok_or_else(|| anyhow::anyhow!("Failed to get data directory"))?
-            .join("communitas")
-            .join("keystore");
+            .join("communitas");
+        std::fs::create_dir_all(&data_root).context("Failed to create data directory")?;
 
+        let keystore_path = data_root.join("keystore");
         // Ensure keystore directory exists
         std::fs::create_dir_all(&keystore_path).context("Failed to create keystore directory")?;
 
@@ -177,7 +178,15 @@ impl GossipContext {
         let peer_id = identity.peer_id();
         debug!("Loaded identity, peer_id: {:?}", peer_id);
 
-        // 2. Initialize QUIC transport (AntQuicTransport)
+        // 2. Load or create peer cache (SPEC2.md §6) - system-wide location
+        let cache_dir = data_root.join("bootstrap-cache");
+        let peer_cache = Arc::new(
+            super::peer_cache::PeerCache::open(&cache_dir)
+                .await
+                .context("Failed to open bootstrap cache")?,
+        );
+
+        // 3. Initialize QUIC transport (AntQuicTransport)
         // Use listen_port if provided, otherwise bind to port 0 (OS-assigned)
         // Use Bootstrap role to allow starting without upstream bootstrap nodes
         let bind_port = listen_port.unwrap_or(0);
@@ -194,14 +203,15 @@ impl GossipContext {
         let transport_config = AntQuicTransportConfig::new(bind_addr, vec![])
             .with_keypair(pub_key_bytes, sec_key_bytes);
 
-        let transport = AntQuicTransport::with_config(transport_config, None)
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to create AntQuicTransport: {}", e))?;
+        let transport =
+            AntQuicTransport::with_config(transport_config, Some(peer_cache.bootstrap_cache()))
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to create AntQuicTransport: {}", e))?;
         let transport = Arc::new(transport);
 
         // No need to call listen() for AntQuicTransport as it binds on creation.
 
-        // 3. Create membership layer (will be started in boot sequence)
+        // 4. Create membership layer (will be started in boot sequence)
         // HyParView parameters: active_degree (3-7), passive_degree (3x active)
         let membership: Arc<RwLock<Box<dyn Membership>>> = Arc::new(RwLock::new(Box::new(
             saorsa_gossip_membership::HyParViewMembership::new(
@@ -212,7 +222,7 @@ impl GossipContext {
             ),
         )));
 
-        // 4. Create pub/sub layer
+        // 5. Create pub/sub layer
         let signing_key = identity.key_pair().clone();
         let pubsub: Arc<RwLock<Box<dyn PubSub>>> = Arc::new(RwLock::new(Box::new(
             saorsa_gossip_pubsub::PlumtreePubSub::new(
@@ -222,72 +232,54 @@ impl GossipContext {
             ),
         )));
 
-        // 5. Create empty groups maps (populated during join_entity)
+        // 6. Create empty groups maps (populated during join_entity)
         let groups = Arc::new(RwLock::new(HashMap::new()));
         let groups_by_topic = Arc::new(RwLock::new(HashMap::new()));
 
-        // 6. Create presence manager
+        // 7. Create presence manager
         let presence = Arc::new(RwLock::new(PresenceManager::new(
             peer_id,
             transport.clone(),
             groups_by_topic.clone(),
         )));
 
-        // 6b. Create FOAF discovery manager
+        // 7b. Create FOAF discovery manager
         let discovery = Arc::new(super::discovery::FoafDiscovery::new());
 
-        // 7. Create CRDT message set
+        // 8. Create CRDT message set
         let crdt_message_set = Arc::new(RwLock::new(OrSet::new()));
 
-        // 8. Create anti-entropy manager (60 second sync interval)
+        // 9. Create anti-entropy manager (60 second sync interval)
         let anti_entropy = Arc::new(AntiEntropyManager::new(crdt_message_set.clone(), 60));
 
-        // 9. Initialize favourite contacts (will be loaded from storage)
+        // 10. Initialize favourite contacts (will be loaded from storage)
         let favourite_contacts = Arc::new(RwLock::new(Vec::new()));
 
-        // 10. Initialize topics map
+        // 11. Initialize topics map
         let topics = Arc::new(RwLock::new(HashMap::new()));
 
-        // 11. Load or create peer cache (SPEC2.md §6) - system-wide location
-        let cache_path = super::peer_cache::PeerCache::default_cache_path()
-            .context("Failed to get default peer cache path")?;
-        let peer_cache = super::peer_cache::PeerCache::load(&cache_path)
-            .await
-            .context("Failed to load peer cache")?;
-        let peer_cache = Arc::new(RwLock::new(peer_cache));
-
         // 12. Initialize coordinator client (SPEC2.md §2, §8, §9)
-        // Create a new QuicTransport instance for coordinator (shared config)
-        let coord_config = saorsa_gossip_transport::TransportConfig::default();
-        let coord_transport = saorsa_gossip_transport::QuicTransport::new(coord_config);
+        // Coordinator client reuses the main transport
         let coordinator_transport: Arc<RwLock<Box<dyn GossipTransport>>> =
-            Arc::new(RwLock::new(Box::new(coord_transport)));
+            Arc::new(RwLock::new(Box::new(transport.clone())));
 
-        let coordinator = super::coordinator::CoordinatorClient::new(
-            peer_id,
-            coordinator_transport,
-            membership.clone(),
-        );
+        let coordinator =
+            super::CoordinatorClient::new(peer_id, coordinator_transport, membership.clone());
         let coordinator = Arc::new(coordinator);
 
-        // Create rendezvous client for global user discovery (SPEC2.md §4, §9)
-        // Needs separate transport and pubsub instances
-        let rdv_config = saorsa_gossip_transport::TransportConfig::default();
-        let rdv_transport_qt = saorsa_gossip_transport::QuicTransport::new(rdv_config.clone());
-        let rdv_pubsub_qt = saorsa_gossip_transport::QuicTransport::new(rdv_config);
+        // Rendezvous client shares the same transport stack
         let rdv_transport: Arc<RwLock<Box<dyn GossipTransport>>> =
-            Arc::new(RwLock::new(Box::new(rdv_transport_qt)));
+            Arc::new(RwLock::new(Box::new(transport.clone())));
 
         let rdv_pubsub_impl = saorsa_gossip_pubsub::PlumtreePubSub::new(
             peer_id,
-            Arc::new(rdv_pubsub_qt),
+            transport.clone(),
             signing_key.clone(),
         );
         let rdv_pubsub: Arc<RwLock<Box<dyn PubSub>>> =
             Arc::new(RwLock::new(Box::new(rdv_pubsub_impl)));
 
-        let rendezvous =
-            super::rendezvous::RendezvousClient::new(peer_id, rdv_transport, rdv_pubsub);
+        let rendezvous = super::RendezvousClient::new(peer_id, rdv_transport, rdv_pubsub);
         let rendezvous = Arc::new(rendezvous);
 
         // 13. Initialize Saorsa Sites (SPEC2.md §5 - Rendezvous Protocol)
@@ -305,24 +297,26 @@ impl GossipContext {
         //
         // BOTH SitesListener AND SiteFetcher will share this dedicated Sites transport.
         let (sites_listener, site_fetcher) = {
-            // Create and bind dedicated transport for Sites protocol
-            let sites_config = saorsa_gossip_transport::TransportConfig::default();
-            let sites_transport =
-                Arc::new(saorsa_gossip_transport::QuicTransport::new(sites_config));
+            let sites_bind = if let Some(main_port) = listen_port {
+                let sites_port = main_port + 1;
+                std::net::SocketAddr::new(
+                    std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED),
+                    sites_port,
+                )
+            } else {
+                "0.0.0.0:0"
+                    .parse()
+                    .context("Failed to parse default sites bind address")?
+            };
 
-            // Bind Sites transport to a port (offset from main port to avoid conflict)
-            if let Some(main_port) = listen_port {
-                let sites_port = main_port + 1; // Main on 5000, Sites on 5001
-                let local_ip = local_ip_address::local_ip()
-                    .context("Failed to get local IP for Sites transport")?;
-                let sites_addr = std::net::SocketAddr::new(local_ip, sites_port);
-
-                info!("Binding Sites transport to {}", sites_addr);
-                sites_transport
-                    .listen(sites_addr)
-                    .await
-                    .context("Failed to bind Sites transport")?;
-            }
+            let sites_transport = Arc::new(
+                AntQuicTransport::with_config(
+                    AntQuicTransportConfig::new(sites_bind, vec![]),
+                    None,
+                )
+                .await
+                .context("Failed to create sites transport")?,
+            );
 
             // Convert to SharedTransport for clean sharing
             let sites_shared: super::transport_types::SharedTransport = sites_transport.clone();

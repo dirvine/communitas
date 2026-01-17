@@ -152,12 +152,14 @@ impl GossipBootSequence {
         };
 
         // Seed peer cache with bootstrap nodes for fast boot
+        match self
+            .context
+            .peer_cache
+            .seed_bootstrap_nodes(&bootstrap_nodes)
+            .await
         {
-            let mut cache = self.context.peer_cache.write().await;
-            match cache.seed_bootstrap_nodes(&bootstrap_nodes).await {
-                Ok(count) => info!("Seeded {} bootstrap nodes into peer cache", count),
-                Err(e) => warn!("Failed to seed bootstrap nodes: {}", e),
-            }
+            Ok(count) => info!("Seeded {} bootstrap nodes into peer cache", count),
+            Err(e) => warn!("Failed to seed bootstrap nodes: {}", e),
         }
 
         let config = super::discovery::IntroducerConfig {
@@ -191,10 +193,7 @@ impl GossipBootSequence {
     /// Find coordinators via FOAF if peer cache is cold (SPEC2.md §2 step 4)
     async fn find_coordinators_if_needed(&self) -> Result<()> {
         // Check if peer cache is cold (no recent peers)
-        let cache = self.context.peer_cache.read().await;
-        let peers = cache.get_top_peers(10);
-        drop(cache); // Release lock
-
+        let peers = self.context.peer_cache.get_top_peers(10).await;
         if !peers.is_empty() {
             debug!(
                 "Peer cache has {} entries, skipping coordinator discovery",
@@ -213,7 +212,8 @@ impl GossipBootSequence {
             .await
         {
             Ok(coordinators) => {
-                info!("Discovered {} coordinators via FOAF", coordinators.len());
+                let count = coordinators.len();
+                info!("Discovered {} coordinators via FOAF", count);
                 // Coordinators are automatically cached by find_coordinators_via_foaf
                 Ok(())
             }
@@ -283,11 +283,8 @@ impl GossipBootSequence {
                 }
 
                 // Address hints from peer cache
-                {
-                    let cache = peer_cache.read().await;
-                    for addr in cache.get_addr_hints(peer_id) {
-                        candidates.push(addr);
-                    }
+                for addr in peer_cache.get_addr_hints(peer_id).await {
+                    candidates.push(addr);
                 }
 
                 // Deduplicate
@@ -312,9 +309,7 @@ impl GossipBootSequence {
                             anti_entropy.add_peer(peer_id).await;
 
                             // Update peer cache
-                            if let Err(e) =
-                                peer_cache.write().await.update_success(peer_id, addr).await
-                            {
+                            if let Err(e) = peer_cache.record_success(peer_id, addr).await {
                                 warn!("Failed to update peer cache for {}: {}", addr, e);
                             }
 

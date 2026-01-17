@@ -9,7 +9,7 @@ Communitas Core is a Rust library that provides all the essential functionality 
 ## Features
 
 - **Post-Quantum Cryptography**: ML-DSA signatures and ML-KEM key exchange
-- **Four-Word Addressing**: Human-readable identity system (e.g., "ocean-forest-moon-star")
+- **Connection Words (four-word networking)**: Human-readable IP:port encoding for peer dialing
 - **Gossip Overlay Network**: Distributed P2P communication layer
 - **CRDT Document Sync**: Conflict-free collaborative editing with Yrs
 - **Encrypted Storage**: Platform-specific secure credential storage (keyring)
@@ -41,7 +41,7 @@ communitas-core/
 │   ├── rendezvous.rs      # Peer rendezvous
 │   ├── transport.rs       # Network transport
 │   └── types.rs           # Shared types
-├── identity.rs             # Identity management and four-word addressing
+├── identity.rs             # Identity + connection word encoding helpers
 ├── keystore.rs            # Cryptographic key storage
 ├── local_storage.rs       # Local data persistence
 ├── message_sync.rs        # Message synchronization
@@ -72,10 +72,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize core context
     let core_ctx = CoreContext::new("./data").await?;
 
-    // Create identity with four-word address
+    // Create identity (public key based)
     let auth = AuthService::new(core_ctx.clone()).await?;
     let session = auth.register(
-        "ocean-forest-moon-star",
+        "pubkey_hex_or_identity_id",
         "Alice",
         "Desktop-01",
         "secure-password"
@@ -92,7 +92,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     gossip.publish(
         "channel-id",
         "Hello, World!".as_bytes(),
-        vec!["recipient-four-words"]
+        vec!["recipient-identity"]
     ).await?;
 
     Ok(())
@@ -101,24 +101,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Authentication System
 
-### Four-Word Identity
+### Public-Key Identity & Connection Words
 
-Every user, organization, and entity has a human-readable four-word identity:
+Identities are public keys (pubkey_hex). Four-word networking is used **only** to
+encode connection endpoints (IP:port) for friend-to-friend dialing.
 
 ```rust
-use communitas_core::identity::{generate_id_words, validate_id_words};
+use communitas_core::identity::{conn_words, conn_from_words};
+use std::net::SocketAddr;
 
-// Generate new identity
-let four_words = generate_id_words()?;
+// Encode IP:port to connection words
+let addr: SocketAddr = "192.168.1.100:9000".parse()?;
+let words = conn_words(&addr)?;
 // → "ocean-forest-moon-star"
 
-// Validate identity
-let is_valid = validate_id_words(&["ocean", "forest", "moon", "star"])?;
-// → true
-
-// Connect from words to IP addresses (optional)
-use communitas_core::identity::conn_from_words;
-let connection_info = conn_from_words(&four_words)?;
+// Decode words back to IP:port
+let decoded = conn_from_words(&words)?;
+assert_eq!(addr, decoded);
 ```
 
 ### Authentication Flow
@@ -313,7 +312,7 @@ let sync = MessageSync::new(gossip_ctx.clone()).await?;
 
 // Send message with automatic retry
 sync.send_reliable(
-    "recipient-four-words",
+    "recipient-identity",
     "channel-id",
     b"Important message"
 ).await?;
@@ -501,7 +500,7 @@ cargo doc -p communitas-core --open
 
 **Identity Generation Fails**
 ```bash
-# Check four-word-networking dictionary
+# Check four-word-networking dictionary (connection words)
 cargo test -p communitas-core -- identity::tests
 ```
 

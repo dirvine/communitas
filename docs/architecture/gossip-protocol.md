@@ -28,10 +28,10 @@ Communitas uses **Saorsa Gossip** - a layered peer-to-peer communication system 
 └─────────────────────────────────────────────────────────────┘
                            ↓
 ┌─────────────────────────────────────────────────────────────┐
-│    SAORSA GOSSIP API (Coordinator)                          │
-│  - saorsa-gossip-coordinator (v0.1.6)                       │
-│  - Provides high-level API: GossipContext                   │
-│  - Orchestrates all subsystems                              │
+│    SAORSA GOSSIP RUNTIME                                    │
+│  - saorsa-gossip-runtime (v0.2.2)                           │
+│  - Coordinator + rendezvous clients                         │
+│  - Used by Communitas GossipContext                         │
 └─────────────────────────────────────────────────────────────┘
                            ↓
 ┌─────────────────────────────────────────────────────────────┐
@@ -39,21 +39,21 @@ Communitas uses **Saorsa Gossip** - a layered peer-to-peer communication system 
 │                                                             │
 │  ┌──────────────────┐  ┌──────────────────┐               │
 │  │ Identity         │  │ Groups           │               │
-│  │ v0.1.6           │  │ v0.1.6           │               │
+│  │ v0.2.2           │  │ v0.2.2           │               │
 │  │ - Public keys    │  │ - MLS support    │               │
 │  │ - ML-DSA sigs    │  │ - Membership     │               │
 │  └──────────────────┘  └──────────────────┘               │
 │                                                             │
 │  ┌──────────────────┐  ┌──────────────────┐               │
 │  │ Presence         │  │ PubSub           │               │
-│  │ v0.1.6           │  │ v0.1.6           │               │
+│  │ v0.2.2           │  │ v0.2.2           │               │
 │  │ - SWIM beacons   │  │ - Plumtree msgs  │               │
 │  │ - Online status  │  │ - Entity topics  │               │
 │  └──────────────────┘  └──────────────────┘               │
 │                                                             │
 │  ┌──────────────────┐  ┌──────────────────┐               │
 │  │ CRDT Sync        │  │ Rendezvous       │               │
-│  │ v0.1.6           │  │ v0.1.6           │               │
+│  │ v0.2.2           │  │ v0.2.2           │               │
 │  │ - GSet merging   │  │ - 65k shards     │               │
 │  │ - Eventual sync  │  │ - DHT-free disc. │               │
 │  └──────────────────┘  └──────────────────┘               │
@@ -61,7 +61,7 @@ Communitas uses **Saorsa Gossip** - a layered peer-to-peer communication system 
                            ↓
 ┌─────────────────────────────────────────────────────────────┐
 │    MEMBERSHIP & DISSEMINATION                               │
-│  - saorsa-gossip-membership (v0.1.6)                        │
+│  - saorsa-gossip-membership (v0.2.2)                        │
 │  - HyParView: 8-12 active, 64-128 passive peers            │
 │  - SWIM: <5s failure detection                              │
 │  - Periodic shuffles heal partitions                        │
@@ -69,15 +69,15 @@ Communitas uses **Saorsa Gossip** - a layered peer-to-peer communication system 
                            ↓
 ┌─────────────────────────────────────────────────────────────┐
 │         TRANSPORT LAYER                                     │
-│  - saorsa-gossip-transport (v0.1.7)                         │
-│  - GossipTransport trait                                    │
-│  - StreamType: Membership, PubSub, Bulk                     │
-│  - Peer cache for bootstrap (NEW in v0.1.7!)               │
+│  - saorsa-gossip-transport (v0.2.2)                         │
+│  - AntQuicTransport + GossipTransport trait                 │
+│  - Streams: Membership, PubSub, Bulk                        │
+│  - Bootstrap cache via ant-quic (CachedPeer, NAT, roles)     │
 └─────────────────────────────────────────────────────────────┘
                            ↓
 ┌─────────────────────────────────────────────────────────────┐
 │         NETWORK LAYER                                       │
-│  - ant-quic (v0.8.17)                                       │
+│  - ant-quic (v0.18)                                         │
 │  - QUIC connections with NAT traversal                      │
 │  - Connection migration & path switching                    │
 └─────────────────────────────────────────────────────────────┘
@@ -93,56 +93,33 @@ Communitas uses **Saorsa Gossip** - a layered peer-to-peer communication system 
 
 ## Core Components
 
-### 1. Coordinator (GossipContext)
+### 1. GossipContext (Communitas)
 
 **Purpose**: High-level API orchestration - single entry point for all gossip operations
 
-**Location**: `saorsa-gossip-coordinator` (v0.1.6)
+**Location**: `communitas-core/src/gossip/context.rs` (wraps saorsa-gossip-* crates and uses
+`CoordinatorClient` / `RendezvousClient` from `saorsa-gossip-runtime`)
 
-**Key Methods**:
-```rust
-impl GossipContext {
-    // Identity
-    async fn initialize(four_words, name, device) -> Result<Self>;
-
-    // Contacts
-    async fn find_contact(four_words) -> Result<PeerId>;
-    async fn add_contact(four_words, peer_id) -> Result<()>;
-
-    // Messaging
-    async fn send_direct_message(peer, msg) -> Result<()>;
-    async fn publish_to_entity(entity_id, msg) -> Result<()>;
-
-    // Groups
-    async fn join_entity(entity_id, type) -> Result<()>;
-    async fn leave_entity(entity_id) -> Result<()>;
-
-    // Presence
-    async fn start_presence_beacons() -> Result<()>;
-    async fn is_peer_online(peer) -> Result<bool>;
-
-    // Storage
-    async fn store_message(msg) -> Result<()>;
-    async fn get_all_messages() -> Result<Vec<u8>>;
-
-    // Bootstrap via peer cache (NEW in v0.1.7)
-    async fn add_bootstrap_peer(four_words) -> Result<()>;
-    async fn get_cached_peers() -> Result<Vec<CachedPeer>>;
-}
-```
+**Key Methods** (selected):
+- `initialize(four_words, display_name, device_name, listen_port)`
+- `find_contact` / `add_contact`
+- `send_direct_message` / `publish_to_entity`
+- `join_entity` / `leave_entity`
+- `start_presence_beacons` / `is_peer_online`
+- `store_message` / `get_all_messages`
 
 **Integration**:
 ```rust
 // communitas-core/src/gossip/context.rs
 pub struct GossipContext {
-    pub identity: Arc<Identity>,
-    pub transport: Arc<RwLock<Box<dyn GossipTransport>>>,
-    pub membership: Arc<Membership>,
-    pub pubsub: Arc<PubSub>,
-    pub presence: Arc<Presence>,
-    pub crdt: Arc<CrdtSync>,
-    pub groups: Arc<Groups>,
+    pub identity: Identity,
+    pub transport: Arc<AntQuicTransport>,
+    pub membership: Arc<RwLock<Box<dyn Membership>>>,
+    pub pubsub: Arc<RwLock<Box<dyn PubSub>>>,
+    pub presence: Arc<RwLock<PresenceManager>>,
+    pub coordinator: Arc<CoordinatorClient>,
     pub rendezvous: Arc<RendezvousClient>,
+    pub peer_cache: Arc<PeerCache>,
 
     // Higher-level features
     pub site_publisher: Option<Arc<SitePublisher>>,
@@ -154,7 +131,7 @@ pub struct GossipContext {
 
 **Purpose**: Public-key identity management with post-quantum signatures
 
-**Location**: `saorsa-gossip-identity` (v0.1.6)
+**Location**: `saorsa-gossip-identity` (v0.2.2)
 
 **Features**:
 - Public-key identity management
@@ -179,12 +156,12 @@ identity.verify(message_bytes, &signature)?;
 
 **Purpose**: Transport abstraction over ant-quic with stream multiplexing
 
-**Location**: `saorsa-gossip-transport` (v0.1.7)
+**Location**: `saorsa-gossip-transport` (v0.2.2)
 
 **Features**:
 - `GossipTransport` trait
 - Stream multiplexing (Membership, PubSub, Bulk)
-- **Peer cache** for offline/bootstrap (NEW!)
+- **Bootstrap cache** integration via ant-quic (CachedPeer metadata)
 - Connection management
 
 **Stream Types**:
@@ -192,25 +169,12 @@ identity.verify(message_bytes, &signature)?;
 - `PubSub`: Plumtree gossip messages
 - `Bulk`: Large content transfer (site assets)
 
-**Peer Cache** (v0.1.7):
+**Bootstrap Cache**:
 ```rust
-pub trait GossipTransport {
-    // NEW: Peer cache for bootstrap
-    async fn get_cached_peers(&self) -> Result<Vec<CachedPeer>>;
-    async fn add_cached_peer(&self, peer: CachedPeer) -> Result<()>;
+// AntQuicTransport accepts an optional bootstrap cache
+let transport = AntQuicTransport::with_config(config, Some(bootstrap_cache)).await?;
 
-    // Existing: Connection management
-    async fn send_to_peer(&self, peer: PeerId, stream: StreamType, data: Bytes) -> Result<()>;
-    async fn receive_message(&self) -> Result<(PeerId, StreamType, Bytes)>;
-}
-
-pub struct CachedPeer {
-    pub four_words: String,
-    pub peer_id: PeerId,
-    pub last_seen: u64,
-    pub success_count: u32,
-    pub fail_count: u32,
-}
+// CachedPeer entries include addresses, quality score, NAT hints, and roles.
 ```
 
 ## Membership Management (HyParView)
@@ -530,66 +494,39 @@ pubsub.publish(&format!("shard:{}", shard_id), announcement).await?;
 
 ## Peer Cache & Bootstrap
 
-### Offline Bootstrap (v0.1.7)
+### Offline Bootstrap (BootstrapCache)
 
 **Problem**: How to bootstrap without online discovery?
 
-**Solution**: Peer cache with friend's four-word address
+**Solution**: Persistent bootstrap cache seeded with IP:port connection words and learned
+addresses (quality-scored via epsilon-greedy selection).
 
 ### Cache Management
 
-**Add friend for bootstrap**:
+**Seed bootstrap nodes**:
 ```rust
-let peer = CachedPeer {
-    four_words: "ocean-forest-moon-star".to_string(),
-    peer_id: friend_peer_id,
-    last_seen: Utc::now().timestamp(),
-    success_count: 0,
-    fail_count: 0,
-};
-
-transport.add_cached_peer(peer).await?;
+let added = peer_cache
+    .seed_bootstrap_nodes(&["192.168.1.10:9000".to_string()])
+    .await?;
 ```
 
 **Bootstrap from cache**:
 ```rust
 // On startup (even offline)
-let cached = transport.get_cached_peers().await?;
-
-// Sort by success rate
-cached.sort_by(|a, b| {
-    let score_a = a.success_count as f64 / (a.success_count + a.fail_count) as f64;
-    let score_b = b.success_count as f64 / (b.success_count + b.fail_count) as f64;
-    score_b.partial_cmp(&score_a).unwrap()
-});
-
-// Try to connect
-for peer in cached.take(5) {
-    if let Ok(_) = membership.try_connect(peer.peer_id).await {
-        // Success - update cache
-        transport.update_peer_success(peer.peer_id).await?;
-        break;
-    } else {
-        // Failure - update cache
-        transport.update_peer_failure(peer.peer_id).await?;
+let cached = peer_cache.get_top_peers(10).await;
+for peer in cached {
+    if let Some(addr) = peer.addresses.first() {
+        if transport.dial_bootstrap(*addr).await.is_ok() {
+            break;
+        }
     }
 }
 ```
 
 ### Cache Persistence
 
-**Storage**: Local filesystem (libSQL materialization planned)
-
-**Schema**:
-```sql
-CREATE TABLE cached_peers (
-    peer_id TEXT PRIMARY KEY,
-    four_words TEXT NOT NULL,
-    last_seen INTEGER,
-    success_count INTEGER,
-    fail_count INTEGER
-);
-```
+**Storage**: Filesystem-backed cache managed by ant-quic `BootstrapCache` (libSQL
+materialization planned for analytics/queries).
 
 ## Data Flow Examples
 
@@ -605,7 +542,7 @@ Identity + Rendezvous
 PubSub
     ↓ eager_push(msg) to active peers
 Membership (active view)
-    ↓ send_to_peer(peer_id, StreamType::PubSub, msg)
+    ↓ send_to_peer(peer_id, GossipStreamType::PubSub, msg)
 Transport
     ↓ QUIC connection to peer
 ant-quic

@@ -20,14 +20,15 @@
     clippy::deref_addrof,
     clippy::explicit_auto_deref,
     clippy::borrow_deref_ref,
-    clippy::needless_borrow
+    clippy::needless_borrow,
+    clippy::not_unsafe_ptr_arg_deref
 )]
 
 // Section: imports
 
 use crate::flutter_api::*;
 use flutter_rust_bridge::for_generated::byteorder::{NativeEndian, ReadBytesExt, WriteBytesExt};
-use flutter_rust_bridge::for_generated::{transform_result_dco, Lifetimeable, Lockable};
+use flutter_rust_bridge::for_generated::{Lifetimeable, Lockable, transform_result_dco};
 use flutter_rust_bridge::{Handler, IntoIntoDart};
 
 // Section: boilerplate
@@ -94,7 +95,8 @@ fn wire__crate__flutter_api__CommunitasApi_auth_create_vault_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::auth_create_vault(
                             &*api_that_guard,
                             api_four_words,
@@ -157,7 +159,8 @@ fn wire__crate__flutter_api__CommunitasApi_auth_delete_vault_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::auth_delete_vault(
                             &*api_that_guard,
                             api_four_words,
@@ -218,7 +221,8 @@ fn wire__crate__flutter_api__CommunitasApi_auth_export_vault_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::auth_export_vault(
                             &*api_that_guard,
                             api_include_data,
@@ -277,7 +281,8 @@ fn wire__crate__flutter_api__CommunitasApi_auth_get_current_session_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok =
                             crate::flutter_api::CommunitasApi::auth_get_current_session(
                                 &*api_that_guard,
@@ -338,7 +343,8 @@ fn wire__crate__flutter_api__CommunitasApi_auth_import_vault_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::auth_import_vault(
                             &*api_that_guard,
                             api_backup_base64,
@@ -398,7 +404,8 @@ fn wire__crate__flutter_api__CommunitasApi_auth_list_vaults_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok =
                             crate::flutter_api::CommunitasApi::auth_list_vaults(&*api_that_guard)
                                 .await?;
@@ -457,7 +464,8 @@ fn wire__crate__flutter_api__CommunitasApi_auth_login_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::auth_login(
                             &*api_that_guard,
                             api_four_words,
@@ -517,7 +525,8 @@ fn wire__crate__flutter_api__CommunitasApi_auth_logout_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok =
                             crate::flutter_api::CommunitasApi::auth_logout(&*api_that_guard)
                                 .await?;
@@ -575,7 +584,8 @@ fn wire__crate__flutter_api__CommunitasApi_auth_vault_exists_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::auth_vault_exists(
                             &*api_that_guard,
                             api_four_words,
@@ -637,7 +647,8 @@ fn wire__crate__flutter_api__CommunitasApi_contact_create_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::contact_create(
                             &*api_that_guard,
                             api_display_name,
@@ -699,7 +710,8 @@ fn wire__crate__flutter_api__CommunitasApi_contact_delete_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::contact_delete(
                             &*api_that_guard,
                             api_contact_id,
@@ -759,7 +771,8 @@ fn wire__crate__flutter_api__CommunitasApi_contact_get_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::contact_get(
                             &*api_that_guard,
                             api_contact_id,
@@ -820,7 +833,8 @@ fn wire__crate__flutter_api__CommunitasApi_contact_link_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::contact_link(
                             &*api_that_guard,
                             api_contact_id,
@@ -881,7 +895,8 @@ fn wire__crate__flutter_api__CommunitasApi_contact_remove_favourite_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok =
                             crate::flutter_api::CommunitasApi::contact_remove_favourite(
                                 &*api_that_guard,
@@ -942,7 +957,8 @@ fn wire__crate__flutter_api__CommunitasApi_contact_set_favourite_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::contact_set_favourite(
                             &*api_that_guard,
                             api_four_words,
@@ -1004,7 +1020,8 @@ fn wire__crate__flutter_api__CommunitasApi_contact_update_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::contact_update(
                             &*api_that_guard,
                             api_contact_id,
@@ -1065,7 +1082,8 @@ fn wire__crate__flutter_api__CommunitasApi_contacts_list_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok =
                             crate::flutter_api::CommunitasApi::contacts_list(&*api_that_guard)
                                 .await?;
@@ -1122,7 +1140,8 @@ fn wire__crate__flutter_api__CommunitasApi_contacts_list_favourites_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok =
                             crate::flutter_api::CommunitasApi::contacts_list_favourites(
                                 &*api_that_guard,
@@ -1182,7 +1201,8 @@ fn wire__crate__flutter_api__CommunitasApi_contacts_search_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::contacts_search(
                             &*api_that_guard,
                             api_query,
@@ -1290,7 +1310,8 @@ fn wire__crate__flutter_api__CommunitasApi_disk_create_directory_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::disk_create_directory(
                             &*api_that_guard,
                             api_entity_id,
@@ -1355,7 +1376,8 @@ fn wire__crate__flutter_api__CommunitasApi_disk_delete_file_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::disk_delete_file(
                             &*api_that_guard,
                             api_entity_id,
@@ -1419,7 +1441,8 @@ fn wire__crate__flutter_api__CommunitasApi_disk_get_stats_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::disk_get_stats(
                             &*api_that_guard,
                             api_entity_id,
@@ -1483,7 +1506,8 @@ fn wire__crate__flutter_api__CommunitasApi_disk_list_files_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::disk_list_files(
                             &*api_that_guard,
                             api_entity_id,
@@ -1548,7 +1572,8 @@ fn wire__crate__flutter_api__CommunitasApi_disk_read_file_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::disk_read_file(
                             &*api_that_guard,
                             api_entity_id,
@@ -1614,7 +1639,8 @@ fn wire__crate__flutter_api__CommunitasApi_disk_write_file_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::disk_write_file(
                             &*api_that_guard,
                             api_entity_id,
@@ -1681,7 +1707,8 @@ fn wire__crate__flutter_api__CommunitasApi_entity_add_member_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::entity_add_member(
                             &*api_that_guard,
                             api_entity_type,
@@ -1748,7 +1775,8 @@ fn wire__crate__flutter_api__CommunitasApi_entity_create_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::entity_create(
                             &*api_that_guard,
                             api_name,
@@ -1811,7 +1839,8 @@ fn wire__crate__flutter_api__CommunitasApi_entity_get_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::entity_get(
                             &*api_that_guard,
                             api_entity_id,
@@ -1870,7 +1899,8 @@ fn wire__crate__flutter_api__CommunitasApi_entity_list_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok =
                             crate::flutter_api::CommunitasApi::entity_list(&*api_that_guard)
                                 .await?;
@@ -1929,7 +1959,8 @@ fn wire__crate__flutter_api__CommunitasApi_entity_list_by_type_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::entity_list_by_type(
                             &*api_that_guard,
                             api_entity_type,
@@ -1992,7 +2023,8 @@ fn wire__crate__flutter_api__CommunitasApi_entity_remove_member_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::entity_remove_member(
                             &*api_that_guard,
                             api_entity_type,
@@ -2053,7 +2085,8 @@ fn wire__crate__flutter_api__CommunitasApi_get_profile_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok =
                             crate::flutter_api::CommunitasApi::get_profile(&*api_that_guard)
                                 .await?;
@@ -2111,7 +2144,8 @@ fn wire__crate__flutter_api__CommunitasApi_gossip_connect_to_peer_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::gossip_connect_to_peer(
                             &*api_that_guard,
                             api_four_words,
@@ -2170,7 +2204,8 @@ fn wire__crate__flutter_api__CommunitasApi_gossip_get_connection_words_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok =
                             crate::flutter_api::CommunitasApi::gossip_get_connection_words(
                                 &*api_that_guard,
@@ -2229,7 +2264,8 @@ fn wire__crate__flutter_api__CommunitasApi_gossip_get_network_info_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::gossip_get_network_info(
                             &*api_that_guard,
                         )
@@ -2288,7 +2324,8 @@ fn wire__crate__flutter_api__CommunitasApi_gossip_start_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::gossip_start(
                             &*api_that_guard,
                             api_port,
@@ -2347,7 +2384,8 @@ fn wire__crate__flutter_api__CommunitasApi_gossip_stop_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok =
                             crate::flutter_api::CommunitasApi::gossip_stop(&*api_that_guard)
                                 .await?;
@@ -2405,7 +2443,8 @@ fn wire__crate__flutter_api__CommunitasApi_invite_accept_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::invite_accept(
                             &*api_that_guard,
                             api_invite_id,
@@ -2470,7 +2509,8 @@ fn wire__crate__flutter_api__CommunitasApi_invite_create_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::invite_create(
                             &*api_that_guard,
                             api_recipient_id,
@@ -2534,7 +2574,8 @@ fn wire__crate__flutter_api__CommunitasApi_invite_reject_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::invite_reject(
                             &*api_that_guard,
                             api_invite_id,
@@ -2594,7 +2635,8 @@ fn wire__crate__flutter_api__CommunitasApi_invite_revoke_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::invite_revoke(
                             &*api_that_guard,
                             api_invite_id,
@@ -2656,7 +2698,8 @@ fn wire__crate__flutter_api__CommunitasApi_kanban_create_board_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::kanban_create_board(
                             &*api_that_guard,
                             api_entity_id,
@@ -2722,7 +2765,8 @@ fn wire__crate__flutter_api__CommunitasApi_kanban_create_card_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::kanban_create_card(
                             &*api_that_guard,
                             api_board_id,
@@ -2788,7 +2832,8 @@ fn wire__crate__flutter_api__CommunitasApi_kanban_create_column_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::kanban_create_column(
                             &*api_that_guard,
                             api_board_id,
@@ -2851,7 +2896,8 @@ fn wire__crate__flutter_api__CommunitasApi_kanban_delete_card_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::kanban_delete_card(
                             &*api_that_guard,
                             api_board_id,
@@ -2912,7 +2958,8 @@ fn wire__crate__flutter_api__CommunitasApi_kanban_get_board_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::kanban_get_board(
                             &*api_that_guard,
                             api_board_id,
@@ -2972,7 +3019,8 @@ fn wire__crate__flutter_api__CommunitasApi_kanban_list_boards_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::kanban_list_boards(
                             &*api_that_guard,
                             api_entity_id,
@@ -3036,7 +3084,8 @@ fn wire__crate__flutter_api__CommunitasApi_kanban_list_cards_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::kanban_list_cards(
                             &*api_that_guard,
                             api_board_id,
@@ -3100,7 +3149,8 @@ fn wire__crate__flutter_api__CommunitasApi_kanban_list_columns_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::kanban_list_columns(
                             &*api_that_guard,
                             api_board_id,
@@ -3163,7 +3213,8 @@ fn wire__crate__flutter_api__CommunitasApi_kanban_move_card_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::kanban_move_card(
                             &*api_that_guard,
                             api_board_id,
@@ -3230,7 +3281,8 @@ fn wire__crate__flutter_api__CommunitasApi_kanban_update_card_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::kanban_update_card(
                             &*api_that_guard,
                             api_board_id,
@@ -3298,7 +3350,8 @@ fn wire__crate__flutter_api__CommunitasApi_message_add_reaction_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::message_add_reaction(
                             &*api_that_guard,
                             api_entity_id,
@@ -3364,7 +3417,8 @@ fn wire__crate__flutter_api__CommunitasApi_message_delete_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::message_delete(
                             &*api_that_guard,
                             api_entity_id,
@@ -3430,7 +3484,8 @@ fn wire__crate__flutter_api__CommunitasApi_message_edit_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::message_edit(
                             &*api_that_guard,
                             api_entity_id,
@@ -3494,7 +3549,8 @@ fn wire__crate__flutter_api__CommunitasApi_message_get_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::message_get(
                             &*api_that_guard,
                             api_entity_id,
@@ -3555,7 +3611,8 @@ fn wire__crate__flutter_api__CommunitasApi_message_list_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::message_list(
                             &*api_that_guard,
                             api_entity_id,
@@ -3615,7 +3672,8 @@ fn wire__crate__flutter_api__CommunitasApi_message_list_direct_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::message_list_direct(
                             &*api_that_guard,
                             api_other_peer_id,
@@ -3676,7 +3734,8 @@ fn wire__crate__flutter_api__CommunitasApi_message_list_thread_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::message_list_thread(
                             &*api_that_guard,
                             api_entity_id,
@@ -3741,7 +3800,8 @@ fn wire__crate__flutter_api__CommunitasApi_message_remove_reaction_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::message_remove_reaction(
                             &*api_that_guard,
                             api_entity_id,
@@ -3808,7 +3868,8 @@ fn wire__crate__flutter_api__CommunitasApi_message_send_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::message_send(
                             &*api_that_guard,
                             api_entity_id,
@@ -3872,7 +3933,8 @@ fn wire__crate__flutter_api__CommunitasApi_message_send_direct_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::message_send_direct(
                             &*api_that_guard,
                             api_recipients,
@@ -3932,7 +3994,8 @@ fn wire__crate__flutter_api__CommunitasApi_presence_announce_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok =
                             crate::flutter_api::CommunitasApi::presence_announce(&*api_that_guard)
                                 .await?;
@@ -3990,7 +4053,8 @@ fn wire__crate__flutter_api__CommunitasApi_presence_get_cached_peer_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok =
                             crate::flutter_api::CommunitasApi::presence_get_cached_peer(
                                 &*api_that_guard,
@@ -4050,7 +4114,8 @@ fn wire__crate__flutter_api__CommunitasApi_presence_get_our_record_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::presence_get_our_record(
                             &*api_that_guard,
                         )
@@ -4109,7 +4174,8 @@ fn wire__crate__flutter_api__CommunitasApi_presence_get_status_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::presence_get_status(
                             &*api_that_guard,
                             api_peer_id,
@@ -4168,7 +4234,8 @@ fn wire__crate__flutter_api__CommunitasApi_presence_list_online_peers_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok =
                             crate::flutter_api::CommunitasApi::presence_list_online_peers(
                                 &*api_that_guard,
@@ -4228,7 +4295,8 @@ fn wire__crate__flutter_api__CommunitasApi_presence_query_peer_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::presence_query_peer(
                             &*api_that_guard,
                             api_pubkey_hex,
@@ -4288,7 +4356,8 @@ fn wire__crate__flutter_api__CommunitasApi_update_display_name_impl(
                                 _ => return Err("Invalid lockable index".to_string()),
                             }
                         }
-                        let api_that_guard = api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
+                        let api_that_guard =
+                            api_that_guard.ok_or_else(|| "FFI handle unavailable".to_string())?;
                         let output_ok = crate::flutter_api::CommunitasApi::update_display_name(
                             &*api_that_guard,
                             api_display_name,
@@ -4474,7 +4543,8 @@ impl SseDecode for String {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut inner = <Vec<u8>>::sse_decode(deserializer);
-        return String::from_utf8(inner).unwrap_or_else(|e| String::from_utf8_lossy(&e.into_bytes()).to_string());
+        return String::from_utf8(inner)
+            .unwrap_or_else(|e| String::from_utf8_lossy(&e.into_bytes()).to_string());
     }
 }
 
@@ -4970,14 +5040,20 @@ impl SseDecode for crate::flutter_api::FlutterVaultInfo {
 impl SseDecode for i32 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        deserializer.cursor.read_i32::<NativeEndian>().unwrap_or_default()
+        deserializer
+            .cursor
+            .read_i32::<NativeEndian>()
+            .unwrap_or_default()
     }
 }
 
 impl SseDecode for i64 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        deserializer.cursor.read_i64::<NativeEndian>().unwrap_or_default()
+        deserializer
+            .cursor
+            .read_i64::<NativeEndian>()
+            .unwrap_or_default()
     }
 }
 
@@ -5238,21 +5314,30 @@ impl SseDecode for Option<u64> {
 impl SseDecode for u16 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        deserializer.cursor.read_u16::<NativeEndian>().unwrap_or_default()
+        deserializer
+            .cursor
+            .read_u16::<NativeEndian>()
+            .unwrap_or_default()
     }
 }
 
 impl SseDecode for u32 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        deserializer.cursor.read_u32::<NativeEndian>().unwrap_or_default()
+        deserializer
+            .cursor
+            .read_u32::<NativeEndian>()
+            .unwrap_or_default()
     }
 }
 
 impl SseDecode for u64 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        deserializer.cursor.read_u64::<NativeEndian>().unwrap_or_default()
+        deserializer
+            .cursor
+            .read_u64::<NativeEndian>()
+            .unwrap_or_default()
     }
 }
 
@@ -5271,7 +5356,10 @@ impl SseDecode for () {
 impl SseDecode for usize {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        deserializer.cursor.read_u64::<NativeEndian>().unwrap_or_default() as _
+        deserializer
+            .cursor
+            .read_u64::<NativeEndian>()
+            .unwrap_or_default() as _
     }
 }
 
@@ -5726,7 +5814,10 @@ fn pde_ffi_dispatcher_sync_impl(
 ) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
-        _ => return,
+        _ => flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+            ptr: std::ptr::null_mut(),
+            len: 0,
+        },
     }
 }
 
@@ -6951,9 +7042,7 @@ impl SseEncode for () {
 impl SseEncode for usize {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        serializer
-            .cursor
-            .write_u64::<NativeEndian>(self as _).ok();
+        serializer.cursor.write_u64::<NativeEndian>(self as _).ok();
     }
 }
 
@@ -6969,7 +7058,7 @@ mod io {
     use flutter_rust_bridge::for_generated::byteorder::{
         NativeEndian, ReadBytesExt, WriteBytesExt,
     };
-    use flutter_rust_bridge::for_generated::{transform_result_dco, Lifetimeable, Lockable};
+    use flutter_rust_bridge::for_generated::{Lifetimeable, Lockable, transform_result_dco};
     use flutter_rust_bridge::{Handler, IntoIntoDart};
 
     // Section: boilerplate
@@ -7008,7 +7097,7 @@ mod web {
     };
     use flutter_rust_bridge::for_generated::wasm_bindgen;
     use flutter_rust_bridge::for_generated::wasm_bindgen::prelude::*;
-    use flutter_rust_bridge::for_generated::{transform_result_dco, Lifetimeable, Lockable};
+    use flutter_rust_bridge::for_generated::{Lifetimeable, Lockable, transform_result_dco};
     use flutter_rust_bridge::{Handler, IntoIntoDart};
 
     // Section: boilerplate

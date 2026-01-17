@@ -134,8 +134,8 @@ Auto-authenticate with temporary identity:
 # Start MCP in demo mode (creates temp identity)
 communitas-mcp --http --demo
 
-# Or with specific identity
-communitas-mcp --http --demo --four-words "test-word-one-two"
+# Or with specific identity (legacy flag name)
+communitas-mcp --http --demo --four-words "pubkey_hex_or_identity"
 ```
 
 #### 3. Delegate Tokens (Scoped Access)

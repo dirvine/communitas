@@ -280,7 +280,8 @@ impl SignalingTransport for GossipSignalingTransport {
         }
 
         // Get provider summaries to verify peer is discoverable
-        let providers = rendezvous.get_providers_for_target(&target_id).await;
+        let providers: Vec<saorsa_gossip_rendezvous::ProviderSummary> =
+            rendezvous.get_providers_for_target(&target_id).await;
 
         if providers.is_empty() {
             warn!("Peer {} not found in rendezvous", peer);

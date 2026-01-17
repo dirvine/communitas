@@ -503,7 +503,10 @@ async fn test_introducer_config_empty_addresses() {
         timeout_secs: 10,
     };
 
-    let transport = QuicTransport::new(TransportConfig::default());
+    let bind: std::net::SocketAddr = "127.0.0.1:0".parse().expect("valid addr");
+    let transport = AntQuicTransport::new(bind, vec![])
+        .await
+        .expect("transport");
 
     // WHEN: Attempting cold start with no introducers
     let peers = cold_start_discovery(config, &transport)
@@ -642,9 +645,10 @@ async fn test_discovery_fallback_chain() {
 use communitas_core::gossip::discovery::FoafTransport;
 use saorsa_gossip_groups::GroupContext;
 use saorsa_gossip_presence::PresenceManager;
-use saorsa_gossip_transport::{QuicTransport, TransportConfig};
+use saorsa_gossip_transport::AntQuicTransport;
 use saorsa_gossip_types::{FoafQuery, FoafResponse, PresenceRecord, TopicId};
 use std::collections::HashMap;
+use std::net::SocketAddr;
 
 /// Create a mock presence manager with test data
 /// Returns both the manager and the groups map so tests can add groups
@@ -653,7 +657,12 @@ async fn create_mock_presence() -> (
     Arc<RwLock<HashMap<TopicId, GroupContext>>>,
 ) {
     let peer_id = test_peer_id(1);
-    let transport = Arc::new(QuicTransport::new(TransportConfig::default()));
+    let bind: SocketAddr = "127.0.0.1:0".parse().expect("valid addr");
+    let transport = Arc::new(
+        AntQuicTransport::new(bind, vec![])
+            .await
+            .expect("transport"),
+    );
     let groups_by_topic = Arc::new(RwLock::new(HashMap::new()));
 
     let manager = PresenceManager::new(peer_id, transport, groups_by_topic.clone());

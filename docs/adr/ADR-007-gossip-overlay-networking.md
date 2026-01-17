@@ -137,9 +137,9 @@ Scalable failure detection with indirect pings:
 65,536 shards for peer discovery without full DHT:
 
 ```rust
-// Hash four-word identity to shard
-fn shard_for_identity(four_words: &str) -> u16 {
-    let hash = blake3::hash(four_words.as_bytes());
+// Hash public-key identity to shard
+fn shard_for_identity(identity: &str) -> u16 {
+    let hash = blake3::hash(identity.as_bytes());
     u16::from_be_bytes([hash.as_bytes()[0], hash.as_bytes()[1]])
 }
 
@@ -257,7 +257,7 @@ gossip.publish(&topic, crdt_update).await?;
 ## References
 
 - saorsa-gossip: `../saorsa-gossip/` crate
-- ant-quic transport: `../ant-quic/`
+- saorsa-gossip-transport (ant-quic): `../saorsa-gossip/crates/transport`
 - Architecture: `docs/architecture/gossip-protocol.md`
 - Boot config: `config/production-network.toml`
 - Implementation: `communitas-core/src/gossip/`

@@ -25,24 +25,25 @@ saorsa-mls = "0.1.5"
 saorsa-rsps = "0.2.0"
 saorsa-pqc = "0.3.12"
 
-# Saorsa Gossip ecosystem - published 0.2.0 versions
-saorsa-gossip-types = "0.2.0"
-saorsa-gossip-identity = "0.2.0"
-saorsa-gossip-crdt-sync = "0.2.0"
-saorsa-gossip-groups = "0.2.0"
-saorsa-gossip-presence = "0.2.0"
-saorsa-gossip-transport = "0.2.1"
-saorsa-gossip-membership = "0.2.0"
-saorsa-gossip-pubsub = "0.2.0"
-saorsa-gossip-coordinator = "0.2.0"
-saorsa-gossip-rendezvous = "0.2.0"
+# Saorsa Gossip ecosystem - published 0.2.2 versions
+saorsa-gossip-types = "0.2.2"
+saorsa-gossip-identity = "0.2.2"
+saorsa-gossip-crdt-sync = "0.2.2"
+saorsa-gossip-groups = "0.2.2"
+saorsa-gossip-presence = "0.2.2"
+saorsa-gossip-transport = "0.2.2"
+saorsa-gossip-membership = "0.2.2"
+saorsa-gossip-pubsub = "0.2.2"
+saorsa-gossip-coordinator = "0.2.2"
+saorsa-gossip-rendezvous = "0.2.2"
+saorsa-gossip-runtime = "0.2.2"
+openh264-sys2 = "0.9.0"
 
 # Real-time multimedia (WebRTC over QUIC)
 saorsa-webrtc-core = "0.2.1"
 saorsa-webrtc-codecs = "0.2.1"
 
 # Networking
-ant-quic = "0.18"
 four-word-networking = "2.6"
 
 # Async runtime
@@ -86,12 +87,6 @@ clap = "4"
 yrs = { version = "0.19", features = ["sync"] }
 
 # Security patches for transitive dependencies
-# Force openh264-sys2 >= 0.8.0 to fix RUSTSEC-2025-0008 (heap overflow CVE)
-# This is a transitive dependency via saorsa-webrtc-codecs
-openh264-sys2 = "0.9.0"
-
-# Force openh264 version to avoid vulnerable dependency
-openh264 = "0.8.0"
 
 [profile.release]
 opt-level = 3
@@ -101,5 +96,3 @@ strip = true
 
 [profile.dev]
 opt-level = 0
-
-# All saorsa-* dependencies now use published crates.io versions

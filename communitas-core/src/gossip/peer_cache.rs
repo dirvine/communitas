@@ -1,1167 +1,238 @@
-// Copyright (c) 2025 Saorsa Labs Limited
-//
-// This file is part of the Communitas P2P collaboration platform.
-//
-// Licensed under the GPL-3.0 license
-
-//! Persistent Peer Cache for Boot Performance
+//! Wrapper around saorsa-gossip's BootstrapCache for Communitas-specific needs.
 //!
-//! Per SPEC2.md §6: Persists successful peer connections to enable fast boot.
-//! Tracks: (peer_id, addr_hints, nat_class, roles, last_success, success_count)
-//!
-//! **Lock-Free File-Based Storage:**
-//! - Uses atomic file operations (write to temp, then rename)
-//! - JSON format for human readability and cross-platform compatibility
-//! - Eventual consistency (last write wins) - acceptable for peer cache
-//! - Shared across multiple process instances
+//! This replaces the previous bespoke peer cache implementation with a thin layer
+//! over `ant-quic`'s epsilon-greedy cache. It also tracks user-specified bootstrap
+//! addresses that do not yet have associated peer identities so they can still
+//! be surfaced in diagnostics and peer list responses.
 
 use anyhow::{Context, Result};
-use saorsa_gossip_types::PeerId;
+use saorsa_gossip_transport::{AntPeerId, BootstrapCache, BootstrapCacheConfigBuilder, CachedPeer};
+use saorsa_gossip_types::PeerId as GossipPeerId;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::net::SocketAddr;
-use std::path::{Path, PathBuf};
-use std::time::SystemTime;
-use tracing::{debug, info, warn};
+use std::{
+    collections::HashMap,
+    net::SocketAddr,
+    path::{Path, PathBuf},
+    sync::Arc,
+    time::{SystemTime, UNIX_EPOCH},
+};
+use tokio::sync::RwLock;
+use tracing::warn;
 
-// ============================================================================
-// ADR-015: Bootstrap Cache API
-// ============================================================================
-
-/// Bootstrap entry per ADR-015 specification.
-///
-/// Represents a known network address for bootstrap purposes, tracking
-/// connection reliability for prioritization.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct BootstrapEntry {
-    /// Socket address for connection
-    pub addr: SocketAddr,
-
-    /// Unix timestamp of last successful connection (None if never succeeded)
-    pub last_success: Option<u64>,
-
-    /// Number of consecutive failures since last success
-    pub failure_count: u32,
-
-    /// Whether this is a community-provided bootstrap node
-    pub is_community_node: bool,
-}
-
-impl BootstrapEntry {
-    /// Create a new bootstrap entry
-    pub fn new(addr: SocketAddr, is_community_node: bool) -> Self {
-        Self {
-            addr,
-            last_success: None,
-            failure_count: 0,
-            is_community_node,
-        }
-    }
-
-    /// Create a bootstrap entry with an initial success timestamp
-    pub fn with_success(addr: SocketAddr, timestamp: u64, is_community_node: bool) -> Self {
-        Self {
-            addr,
-            last_success: Some(timestamp),
-            failure_count: 0,
-            is_community_node,
-        }
-    }
-}
-
-// ============================================================================
-// Peer Cache Types
-// ============================================================================
-
-/// NAT classification for connection strategy
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum NatClass {
-    /// No NAT, publicly accessible
-    Public,
-    /// Full cone NAT
-    FullCone,
-    /// Restricted cone NAT
-    RestrictedCone,
-    /// Port-restricted cone NAT
-    PortRestrictedCone,
-    /// Symmetric NAT (hardest to traverse)
-    Symmetric,
-    /// Unknown/unclassified
-    Unknown,
-}
-
-impl NatClass {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            NatClass::Public => "public",
-            NatClass::FullCone => "full_cone",
-            NatClass::RestrictedCone => "restricted_cone",
-            NatClass::PortRestrictedCone => "port_restricted_cone",
-            NatClass::Symmetric => "symmetric",
-            NatClass::Unknown => "unknown",
-        }
-    }
-
-    pub fn parse(s: &str) -> Self {
-        match s {
-            "public" => NatClass::Public,
-            "full_cone" => NatClass::FullCone,
-            "restricted_cone" => NatClass::RestrictedCone,
-            "port_restricted_cone" => NatClass::PortRestrictedCone,
-            "symmetric" => NatClass::Symmetric,
-            _ => NatClass::Unknown,
-        }
-    }
-}
-
-/// Cached peer entry with connection history
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PeerCacheEntry {
-    #[serde(
-        serialize_with = "serialize_peer_id",
-        deserialize_with = "deserialize_peer_id"
-    )]
-    pub peer_id: PeerId,
-    pub addr_hints: Vec<SocketAddr>,
-    pub nat_class: NatClass,
-    pub roles: Vec<String>,
-    #[serde(
-        serialize_with = "serialize_time",
-        deserialize_with = "deserialize_time"
-    )]
-    pub last_success: SystemTime,
-    pub success_count: u32,
-    pub failure_count: u32,
-    #[serde(default)]
-    pub is_bootstrap: bool,
-}
-
-// Serde helpers for PeerId
-fn serialize_peer_id<S>(peer_id: &PeerId, serializer: S) -> Result<S::Ok, S::Error>
-where
-    S: serde::Serializer,
-{
-    serializer.serialize_str(&hex::encode(peer_id.as_bytes()))
-}
-
-fn deserialize_peer_id<'de, D>(deserializer: D) -> Result<PeerId, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    let hex_str = String::deserialize(deserializer)?;
-    let bytes = hex::decode(&hex_str).map_err(serde::de::Error::custom)?;
-    let array: [u8; 32] = bytes
-        .as_slice()
-        .try_into()
-        .map_err(|_| serde::de::Error::custom("Invalid PeerId length"))?;
-    Ok(PeerId::new(array))
-}
-
-// Serde helpers for SystemTime
-fn serialize_time<S>(time: &SystemTime, serializer: S) -> Result<S::Ok, S::Error>
-where
-    S: serde::Serializer,
-{
-    let secs = time
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .map_err(serde::ser::Error::custom)?
-        .as_secs();
-    serializer.serialize_u64(secs)
-}
-
-fn deserialize_time<'de, D>(deserializer: D) -> Result<SystemTime, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    let secs = u64::deserialize(deserializer)?;
-    Ok(SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(secs))
-}
-
-impl PeerCacheEntry {
-    /// Calculate peer score for connection priority
-    /// Score components:
-    /// - Success rate: 0.0 (all failures) to 1.0 (all successes)
-    /// - Recency bonus: 0.0 (old) to 1.0 (recent)
-    /// - NAT penalty: 0.0 (public) to 0.5 (symmetric)
-    /// - Role bonus: 0.0 (none) to 0.3 (coordinator)
-    pub fn score(&self) -> f64 {
-        let total_attempts = self.success_count + self.failure_count;
-        if total_attempts == 0 {
-            return 0.0;
-        }
-
-        // Success rate (0-1)
-        let success_rate = self.success_count as f64 / total_attempts as f64;
-
-        // Recency bonus: decays exponentially with time
-        // Recent connections get higher scores
-        let now = SystemTime::now();
-        let age_secs = now
-            .duration_since(self.last_success)
-            .map(|d| d.as_secs())
-            .unwrap_or(u64::MAX);
-
-        const ONE_DAY: u64 = 24 * 60 * 60;
-        let recency_bonus = (-(age_secs as f64 / ONE_DAY as f64)).exp();
-
-        // NAT penalty: harder NAT types get lower scores
-        let nat_penalty = match self.nat_class {
-            NatClass::Public => 0.0,
-            NatClass::FullCone => 0.1,
-            NatClass::RestrictedCone => 0.2,
-            NatClass::PortRestrictedCone => 0.3,
-            NatClass::Symmetric => 0.5,
-            NatClass::Unknown => 0.25, // Middle ground for unknown
-        };
-
-        // Role bonuses: coordinators and relays are valuable
-        let role_bonus = if self.roles.contains(&"coordinator".to_string()) {
-            0.3
-        } else if self.roles.contains(&"relay".to_string()) {
-            0.2
-        } else {
-            0.0
-        };
-
-        // Final score: success_rate (0-1) + recency_bonus (0-1) - nat_penalty (0-0.5) + role_bonus (0-0.3)
-        (success_rate + recency_bonus + role_bonus - nat_penalty).max(0.0)
-    }
-}
-
-/// File format for peer cache
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct PeerCacheFile {
-    version: u32,
-    peers: HashMap<String, PeerCacheEntry>,
-}
-
-impl PeerCacheFile {
-    fn new() -> Self {
-        Self {
-            version: 1,
-            peers: HashMap::new(),
-        }
-    }
-}
-
-/// Lock-free persistent peer cache using atomic file operations
+/// Persistent peer cache wrapper
+#[derive(Clone)]
 pub struct PeerCache {
-    cache_path: PathBuf,
+    bootstrap_cache: Arc<BootstrapCache>,
+    seed_store: Arc<RwLock<SeedStore>>,
+    seed_path: Arc<PathBuf>,
 }
 
 impl PeerCache {
-    /// Maximum number of peers to cache (FIFO eviction when exceeded)
-    const MAX_CACHE_SIZE: usize = 1000;
+    /// Initialize the cache using the provided directory.
+    ///
+    /// Creates both the bootstrap cache directory and the auxiliary seed store.
+    pub async fn open(dir: &Path) -> Result<Self> {
+        tokio::fs::create_dir_all(dir)
+            .await
+            .with_context(|| format!("failed to create bootstrap cache dir {}", dir.display()))?;
 
-    /// Get system-wide peer cache path
-    /// Returns: ~/.local/share/communitas/peer_cache.json (Linux/macOS)
-    /// or %APPDATA%\communitas\peer_cache.json (Windows)
-    pub fn default_cache_path() -> Result<PathBuf> {
-        let data_dir = dirs::data_local_dir()
-            .ok_or_else(|| anyhow::anyhow!("Failed to get system data directory"))?
-            .join("communitas");
+        let cache = BootstrapCache::open(
+            BootstrapCacheConfigBuilder::default()
+                .cache_dir(dir)
+                .max_peers(10_000)
+                .build(),
+        )
+        .await
+        .context("failed to open bootstrap cache")?;
 
-        // Ensure directory exists
-        std::fs::create_dir_all(&data_dir).context("Failed to create communitas data directory")?;
-
-        Ok(data_dir.join("peer_cache.json"))
-    }
-
-    /// Load existing cache or create new one
-    pub async fn load(path: &Path) -> Result<Self> {
-        // Ensure parent directory exists
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)
-                .with_context(|| format!("Failed to create directory: {:?}", parent))?;
-        }
-
-        // Create empty cache file if it doesn't exist
-        if !path.exists() {
-            let empty_cache = PeerCacheFile::new();
-            let json = serde_json::to_string_pretty(&empty_cache)
-                .context("Failed to serialize empty cache")?;
-            std::fs::write(path, json)
-                .with_context(|| format!("Failed to write cache file: {:?}", path))?;
-            info!("Created new peer cache at {:?}", path);
-        } else {
-            info!("Loaded peer cache from {:?}", path);
-        }
+        let seed_path = dir.join("seed_nodes.json");
+        let seed_store = SeedStore::load(&seed_path).await.unwrap_or_default();
 
         Ok(Self {
-            cache_path: path.to_path_buf(),
+            bootstrap_cache: Arc::new(cache),
+            seed_store: Arc::new(RwLock::new(seed_store)),
+            seed_path: Arc::new(seed_path),
         })
     }
 
-    /// Read cache from file
-    fn read_cache(&self) -> Result<PeerCacheFile> {
-        if !self.cache_path.exists() {
-            return Ok(PeerCacheFile::new());
-        }
-
-        let contents = std::fs::read_to_string(&self.cache_path)
-            .with_context(|| format!("Failed to read cache: {:?}", self.cache_path))?;
-
-        serde_json::from_str(&contents)
-            .context("Failed to parse peer cache JSON")
-            .or_else(|e| {
-                warn!("Corrupted peer cache, creating new: {}", e);
-                Ok(PeerCacheFile::new())
-            })
+    /// Expose the underlying bootstrap cache for transport wiring.
+    pub fn bootstrap_cache(&self) -> Arc<BootstrapCache> {
+        Arc::clone(&self.bootstrap_cache)
     }
 
-    /// Write cache to file atomically
-    /// Uses temp file + atomic rename for lock-free concurrent updates
-    fn write_cache(&self, cache: &PeerCacheFile) -> Result<()> {
-        let json = serde_json::to_string_pretty(cache).context("Failed to serialize peer cache")?;
+    /// Total cached peers with quality data.
+    pub async fn len(&self) -> usize {
+        self.bootstrap_cache.peer_count().await
+    }
 
-        // Write to temp file in same directory
-        let temp_path = self.cache_path.with_extension("tmp");
-        std::fs::write(&temp_path, json)
-            .with_context(|| format!("Failed to write temp cache: {:?}", temp_path))?;
+    /// Whether the cache has no peers.
+    pub async fn is_empty(&self) -> bool {
+        self.bootstrap_cache.peer_count().await == 0
+    }
 
-        // Atomic rename (last write wins)
-        std::fs::rename(&temp_path, &self.cache_path)
-            .with_context(|| format!("Failed to rename cache: {:?}", self.cache_path))?;
+    /// Select the best peers according to epsilon-greedy scoring.
+    pub async fn get_top_peers(&self, limit: usize) -> Vec<CachedPeer> {
+        self.bootstrap_cache.select_peers(limit).await
+    }
 
+    /// Record a successful connection (addresses are learned via connection metadata).
+    pub async fn record_success(&self, peer_id: GossipPeerId, addr: SocketAddr) -> Result<()> {
+        let ant_id = gossip_to_ant(peer_id);
+        self.bootstrap_cache
+            .add_from_connection(ant_id, vec![addr], None)
+            .await;
+        self.bootstrap_cache.record_success(&ant_id, 50).await;
         Ok(())
     }
 
-    /// Update peer on successful connection
-    pub async fn update_success(&mut self, peer_id: PeerId, addr: SocketAddr) -> Result<()> {
-        let mut cache = self.read_cache()?;
-        let peer_id_str = hex::encode(peer_id.as_bytes());
-        let now = SystemTime::now();
-
-        if let Some(entry) = cache.peers.get_mut(&peer_id_str) {
-            // Update existing entry
-            if !entry.addr_hints.contains(&addr) {
-                entry.addr_hints.push(addr);
-            }
-            entry.last_success = now;
-            entry.success_count += 1;
-            debug!("Updated peer {} on success", peer_id_str);
-        } else {
-            // Insert new entry
-            cache.peers.insert(
-                peer_id_str.clone(),
-                PeerCacheEntry {
-                    peer_id,
-                    addr_hints: vec![addr],
-                    nat_class: NatClass::Unknown,
-                    roles: Vec::new(),
-                    last_success: now,
-                    success_count: 1,
-                    failure_count: 0,
-                    is_bootstrap: false,
-                },
-            );
-            debug!("Added new peer {} to cache", peer_id_str);
-        }
-
-        self.write_cache(&cache)?;
-        self.enforce_max_size().await?;
-
+    /// Record a failed connection attempt for scoring.
+    pub async fn record_failure(&self, peer_id: GossipPeerId) -> Result<()> {
+        let ant_id = gossip_to_ant(peer_id);
+        self.bootstrap_cache.record_failure(&ant_id).await;
         Ok(())
     }
 
-    /// Update peer on connection failure
-    pub async fn update_failure(&mut self, peer_id: PeerId) -> Result<()> {
-        let mut cache = self.read_cache()?;
-        let peer_id_str = hex::encode(peer_id.as_bytes());
-
-        if let Some(entry) = cache.peers.get_mut(&peer_id_str) {
-            entry.failure_count += 1;
-            self.write_cache(&cache)?;
-            debug!("Incremented failure count for peer {}", peer_id_str);
+    /// Return cached addresses for a specific peer.
+    pub async fn get_addr_hints(&self, peer_id: GossipPeerId) -> Vec<SocketAddr> {
+        let ant_id = gossip_to_ant(peer_id);
+        if let Some(peer) = self.bootstrap_cache.get_peer(&ant_id).await
+            && !peer.addresses.is_empty()
+        {
+            return peer.addresses;
         }
-
-        Ok(())
+        Vec::new()
     }
 
-    /// Get top N peers sorted by score
-    pub fn get_top_peers(&self, limit: usize) -> Vec<PeerCacheEntry> {
-        let cache = match self.read_cache() {
-            Ok(c) => c,
-            Err(e) => {
-                warn!("Failed to read peer cache: {}", e);
-                return Vec::new();
-            }
-        };
-
-        let mut entries: Vec<PeerCacheEntry> = cache.peers.into_values().collect();
-
-        // Sort by score (descending)
-        entries.sort_by(|a, b| {
-            b.score()
-                .partial_cmp(&a.score())
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-
-        // Take top N
-        entries.into_iter().take(limit).collect()
-    }
-
-    /// Get a peer cache entry by peer id.
-    pub fn get_entry(&self, peer_id: PeerId) -> Option<PeerCacheEntry> {
-        let cache = self.read_cache().ok()?;
-        let peer_id_str = hex::encode(peer_id.as_bytes());
-        cache.peers.get(&peer_id_str).cloned()
-    }
-
-    /// Get address hints for a peer id.
-    pub fn get_addr_hints(&self, peer_id: PeerId) -> Vec<SocketAddr> {
-        self.get_entry(peer_id)
-            .map(|entry| entry.addr_hints)
-            .unwrap_or_default()
-    }
-
-    /// Prune peers with high failure rates
-    pub async fn prune_failed(&mut self, threshold_ratio: f64) -> Result<()> {
-        let mut cache = self.read_cache()?;
-        let initial_count = cache.peers.len();
-
-        // Remove peers where failure_count / (success_count + failure_count) > threshold
-        // and have at least 5 total attempts
-        cache.peers.retain(|_, entry| {
-            let total_attempts = entry.success_count + entry.failure_count;
-            if total_attempts <= 5 {
-                return true; // Keep peers with few attempts
-            }
-            let failure_ratio = entry.failure_count as f64 / total_attempts as f64;
-            failure_ratio <= threshold_ratio
-        });
-
-        let removed = initial_count - cache.peers.len();
-        if removed > 0 {
-            self.write_cache(&cache)?;
-            warn!("Pruned {} failed peers from cache", removed);
-        }
-
-        Ok(())
-    }
-
-    /// Get count of cached peers
-    pub fn len(&self) -> usize {
-        self.read_cache().map(|c| c.peers.len()).unwrap_or(0)
-    }
-
-    /// Check if cache is empty
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-
-    /// Add bootstrap node using four-word address
-    /// Bootstrap nodes are marked specially and given priority in connections
-    pub async fn add_bootstrap_node(&mut self, four_words: &str) -> Result<()> {
-        let mut cache = self.read_cache()?;
-
-        // Parse four-word address to get socket address
-        // For now, we derive a temporary peer_id from four-words.
-        // Replace with resolved peer_id once identity resolution is available.
-        let peer_id_bytes = blake3::hash(four_words.as_bytes());
-        let peer_id = PeerId::new(*peer_id_bytes.as_bytes());
-        let peer_id_str = hex::encode(peer_id.as_bytes());
-
-        if !cache.peers.contains_key(&peer_id_str) {
-            let now = SystemTime::now();
-            cache.peers.insert(
-                peer_id_str.clone(),
-                PeerCacheEntry {
-                    peer_id,
-                    addr_hints: Vec::new(), // No address hints yet, will be resolved
-                    nat_class: NatClass::Public, // Assume bootstrap nodes are public
-                    roles: vec!["bootstrap".to_string()],
-                    last_success: now,
-                    success_count: 100, // High initial success count for priority
-                    failure_count: 0,
-                    is_bootstrap: true,
-                },
-            );
-            self.write_cache(&cache)?;
-            info!("Added bootstrap node: {}", four_words);
-        }
-
-        Ok(())
-    }
-
-    /// Seed peer cache with bootstrap nodes from config
-    /// Returns number of nodes seeded
-    pub async fn seed_bootstrap_nodes(&mut self, bootstrap_nodes: &[String]) -> Result<usize> {
-        let mut seeded = 0;
-        for node in bootstrap_nodes {
-            match self.add_bootstrap_node(node).await {
-                Ok(_) => seeded += 1,
-                Err(e) => warn!("Failed to seed bootstrap node {}: {}", node, e),
+    /// Seed the cache with manual bootstrap nodes (addresses only).
+    pub async fn seed_bootstrap_nodes(&self, nodes: &[String]) -> Result<usize> {
+        let mut store = self.seed_store.write().await;
+        let mut added = 0usize;
+        for node in nodes {
+            if let Some(addr) = parse_addr(node) {
+                if store
+                    .entries
+                    .insert(addr.to_string(), SeedEntry::new())
+                    .is_none()
+                {
+                    added += 1;
+                }
+            } else {
+                warn!("Unable to parse bootstrap node '{}'", node);
             }
         }
-        info!("Seeded {} bootstrap nodes into peer cache", seeded);
-        Ok(seeded)
+        drop(store);
+        self.persist_seeds().await?;
+        Ok(added)
     }
 
-    /// Enforce maximum cache size using FIFO eviction
-    /// Removes oldest peers (by last_success) when cache exceeds MAX_CACHE_SIZE
-    /// Bootstrap nodes are never evicted
-    async fn enforce_max_size(&mut self) -> Result<()> {
-        let mut cache = self.read_cache()?;
-
-        if cache.peers.len() <= Self::MAX_CACHE_SIZE {
-            return Ok(());
-        }
-
-        // Collect non-bootstrap peers sorted by last_success
-        let mut non_bootstrap: Vec<(String, SystemTime)> = cache
-            .peers
-            .iter()
-            .filter(|(_, entry)| !entry.is_bootstrap)
-            .map(|(id, entry)| (id.clone(), entry.last_success))
-            .collect();
-
-        non_bootstrap.sort_by_key(|(_, last_success)| *last_success);
-
-        // Remove oldest peers to get back under limit
-        let to_remove = cache.peers.len() - Self::MAX_CACHE_SIZE;
-        let mut removed = 0;
-
-        for (peer_id, _) in non_bootstrap.iter().take(to_remove) {
-            cache.peers.remove(peer_id);
-            removed += 1;
-        }
-
-        if removed > 0 {
-            self.write_cache(&cache)?;
-            info!(
-                "Evicted {} oldest peers (FIFO) to maintain cache size <= {}",
-                removed,
-                Self::MAX_CACHE_SIZE
-            );
-        }
-
-        Ok(())
+    /// Add a bootstrap address discovered via peer lists.
+    pub async fn add_bootstrap_addr(&self, addr: SocketAddr, is_community: bool) -> Result<()> {
+        let mut store = self.seed_store.write().await;
+        store
+            .entries
+            .entry(addr.to_string())
+            .and_modify(|entry| entry.is_community |= is_community)
+            .or_insert_with(|| {
+                let mut entry = SeedEntry::new();
+                entry.is_community = is_community;
+                entry
+            });
+        drop(store);
+        self.persist_seeds().await
     }
 
-    // ========================================================================
-    // ADR-015: Bootstrap Cache API
-    // ========================================================================
+    /// Record that a bootstrap address responded successfully.
+    pub async fn record_bootstrap_success(&self, addr: &SocketAddr) -> Result<()> {
+        let mut store = self.seed_store.write().await;
+        if let Some(entry) = store.entries.get_mut(&addr.to_string()) {
+            entry.success_count = entry.success_count.saturating_add(1);
+            entry.last_success_epoch = Some(now_secs());
+        }
+        drop(store);
+        self.persist_seeds().await
+    }
 
-    /// Get all bootstrap nodes as `BootstrapEntry` per ADR-015.
-    ///
-    /// Returns entries derived from peer cache, converting peer addresses
-    /// to the ADR-015 bootstrap format.
-    pub fn get_bootstrap_nodes(&self) -> Vec<BootstrapEntry> {
-        let cache = match self.read_cache() {
-            Ok(c) => c,
-            Err(e) => {
-                warn!("Failed to read peer cache for bootstrap nodes: {}", e);
-                return Vec::new();
-            }
-        };
-
-        cache
-            .peers
-            .values()
-            .flat_map(|entry| {
-                entry.addr_hints.iter().map(move |addr| {
-                    let last_success = entry
-                        .last_success
-                        .duration_since(SystemTime::UNIX_EPOCH)
-                        .ok()
-                        .map(|d| d.as_secs());
-
-                    BootstrapEntry {
-                        addr: *addr,
-                        last_success,
-                        failure_count: entry.failure_count,
-                        is_community_node: entry.is_bootstrap,
-                    }
-                })
-            })
+    /// Return all known seed addresses (manual + discovered).
+    pub async fn seed_addresses(&self) -> Vec<SocketAddr> {
+        let store = self.seed_store.read().await;
+        store
+            .entries
+            .keys()
+            .filter_map(|val| val.parse::<SocketAddr>().ok())
             .collect()
     }
 
-    /// Get bootstrap nodes sorted by reliability per ADR-015.
-    ///
-    /// Entries are sorted by:
-    /// 1. Entries with recent success come first
-    /// 2. Among entries without success, lower failure count comes first
-    pub fn get_sorted_by_reliability(&self) -> Vec<BootstrapEntry> {
-        let mut entries = self.get_bootstrap_nodes();
-
-        entries.sort_by(|a, b| {
-            // Prefer entries with recent success and low failure count
-            match (&a.last_success, &b.last_success) {
-                (Some(a_time), Some(b_time)) => b_time.cmp(a_time), // More recent first
-                (Some(_), None) => std::cmp::Ordering::Less,        // Success before no success
-                (None, Some(_)) => std::cmp::Ordering::Greater,
-                (None, None) => a.failure_count.cmp(&b.failure_count), // Lower failures first
-            }
-        });
-
-        entries
-    }
-
-    /// Add a bootstrap node by socket address per ADR-015.
-    ///
-    /// If `is_community` is true, the entry is marked as a community-provided
-    /// node and given priority in connection attempts.
-    pub fn add_bootstrap_addr(&mut self, addr: SocketAddr, is_community: bool) -> Result<()> {
-        let mut cache = self.read_cache()?;
-
-        // Generate a deterministic peer_id from the address
-        let addr_str = addr.to_string();
-        let peer_id_bytes = blake3::hash(addr_str.as_bytes());
-        let peer_id = PeerId::new(*peer_id_bytes.as_bytes());
-        let peer_id_str = hex::encode(peer_id.as_bytes());
-
-        let now = SystemTime::now();
-
-        if let Some(entry) = cache.peers.get_mut(&peer_id_str) {
-            // Update existing entry with the address if not present
-            if !entry.addr_hints.contains(&addr) {
-                entry.addr_hints.push(addr);
-            }
-            if is_community {
-                entry.is_bootstrap = true;
-                if !entry.roles.contains(&"bootstrap".to_string()) {
-                    entry.roles.push("bootstrap".to_string());
-                }
-            }
-        } else {
-            // Insert new entry
-            cache.peers.insert(
-                peer_id_str.clone(),
-                PeerCacheEntry {
-                    peer_id,
-                    addr_hints: vec![addr],
-                    nat_class: NatClass::Public, // Assume public for bootstrap nodes
-                    roles: if is_community {
-                        vec!["bootstrap".to_string()]
-                    } else {
-                        Vec::new()
-                    },
-                    last_success: now,
-                    success_count: if is_community { 100 } else { 0 },
-                    failure_count: 0,
-                    is_bootstrap: is_community,
-                },
-            );
-            debug!(
-                "Added bootstrap address: {} (community: {})",
-                addr, is_community
-            );
-        }
-
-        self.write_cache(&cache)?;
+    async fn persist_seeds(&self) -> Result<()> {
+        let snapshot = { self.seed_store.read().await.clone() };
+        let tmp = self.seed_path.with_extension("tmp");
+        let bytes =
+            serde_json::to_vec_pretty(&snapshot).context("failed to serialize bootstrap seeds")?;
+        tokio::fs::write(&tmp, bytes)
+            .await
+            .with_context(|| format!("failed to write {}", tmp.display()))?;
+        tokio::fs::rename(&tmp, &*self.seed_path)
+            .await
+            .with_context(|| {
+                format!("failed to atomically replace {}", self.seed_path.display())
+            })?;
         Ok(())
-    }
-
-    /// Record successful connection to an address per ADR-015.
-    ///
-    /// Updates the last_success timestamp and resets failure count.
-    pub fn record_bootstrap_success(&mut self, addr: &SocketAddr) -> Result<()> {
-        let mut cache = self.read_cache()?;
-        let now = SystemTime::now();
-        let mut updated = false;
-
-        for entry in cache.peers.values_mut() {
-            if entry.addr_hints.contains(addr) {
-                entry.last_success = now;
-                entry.success_count = entry.success_count.saturating_add(1);
-                // Note: We don't reset failure_count here to maintain history
-                // but the last_success update will improve sorting priority
-                updated = true;
-                debug!("Recorded bootstrap success for {}", addr);
-            }
-        }
-
-        if updated {
-            self.write_cache(&cache)?;
-        }
-
-        Ok(())
-    }
-
-    /// Record failed connection to an address per ADR-015.
-    ///
-    /// Increments the failure count for reliability tracking.
-    pub fn record_bootstrap_failure(&mut self, addr: &SocketAddr) -> Result<()> {
-        let mut cache = self.read_cache()?;
-        let mut updated = false;
-
-        for entry in cache.peers.values_mut() {
-            if entry.addr_hints.contains(addr) {
-                entry.failure_count = entry.failure_count.saturating_add(1);
-                updated = true;
-                debug!(
-                    "Recorded bootstrap failure for {} (count: {})",
-                    addr, entry.failure_count
-                );
-            }
-        }
-
-        if updated {
-            self.write_cache(&cache)?;
-        }
-
-        Ok(())
-    }
-
-    /// Remove bootstrap entries that have exceeded the failure threshold.
-    ///
-    /// Per ADR-015, entries with too many consecutive failures should be cleaned up.
-    pub fn cleanup_failed_bootstrap(&mut self, failure_threshold: u32) -> Result<usize> {
-        let mut cache = self.read_cache()?;
-        let initial_count = cache.peers.len();
-
-        // Remove entries (but not bootstrap nodes) that exceed failure threshold
-        cache.peers.retain(|_, entry| {
-            // Always keep bootstrap nodes
-            if entry.is_bootstrap {
-                return true;
-            }
-            entry.failure_count < failure_threshold
-        });
-
-        let removed = initial_count - cache.peers.len();
-        if removed > 0 {
-            self.write_cache(&cache)?;
-            info!(
-                "Cleaned up {} entries exceeding failure threshold {}",
-                removed, failure_threshold
-            );
-        }
-
-        Ok(removed)
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use tempfile::TempDir;
-
-    fn create_test_peer_id(seed: u8) -> PeerId {
-        let mut bytes = [0u8; 32];
-        bytes[0] = seed;
-        PeerId::new(bytes)
+/// Parse socket addresses from either ip:port or four-word identities.
+fn parse_addr(input: &str) -> Option<SocketAddr> {
+    if let Ok(addr) = input.parse::<SocketAddr>() {
+        return Some(addr);
     }
-
-    #[tokio::test]
-    async fn test_peer_cache_creation() {
-        let temp_dir = TempDir::new().expect("temp dir");
-        let cache_path = temp_dir.path().join("peers.json");
-
-        let cache = PeerCache::load(&cache_path)
-            .await
-            .expect("Should create new cache");
-
-        assert_eq!(cache.len(), 0);
-        assert!(cache.is_empty());
+    if let Ok(addr) = crate::identity::conn_from_words(input) {
+        return Some(addr);
     }
-
-    #[tokio::test]
-    async fn test_update_success() {
-        let temp_dir = TempDir::new().expect("temp dir");
-        let cache_path = temp_dir.path().join("peers.json");
-
-        let mut cache = PeerCache::load(&cache_path).await.expect("create cache");
-        let peer_id = create_test_peer_id(1);
-        let addr: SocketAddr = "127.0.0.1:8080".parse().expect("parse addr");
-
-        cache
-            .update_success(peer_id, addr)
-            .await
-            .expect("update success");
-
-        assert_eq!(cache.len(), 1);
-        assert!(!cache.is_empty());
-
-        let top_peers = cache.get_top_peers(10);
-        assert_eq!(top_peers.len(), 1);
-        assert_eq!(top_peers[0].success_count, 1);
-        assert_eq!(top_peers[0].failure_count, 0);
+    let normalized = input.replace('-', " ");
+    if normalized != input
+        && let Ok(addr) = crate::identity::conn_from_words(&normalized)
+    {
+        return Some(addr);
     }
+    None
+}
 
-    #[tokio::test]
-    async fn test_update_failure() {
-        let temp_dir = TempDir::new().expect("temp dir");
-        let cache_path = temp_dir.path().join("peers.json");
+fn gossip_to_ant(peer_id: GossipPeerId) -> AntPeerId {
+    AntPeerId(*peer_id.as_bytes())
+}
 
-        let mut cache = PeerCache::load(&cache_path).await.expect("create cache");
-        let peer_id = create_test_peer_id(1);
-        let addr: SocketAddr = "127.0.0.1:8080".parse().expect("parse addr");
+fn now_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|dur| dur.as_secs())
+        .unwrap_or(0)
+}
 
-        // Add peer first
-        cache
-            .update_success(peer_id, addr)
-            .await
-            .expect("update success");
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+struct SeedEntry {
+    success_count: u32,
+    last_success_epoch: Option<u64>,
+    is_community: bool,
+}
 
-        // Record failure
-        cache.update_failure(peer_id).await.expect("update failure");
-
-        let top_peers = cache.get_top_peers(10);
-        assert_eq!(top_peers.len(), 1);
-        assert_eq!(top_peers[0].failure_count, 1);
+impl SeedEntry {
+    fn new() -> Self {
+        Self::default()
     }
+}
 
-    #[tokio::test]
-    async fn test_top_peers_sorting() {
-        let temp_dir = TempDir::new().expect("temp dir");
-        let cache_path = temp_dir.path().join("peers.json");
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+struct SeedStore {
+    entries: HashMap<String, SeedEntry>,
+}
 
-        let mut cache = PeerCache::load(&cache_path).await.expect("create cache");
-
-        // Add peers with different success counts
-        for i in 1..=5 {
-            let peer_id = create_test_peer_id(i);
-            let addr: SocketAddr = format!("127.0.0.1:808{}", i).parse().expect("parse addr");
-
-            for _ in 0..i {
-                cache
-                    .update_success(peer_id, addr)
-                    .await
-                    .expect("update success");
-            }
+impl SeedStore {
+    async fn load(path: &Path) -> Result<Self> {
+        if !path.exists() {
+            return Ok(Self::default());
         }
-
-        let top_peers = cache.get_top_peers(3);
-        assert_eq!(top_peers.len(), 3);
-
-        // Peers should be sorted by score (descending)
-        assert!(top_peers[0].score() >= top_peers[1].score());
-        assert!(top_peers[1].score() >= top_peers[2].score());
-
-        // Verify all 5 peers were added
-        let all_peers = cache.get_top_peers(10);
-        assert_eq!(all_peers.len(), 5);
-    }
-
-    #[tokio::test]
-    async fn test_bootstrap_nodes() {
-        let temp_dir = TempDir::new().expect("temp dir");
-        let cache_path = temp_dir.path().join("peers.json");
-
-        let mut cache = PeerCache::load(&cache_path).await.expect("create cache");
-
-        cache
-            .add_bootstrap_node("ocean-forest-moon-star")
+        let bytes = tokio::fs::read(path)
             .await
-            .expect("add bootstrap");
-
-        assert_eq!(cache.len(), 1);
-
-        let top_peers = cache.get_top_peers(10);
-        assert_eq!(top_peers.len(), 1);
-        assert!(top_peers[0].is_bootstrap);
-        assert_eq!(top_peers[0].success_count, 100); // High initial count
-    }
-
-    #[tokio::test]
-    async fn test_prune_failed() {
-        let temp_dir = TempDir::new().expect("temp dir");
-        let cache_path = temp_dir.path().join("peers.json");
-
-        let mut cache = PeerCache::load(&cache_path).await.expect("create cache");
-        let peer_id = create_test_peer_id(1);
-        let addr: SocketAddr = "127.0.0.1:8080".parse().expect("parse addr");
-
-        // Add peer with failures
-        cache
-            .update_success(peer_id, addr)
-            .await
-            .expect("update success");
-
-        for _ in 0..10 {
-            cache.update_failure(peer_id).await.expect("update failure");
-        }
-
-        assert_eq!(cache.len(), 1);
-
-        // Prune peers with >50% failure rate
-        cache.prune_failed(0.5).await.expect("prune failed");
-
-        // Peer should be removed (1 success, 10 failures = 90% failure rate)
-        assert_eq!(cache.len(), 0);
-    }
-
-    #[tokio::test]
-    async fn test_max_cache_size() {
-        let temp_dir = TempDir::new().expect("temp dir");
-        let cache_path = temp_dir.path().join("peers.json");
-
-        let mut cache = PeerCache::load(&cache_path).await.expect("create cache");
-
-        // Add more than MAX_CACHE_SIZE peers
-        for i in 0..1100 {
-            let peer_id = create_test_peer_id((i % 256) as u8);
-            let addr: SocketAddr = format!("127.0.0.1:{}", 8000 + i)
-                .parse()
-                .expect("parse addr");
-
-            cache
-                .update_success(peer_id, addr)
-                .await
-                .expect("update success");
-        }
-
-        // Cache should be limited to MAX_CACHE_SIZE
-        assert!(cache.len() <= PeerCache::MAX_CACHE_SIZE);
-    }
-
-    #[tokio::test]
-    async fn test_concurrent_writes() {
-        let temp_dir = TempDir::new().expect("temp dir");
-        let cache_path = temp_dir.path().join("peers.json");
-
-        // Create two cache instances pointing to same file
-        let mut cache1 = PeerCache::load(&cache_path).await.expect("create cache1");
-        let mut cache2 = PeerCache::load(&cache_path).await.expect("create cache2");
-
-        let peer1 = create_test_peer_id(1);
-        let peer2 = create_test_peer_id(2);
-        let addr1: SocketAddr = "127.0.0.1:8081".parse().expect("parse addr1");
-        let addr2: SocketAddr = "127.0.0.1:8082".parse().expect("parse addr2");
-
-        // Concurrent writes (last write wins)
-        cache1.update_success(peer1, addr1).await.expect("write 1");
-        cache2.update_success(peer2, addr2).await.expect("write 2");
-
-        // Read from fresh instance
-        let cache3 = PeerCache::load(&cache_path).await.expect("create cache3");
-
-        // At least one peer should be present (last write wins due to atomic rename)
-        assert!(!cache3.is_empty());
-    }
-
-    // ========================================================================
-    // ADR-015: Bootstrap Cache API Tests
-    // ========================================================================
-
-    #[tokio::test]
-    async fn test_bootstrap_entry_creation() {
-        let addr: SocketAddr = "192.168.1.1:8080".parse().expect("parse addr");
-
-        let entry = BootstrapEntry::new(addr, false);
-        assert_eq!(entry.addr, addr);
-        assert!(entry.last_success.is_none());
-        assert_eq!(entry.failure_count, 0);
-        assert!(!entry.is_community_node);
-
-        let community_entry = BootstrapEntry::new(addr, true);
-        assert!(community_entry.is_community_node);
-
-        let success_entry = BootstrapEntry::with_success(addr, 1234567890, true);
-        assert_eq!(success_entry.last_success, Some(1234567890));
-        assert!(success_entry.is_community_node);
-    }
-
-    #[tokio::test]
-    async fn test_get_bootstrap_nodes() {
-        let temp_dir = TempDir::new().expect("temp dir");
-        let cache_path = temp_dir.path().join("peers.json");
-
-        let mut cache = PeerCache::load(&cache_path).await.expect("create cache");
-
-        // Add some peers with addresses
-        let peer_id = create_test_peer_id(1);
-        let addr: SocketAddr = "127.0.0.1:8080".parse().expect("parse addr");
-        cache
-            .update_success(peer_id, addr)
-            .await
-            .expect("update success");
-
-        let bootstrap_nodes = cache.get_bootstrap_nodes();
-        assert_eq!(bootstrap_nodes.len(), 1);
-        assert_eq!(bootstrap_nodes[0].addr, addr);
-        assert!(bootstrap_nodes[0].last_success.is_some());
-    }
-
-    #[tokio::test]
-    async fn test_get_sorted_by_reliability() {
-        let temp_dir = TempDir::new().expect("temp dir");
-        let cache_path = temp_dir.path().join("peers.json");
-
-        let mut cache = PeerCache::load(&cache_path).await.expect("create cache");
-
-        // Add multiple peers with different success/failure counts
-        for i in 1..=3 {
-            let peer_id = create_test_peer_id(i);
-            let addr: SocketAddr = format!("127.0.0.1:808{}", i).parse().expect("parse addr");
-            cache
-                .update_success(peer_id, addr)
-                .await
-                .expect("update success");
-        }
-
-        let sorted = cache.get_sorted_by_reliability();
-        assert_eq!(sorted.len(), 3);
-
-        // Entries should be sorted by recent success (most recent first)
-        // Since they were added recently, they should all have success timestamps
-        for entry in &sorted {
-            assert!(entry.last_success.is_some());
-        }
-    }
-
-    #[tokio::test]
-    async fn test_add_bootstrap_addr() {
-        let temp_dir = TempDir::new().expect("temp dir");
-        let cache_path = temp_dir.path().join("peers.json");
-
-        let mut cache = PeerCache::load(&cache_path).await.expect("create cache");
-
-        let addr: SocketAddr = "10.0.0.1:9000".parse().expect("parse addr");
-        cache
-            .add_bootstrap_addr(addr, true)
-            .expect("add bootstrap addr");
-
-        let nodes = cache.get_bootstrap_nodes();
-        assert_eq!(nodes.len(), 1);
-        assert_eq!(nodes[0].addr, addr);
-        assert!(nodes[0].is_community_node);
-    }
-
-    #[tokio::test]
-    async fn test_record_bootstrap_success() {
-        let temp_dir = TempDir::new().expect("temp dir");
-        let cache_path = temp_dir.path().join("peers.json");
-
-        let mut cache = PeerCache::load(&cache_path).await.expect("create cache");
-
-        let peer_id = create_test_peer_id(1);
-        let addr: SocketAddr = "127.0.0.1:8080".parse().expect("parse addr");
-        cache
-            .update_success(peer_id, addr)
-            .await
-            .expect("update success");
-
-        // Record additional bootstrap success
-        cache
-            .record_bootstrap_success(&addr)
-            .expect("record success");
-
-        let nodes = cache.get_bootstrap_nodes();
-        assert_eq!(nodes.len(), 1);
-        assert!(nodes[0].last_success.is_some());
-    }
-
-    #[tokio::test]
-    async fn test_record_bootstrap_failure() {
-        let temp_dir = TempDir::new().expect("temp dir");
-        let cache_path = temp_dir.path().join("peers.json");
-
-        let mut cache = PeerCache::load(&cache_path).await.expect("create cache");
-
-        let peer_id = create_test_peer_id(1);
-        let addr: SocketAddr = "127.0.0.1:8080".parse().expect("parse addr");
-        cache
-            .update_success(peer_id, addr)
-            .await
-            .expect("update success");
-
-        // Record failures
-        cache
-            .record_bootstrap_failure(&addr)
-            .expect("record failure 1");
-        cache
-            .record_bootstrap_failure(&addr)
-            .expect("record failure 2");
-
-        let nodes = cache.get_bootstrap_nodes();
-        assert_eq!(nodes.len(), 1);
-        assert_eq!(nodes[0].failure_count, 2);
-    }
-
-    #[tokio::test]
-    async fn test_cleanup_failed_bootstrap() {
-        let temp_dir = TempDir::new().expect("temp dir");
-        let cache_path = temp_dir.path().join("peers.json");
-
-        let mut cache = PeerCache::load(&cache_path).await.expect("create cache");
-
-        // Add a non-bootstrap peer
-        let peer_id = create_test_peer_id(1);
-        let addr: SocketAddr = "127.0.0.1:8080".parse().expect("parse addr");
-        cache
-            .update_success(peer_id, addr)
-            .await
-            .expect("update success");
-
-        // Record many failures
-        for _ in 0..10 {
-            cache
-                .record_bootstrap_failure(&addr)
-                .expect("record failure");
-        }
-
-        // Cleanup entries with more than 5 failures
-        let removed = cache.cleanup_failed_bootstrap(5).expect("cleanup");
-        assert_eq!(removed, 1);
-        assert!(cache.is_empty());
-    }
-
-    #[tokio::test]
-    async fn test_bootstrap_nodes_not_cleaned_up() {
-        let temp_dir = TempDir::new().expect("temp dir");
-        let cache_path = temp_dir.path().join("peers.json");
-
-        let mut cache = PeerCache::load(&cache_path).await.expect("create cache");
-
-        // Add a bootstrap node
-        cache
-            .add_bootstrap_node("echo-foxtrot-lima-bravo")
-            .await
-            .expect("add bootstrap");
-
-        // Record many failures
-        let peer_id_bytes = blake3::hash("echo-foxtrot-lima-bravo".as_bytes());
-        let peer_id = PeerId::new(*peer_id_bytes.as_bytes());
-        for _ in 0..10 {
-            cache.update_failure(peer_id).await.expect("record failure");
-        }
-
-        // Cleanup should NOT remove bootstrap nodes
-        let removed = cache.cleanup_failed_bootstrap(5).expect("cleanup");
-        assert_eq!(removed, 0);
-        assert!(!cache.is_empty()); // Bootstrap node still present
-    }
-
-    #[tokio::test]
-    async fn test_sorted_reliability_with_failures() {
-        let temp_dir = TempDir::new().expect("temp dir");
-        let cache_path = temp_dir.path().join("peers.json");
-
-        let mut cache = PeerCache::load(&cache_path).await.expect("create cache");
-
-        // Add peer 1 with no failures
-        let peer_id1 = create_test_peer_id(1);
-        let addr1: SocketAddr = "127.0.0.1:8081".parse().expect("parse addr");
-        cache
-            .update_success(peer_id1, addr1)
-            .await
-            .expect("update success");
-
-        // Add peer 2 with failures
-        let peer_id2 = create_test_peer_id(2);
-        let addr2: SocketAddr = "127.0.0.1:8082".parse().expect("parse addr");
-        cache
-            .update_success(peer_id2, addr2)
-            .await
-            .expect("update success");
-        for _ in 0..5 {
-            cache
-                .record_bootstrap_failure(&addr2)
-                .expect("record failure");
-        }
-
-        let sorted = cache.get_sorted_by_reliability();
-        assert_eq!(sorted.len(), 2);
-
-        // Both have success times, so they'll be sorted by time
-        // The important thing is the sorting doesn't panic and returns entries
-        for entry in &sorted {
-            assert!(entry.last_success.is_some());
-        }
+            .with_context(|| format!("failed to read {}", path.display()))?;
+        serde_json::from_slice(&bytes).context("failed to parse bootstrap seed store")
     }
 }

@@ -10,12 +10,9 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 use clap::Parser;
 // Cryptography module with real ML-DSA-87 implementation
 mod crypto;
-// Ed25519 for QUIC transport layer (ant-quic requirement)
-use ed25519_dalek::SigningKey as Ed25519SecretKey;
 use four_word_networking::FourWordAdaptiveEncoder;
 use once_cell::sync::Lazy;
 // use rand::RngCore; // Unused
-use rand::rngs::OsRng;
 // Removed: saorsa-core imports - replaced with saorsa-pqc and four-word-networking
 // use saorsa_core::address::NetworkAddress;
 // use saorsa_core::identity::FourWordAddress;
@@ -872,9 +869,10 @@ async fn connect_to_peer(addr_str: String) -> Result<()> {
             .build_client_config()
             .map_err(|e| anyhow::anyhow!("Failed to build client config: {}", e))?;
 
-        let quic_tls: ant_quic::crypto::rustls::QuicClientConfig = StdArc::new(rustls_cfg)
-            .try_into()
-            .map_err(|e| anyhow::anyhow!("Failed to convert to QUIC TLS config: {}", e))?;
+        let quic_tls: saorsa_gossip_transport::quic::crypto::rustls::QuicClientConfig =
+            StdArc::new(rustls_cfg)
+                .try_into()
+                .map_err(|e| anyhow::anyhow!("Failed to convert to QUIC TLS config: {}", e))?;
 
         let client = QuicClientConfig::new(StdArc::new(quic_tls));
         with_pqc_support(client)
@@ -1178,15 +1176,21 @@ async fn main() -> Result<()> {
 
 // ---------------- QUIC Delta Server (raw SPKI) -----------------
 
-use ant_quic::config::{ClientConfig as QuicClientConfig, ServerConfig as QuicServerConfig};
-use ant_quic::crypto::pqc::rustls_provider::{with_pqc_support, with_pqc_support_server};
-use ant_quic::crypto::raw_public_keys::RawPublicKeyConfigBuilder;
-use ant_quic::crypto::raw_public_keys::key_utils::public_key_to_bytes;
-use ant_quic::high_level::Endpoint as QuicEndpoint;
+use saorsa_gossip_transport::quic::config::{
+    ClientConfig as QuicClientConfig, ServerConfig as QuicServerConfig,
+};
+use saorsa_gossip_transport::quic::crypto::pqc::rustls_provider::{
+    with_pqc_support, with_pqc_support_server,
+};
+use saorsa_gossip_transport::quic::crypto::raw_public_keys::RawPublicKeyConfigBuilder;
+use saorsa_gossip_transport::quic::crypto::raw_public_keys::key_utils::{
+    MlDsa65PublicKey, MlDsa65SecretKey, generate_keypair as generate_mldsa65_keypair,
+};
+use saorsa_gossip_transport::quic::high_level::Endpoint as QuicEndpoint;
 use std::sync::Arc as StdArc;
 // ant-quic send streams provide write_all via their API; no extra trait import needed
 // Global connection tracking
-use ant_quic::HighLevelConnection;
+use saorsa_gossip_transport::quic::HighLevelConnection;
 static ACTIVE_CONNECTIONS: Lazy<Arc<RwLock<HashMap<String, HighLevelConnection>>>> =
     Lazy::new(|| Arc::new(RwLock::new(HashMap::new())));
 
@@ -1197,46 +1201,50 @@ async fn start_quic_delta_server(
     // ACCEPT ML-DSA-87 SECRET KEY
     _mldsa87_secret: &[u8],
 ) -> Result<std::net::SocketAddr> {
-    // Persist or generate transport key (ed25519 seed, 32 bytes)
-    let key_path = base_dir.join("transport_ed25519.key");
-    let sk: Ed25519SecretKey = if key_path.exists() {
-        let bytes = tokio::fs::read(&key_path)
+    // Persist or generate ML-DSA-65 transport keypair for raw public keys
+    let public_key_path = base_dir.join("transport_mldsa65.pub");
+    let secret_key_path = base_dir.join("transport_mldsa65.key");
+    let (pk, sk): (MlDsa65PublicKey, MlDsa65SecretKey) = if public_key_path.exists()
+        && secret_key_path.exists()
+    {
+        let pk_bytes = tokio::fs::read(&public_key_path)
             .await
-            .context("read transport key")?;
-        anyhow::ensure!(bytes.len() == 32, "transport key must be 32 bytes (seed)");
-        let seed: [u8; 32] = bytes
-            .as_slice()
-            .try_into()
-            .map_err(|_| anyhow::anyhow!("transport key file must be exactly 32 bytes"))?;
-        Ed25519SecretKey::from_bytes(&seed)
+            .context("read transport public key")?;
+        let sk_bytes = tokio::fs::read(&secret_key_path)
+            .await
+            .context("read transport secret key")?;
+        let pk = MlDsa65PublicKey::from_bytes(&pk_bytes).context("invalid transport public key")?;
+        let sk = MlDsa65SecretKey::from_bytes(&sk_bytes).context("invalid transport secret key")?;
+        (pk, sk)
     } else {
-        let mut rng = OsRng;
-        let sk = Ed25519SecretKey::generate(&mut rng);
-        if let Some(parent) = key_path.parent() {
+        let (pk, sk) = generate_mldsa65_keypair()
+            .map_err(|e| anyhow::anyhow!("generate ML-DSA-65 keypair: {e}"))?;
+        if let Some(parent) = secret_key_path.parent() {
             tokio::fs::create_dir_all(parent).await.ok();
         }
-        let _ = tokio::fs::write(&key_path, sk.to_bytes()).await;
+        let _ = tokio::fs::write(&public_key_path, pk.as_bytes()).await;
+        let _ = tokio::fs::write(&secret_key_path, sk.as_bytes()).await;
         #[cfg(unix)]
         {
-            let _ = std::fs::set_permissions(&key_path, std::fs::Permissions::from_mode(0o600));
+            let _ =
+                std::fs::set_permissions(&secret_key_path, std::fs::Permissions::from_mode(0o600));
         }
-        sk
+        (pk, sk)
     };
-    let pk_bytes = public_key_to_bytes(&sk.verifying_key());
-    info!("QUIC server raw key (hex): {}", hex::encode(pk_bytes));
+    info!("QUIC server raw key (hex): {}", hex::encode(pk.as_bytes()));
 
     // Build rustls server config with raw public key resolver
     // IMPORTANT: For bootstrap nodes, accept connections from any client (trust-on-first-use)
     // This allows bootstrap nodes to be publicly accessible without pre-shared keys
     let rustls_srv = RawPublicKeyConfigBuilder::new()
-        .with_server_key(sk)
+        .with_server_key(pk, sk)
         .enable_certificate_type_extensions()
         .allow_any_key() // Accept connections from any client
         .build_server_config()
         .map_err(|e| anyhow::anyhow!("raw pk server config: {e}"))?;
 
     // Convert to ant-quic server crypto config
-    let quic_tls: ant_quic::crypto::rustls::QuicServerConfig =
+    let quic_tls: saorsa_gossip_transport::quic::crypto::rustls::QuicServerConfig =
         StdArc::new(rustls_srv)
             .try_into()
             .map_err(|e| anyhow::anyhow!("convert tls server cfg: {e}"))?;

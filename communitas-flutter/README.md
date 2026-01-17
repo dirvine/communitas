@@ -2,6 +2,8 @@
 
 Flutter UI for Communitas, backed by the Rust core via `flutter_rust_bridge`.
 
+Supported targets: iOS, Android, Linux, Windows, Web (demo). The macOS runner is intentionally removed for now.
+
 ## Prerequisites
 
 - Flutter 3.27+
@@ -14,7 +16,7 @@ Demo mode runs without the native Rust library (useful for UI work):
 ```bash
 cd communitas-flutter
 flutter pub get
-flutter run -d macos --dart-define=DEMO_MODE=true
+flutter run -d android --dart-define=DEMO_MODE=true  # or: -d ios, -d linux, -d windows
 ```
 
 ## Native FFI Mode
@@ -25,7 +27,7 @@ and discoverable by the app (see `docs/adr/ADR-017-flutter-rust-ffi-integration.
 ```bash
 cd communitas-flutter
 flutter pub get
-flutter run -d macos
+flutter run -d android  # or: -d ios, -d linux, -d windows
 ```
 
 ## Web

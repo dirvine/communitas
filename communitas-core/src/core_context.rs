@@ -703,38 +703,41 @@ impl CoreContext {
         request: crate::crdt::PeerListRequest,
     ) {
         let handle = tokio::spawn(async move {
-            // Get peer count and top peers from the peer cache
-            let cache_guard = gossip.peer_cache.read().await;
-            let peer_count = cache_guard.len();
-            let selected = cache_guard.get_top_peers(request.max_peers as usize);
-            drop(cache_guard);
+            let peer_count = gossip.peer_cache.len().await;
+            let selected = gossip
+                .peer_cache
+                .get_top_peers(request.max_peers as usize)
+                .await;
 
-            // Convert to PeerInfo for response, logging peers without addresses
-            let mut skipped_peers = 0usize;
+            let mut skipped = 0usize;
             let peers: Vec<crate::crdt::PeerInfo> = selected
                 .iter()
-                .filter_map(|p| {
-                    if let Some(addr) = p.addr_hints.first() {
-                        Some(crate::crdt::PeerInfo::new(addr.to_string()))
+                .filter_map(|peer| {
+                    if let Some(addr) = peer.addresses.first() {
+                        Some(crate::crdt::PeerInfo::with_details(
+                            addr.to_string(),
+                            peer.quality_score,
+                            peer_nat_label(peer),
+                            peer_roles(peer),
+                        ))
                     } else {
-                        skipped_peers += 1;
+                        skipped += 1;
                         None
                     }
                 })
                 .collect();
 
-            if skipped_peers > 0 {
+            if skipped > 0 {
                 warn!(
                     "Skipped {} peers with no address hints when building peer list response",
-                    skipped_peers
+                    skipped
                 );
             }
 
-            let response_peer_count = peers.len();
-
             info!(
                 "Sending peer list response with {} peers (of {} known)",
-                response_peer_count, peer_count
+                peers.len(),
+                peer_count
             );
 
             // Wrap in GossipMessageType and serialize
@@ -792,15 +795,17 @@ impl CoreContext {
                 return;
             }
 
-            let mut cache = gossip.peer_cache.write().await;
             for peer_info in &response.peers {
                 match peer_info.addr.parse::<SocketAddr>() {
                     Ok(addr) => {
-                        if let Err(e) = cache.add_bootstrap_addr(addr, false) {
-                            warn!("Failed to add peer {} to bootstrap cache: {}", addr, e);
+                        if let Err(e) = gossip.peer_cache.add_bootstrap_addr(addr, false).await {
+                            warn!(
+                                "Failed to add peer {} to bootstrap cache: {}",
+                                peer_info.addr, e
+                            );
                             continue;
                         }
-                        if let Err(e) = cache.record_bootstrap_success(&addr) {
+                        if let Err(e) = gossip.peer_cache.record_bootstrap_success(&addr).await {
                             warn!("Failed to record bootstrap success for {}: {}", addr, e);
                         }
                     }
@@ -889,9 +894,7 @@ impl CoreContext {
         }
 
         // If native discovery didn't work, check if we have any connected peers at all
-        let cache = gossip.peer_cache.read().await;
-        let peers = cache.get_top_peers(5);
-        drop(cache);
+        let peers = gossip.peer_cache.get_top_peers(5).await;
 
         if peers.is_empty() {
             return Err("No connected peers - external address not yet available. \
@@ -1173,6 +1176,29 @@ impl CoreContext {
     pub fn has_passkey(&self) -> bool {
         self.profile.has_passkey()
     }
+}
+
+fn peer_nat_label(peer: &saorsa_gossip_transport::CachedPeer) -> Option<String> {
+    use saorsa_gossip_transport::BootstrapNatType;
+    peer.capabilities.nat_type.map(|nat| match nat {
+        BootstrapNatType::None => "public".to_string(),
+        BootstrapNatType::FullCone => "full_cone".to_string(),
+        BootstrapNatType::AddressRestrictedCone => "restricted_cone".to_string(),
+        BootstrapNatType::PortRestrictedCone => "port_restricted_cone".to_string(),
+        BootstrapNatType::Symmetric => "symmetric".to_string(),
+        BootstrapNatType::Unknown => "unknown".to_string(),
+    })
+}
+
+fn peer_roles(peer: &saorsa_gossip_transport::CachedPeer) -> Vec<String> {
+    let mut roles = Vec::new();
+    if peer.capabilities.supports_coordination {
+        roles.push("coordinator".to_string());
+    }
+    if peer.capabilities.supports_relay {
+        roles.push("relay".to_string());
+    }
+    roles
 }
 
 #[cfg(test)]

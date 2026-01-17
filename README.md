@@ -42,10 +42,6 @@ Technical implementation verified through comprehensive integration testing (wat
 - CMake 3.20+ (required by aws-lc-sys for FIPS-certified cryptography)
 - See [Windows Build Guide](docs/development/windows-build.md) for detailed setup
 
-**macOS:**
-- Xcode Command Line Tools
-- CMake (via Homebrew: `brew install cmake`)
-
 **Linux:**
 - Build essentials, CMake, and platform libraries
 - See Flutter docs for GTK/WebKit dependencies
@@ -58,7 +54,7 @@ cd communitas
 # Flutter app development
 cd communitas-flutter
 flutter pub get
-flutter run -d macos  # or: -d linux, -d windows, -d ios, -d android
+flutter run -d android  # or: -d ios, -d linux, -d windows
 # Web demo (FFI not available in browser)
 flutter run -d chrome --dart-define=DEMO_MODE=true
 ```
@@ -104,7 +100,7 @@ cargo test
 - **Automatic Merge**: Conflict-free convergence without manual intervention or consensus protocols
 
 ### Decentralized Network Architecture
-- **QUIC Transport**: UDP-based reliable transport with built-in NAT traversal (ant-quic v0.18)
+- **QUIC Transport**: saorsa-gossip-transport (AntQuicTransport on ant-quic v0.18)
 - **Gossip Overlay (saorsa-gossip v0.2.0)**: HyParView membership + SWIM failure detection + Plumtree broadcast
 - **FOAF Discovery**: Friend-of-a-friend peer discovery without DHT or global indexing
 - **Rendezvous Shards**: 65,536-shard distributed discovery system for global user location
@@ -138,7 +134,7 @@ cargo test
 - **[MCP API](communitas-mcp/README.md)**: AI agent interface (stdio/HTTP)
 
 ### Deployment & Ops
-- **[Headless Service](communitas-headless/README.md)**: systemd, launchd, JSON-RPC API
+- **[Headless Service](communitas-headless/README.md)**: systemd/launchd service with config-driven startup
 - **[Testnet Deployment](finalise/DEPLOY_TESTNET.md)**: Complete network deployment
 - **[Infrastructure](docs/infrastructure/INFRASTRUCTURE.md)**: Infra layout and environments
 
@@ -176,10 +172,11 @@ Flutter is the only supported GUI; MCP is the integration surface for other loca
 # Flutter Development
 cd communitas-flutter
 flutter pub get
-flutter run -d macos
+flutter run -d android  # or: -d ios, -d linux, -d windows
 
 # Production Build
-flutter build macos --release
+flutter build apk --release
+# or: flutter build ios --release
 # Web demo build only (no native FFI in browser)
 flutter build web --release --dart-define=DEMO_MODE=true
 
@@ -197,10 +194,11 @@ communitas-headless --config /etc/communitas/headless.toml
 Communitas supports multiple deployment scenarios for different use cases:
 
 ### Flutter Application (End Users)
-Full-featured cross-platform application for macOS, iOS, Android, Linux, and Windows.
+Full-featured cross-platform application for iOS, Android, Linux, and Windows.
 ```bash
 cd communitas-flutter
-flutter build macos --release
+flutter build apk --release
+# or: flutter build ios --release
 # Web demo build only (FFI not available in browser)
 flutter build web --release --dart-define=DEMO_MODE=true
 ```
@@ -226,6 +224,9 @@ Complete guide: [communitas-mcp/README.md](communitas-mcp/README.md)
 ---
 
 ## Network & Identity
+
+Identity is the public key (pubkey_hex). Four-word networking is used only to encode
+connection endpoints (IP:port) for sharing between peers.
 
 ### Connection Words Example
 ```dart

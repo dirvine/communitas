@@ -17,8 +17,8 @@ path = "src/main.rs"
 communitas-core = { version = "0.1.20", path = "../communitas-core" }
 
 
-# Networking - use published crate with wildcard address fix
-ant-quic = "^0.8.17"
+# Networking provided by saorsa-gossip
+saorsa-gossip-transport.workspace = true
 # Post-Quantum Cryptography (ML-DSA-87 for application identity)
 saorsa-pqc = "0.3.12"
 four-word-networking = "2.6"

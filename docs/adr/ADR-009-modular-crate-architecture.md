@@ -179,25 +179,9 @@ Generated bindings in `communitas-flutter/lib/src/bindings/`:
 
 ### Feature Flags
 
-Crates use feature flags for optional functionality:
-
-```toml
-# communitas-core/Cargo.toml
-[features]
-default = ["full"]
-full = ["gossip", "webrtc", "crdt"]
-minimal = []  # Just identity and storage
-gossip = ["saorsa-gossip", "ant-quic"]
-webrtc = ["saorsa-webrtc"]
-crdt = ["yrs"]
-```
-
-| Feature | Use Case |
-|---------|----------|
-| `minimal` | Embedded, testing |
-| `gossip` | P2P networking |
-| `webrtc` | Voice/video calls |
-| `full` | Desktop application |
+Communitas core no longer feature-gates gossip; the saorsa-gossip stack is required.
+Optional functionality (like WebRTC) is configured in dependent crates rather than
+via core feature flags.
 
 ### Build Configuration
 
@@ -229,7 +213,6 @@ cd communitas-flutter
 flutter_rust_bridge_codegen generate
 
 # Build for specific platform
-flutter build macos --release
 flutter build ios --release
 flutter build android --release
 ```

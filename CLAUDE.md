@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Communitas is a local-first, PQC-ready collaboration platform that merges WhatsApp, Dropbox, Zoom, and Slack into one decentralized application. It uses Four-Word identities for human-verifiable addressing, provides per-entity virtual disks (org, group, channel, project, individual), and enables DNS-free website publishing via identity-bound website roots.
+Communitas is a local-first, PQC-ready collaboration platform that merges WhatsApp, Dropbox, Zoom, and Slack into one decentralized application. It uses connection words (four-word networking) to share peer connection details, provides per-entity virtual disks (org, group, channel, project, individual), and enables DNS-free website publishing via identity-bound website roots.
 
-**Platform Focus**: Cross-platform Flutter application (macOS, iOS, Android, Linux, Windows, Web).
+**Platform Focus**: Cross-platform Flutter application (iOS, Android, Linux, Windows, Web).
 
 ## Core Architecture
 
@@ -14,7 +14,7 @@ Communitas is a local-first, PQC-ready collaboration platform that merges WhatsA
 - **Location**: `communitas-flutter/`
 - **Framework**: Flutter with Dart
 - **Rust Integration**: flutter_rust_bridge for native bindings
-- **Platforms**: macOS, iOS, Android, Linux, Windows, Web
+- **Platforms**: iOS, Android, Linux, Windows, Web
 
 ### Rust Core Library
 - **Location**: `communitas-core/`
@@ -24,7 +24,7 @@ Communitas is a local-first, PQC-ready collaboration platform that merges WhatsA
 - **Networking**: QUIC via ant-quic, IPv4-first with Happy Eyeballs fallback
 
 ### Key Components
-- **Four-Word Addresses**: Human-readable network identities (e.g., "ocean-forest-moon-star")
+- **Connection Words**: Human-readable encoding for sharing IP:port (e.g., "ocean-forest-moon-star")
 - **Virtual Disks**: Private/Public/Shared per entity with different encryption policies
 - **Website Publishing**: DNS-free web via identity.website_root binding
 - **Messaging**: End-to-end encrypted group messaging with channel support
@@ -39,14 +39,14 @@ Communitas is a local-first, PQC-ready collaboration platform that merges WhatsA
 # Install Flutter dependencies
 cd communitas-flutter && flutter pub get
 
-# Run Flutter app (macOS)
-flutter run -d macos
+# Run Flutter app (Android)
+flutter run -d android
 
 # Run Flutter app (web)
 flutter run -d chrome
 
 # Build for release
-flutter build macos --release
+flutter build apk --release
 flutter build web --release --dart-define=DEMO_MODE=true
 ```
 
@@ -77,7 +77,7 @@ cargo run -p communitas-mcp -- --demo
 # Start MCP server with HTTPS transport (ML-DSA-65 raw public keys)
 cargo run -p communitas-mcp -- --http --tls --demo --no-client-auth
 
-# MCP provides JSON-RPC 2.0 endpoints for AI agents
+# MCP provides Model Context Protocol endpoints for AI agents
 # See docs/api/mcp-api.md for details
 ```
 

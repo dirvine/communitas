@@ -10,7 +10,11 @@ The `communitas-core` crate provides the core functionality for identity managem
 - `communitas-core` - Core identity, storage, and messaging
 - `saorsa-pqc` - Post-quantum cryptography primitives
 - `ant-quic` - QUIC transport layer
-- `four-word-networking` - Four-word address encoding/decoding
+- `four-word-networking` - Connection word encoding/decoding (IP:port)
+
+**Terminology**: Identity is the public key (pubkey_hex). Four-word networking is used only for
+connection words. Some APIs still use legacy field names like `four_words` to carry the identity
+value during migration.
 
 **Cargo.toml**:
 ```toml
@@ -372,7 +376,7 @@ assert_eq!(decrypted, plaintext);
 
 ## four-word-networking API
 
-Four-word address encoding/decoding.
+Connection word encoding/decoding (IP:port).
 
 ```rust
 use four_word_networking::{
@@ -391,7 +395,7 @@ let four_words = encode_socket_addr(&addr);
 let decoded = decode_socket_addr("ocean-forest-moon-star")?;
 assert_eq!(decoded, addr);
 
-// Validate four-word sequence
+// Validate connection words
 assert!(validate_words("ocean-forest-moon-star"));
 assert!(!validate_words("invalid-words-not-real"));
 
@@ -402,26 +406,27 @@ let suggestions = suggest_corrections("occean-forest-moon-star");
 
 ---
 
-## ant-quic API
+## saorsa-gossip-transport QUIC API
 
-QUIC transport layer (simplified interface).
+Communitas uses `saorsa_gossip_transport::AntQuicTransport` (built on ant-quic).
+For advanced QUIC primitives, use the re-exported module `saorsa_gossip_transport::quic`.
 
 ```rust
-use ant_quic::{QuicP2p, Config, Endpoint};
+use bytes::Bytes;
+use saorsa_gossip_transport::{AntQuicTransport, AntQuicTransportConfig, GossipStreamType};
+use std::net::SocketAddr;
 
-// Create QUIC endpoint
-let config = Config::default();
-let mut quic = QuicP2p::new(config)?;
-let endpoint = quic.bind()?;
+let bind_addr: SocketAddr = "0.0.0.0:0".parse()?;
+let transport = AntQuicTransport::with_config(
+    AntQuicTransportConfig::new(bind_addr, vec![]),
+    None,
+)
+.await?;
 
-// Connect to peer
-let connection = endpoint.connect("192.168.1.100:8080").await?;
-
-// Send data
-connection.send(b"Hello, peer!").await?;
-
-// Receive data
-let data = connection.receive().await?;
+// Send data over the pubsub stream
+transport
+    .send_to_peer(peer_id, GossipStreamType::PubSub, Bytes::from("Hello"))
+    .await?;
 ```
 
 ---

@@ -2,7 +2,7 @@
  * Enhanced TestHarness for Communitas Integration Tests
  *
  * Provides a controlled testing environment with real QUIC transport,
- * multi-node scenarios, network chaos simulation, and full networking stack.
+ * multi-node scenarios, network chaos testing, and full networking stack.
  *
  * Capabilities:
  * - Real QUIC connections over ephemeral UDP ports
@@ -13,17 +13,56 @@
 use crate::core_context::CoreContext;
 use crate::types::DeviceType;
 use anyhow::{Context, Result};
+use rand::Rng;
 use saorsa_gossip_groups::GroupContext;
 use saorsa_gossip_presence::PresenceManager;
-use saorsa_gossip_transport::{QuicTransport, TransportConfig};
+use saorsa_gossip_transport::{AntQuicTransport, AntQuicTransportConfig};
 use saorsa_gossip_types::{PeerId, TopicId};
-use std::collections::HashMap;
-use std::net::SocketAddr;
-use std::sync::Arc;
+use std::collections::{HashMap, HashSet};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 use tempfile::TempDir;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
+
+const TEST_PORT_MIN: u16 = 20_000;
+const TEST_PORT_MAX: u16 = 60_000;
+const TEST_PORT_ATTEMPTS: usize = 50;
+
+static PORT_REGISTRY: OnceLock<Mutex<HashSet<u16>>> = OnceLock::new();
+
+fn port_registry() -> &'static Mutex<HashSet<u16>> {
+    PORT_REGISTRY.get_or_init(|| Mutex::new(HashSet::new()))
+}
+
+fn reserve_test_port() -> Result<u16> {
+    let mut rng = rand::thread_rng();
+    for _ in 0..TEST_PORT_ATTEMPTS {
+        let port = rng.gen_range(TEST_PORT_MIN..=TEST_PORT_MAX);
+        let registry = port_registry();
+        let mut used = registry
+            .lock()
+            .map_err(|_| anyhow::anyhow!("test port registry lock poisoned"))?;
+        if used.contains(&port) {
+            continue;
+        }
+        used.insert(port);
+        return Ok(port);
+    }
+    Err(anyhow::anyhow!(
+        "failed to reserve a test port after {} attempts",
+        TEST_PORT_ATTEMPTS
+    ))
+}
+
+fn release_test_port(port: u16) {
+    if let Some(registry) = PORT_REGISTRY.get()
+        && let Ok(mut used) = registry.lock()
+    {
+        used.remove(&port);
+    }
+}
 
 /// Network link policy for chaos engineering
 #[derive(Debug, Clone)]
@@ -107,7 +146,7 @@ pub struct TestNode {
     pub core: Option<Arc<CoreContext>>,
     pub presence: Option<Arc<RwLock<PresenceManager>>>,
     pub groups: Arc<RwLock<HashMap<TopicId, GroupContext>>>,
-    pub transport: Arc<QuicTransport>,
+    pub transport: Arc<AntQuicTransport>,
 }
 
 impl TestNode {
@@ -119,31 +158,44 @@ impl TestNode {
         let four_words = format!("test-node-{:04x}-peer", id);
         let peer_id = PeerId::new([(id % 256) as u8; 32]);
 
-        // Create transport with default config
-        let config = TransportConfig::default();
-        let transport = Arc::new(QuicTransport::new(config));
+        let mut last_err = None;
+        for _ in 0..TEST_PORT_ATTEMPTS {
+            let port = reserve_test_port()?;
+            let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port);
 
-        // Use ephemeral port (assigned by OS)
-        // Note: Actual port discovery will need to be implemented in QuicTransport
-        let port = 10000 + (id as u16); // Temp: Use deterministic port for testing
-        let addr: SocketAddr = format!("127.0.0.1:{}", port)
-            .parse()
-            .context("failed to parse address")?;
+            match AntQuicTransport::with_config(AntQuicTransportConfig::new(addr, vec![]), None)
+                .await
+                .context("failed to create AntQuicTransport")
+            {
+                Ok(transport) => {
+                    debug!("TestNode {} created on port {}", id, port);
+                    return Ok(TestNode {
+                        id,
+                        four_words,
+                        peer_id,
+                        port,
+                        addr,
+                        temp_dir,
+                        core: None,
+                        presence: None,
+                        groups: Arc::new(RwLock::new(HashMap::new())),
+                        transport: Arc::new(transport),
+                    });
+                }
+                Err(err) => {
+                    release_test_port(port);
+                    last_err = Some(err);
+                }
+            }
+        }
 
-        debug!("TestNode {} created on port {}", id, port);
-
-        Ok(TestNode {
+        Err(anyhow::anyhow!(
+            "failed to allocate test port for node {}: {}",
             id,
-            four_words,
-            peer_id,
-            port,
-            addr,
-            temp_dir,
-            core: None,
-            presence: None,
-            groups: Arc::new(RwLock::new(HashMap::new())),
-            transport,
-        })
+            last_err
+                .map(|e| e.to_string())
+                .unwrap_or_else(|| "unknown error".to_string())
+        ))
     }
 
     /// Initialize core context (full stack)
@@ -194,21 +246,21 @@ impl TestNode {
     }
 }
 
-/// Network simulator with chaos control
-pub struct NetworkSimulator {
+/// Network harness with chaos control
+pub struct NetworkHarness {
     pub nodes: HashMap<usize, Arc<RwLock<TestNode>>>,
     pub policies: Arc<RwLock<HashMap<(usize, usize), LinkPolicy>>>,
 }
 
-impl Default for NetworkSimulator {
+impl Default for NetworkHarness {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl NetworkSimulator {
+impl NetworkHarness {
     pub fn new() -> Self {
-        NetworkSimulator {
+        NetworkHarness {
             nodes: HashMap::new(),
             policies: Arc::new(RwLock::new(HashMap::new())),
         }
@@ -269,7 +321,7 @@ impl NetworkSimulator {
 
 /// Main test harness for integration testing
 pub struct TestHarness {
-    pub network: Arc<RwLock<NetworkSimulator>>,
+    pub network: Arc<RwLock<NetworkHarness>>,
     pub temp_dir: TempDir,
 }
 
@@ -277,7 +329,7 @@ impl TestHarness {
     /// Create test harness with N nodes
     pub async fn new(node_count: usize) -> Result<Self> {
         let temp_dir = TempDir::new().context("failed to create harness temp dir")?;
-        let network = Arc::new(RwLock::new(NetworkSimulator::new()));
+        let network = Arc::new(RwLock::new(NetworkHarness::new()));
 
         let harness = TestHarness { network, temp_dir };
 

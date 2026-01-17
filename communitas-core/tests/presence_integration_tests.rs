@@ -68,7 +68,7 @@ async fn test_advertise_and_discover() {
     {
         let presence_guard = presence_a.write().await;
         presence_guard
-            .handle_beacon(topic_id, peer_id_a, beacon)
+            .handle_beacon(topic_id, peer_id_a, beacon.clone())
             .await
             .expect("handle beacon failed");
     }
@@ -96,11 +96,11 @@ async fn test_advertise_and_discover() {
         let presence_guard = presence_b.read().await;
         let status = presence_guard.get_status(peer_id_a, topic_id).await;
         assert_eq!(status, PresenceStatus::Online);
-    }
 
-    let records = presence_guard.get_group_presence(topic_id).await;
-    let record = records.get(&peer_id_a).expect("record missing");
-    assert_eq!(record.four_words.as_deref(), Some(four_words_a.as_str()));
+        let records = presence_guard.get_group_presence(topic_id).await;
+        let record = records.get(&peer_id_a).expect("record missing");
+        assert_eq!(record.four_words.as_deref(), Some(four_words_a.as_str()));
+    }
 
     harness.cleanup().await.expect("cleanup failed");
 }
@@ -155,7 +155,7 @@ async fn test_presence_ttl_expiry() {
     {
         let presence_guard = presence_a.write().await;
         presence_guard
-            .handle_beacon(topic_id, peer_id_a, beacon)
+            .handle_beacon(topic_id, peer_id_a, beacon.clone())
             .await
             .expect("handle beacon failed");
     }

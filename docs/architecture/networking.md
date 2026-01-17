@@ -1,7 +1,7 @@
 # Networking Architecture
 
 **Version**: 1.0
-**Last Updated**: 2025-10-15
+**Last Updated**: 2026-01-16
 **Status**: Active
 
 ## Overview
@@ -9,7 +9,7 @@
 Communitas uses a sophisticated multi-layered networking architecture built on QUIC for transport, with advanced NAT traversal, dual-stack IPv4/IPv6 support, and resilient connection management. The networking layer is designed for peer-to-peer communication in challenging network environments with no reliance on central servers.
 
 **Core Technologies**:
-- **Transport**: ant-quic (QUIC over UDP)
+- **Transport**: saorsa-gossip-transport (AntQuicTransport built on ant-quic)
 - **Discovery**: Rendezvous shards (65k shards, DHT-free)
 - **NAT Traversal**: Coordinator-based hole punching and reflection
 - **Resilience**: Connection migration, automatic retry, offline fallback
@@ -59,7 +59,7 @@ Communitas uses a sophisticated multi-layered networking architecture built on Q
                            ↓
 ┌─────────────────────────────────────────────────────────────┐
 │                  TRANSPORT LAYER                            │
-│              QUIC (ant-quic) over UDP                       │
+│     QUIC via saorsa-gossip-transport (ant-quic)             │
 │  - Stream multiplexing                                      │
 │  - Connection migration                                     │
 │  - Built-in encryption (TLS 1.3)                           │
@@ -86,8 +86,8 @@ pub struct GossipContext {
     pub identity: Identity,
     pub four_words: String,
 
-    /// Transport layer (QUIC via ant-quic)
-    pub transport: Arc<QuicTransport>,
+    /// Transport layer (AntQuicTransport via saorsa-gossip-transport)
+    pub transport: Arc<AntQuicTransport>,
 
     /// Membership (HyParView + SWIM)
     pub membership: Arc<RwLock<Box<dyn Membership>>>,
@@ -102,7 +102,7 @@ pub struct GossipContext {
     pub rendezvous: Arc<RendezvousClient>,
 
     /// Peer cache for fast boot
-    pub peer_cache: Arc<RwLock<PeerCache>>,
+    pub peer_cache: Arc<PeerCache>,
 }
 ```
 
@@ -118,29 +118,34 @@ Communitas uses **ant-quic**, a QUIC implementation built on top of quinn, for a
 - **Congestion control**: Modern congestion control algorithms
 - **Low latency**: 0-RTT and 1-RTT handshakes
 
-### QuicTransport Interface
+### GossipTransport Interface
 
-**From**: `saorsa_gossip_transport::QuicTransport`
+**From**: `saorsa_gossip_transport::GossipTransport`
 
 ```rust
 pub trait GossipTransport: Send + Sync {
-    /// Send data to a peer over a specific stream type
+    /// Dial a peer and establish QUIC connection
+    async fn dial(&self, peer: PeerId, addr: SocketAddr) -> Result<()>;
+
+    /// Dial a bootstrap node directly by address
+    async fn dial_bootstrap(&self, addr: SocketAddr) -> Result<PeerId>;
+
+    /// Listen on a socket address for incoming connections
+    async fn listen(&self, bind: SocketAddr) -> Result<()>;
+
+    /// Close the transport
+    async fn close(&self) -> Result<()>;
+
+    /// Send data to a specific peer on a specific stream type
     async fn send_to_peer(
         &self,
-        peer_id: PeerId,
-        stream_type: StreamType,
+        peer: PeerId,
+        stream_type: GossipStreamType,
         data: Bytes,
     ) -> Result<()>;
 
-    /// Open a bidirectional stream to a peer
-    async fn open_stream(
-        &self,
-        peer_id: PeerId,
-        stream_type: StreamType,
-    ) -> Result<(SendStream, RecvStream)>;
-
-    /// Listen for incoming connections
-    async fn listen(&self) -> Result<()>;
+    /// Receive a message from any peer on any stream
+    async fn receive_message(&self) -> Result<(PeerId, GossipStreamType, Bytes)>;
 }
 ```
 
@@ -149,32 +154,20 @@ pub trait GossipTransport: Send + Sync {
 QUIC streams are classified by purpose for efficient multiplexing:
 
 ```rust
-pub enum StreamType {
+pub enum GossipStreamType {
     /// Membership protocol (HyParView, SWIM)
     Membership,
 
-    /// Pub/sub message dissemination (Plumtree)
+    /// Pub/sub message dissemination (Plumtree control + routing)
     PubSub,
 
-    /// Presence beacons (encrypted with MLS)
-    Presence,
-
-    /// CRDT synchronization (anti-entropy)
-    CrdtSync,
-
-    /// Direct messages (end-to-end encrypted)
-    DirectMessage,
-
-    /// Group messages (MLS encrypted)
-    GroupMessage,
-
-    /// File transfer
-    FileTransfer,
-
-    /// Website publishing
-    SitePublish,
+    /// Bulk payloads (CRDT deltas, files, site assets)
+    Bulk,
 }
 ```
+
+Higher-level protocols (presence, CRDT sync, direct messages, file transfer, sites)
+are multiplexed within the PubSub/Bulk streams via message envelopes.
 
 ### Connection Properties
 
@@ -581,7 +574,7 @@ impl PortManager {
 ### Address Resolution
 
 ```rust
-/// Resolve four-word address to socket addresses
+/// Resolve connection words to socket addresses
 pub async fn resolve_four_words(four_words: &str) -> Result<Vec<SocketAddr>> {
     // Query rendezvous shards for provider summaries
     let summaries = rendezvous.find_providers(four_words).await?;
@@ -626,53 +619,32 @@ Communitas uses a multi-tiered discovery system that eliminates reliance on DNS 
 
 ```rust
 pub struct PeerCache {
-    /// Cached peers with metadata
-    peers: HashMap<PeerId, CachedPeer>,
-
-    /// Maximum cache size
-    max_size: usize,
-
-    /// Cache expiry (24 hours)
-    expiry_secs: u64,
+    bootstrap_cache: Arc<BootstrapCache>,
+    seed_store: Arc<RwLock<SeedStore>>,
+    seed_path: Arc<PathBuf>,
 }
 
-pub struct CachedPeer {
-    /// Peer ID
-    pub peer_id: PeerId,
-
-    /// Four-word address
-    pub four_words: String,
-
-    /// Last known addresses
-    pub addresses: Vec<SocketAddr>,
-
-    /// Last successful connection timestamp
-    pub last_seen_ms: u64,
-
-    /// Connection success count
-    pub success_count: u32,
-
-    /// NAT classification
-    pub nat_class: NatClass,
-
-    /// Coordinator roles (if any)
-    pub roles: Option<CoordinatorRoles>,
+impl PeerCache {
+    pub async fn open(dir: &Path) -> Result<Self>;
+    pub fn bootstrap_cache(&self) -> Arc<BootstrapCache>;
+    pub async fn seed_bootstrap_nodes(&self, nodes: &[String]) -> Result<usize>;
+    pub async fn get_top_peers(&self, limit: usize) -> Vec<CachedPeer>;
+    pub async fn record_success(&self, peer_id: PeerId, addr: SocketAddr) -> Result<()>;
+    pub async fn get_addr_hints(&self, peer_id: PeerId) -> Vec<SocketAddr>;
 }
 ```
 
 **Cache Strategy**:
-- **Size limit**: 1000 peers
-- **Eviction**: LRU (Least Recently Used)
-- **Expiry**: 24 hours
-- **Priority**: Coordinators and favourite contacts never evicted
-- **Persistence**: Encrypted on-disk cache
+- **Selection**: Epsilon-greedy scoring over `CachedPeer` quality metrics
+- **Persistence**: Filesystem-backed `BootstrapCache` plus `seed_nodes.json` for manual entries
+- **Purpose**: Fast bootstrapping + address hints for dial attempts
 
 ### Favourite Contacts
 
 Users designate **favourite contacts** for reliable network access:
 
 ```rust
-/// Dial 1-3 favourite contacts over ant-quic
+/// Dial 1-3 favourite contacts over QUIC
 async fn dial_favourite_contacts(&self) -> Result<()> {
     let favourites = self.load_favourites_from_storage().await?;
 
@@ -735,52 +707,25 @@ async fn use_introducer_nodes(&self) -> Result<()> {
 
 ```rust
 pub struct FoafDiscovery {
+    /// Local contact cache (four_words → peer_id)
+    local_contacts: Arc<RwLock<HashMap<String, PeerId>>>,
+
+    /// Optional presence manager for group-scoped discovery
+    presence: Option<Arc<RwLock<PresenceManager>>>,
+
+    /// Optional FOAF transport for network queries
+    foaf_transport: Option<Arc<dyn FoafTransport>>,
+
     /// Our peer ID
-    peer_id: PeerId,
-
-    /// Transport layer
-    transport: Arc<QuicTransport>,
-
-    /// Membership layer for peer list
-    membership: Arc<RwLock<Box<dyn Membership>>>,
-
-    /// Query cache (target → result)
-    query_cache: Arc<RwLock<HashMap<String, PeerId>>>,
+    our_peer_id: PeerId,
 }
 
-impl FoafDiscovery {
-    /// Find a contact by four-word address
-    pub async fn find_contact(&self, four_words: &str) -> Result<PeerId> {
-        // Check cache first
-        if let Some(peer_id) = self.query_cache.read().await.get(four_words) {
-            return Ok(peer_id.clone());
-        }
-
-        // Send FOAF query with TTL=3, fanout=3
-        let query = FoafQuery {
-            target: four_words.to_string(),
-            ttl: 3,
-            fanout: 3,
-        };
-
-        let result = self.send_foaf_query(query).await?;
-
-        // Cache result
-        self.query_cache.write().await.insert(
-            four_words.to_string(),
-            result.clone(),
-        );
-
-        Ok(result)
-    }
-}
 ```
 
-**FOAF Query Parameters**:
-- **TTL**: 3 hops (limits network load)
-- **Fanout**: 3 peers per hop (balances speed and bandwidth)
-- **Timeout**: 5 seconds per hop
-- **Cache**: Results cached for 1 hour
+**Lookup Flow**:
+- Check local contact cache
+- Check presence in shared groups (if configured)
+- FOAF query with TTL=3, fanout=3 (if a transport is configured)
 
 ### Rendezvous Shards
 
@@ -935,7 +880,7 @@ pub struct NetworkRuntime {
     /// Number of active peers
     pub peers: u32,
 
-    /// Our endpoint four-words address
+    /// Our endpoint connection words
     pub endpoint_four_words: Option<String>,
 
     /// Bootstrap nodes
@@ -944,7 +889,7 @@ pub struct NetworkRuntime {
     /// Last network error
     pub last_error: Option<String>,
 
-    /// User four-words address
+    /// User identity (legacy field name)
     pub user_four_words: Option<String>,
 }
 ```
@@ -1191,7 +1136,7 @@ Best provider:
 final status = await api.getNetworkInfo();
 print('Network status: $status');
 
-// Connect to a peer via four-words
+// Connect to a peer via connection words
 await api.connectByWords('ocean-forest-moon-star');
 
 // Get endpoint connection words

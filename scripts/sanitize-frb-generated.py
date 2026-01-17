@@ -65,10 +65,17 @@ def sanitize(path: Path) -> None:
         "        _ => unreachable!(),",
         "        _ => return,",
     )
-    text = text.replace(
-        "    match func_id {\n        _ => unreachable!(),\n    }",
-        "    match func_id {\n        _ => flutter_rust_bridge::for_generated::WireSyncRust2DartSse {\n            ptr: std::ptr::null_mut(),\n            len: 0,\n        },\n    }",
+    text = re.sub(
+        r"(fn pde_ffi_dispatcher_sync_impl[\s\S]*?match func_id \{\n)\s*_ => return,\n(\s*\}\n)",
+        r"\1        _ => flutter_rust_bridge::for_generated::WireSyncRust2DartSse {\n            ptr: std::ptr::null_mut(),\n            len: 0,\n        },\n\2",
+        text,
     )
+
+    if "clippy::not_unsafe_ptr_arg_deref" not in text:
+        text = text.replace(
+            "    clippy::needless_borrow\n)",
+            "    clippy::needless_borrow,\n    clippy::not_unsafe_ptr_arg_deref\n)",
+        )
 
     path.write_text(text)
 

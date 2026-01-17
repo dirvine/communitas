@@ -166,38 +166,28 @@ impl BootstrapCache {
 
 ```rust
 pub async fn bootstrap_network(&self) -> Result<(), Error> {
-    // Priority 1: Try favourite contacts
+    // Priority 1: Try favourite contacts with known endpoints
     let contacts = self.get_favourite_contacts().await;
     for contact in contacts {
-        if let Some(addr) = self.presence_cache.get(&contact.pubkey) {
+        if let Some(addr) = self.get_contact_endpoint(&contact).await {
             if self.try_connect(addr).await.is_ok() {
                 return Ok(());
             }
         }
     }
-    
-    // Priority 2: Try cached presence records
-    let cached_presences = self.presence_cache.get_all_sorted_by_freshness();
-    for record in cached_presences.iter().take(10) {
-        if let Ok(addr) = decode_connection_words(&record.connection_words) {
-            if self.try_connect(addr).await.is_ok() {
+
+    // Priority 2: Try bootstrap cache (quality-scored)
+    let cached = self.peer_cache.get_top_peers(20).await;
+    for peer in cached {
+        if let Some(addr) = peer.addresses.first() {
+            if self.try_connect(*addr).await.is_ok() {
+                self.peer_cache.record_bootstrap_success(addr).await?;
                 return Ok(());
             }
         }
     }
-    
-    // Priority 3: Try bootstrap cache
-    let bootstrap_entries = self.bootstrap_cache.get_sorted();
-    for entry in bootstrap_entries.iter().take(20) {
-        if self.try_connect(entry.addr).await.is_ok() {
-            self.bootstrap_cache.record_success(&entry.addr);
-            return Ok(());
-        } else {
-            self.bootstrap_cache.record_failure(&entry.addr);
-        }
-    }
-    
-    // Priority 4: Need manual entry
+
+    // Priority 3: Need manual entry
     Err(Error::BootstrapFailed("No cached addresses worked, please enter connection words manually"))
 }
 ```
@@ -207,18 +197,7 @@ pub async fn bootstrap_network(&self) -> Result<(), Error> {
 Bootstrap cache entries may be stale:
 - IPs change, nodes go offline
 - This is expected and acceptable
-- Solution: try multiple entries, track reliability
-
-```rust
-const MAX_BOOTSTRAP_ATTEMPTS: usize = 20;
-const FAILURE_THRESHOLD: u32 = 5; // Remove entry after 5 consecutive failures
-
-impl BootstrapCache {
-    pub fn cleanup(&mut self) {
-        self.entries.retain(|e| e.failure_count < FAILURE_THRESHOLD);
-    }
-}
-```
+- Solution: try multiple entries, track reliability via `record_success` / `record_failure`
 
 ### No Central Servers
 

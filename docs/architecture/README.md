@@ -63,7 +63,7 @@ Communitas is a **local-first, post-quantum secure collaboration platform** that
 └─────────────────────────────────────────────────────────────┘
                            ↓ QUIC Transport
 ┌─────────────────────────────────────────────────────────────┐
-│              NETWORK LAYER (ant-quic)                       │
+│   NETWORK LAYER (saorsa-gossip-transport / ant-quic)         │
 │  - QUIC connections with multiplexing                      │
 │  - NAT traversal and connection migration                  │
 │  - IPv4-first with Happy Eyeballs fallback                 │
@@ -231,7 +231,7 @@ See [Gossip Protocol](gossip-protocol.md) for details.
 ### Core
 - **Language**: Rust 2024 edition
 - **CRDT**: Yrs (Yjs Rust port)
-- **Networking**: ant-quic + saorsa-gossip
+- **Networking**: saorsa-gossip (AntQuicTransport on ant-quic)
 - **Crypto**: saorsa-pqc (post-quantum)
 
 ### Infrastructure

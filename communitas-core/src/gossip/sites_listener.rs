@@ -293,7 +293,7 @@ mod tests {
     use crate::gossip::sites::SiteId;
     use rand::SeedableRng;
     use rand_chacha::ChaCha20Rng;
-    use saorsa_gossip_transport::{QuicTransport, TransportConfig};
+    use saorsa_gossip_transport::{AntQuicTransport, AntQuicTransportConfig};
     use saorsa_pqc::ml_dsa_65::try_keygen_with_rng;
 
     fn generate_test_keypair(
@@ -309,8 +309,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_listener_creation() {
-        let config = TransportConfig::default();
-        let qt = QuicTransport::new(config);
+        let config = AntQuicTransportConfig::new("0.0.0.0:0".parse().unwrap(), vec![]);
+        let qt = AntQuicTransport::with_config(config, None)
+            .await
+            .expect("transport");
         let transport: Arc<dyn GossipTransport + Send + Sync> = Arc::new(qt);
 
         let listener = SitesListener::new(transport, None);
@@ -319,8 +321,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_listener_with_publisher() {
-        let config = TransportConfig::default();
-        let qt = QuicTransport::new(config);
+        let config = AntQuicTransportConfig::new("0.0.0.0:0".parse().unwrap(), vec![]);
+        let qt = AntQuicTransport::with_config(config, None)
+            .await
+            .expect("transport");
         let transport: Arc<dyn GossipTransport + Send + Sync> = Arc::new(qt);
 
         let (_sk, pk) = generate_test_keypair(1);

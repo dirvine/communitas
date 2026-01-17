@@ -1,5 +1,5 @@
 use yrs::updates::decoder::Decode;
-use yrs::{Doc, GetString, Transact, Update};
+use yrs::{Doc, GetString, ReadTxn, Text, Transact, Update};
 
 #[tokio::test]
 async fn test_crdt_delta_sync_applies_updates() {

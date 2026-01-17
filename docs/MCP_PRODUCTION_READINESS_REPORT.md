@@ -45,7 +45,7 @@ The `communitas-mcp` server provides solid coverage of **core collaboration work
 
 ### 1.2 Networking (Functional, still maturing)
 - ✅ Start/stop networking
-- ✅ Connect by four-words / connection words
+- ✅ Connect by connection words (IP:port encoding)
 - ✅ External address discovery
 - ✅ Presence announcements and peer presence queries
 

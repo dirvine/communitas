@@ -92,7 +92,7 @@ Implement a **multi-layered encrypted vault system** with platform-native securi
 
 ### Vault Structure
 
-Each four-word identity gets its own encrypted vault:
+Each identity (pubkey_hex) gets its own encrypted vault:
 
 ```rust
 pub struct EncryptedVault {
@@ -123,7 +123,7 @@ pub struct VaultMetadata {
 
 ```
 ~/.communitas/vaults/
-├── ocean-forest-moon-star/          # Vault per four-word identity
+├── pubkey_hex_.../                  # Vault per identity
 │   ├── vault.meta                   # Unencrypted metadata
 │   ├── password.verifier            # Encrypted verifier for empty vaults
 │   ├── identity.enc                 # Encrypted identity data
@@ -209,10 +209,10 @@ pub fn decrypt(&self, key: &[u8], data: &[u8]) -> Result<Zeroizing<Vec<u8>>> {
 
 ### Password-Only Login
 
-Users can log in with just a password (no four-word address):
+Users can log in with just a password (no connection words required):
 
 ```rust
-// Store password hash → four-words mapping
+// Store password hash → identity mapping
 pub async fn store_password_locator(
     &self,
     password_hash: &[u8],  // BLAKE3 hash
@@ -342,7 +342,7 @@ impl Session {
 
 ### Benefits
 
-- **Multi-identity**: Each four-word gets isolated vault
+- **Multi-identity**: Each identity gets isolated vault
 - **Strong encryption**: ChaCha20-Poly1305 AEAD
 - **Key stretching**: 100,000 PBKDF2 iterations
 - **Platform security**: Native keyring integration
@@ -395,5 +395,5 @@ key_manager.decrypt(&encryption_key, &encrypted_verifier)
 - Key Management: `communitas-core/src/encrypted_storage/key_management.rs`
 - Vault: `communitas-core/src/encrypted_storage/vault.rs`
 - Platform Storage: `communitas-core/src/encrypted_storage/platform_storage.rs`
-- Related ADR: [ADR-001 Four-Word Identity](ADR-001-four-word-identity-system.md)
+- Related ADR: [ADR-001 Four-Word Identity](ADR-001-four-word-identity-system.md) (superseded)
 - Related ADR: [ADR-006 Post-Quantum Cryptography](ADR-006-post-quantum-cryptography.md)

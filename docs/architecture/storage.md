@@ -125,7 +125,7 @@ pub struct StorageConfig {
 
 ### Overview
 
-Each four-word identity has an **encrypted vault** that stores all local data with strong encryption. Vaults use ChaCha20-Poly1305 for authenticated encryption and PBKDF2 for secure key derivation from passwords.
+Each identity (pubkey_hex) has an **encrypted vault** that stores all local data with strong encryption. Vaults use ChaCha20-Poly1305 for authenticated encryption and PBKDF2 for secure key derivation from passwords.
 
 **File**: `communitas-core/src/encrypted_storage/vault.rs`
 
@@ -133,7 +133,7 @@ Each four-word identity has an **encrypted vault** that stores all local data wi
 
 ```rust
 pub struct EncryptedVault {
-    /// Four-word identity address
+    /// Public-key identity (pubkey_hex)
     pub four_words: String,
 
     /// User-friendly display name

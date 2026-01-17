@@ -238,11 +238,11 @@ pub fn derive_identity_keys(
     let (mlkem_pk, mlkem_sk) = ml_kem_768::try_keygen_with_rng(&mut mlkem_rng)
         .map_err(|e| RecoveryError::KeyDerivationFailed(e.to_string()))?;
     
-    // Derive four-word identity from public key for human-friendly display
-    let four_words = derive_four_words_from_pubkey(&mldsa_pk)?;
+    // Derive public-key identity (pubkey_hex). Legacy field name is four_words.
+    let identity_id = hex::encode(mldsa_pk);
 
     Ok(IdentityKeys {
-        four_words,
+        four_words: identity_id,
         mldsa_public: MlDsaPublicKey::from_bytes(&mldsa_pk.into_bytes())?,
         mldsa_secret: MlDsaSecretKey::from_bytes(&mldsa_sk.into_bytes())?,
         mlkem_public: MlKemPublicKey::from_bytes(&mlkem_pk.into_bytes())?,
@@ -290,7 +290,7 @@ pub async fn recover_from_mnemonic(
     // Store identity keys in vault
     let vault = EncryptedVault::create(
         identity_keys.four_words.clone(),
-        identity_keys.four_words.clone(), // Use four-words as initial display name
+        identity_keys.four_words.clone(), // Use identity fingerprint as initial display name
         encryption_key,
         salt,
         config,
@@ -477,7 +477,7 @@ pub struct EncryptedShard {
     pub version: u32,
     /// Owner's public key (who this shard belongs to)
     pub owner_pubkey: Vec<u8>,
-    /// Owner's four-word identity
+    /// Owner identity (pubkey_hex). Legacy field name retained for compatibility.
     pub owner_four_words: String,
     /// Shard index
     pub shard_index: usize,
@@ -1124,7 +1124,7 @@ pub fn hash_security_answer(answer: &str, salt: &[u8]) -> Vec<u8> {
 │  │  3. They will verify your identity and approve recovery            │   │
 │  │  4. After 7 days, you can complete recovery                        │   │
 │  │                                                                     │   │
-│  │  Enter your four-word identity:                                    │   │
+│  │  Enter your identity (public key):                                 │   │
 │  │  [________]-[________]-[________]-[________]                       │   │
 │  │                                                                     │   │
 │  │  [Begin Social Recovery]                                            │   │

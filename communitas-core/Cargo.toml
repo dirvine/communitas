@@ -10,7 +10,6 @@ description = "Core business logic for Communitas - PQC collaboration with virtu
 
 [dependencies]
 # Saorsa Gossip - P2P networking layer (required, no longer optional)
-# Using workspace path dependencies for local development with dial_bootstrap fix
 saorsa-gossip-types.workspace = true
 saorsa-gossip-identity.workspace = true
 saorsa-gossip-crdt-sync.workspace = true
@@ -21,6 +20,7 @@ saorsa-gossip-membership.workspace = true
 saorsa-gossip-pubsub.workspace = true
 saorsa-gossip-coordinator.workspace = true
 saorsa-gossip-rendezvous.workspace = true
+saorsa-gossip-runtime.workspace = true
 
 # Real-time multimedia (WebRTC over QUIC) - Using core library
 saorsa-webrtc-core.workspace = true

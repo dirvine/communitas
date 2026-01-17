@@ -20,11 +20,11 @@
 //! 2. **Fetch Site**: Subscribe to SITE_ADVERT shard, fetch manifest/blocks
 //! 3. **Private Site**: MLS group encryption with ChaCha20Poly1305
 
-use crate::gossip::rendezvous::RendezvousClient;
-use anyhow::Result;
+use crate::gossip::RendezvousClient;
+use anyhow::{Context, Result};
 use blake3;
 use bytes::Bytes;
-use saorsa_gossip_transport::GossipStreamType;
+use saorsa_gossip_transport::{AntQuicTransport, AntQuicTransportConfig, GossipStreamType};
 use saorsa_gossip_types::PeerId;
 use saorsa_pqc::dsa_traits::{SerDes, Signer, Verifier};
 use saorsa_pqc::ml_dsa_65::{PrivateKey, PublicKey};
@@ -530,13 +530,17 @@ impl SiteFetcher {
     ///
     /// Note: This creates an unbound transport that won't work for real network fetching.
     /// Use new_with_shared_transport() with a bound Sites transport for production.
-    pub fn new(rendezvous: Arc<RendezvousClient>) -> Self {
-        // Create dummy transport for backward compatibility with tests
-        let dummy_config = saorsa_gossip_transport::TransportConfig::default();
-        let dummy_qt = saorsa_gossip_transport::QuicTransport::new(dummy_config);
-        let transport: super::transport_types::SharedTransport = Arc::new(dummy_qt);
+    pub async fn new(rendezvous: Arc<RendezvousClient>) -> Result<Self> {
+        let dummy_bind = "0.0.0.0:0"
+            .parse()
+            .context("Failed to parse dummy bind address")?;
+        let dummy =
+            AntQuicTransport::with_config(AntQuicTransportConfig::new(dummy_bind, vec![]), None)
+                .await
+                .context("Failed to create dummy transport")?;
+        let transport: super::transport_types::SharedTransport = Arc::new(dummy);
 
-        Self {
+        Ok(Self {
             rendezvous,
             transport,
             dispatcher: None, // For backward compat with tests
@@ -544,7 +548,7 @@ impl SiteFetcher {
             block_cache: None,
             manifests: Arc::new(RwLock::new(HashMap::new())),
             next_request_id: Arc::new(RwLock::new(1)),
-        }
+        })
     }
 
     /// Allocate a new request ID for correlation
@@ -776,7 +780,7 @@ mod tests {
     use rand::SeedableRng;
     use rand_chacha::ChaCha20Rng;
     use saorsa_gossip_pubsub::PubSub as PubSubTrait;
-    use saorsa_gossip_transport::{GossipTransport, QuicTransport, TransportConfig};
+    use saorsa_gossip_transport::{AntQuicTransport, AntQuicTransportConfig, GossipTransport};
     use saorsa_gossip_types::PeerId;
     use saorsa_pqc::ml_dsa_65::try_keygen_with_rng;
 
@@ -789,10 +793,14 @@ mod tests {
     async fn create_test_rendezvous_client() -> RendezvousClient {
         let peer_id = create_test_peer_id(1);
 
-        // Create test transport
-        let config = TransportConfig::default();
-        let qt1 = QuicTransport::new(config.clone());
-        let qt2 = QuicTransport::new(config);
+        let bind_a = "127.0.0.1:0".parse().expect("valid addr");
+        let bind_b = "127.0.0.1:0".parse().expect("valid addr");
+        let qt1 = AntQuicTransport::with_config(AntQuicTransportConfig::new(bind_a, vec![]), None)
+            .await
+            .expect("transport");
+        let qt2 = AntQuicTransport::with_config(AntQuicTransportConfig::new(bind_b, vec![]), None)
+            .await
+            .expect("transport");
         let transport: Arc<RwLock<Box<dyn GossipTransport>>> = Arc::new(RwLock::new(Box::new(qt1)));
 
         // Create test identity for signing
@@ -1058,7 +1066,7 @@ mod tests {
     #[tokio::test]
     async fn test_site_fetcher_creation() {
         let rendezvous = Arc::new(create_test_rendezvous_client().await);
-        let fetcher = SiteFetcher::new(rendezvous);
+        let fetcher = SiteFetcher::new(rendezvous).await.unwrap();
 
         // Initially should have no cached data
         let site_id = SiteId::new([2u8; 32]);
@@ -1070,7 +1078,7 @@ mod tests {
     #[tokio::test]
     async fn test_fetcher_block_caching() {
         let rendezvous = Arc::new(create_test_rendezvous_client().await);
-        let fetcher = SiteFetcher::new(rendezvous);
+        let fetcher = SiteFetcher::new(rendezvous).await.unwrap();
 
         // Cache a block
         let content = b"Test content".to_vec();
@@ -1089,7 +1097,7 @@ mod tests {
     #[tokio::test]
     async fn test_fetcher_manifest_caching() {
         let rendezvous = Arc::new(create_test_rendezvous_client().await);
-        let fetcher = SiteFetcher::new(rendezvous);
+        let fetcher = SiteFetcher::new(rendezvous).await.unwrap();
 
         // Cache a manifest
         let (_sk, pk) = generate_test_keypair(2);
@@ -1109,7 +1117,7 @@ mod tests {
     #[tokio::test]
     async fn test_fetcher_start_discovery() {
         let rendezvous = Arc::new(create_test_rendezvous_client().await);
-        let fetcher = SiteFetcher::new(rendezvous);
+        let fetcher = SiteFetcher::new(rendezvous).await.unwrap();
 
         let site_id = SiteId::new([2u8; 32]);
 

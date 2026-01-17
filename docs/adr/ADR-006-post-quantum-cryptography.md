@@ -208,5 +208,5 @@ Following RFC 7250 inspiration, we use raw public keys without X.509 certificate
 - Standards: FIPS 203 (ML-KEM), FIPS 204 (ML-DSA)
 - Vault Integration: `communitas-core/src/encrypted_storage/`
 - ant-quic PQC: `../ant-quic/docs/adr/ADR-003-pure-post-quantum-cryptography.md`
-- Related ADR: [ADR-001 Four-Word Identity](ADR-001-four-word-identity-system.md)
+- Related ADR: [ADR-001 Four-Word Identity](ADR-001-four-word-identity-system.md) (superseded)
 - Related ADR: [ADR-011 Encrypted Vault Storage](ADR-011-encrypted-vault-storage.md)

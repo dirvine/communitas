@@ -24,13 +24,13 @@ Users need a model that supports:
 
 - Support individual, team, and organizational use cases
 - Clear ownership and permission inheritance
-- Four-word addressing for all entities
+- Public-key identity for all entities (connection words are separate)
 - Each entity gets its own storage (virtual disks)
 - Flexible parent-child relationships
 
 ## Decision
 
-Adopt a **unified entity model** where everything is an entity with a four-word address, organized in a flexible hierarchy:
+Adopt a **unified entity model** where everything is an entity with a public-key identity, organized in a flexible hierarchy:
 
 ### Entity Types
 
@@ -49,19 +49,19 @@ Adopt a **unified entity model** where everything is an entity with a four-word 
 │                      Entity Hierarchy                               │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                     │
-│  Organization: acme-corp-river-stone                               │
-│  ├── Channel: engineering-chat-moon-fire                           │
-│  ├── Channel: design-updates-star-wind                             │
-│  ├── Group: backend-team-ocean-wave                                │
+│  Organization: Acme Corp                                           │
+│  ├── Channel: engineering-chat                                     │
+│  ├── Channel: design-updates                                       │
+│  ├── Group: backend-team                                           │
 │  │   └── [Members can create sub-entities]                         │
-│  └── Project: mobile-app-forest-rain                               │
+│  └── Project: mobile-app                                           │
 │      ├── Kanban board                                              │
 │      └── Issue tracker                                             │
 │                                                                     │
-│  Standalone Group: friends-gaming-sun-cloud                        │
+│  Standalone Group: friends-gaming                                  │
 │  └── [No parent organization, independent]                         │
 │                                                                     │
-│  User: alice-bob-charlie-delta                                     │
+│  User: Alice                                                       │
 │  └── [Personal space with virtual disks]                           │
 │                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
@@ -75,11 +75,11 @@ pub struct Entity {
     pub name: String,                   // Display name
     pub entity_type: EntityType,        // Organization | Group | Channel | Project
     pub description: Option<String>,
-    pub created_by: String,             // Four-word address of creator
+    pub created_by: String,             // Creator identity (pubkey_hex)
     pub created_at: i64,
-    pub members: Vec<String>,           // Four-word addresses
+    pub members: Vec<String>,           // Member identities (pubkey_hex)
     pub parent_org_id: Option<String>,  // Links to parent organization
-    pub network_four_words: Option<String>, // P2P network identity
+    pub connection_words: Option<String>, // Optional P2P connection words
     pub is_local_only: bool,            // True if not yet synced
 }
 ```
@@ -101,7 +101,8 @@ Each entity automatically gets:
 
 | Resource | Description |
 |----------|-------------|
-| **Four-word address** | Unique, human-readable identifier |
+| **Identity** | Public-key identity (pubkey_hex) |
+| **Connection words (optional)** | Human-readable IP:port encoding |
 | **CRDT documents** | Core (metadata/members), Chat, domain-specific |
 | **Virtual disks** | Private, Public, Shared storage |
 | **Website root** | Optional DNS-free publishing |
@@ -113,10 +114,10 @@ Each entity automatically gets:
 │                    Entity Lifecycle                                 │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                     │
-│  1. Create Local          2. Generate Identity      3. Link & Sync  │
+│  1. Create Local          2. Generate Keypair       3. Link & Sync  │
 │  ┌─────────────────┐      ┌─────────────────┐      ┌─────────────┐ │
-│  │ Entity::new_    │      │ generate_id_    │      │ link_to_    │ │
-│  │ local(name,     │ ───► │ words()         │ ───► │ network()   │ │
+│  │ Entity::new_    │      │ generate_keys() │      │ link_to_    │ │
+│  │ local(name,     │ ───► │                 │ ───► │ network()   │ │
 │  │ type, desc)     │      │                 │      │             │ │
 │  │                 │      │ "ocean-forest-  │      │ Gossip      │ │
 │  │ is_local: true  │      │  moon-star"     │      │ announce    │ │
@@ -190,5 +191,5 @@ MemberInfo {
 - Implementation: `communitas-core/src/entity_service.rs`
 - CRDT Documents: `communitas-core/src/crdt/documents.rs`
 - Entity Types: `communitas-core/src/crdt/mod.rs`
-- Related ADR: [ADR-001 Four-Word Identity](ADR-001-four-word-identity-system.md)
+- Related ADR: [ADR-001 Four-Word Identity](ADR-001-four-word-identity-system.md) (superseded)
 - Related ADR: [ADR-005 Virtual Disk Architecture](ADR-005-virtual-disk-architecture.md)

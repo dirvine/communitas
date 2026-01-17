@@ -6,7 +6,7 @@
 3. Flutter: Install Flutter 3.27+
 4. Build core: `cargo build -p communitas-core`
 5. Flutter deps: `cd communitas-flutter && flutter pub get`
-6. Run native: `flutter run -d macos` (or linux/windows/ios/android)
+6. Run native: `flutter run -d android` (or ios/linux/windows)
 7. Web demo (demo-only): `flutter run -d chrome --dart-define=DEMO_MODE=true`
 
 ## FFI Codegen

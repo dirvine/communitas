@@ -15,24 +15,28 @@ This project exposes three primary API surfaces:
    - Server in `communitas-mcp/`
    - Tools map to core commands/queries
 
+**Terminology**: Identity is the public key (pubkey_hex). Four-word networking is used only for
+connection words (IP:port). Some APIs still use legacy field names like `fourWords` to carry the
+identity value during migration.
+
 ## Flutter FFI Example
 
 ```dart
 final api = await CommunitasApi.create(
-  fourWords: 'ocean-forest-moon-star',
+  fourWords: 'pubkey_hex_goes_here',
   displayName: 'Alice',
-  deviceName: 'Flutter-macos',
+  deviceName: 'Flutter-android',
   storagePath: '/path/to/storage',
 );
 
 await api.authCreateVault(
-  fourWords: 'ocean-forest-moon-star',
+  fourWords: 'pubkey_hex_goes_here',
   displayName: 'Alice',
   password: 'strong-password',
 );
 
 final session = await api.authLogin(
-  fourWords: 'ocean-forest-moon-star',
+  fourWords: 'pubkey_hex_goes_here',
   password: 'strong-password',
 );
 

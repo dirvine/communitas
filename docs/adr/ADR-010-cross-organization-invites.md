@@ -26,7 +26,7 @@ Traditional invite systems have limitations:
 
 ### Requirements
 
-- Four-word based (no email required)
+- Identity-based (pubkey_hex or invite token; no email required)
 - Recipient verification
 - Time-limited validity
 - Revocable by issuer
@@ -36,7 +36,7 @@ Traditional invite systems have limitations:
 
 ## Decision
 
-Implement a **four-word invite system** that enables secure cross-organization collaboration:
+Implement an **identity-based invite system** with shareable invite tokens for cross-organization collaboration:
 
 ### Invite Flow
 
@@ -79,11 +79,11 @@ Implement a **four-word invite system** that enables secure cross-organization c
 
 ```rust
 pub struct Invite {
-    pub id: String,                // Four-word invite code
+    pub id: String,                // Invite token (opaque)
     pub entity_type: EntityType,   // Organization, Group, Channel, Project
-    pub entity_id: String,         // Target entity's four-word address
-    pub recipient_id: String,      // Intended recipient's four-word address
-    pub created_by: String,        // Creator's four-word address
+    pub entity_id: String,         // Target entity identity (pubkey_hex)
+    pub recipient_id: String,      // Intended recipient identity (pubkey_hex)
+    pub created_by: String,        // Creator identity (pubkey_hex)
     pub created_at: i64,
     pub expires_at: Option<i64>,   // Optional expiration
     pub role: String,              // "admin" | "member" | "guest"
@@ -199,21 +199,20 @@ fn can_revoke_invite(revoker: &Member, invite: &Invite) -> bool {
 
 ### Invite Code Format
 
-Invite codes use the same four-word format as identities:
+Invite codes are opaque tokens (not derived from four-word networking):
 
 ```rust
-// Generate random invite ID
-let invite_id = generate_id_words()?; // "brave-echo-nova-frost"
+// Generate random invite token
+let invite_id = generate_invite_token()?; // "inv_7w3R9kQGm1..."
 
-// Validate invite code
-assert!(validate_id_words("brave-echo-nova-frost"));
+// Validate invite token
+assert!(validate_invite_token(&invite_id));
 ```
 
-**Why four words?**:
-- Verbally shareable (phone, in-person)
-- Easy to transcribe
-- Consistent with identity system
-- Human-verifiable
+**Why opaque tokens?**:
+- Shareable via chat or QR
+- Avoids identity coupling
+- Independent of connection-word encoding
 
 ### Cross-Organization Flow
 
@@ -268,7 +267,7 @@ InviteData = Map {
 
 ### Benefits
 
-- **No email required**: Works with four-word addresses only
+- **No email required**: Works with identity IDs or invite tokens
 - **Verifiable recipient**: Only intended recipient can accept
 - **Revocable**: Creator can cancel before acceptance
 - **Time-limited**: Optional expiration prevents stale invites
@@ -277,7 +276,7 @@ InviteData = Map {
 
 ### Trade-offs
 
-- **Requires recipient address**: Must know recipient's four-words
+- **Requires recipient identity**: Must know recipient identity or share token
 - **Single use**: Each invite for one recipient
 - **No discovery**: Can't browse available invites
 
@@ -312,5 +311,5 @@ InviteData = Map {
 - Implementation: `communitas-core/src/invite.rs`
 - Service: `communitas-core/src/invite_service.rs`
 - Bindings: `communitas-bindings/src/lib.rs`
-- Related ADR: [ADR-001 Four-Word Identity](ADR-001-four-word-identity-system.md)
+- Related ADR: [ADR-001 Four-Word Identity](ADR-001-four-word-identity-system.md) (superseded)
 - Related ADR: [ADR-004 Entity Hierarchy](ADR-004-entity-hierarchy-model.md)

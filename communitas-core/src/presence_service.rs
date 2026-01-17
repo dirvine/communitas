@@ -408,7 +408,9 @@ impl PresenceService {
 mod tests {
     use super::*;
     use saorsa_gossip_identity::MlDsaKeyPair;
+    use saorsa_gossip_transport::AntQuicTransport;
     use saorsa_gossip_types::TopicId;
+    use std::net::SocketAddr;
 
     /// Helper to generate random PeerId
     fn random_peer_id() -> PeerId {
@@ -498,16 +500,7 @@ mod tests {
     #[tokio::test]
     async fn test_presence_service_creation() {
         let peer_id = random_peer_id();
-        let keypair = MlDsaKeyPair::generate().expect("keypair generation");
-        let pubsub: Arc<RwLock<Box<dyn PubSub>>> = Arc::new(RwLock::new(Box::new(
-            saorsa_gossip_pubsub::PlumtreePubSub::new(
-                peer_id,
-                Arc::new(saorsa_gossip_transport::QuicTransport::new(
-                    Default::default(),
-                )),
-                keypair,
-            ),
-        )));
+        let pubsub = build_test_pubsub(peer_id).await;
 
         let service = PresenceService::new(
             peer_id,
@@ -524,16 +517,7 @@ mod tests {
     #[tokio::test]
     async fn test_presence_status_updates() {
         let peer_id = random_peer_id();
-        let keypair = MlDsaKeyPair::generate().expect("keypair generation");
-        let pubsub: Arc<RwLock<Box<dyn PubSub>>> = Arc::new(RwLock::new(Box::new(
-            saorsa_gossip_pubsub::PlumtreePubSub::new(
-                peer_id,
-                Arc::new(saorsa_gossip_transport::QuicTransport::new(
-                    Default::default(),
-                )),
-                keypair,
-            ),
-        )));
+        let pubsub = build_test_pubsub(peer_id).await;
 
         let service = PresenceService::new(
             peer_id,
@@ -571,16 +555,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_online_in_group() {
         let peer_id = random_peer_id();
-        let keypair = MlDsaKeyPair::generate().expect("keypair generation");
-        let pubsub: Arc<RwLock<Box<dyn PubSub>>> = Arc::new(RwLock::new(Box::new(
-            saorsa_gossip_pubsub::PlumtreePubSub::new(
-                peer_id,
-                Arc::new(saorsa_gossip_transport::QuicTransport::new(
-                    Default::default(),
-                )),
-                keypair,
-            ),
-        )));
+        let pubsub = build_test_pubsub(peer_id).await;
 
         let service = PresenceService::new(
             peer_id,
@@ -628,16 +603,7 @@ mod tests {
     #[tokio::test]
     async fn test_find_by_four_words() {
         let peer_id = random_peer_id();
-        let keypair = MlDsaKeyPair::generate().expect("keypair generation");
-        let pubsub: Arc<RwLock<Box<dyn PubSub>>> = Arc::new(RwLock::new(Box::new(
-            saorsa_gossip_pubsub::PlumtreePubSub::new(
-                peer_id,
-                Arc::new(saorsa_gossip_transport::QuicTransport::new(
-                    Default::default(),
-                )),
-                keypair,
-            ),
-        )));
+        let pubsub = build_test_pubsub(peer_id).await;
 
         let service = PresenceService::new(
             peer_id,
@@ -667,5 +633,18 @@ mod tests {
         // Should not find with wrong four-words
         let not_found = service.find_by_four_words("wrong-four-word-address").await;
         assert!(not_found.is_none());
+    }
+
+    async fn build_test_pubsub(peer_id: PeerId) -> Arc<RwLock<Box<dyn PubSub>>> {
+        let bind: SocketAddr = "127.0.0.1:0".parse().expect("valid addr");
+        let transport = Arc::new(
+            AntQuicTransport::new(bind, vec![])
+                .await
+                .expect("transport"),
+        );
+        let signing = MlDsaKeyPair::generate().expect("keypair");
+        Arc::new(RwLock::new(Box::new(
+            saorsa_gossip_pubsub::PlumtreePubSub::new(peer_id, transport, signing),
+        )))
     }
 }

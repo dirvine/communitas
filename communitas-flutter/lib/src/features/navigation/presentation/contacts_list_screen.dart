@@ -7,6 +7,7 @@ import '../../../core/theme/colors.dart';
 import '../../../shared/widgets/adaptive_layout.dart';
 import '../../../shared/widgets/sidebar.dart';
 import '../../../services/unified_data_provider.dart';
+import '../../../services/navigation_state.dart';
 
 class ContactsListScreen extends ConsumerWidget {
   const ContactsListScreen({super.key});
@@ -47,9 +48,14 @@ class ContactsListScreen extends ConsumerWidget {
                   ),
                   title: Text(contact.displayName),
                   subtitle: Text(contact.status),
-                  onTap: () => context.go(
-                    Routes.contactChat.replaceAll(':fourWords', contact.pubkeyHex),
-                  ),
+                  onTap: () {
+                    ref
+                        .read(recentContactsProvider.notifier)
+                        .record(contact.pubkeyHex);
+                    context.go(
+                      Routes.contactChat.replaceAll(':fourWords', contact.pubkeyHex),
+                    );
+                  },
                 );
               },
             );

@@ -4,7 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/colors.dart';
 import '../../../shared/widgets/sidebar.dart';
 import '../../../shared/widgets/adaptive_layout.dart';
+import '../../../shared/widgets/collab_toolbar.dart';
 import '../../../services/unified_data_provider.dart';
+import '../../../services/navigation_state.dart';
 import '../../../services/ffi_provider.dart';
 import '../../../bindings/api_exports.dart';
 
@@ -33,6 +35,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   };
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref
+          .read(recentEntitiesProvider.notifier)
+          .record(entityKey(widget.entityType, widget.entityId));
+    });
+  }
+
+  @override
   void dispose() {
     _messageController.dispose();
     _scrollController.dispose();
@@ -41,21 +53,31 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final entityAsync = ref.watch(
+      unifiedEntityByIdProvider((type: widget.entityType, id: widget.entityId)),
+    );
+
     return AdaptiveLayout(
       sidebar: const Sidebar(),
       body: Scaffold(
         appBar: AppBar(
-          title: Text('#${widget.entityId}'),
+          title: entityAsync.when(
+            loading: () => Text(_fallbackTitle()),
+            error: (_, __) => Text(_fallbackTitle()),
+            data: (entity) {
+              final name = entity?.name ?? widget.entityId;
+              final prefix = widget.entityType == 'channel' ? '#' : '';
+              return Text('$prefix$name');
+            },
+          ),
           actions: [
-            IconButton(
-              icon: const Icon(Icons.phone),
-              onPressed: _showCallsUnavailable,
-              tooltip: 'Voice call (coming soon)',
-            ),
-            IconButton(
-              icon: const Icon(Icons.videocam),
-              onPressed: _showCallsUnavailable,
-              tooltip: 'Video call (coming soon)',
+            ...CollabToolbar.entityActions(
+              context,
+              entityType: widget.entityType,
+              entityId: widget.entityId,
+              onVoice: _showCallsUnavailable,
+              onVideo: _showCallsUnavailable,
+              onShare: _showCallsUnavailable,
             ),
             IconButton(
               icon: const Icon(Icons.more_vert),
@@ -113,6 +135,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         ),
       ),
     );
+  }
+
+  String _fallbackTitle() {
+    final prefix = widget.entityType == 'channel' ? '#' : '';
+    return '$prefix${widget.entityId}';
   }
 
   Widget _buildMessageList() {

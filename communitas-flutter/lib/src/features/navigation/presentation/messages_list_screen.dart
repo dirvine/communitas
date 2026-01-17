@@ -7,6 +7,7 @@ import '../../../core/theme/colors.dart';
 import '../../../shared/widgets/adaptive_layout.dart';
 import '../../../shared/widgets/sidebar.dart';
 import '../../../services/unified_data_provider.dart';
+import '../../../services/navigation_state.dart';
 
 class MessagesListScreen extends ConsumerWidget {
   const MessagesListScreen({super.key});
@@ -31,9 +32,14 @@ class MessagesListScreen extends ConsumerWidget {
               error: (e, _) => _ErrorRow(message: 'Failed to load channels: $e'),
               data: (channels) => _EntityList(
                 entities: channels,
-                onTap: (entity) => context.go(
-                  '${Routes.entityChat.replaceAll(':type', entity.type).replaceAll(':id', entity.id)}',
-                ),
+                onTap: (entity) {
+                  ref
+                      .read(recentEntitiesProvider.notifier)
+                      .record(entityKey(entity.type, entity.id));
+                  context.go(
+                    '${Routes.entityChat.replaceAll(':type', entity.type).replaceAll(':id', entity.id)}',
+                  );
+                },
               ),
             ),
             const SizedBox(height: 24),
@@ -43,9 +49,14 @@ class MessagesListScreen extends ConsumerWidget {
               error: (e, _) => _ErrorRow(message: 'Failed to load groups: $e'),
               data: (groups) => _EntityList(
                 entities: groups,
-                onTap: (entity) => context.go(
-                  '${Routes.entityChat.replaceAll(':type', entity.type).replaceAll(':id', entity.id)}',
-                ),
+                onTap: (entity) {
+                  ref
+                      .read(recentEntitiesProvider.notifier)
+                      .record(entityKey(entity.type, entity.id));
+                  context.go(
+                    '${Routes.entityChat.replaceAll(':type', entity.type).replaceAll(':id', entity.id)}',
+                  );
+                },
               ),
             ),
           ],

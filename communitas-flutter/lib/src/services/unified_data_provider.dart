@@ -1,11 +1,82 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../main.dart' show kDemoMode;
 import '../bindings/api_exports.dart';
 import '../demo/demo_data.dart';
 import '../features/auth/providers/auth_provider.dart';
 import 'ffi_provider.dart';
+
+enum OrganizationCategory {
+  organization,
+  community,
+}
+
+class OrganizationCategoryOverrides
+    extends StateNotifier<Map<String, OrganizationCategory>> {
+  static const _prefsKey = 'organization_category_overrides';
+
+  OrganizationCategoryOverrides() : super(const {}) {
+    _load();
+  }
+
+  Future<void> _load() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_prefsKey);
+    if (raw == null || raw.isEmpty) return;
+    try {
+      final decoded = jsonDecode(raw) as Map<String, dynamic>;
+      final parsed = <String, OrganizationCategory>{};
+      for (final entry in decoded.entries) {
+        final value = entry.value?.toString();
+        final category = OrganizationCategory.values
+            .firstWhere((c) => c.name == value, orElse: () => OrganizationCategory.organization);
+        parsed[entry.key] = category;
+      }
+      state = parsed;
+    } catch (e) {
+      debugPrint('Failed to load org category overrides: $e');
+    }
+  }
+
+  Future<void> _persist() async {
+    final prefs = await SharedPreferences.getInstance();
+    final payload = {
+      for (final entry in state.entries) entry.key: entry.value.name,
+    };
+    await prefs.setString(_prefsKey, jsonEncode(payload));
+  }
+
+  Future<void> setCategory(String entityId, OrganizationCategory category) async {
+    state = {...state, entityId: category};
+    await _persist();
+  }
+}
+
+final organizationCategoryOverridesProvider =
+    StateNotifierProvider<OrganizationCategoryOverrides, Map<String, OrganizationCategory>>((ref) {
+  return OrganizationCategoryOverrides();
+});
+
+OrganizationCategory resolveOrganizationCategory(
+  UnifiedEntity entity,
+  Map<String, OrganizationCategory> overrides,
+) {
+  final override = overrides[entity.id];
+  if (override != null) return override;
+  final text = '${entity.name} ${entity.description}'.toLowerCase();
+  if (text.contains('community') ||
+      text.contains('collective') ||
+      text.contains('nonprofit') ||
+      text.contains('non-profit') ||
+      text.contains('foundation')) {
+    return OrganizationCategory.community;
+  }
+  return OrganizationCategory.organization;
+}
 
 /// Unified entity model for both demo and FFI data.
 class UnifiedEntity {
@@ -40,12 +111,15 @@ class UnifiedEntity {
   }
 
   /// Create from FFI FlutterEntity type.
-  factory UnifiedEntity.fromFfi(FlutterEntity entity) {
+  factory UnifiedEntity.fromFfi(
+    FlutterEntity entity, {
+    String role = 'member',
+  }) {
     return UnifiedEntity(
       id: entity.id,
       type: entity.entityType.name,
       name: entity.name,
-      role: 'member', // Role is determined by membership, not entity
+      role: role,
       description: entity.description ?? '',
       memberCount: entity.memberCount.toInt(),
       parentId: entity.parentOrgId,
@@ -224,6 +298,7 @@ final unifiedIdentityProvider = Provider<({String pubkeyHex, String displayName,
 
 /// Provider for all organizations.
 final unifiedOrganizationsProvider = FutureProvider<List<UnifiedEntity>>((ref) async {
+  final identity = ref.watch(unifiedIdentityProvider);
   // Demo mode: use demo data
   if (kDemoMode) {
     return DemoData.organizations.map((e) => UnifiedEntity.fromDemo(e)).toList();
@@ -232,7 +307,9 @@ final unifiedOrganizationsProvider = FutureProvider<List<UnifiedEntity>>((ref) a
   // FFI mode: use direct Rust bindings
   try {
     final orgs = await ref.watch(ffiOrganizationsProvider.future);
-    return orgs.map((e) => UnifiedEntity.fromFfi(e)).toList();
+    return orgs
+        .map((e) => UnifiedEntity.fromFfi(e, role: _inferRole(e, identity)))
+        .toList();
   } catch (e) {
     debugPrint('Error fetching organizations via FFI: $e');
     return [];
@@ -241,6 +318,7 @@ final unifiedOrganizationsProvider = FutureProvider<List<UnifiedEntity>>((ref) a
 
 /// Provider for all projects.
 final unifiedProjectsProvider = FutureProvider<List<UnifiedEntity>>((ref) async {
+  final identity = ref.watch(unifiedIdentityProvider);
   // Demo mode: use demo data
   if (kDemoMode) {
     return DemoData.projects.map((e) => UnifiedEntity.fromDemo(e)).toList();
@@ -249,7 +327,9 @@ final unifiedProjectsProvider = FutureProvider<List<UnifiedEntity>>((ref) async 
   // FFI mode: use direct Rust bindings
   try {
     final projects = await ref.watch(ffiProjectsProvider.future);
-    return projects.map((e) => UnifiedEntity.fromFfi(e)).toList();
+    return projects
+        .map((e) => UnifiedEntity.fromFfi(e, role: _inferRole(e, identity)))
+        .toList();
   } catch (e) {
     debugPrint('Error fetching projects via FFI: $e');
     return [];
@@ -258,6 +338,7 @@ final unifiedProjectsProvider = FutureProvider<List<UnifiedEntity>>((ref) async 
 
 /// Provider for all channels.
 final unifiedChannelsProvider = FutureProvider<List<UnifiedEntity>>((ref) async {
+  final identity = ref.watch(unifiedIdentityProvider);
   // Demo mode: use demo data
   if (kDemoMode) {
     return DemoData.channels.map((e) => UnifiedEntity.fromDemo(e)).toList();
@@ -266,7 +347,9 @@ final unifiedChannelsProvider = FutureProvider<List<UnifiedEntity>>((ref) async 
   // FFI mode: use direct Rust bindings
   try {
     final channels = await ref.watch(ffiChannelsProvider.future);
-    return channels.map((e) => UnifiedEntity.fromFfi(e)).toList();
+    return channels
+        .map((e) => UnifiedEntity.fromFfi(e, role: _inferRole(e, identity)))
+        .toList();
   } catch (e) {
     debugPrint('Error fetching channels via FFI: $e');
     return [];
@@ -275,6 +358,7 @@ final unifiedChannelsProvider = FutureProvider<List<UnifiedEntity>>((ref) async 
 
 /// Provider for all groups.
 final unifiedGroupsProvider = FutureProvider<List<UnifiedEntity>>((ref) async {
+  final identity = ref.watch(unifiedIdentityProvider);
   // Demo mode: use demo data
   if (kDemoMode) {
     return DemoData.groups.map((e) => UnifiedEntity.fromDemo(e)).toList();
@@ -283,7 +367,9 @@ final unifiedGroupsProvider = FutureProvider<List<UnifiedEntity>>((ref) async {
   // FFI mode: use direct Rust bindings
   try {
     final groups = await ref.watch(ffiGroupsProvider.future);
-    return groups.map((e) => UnifiedEntity.fromFfi(e)).toList();
+    return groups
+        .map((e) => UnifiedEntity.fromFfi(e, role: _inferRole(e, identity)))
+        .toList();
   } catch (e) {
     debugPrint('Error fetching groups via FFI: $e');
     return [];
@@ -394,14 +480,31 @@ final unifiedEntitiesByTypeProvider = FutureProvider.family<List<UnifiedEntity>,
   }
 });
 
-/// Provider for child entities under a parent.
-final unifiedChildEntitiesProvider = FutureProvider.family<List<UnifiedEntity>, String>((ref, parentId) async {
+/// Provider for all entities across types.
+final unifiedAllEntitiesProvider = FutureProvider<List<UnifiedEntity>>((ref) async {
+  final orgs = await ref.watch(unifiedOrganizationsProvider.future);
+  final groups = await ref.watch(unifiedGroupsProvider.future);
   final projects = await ref.watch(unifiedProjectsProvider.future);
   final channels = await ref.watch(unifiedChannelsProvider.future);
 
   return [
+    ...orgs,
+    ...groups,
+    ...projects,
+    ...channels,
+  ];
+});
+
+/// Provider for child entities under a parent.
+final unifiedChildEntitiesProvider = FutureProvider.family<List<UnifiedEntity>, String>((ref, parentId) async {
+  final projects = await ref.watch(unifiedProjectsProvider.future);
+  final channels = await ref.watch(unifiedChannelsProvider.future);
+  final groups = await ref.watch(unifiedGroupsProvider.future);
+
+  return [
     ...projects.where((p) => p.parentId == parentId),
     ...channels.where((c) => c.parentId == parentId),
+    ...groups.where((g) => g.parentId == parentId),
   ];
 });
 
@@ -415,3 +518,14 @@ final unifiedEntityByIdProvider = FutureProvider.family<UnifiedEntity?, ({String
   }
   return null;
 });
+
+String _inferRole(
+  FlutterEntity entity,
+  ({String pubkeyHex, String displayName, String? fourWords}) identity,
+) {
+  if (entity.createdBy == identity.pubkeyHex ||
+      (identity.fourWords != null && entity.createdBy == identity.fourWords)) {
+    return 'owner';
+  }
+  return 'member';
+}

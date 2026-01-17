@@ -8,7 +8,10 @@ import '../../../bindings/api_exports.dart';
 import '../../../core/theme/colors.dart';
 import '../../../shared/widgets/sidebar.dart';
 import '../../../shared/widgets/adaptive_layout.dart';
+import '../../../shared/widgets/collab_toolbar.dart';
 import '../../../services/ffi_provider.dart';
+import '../../../services/navigation_state.dart';
+import '../../../services/unified_data_provider.dart';
 
 /// Virtual disk browser with Private/Public/Shared views.
 class DriveBrowserScreen extends ConsumerStatefulWidget {
@@ -30,13 +33,42 @@ class _DriveBrowserScreenState extends ConsumerState<DriveBrowserScreen> {
   String _currentPath = '/';
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref
+          .read(recentEntitiesProvider.notifier)
+          .record(entityKey(widget.entityType, widget.entityId));
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final entityAsync = ref.watch(
+      unifiedEntityByIdProvider((type: widget.entityType, id: widget.entityId)),
+    );
+
     return AdaptiveLayout(
       sidebar: const Sidebar(),
       body: Scaffold(
         appBar: AppBar(
-          title: const Text('Drive'),
+          title: entityAsync.when(
+            loading: () => const Text('Drive'),
+            error: (_, __) => const Text('Drive'),
+            data: (entity) {
+              final name = entity?.name;
+              if (name == null || name.isEmpty) {
+                return const Text('Drive');
+              }
+              return Text('$name · Drive');
+            },
+          ),
           actions: [
+            ...CollabToolbar.entityActions(
+              context,
+              entityType: widget.entityType,
+              entityId: widget.entityId,
+            ),
             IconButton(
               icon: const Icon(Icons.upload_file),
               onPressed: _promptCreateFile,

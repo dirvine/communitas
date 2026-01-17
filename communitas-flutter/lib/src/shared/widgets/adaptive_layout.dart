@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/router.dart';
+import 'quick_switcher_dialog.dart';
 
 /// Adaptive layout that shows sidebar on desktop and bottom nav on mobile.
 class AdaptiveLayout extends StatelessWidget {
@@ -18,32 +20,104 @@ class AdaptiveLayout extends StatelessWidget {
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final isDesktop = screenWidth >= 768;
-
-    if (isDesktop) {
-      // Desktop: sidebar + body
-      // Use LayoutBuilder to get exact height for sidebar
-      return LayoutBuilder(
-        builder: (context, constraints) {
-          return Row(
+    final scaffold = _extractScaffold(body);
+    final content = isDesktop
+        ? Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               SizedBox(
-                height: constraints.maxHeight,
+                height: double.infinity,
                 child: sidebar,
               ),
               const VerticalDivider(width: 1),
-              Expanded(child: body),
+              Expanded(child: scaffold.body ?? const SizedBox.shrink()),
             ],
-          );
+          )
+        : (scaffold.body ?? const SizedBox.shrink());
+
+    final mergedScaffold = Scaffold(
+      appBar: scaffold.appBar,
+      body: content,
+      bottomNavigationBar: isDesktop
+          ? scaffold.bottomNavigationBar
+          : (scaffold.bottomNavigationBar ?? _buildBottomNav(context)),
+      floatingActionButton: scaffold.floatingActionButton,
+      floatingActionButtonLocation: scaffold.floatingActionButtonLocation,
+      floatingActionButtonAnimator: scaffold.floatingActionButtonAnimator,
+      drawer: scaffold.drawer,
+      endDrawer: scaffold.endDrawer,
+      drawerEnableOpenDragGesture: scaffold.drawerEnableOpenDragGesture,
+      endDrawerEnableOpenDragGesture: scaffold.endDrawerEnableOpenDragGesture,
+      bottomSheet: scaffold.bottomSheet,
+      backgroundColor: scaffold.backgroundColor,
+      resizeToAvoidBottomInset: scaffold.resizeToAvoidBottomInset,
+      primary: scaffold.primary,
+      extendBody: scaffold.extendBody,
+      extendBodyBehindAppBar: scaffold.extendBodyBehindAppBar,
+    );
+
+    return Shortcuts(
+      shortcuts: _navigationShortcuts(),
+      child: Actions(
+        actions: {
+          _NavigateIntent: CallbackAction<_NavigateIntent>(
+            onInvoke: (intent) {
+              context.go(intent.route);
+              return null;
+            },
+          ),
+          _OpenSwitcherIntent: CallbackAction<_OpenSwitcherIntent>(
+            onInvoke: (intent) {
+              showDialog<void>(
+                context: context,
+                builder: (context) => const QuickSwitcherDialog(),
+              );
+              return null;
+            },
+          ),
         },
-      );
-    } else {
-      // Mobile: body with bottom navigation
-      return Scaffold(
-        body: body,
-        bottomNavigationBar: _buildBottomNav(context),
-      );
+        child: Focus(
+          autofocus: true,
+          child: mergedScaffold,
+        ),
+      ),
+    );
+  }
+
+  Scaffold _extractScaffold(Widget body) {
+    if (body is Scaffold) {
+      return body;
     }
+    return Scaffold(body: body);
+  }
+
+  Map<ShortcutActivator, Intent> _navigationShortcuts() {
+    return const {
+      SingleActivator(LogicalKeyboardKey.digit1, control: true):
+          _NavigateIntent(Routes.home),
+      SingleActivator(LogicalKeyboardKey.digit1, meta: true):
+          _NavigateIntent(Routes.home),
+      SingleActivator(LogicalKeyboardKey.digit2, control: true):
+          _NavigateIntent(Routes.messages),
+      SingleActivator(LogicalKeyboardKey.digit2, meta: true):
+          _NavigateIntent(Routes.messages),
+      SingleActivator(LogicalKeyboardKey.digit3, control: true):
+          _NavigateIntent(Routes.projects),
+      SingleActivator(LogicalKeyboardKey.digit3, meta: true):
+          _NavigateIntent(Routes.projects),
+      SingleActivator(LogicalKeyboardKey.digit4, control: true):
+          _NavigateIntent(Routes.contacts),
+      SingleActivator(LogicalKeyboardKey.digit4, meta: true):
+          _NavigateIntent(Routes.contacts),
+      SingleActivator(LogicalKeyboardKey.digit5, control: true):
+          _NavigateIntent(Routes.more),
+      SingleActivator(LogicalKeyboardKey.digit5, meta: true):
+          _NavigateIntent(Routes.more),
+      SingleActivator(LogicalKeyboardKey.keyK, control: true):
+          _OpenSwitcherIntent(),
+      SingleActivator(LogicalKeyboardKey.keyK, meta: true):
+          _OpenSwitcherIntent(),
+    };
   }
 
   Widget _buildBottomNav(BuildContext context) {
@@ -119,4 +193,14 @@ class AdaptiveLayout extends StatelessWidget {
         return Routes.home;
     }
   }
+}
+
+class _NavigateIntent extends Intent {
+  final String route;
+
+  const _NavigateIntent(this.route);
+}
+
+class _OpenSwitcherIntent extends Intent {
+  const _OpenSwitcherIntent();
 }

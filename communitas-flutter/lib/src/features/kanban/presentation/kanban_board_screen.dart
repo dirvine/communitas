@@ -6,8 +6,10 @@ import '../../../bindings/api_exports.dart';
 import '../../../core/theme/colors.dart';
 import '../../../demo/demo_data.dart';
 import '../../../services/ffi_provider.dart';
+import '../../../services/unified_data_provider.dart';
 import '../../../shared/widgets/adaptive_layout.dart';
 import '../../../shared/widgets/sidebar.dart';
+import '../../../shared/widgets/collab_toolbar.dart';
 
 /// Kanban board screen with 5 columns.
 class KanbanBoardScreen extends ConsumerWidget {
@@ -28,17 +30,33 @@ class KanbanBoardScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final projectAsync =
+        ref.watch(unifiedEntityByIdProvider((type: 'project', id: projectId)));
+    final projectName = projectAsync.maybeWhen(
+      data: (entity) => entity?.name,
+      orElse: () => null,
+    );
+
     return AdaptiveLayout(
       sidebar: const Sidebar(),
-      body: kIsWeb ? _buildDemoScaffold() : _buildFfiScaffold(context, ref),
+      body: kIsWeb
+          ? _buildDemoScaffold(context, projectName)
+          : _buildFfiScaffold(context, ref, projectName),
     );
   }
 
-  Widget _buildDemoScaffold() {
+  Widget _buildDemoScaffold(BuildContext context, String? projectName) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Project Board'),
+        title: Text(projectName == null || projectName.isEmpty
+            ? 'Project Board'
+            : '$projectName · Board'),
         actions: [
+          ...CollabToolbar.entityActions(
+            context,
+            entityType: 'project',
+            entityId: projectId,
+          ),
           IconButton(
             icon: const Icon(Icons.filter_list),
             onPressed: () {},
@@ -67,7 +85,7 @@ class KanbanBoardScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildFfiScaffold(BuildContext context, WidgetRef ref) {
+  Widget _buildFfiScaffold(BuildContext context, WidgetRef ref, String? projectName) {
     final api = ref.watch(communitasApiProvider);
     if (api == null) {
       return const Scaffold(
@@ -89,7 +107,18 @@ class KanbanBoardScreen extends ConsumerWidget {
       data: (boards) {
         if (boards.isEmpty) {
           return Scaffold(
-            appBar: AppBar(title: const Text('Project Board')),
+            appBar: AppBar(
+              title: Text(projectName == null || projectName.isEmpty
+                  ? 'Project Board'
+                  : '$projectName · Board'),
+              actions: [
+                ...CollabToolbar.entityActions(
+                  context,
+                  entityType: 'project',
+                  entityId: projectId,
+                ),
+              ],
+            ),
             body: Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -126,7 +155,18 @@ class KanbanBoardScreen extends ConsumerWidget {
           data: (columns) {
             if (columns.isEmpty) {
               return Scaffold(
-                appBar: AppBar(title: Text(board.name)),
+                appBar: AppBar(
+                  title: Text(projectName == null || projectName.isEmpty
+                      ? board.name
+                      : '$projectName · ${board.name}'),
+                  actions: [
+                    ...CollabToolbar.entityActions(
+                      context,
+                      entityType: 'project',
+                      entityId: projectId,
+                    ),
+                  ],
+                ),
                 body: Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -166,8 +206,15 @@ class KanbanBoardScreen extends ConsumerWidget {
 
                 return Scaffold(
                   appBar: AppBar(
-                    title: Text(board.name),
+                    title: Text(projectName == null || projectName.isEmpty
+                        ? board.name
+                        : '$projectName · ${board.name}'),
                     actions: [
+                      ...CollabToolbar.entityActions(
+                        context,
+                        entityType: 'project',
+                        entityId: projectId,
+                      ),
                       IconButton(
                         icon: const Icon(Icons.add),
                         onPressed: defaultColumnId == null

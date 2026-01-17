@@ -7,6 +7,7 @@ import '../../../core/theme/colors.dart';
 import '../../../shared/widgets/adaptive_layout.dart';
 import '../../../shared/widgets/sidebar.dart';
 import '../../../services/unified_data_provider.dart';
+import '../../../services/navigation_state.dart';
 
 class ProjectsListScreen extends ConsumerWidget {
   const ProjectsListScreen({super.key});
@@ -41,9 +42,14 @@ class ProjectsListScreen extends ConsumerWidget {
                   leading: const Icon(Icons.folder, color: CommunitasColors.project),
                   title: Text(project.name),
                   subtitle: Text('${project.memberCount} members'),
-                  onTap: () => context.go(
-                    '${Routes.entityDetail.replaceAll(':type', project.type).replaceAll(':id', project.id)}',
-                  ),
+                  onTap: () {
+                    ref
+                        .read(recentEntitiesProvider.notifier)
+                        .record(entityKey(project.type, project.id));
+                    context.go(
+                      '${Routes.entityDetail.replaceAll(':type', project.type).replaceAll(':id', project.id)}',
+                    );
+                  },
                 );
               },
             );

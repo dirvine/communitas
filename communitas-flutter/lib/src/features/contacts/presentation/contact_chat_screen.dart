@@ -4,7 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/colors.dart';
 import '../../../shared/widgets/sidebar.dart';
 import '../../../shared/widgets/adaptive_layout.dart';
+import '../../../shared/widgets/collab_toolbar.dart';
 import '../../../services/ffi_provider.dart';
+import '../../../services/navigation_state.dart';
 import '../../../services/unified_data_provider.dart';
 
 /// Direct message chat screen for 1:1 contact conversations.
@@ -22,6 +24,14 @@ class ContactChatScreen extends ConsumerStatefulWidget {
 
 class _ContactChatScreenState extends ConsumerState<ContactChatScreen> {
   final _messageController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(recentContactsProvider.notifier).record(widget.fourWords);
+    });
+  }
 
   @override
   void dispose() {
@@ -104,15 +114,12 @@ class _ContactChatScreenState extends ConsumerState<ContactChatScreen> {
             ],
           ),
           actions: [
-            IconButton(
-              icon: const Icon(Icons.phone),
-              onPressed: _showCallsUnavailable,
-              tooltip: 'Voice call (coming soon)',
-            ),
-            IconButton(
-              icon: const Icon(Icons.videocam),
-              onPressed: _showCallsUnavailable,
-              tooltip: 'Video call (coming soon)',
+            ...CollabToolbar.contactActions(
+              context,
+              contactId: widget.fourWords,
+              onVoice: _showCallsUnavailable,
+              onVideo: _showCallsUnavailable,
+              onShare: _showCallsUnavailable,
             ),
             IconButton(
               icon: const Icon(Icons.more_vert),

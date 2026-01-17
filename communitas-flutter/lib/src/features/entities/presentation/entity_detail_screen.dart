@@ -6,10 +6,12 @@ import '../../../core/router.dart';
 import '../../../core/theme/colors.dart';
 import '../../../shared/widgets/sidebar.dart';
 import '../../../shared/widgets/adaptive_layout.dart';
+import '../../../shared/widgets/collab_toolbar.dart';
+import '../../../services/navigation_state.dart';
 import '../../../services/unified_data_provider.dart';
 
 /// Entity detail screen with quick actions (Chat, Drive, Board).
-class EntityDetailScreen extends ConsumerWidget {
+class EntityDetailScreen extends ConsumerStatefulWidget {
   final String entityType;
   final String entityId;
 
@@ -20,8 +22,25 @@ class EntityDetailScreen extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final entityAsync = ref.watch(unifiedEntityByIdProvider((type: entityType, id: entityId)));
+  ConsumerState<EntityDetailScreen> createState() => _EntityDetailScreenState();
+}
+
+class _EntityDetailScreenState extends ConsumerState<EntityDetailScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(recentEntitiesProvider.notifier).record(
+            entityKey(widget.entityType, widget.entityId),
+          );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final entityAsync = ref.watch(
+      unifiedEntityByIdProvider((type: widget.entityType, id: widget.entityId)),
+    );
 
     return AdaptiveLayout(
       sidebar: const Sidebar(),
@@ -29,8 +48,13 @@ class EntityDetailScreen extends ConsumerWidget {
         appBar: AppBar(
           title: entityAsync.when(
             loading: () => const Text('Loading...'),
-            error: (_, __) => Text('Entity $entityId'),
+            error: (_, __) => Text('Entity ${widget.entityId}'),
             data: (entity) => Text(entity?.name ?? 'Unknown Entity'),
+          ),
+          actions: CollabToolbar.entityActions(
+            context,
+            entityType: widget.entityType,
+            entityId: widget.entityId,
           ),
         ),
         body: _buildDetailsBody(context, ref),
@@ -39,7 +63,9 @@ class EntityDetailScreen extends ConsumerWidget {
   }
 
   Widget _buildDetailsBody(BuildContext context, WidgetRef ref) {
-    final entityAsync = ref.watch(unifiedEntityByIdProvider((type: entityType, id: entityId)));
+    final entityAsync = ref.watch(
+      unifiedEntityByIdProvider((type: widget.entityType, id: widget.entityId)),
+    );
 
     return entityAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
@@ -49,6 +75,11 @@ class EntityDetailScreen extends ConsumerWidget {
         final description = entity?.description ?? 'No description';
         final memberCount = entity?.memberCount ?? 0;
         final role = entity?.role ?? 'member';
+        final overrides = ref.watch(organizationCategoryOverridesProvider);
+        final isOrg = entity?.type == 'organisation' || entity?.type == 'organization';
+        final category = (entity != null && isOrg)
+            ? resolveOrganizationCategory(entity, overrides)
+            : null;
 
         return SingleChildScrollView(
           padding: const EdgeInsets.all(24),
@@ -70,7 +101,7 @@ class EntityDetailScreen extends ConsumerWidget {
                           width: 64,
                           height: 64,
                           decoration: BoxDecoration(
-                            color: CommunitasColors.entityColor(entityType),
+                            color: CommunitasColors.entityColor(widget.entityType),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Icon(
@@ -109,6 +140,17 @@ class EntityDetailScreen extends ConsumerWidget {
                         _buildInfoChip(Icons.people, '$memberCount members'),
                         const SizedBox(width: 12),
                         _buildInfoChip(_getRoleIcon(role), role),
+                        if (category != null) ...[
+                          const SizedBox(width: 12),
+                          _buildInfoChip(
+                            category == OrganizationCategory.community
+                                ? Icons.public
+                                : Icons.business,
+                            category == OrganizationCategory.community
+                                ? 'Community'
+                                : 'Organization',
+                          ),
+                        ],
                       ],
                     ),
                   ],
@@ -125,7 +167,9 @@ class EntityDetailScreen extends ConsumerWidget {
                 icon: Icons.chat,
                 label: 'Open Chat',
                 onTap: () => context.go(
-                  Routes.entityChat.replaceAll(':type', entityType).replaceAll(':id', entityId),
+                  Routes.entityChat
+                      .replaceAll(':type', widget.entityType)
+                      .replaceAll(':id', widget.entityId),
                 ),
               ),
               _buildActionTile(
@@ -133,16 +177,18 @@ class EntityDetailScreen extends ConsumerWidget {
                 icon: Icons.folder,
                 label: 'Open Drive',
                 onTap: () => context.go(
-                  Routes.entityDrive.replaceAll(':type', entityType).replaceAll(':id', entityId),
+                  Routes.entityDrive
+                      .replaceAll(':type', widget.entityType)
+                      .replaceAll(':id', widget.entityId),
                 ),
               ),
-              if (entityType == 'project')
+              if (widget.entityType == 'project')
                 _buildActionTile(
                   context,
                   icon: Icons.view_kanban,
                   label: 'Open Kanban Board',
                   onTap: () => context.go(
-                    Routes.projectBoard.replaceAll(':id', entityId),
+                    Routes.projectBoard.replaceAll(':id', widget.entityId),
                   ),
                 ),
             ],
@@ -198,7 +244,7 @@ class EntityDetailScreen extends ConsumerWidget {
   }
 
   IconData _getEntityIcon() {
-    switch (entityType) {
+    switch (widget.entityType) {
       case 'organization':
       case 'organisation':
         return Icons.business;

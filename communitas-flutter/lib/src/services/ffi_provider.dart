@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../main.dart' show kDemoMode;
 import '../bindings/api_exports.dart';
 import '../features/auth/providers/auth_provider.dart';
 
@@ -13,7 +12,6 @@ import '../features/auth/providers/auth_provider.dart';
 // directly instead of HTTP. This is the preferred approach for
 // native apps (macOS, iOS, Android, Windows, Linux).
 //
-// For demo mode, fallback data is provided.
 // Web builds are not supported (use native apps only).
 
 /// Provider for the CommunitasApi instance from auth state.
@@ -24,10 +22,10 @@ final communitasApiProvider = Provider<CommunitasApi?>((ref) {
   return auth.api;
 });
 
-/// Whether FFI is available (authenticated with native API, non-demo builds).
+/// Whether FFI is available (authenticated with native API).
 final ffiAvailableProvider = Provider<bool>((ref) {
   final api = ref.watch(communitasApiProvider);
-  return api != null && !kDemoMode;
+  return api != null;
 });
 
 // ============================================================

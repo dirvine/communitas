@@ -12,50 +12,68 @@ part 'flutter_api.freezed.dart';
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
 
 /// Generate a random four-word identity
-Future<String> generateIdWords() => RustLib.instance.api.crateFlutterApiGenerateIdWords();
+Future<String> generateIdWords() =>
+    RustLib.instance.api.crateFlutterApiGenerateIdWords();
 
 Future<bool> validateRecoveryMnemonic({required String mnemonic}) =>
-    RustLib.instance.api.crateFlutterApiValidateRecoveryMnemonic(mnemonic: mnemonic);
+    RustLib.instance.api
+        .crateFlutterApiValidateRecoveryMnemonic(mnemonic: mnemonic);
 
-Future<FlutterRecoveredIdentity> previewIdentityFromMnemonic({required String mnemonic, String? passphrase}) =>
-    RustLib.instance.api.crateFlutterApiPreviewIdentityFromMnemonic(mnemonic: mnemonic, passphrase: passphrase);
+Future<FlutterRecoveredIdentity> previewIdentityFromMnemonic(
+        {required String mnemonic, String? passphrase}) =>
+    RustLib.instance.api.crateFlutterApiPreviewIdentityFromMnemonic(
+        mnemonic: mnemonic, passphrase: passphrase);
 
-Future<FlutterRecoveredIdentity> recoverIdentityFromMnemonic({required String mnemonic, String? passphrase}) =>
-    RustLib.instance.api.crateFlutterApiRecoverIdentityFromMnemonic(mnemonic: mnemonic, passphrase: passphrase);
+Future<FlutterRecoveredIdentity> recoverIdentityFromMnemonic(
+        {required String mnemonic, String? passphrase}) =>
+    RustLib.instance.api.crateFlutterApiRecoverIdentityFromMnemonic(
+        mnemonic: mnemonic, passphrase: passphrase);
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<CommunitasApi>>
 abstract class CommunitasApi implements RustOpaqueInterface {
-  Future<String> authCreateVault({required String fourWords, required String displayName, required String password});
+  Future<String> authCreateVault(
+      {required String fourWords,
+      required String displayName,
+      required String password});
 
-  Future<void> authDeleteVault({required String fourWords, required String password});
+  Future<void> authDeleteVault(
+      {required String fourWords, required String password});
 
   Future<String> authExportVault({required bool includeData});
 
   Future<FlutterSessionInfo?> authGetCurrentSession();
 
-  Future<String> authImportVault({required String backupBase64, required String password});
+  Future<String> authImportVault(
+      {required String backupBase64, required String password});
 
   Future<List<FlutterVaultInfo>> authListVaults();
 
-  Future<FlutterSessionInfo> authLogin({required String fourWords, required String password});
+  Future<FlutterSessionInfo> authLogin(
+      {required String fourWords, required String password});
 
   Future<void> authLogout();
 
   Future<bool> authVaultExists({required String fourWords});
 
-  Future<List<FlutterEvent>> contactCreate({required String displayName, String? fourWords, required bool isFavourite});
+  Future<List<FlutterEvent>> contactCreate(
+      {required String displayName,
+      String? fourWords,
+      required bool isFavourite});
 
   Future<List<FlutterEvent>> contactDelete({required String contactId});
 
   Future<FlutterContact> contactGet({required String contactId});
 
-  Future<List<FlutterEvent>> contactLink({required String contactId, required String fourWords});
+  Future<List<FlutterEvent>> contactLink(
+      {required String contactId, required String fourWords});
 
-  Future<List<FlutterEvent>> contactRemoveFavourite({required String fourWords});
+  Future<List<FlutterEvent>> contactRemoveFavourite(
+      {required String fourWords});
 
   Future<List<FlutterEvent>> contactSetFavourite({required String fourWords});
 
-  Future<List<FlutterEvent>> contactUpdate({required String contactId, String? displayName, bool? isFavourite});
+  Future<List<FlutterEvent>> contactUpdate(
+      {required String contactId, String? displayName, bool? isFavourite});
 
   Future<List<FlutterContact>> contactsList();
 
@@ -70,23 +88,39 @@ abstract class CommunitasApi implements RustOpaqueInterface {
           required String deviceName,
           required String storagePath}) =>
       RustLib.instance.api.crateFlutterApiCommunitasApiCreate(
-          fourWords: fourWords, displayName: displayName, deviceName: deviceName, storagePath: storagePath);
+          fourWords: fourWords,
+          displayName: displayName,
+          deviceName: deviceName,
+          storagePath: storagePath);
 
   Future<List<FlutterEvent>> diskCreateDirectory(
-      {required String entityId, required FlutterDiskType diskType, required String path});
+      {required String entityId,
+      required FlutterDiskType diskType,
+      required String path});
 
   Future<List<FlutterEvent>> diskDeleteFile(
-      {required String entityId, required FlutterDiskType diskType, required String path});
+      {required String entityId,
+      required FlutterDiskType diskType,
+      required String path});
 
-  Future<FlutterDiskStats> diskGetStats({required String entityId, required FlutterDiskType diskType});
+  Future<FlutterDiskStats> diskGetStats(
+      {required String entityId, required FlutterDiskType diskType});
 
   Future<List<FlutterFileInfo>> diskListFiles(
-      {required String entityId, required FlutterDiskType diskType, required String path});
+      {required String entityId,
+      required FlutterDiskType diskType,
+      required String path});
 
-  Future<Uint8List> diskReadFile({required String entityId, required FlutterDiskType diskType, required String path});
+  Future<Uint8List> diskReadFile(
+      {required String entityId,
+      required FlutterDiskType diskType,
+      required String path});
 
   Future<List<FlutterEvent>> diskWriteFile(
-      {required String entityId, required FlutterDiskType diskType, required String path, required List<int> data});
+      {required String entityId,
+      required FlutterDiskType diskType,
+      required String path,
+      required List<int> data});
 
   Future<List<FlutterEvent>> entityAddMember(
       {required FlutterEntityType entityType,
@@ -95,16 +129,22 @@ abstract class CommunitasApi implements RustOpaqueInterface {
       required String role});
 
   Future<List<FlutterEvent>> entityCreate(
-      {required String name, required FlutterEntityType entityType, String? description, String? parentOrgId});
+      {required String name,
+      required FlutterEntityType entityType,
+      String? description,
+      String? parentOrgId});
 
   Future<FlutterEntity> entityGet({required String entityId});
 
   Future<List<FlutterEntity>> entityList();
 
-  Future<List<FlutterEntity>> entityListByType({required FlutterEntityType entityType});
+  Future<List<FlutterEntity>> entityListByType(
+      {required FlutterEntityType entityType});
 
   Future<List<FlutterEvent>> entityRemoveMember(
-      {required FlutterEntityType entityType, required String entityId, required String memberId});
+      {required FlutterEntityType entityType,
+      required String entityId,
+      required String memberId});
 
   Future<FlutterUserProfile> getProfile();
 
@@ -132,7 +172,9 @@ abstract class CommunitasApi implements RustOpaqueInterface {
   Future<List<FlutterEvent>> inviteRevoke({required String inviteId});
 
   Future<FlutterKanbanBoard> kanbanCreateBoard(
-      {required String entityId, required String boardName, String? description});
+      {required String entityId,
+      required String boardName,
+      String? description});
 
   Future<FlutterKanbanCard> kanbanCreateCard(
       {required String boardId,
@@ -141,24 +183,38 @@ abstract class CommunitasApi implements RustOpaqueInterface {
       String? description,
       String? assignee});
 
-  Future<FlutterKanbanColumn> kanbanCreateColumn({required String boardId, required String columnName, int? position});
+  Future<FlutterKanbanColumn> kanbanCreateColumn(
+      {required String boardId, required String columnName, int? position});
 
-  Future<List<FlutterEvent>> kanbanDeleteCard({required String boardId, required String cardId});
+  Future<List<FlutterEvent>> kanbanDeleteCard(
+      {required String boardId, required String cardId});
 
   Future<FlutterKanbanBoard> kanbanGetBoard({required String boardId});
 
   Future<List<FlutterKanbanBoard>> kanbanListBoards({required String entityId});
 
   Future<List<FlutterKanbanCard>> kanbanListCards(
-      {required String boardId, String? columnId, String? state, String? assigneeId, String? tagId});
+      {required String boardId,
+      String? columnId,
+      String? state,
+      String? assigneeId,
+      String? tagId});
 
-  Future<List<FlutterKanbanColumn>> kanbanListColumns({required String boardId});
+  Future<List<FlutterKanbanColumn>> kanbanListColumns(
+      {required String boardId});
 
   Future<List<FlutterEvent>> kanbanMoveCard(
-      {required String boardId, required String cardId, required String targetColumnId, int? position});
+      {required String boardId,
+      required String cardId,
+      required String targetColumnId,
+      int? position});
 
   Future<List<FlutterEvent>> kanbanUpdateCard(
-      {required String boardId, required String cardId, String? title, String? description, String? assignee});
+      {required String boardId,
+      required String cardId,
+      String? title,
+      String? description,
+      String? assignee});
 
   Future<List<FlutterEvent>> messageAddReaction(
       {required String entityId,
@@ -167,7 +223,9 @@ abstract class CommunitasApi implements RustOpaqueInterface {
       required String emoji});
 
   Future<List<FlutterEvent>> messageDelete(
-      {required String entityId, required FlutterEntityType entityType, required String messageId});
+      {required String entityId,
+      required FlutterEntityType entityType,
+      required String messageId});
 
   Future<List<FlutterEvent>> messageEdit(
       {required String entityId,
@@ -175,13 +233,15 @@ abstract class CommunitasApi implements RustOpaqueInterface {
       required String messageId,
       required String newText});
 
-  Future<FlutterMessage> messageGet({required String entityId, required String messageId});
+  Future<FlutterMessage> messageGet(
+      {required String entityId, required String messageId});
 
   Future<List<FlutterMessage>> messageList({required String entityId});
 
   Future<List<FlutterMessage>> messageListDirect({required String otherPeerId});
 
-  Future<List<FlutterMessage>> messageListThread({required String entityId, required String parentMessageId});
+  Future<List<FlutterMessage>> messageListThread(
+      {required String entityId, required String parentMessageId});
 
   Future<List<FlutterEvent>> messageRemoveReaction(
       {required String entityId,
@@ -190,13 +250,18 @@ abstract class CommunitasApi implements RustOpaqueInterface {
       required String emoji});
 
   Future<List<FlutterEvent>> messageSend(
-      {required String entityId, required FlutterEntityType entityType, required String text, String? replyToId});
+      {required String entityId,
+      required FlutterEntityType entityType,
+      required String text,
+      String? replyToId});
 
-  Future<List<FlutterEvent>> messageSendDirect({required List<String> recipients, required String text});
+  Future<List<FlutterEvent>> messageSendDirect(
+      {required List<String> recipients, required String text});
 
   Future<List<FlutterEvent>> presenceAnnounce();
 
-  Future<FlutterPresenceRecord?> presenceGetCachedPeer({required String pubkeyHex});
+  Future<FlutterPresenceRecord?> presenceGetCachedPeer(
+      {required String pubkeyHex});
 
   Future<FlutterPresenceRecord?> presenceGetOurRecord();
 
@@ -271,7 +336,11 @@ class FlutterDiskStats {
 
   @override
   int get hashCode =>
-      entityId.hashCode ^ diskType.hashCode ^ usedBytes.hashCode ^ fileCount.hashCode ^ dirCount.hashCode;
+      entityId.hashCode ^
+      diskType.hashCode ^
+      usedBytes.hashCode ^
+      fileCount.hashCode ^
+      dirCount.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -366,7 +435,8 @@ sealed class FlutterEvent with _$FlutterEvent {
   const factory FlutterEvent.networkingStarted({
     required String address,
   }) = FlutterEvent_NetworkingStarted;
-  const factory FlutterEvent.networkingStopped() = FlutterEvent_NetworkingStopped;
+  const factory FlutterEvent.networkingStopped() =
+      FlutterEvent_NetworkingStopped;
   const factory FlutterEvent.peerConnected({
     required String peerId,
   }) = FlutterEvent_PeerConnected;
@@ -456,7 +526,12 @@ class FlutterFileInfo {
   });
 
   @override
-  int get hashCode => path.hashCode ^ name.hashCode ^ isDirectory.hashCode ^ sizeBytes.hashCode ^ modifiedAt.hashCode;
+  int get hashCode =>
+      path.hashCode ^
+      name.hashCode ^
+      isDirectory.hashCode ^
+      sizeBytes.hashCode ^
+      modifiedAt.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -487,7 +562,12 @@ class FlutterKanbanBoard {
   });
 
   @override
-  int get hashCode => id.hashCode ^ entityId.hashCode ^ name.hashCode ^ description.hashCode ^ columnCount.hashCode;
+  int get hashCode =>
+      id.hashCode ^
+      entityId.hashCode ^
+      name.hashCode ^
+      description.hashCode ^
+      columnCount.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -521,7 +601,12 @@ class FlutterKanbanCard {
 
   @override
   int get hashCode =>
-      id.hashCode ^ columnId.hashCode ^ title.hashCode ^ description.hashCode ^ assignee.hashCode ^ position.hashCode;
+      id.hashCode ^
+      columnId.hashCode ^
+      title.hashCode ^
+      description.hashCode ^
+      assignee.hashCode ^
+      position.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -556,7 +641,12 @@ class FlutterKanbanColumn {
 
   @override
   int get hashCode =>
-      id.hashCode ^ boardId.hashCode ^ name.hashCode ^ position.hashCode ^ color.hashCode ^ wipLimit.hashCode;
+      id.hashCode ^
+      boardId.hashCode ^
+      name.hashCode ^
+      position.hashCode ^
+      color.hashCode ^
+      wipLimit.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -670,7 +760,11 @@ class FlutterPresenceRecord {
   });
 
   @override
-  int get hashCode => pubkeyHex.hashCode ^ connectionWords.hashCode ^ timestamp.hashCode ^ isVerified.hashCode;
+  int get hashCode =>
+      pubkeyHex.hashCode ^
+      connectionWords.hashCode ^
+      timestamp.hashCode ^
+      isVerified.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -722,7 +816,8 @@ class FlutterReaction {
   });
 
   @override
-  int get hashCode => emoji.hashCode ^ count.hashCode ^ userReacted.hashCode ^ peerIds.hashCode;
+  int get hashCode =>
+      emoji.hashCode ^ count.hashCode ^ userReacted.hashCode ^ peerIds.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -763,14 +858,22 @@ class FlutterSessionInfo {
   final String fourWords;
   final String displayName;
 
+  /// Hex-encoded ML-DSA-87 public key (the user's cryptographic identity)
+  final String pubkeyHex;
+
   const FlutterSessionInfo({
     required this.sessionId,
     required this.fourWords,
     required this.displayName,
+    required this.pubkeyHex,
   });
 
   @override
-  int get hashCode => sessionId.hashCode ^ fourWords.hashCode ^ displayName.hashCode;
+  int get hashCode =>
+      sessionId.hashCode ^
+      fourWords.hashCode ^
+      displayName.hashCode ^
+      pubkeyHex.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -779,7 +882,8 @@ class FlutterSessionInfo {
           runtimeType == other.runtimeType &&
           sessionId == other.sessionId &&
           fourWords == other.fourWords &&
-          displayName == other.displayName;
+          displayName == other.displayName &&
+          pubkeyHex == other.pubkeyHex;
 }
 
 /// User profile information
@@ -797,7 +901,11 @@ class FlutterUserProfile {
   });
 
   @override
-  int get hashCode => fourWords.hashCode ^ displayName.hashCode ^ deviceName.hashCode ^ deviceType.hashCode;
+  int get hashCode =>
+      fourWords.hashCode ^
+      displayName.hashCode ^
+      deviceName.hashCode ^
+      deviceType.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -828,7 +936,11 @@ class FlutterVaultInfo {
 
   @override
   int get hashCode =>
-      fourWords.hashCode ^ displayName.hashCode ^ createdAt.hashCode ^ lastAccessed.hashCode ^ sizeBytes.hashCode;
+      fourWords.hashCode ^
+      displayName.hashCode ^
+      createdAt.hashCode ^
+      lastAccessed.hashCode ^
+      sizeBytes.hashCode;
 
   @override
   bool operator ==(Object other) =>

@@ -1,9 +1,7 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../main.dart';
 import '../../../core/router.dart';
 import '../../../core/theme/colors.dart';
 import '../providers/auth_provider.dart';
@@ -315,47 +313,28 @@ class _RecoverIdentityScreenState extends ConsumerState<RecoverIdentityScreen> {
     });
 
     try {
-      if (kIsWeb) {
-        // Demo mode: simulate validation
-        await Future.delayed(const Duration(milliseconds: 500));
+      final normalizedMnemonic = words.join(' ');
+      final passphrase = _passphraseController.text.trim().isNotEmpty
+          ? _passphraseController.text.trim()
+          : null;
 
-        // Check if using a known test mnemonic
-        final normalizedMnemonic = words.join(' ');
-        if (normalizedMnemonic.startsWith('abandon abandon abandon')) {
-          setState(() {
-            _recoveredFourWords = 'test-vault-demo-key';
-            _isValidating = false;
-          });
-        } else {
-          setState(() {
-            _validationError = 'Invalid mnemonic (demo mode only accepts test vectors)';
-            _isValidating = false;
-          });
-        }
-      } else {
-        final normalizedMnemonic = words.join(' ');
-        final passphrase = _passphraseController.text.trim().isNotEmpty
-            ? _passphraseController.text.trim()
-            : null;
-
-        final isValid = await validateRecoveryMnemonic(mnemonic: normalizedMnemonic);
-        if (!isValid) {
-          setState(() {
-            _validationError = 'Invalid mnemonic phrase';
-            _isValidating = false;
-          });
-          return;
-        }
-
-        final preview = await previewIdentityFromMnemonic(
-          mnemonic: normalizedMnemonic,
-          passphrase: passphrase,
-        );
+      final isValid = await validateRecoveryMnemonic(mnemonic: normalizedMnemonic);
+      if (!isValid) {
         setState(() {
-          _recoveredFourWords = preview.fourWords;
+          _validationError = 'Invalid mnemonic phrase';
           _isValidating = false;
         });
+        return;
       }
+
+      final preview = await previewIdentityFromMnemonic(
+        mnemonic: normalizedMnemonic,
+        passphrase: passphrase,
+      );
+      setState(() {
+        _recoveredFourWords = preview.fourWords;
+        _isValidating = false;
+      });
     } catch (e) {
       debugPrint('Validation error: $e');
       setState(() {

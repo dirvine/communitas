@@ -7,7 +7,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'flutter_api.dart';
 import 'frb_generated.dart';
-import 'frb_generated.io.dart' if (dart.library.js_interop) 'frb_generated.web.dart';
+import 'frb_generated.io.dart'
+    if (dart.library.js_interop) 'frb_generated.web.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 /// Main entrypoint of the Rust API
@@ -49,16 +50,19 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   static void dispose() => instance.disposeImpl();
 
   @override
-  ApiImplConstructor<RustLibApiImpl, RustLibWire> get apiImplConstructor => RustLibApiImpl.new;
+  ApiImplConstructor<RustLibApiImpl, RustLibWire> get apiImplConstructor =>
+      RustLibApiImpl.new;
 
   @override
-  WireConstructor<RustLibWire> get wireConstructor => RustLibWire.fromExternalLibrary;
+  WireConstructor<RustLibWire> get wireConstructor =>
+      RustLibWire.fromExternalLibrary;
 
   @override
   Future<void> executeRustInitializers() async {}
 
   @override
-  ExternalLibraryLoaderConfig get defaultExternalLibraryLoaderConfig => kDefaultExternalLibraryLoaderConfig;
+  ExternalLibraryLoaderConfig get defaultExternalLibraryLoaderConfig =>
+      kDefaultExternalLibraryLoaderConfig;
 
   @override
   String get codegenVersion => '2.11.1';
@@ -66,8 +70,9 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   @override
   int get rustContentHash => -1768860543;
 
-  static const kDefaultExternalLibraryLoaderConfig = ExternalLibraryLoaderConfig(
-    stem: 'communitas_core',
+  static const kDefaultExternalLibraryLoaderConfig =
+      ExternalLibraryLoaderConfig(
+    stem: 'communitas_bindings',
     ioDirectory: '../communitas-core/target/release/',
     webPrefix: 'pkg/',
   );
@@ -75,29 +80,46 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
 
 abstract class RustLibApi extends BaseApi {
   Future<String> crateFlutterApiCommunitasApiAuthCreateVault(
-      {required CommunitasApi that, required String fourWords, required String displayName, required String password});
+      {required CommunitasApi that,
+      required String fourWords,
+      required String displayName,
+      required String password});
 
   Future<void> crateFlutterApiCommunitasApiAuthDeleteVault(
-      {required CommunitasApi that, required String fourWords, required String password});
+      {required CommunitasApi that,
+      required String fourWords,
+      required String password});
 
-  Future<String> crateFlutterApiCommunitasApiAuthExportVault({required CommunitasApi that, required bool includeData});
+  Future<String> crateFlutterApiCommunitasApiAuthExportVault(
+      {required CommunitasApi that, required bool includeData});
 
-  Future<FlutterSessionInfo?> crateFlutterApiCommunitasApiAuthGetCurrentSession({required CommunitasApi that});
+  Future<FlutterSessionInfo?> crateFlutterApiCommunitasApiAuthGetCurrentSession(
+      {required CommunitasApi that});
 
   Future<String> crateFlutterApiCommunitasApiAuthImportVault(
-      {required CommunitasApi that, required String backupBase64, required String password});
+      {required CommunitasApi that,
+      required String backupBase64,
+      required String password});
 
-  Future<List<FlutterVaultInfo>> crateFlutterApiCommunitasApiAuthListVaults({required CommunitasApi that});
+  Future<List<FlutterVaultInfo>> crateFlutterApiCommunitasApiAuthListVaults(
+      {required CommunitasApi that});
 
   Future<FlutterSessionInfo> crateFlutterApiCommunitasApiAuthLogin(
-      {required CommunitasApi that, required String fourWords, required String password});
+      {required CommunitasApi that,
+      required String fourWords,
+      required String password});
 
-  Future<void> crateFlutterApiCommunitasApiAuthLogout({required CommunitasApi that});
+  Future<void> crateFlutterApiCommunitasApiAuthLogout(
+      {required CommunitasApi that});
 
-  Future<bool> crateFlutterApiCommunitasApiAuthVaultExists({required CommunitasApi that, required String fourWords});
+  Future<bool> crateFlutterApiCommunitasApiAuthVaultExists(
+      {required CommunitasApi that, required String fourWords});
 
   Future<List<FlutterEvent>> crateFlutterApiCommunitasApiContactCreate(
-      {required CommunitasApi that, required String displayName, String? fourWords, required bool isFavourite});
+      {required CommunitasApi that,
+      required String displayName,
+      String? fourWords,
+      required bool isFavourite});
 
   Future<List<FlutterEvent>> crateFlutterApiCommunitasApiContactDelete(
       {required CommunitasApi that, required String contactId});
@@ -106,7 +128,9 @@ abstract class RustLibApi extends BaseApi {
       {required CommunitasApi that, required String contactId});
 
   Future<List<FlutterEvent>> crateFlutterApiCommunitasApiContactLink(
-      {required CommunitasApi that, required String contactId, required String fourWords});
+      {required CommunitasApi that,
+      required String contactId,
+      required String fourWords});
 
   Future<List<FlutterEvent>> crateFlutterApiCommunitasApiContactRemoveFavourite(
       {required CommunitasApi that, required String fourWords});
@@ -115,11 +139,17 @@ abstract class RustLibApi extends BaseApi {
       {required CommunitasApi that, required String fourWords});
 
   Future<List<FlutterEvent>> crateFlutterApiCommunitasApiContactUpdate(
-      {required CommunitasApi that, required String contactId, String? displayName, bool? isFavourite});
+      {required CommunitasApi that,
+      required String contactId,
+      String? displayName,
+      bool? isFavourite});
 
-  Future<List<FlutterContact>> crateFlutterApiCommunitasApiContactsList({required CommunitasApi that});
+  Future<List<FlutterContact>> crateFlutterApiCommunitasApiContactsList(
+      {required CommunitasApi that});
 
-  Future<List<FlutterContact>> crateFlutterApiCommunitasApiContactsListFavourites({required CommunitasApi that});
+  Future<List<FlutterContact>>
+      crateFlutterApiCommunitasApiContactsListFavourites(
+          {required CommunitasApi that});
 
   Future<List<FlutterContact>> crateFlutterApiCommunitasApiContactsSearch(
       {required CommunitasApi that, required String query});
@@ -131,19 +161,33 @@ abstract class RustLibApi extends BaseApi {
       required String storagePath});
 
   Future<List<FlutterEvent>> crateFlutterApiCommunitasApiDiskCreateDirectory(
-      {required CommunitasApi that, required String entityId, required FlutterDiskType diskType, required String path});
+      {required CommunitasApi that,
+      required String entityId,
+      required FlutterDiskType diskType,
+      required String path});
 
   Future<List<FlutterEvent>> crateFlutterApiCommunitasApiDiskDeleteFile(
-      {required CommunitasApi that, required String entityId, required FlutterDiskType diskType, required String path});
+      {required CommunitasApi that,
+      required String entityId,
+      required FlutterDiskType diskType,
+      required String path});
 
   Future<FlutterDiskStats> crateFlutterApiCommunitasApiDiskGetStats(
-      {required CommunitasApi that, required String entityId, required FlutterDiskType diskType});
+      {required CommunitasApi that,
+      required String entityId,
+      required FlutterDiskType diskType});
 
   Future<List<FlutterFileInfo>> crateFlutterApiCommunitasApiDiskListFiles(
-      {required CommunitasApi that, required String entityId, required FlutterDiskType diskType, required String path});
+      {required CommunitasApi that,
+      required String entityId,
+      required FlutterDiskType diskType,
+      required String path});
 
   Future<Uint8List> crateFlutterApiCommunitasApiDiskReadFile(
-      {required CommunitasApi that, required String entityId, required FlutterDiskType diskType, required String path});
+      {required CommunitasApi that,
+      required String entityId,
+      required FlutterDiskType diskType,
+      required String path});
 
   Future<List<FlutterEvent>> crateFlutterApiCommunitasApiDiskWriteFile(
       {required CommunitasApi that,
@@ -166,9 +210,11 @@ abstract class RustLibApi extends BaseApi {
       String? description,
       String? parentOrgId});
 
-  Future<FlutterEntity> crateFlutterApiCommunitasApiEntityGet({required CommunitasApi that, required String entityId});
+  Future<FlutterEntity> crateFlutterApiCommunitasApiEntityGet(
+      {required CommunitasApi that, required String entityId});
 
-  Future<List<FlutterEntity>> crateFlutterApiCommunitasApiEntityList({required CommunitasApi that});
+  Future<List<FlutterEntity>> crateFlutterApiCommunitasApiEntityList(
+      {required CommunitasApi that});
 
   Future<List<FlutterEntity>> crateFlutterApiCommunitasApiEntityListByType(
       {required CommunitasApi that, required FlutterEntityType entityType});
@@ -179,18 +225,23 @@ abstract class RustLibApi extends BaseApi {
       required String entityId,
       required String memberId});
 
-  Future<FlutterUserProfile> crateFlutterApiCommunitasApiGetProfile({required CommunitasApi that});
+  Future<FlutterUserProfile> crateFlutterApiCommunitasApiGetProfile(
+      {required CommunitasApi that});
 
   Future<List<FlutterEvent>> crateFlutterApiCommunitasApiGossipConnectToPeer(
       {required CommunitasApi that, required String fourWords});
 
-  Future<String?> crateFlutterApiCommunitasApiGossipGetConnectionWords({required CommunitasApi that});
+  Future<String?> crateFlutterApiCommunitasApiGossipGetConnectionWords(
+      {required CommunitasApi that});
 
-  Future<FlutterNetworkInfo> crateFlutterApiCommunitasApiGossipGetNetworkInfo({required CommunitasApi that});
+  Future<FlutterNetworkInfo> crateFlutterApiCommunitasApiGossipGetNetworkInfo(
+      {required CommunitasApi that});
 
-  Future<List<FlutterEvent>> crateFlutterApiCommunitasApiGossipStart({required CommunitasApi that, int? port});
+  Future<List<FlutterEvent>> crateFlutterApiCommunitasApiGossipStart(
+      {required CommunitasApi that, int? port});
 
-  Future<List<FlutterEvent>> crateFlutterApiCommunitasApiGossipStop({required CommunitasApi that});
+  Future<List<FlutterEvent>> crateFlutterApiCommunitasApiGossipStop(
+      {required CommunitasApi that});
 
   Future<List<FlutterEvent>> crateFlutterApiCommunitasApiInviteAccept(
       {required CommunitasApi that, required String inviteId});
@@ -210,7 +261,10 @@ abstract class RustLibApi extends BaseApi {
       {required CommunitasApi that, required String inviteId});
 
   Future<FlutterKanbanBoard> crateFlutterApiCommunitasApiKanbanCreateBoard(
-      {required CommunitasApi that, required String entityId, required String boardName, String? description});
+      {required CommunitasApi that,
+      required String entityId,
+      required String boardName,
+      String? description});
 
   Future<FlutterKanbanCard> crateFlutterApiCommunitasApiKanbanCreateCard(
       {required CommunitasApi that,
@@ -221,10 +275,15 @@ abstract class RustLibApi extends BaseApi {
       String? assignee});
 
   Future<FlutterKanbanColumn> crateFlutterApiCommunitasApiKanbanCreateColumn(
-      {required CommunitasApi that, required String boardId, required String columnName, int? position});
+      {required CommunitasApi that,
+      required String boardId,
+      required String columnName,
+      int? position});
 
   Future<List<FlutterEvent>> crateFlutterApiCommunitasApiKanbanDeleteCard(
-      {required CommunitasApi that, required String boardId, required String cardId});
+      {required CommunitasApi that,
+      required String boardId,
+      required String cardId});
 
   Future<FlutterKanbanBoard> crateFlutterApiCommunitasApiKanbanGetBoard(
       {required CommunitasApi that, required String boardId});
@@ -240,8 +299,9 @@ abstract class RustLibApi extends BaseApi {
       String? assigneeId,
       String? tagId});
 
-  Future<List<FlutterKanbanColumn>> crateFlutterApiCommunitasApiKanbanListColumns(
-      {required CommunitasApi that, required String boardId});
+  Future<List<FlutterKanbanColumn>>
+      crateFlutterApiCommunitasApiKanbanListColumns(
+          {required CommunitasApi that, required String boardId});
 
   Future<List<FlutterEvent>> crateFlutterApiCommunitasApiKanbanMoveCard(
       {required CommunitasApi that,
@@ -279,7 +339,9 @@ abstract class RustLibApi extends BaseApi {
       required String newText});
 
   Future<FlutterMessage> crateFlutterApiCommunitasApiMessageGet(
-      {required CommunitasApi that, required String entityId, required String messageId});
+      {required CommunitasApi that,
+      required String entityId,
+      required String messageId});
 
   Future<List<FlutterMessage>> crateFlutterApiCommunitasApiMessageList(
       {required CommunitasApi that, required String entityId});
@@ -288,7 +350,9 @@ abstract class RustLibApi extends BaseApi {
       {required CommunitasApi that, required String otherPeerId});
 
   Future<List<FlutterMessage>> crateFlutterApiCommunitasApiMessageListThread(
-      {required CommunitasApi that, required String entityId, required String parentMessageId});
+      {required CommunitasApi that,
+      required String entityId,
+      required String parentMessageId});
 
   Future<List<FlutterEvent>> crateFlutterApiCommunitasApiMessageRemoveReaction(
       {required CommunitasApi that,
@@ -305,19 +369,26 @@ abstract class RustLibApi extends BaseApi {
       String? replyToId});
 
   Future<List<FlutterEvent>> crateFlutterApiCommunitasApiMessageSendDirect(
-      {required CommunitasApi that, required List<String> recipients, required String text});
+      {required CommunitasApi that,
+      required List<String> recipients,
+      required String text});
 
-  Future<List<FlutterEvent>> crateFlutterApiCommunitasApiPresenceAnnounce({required CommunitasApi that});
+  Future<List<FlutterEvent>> crateFlutterApiCommunitasApiPresenceAnnounce(
+      {required CommunitasApi that});
 
-  Future<FlutterPresenceRecord?> crateFlutterApiCommunitasApiPresenceGetCachedPeer(
-      {required CommunitasApi that, required String pubkeyHex});
+  Future<FlutterPresenceRecord?>
+      crateFlutterApiCommunitasApiPresenceGetCachedPeer(
+          {required CommunitasApi that, required String pubkeyHex});
 
-  Future<FlutterPresenceRecord?> crateFlutterApiCommunitasApiPresenceGetOurRecord({required CommunitasApi that});
+  Future<FlutterPresenceRecord?>
+      crateFlutterApiCommunitasApiPresenceGetOurRecord(
+          {required CommunitasApi that});
 
   Future<FlutterPresenceStatus> crateFlutterApiCommunitasApiPresenceGetStatus(
       {required CommunitasApi that, required String peerId});
 
-  Future<List<String>> crateFlutterApiCommunitasApiPresenceListOnlinePeers({required CommunitasApi that});
+  Future<List<String>> crateFlutterApiCommunitasApiPresenceListOnlinePeers(
+      {required CommunitasApi that});
 
   Future<FlutterPresenceRecord?> crateFlutterApiCommunitasApiPresenceQueryPeer(
       {required CommunitasApi that, required String pubkeyHex});
@@ -333,13 +404,17 @@ abstract class RustLibApi extends BaseApi {
   Future<FlutterRecoveredIdentity> crateFlutterApiRecoverIdentityFromMnemonic(
       {required String mnemonic, String? passphrase});
 
-  Future<bool> crateFlutterApiValidateRecoveryMnemonic({required String mnemonic});
+  Future<bool> crateFlutterApiValidateRecoveryMnemonic(
+      {required String mnemonic});
 
-  RustArcIncrementStrongCountFnType get rust_arc_increment_strong_count_CommunitasApi;
+  RustArcIncrementStrongCountFnType
+      get rust_arc_increment_strong_count_CommunitasApi;
 
-  RustArcDecrementStrongCountFnType get rust_arc_decrement_strong_count_CommunitasApi;
+  RustArcDecrementStrongCountFnType
+      get rust_arc_decrement_strong_count_CommunitasApi;
 
-  CrossPlatformFinalizerArg get rust_arc_decrement_strong_count_CommunitasApiPtr;
+  CrossPlatformFinalizerArg
+      get rust_arc_decrement_strong_count_CommunitasApiPtr;
 }
 
 class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
@@ -352,7 +427,10 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @override
   Future<String> crateFlutterApiCommunitasApiAuthCreateVault(
-      {required CommunitasApi that, required String fourWords, required String displayName, required String password}) {
+      {required CommunitasApi that,
+      required String fourWords,
+      required String displayName,
+      required String password}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
@@ -361,7 +439,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(fourWords, serializer);
         sse_encode_String(displayName, serializer);
         sse_encode_String(password, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 1, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 1, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -373,14 +452,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiAuthCreateVaultConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiAuthCreateVaultConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_auth_create_vault",
         argNames: ["that", "fourWords", "displayName", "password"],
       );
 
   @override
   Future<void> crateFlutterApiCommunitasApiAuthDeleteVault(
-      {required CommunitasApi that, required String fourWords, required String password}) {
+      {required CommunitasApi that,
+      required String fourWords,
+      required String password}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
@@ -388,7 +470,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             that, serializer);
         sse_encode_String(fourWords, serializer);
         sse_encode_String(password, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 2, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 2, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -400,20 +483,23 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiAuthDeleteVaultConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiAuthDeleteVaultConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_auth_delete_vault",
         argNames: ["that", "fourWords", "password"],
       );
 
   @override
-  Future<String> crateFlutterApiCommunitasApiAuthExportVault({required CommunitasApi that, required bool includeData}) {
+  Future<String> crateFlutterApiCommunitasApiAuthExportVault(
+      {required CommunitasApi that, required bool includeData}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
             that, serializer);
         sse_encode_bool(includeData, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 3, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 3, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -425,19 +511,22 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiAuthExportVaultConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiAuthExportVaultConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_auth_export_vault",
         argNames: ["that", "includeData"],
       );
 
   @override
-  Future<FlutterSessionInfo?> crateFlutterApiCommunitasApiAuthGetCurrentSession({required CommunitasApi that}) {
+  Future<FlutterSessionInfo?> crateFlutterApiCommunitasApiAuthGetCurrentSession(
+      {required CommunitasApi that}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
             that, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 4, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 4, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_opt_box_autoadd_flutter_session_info,
@@ -449,14 +538,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiAuthGetCurrentSessionConstMeta => const TaskConstMeta(
-        debugName: "CommunitasApi_auth_get_current_session",
-        argNames: ["that"],
-      );
+  TaskConstMeta
+      get kCrateFlutterApiCommunitasApiAuthGetCurrentSessionConstMeta =>
+          const TaskConstMeta(
+            debugName: "CommunitasApi_auth_get_current_session",
+            argNames: ["that"],
+          );
 
   @override
   Future<String> crateFlutterApiCommunitasApiAuthImportVault(
-      {required CommunitasApi that, required String backupBase64, required String password}) {
+      {required CommunitasApi that,
+      required String backupBase64,
+      required String password}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
@@ -464,7 +557,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             that, serializer);
         sse_encode_String(backupBase64, serializer);
         sse_encode_String(password, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 5, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 5, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -476,19 +570,22 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiAuthImportVaultConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiAuthImportVaultConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_auth_import_vault",
         argNames: ["that", "backupBase64", "password"],
       );
 
   @override
-  Future<List<FlutterVaultInfo>> crateFlutterApiCommunitasApiAuthListVaults({required CommunitasApi that}) {
+  Future<List<FlutterVaultInfo>> crateFlutterApiCommunitasApiAuthListVaults(
+      {required CommunitasApi that}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
             that, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 6, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 6, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_flutter_vault_info,
@@ -500,14 +597,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiAuthListVaultsConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiAuthListVaultsConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_auth_list_vaults",
         argNames: ["that"],
       );
 
   @override
   Future<FlutterSessionInfo> crateFlutterApiCommunitasApiAuthLogin(
-      {required CommunitasApi that, required String fourWords, required String password}) {
+      {required CommunitasApi that,
+      required String fourWords,
+      required String password}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
@@ -515,7 +615,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             that, serializer);
         sse_encode_String(fourWords, serializer);
         sse_encode_String(password, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 7, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 7, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_flutter_session_info,
@@ -527,19 +628,22 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiAuthLoginConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiAuthLoginConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_auth_login",
         argNames: ["that", "fourWords", "password"],
       );
 
   @override
-  Future<void> crateFlutterApiCommunitasApiAuthLogout({required CommunitasApi that}) {
+  Future<void> crateFlutterApiCommunitasApiAuthLogout(
+      {required CommunitasApi that}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
             that, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 8, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 8, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -551,20 +655,23 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiAuthLogoutConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiAuthLogoutConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_auth_logout",
         argNames: ["that"],
       );
 
   @override
-  Future<bool> crateFlutterApiCommunitasApiAuthVaultExists({required CommunitasApi that, required String fourWords}) {
+  Future<bool> crateFlutterApiCommunitasApiAuthVaultExists(
+      {required CommunitasApi that, required String fourWords}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
             that, serializer);
         sse_encode_String(fourWords, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 9, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 9, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bool,
@@ -576,14 +683,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiAuthVaultExistsConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiAuthVaultExistsConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_auth_vault_exists",
         argNames: ["that", "fourWords"],
       );
 
   @override
   Future<List<FlutterEvent>> crateFlutterApiCommunitasApiContactCreate(
-      {required CommunitasApi that, required String displayName, String? fourWords, required bool isFavourite}) {
+      {required CommunitasApi that,
+      required String displayName,
+      String? fourWords,
+      required bool isFavourite}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
@@ -592,7 +703,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(displayName, serializer);
         sse_encode_opt_String(fourWords, serializer);
         sse_encode_bool(isFavourite, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 10, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 10, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_flutter_event,
@@ -604,7 +716,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiContactCreateConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiContactCreateConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_contact_create",
         argNames: ["that", "displayName", "fourWords", "isFavourite"],
       );
@@ -618,7 +731,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
             that, serializer);
         sse_encode_String(contactId, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 11, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 11, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_flutter_event,
@@ -630,7 +744,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiContactDeleteConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiContactDeleteConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_contact_delete",
         argNames: ["that", "contactId"],
       );
@@ -644,7 +759,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
             that, serializer);
         sse_encode_String(contactId, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 12, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 12, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_flutter_contact,
@@ -656,14 +772,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiContactGetConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiContactGetConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_contact_get",
         argNames: ["that", "contactId"],
       );
 
   @override
   Future<List<FlutterEvent>> crateFlutterApiCommunitasApiContactLink(
-      {required CommunitasApi that, required String contactId, required String fourWords}) {
+      {required CommunitasApi that,
+      required String contactId,
+      required String fourWords}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
@@ -671,7 +790,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             that, serializer);
         sse_encode_String(contactId, serializer);
         sse_encode_String(fourWords, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 13, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 13, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_flutter_event,
@@ -683,7 +803,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiContactLinkConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiContactLinkConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_contact_link",
         argNames: ["that", "contactId", "fourWords"],
       );
@@ -697,7 +818,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
             that, serializer);
         sse_encode_String(fourWords, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 14, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 14, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_flutter_event,
@@ -709,10 +831,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiContactRemoveFavouriteConstMeta => const TaskConstMeta(
-        debugName: "CommunitasApi_contact_remove_favourite",
-        argNames: ["that", "fourWords"],
-      );
+  TaskConstMeta
+      get kCrateFlutterApiCommunitasApiContactRemoveFavouriteConstMeta =>
+          const TaskConstMeta(
+            debugName: "CommunitasApi_contact_remove_favourite",
+            argNames: ["that", "fourWords"],
+          );
 
   @override
   Future<List<FlutterEvent>> crateFlutterApiCommunitasApiContactSetFavourite(
@@ -723,7 +847,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
             that, serializer);
         sse_encode_String(fourWords, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 15, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 15, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_flutter_event,
@@ -735,14 +860,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiContactSetFavouriteConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiContactSetFavouriteConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_contact_set_favourite",
         argNames: ["that", "fourWords"],
       );
 
   @override
   Future<List<FlutterEvent>> crateFlutterApiCommunitasApiContactUpdate(
-      {required CommunitasApi that, required String contactId, String? displayName, bool? isFavourite}) {
+      {required CommunitasApi that,
+      required String contactId,
+      String? displayName,
+      bool? isFavourite}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
@@ -751,7 +880,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(contactId, serializer);
         sse_encode_opt_String(displayName, serializer);
         sse_encode_opt_box_autoadd_bool(isFavourite, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 16, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 16, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_flutter_event,
@@ -763,19 +893,22 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiContactUpdateConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiContactUpdateConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_contact_update",
         argNames: ["that", "contactId", "displayName", "isFavourite"],
       );
 
   @override
-  Future<List<FlutterContact>> crateFlutterApiCommunitasApiContactsList({required CommunitasApi that}) {
+  Future<List<FlutterContact>> crateFlutterApiCommunitasApiContactsList(
+      {required CommunitasApi that}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
             that, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 17, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 17, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_flutter_contact,
@@ -787,19 +920,23 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiContactsListConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiContactsListConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_contacts_list",
         argNames: ["that"],
       );
 
   @override
-  Future<List<FlutterContact>> crateFlutterApiCommunitasApiContactsListFavourites({required CommunitasApi that}) {
+  Future<List<FlutterContact>>
+      crateFlutterApiCommunitasApiContactsListFavourites(
+          {required CommunitasApi that}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
             that, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 18, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 18, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_flutter_contact,
@@ -811,10 +948,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiContactsListFavouritesConstMeta => const TaskConstMeta(
-        debugName: "CommunitasApi_contacts_list_favourites",
-        argNames: ["that"],
-      );
+  TaskConstMeta
+      get kCrateFlutterApiCommunitasApiContactsListFavouritesConstMeta =>
+          const TaskConstMeta(
+            debugName: "CommunitasApi_contacts_list_favourites",
+            argNames: ["that"],
+          );
 
   @override
   Future<List<FlutterContact>> crateFlutterApiCommunitasApiContactsSearch(
@@ -825,7 +964,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
             that, serializer);
         sse_encode_String(query, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 19, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 19, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_flutter_contact,
@@ -837,7 +977,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiContactsSearchConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiContactsSearchConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_contacts_search",
         argNames: ["that", "query"],
       );
@@ -855,7 +996,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(displayName, serializer);
         sse_encode_String(deviceName, serializer);
         sse_encode_String(storagePath, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 20, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 20, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData:
@@ -868,7 +1010,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiCreateConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiCreateConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_create",
         argNames: ["fourWords", "displayName", "deviceName", "storagePath"],
       );
@@ -887,7 +1030,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(entityId, serializer);
         sse_encode_flutter_disk_type(diskType, serializer);
         sse_encode_String(path, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 21, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 21, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_flutter_event,
@@ -899,7 +1043,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiDiskCreateDirectoryConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiDiskCreateDirectoryConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_disk_create_directory",
         argNames: ["that", "entityId", "diskType", "path"],
       );
@@ -918,7 +1063,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(entityId, serializer);
         sse_encode_flutter_disk_type(diskType, serializer);
         sse_encode_String(path, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 22, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 22, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_flutter_event,
@@ -930,14 +1076,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiDiskDeleteFileConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiDiskDeleteFileConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_disk_delete_file",
         argNames: ["that", "entityId", "diskType", "path"],
       );
 
   @override
   Future<FlutterDiskStats> crateFlutterApiCommunitasApiDiskGetStats(
-      {required CommunitasApi that, required String entityId, required FlutterDiskType diskType}) {
+      {required CommunitasApi that,
+      required String entityId,
+      required FlutterDiskType diskType}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
@@ -945,7 +1094,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             that, serializer);
         sse_encode_String(entityId, serializer);
         sse_encode_flutter_disk_type(diskType, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 23, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 23, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_flutter_disk_stats,
@@ -957,7 +1107,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiDiskGetStatsConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiDiskGetStatsConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_disk_get_stats",
         argNames: ["that", "entityId", "diskType"],
       );
@@ -976,7 +1127,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(entityId, serializer);
         sse_encode_flutter_disk_type(diskType, serializer);
         sse_encode_String(path, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 24, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 24, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_flutter_file_info,
@@ -988,7 +1140,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiDiskListFilesConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiDiskListFilesConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_disk_list_files",
         argNames: ["that", "entityId", "diskType", "path"],
       );
@@ -1007,7 +1160,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(entityId, serializer);
         sse_encode_flutter_disk_type(diskType, serializer);
         sse_encode_String(path, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 25, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 25, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_prim_u_8_strict,
@@ -1019,7 +1173,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiDiskReadFileConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiDiskReadFileConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_disk_read_file",
         argNames: ["that", "entityId", "diskType", "path"],
       );
@@ -1040,7 +1195,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_flutter_disk_type(diskType, serializer);
         sse_encode_String(path, serializer);
         sse_encode_list_prim_u_8_loose(data, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 26, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 26, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_flutter_event,
@@ -1052,7 +1208,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiDiskWriteFileConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiDiskWriteFileConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_disk_write_file",
         argNames: ["that", "entityId", "diskType", "path", "data"],
       );
@@ -1073,7 +1230,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(entityId, serializer);
         sse_encode_String(memberId, serializer);
         sse_encode_String(role, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 27, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 27, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_flutter_event,
@@ -1085,7 +1243,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiEntityAddMemberConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiEntityAddMemberConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_entity_add_member",
         argNames: ["that", "entityType", "entityId", "memberId", "role"],
       );
@@ -1106,7 +1265,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_flutter_entity_type(entityType, serializer);
         sse_encode_opt_String(description, serializer);
         sse_encode_opt_String(parentOrgId, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 28, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 28, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_flutter_event,
@@ -1118,20 +1278,23 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiEntityCreateConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiEntityCreateConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_entity_create",
         argNames: ["that", "name", "entityType", "description", "parentOrgId"],
       );
 
   @override
-  Future<FlutterEntity> crateFlutterApiCommunitasApiEntityGet({required CommunitasApi that, required String entityId}) {
+  Future<FlutterEntity> crateFlutterApiCommunitasApiEntityGet(
+      {required CommunitasApi that, required String entityId}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
             that, serializer);
         sse_encode_String(entityId, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 29, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 29, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_flutter_entity,
@@ -1143,19 +1306,22 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiEntityGetConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiEntityGetConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_entity_get",
         argNames: ["that", "entityId"],
       );
 
   @override
-  Future<List<FlutterEntity>> crateFlutterApiCommunitasApiEntityList({required CommunitasApi that}) {
+  Future<List<FlutterEntity>> crateFlutterApiCommunitasApiEntityList(
+      {required CommunitasApi that}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
             that, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 30, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 30, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_flutter_entity,
@@ -1167,7 +1333,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiEntityListConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiEntityListConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_entity_list",
         argNames: ["that"],
       );
@@ -1181,7 +1348,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
             that, serializer);
         sse_encode_flutter_entity_type(entityType, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 31, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 31, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_flutter_entity,
@@ -1193,7 +1361,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiEntityListByTypeConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiEntityListByTypeConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_entity_list_by_type",
         argNames: ["that", "entityType"],
       );
@@ -1212,7 +1381,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_flutter_entity_type(entityType, serializer);
         sse_encode_String(entityId, serializer);
         sse_encode_String(memberId, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 32, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 32, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_flutter_event,
@@ -1224,19 +1394,22 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiEntityRemoveMemberConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiEntityRemoveMemberConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_entity_remove_member",
         argNames: ["that", "entityType", "entityId", "memberId"],
       );
 
   @override
-  Future<FlutterUserProfile> crateFlutterApiCommunitasApiGetProfile({required CommunitasApi that}) {
+  Future<FlutterUserProfile> crateFlutterApiCommunitasApiGetProfile(
+      {required CommunitasApi that}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
             that, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 33, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 33, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_flutter_user_profile,
@@ -1248,7 +1421,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiGetProfileConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiGetProfileConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_get_profile",
         argNames: ["that"],
       );
@@ -1262,7 +1436,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
             that, serializer);
         sse_encode_String(fourWords, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 34, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 34, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_flutter_event,
@@ -1274,19 +1449,22 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiGossipConnectToPeerConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiGossipConnectToPeerConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_gossip_connect_to_peer",
         argNames: ["that", "fourWords"],
       );
 
   @override
-  Future<String?> crateFlutterApiCommunitasApiGossipGetConnectionWords({required CommunitasApi that}) {
+  Future<String?> crateFlutterApiCommunitasApiGossipGetConnectionWords(
+      {required CommunitasApi that}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
             that, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 35, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 35, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_opt_String,
@@ -1298,19 +1476,23 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiGossipGetConnectionWordsConstMeta => const TaskConstMeta(
-        debugName: "CommunitasApi_gossip_get_connection_words",
-        argNames: ["that"],
-      );
+  TaskConstMeta
+      get kCrateFlutterApiCommunitasApiGossipGetConnectionWordsConstMeta =>
+          const TaskConstMeta(
+            debugName: "CommunitasApi_gossip_get_connection_words",
+            argNames: ["that"],
+          );
 
   @override
-  Future<FlutterNetworkInfo> crateFlutterApiCommunitasApiGossipGetNetworkInfo({required CommunitasApi that}) {
+  Future<FlutterNetworkInfo> crateFlutterApiCommunitasApiGossipGetNetworkInfo(
+      {required CommunitasApi that}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
             that, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 36, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 36, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_flutter_network_info,
@@ -1322,20 +1504,24 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiGossipGetNetworkInfoConstMeta => const TaskConstMeta(
-        debugName: "CommunitasApi_gossip_get_network_info",
-        argNames: ["that"],
-      );
+  TaskConstMeta
+      get kCrateFlutterApiCommunitasApiGossipGetNetworkInfoConstMeta =>
+          const TaskConstMeta(
+            debugName: "CommunitasApi_gossip_get_network_info",
+            argNames: ["that"],
+          );
 
   @override
-  Future<List<FlutterEvent>> crateFlutterApiCommunitasApiGossipStart({required CommunitasApi that, int? port}) {
+  Future<List<FlutterEvent>> crateFlutterApiCommunitasApiGossipStart(
+      {required CommunitasApi that, int? port}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
             that, serializer);
         sse_encode_opt_box_autoadd_u_16(port, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 37, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 37, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_flutter_event,
@@ -1347,19 +1533,22 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiGossipStartConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiGossipStartConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_gossip_start",
         argNames: ["that", "port"],
       );
 
   @override
-  Future<List<FlutterEvent>> crateFlutterApiCommunitasApiGossipStop({required CommunitasApi that}) {
+  Future<List<FlutterEvent>> crateFlutterApiCommunitasApiGossipStop(
+      {required CommunitasApi that}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
             that, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 38, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 38, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_flutter_event,
@@ -1371,7 +1560,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiGossipStopConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiGossipStopConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_gossip_stop",
         argNames: ["that"],
       );
@@ -1385,7 +1575,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
             that, serializer);
         sse_encode_String(inviteId, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 39, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 39, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_flutter_event,
@@ -1397,7 +1588,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiInviteAcceptConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiInviteAcceptConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_invite_accept",
         argNames: ["that", "inviteId"],
       );
@@ -1420,7 +1612,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(entityId, serializer);
         sse_encode_String(role, serializer);
         sse_encode_opt_String(message, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 40, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 40, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_flutter_event,
@@ -1432,9 +1625,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiInviteCreateConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiInviteCreateConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_invite_create",
-        argNames: ["that", "recipientId", "entityType", "entityId", "role", "message"],
+        argNames: [
+          "that",
+          "recipientId",
+          "entityType",
+          "entityId",
+          "role",
+          "message"
+        ],
       );
 
   @override
@@ -1446,7 +1647,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
             that, serializer);
         sse_encode_String(inviteId, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 41, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 41, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_flutter_event,
@@ -1458,7 +1660,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiInviteRejectConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiInviteRejectConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_invite_reject",
         argNames: ["that", "inviteId"],
       );
@@ -1472,7 +1675,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
             that, serializer);
         sse_encode_String(inviteId, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 42, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 42, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_flutter_event,
@@ -1484,14 +1688,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiInviteRevokeConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiInviteRevokeConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_invite_revoke",
         argNames: ["that", "inviteId"],
       );
 
   @override
   Future<FlutterKanbanBoard> crateFlutterApiCommunitasApiKanbanCreateBoard(
-      {required CommunitasApi that, required String entityId, required String boardName, String? description}) {
+      {required CommunitasApi that,
+      required String entityId,
+      required String boardName,
+      String? description}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
@@ -1500,7 +1708,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(entityId, serializer);
         sse_encode_String(boardName, serializer);
         sse_encode_opt_String(description, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 43, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 43, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_flutter_kanban_board,
@@ -1512,7 +1721,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiKanbanCreateBoardConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiKanbanCreateBoardConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_kanban_create_board",
         argNames: ["that", "entityId", "boardName", "description"],
       );
@@ -1535,7 +1745,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(title, serializer);
         sse_encode_opt_String(description, serializer);
         sse_encode_opt_String(assignee, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 44, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 44, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_flutter_kanban_card,
@@ -1547,14 +1758,25 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiKanbanCreateCardConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiKanbanCreateCardConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_kanban_create_card",
-        argNames: ["that", "boardId", "columnId", "title", "description", "assignee"],
+        argNames: [
+          "that",
+          "boardId",
+          "columnId",
+          "title",
+          "description",
+          "assignee"
+        ],
       );
 
   @override
   Future<FlutterKanbanColumn> crateFlutterApiCommunitasApiKanbanCreateColumn(
-      {required CommunitasApi that, required String boardId, required String columnName, int? position}) {
+      {required CommunitasApi that,
+      required String boardId,
+      required String columnName,
+      int? position}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
@@ -1563,7 +1785,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(boardId, serializer);
         sse_encode_String(columnName, serializer);
         sse_encode_opt_box_autoadd_u_32(position, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 45, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 45, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_flutter_kanban_column,
@@ -1575,14 +1798,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiKanbanCreateColumnConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiKanbanCreateColumnConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_kanban_create_column",
         argNames: ["that", "boardId", "columnName", "position"],
       );
 
   @override
   Future<List<FlutterEvent>> crateFlutterApiCommunitasApiKanbanDeleteCard(
-      {required CommunitasApi that, required String boardId, required String cardId}) {
+      {required CommunitasApi that,
+      required String boardId,
+      required String cardId}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
@@ -1590,7 +1816,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             that, serializer);
         sse_encode_String(boardId, serializer);
         sse_encode_String(cardId, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 46, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 46, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_flutter_event,
@@ -1602,7 +1829,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiKanbanDeleteCardConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiKanbanDeleteCardConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_kanban_delete_card",
         argNames: ["that", "boardId", "cardId"],
       );
@@ -1616,7 +1844,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
             that, serializer);
         sse_encode_String(boardId, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 47, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 47, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_flutter_kanban_board,
@@ -1628,7 +1857,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiKanbanGetBoardConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiKanbanGetBoardConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_kanban_get_board",
         argNames: ["that", "boardId"],
       );
@@ -1642,7 +1872,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
             that, serializer);
         sse_encode_String(entityId, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 48, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 48, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_flutter_kanban_board,
@@ -1654,7 +1885,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiKanbanListBoardsConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiKanbanListBoardsConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_kanban_list_boards",
         argNames: ["that", "entityId"],
       );
@@ -1677,7 +1909,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_opt_String(state, serializer);
         sse_encode_opt_String(assigneeId, serializer);
         sse_encode_opt_String(tagId, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 49, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 49, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_flutter_kanban_card,
@@ -1689,21 +1922,31 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiKanbanListCardsConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiKanbanListCardsConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_kanban_list_cards",
-        argNames: ["that", "boardId", "columnId", "state", "assigneeId", "tagId"],
+        argNames: [
+          "that",
+          "boardId",
+          "columnId",
+          "state",
+          "assigneeId",
+          "tagId"
+        ],
       );
 
   @override
-  Future<List<FlutterKanbanColumn>> crateFlutterApiCommunitasApiKanbanListColumns(
-      {required CommunitasApi that, required String boardId}) {
+  Future<List<FlutterKanbanColumn>>
+      crateFlutterApiCommunitasApiKanbanListColumns(
+          {required CommunitasApi that, required String boardId}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
             that, serializer);
         sse_encode_String(boardId, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 50, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 50, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_flutter_kanban_column,
@@ -1715,7 +1958,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiKanbanListColumnsConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiKanbanListColumnsConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_kanban_list_columns",
         argNames: ["that", "boardId"],
       );
@@ -1736,7 +1980,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(cardId, serializer);
         sse_encode_String(targetColumnId, serializer);
         sse_encode_opt_box_autoadd_u_32(position, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 51, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 51, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_flutter_event,
@@ -1748,7 +1993,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiKanbanMoveCardConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiKanbanMoveCardConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_kanban_move_card",
         argNames: ["that", "boardId", "cardId", "targetColumnId", "position"],
       );
@@ -1771,7 +2017,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_opt_String(title, serializer);
         sse_encode_opt_String(description, serializer);
         sse_encode_opt_String(assignee, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 52, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 52, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_flutter_event,
@@ -1783,9 +2030,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiKanbanUpdateCardConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiKanbanUpdateCardConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_kanban_update_card",
-        argNames: ["that", "boardId", "cardId", "title", "description", "assignee"],
+        argNames: [
+          "that",
+          "boardId",
+          "cardId",
+          "title",
+          "description",
+          "assignee"
+        ],
       );
 
   @override
@@ -1804,7 +2059,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_flutter_entity_type(entityType, serializer);
         sse_encode_String(messageId, serializer);
         sse_encode_String(emoji, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 53, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 53, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_flutter_event,
@@ -1816,7 +2072,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiMessageAddReactionConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiMessageAddReactionConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_message_add_reaction",
         argNames: ["that", "entityId", "entityType", "messageId", "emoji"],
       );
@@ -1835,7 +2092,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(entityId, serializer);
         sse_encode_flutter_entity_type(entityType, serializer);
         sse_encode_String(messageId, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 54, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 54, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_flutter_event,
@@ -1847,7 +2105,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiMessageDeleteConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiMessageDeleteConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_message_delete",
         argNames: ["that", "entityId", "entityType", "messageId"],
       );
@@ -1868,7 +2127,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_flutter_entity_type(entityType, serializer);
         sse_encode_String(messageId, serializer);
         sse_encode_String(newText, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 55, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 55, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_flutter_event,
@@ -1880,14 +2140,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiMessageEditConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiMessageEditConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_message_edit",
         argNames: ["that", "entityId", "entityType", "messageId", "newText"],
       );
 
   @override
   Future<FlutterMessage> crateFlutterApiCommunitasApiMessageGet(
-      {required CommunitasApi that, required String entityId, required String messageId}) {
+      {required CommunitasApi that,
+      required String entityId,
+      required String messageId}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
@@ -1895,7 +2158,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             that, serializer);
         sse_encode_String(entityId, serializer);
         sse_encode_String(messageId, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 56, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 56, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_flutter_message,
@@ -1907,7 +2171,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiMessageGetConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiMessageGetConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_message_get",
         argNames: ["that", "entityId", "messageId"],
       );
@@ -1921,7 +2186,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
             that, serializer);
         sse_encode_String(entityId, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 57, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 57, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_flutter_message,
@@ -1933,7 +2199,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiMessageListConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiMessageListConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_message_list",
         argNames: ["that", "entityId"],
       );
@@ -1947,7 +2214,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
             that, serializer);
         sse_encode_String(otherPeerId, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 58, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 58, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_flutter_message,
@@ -1959,14 +2227,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiMessageListDirectConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiMessageListDirectConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_message_list_direct",
         argNames: ["that", "otherPeerId"],
       );
 
   @override
   Future<List<FlutterMessage>> crateFlutterApiCommunitasApiMessageListThread(
-      {required CommunitasApi that, required String entityId, required String parentMessageId}) {
+      {required CommunitasApi that,
+      required String entityId,
+      required String parentMessageId}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
@@ -1974,7 +2245,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             that, serializer);
         sse_encode_String(entityId, serializer);
         sse_encode_String(parentMessageId, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 59, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 59, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_flutter_message,
@@ -1986,7 +2258,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiMessageListThreadConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiMessageListThreadConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_message_list_thread",
         argNames: ["that", "entityId", "parentMessageId"],
       );
@@ -2007,7 +2280,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_flutter_entity_type(entityType, serializer);
         sse_encode_String(messageId, serializer);
         sse_encode_String(emoji, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 60, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 60, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_flutter_event,
@@ -2019,10 +2293,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiMessageRemoveReactionConstMeta => const TaskConstMeta(
-        debugName: "CommunitasApi_message_remove_reaction",
-        argNames: ["that", "entityId", "entityType", "messageId", "emoji"],
-      );
+  TaskConstMeta
+      get kCrateFlutterApiCommunitasApiMessageRemoveReactionConstMeta =>
+          const TaskConstMeta(
+            debugName: "CommunitasApi_message_remove_reaction",
+            argNames: ["that", "entityId", "entityType", "messageId", "emoji"],
+          );
 
   @override
   Future<List<FlutterEvent>> crateFlutterApiCommunitasApiMessageSend(
@@ -2040,7 +2316,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_flutter_entity_type(entityType, serializer);
         sse_encode_String(text, serializer);
         sse_encode_opt_String(replyToId, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 61, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 61, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_flutter_event,
@@ -2052,14 +2329,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiMessageSendConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiMessageSendConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_message_send",
         argNames: ["that", "entityId", "entityType", "text", "replyToId"],
       );
 
   @override
   Future<List<FlutterEvent>> crateFlutterApiCommunitasApiMessageSendDirect(
-      {required CommunitasApi that, required List<String> recipients, required String text}) {
+      {required CommunitasApi that,
+      required List<String> recipients,
+      required String text}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
@@ -2067,7 +2347,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             that, serializer);
         sse_encode_list_String(recipients, serializer);
         sse_encode_String(text, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 62, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 62, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_flutter_event,
@@ -2079,19 +2360,22 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiMessageSendDirectConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiMessageSendDirectConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_message_send_direct",
         argNames: ["that", "recipients", "text"],
       );
 
   @override
-  Future<List<FlutterEvent>> crateFlutterApiCommunitasApiPresenceAnnounce({required CommunitasApi that}) {
+  Future<List<FlutterEvent>> crateFlutterApiCommunitasApiPresenceAnnounce(
+      {required CommunitasApi that}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
             that, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 63, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 63, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_flutter_event,
@@ -2103,21 +2387,24 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiPresenceAnnounceConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiPresenceAnnounceConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_presence_announce",
         argNames: ["that"],
       );
 
   @override
-  Future<FlutterPresenceRecord?> crateFlutterApiCommunitasApiPresenceGetCachedPeer(
-      {required CommunitasApi that, required String pubkeyHex}) {
+  Future<FlutterPresenceRecord?>
+      crateFlutterApiCommunitasApiPresenceGetCachedPeer(
+          {required CommunitasApi that, required String pubkeyHex}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
             that, serializer);
         sse_encode_String(pubkeyHex, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 64, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 64, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_opt_box_autoadd_flutter_presence_record,
@@ -2129,19 +2416,24 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiPresenceGetCachedPeerConstMeta => const TaskConstMeta(
-        debugName: "CommunitasApi_presence_get_cached_peer",
-        argNames: ["that", "pubkeyHex"],
-      );
+  TaskConstMeta
+      get kCrateFlutterApiCommunitasApiPresenceGetCachedPeerConstMeta =>
+          const TaskConstMeta(
+            debugName: "CommunitasApi_presence_get_cached_peer",
+            argNames: ["that", "pubkeyHex"],
+          );
 
   @override
-  Future<FlutterPresenceRecord?> crateFlutterApiCommunitasApiPresenceGetOurRecord({required CommunitasApi that}) {
+  Future<FlutterPresenceRecord?>
+      crateFlutterApiCommunitasApiPresenceGetOurRecord(
+          {required CommunitasApi that}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
             that, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 65, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 65, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_opt_box_autoadd_flutter_presence_record,
@@ -2153,10 +2445,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiPresenceGetOurRecordConstMeta => const TaskConstMeta(
-        debugName: "CommunitasApi_presence_get_our_record",
-        argNames: ["that"],
-      );
+  TaskConstMeta
+      get kCrateFlutterApiCommunitasApiPresenceGetOurRecordConstMeta =>
+          const TaskConstMeta(
+            debugName: "CommunitasApi_presence_get_our_record",
+            argNames: ["that"],
+          );
 
   @override
   Future<FlutterPresenceStatus> crateFlutterApiCommunitasApiPresenceGetStatus(
@@ -2167,7 +2461,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
             that, serializer);
         sse_encode_String(peerId, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 66, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 66, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_flutter_presence_status,
@@ -2179,19 +2474,22 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiPresenceGetStatusConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiPresenceGetStatusConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_presence_get_status",
         argNames: ["that", "peerId"],
       );
 
   @override
-  Future<List<String>> crateFlutterApiCommunitasApiPresenceListOnlinePeers({required CommunitasApi that}) {
+  Future<List<String>> crateFlutterApiCommunitasApiPresenceListOnlinePeers(
+      {required CommunitasApi that}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
             that, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 67, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 67, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_String,
@@ -2203,10 +2501,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiPresenceListOnlinePeersConstMeta => const TaskConstMeta(
-        debugName: "CommunitasApi_presence_list_online_peers",
-        argNames: ["that"],
-      );
+  TaskConstMeta
+      get kCrateFlutterApiCommunitasApiPresenceListOnlinePeersConstMeta =>
+          const TaskConstMeta(
+            debugName: "CommunitasApi_presence_list_online_peers",
+            argNames: ["that"],
+          );
 
   @override
   Future<FlutterPresenceRecord?> crateFlutterApiCommunitasApiPresenceQueryPeer(
@@ -2217,7 +2517,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
             that, serializer);
         sse_encode_String(pubkeyHex, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 68, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 68, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_opt_box_autoadd_flutter_presence_record,
@@ -2229,7 +2530,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiPresenceQueryPeerConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiPresenceQueryPeerConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_presence_query_peer",
         argNames: ["that", "pubkeyHex"],
       );
@@ -2243,7 +2545,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
             that, serializer);
         sse_encode_String(displayName, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 69, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 69, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_flutter_event,
@@ -2255,7 +2558,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiCommunitasApiUpdateDisplayNameConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiCommunitasApiUpdateDisplayNameConstMeta =>
+      const TaskConstMeta(
         debugName: "CommunitasApi_update_display_name",
         argNames: ["that", "displayName"],
       );
@@ -2265,7 +2569,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 70, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 70, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -2277,7 +2582,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiGenerateIdWordsConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiGenerateIdWordsConstMeta =>
+      const TaskConstMeta(
         debugName: "generate_id_words",
         argNames: [],
       );
@@ -2290,7 +2596,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(mnemonic, serializer);
         sse_encode_opt_String(passphrase, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 71, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 71, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_flutter_recovered_identity,
@@ -2302,7 +2609,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiPreviewIdentityFromMnemonicConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiPreviewIdentityFromMnemonicConstMeta =>
+      const TaskConstMeta(
         debugName: "preview_identity_from_mnemonic",
         argNames: ["mnemonic", "passphrase"],
       );
@@ -2315,7 +2623,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(mnemonic, serializer);
         sse_encode_opt_String(passphrase, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 72, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 72, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_flutter_recovered_identity,
@@ -2327,18 +2636,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiRecoverIdentityFromMnemonicConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiRecoverIdentityFromMnemonicConstMeta =>
+      const TaskConstMeta(
         debugName: "recover_identity_from_mnemonic",
         argNames: ["mnemonic", "passphrase"],
       );
 
   @override
-  Future<bool> crateFlutterApiValidateRecoveryMnemonic({required String mnemonic}) {
+  Future<bool> crateFlutterApiValidateRecoveryMnemonic(
+      {required String mnemonic}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(mnemonic, serializer);
-        pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 73, port: port_);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 73, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bool,
@@ -2350,33 +2662,40 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     ));
   }
 
-  TaskConstMeta get kCrateFlutterApiValidateRecoveryMnemonicConstMeta => const TaskConstMeta(
+  TaskConstMeta get kCrateFlutterApiValidateRecoveryMnemonicConstMeta =>
+      const TaskConstMeta(
         debugName: "validate_recovery_mnemonic",
         argNames: ["mnemonic"],
       );
 
-  RustArcIncrementStrongCountFnType get rust_arc_increment_strong_count_CommunitasApi =>
-      wire.rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi;
+  RustArcIncrementStrongCountFnType
+      get rust_arc_increment_strong_count_CommunitasApi => wire
+          .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi;
 
-  RustArcDecrementStrongCountFnType get rust_arc_decrement_strong_count_CommunitasApi =>
-      wire.rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi;
+  RustArcDecrementStrongCountFnType
+      get rust_arc_decrement_strong_count_CommunitasApi => wire
+          .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi;
 
   @protected
-  CommunitasApi dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
-      dynamic raw) {
+  CommunitasApi
+      dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
+          dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return CommunitasApiImpl.frbInternalDcoDecode(raw as List<dynamic>);
   }
 
   @protected
-  CommunitasApi dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
-      dynamic raw) {
+  CommunitasApi
+      dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
+          dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return CommunitasApiImpl.frbInternalDcoDecode(raw as List<dynamic>);
   }
 
   @protected
-  CommunitasApi dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(dynamic raw) {
+  CommunitasApi
+      dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
+          dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return CommunitasApiImpl.frbInternalDcoDecode(raw as List<dynamic>);
   }
@@ -2400,7 +2719,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  FlutterPresenceRecord dco_decode_box_autoadd_flutter_presence_record(dynamic raw) {
+  FlutterPresenceRecord dco_decode_box_autoadd_flutter_presence_record(
+      dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_flutter_presence_record(raw);
   }
@@ -2439,7 +2759,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   FlutterContact dco_decode_flutter_contact(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 7) throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
+    if (arr.length != 7)
+      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
     return FlutterContact(
       id: dco_decode_String(arr[0]),
       displayName: dco_decode_String(arr[1]),
@@ -2455,7 +2776,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   FlutterDiskStats dco_decode_flutter_disk_stats(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 5) throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
     return FlutterDiskStats(
       entityId: dco_decode_String(arr[0]),
       diskType: dco_decode_flutter_disk_type(arr[1]),
@@ -2475,7 +2797,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   FlutterEntity dco_decode_flutter_entity(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 10) throw Exception('unexpected arr length: expect 10 but see ${arr.length}');
+    if (arr.length != 10)
+      throw Exception('unexpected arr length: expect 10 but see ${arr.length}');
     return FlutterEntity(
       id: dco_decode_String(arr[0]),
       name: dco_decode_String(arr[1]),
@@ -2603,7 +2926,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   FlutterFileInfo dco_decode_flutter_file_info(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 5) throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
     return FlutterFileInfo(
       path: dco_decode_String(arr[0]),
       name: dco_decode_String(arr[1]),
@@ -2617,7 +2941,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   FlutterKanbanBoard dco_decode_flutter_kanban_board(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 5) throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
     return FlutterKanbanBoard(
       id: dco_decode_String(arr[0]),
       entityId: dco_decode_String(arr[1]),
@@ -2631,7 +2956,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   FlutterKanbanCard dco_decode_flutter_kanban_card(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 6) throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
     return FlutterKanbanCard(
       id: dco_decode_String(arr[0]),
       columnId: dco_decode_String(arr[1]),
@@ -2646,7 +2972,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   FlutterKanbanColumn dco_decode_flutter_kanban_column(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 6) throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
     return FlutterKanbanColumn(
       id: dco_decode_String(arr[0]),
       boardId: dco_decode_String(arr[1]),
@@ -2661,7 +2988,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   FlutterMessage dco_decode_flutter_message(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 8) throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
+    if (arr.length != 8)
+      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
     return FlutterMessage(
       id: dco_decode_String(arr[0]),
       entityId: dco_decode_String(arr[1]),
@@ -2678,7 +3006,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   FlutterNetworkInfo dco_decode_flutter_network_info(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 5) throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
     return FlutterNetworkInfo(
       isActive: dco_decode_bool(arr[0]),
       boundPort: dco_decode_opt_box_autoadd_u_16(arr[1]),
@@ -2692,7 +3021,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   FlutterPresenceRecord dco_decode_flutter_presence_record(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 4) throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
     return FlutterPresenceRecord(
       pubkeyHex: dco_decode_String(arr[0]),
       connectionWords: dco_decode_String(arr[1]),
@@ -2705,7 +3035,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   FlutterPresenceStatus dco_decode_flutter_presence_status(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 3) throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
     return FlutterPresenceStatus(
       peerId: dco_decode_String(arr[0]),
       status: dco_decode_String(arr[1]),
@@ -2717,7 +3048,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   FlutterReaction dco_decode_flutter_reaction(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 4) throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
     return FlutterReaction(
       emoji: dco_decode_String(arr[0]),
       count: dco_decode_u_32(arr[1]),
@@ -2730,7 +3062,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   FlutterRecoveredIdentity dco_decode_flutter_recovered_identity(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 2) throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
     return FlutterRecoveredIdentity(
       fourWords: dco_decode_String(arr[0]),
       pubkeyHex: dco_decode_String(arr[1]),
@@ -2741,11 +3074,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   FlutterSessionInfo dco_decode_flutter_session_info(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 3) throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
     return FlutterSessionInfo(
       sessionId: dco_decode_String(arr[0]),
       fourWords: dco_decode_String(arr[1]),
       displayName: dco_decode_String(arr[2]),
+      pubkeyHex: dco_decode_String(arr[3]),
     );
   }
 
@@ -2753,7 +3088,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   FlutterUserProfile dco_decode_flutter_user_profile(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 4) throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
     return FlutterUserProfile(
       fourWords: dco_decode_String(arr[0]),
       displayName: dco_decode_String(arr[1]),
@@ -2766,7 +3102,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   FlutterVaultInfo dco_decode_flutter_vault_info(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 5) throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
     return FlutterVaultInfo(
       fourWords: dco_decode_String(arr[0]),
       displayName: dco_decode_String(arr[1]),
@@ -2833,7 +3170,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   @protected
   List<FlutterKanbanColumn> dco_decode_list_flutter_kanban_column(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
-    return (raw as List<dynamic>).map(dco_decode_flutter_kanban_column).toList();
+    return (raw as List<dynamic>)
+        .map(dco_decode_flutter_kanban_column)
+        .toList();
   }
 
   @protected
@@ -2879,15 +3218,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  FlutterPresenceRecord? dco_decode_opt_box_autoadd_flutter_presence_record(dynamic raw) {
+  FlutterPresenceRecord? dco_decode_opt_box_autoadd_flutter_presence_record(
+      dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
-    return raw == null ? null : dco_decode_box_autoadd_flutter_presence_record(raw);
+    return raw == null
+        ? null
+        : dco_decode_box_autoadd_flutter_presence_record(raw);
   }
 
   @protected
-  FlutterSessionInfo? dco_decode_opt_box_autoadd_flutter_session_info(dynamic raw) {
+  FlutterSessionInfo? dco_decode_opt_box_autoadd_flutter_session_info(
+      dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
-    return raw == null ? null : dco_decode_box_autoadd_flutter_session_info(raw);
+    return raw == null
+        ? null
+        : dco_decode_box_autoadd_flutter_session_info(raw);
   }
 
   @protected
@@ -2951,24 +3296,30 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  CommunitasApi sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
-      SseDeserializer deserializer) {
+  CommunitasApi
+      sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
+          SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    return CommunitasApiImpl.frbInternalSseDecode(sse_decode_usize(deserializer), sse_decode_i_32(deserializer));
+    return CommunitasApiImpl.frbInternalSseDecode(
+        sse_decode_usize(deserializer), sse_decode_i_32(deserializer));
   }
 
   @protected
-  CommunitasApi sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
-      SseDeserializer deserializer) {
+  CommunitasApi
+      sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
+          SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    return CommunitasApiImpl.frbInternalSseDecode(sse_decode_usize(deserializer), sse_decode_i_32(deserializer));
+    return CommunitasApiImpl.frbInternalSseDecode(
+        sse_decode_usize(deserializer), sse_decode_i_32(deserializer));
   }
 
   @protected
-  CommunitasApi sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
-      SseDeserializer deserializer) {
+  CommunitasApi
+      sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
+          SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    return CommunitasApiImpl.frbInternalSseDecode(sse_decode_usize(deserializer), sse_decode_i_32(deserializer));
+    return CommunitasApiImpl.frbInternalSseDecode(
+        sse_decode_usize(deserializer), sse_decode_i_32(deserializer));
   }
 
   @protected
@@ -2991,13 +3342,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  FlutterPresenceRecord sse_decode_box_autoadd_flutter_presence_record(SseDeserializer deserializer) {
+  FlutterPresenceRecord sse_decode_box_autoadd_flutter_presence_record(
+      SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_flutter_presence_record(deserializer));
   }
 
   @protected
-  FlutterSessionInfo sse_decode_box_autoadd_flutter_session_info(SseDeserializer deserializer) {
+  FlutterSessionInfo sse_decode_box_autoadd_flutter_session_info(
+      SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_flutter_session_info(deserializer));
   }
@@ -3096,7 +3449,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  FlutterEntityType sse_decode_flutter_entity_type(SseDeserializer deserializer) {
+  FlutterEntityType sse_decode_flutter_entity_type(
+      SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var inner = sse_decode_i_32(deserializer);
     return FlutterEntityType.values[inner];
@@ -3128,40 +3482,53 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       case 6:
         var var_messageId = sse_decode_String(deserializer);
         var var_entityId = sse_decode_String(deserializer);
-        return FlutterEvent_MessageSent(messageId: var_messageId, entityId: var_entityId);
+        return FlutterEvent_MessageSent(
+            messageId: var_messageId, entityId: var_entityId);
       case 7:
         var var_messageId = sse_decode_String(deserializer);
         var var_entityId = sse_decode_String(deserializer);
-        return FlutterEvent_MessageReceived(messageId: var_messageId, entityId: var_entityId);
+        return FlutterEvent_MessageReceived(
+            messageId: var_messageId, entityId: var_entityId);
       case 8:
         var var_messageIds = sse_decode_list_String(deserializer);
         var var_recipients = sse_decode_list_String(deserializer);
-        return FlutterEvent_DirectMessageSent(messageIds: var_messageIds, recipients: var_recipients);
+        return FlutterEvent_DirectMessageSent(
+            messageIds: var_messageIds, recipients: var_recipients);
       case 9:
         var var_messageId = sse_decode_String(deserializer);
         var var_entityId = sse_decode_String(deserializer);
-        return FlutterEvent_MessageDeleted(messageId: var_messageId, entityId: var_entityId);
+        return FlutterEvent_MessageDeleted(
+            messageId: var_messageId, entityId: var_entityId);
       case 10:
         var var_messageId = sse_decode_String(deserializer);
         var var_entityId = sse_decode_String(deserializer);
         var var_newText = sse_decode_String(deserializer);
         var var_editedAt = sse_decode_u_64(deserializer);
         return FlutterEvent_MessageEdited(
-            messageId: var_messageId, entityId: var_entityId, newText: var_newText, editedAt: var_editedAt);
+            messageId: var_messageId,
+            entityId: var_entityId,
+            newText: var_newText,
+            editedAt: var_editedAt);
       case 11:
         var var_messageId = sse_decode_String(deserializer);
         var var_entityId = sse_decode_String(deserializer);
         var var_emoji = sse_decode_String(deserializer);
         var var_reactorId = sse_decode_String(deserializer);
         return FlutterEvent_ReactionAdded(
-            messageId: var_messageId, entityId: var_entityId, emoji: var_emoji, reactorId: var_reactorId);
+            messageId: var_messageId,
+            entityId: var_entityId,
+            emoji: var_emoji,
+            reactorId: var_reactorId);
       case 12:
         var var_messageId = sse_decode_String(deserializer);
         var var_entityId = sse_decode_String(deserializer);
         var var_emoji = sse_decode_String(deserializer);
         var var_reactorId = sse_decode_String(deserializer);
         return FlutterEvent_ReactionRemoved(
-            messageId: var_messageId, entityId: var_entityId, emoji: var_emoji, reactorId: var_reactorId);
+            messageId: var_messageId,
+            entityId: var_entityId,
+            emoji: var_emoji,
+            reactorId: var_reactorId);
       case 13:
         var var_inviteId = sse_decode_String(deserializer);
         return FlutterEvent_InviteCreated(inviteId: var_inviteId);
@@ -3208,7 +3575,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  FlutterKanbanBoard sse_decode_flutter_kanban_board(SseDeserializer deserializer) {
+  FlutterKanbanBoard sse_decode_flutter_kanban_board(
+      SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_id = sse_decode_String(deserializer);
     var var_entityId = sse_decode_String(deserializer);
@@ -3216,11 +3584,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_description = sse_decode_opt_String(deserializer);
     var var_columnCount = sse_decode_u_32(deserializer);
     return FlutterKanbanBoard(
-        id: var_id, entityId: var_entityId, name: var_name, description: var_description, columnCount: var_columnCount);
+        id: var_id,
+        entityId: var_entityId,
+        name: var_name,
+        description: var_description,
+        columnCount: var_columnCount);
   }
 
   @protected
-  FlutterKanbanCard sse_decode_flutter_kanban_card(SseDeserializer deserializer) {
+  FlutterKanbanCard sse_decode_flutter_kanban_card(
+      SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_id = sse_decode_String(deserializer);
     var var_columnId = sse_decode_String(deserializer);
@@ -3238,7 +3611,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  FlutterKanbanColumn sse_decode_flutter_kanban_column(SseDeserializer deserializer) {
+  FlutterKanbanColumn sse_decode_flutter_kanban_column(
+      SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_id = sse_decode_String(deserializer);
     var var_boardId = sse_decode_String(deserializer);
@@ -3278,7 +3652,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  FlutterNetworkInfo sse_decode_flutter_network_info(SseDeserializer deserializer) {
+  FlutterNetworkInfo sse_decode_flutter_network_info(
+      SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_isActive = sse_decode_bool(deserializer);
     var var_boundPort = sse_decode_opt_box_autoadd_u_16(deserializer);
@@ -3294,7 +3669,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  FlutterPresenceRecord sse_decode_flutter_presence_record(SseDeserializer deserializer) {
+  FlutterPresenceRecord sse_decode_flutter_presence_record(
+      SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_pubkeyHex = sse_decode_String(deserializer);
     var var_connectionWords = sse_decode_String(deserializer);
@@ -3308,12 +3684,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  FlutterPresenceStatus sse_decode_flutter_presence_status(SseDeserializer deserializer) {
+  FlutterPresenceStatus sse_decode_flutter_presence_status(
+      SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_peerId = sse_decode_String(deserializer);
     var var_status = sse_decode_String(deserializer);
     var var_lastSeen = sse_decode_i_64(deserializer);
-    return FlutterPresenceStatus(peerId: var_peerId, status: var_status, lastSeen: var_lastSeen);
+    return FlutterPresenceStatus(
+        peerId: var_peerId, status: var_status, lastSeen: var_lastSeen);
   }
 
   @protected
@@ -3323,35 +3701,51 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_count = sse_decode_u_32(deserializer);
     var var_userReacted = sse_decode_bool(deserializer);
     var var_peerIds = sse_decode_list_String(deserializer);
-    return FlutterReaction(emoji: var_emoji, count: var_count, userReacted: var_userReacted, peerIds: var_peerIds);
+    return FlutterReaction(
+        emoji: var_emoji,
+        count: var_count,
+        userReacted: var_userReacted,
+        peerIds: var_peerIds);
   }
 
   @protected
-  FlutterRecoveredIdentity sse_decode_flutter_recovered_identity(SseDeserializer deserializer) {
+  FlutterRecoveredIdentity sse_decode_flutter_recovered_identity(
+      SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_fourWords = sse_decode_String(deserializer);
     var var_pubkeyHex = sse_decode_String(deserializer);
-    return FlutterRecoveredIdentity(fourWords: var_fourWords, pubkeyHex: var_pubkeyHex);
+    return FlutterRecoveredIdentity(
+        fourWords: var_fourWords, pubkeyHex: var_pubkeyHex);
   }
 
   @protected
-  FlutterSessionInfo sse_decode_flutter_session_info(SseDeserializer deserializer) {
+  FlutterSessionInfo sse_decode_flutter_session_info(
+      SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_sessionId = sse_decode_String(deserializer);
     var var_fourWords = sse_decode_String(deserializer);
     var var_displayName = sse_decode_String(deserializer);
-    return FlutterSessionInfo(sessionId: var_sessionId, fourWords: var_fourWords, displayName: var_displayName);
+    var var_pubkeyHex = sse_decode_String(deserializer);
+    return FlutterSessionInfo(
+        sessionId: var_sessionId,
+        fourWords: var_fourWords,
+        displayName: var_displayName,
+        pubkeyHex: var_pubkeyHex);
   }
 
   @protected
-  FlutterUserProfile sse_decode_flutter_user_profile(SseDeserializer deserializer) {
+  FlutterUserProfile sse_decode_flutter_user_profile(
+      SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_fourWords = sse_decode_String(deserializer);
     var var_displayName = sse_decode_String(deserializer);
     var var_deviceName = sse_decode_String(deserializer);
     var var_deviceType = sse_decode_String(deserializer);
     return FlutterUserProfile(
-        fourWords: var_fourWords, displayName: var_displayName, deviceName: var_deviceName, deviceType: var_deviceType);
+        fourWords: var_fourWords,
+        displayName: var_displayName,
+        deviceName: var_deviceName,
+        deviceType: var_deviceType);
   }
 
   @protected
@@ -3395,7 +3789,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  List<FlutterContact> sse_decode_list_flutter_contact(SseDeserializer deserializer) {
+  List<FlutterContact> sse_decode_list_flutter_contact(
+      SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
     var len_ = sse_decode_i_32(deserializer);
@@ -3407,7 +3802,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  List<FlutterEntity> sse_decode_list_flutter_entity(SseDeserializer deserializer) {
+  List<FlutterEntity> sse_decode_list_flutter_entity(
+      SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
     var len_ = sse_decode_i_32(deserializer);
@@ -3419,7 +3815,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  List<FlutterEvent> sse_decode_list_flutter_event(SseDeserializer deserializer) {
+  List<FlutterEvent> sse_decode_list_flutter_event(
+      SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
     var len_ = sse_decode_i_32(deserializer);
@@ -3431,7 +3828,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  List<FlutterFileInfo> sse_decode_list_flutter_file_info(SseDeserializer deserializer) {
+  List<FlutterFileInfo> sse_decode_list_flutter_file_info(
+      SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
     var len_ = sse_decode_i_32(deserializer);
@@ -3443,7 +3841,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  List<FlutterKanbanBoard> sse_decode_list_flutter_kanban_board(SseDeserializer deserializer) {
+  List<FlutterKanbanBoard> sse_decode_list_flutter_kanban_board(
+      SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
     var len_ = sse_decode_i_32(deserializer);
@@ -3455,7 +3854,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  List<FlutterKanbanCard> sse_decode_list_flutter_kanban_card(SseDeserializer deserializer) {
+  List<FlutterKanbanCard> sse_decode_list_flutter_kanban_card(
+      SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
     var len_ = sse_decode_i_32(deserializer);
@@ -3467,7 +3867,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  List<FlutterKanbanColumn> sse_decode_list_flutter_kanban_column(SseDeserializer deserializer) {
+  List<FlutterKanbanColumn> sse_decode_list_flutter_kanban_column(
+      SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
     var len_ = sse_decode_i_32(deserializer);
@@ -3479,7 +3880,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  List<FlutterMessage> sse_decode_list_flutter_message(SseDeserializer deserializer) {
+  List<FlutterMessage> sse_decode_list_flutter_message(
+      SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
     var len_ = sse_decode_i_32(deserializer);
@@ -3491,7 +3893,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  List<FlutterReaction> sse_decode_list_flutter_reaction(SseDeserializer deserializer) {
+  List<FlutterReaction> sse_decode_list_flutter_reaction(
+      SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
     var len_ = sse_decode_i_32(deserializer);
@@ -3503,7 +3906,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  List<FlutterVaultInfo> sse_decode_list_flutter_vault_info(SseDeserializer deserializer) {
+  List<FlutterVaultInfo> sse_decode_list_flutter_vault_info(
+      SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
     var len_ = sse_decode_i_32(deserializer);
@@ -3551,7 +3955,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  FlutterPresenceRecord? sse_decode_opt_box_autoadd_flutter_presence_record(SseDeserializer deserializer) {
+  FlutterPresenceRecord? sse_decode_opt_box_autoadd_flutter_presence_record(
+      SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
     if (sse_decode_bool(deserializer)) {
@@ -3562,7 +3967,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  FlutterSessionInfo? sse_decode_opt_box_autoadd_flutter_session_info(SseDeserializer deserializer) {
+  FlutterSessionInfo? sse_decode_opt_box_autoadd_flutter_session_info(
+      SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
     if (sse_decode_bool(deserializer)) {
@@ -3652,24 +4058,33 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
-      CommunitasApi self, SseSerializer serializer) {
+  void
+      sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
+          CommunitasApi self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_usize((self as CommunitasApiImpl).frbInternalSseEncode(move: true), serializer);
+    sse_encode_usize(
+        (self as CommunitasApiImpl).frbInternalSseEncode(move: true),
+        serializer);
   }
 
   @protected
-  void sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
-      CommunitasApi self, SseSerializer serializer) {
+  void
+      sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
+          CommunitasApi self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_usize((self as CommunitasApiImpl).frbInternalSseEncode(move: false), serializer);
+    sse_encode_usize(
+        (self as CommunitasApiImpl).frbInternalSseEncode(move: false),
+        serializer);
   }
 
   @protected
-  void sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
-      CommunitasApi self, SseSerializer serializer) {
+  void
+      sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
+          CommunitasApi self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_usize((self as CommunitasApiImpl).frbInternalSseEncode(move: null), serializer);
+    sse_encode_usize(
+        (self as CommunitasApiImpl).frbInternalSseEncode(move: null),
+        serializer);
   }
 
   @protected
@@ -3691,19 +4106,22 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_box_autoadd_flutter_presence_record(FlutterPresenceRecord self, SseSerializer serializer) {
+  void sse_encode_box_autoadd_flutter_presence_record(
+      FlutterPresenceRecord self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_flutter_presence_record(self, serializer);
   }
 
   @protected
-  void sse_encode_box_autoadd_flutter_session_info(FlutterSessionInfo self, SseSerializer serializer) {
+  void sse_encode_box_autoadd_flutter_session_info(
+      FlutterSessionInfo self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_flutter_session_info(self, serializer);
   }
 
   @protected
-  void sse_encode_box_autoadd_i_64(PlatformInt64 self, SseSerializer serializer) {
+  void sse_encode_box_autoadd_i_64(
+      PlatformInt64 self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_64(self, serializer);
   }
@@ -3727,7 +4145,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_flutter_contact(FlutterContact self, SseSerializer serializer) {
+  void sse_encode_flutter_contact(
+      FlutterContact self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.id, serializer);
     sse_encode_String(self.displayName, serializer);
@@ -3739,7 +4158,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_flutter_disk_stats(FlutterDiskStats self, SseSerializer serializer) {
+  void sse_encode_flutter_disk_stats(
+      FlutterDiskStats self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.entityId, serializer);
     sse_encode_flutter_disk_type(self.diskType, serializer);
@@ -3749,7 +4169,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_flutter_disk_type(FlutterDiskType self, SseSerializer serializer) {
+  void sse_encode_flutter_disk_type(
+      FlutterDiskType self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.index, serializer);
   }
@@ -3770,7 +4191,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_flutter_entity_type(FlutterEntityType self, SseSerializer serializer) {
+  void sse_encode_flutter_entity_type(
+      FlutterEntityType self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.index, serializer);
   }
@@ -3796,19 +4218,31 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       case FlutterEvent_EntityUpdated(entityId: final entityId):
         sse_encode_i_32(5, serializer);
         sse_encode_String(entityId, serializer);
-      case FlutterEvent_MessageSent(messageId: final messageId, entityId: final entityId):
+      case FlutterEvent_MessageSent(
+          messageId: final messageId,
+          entityId: final entityId
+        ):
         sse_encode_i_32(6, serializer);
         sse_encode_String(messageId, serializer);
         sse_encode_String(entityId, serializer);
-      case FlutterEvent_MessageReceived(messageId: final messageId, entityId: final entityId):
+      case FlutterEvent_MessageReceived(
+          messageId: final messageId,
+          entityId: final entityId
+        ):
         sse_encode_i_32(7, serializer);
         sse_encode_String(messageId, serializer);
         sse_encode_String(entityId, serializer);
-      case FlutterEvent_DirectMessageSent(messageIds: final messageIds, recipients: final recipients):
+      case FlutterEvent_DirectMessageSent(
+          messageIds: final messageIds,
+          recipients: final recipients
+        ):
         sse_encode_i_32(8, serializer);
         sse_encode_list_String(messageIds, serializer);
         sse_encode_list_String(recipients, serializer);
-      case FlutterEvent_MessageDeleted(messageId: final messageId, entityId: final entityId):
+      case FlutterEvent_MessageDeleted(
+          messageId: final messageId,
+          entityId: final entityId
+        ):
         sse_encode_i_32(9, serializer);
         sse_encode_String(messageId, serializer);
         sse_encode_String(entityId, serializer);
@@ -3873,7 +4307,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_flutter_file_info(FlutterFileInfo self, SseSerializer serializer) {
+  void sse_encode_flutter_file_info(
+      FlutterFileInfo self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.path, serializer);
     sse_encode_String(self.name, serializer);
@@ -3883,7 +4318,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_flutter_kanban_board(FlutterKanbanBoard self, SseSerializer serializer) {
+  void sse_encode_flutter_kanban_board(
+      FlutterKanbanBoard self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.id, serializer);
     sse_encode_String(self.entityId, serializer);
@@ -3893,7 +4329,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_flutter_kanban_card(FlutterKanbanCard self, SseSerializer serializer) {
+  void sse_encode_flutter_kanban_card(
+      FlutterKanbanCard self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.id, serializer);
     sse_encode_String(self.columnId, serializer);
@@ -3904,7 +4341,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_flutter_kanban_column(FlutterKanbanColumn self, SseSerializer serializer) {
+  void sse_encode_flutter_kanban_column(
+      FlutterKanbanColumn self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.id, serializer);
     sse_encode_String(self.boardId, serializer);
@@ -3915,7 +4353,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_flutter_message(FlutterMessage self, SseSerializer serializer) {
+  void sse_encode_flutter_message(
+      FlutterMessage self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.id, serializer);
     sse_encode_String(self.entityId, serializer);
@@ -3928,7 +4367,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_flutter_network_info(FlutterNetworkInfo self, SseSerializer serializer) {
+  void sse_encode_flutter_network_info(
+      FlutterNetworkInfo self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_bool(self.isActive, serializer);
     sse_encode_opt_box_autoadd_u_16(self.boundPort, serializer);
@@ -3938,7 +4378,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_flutter_presence_record(FlutterPresenceRecord self, SseSerializer serializer) {
+  void sse_encode_flutter_presence_record(
+      FlutterPresenceRecord self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.pubkeyHex, serializer);
     sse_encode_String(self.connectionWords, serializer);
@@ -3947,7 +4388,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_flutter_presence_status(FlutterPresenceStatus self, SseSerializer serializer) {
+  void sse_encode_flutter_presence_status(
+      FlutterPresenceStatus self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.peerId, serializer);
     sse_encode_String(self.status, serializer);
@@ -3955,7 +4397,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_flutter_reaction(FlutterReaction self, SseSerializer serializer) {
+  void sse_encode_flutter_reaction(
+      FlutterReaction self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.emoji, serializer);
     sse_encode_u_32(self.count, serializer);
@@ -3964,22 +4407,26 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_flutter_recovered_identity(FlutterRecoveredIdentity self, SseSerializer serializer) {
+  void sse_encode_flutter_recovered_identity(
+      FlutterRecoveredIdentity self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.fourWords, serializer);
     sse_encode_String(self.pubkeyHex, serializer);
   }
 
   @protected
-  void sse_encode_flutter_session_info(FlutterSessionInfo self, SseSerializer serializer) {
+  void sse_encode_flutter_session_info(
+      FlutterSessionInfo self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.sessionId, serializer);
     sse_encode_String(self.fourWords, serializer);
     sse_encode_String(self.displayName, serializer);
+    sse_encode_String(self.pubkeyHex, serializer);
   }
 
   @protected
-  void sse_encode_flutter_user_profile(FlutterUserProfile self, SseSerializer serializer) {
+  void sse_encode_flutter_user_profile(
+      FlutterUserProfile self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.fourWords, serializer);
     sse_encode_String(self.displayName, serializer);
@@ -3988,7 +4435,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_flutter_vault_info(FlutterVaultInfo self, SseSerializer serializer) {
+  void sse_encode_flutter_vault_info(
+      FlutterVaultInfo self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.fourWords, serializer);
     sse_encode_String(self.displayName, serializer);
@@ -4019,7 +4467,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_list_flutter_contact(List<FlutterContact> self, SseSerializer serializer) {
+  void sse_encode_list_flutter_contact(
+      List<FlutterContact> self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
@@ -4028,7 +4477,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_list_flutter_entity(List<FlutterEntity> self, SseSerializer serializer) {
+  void sse_encode_list_flutter_entity(
+      List<FlutterEntity> self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
@@ -4037,7 +4487,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_list_flutter_event(List<FlutterEvent> self, SseSerializer serializer) {
+  void sse_encode_list_flutter_event(
+      List<FlutterEvent> self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
@@ -4046,7 +4497,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_list_flutter_file_info(List<FlutterFileInfo> self, SseSerializer serializer) {
+  void sse_encode_list_flutter_file_info(
+      List<FlutterFileInfo> self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
@@ -4055,7 +4507,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_list_flutter_kanban_board(List<FlutterKanbanBoard> self, SseSerializer serializer) {
+  void sse_encode_list_flutter_kanban_board(
+      List<FlutterKanbanBoard> self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
@@ -4064,7 +4517,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_list_flutter_kanban_card(List<FlutterKanbanCard> self, SseSerializer serializer) {
+  void sse_encode_list_flutter_kanban_card(
+      List<FlutterKanbanCard> self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
@@ -4073,7 +4527,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_list_flutter_kanban_column(List<FlutterKanbanColumn> self, SseSerializer serializer) {
+  void sse_encode_list_flutter_kanban_column(
+      List<FlutterKanbanColumn> self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
@@ -4082,7 +4537,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_list_flutter_message(List<FlutterMessage> self, SseSerializer serializer) {
+  void sse_encode_list_flutter_message(
+      List<FlutterMessage> self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
@@ -4091,7 +4547,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_list_flutter_reaction(List<FlutterReaction> self, SseSerializer serializer) {
+  void sse_encode_list_flutter_reaction(
+      List<FlutterReaction> self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
@@ -4100,7 +4557,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_list_flutter_vault_info(List<FlutterVaultInfo> self, SseSerializer serializer) {
+  void sse_encode_list_flutter_vault_info(
+      List<FlutterVaultInfo> self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
@@ -4109,14 +4567,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_list_prim_u_8_loose(List<int> self, SseSerializer serializer) {
+  void sse_encode_list_prim_u_8_loose(
+      List<int> self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.length, serializer);
-    serializer.buffer.putUint8List(self is Uint8List ? self : Uint8List.fromList(self));
+    serializer.buffer
+        .putUint8List(self is Uint8List ? self : Uint8List.fromList(self));
   }
 
   @protected
-  void sse_encode_list_prim_u_8_strict(Uint8List self, SseSerializer serializer) {
+  void sse_encode_list_prim_u_8_strict(
+      Uint8List self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.length, serializer);
     serializer.buffer.putUint8List(self);
@@ -4143,7 +4604,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_opt_box_autoadd_flutter_presence_record(FlutterPresenceRecord? self, SseSerializer serializer) {
+  void sse_encode_opt_box_autoadd_flutter_presence_record(
+      FlutterPresenceRecord? self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
     sse_encode_bool(self != null, serializer);
@@ -4153,7 +4615,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_opt_box_autoadd_flutter_session_info(FlutterSessionInfo? self, SseSerializer serializer) {
+  void sse_encode_opt_box_autoadd_flutter_session_info(
+      FlutterSessionInfo? self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
     sse_encode_bool(self != null, serializer);
@@ -4163,7 +4626,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_opt_box_autoadd_i_64(PlatformInt64? self, SseSerializer serializer) {
+  void sse_encode_opt_box_autoadd_i_64(
+      PlatformInt64? self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
     sse_encode_bool(self != null, serializer);
@@ -4241,75 +4705,114 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 @sealed
 class CommunitasApiImpl extends RustOpaque implements CommunitasApi {
   // Not to be used by end users
-  CommunitasApiImpl.frbInternalDcoDecode(List<dynamic> wire) : super.frbInternalDcoDecode(wire, _kStaticData);
+  CommunitasApiImpl.frbInternalDcoDecode(List<dynamic> wire)
+      : super.frbInternalDcoDecode(wire, _kStaticData);
 
   // Not to be used by end users
   CommunitasApiImpl.frbInternalSseDecode(BigInt ptr, int externalSizeOnNative)
       : super.frbInternalSseDecode(ptr, externalSizeOnNative, _kStaticData);
 
   static final _kStaticData = RustArcStaticData(
-    rustArcIncrementStrongCount: RustLib.instance.api.rust_arc_increment_strong_count_CommunitasApi,
-    rustArcDecrementStrongCount: RustLib.instance.api.rust_arc_decrement_strong_count_CommunitasApi,
-    rustArcDecrementStrongCountPtr: RustLib.instance.api.rust_arc_decrement_strong_count_CommunitasApiPtr,
+    rustArcIncrementStrongCount:
+        RustLib.instance.api.rust_arc_increment_strong_count_CommunitasApi,
+    rustArcDecrementStrongCount:
+        RustLib.instance.api.rust_arc_decrement_strong_count_CommunitasApi,
+    rustArcDecrementStrongCountPtr:
+        RustLib.instance.api.rust_arc_decrement_strong_count_CommunitasApiPtr,
   );
 
-  Future<String> authCreateVault({required String fourWords, required String displayName, required String password}) =>
+  Future<String> authCreateVault(
+          {required String fourWords,
+          required String displayName,
+          required String password}) =>
       RustLib.instance.api.crateFlutterApiCommunitasApiAuthCreateVault(
-          that: this, fourWords: fourWords, displayName: displayName, password: password);
+          that: this,
+          fourWords: fourWords,
+          displayName: displayName,
+          password: password);
 
-  Future<void> authDeleteVault({required String fourWords, required String password}) => RustLib.instance.api
-      .crateFlutterApiCommunitasApiAuthDeleteVault(that: this, fourWords: fourWords, password: password);
+  Future<void> authDeleteVault(
+          {required String fourWords, required String password}) =>
+      RustLib.instance.api.crateFlutterApiCommunitasApiAuthDeleteVault(
+          that: this, fourWords: fourWords, password: password);
 
   Future<String> authExportVault({required bool includeData}) =>
-      RustLib.instance.api.crateFlutterApiCommunitasApiAuthExportVault(that: this, includeData: includeData);
+      RustLib.instance.api.crateFlutterApiCommunitasApiAuthExportVault(
+          that: this, includeData: includeData);
 
   Future<FlutterSessionInfo?> authGetCurrentSession() =>
       RustLib.instance.api.crateFlutterApiCommunitasApiAuthGetCurrentSession(
         that: this,
       );
 
-  Future<String> authImportVault({required String backupBase64, required String password}) => RustLib.instance.api
-      .crateFlutterApiCommunitasApiAuthImportVault(that: this, backupBase64: backupBase64, password: password);
+  Future<String> authImportVault(
+          {required String backupBase64, required String password}) =>
+      RustLib.instance.api.crateFlutterApiCommunitasApiAuthImportVault(
+          that: this, backupBase64: backupBase64, password: password);
 
-  Future<List<FlutterVaultInfo>> authListVaults() => RustLib.instance.api.crateFlutterApiCommunitasApiAuthListVaults(
+  Future<List<FlutterVaultInfo>> authListVaults() =>
+      RustLib.instance.api.crateFlutterApiCommunitasApiAuthListVaults(
         that: this,
       );
 
-  Future<FlutterSessionInfo> authLogin({required String fourWords, required String password}) =>
-      RustLib.instance.api.crateFlutterApiCommunitasApiAuthLogin(that: this, fourWords: fourWords, password: password);
+  Future<FlutterSessionInfo> authLogin(
+          {required String fourWords, required String password}) =>
+      RustLib.instance.api.crateFlutterApiCommunitasApiAuthLogin(
+          that: this, fourWords: fourWords, password: password);
 
-  Future<void> authLogout() => RustLib.instance.api.crateFlutterApiCommunitasApiAuthLogout(
+  Future<void> authLogout() =>
+      RustLib.instance.api.crateFlutterApiCommunitasApiAuthLogout(
         that: this,
       );
 
   Future<bool> authVaultExists({required String fourWords}) =>
-      RustLib.instance.api.crateFlutterApiCommunitasApiAuthVaultExists(that: this, fourWords: fourWords);
+      RustLib.instance.api.crateFlutterApiCommunitasApiAuthVaultExists(
+          that: this, fourWords: fourWords);
 
   Future<List<FlutterEvent>> contactCreate(
-          {required String displayName, String? fourWords, required bool isFavourite}) =>
+          {required String displayName,
+          String? fourWords,
+          required bool isFavourite}) =>
       RustLib.instance.api.crateFlutterApiCommunitasApiContactCreate(
-          that: this, displayName: displayName, fourWords: fourWords, isFavourite: isFavourite);
+          that: this,
+          displayName: displayName,
+          fourWords: fourWords,
+          isFavourite: isFavourite);
 
   Future<List<FlutterEvent>> contactDelete({required String contactId}) =>
-      RustLib.instance.api.crateFlutterApiCommunitasApiContactDelete(that: this, contactId: contactId);
+      RustLib.instance.api.crateFlutterApiCommunitasApiContactDelete(
+          that: this, contactId: contactId);
 
-  Future<FlutterContact> contactGet({required String contactId}) =>
-      RustLib.instance.api.crateFlutterApiCommunitasApiContactGet(that: this, contactId: contactId);
+  Future<FlutterContact> contactGet({required String contactId}) => RustLib
+      .instance.api
+      .crateFlutterApiCommunitasApiContactGet(that: this, contactId: contactId);
 
-  Future<List<FlutterEvent>> contactLink({required String contactId, required String fourWords}) => RustLib.instance.api
-      .crateFlutterApiCommunitasApiContactLink(that: this, contactId: contactId, fourWords: fourWords);
+  Future<List<FlutterEvent>> contactLink(
+          {required String contactId, required String fourWords}) =>
+      RustLib.instance.api.crateFlutterApiCommunitasApiContactLink(
+          that: this, contactId: contactId, fourWords: fourWords);
 
-  Future<List<FlutterEvent>> contactRemoveFavourite({required String fourWords}) =>
-      RustLib.instance.api.crateFlutterApiCommunitasApiContactRemoveFavourite(that: this, fourWords: fourWords);
+  Future<List<FlutterEvent>> contactRemoveFavourite(
+          {required String fourWords}) =>
+      RustLib.instance.api.crateFlutterApiCommunitasApiContactRemoveFavourite(
+          that: this, fourWords: fourWords);
 
   Future<List<FlutterEvent>> contactSetFavourite({required String fourWords}) =>
-      RustLib.instance.api.crateFlutterApiCommunitasApiContactSetFavourite(that: this, fourWords: fourWords);
+      RustLib.instance.api.crateFlutterApiCommunitasApiContactSetFavourite(
+          that: this, fourWords: fourWords);
 
-  Future<List<FlutterEvent>> contactUpdate({required String contactId, String? displayName, bool? isFavourite}) =>
+  Future<List<FlutterEvent>> contactUpdate(
+          {required String contactId,
+          String? displayName,
+          bool? isFavourite}) =>
       RustLib.instance.api.crateFlutterApiCommunitasApiContactUpdate(
-          that: this, contactId: contactId, displayName: displayName, isFavourite: isFavourite);
+          that: this,
+          contactId: contactId,
+          displayName: displayName,
+          isFavourite: isFavourite);
 
-  Future<List<FlutterContact>> contactsList() => RustLib.instance.api.crateFlutterApiCommunitasApiContactsList(
+  Future<List<FlutterContact>> contactsList() =>
+      RustLib.instance.api.crateFlutterApiCommunitasApiContactsList(
         that: this,
       );
 
@@ -4319,29 +4822,41 @@ class CommunitasApiImpl extends RustOpaque implements CommunitasApi {
       );
 
   Future<List<FlutterContact>> contactsSearch({required String query}) =>
-      RustLib.instance.api.crateFlutterApiCommunitasApiContactsSearch(that: this, query: query);
+      RustLib.instance.api
+          .crateFlutterApiCommunitasApiContactsSearch(that: this, query: query);
 
   Future<List<FlutterEvent>> diskCreateDirectory(
-          {required String entityId, required FlutterDiskType diskType, required String path}) =>
+          {required String entityId,
+          required FlutterDiskType diskType,
+          required String path}) =>
       RustLib.instance.api.crateFlutterApiCommunitasApiDiskCreateDirectory(
           that: this, entityId: entityId, diskType: diskType, path: path);
 
   Future<List<FlutterEvent>> diskDeleteFile(
-          {required String entityId, required FlutterDiskType diskType, required String path}) =>
-      RustLib.instance.api
-          .crateFlutterApiCommunitasApiDiskDeleteFile(that: this, entityId: entityId, diskType: diskType, path: path);
+          {required String entityId,
+          required FlutterDiskType diskType,
+          required String path}) =>
+      RustLib.instance.api.crateFlutterApiCommunitasApiDiskDeleteFile(
+          that: this, entityId: entityId, diskType: diskType, path: path);
 
-  Future<FlutterDiskStats> diskGetStats({required String entityId, required FlutterDiskType diskType}) =>
-      RustLib.instance.api.crateFlutterApiCommunitasApiDiskGetStats(that: this, entityId: entityId, diskType: diskType);
+  Future<FlutterDiskStats> diskGetStats(
+          {required String entityId, required FlutterDiskType diskType}) =>
+      RustLib.instance.api.crateFlutterApiCommunitasApiDiskGetStats(
+          that: this, entityId: entityId, diskType: diskType);
 
   Future<List<FlutterFileInfo>> diskListFiles(
-          {required String entityId, required FlutterDiskType diskType, required String path}) =>
-      RustLib.instance.api
-          .crateFlutterApiCommunitasApiDiskListFiles(that: this, entityId: entityId, diskType: diskType, path: path);
+          {required String entityId,
+          required FlutterDiskType diskType,
+          required String path}) =>
+      RustLib.instance.api.crateFlutterApiCommunitasApiDiskListFiles(
+          that: this, entityId: entityId, diskType: diskType, path: path);
 
-  Future<Uint8List> diskReadFile({required String entityId, required FlutterDiskType diskType, required String path}) =>
-      RustLib.instance.api
-          .crateFlutterApiCommunitasApiDiskReadFile(that: this, entityId: entityId, diskType: diskType, path: path);
+  Future<Uint8List> diskReadFile(
+          {required String entityId,
+          required FlutterDiskType diskType,
+          required String path}) =>
+      RustLib.instance.api.crateFlutterApiCommunitasApiDiskReadFile(
+          that: this, entityId: entityId, diskType: diskType, path: path);
 
   Future<List<FlutterEvent>> diskWriteFile(
           {required String entityId,
@@ -4349,7 +4864,11 @@ class CommunitasApiImpl extends RustOpaque implements CommunitasApi {
           required String path,
           required List<int> data}) =>
       RustLib.instance.api.crateFlutterApiCommunitasApiDiskWriteFile(
-          that: this, entityId: entityId, diskType: diskType, path: path, data: data);
+          that: this,
+          entityId: entityId,
+          diskType: diskType,
+          path: path,
+          data: data);
 
   Future<List<FlutterEvent>> entityAddMember(
           {required FlutterEntityType entityType,
@@ -4357,34 +4876,56 @@ class CommunitasApiImpl extends RustOpaque implements CommunitasApi {
           required String memberId,
           required String role}) =>
       RustLib.instance.api.crateFlutterApiCommunitasApiEntityAddMember(
-          that: this, entityType: entityType, entityId: entityId, memberId: memberId, role: role);
+          that: this,
+          entityType: entityType,
+          entityId: entityId,
+          memberId: memberId,
+          role: role);
 
   Future<List<FlutterEvent>> entityCreate(
-          {required String name, required FlutterEntityType entityType, String? description, String? parentOrgId}) =>
+          {required String name,
+          required FlutterEntityType entityType,
+          String? description,
+          String? parentOrgId}) =>
       RustLib.instance.api.crateFlutterApiCommunitasApiEntityCreate(
-          that: this, name: name, entityType: entityType, description: description, parentOrgId: parentOrgId);
+          that: this,
+          name: name,
+          entityType: entityType,
+          description: description,
+          parentOrgId: parentOrgId);
 
-  Future<FlutterEntity> entityGet({required String entityId}) =>
-      RustLib.instance.api.crateFlutterApiCommunitasApiEntityGet(that: this, entityId: entityId);
+  Future<FlutterEntity> entityGet({required String entityId}) => RustLib
+      .instance.api
+      .crateFlutterApiCommunitasApiEntityGet(that: this, entityId: entityId);
 
-  Future<List<FlutterEntity>> entityList() => RustLib.instance.api.crateFlutterApiCommunitasApiEntityList(
+  Future<List<FlutterEntity>> entityList() =>
+      RustLib.instance.api.crateFlutterApiCommunitasApiEntityList(
         that: this,
       );
 
-  Future<List<FlutterEntity>> entityListByType({required FlutterEntityType entityType}) =>
-      RustLib.instance.api.crateFlutterApiCommunitasApiEntityListByType(that: this, entityType: entityType);
+  Future<List<FlutterEntity>> entityListByType(
+          {required FlutterEntityType entityType}) =>
+      RustLib.instance.api.crateFlutterApiCommunitasApiEntityListByType(
+          that: this, entityType: entityType);
 
   Future<List<FlutterEvent>> entityRemoveMember(
-          {required FlutterEntityType entityType, required String entityId, required String memberId}) =>
+          {required FlutterEntityType entityType,
+          required String entityId,
+          required String memberId}) =>
       RustLib.instance.api.crateFlutterApiCommunitasApiEntityRemoveMember(
-          that: this, entityType: entityType, entityId: entityId, memberId: memberId);
+          that: this,
+          entityType: entityType,
+          entityId: entityId,
+          memberId: memberId);
 
-  Future<FlutterUserProfile> getProfile() => RustLib.instance.api.crateFlutterApiCommunitasApiGetProfile(
+  Future<FlutterUserProfile> getProfile() =>
+      RustLib.instance.api.crateFlutterApiCommunitasApiGetProfile(
         that: this,
       );
 
   Future<List<FlutterEvent>> gossipConnectToPeer({required String fourWords}) =>
-      RustLib.instance.api.crateFlutterApiCommunitasApiGossipConnectToPeer(that: this, fourWords: fourWords);
+      RustLib.instance.api.crateFlutterApiCommunitasApiGossipConnectToPeer(
+          that: this, fourWords: fourWords);
 
   Future<String?> gossipGetConnectionWords() =>
       RustLib.instance.api.crateFlutterApiCommunitasApiGossipGetConnectionWords(
@@ -4396,15 +4937,17 @@ class CommunitasApiImpl extends RustOpaque implements CommunitasApi {
         that: this,
       );
 
-  Future<List<FlutterEvent>> gossipStart({int? port}) =>
-      RustLib.instance.api.crateFlutterApiCommunitasApiGossipStart(that: this, port: port);
+  Future<List<FlutterEvent>> gossipStart({int? port}) => RustLib.instance.api
+      .crateFlutterApiCommunitasApiGossipStart(that: this, port: port);
 
-  Future<List<FlutterEvent>> gossipStop() => RustLib.instance.api.crateFlutterApiCommunitasApiGossipStop(
+  Future<List<FlutterEvent>> gossipStop() =>
+      RustLib.instance.api.crateFlutterApiCommunitasApiGossipStop(
         that: this,
       );
 
-  Future<List<FlutterEvent>> inviteAccept({required String inviteId}) =>
-      RustLib.instance.api.crateFlutterApiCommunitasApiInviteAccept(that: this, inviteId: inviteId);
+  Future<List<FlutterEvent>> inviteAccept({required String inviteId}) => RustLib
+      .instance.api
+      .crateFlutterApiCommunitasApiInviteAccept(that: this, inviteId: inviteId);
 
   Future<List<FlutterEvent>> inviteCreate(
           {required String recipientId,
@@ -4420,16 +4963,23 @@ class CommunitasApiImpl extends RustOpaque implements CommunitasApi {
           role: role,
           message: message);
 
-  Future<List<FlutterEvent>> inviteReject({required String inviteId}) =>
-      RustLib.instance.api.crateFlutterApiCommunitasApiInviteReject(that: this, inviteId: inviteId);
+  Future<List<FlutterEvent>> inviteReject({required String inviteId}) => RustLib
+      .instance.api
+      .crateFlutterApiCommunitasApiInviteReject(that: this, inviteId: inviteId);
 
-  Future<List<FlutterEvent>> inviteRevoke({required String inviteId}) =>
-      RustLib.instance.api.crateFlutterApiCommunitasApiInviteRevoke(that: this, inviteId: inviteId);
+  Future<List<FlutterEvent>> inviteRevoke({required String inviteId}) => RustLib
+      .instance.api
+      .crateFlutterApiCommunitasApiInviteRevoke(that: this, inviteId: inviteId);
 
   Future<FlutterKanbanBoard> kanbanCreateBoard(
-          {required String entityId, required String boardName, String? description}) =>
+          {required String entityId,
+          required String boardName,
+          String? description}) =>
       RustLib.instance.api.crateFlutterApiCommunitasApiKanbanCreateBoard(
-          that: this, entityId: entityId, boardName: boardName, description: description);
+          that: this,
+          entityId: entityId,
+          boardName: boardName,
+          description: description);
 
   Future<FlutterKanbanCard> kanbanCreateCard(
           {required String boardId,
@@ -4438,39 +4988,81 @@ class CommunitasApiImpl extends RustOpaque implements CommunitasApi {
           String? description,
           String? assignee}) =>
       RustLib.instance.api.crateFlutterApiCommunitasApiKanbanCreateCard(
-          that: this, boardId: boardId, columnId: columnId, title: title, description: description, assignee: assignee);
+          that: this,
+          boardId: boardId,
+          columnId: columnId,
+          title: title,
+          description: description,
+          assignee: assignee);
 
   Future<FlutterKanbanColumn> kanbanCreateColumn(
-          {required String boardId, required String columnName, int? position}) =>
+          {required String boardId,
+          required String columnName,
+          int? position}) =>
       RustLib.instance.api.crateFlutterApiCommunitasApiKanbanCreateColumn(
-          that: this, boardId: boardId, columnName: columnName, position: position);
+          that: this,
+          boardId: boardId,
+          columnName: columnName,
+          position: position);
 
-  Future<List<FlutterEvent>> kanbanDeleteCard({required String boardId, required String cardId}) =>
-      RustLib.instance.api.crateFlutterApiCommunitasApiKanbanDeleteCard(that: this, boardId: boardId, cardId: cardId);
+  Future<List<FlutterEvent>> kanbanDeleteCard(
+          {required String boardId, required String cardId}) =>
+      RustLib.instance.api.crateFlutterApiCommunitasApiKanbanDeleteCard(
+          that: this, boardId: boardId, cardId: cardId);
 
   Future<FlutterKanbanBoard> kanbanGetBoard({required String boardId}) =>
-      RustLib.instance.api.crateFlutterApiCommunitasApiKanbanGetBoard(that: this, boardId: boardId);
+      RustLib.instance.api.crateFlutterApiCommunitasApiKanbanGetBoard(
+          that: this, boardId: boardId);
 
-  Future<List<FlutterKanbanBoard>> kanbanListBoards({required String entityId}) =>
-      RustLib.instance.api.crateFlutterApiCommunitasApiKanbanListBoards(that: this, entityId: entityId);
+  Future<List<FlutterKanbanBoard>> kanbanListBoards(
+          {required String entityId}) =>
+      RustLib.instance.api.crateFlutterApiCommunitasApiKanbanListBoards(
+          that: this, entityId: entityId);
 
   Future<List<FlutterKanbanCard>> kanbanListCards(
-          {required String boardId, String? columnId, String? state, String? assigneeId, String? tagId}) =>
+          {required String boardId,
+          String? columnId,
+          String? state,
+          String? assigneeId,
+          String? tagId}) =>
       RustLib.instance.api.crateFlutterApiCommunitasApiKanbanListCards(
-          that: this, boardId: boardId, columnId: columnId, state: state, assigneeId: assigneeId, tagId: tagId);
+          that: this,
+          boardId: boardId,
+          columnId: columnId,
+          state: state,
+          assigneeId: assigneeId,
+          tagId: tagId);
 
-  Future<List<FlutterKanbanColumn>> kanbanListColumns({required String boardId}) =>
-      RustLib.instance.api.crateFlutterApiCommunitasApiKanbanListColumns(that: this, boardId: boardId);
+  Future<List<FlutterKanbanColumn>> kanbanListColumns(
+          {required String boardId}) =>
+      RustLib.instance.api.crateFlutterApiCommunitasApiKanbanListColumns(
+          that: this, boardId: boardId);
 
   Future<List<FlutterEvent>> kanbanMoveCard(
-          {required String boardId, required String cardId, required String targetColumnId, int? position}) =>
+          {required String boardId,
+          required String cardId,
+          required String targetColumnId,
+          int? position}) =>
       RustLib.instance.api.crateFlutterApiCommunitasApiKanbanMoveCard(
-          that: this, boardId: boardId, cardId: cardId, targetColumnId: targetColumnId, position: position);
+          that: this,
+          boardId: boardId,
+          cardId: cardId,
+          targetColumnId: targetColumnId,
+          position: position);
 
   Future<List<FlutterEvent>> kanbanUpdateCard(
-          {required String boardId, required String cardId, String? title, String? description, String? assignee}) =>
+          {required String boardId,
+          required String cardId,
+          String? title,
+          String? description,
+          String? assignee}) =>
       RustLib.instance.api.crateFlutterApiCommunitasApiKanbanUpdateCard(
-          that: this, boardId: boardId, cardId: cardId, title: title, description: description, assignee: assignee);
+          that: this,
+          boardId: boardId,
+          cardId: cardId,
+          title: title,
+          description: description,
+          assignee: assignee);
 
   Future<List<FlutterEvent>> messageAddReaction(
           {required String entityId,
@@ -4478,12 +5070,21 @@ class CommunitasApiImpl extends RustOpaque implements CommunitasApi {
           required String messageId,
           required String emoji}) =>
       RustLib.instance.api.crateFlutterApiCommunitasApiMessageAddReaction(
-          that: this, entityId: entityId, entityType: entityType, messageId: messageId, emoji: emoji);
+          that: this,
+          entityId: entityId,
+          entityType: entityType,
+          messageId: messageId,
+          emoji: emoji);
 
   Future<List<FlutterEvent>> messageDelete(
-          {required String entityId, required FlutterEntityType entityType, required String messageId}) =>
+          {required String entityId,
+          required FlutterEntityType entityType,
+          required String messageId}) =>
       RustLib.instance.api.crateFlutterApiCommunitasApiMessageDelete(
-          that: this, entityId: entityId, entityType: entityType, messageId: messageId);
+          that: this,
+          entityId: entityId,
+          entityType: entityType,
+          messageId: messageId);
 
   Future<List<FlutterEvent>> messageEdit(
           {required String entityId,
@@ -4491,20 +5092,30 @@ class CommunitasApiImpl extends RustOpaque implements CommunitasApi {
           required String messageId,
           required String newText}) =>
       RustLib.instance.api.crateFlutterApiCommunitasApiMessageEdit(
-          that: this, entityId: entityId, entityType: entityType, messageId: messageId, newText: newText);
+          that: this,
+          entityId: entityId,
+          entityType: entityType,
+          messageId: messageId,
+          newText: newText);
 
-  Future<FlutterMessage> messageGet({required String entityId, required String messageId}) =>
-      RustLib.instance.api.crateFlutterApiCommunitasApiMessageGet(that: this, entityId: entityId, messageId: messageId);
+  Future<FlutterMessage> messageGet(
+          {required String entityId, required String messageId}) =>
+      RustLib.instance.api.crateFlutterApiCommunitasApiMessageGet(
+          that: this, entityId: entityId, messageId: messageId);
 
   Future<List<FlutterMessage>> messageList({required String entityId}) =>
-      RustLib.instance.api.crateFlutterApiCommunitasApiMessageList(that: this, entityId: entityId);
+      RustLib.instance.api.crateFlutterApiCommunitasApiMessageList(
+          that: this, entityId: entityId);
 
-  Future<List<FlutterMessage>> messageListDirect({required String otherPeerId}) =>
-      RustLib.instance.api.crateFlutterApiCommunitasApiMessageListDirect(that: this, otherPeerId: otherPeerId);
+  Future<List<FlutterMessage>> messageListDirect(
+          {required String otherPeerId}) =>
+      RustLib.instance.api.crateFlutterApiCommunitasApiMessageListDirect(
+          that: this, otherPeerId: otherPeerId);
 
-  Future<List<FlutterMessage>> messageListThread({required String entityId, required String parentMessageId}) => RustLib
-      .instance.api
-      .crateFlutterApiCommunitasApiMessageListThread(that: this, entityId: entityId, parentMessageId: parentMessageId);
+  Future<List<FlutterMessage>> messageListThread(
+          {required String entityId, required String parentMessageId}) =>
+      RustLib.instance.api.crateFlutterApiCommunitasApiMessageListThread(
+          that: this, entityId: entityId, parentMessageId: parentMessageId);
 
   Future<List<FlutterEvent>> messageRemoveReaction(
           {required String entityId,
@@ -4512,23 +5123,38 @@ class CommunitasApiImpl extends RustOpaque implements CommunitasApi {
           required String messageId,
           required String emoji}) =>
       RustLib.instance.api.crateFlutterApiCommunitasApiMessageRemoveReaction(
-          that: this, entityId: entityId, entityType: entityType, messageId: messageId, emoji: emoji);
+          that: this,
+          entityId: entityId,
+          entityType: entityType,
+          messageId: messageId,
+          emoji: emoji);
 
   Future<List<FlutterEvent>> messageSend(
-          {required String entityId, required FlutterEntityType entityType, required String text, String? replyToId}) =>
+          {required String entityId,
+          required FlutterEntityType entityType,
+          required String text,
+          String? replyToId}) =>
       RustLib.instance.api.crateFlutterApiCommunitasApiMessageSend(
-          that: this, entityId: entityId, entityType: entityType, text: text, replyToId: replyToId);
+          that: this,
+          entityId: entityId,
+          entityType: entityType,
+          text: text,
+          replyToId: replyToId);
 
-  Future<List<FlutterEvent>> messageSendDirect({required List<String> recipients, required String text}) =>
-      RustLib.instance.api
-          .crateFlutterApiCommunitasApiMessageSendDirect(that: this, recipients: recipients, text: text);
+  Future<List<FlutterEvent>> messageSendDirect(
+          {required List<String> recipients, required String text}) =>
+      RustLib.instance.api.crateFlutterApiCommunitasApiMessageSendDirect(
+          that: this, recipients: recipients, text: text);
 
-  Future<List<FlutterEvent>> presenceAnnounce() => RustLib.instance.api.crateFlutterApiCommunitasApiPresenceAnnounce(
+  Future<List<FlutterEvent>> presenceAnnounce() =>
+      RustLib.instance.api.crateFlutterApiCommunitasApiPresenceAnnounce(
         that: this,
       );
 
-  Future<FlutterPresenceRecord?> presenceGetCachedPeer({required String pubkeyHex}) =>
-      RustLib.instance.api.crateFlutterApiCommunitasApiPresenceGetCachedPeer(that: this, pubkeyHex: pubkeyHex);
+  Future<FlutterPresenceRecord?> presenceGetCachedPeer(
+          {required String pubkeyHex}) =>
+      RustLib.instance.api.crateFlutterApiCommunitasApiPresenceGetCachedPeer(
+          that: this, pubkeyHex: pubkeyHex);
 
   Future<FlutterPresenceRecord?> presenceGetOurRecord() =>
       RustLib.instance.api.crateFlutterApiCommunitasApiPresenceGetOurRecord(
@@ -4536,16 +5162,20 @@ class CommunitasApiImpl extends RustOpaque implements CommunitasApi {
       );
 
   Future<FlutterPresenceStatus> presenceGetStatus({required String peerId}) =>
-      RustLib.instance.api.crateFlutterApiCommunitasApiPresenceGetStatus(that: this, peerId: peerId);
+      RustLib.instance.api.crateFlutterApiCommunitasApiPresenceGetStatus(
+          that: this, peerId: peerId);
 
   Future<List<String>> presenceListOnlinePeers() =>
       RustLib.instance.api.crateFlutterApiCommunitasApiPresenceListOnlinePeers(
         that: this,
       );
 
-  Future<FlutterPresenceRecord?> presenceQueryPeer({required String pubkeyHex}) =>
-      RustLib.instance.api.crateFlutterApiCommunitasApiPresenceQueryPeer(that: this, pubkeyHex: pubkeyHex);
+  Future<FlutterPresenceRecord?> presenceQueryPeer(
+          {required String pubkeyHex}) =>
+      RustLib.instance.api.crateFlutterApiCommunitasApiPresenceQueryPeer(
+          that: this, pubkeyHex: pubkeyHex);
 
   Future<List<FlutterEvent>> updateDisplayName({required String displayName}) =>
-      RustLib.instance.api.crateFlutterApiCommunitasApiUpdateDisplayName(that: this, displayName: displayName);
+      RustLib.instance.api.crateFlutterApiCommunitasApiUpdateDisplayName(
+          that: this, displayName: displayName);
 }

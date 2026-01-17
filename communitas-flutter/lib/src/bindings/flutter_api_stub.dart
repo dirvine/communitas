@@ -228,7 +228,8 @@ abstract class CommunitasApi {
     String? tagId,
   });
 
-  Future<List<FlutterKanbanColumn>> kanbanListColumns({required String boardId});
+  Future<List<FlutterKanbanColumn>> kanbanListColumns(
+      {required String boardId});
 
   Future<List<FlutterEvent>> kanbanMoveCard({
     required String boardId,
@@ -317,7 +318,8 @@ abstract class CommunitasApi {
 
   Future<List<FlutterEvent>> contactSetFavourite({required String fourWords});
 
-  Future<List<FlutterEvent>> contactRemoveFavourite({required String fourWords});
+  Future<List<FlutterEvent>> contactRemoveFavourite(
+      {required String fourWords});
 
   Future<List<FlutterEvent>> presenceAnnounce();
 
@@ -407,12 +409,17 @@ enum FlutterEntityType {
 abstract class FlutterEvent {
   const FlutterEvent._();
 
-  factory FlutterEvent.networkingStarted({required String address}) = FlutterEventNetworkingStarted;
+  factory FlutterEvent.networkingStarted({required String address}) =
+      FlutterEventNetworkingStarted;
   factory FlutterEvent.networkingStopped() = FlutterEventNetworkingStopped;
-  factory FlutterEvent.peerConnected({required String peerId}) = FlutterEventPeerConnected;
-  factory FlutterEvent.peerDisconnected({required String peerId}) = FlutterEventPeerDisconnected;
-  factory FlutterEvent.entityCreated({required String entityId}) = FlutterEventEntityCreated;
-  factory FlutterEvent.entityUpdated({required String entityId}) = FlutterEventEntityUpdated;
+  factory FlutterEvent.peerConnected({required String peerId}) =
+      FlutterEventPeerConnected;
+  factory FlutterEvent.peerDisconnected({required String peerId}) =
+      FlutterEventPeerDisconnected;
+  factory FlutterEvent.entityCreated({required String entityId}) =
+      FlutterEventEntityCreated;
+  factory FlutterEvent.entityUpdated({required String entityId}) =
+      FlutterEventEntityUpdated;
   factory FlutterEvent.messageSent({
     required String messageId,
     required String entityId,
@@ -447,10 +454,14 @@ abstract class FlutterEvent {
     required String emoji,
     required String reactorId,
   }) = FlutterEventReactionRemoved;
-  factory FlutterEvent.inviteCreated({required String inviteId}) = FlutterEventInviteCreated;
-  factory FlutterEvent.inviteAccepted({required String inviteId}) = FlutterEventInviteAccepted;
-  factory FlutterEvent.inviteRejected({required String inviteId}) = FlutterEventInviteRejected;
-  factory FlutterEvent.inviteRevoked({required String inviteId}) = FlutterEventInviteRevoked;
+  factory FlutterEvent.inviteCreated({required String inviteId}) =
+      FlutterEventInviteCreated;
+  factory FlutterEvent.inviteAccepted({required String inviteId}) =
+      FlutterEventInviteAccepted;
+  factory FlutterEvent.inviteRejected({required String inviteId}) =
+      FlutterEventInviteRejected;
+  factory FlutterEvent.inviteRevoked({required String inviteId}) =
+      FlutterEventInviteRevoked;
   factory FlutterEvent.fileWritten({
     required String entityId,
     required String path,
@@ -497,13 +508,15 @@ class FlutterEventEntityUpdated extends FlutterEvent {
 class FlutterEventMessageSent extends FlutterEvent {
   final String messageId;
   final String entityId;
-  FlutterEventMessageSent({required this.messageId, required this.entityId}) : super._();
+  FlutterEventMessageSent({required this.messageId, required this.entityId})
+      : super._();
 }
 
 class FlutterEventMessageReceived extends FlutterEvent {
   final String messageId;
   final String entityId;
-  FlutterEventMessageReceived({required this.messageId, required this.entityId}) : super._();
+  FlutterEventMessageReceived({required this.messageId, required this.entityId})
+      : super._();
 }
 
 class FlutterEventDirectMessageSent extends FlutterEvent {
@@ -518,7 +531,8 @@ class FlutterEventDirectMessageSent extends FlutterEvent {
 class FlutterEventMessageDeleted extends FlutterEvent {
   final String messageId;
   final String entityId;
-  FlutterEventMessageDeleted({required this.messageId, required this.entityId}) : super._();
+  FlutterEventMessageDeleted({required this.messageId, required this.entityId})
+      : super._();
 }
 
 class FlutterEventMessageEdited extends FlutterEvent {
@@ -583,13 +597,15 @@ class FlutterEventInviteRevoked extends FlutterEvent {
 class FlutterEventFileWritten extends FlutterEvent {
   final String entityId;
   final String path;
-  FlutterEventFileWritten({required this.entityId, required this.path}) : super._();
+  FlutterEventFileWritten({required this.entityId, required this.path})
+      : super._();
 }
 
 class FlutterEventFileDeleted extends FlutterEvent {
   final String entityId;
   final String path;
-  FlutterEventFileDeleted({required this.entityId, required this.path}) : super._();
+  FlutterEventFileDeleted({required this.entityId, required this.path})
+      : super._();
 }
 
 class FlutterEventError extends FlutterEvent {
@@ -640,14 +656,22 @@ class FlutterSessionInfo {
   final String fourWords;
   final String displayName;
 
+  /// Hex-encoded ML-DSA-87 public key (the user's cryptographic identity)
+  final String pubkeyHex;
+
   const FlutterSessionInfo({
     required this.sessionId,
     required this.fourWords,
     required this.displayName,
+    required this.pubkeyHex,
   });
 
   @override
-  int get hashCode => sessionId.hashCode ^ fourWords.hashCode ^ displayName.hashCode;
+  int get hashCode =>
+      sessionId.hashCode ^
+      fourWords.hashCode ^
+      displayName.hashCode ^
+      pubkeyHex.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -656,7 +680,8 @@ class FlutterSessionInfo {
           runtimeType == other.runtimeType &&
           sessionId == other.sessionId &&
           fourWords == other.fourWords &&
-          displayName == other.displayName;
+          displayName == other.displayName &&
+          pubkeyHex == other.pubkeyHex;
 }
 
 /// User profile information
@@ -674,7 +699,11 @@ class FlutterUserProfile {
   });
 
   @override
-  int get hashCode => fourWords.hashCode ^ displayName.hashCode ^ deviceName.hashCode ^ deviceType.hashCode;
+  int get hashCode =>
+      fourWords.hashCode ^
+      displayName.hashCode ^
+      deviceName.hashCode ^
+      deviceType.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -705,7 +734,11 @@ class FlutterVaultInfo {
 
   @override
   int get hashCode =>
-      fourWords.hashCode ^ displayName.hashCode ^ createdAt.hashCode ^ lastAccessed.hashCode ^ sizeBytes.hashCode;
+      fourWords.hashCode ^
+      displayName.hashCode ^
+      createdAt.hashCode ^
+      lastAccessed.hashCode ^
+      sizeBytes.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -782,7 +815,8 @@ class FlutterReaction {
   });
 
   @override
-  int get hashCode => emoji.hashCode ^ count.hashCode ^ userReacted.hashCode ^ peerIds.hashCode;
+  int get hashCode =>
+      emoji.hashCode ^ count.hashCode ^ userReacted.hashCode ^ peerIds.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -857,7 +891,11 @@ class FlutterDiskStats {
 
   @override
   int get hashCode =>
-      entityId.hashCode ^ diskType.hashCode ^ usedBytes.hashCode ^ fileCount.hashCode ^ dirCount.hashCode;
+      entityId.hashCode ^
+      diskType.hashCode ^
+      usedBytes.hashCode ^
+      fileCount.hashCode ^
+      dirCount.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -895,7 +933,12 @@ class FlutterFileInfo {
   });
 
   @override
-  int get hashCode => path.hashCode ^ name.hashCode ^ isDirectory.hashCode ^ sizeBytes.hashCode ^ modifiedAt.hashCode;
+  int get hashCode =>
+      path.hashCode ^
+      name.hashCode ^
+      isDirectory.hashCode ^
+      sizeBytes.hashCode ^
+      modifiedAt.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -926,7 +969,12 @@ class FlutterKanbanBoard {
   });
 
   @override
-  int get hashCode => id.hashCode ^ entityId.hashCode ^ name.hashCode ^ description.hashCode ^ columnCount.hashCode;
+  int get hashCode =>
+      id.hashCode ^
+      entityId.hashCode ^
+      name.hashCode ^
+      description.hashCode ^
+      columnCount.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -960,7 +1008,12 @@ class FlutterKanbanCard {
 
   @override
   int get hashCode =>
-      id.hashCode ^ columnId.hashCode ^ title.hashCode ^ description.hashCode ^ assignee.hashCode ^ position.hashCode;
+      id.hashCode ^
+      columnId.hashCode ^
+      title.hashCode ^
+      description.hashCode ^
+      assignee.hashCode ^
+      position.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -995,7 +1048,12 @@ class FlutterKanbanColumn {
 
   @override
   int get hashCode =>
-      id.hashCode ^ boardId.hashCode ^ name.hashCode ^ position.hashCode ^ color.hashCode ^ wipLimit.hashCode;
+      id.hashCode ^
+      boardId.hashCode ^
+      name.hashCode ^
+      position.hashCode ^
+      color.hashCode ^
+      wipLimit.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -1025,7 +1083,11 @@ class FlutterPresenceRecord {
   });
 
   @override
-  int get hashCode => pubkeyHex.hashCode ^ connectionWords.hashCode ^ timestamp.hashCode ^ isVerified.hashCode;
+  int get hashCode =>
+      pubkeyHex.hashCode ^
+      connectionWords.hashCode ^
+      timestamp.hashCode ^
+      isVerified.hashCode;
 
   @override
   bool operator ==(Object other) =>

@@ -18,19 +18,24 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
     required super.portManager,
   });
 
-  CrossPlatformFinalizerArg get rust_arc_decrement_strong_count_CommunitasApiPtr => wire
-      ._rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApiPtr;
+  CrossPlatformFinalizerArg
+      get rust_arc_decrement_strong_count_CommunitasApiPtr => wire
+          ._rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApiPtr;
 
   @protected
-  CommunitasApi dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
-      dynamic raw);
+  CommunitasApi
+      dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
+          dynamic raw);
 
   @protected
-  CommunitasApi dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
-      dynamic raw);
+  CommunitasApi
+      dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
+          dynamic raw);
 
   @protected
-  CommunitasApi dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(dynamic raw);
+  CommunitasApi
+      dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
+          dynamic raw);
 
   @protected
   String dco_decode_String(dynamic raw);
@@ -42,7 +47,8 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   bool dco_decode_box_autoadd_bool(dynamic raw);
 
   @protected
-  FlutterPresenceRecord dco_decode_box_autoadd_flutter_presence_record(dynamic raw);
+  FlutterPresenceRecord dco_decode_box_autoadd_flutter_presence_record(
+      dynamic raw);
 
   @protected
   FlutterSessionInfo dco_decode_box_autoadd_flutter_session_info(dynamic raw);
@@ -168,10 +174,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   bool? dco_decode_opt_box_autoadd_bool(dynamic raw);
 
   @protected
-  FlutterPresenceRecord? dco_decode_opt_box_autoadd_flutter_presence_record(dynamic raw);
+  FlutterPresenceRecord? dco_decode_opt_box_autoadd_flutter_presence_record(
+      dynamic raw);
 
   @protected
-  FlutterSessionInfo? dco_decode_opt_box_autoadd_flutter_session_info(dynamic raw);
+  FlutterSessionInfo? dco_decode_opt_box_autoadd_flutter_session_info(
+      dynamic raw);
 
   @protected
   PlatformInt64? dco_decode_opt_box_autoadd_i_64(dynamic raw);
@@ -204,16 +212,19 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   BigInt dco_decode_usize(dynamic raw);
 
   @protected
-  CommunitasApi sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
-      SseDeserializer deserializer);
+  CommunitasApi
+      sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
+          SseDeserializer deserializer);
 
   @protected
-  CommunitasApi sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
-      SseDeserializer deserializer);
+  CommunitasApi
+      sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
+          SseDeserializer deserializer);
 
   @protected
-  CommunitasApi sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
-      SseDeserializer deserializer);
+  CommunitasApi
+      sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
+          SseDeserializer deserializer);
 
   @protected
   String sse_decode_String(SseDeserializer deserializer);
@@ -225,10 +236,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   bool sse_decode_box_autoadd_bool(SseDeserializer deserializer);
 
   @protected
-  FlutterPresenceRecord sse_decode_box_autoadd_flutter_presence_record(SseDeserializer deserializer);
+  FlutterPresenceRecord sse_decode_box_autoadd_flutter_presence_record(
+      SseDeserializer deserializer);
 
   @protected
-  FlutterSessionInfo sse_decode_box_autoadd_flutter_session_info(SseDeserializer deserializer);
+  FlutterSessionInfo sse_decode_box_autoadd_flutter_session_info(
+      SseDeserializer deserializer);
 
   @protected
   PlatformInt64 sse_decode_box_autoadd_i_64(SseDeserializer deserializer);
@@ -255,7 +268,8 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   FlutterEntity sse_decode_flutter_entity(SseDeserializer deserializer);
 
   @protected
-  FlutterEntityType sse_decode_flutter_entity_type(SseDeserializer deserializer);
+  FlutterEntityType sse_decode_flutter_entity_type(
+      SseDeserializer deserializer);
 
   @protected
   FlutterEvent sse_decode_flutter_event(SseDeserializer deserializer);
@@ -264,37 +278,46 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   FlutterFileInfo sse_decode_flutter_file_info(SseDeserializer deserializer);
 
   @protected
-  FlutterKanbanBoard sse_decode_flutter_kanban_board(SseDeserializer deserializer);
+  FlutterKanbanBoard sse_decode_flutter_kanban_board(
+      SseDeserializer deserializer);
 
   @protected
-  FlutterKanbanCard sse_decode_flutter_kanban_card(SseDeserializer deserializer);
+  FlutterKanbanCard sse_decode_flutter_kanban_card(
+      SseDeserializer deserializer);
 
   @protected
-  FlutterKanbanColumn sse_decode_flutter_kanban_column(SseDeserializer deserializer);
+  FlutterKanbanColumn sse_decode_flutter_kanban_column(
+      SseDeserializer deserializer);
 
   @protected
   FlutterMessage sse_decode_flutter_message(SseDeserializer deserializer);
 
   @protected
-  FlutterNetworkInfo sse_decode_flutter_network_info(SseDeserializer deserializer);
+  FlutterNetworkInfo sse_decode_flutter_network_info(
+      SseDeserializer deserializer);
 
   @protected
-  FlutterPresenceRecord sse_decode_flutter_presence_record(SseDeserializer deserializer);
+  FlutterPresenceRecord sse_decode_flutter_presence_record(
+      SseDeserializer deserializer);
 
   @protected
-  FlutterPresenceStatus sse_decode_flutter_presence_status(SseDeserializer deserializer);
+  FlutterPresenceStatus sse_decode_flutter_presence_status(
+      SseDeserializer deserializer);
 
   @protected
   FlutterReaction sse_decode_flutter_reaction(SseDeserializer deserializer);
 
   @protected
-  FlutterRecoveredIdentity sse_decode_flutter_recovered_identity(SseDeserializer deserializer);
+  FlutterRecoveredIdentity sse_decode_flutter_recovered_identity(
+      SseDeserializer deserializer);
 
   @protected
-  FlutterSessionInfo sse_decode_flutter_session_info(SseDeserializer deserializer);
+  FlutterSessionInfo sse_decode_flutter_session_info(
+      SseDeserializer deserializer);
 
   @protected
-  FlutterUserProfile sse_decode_flutter_user_profile(SseDeserializer deserializer);
+  FlutterUserProfile sse_decode_flutter_user_profile(
+      SseDeserializer deserializer);
 
   @protected
   FlutterVaultInfo sse_decode_flutter_vault_info(SseDeserializer deserializer);
@@ -309,34 +332,44 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<String> sse_decode_list_String(SseDeserializer deserializer);
 
   @protected
-  List<FlutterContact> sse_decode_list_flutter_contact(SseDeserializer deserializer);
+  List<FlutterContact> sse_decode_list_flutter_contact(
+      SseDeserializer deserializer);
 
   @protected
-  List<FlutterEntity> sse_decode_list_flutter_entity(SseDeserializer deserializer);
+  List<FlutterEntity> sse_decode_list_flutter_entity(
+      SseDeserializer deserializer);
 
   @protected
-  List<FlutterEvent> sse_decode_list_flutter_event(SseDeserializer deserializer);
+  List<FlutterEvent> sse_decode_list_flutter_event(
+      SseDeserializer deserializer);
 
   @protected
-  List<FlutterFileInfo> sse_decode_list_flutter_file_info(SseDeserializer deserializer);
+  List<FlutterFileInfo> sse_decode_list_flutter_file_info(
+      SseDeserializer deserializer);
 
   @protected
-  List<FlutterKanbanBoard> sse_decode_list_flutter_kanban_board(SseDeserializer deserializer);
+  List<FlutterKanbanBoard> sse_decode_list_flutter_kanban_board(
+      SseDeserializer deserializer);
 
   @protected
-  List<FlutterKanbanCard> sse_decode_list_flutter_kanban_card(SseDeserializer deserializer);
+  List<FlutterKanbanCard> sse_decode_list_flutter_kanban_card(
+      SseDeserializer deserializer);
 
   @protected
-  List<FlutterKanbanColumn> sse_decode_list_flutter_kanban_column(SseDeserializer deserializer);
+  List<FlutterKanbanColumn> sse_decode_list_flutter_kanban_column(
+      SseDeserializer deserializer);
 
   @protected
-  List<FlutterMessage> sse_decode_list_flutter_message(SseDeserializer deserializer);
+  List<FlutterMessage> sse_decode_list_flutter_message(
+      SseDeserializer deserializer);
 
   @protected
-  List<FlutterReaction> sse_decode_list_flutter_reaction(SseDeserializer deserializer);
+  List<FlutterReaction> sse_decode_list_flutter_reaction(
+      SseDeserializer deserializer);
 
   @protected
-  List<FlutterVaultInfo> sse_decode_list_flutter_vault_info(SseDeserializer deserializer);
+  List<FlutterVaultInfo> sse_decode_list_flutter_vault_info(
+      SseDeserializer deserializer);
 
   @protected
   List<int> sse_decode_list_prim_u_8_loose(SseDeserializer deserializer);
@@ -351,10 +384,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   bool? sse_decode_opt_box_autoadd_bool(SseDeserializer deserializer);
 
   @protected
-  FlutterPresenceRecord? sse_decode_opt_box_autoadd_flutter_presence_record(SseDeserializer deserializer);
+  FlutterPresenceRecord? sse_decode_opt_box_autoadd_flutter_presence_record(
+      SseDeserializer deserializer);
 
   @protected
-  FlutterSessionInfo? sse_decode_opt_box_autoadd_flutter_session_info(SseDeserializer deserializer);
+  FlutterSessionInfo? sse_decode_opt_box_autoadd_flutter_session_info(
+      SseDeserializer deserializer);
 
   @protected
   PlatformInt64? sse_decode_opt_box_autoadd_i_64(SseDeserializer deserializer);
@@ -387,16 +422,19 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   BigInt sse_decode_usize(SseDeserializer deserializer);
 
   @protected
-  void sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
-      CommunitasApi self, SseSerializer serializer);
+  void
+      sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
+          CommunitasApi self, SseSerializer serializer);
 
   @protected
-  void sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
-      CommunitasApi self, SseSerializer serializer);
+  void
+      sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
+          CommunitasApi self, SseSerializer serializer);
 
   @protected
-  void sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
-      CommunitasApi self, SseSerializer serializer);
+  void
+      sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
+          CommunitasApi self, SseSerializer serializer);
 
   @protected
   void sse_encode_String(String self, SseSerializer serializer);
@@ -408,13 +446,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_box_autoadd_bool(bool self, SseSerializer serializer);
 
   @protected
-  void sse_encode_box_autoadd_flutter_presence_record(FlutterPresenceRecord self, SseSerializer serializer);
+  void sse_encode_box_autoadd_flutter_presence_record(
+      FlutterPresenceRecord self, SseSerializer serializer);
 
   @protected
-  void sse_encode_box_autoadd_flutter_session_info(FlutterSessionInfo self, SseSerializer serializer);
+  void sse_encode_box_autoadd_flutter_session_info(
+      FlutterSessionInfo self, SseSerializer serializer);
 
   @protected
-  void sse_encode_box_autoadd_i_64(PlatformInt64 self, SseSerializer serializer);
+  void sse_encode_box_autoadd_i_64(
+      PlatformInt64 self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_u_16(int self, SseSerializer serializer);
@@ -426,61 +467,78 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_box_autoadd_u_64(BigInt self, SseSerializer serializer);
 
   @protected
-  void sse_encode_flutter_contact(FlutterContact self, SseSerializer serializer);
+  void sse_encode_flutter_contact(
+      FlutterContact self, SseSerializer serializer);
 
   @protected
-  void sse_encode_flutter_disk_stats(FlutterDiskStats self, SseSerializer serializer);
+  void sse_encode_flutter_disk_stats(
+      FlutterDiskStats self, SseSerializer serializer);
 
   @protected
-  void sse_encode_flutter_disk_type(FlutterDiskType self, SseSerializer serializer);
+  void sse_encode_flutter_disk_type(
+      FlutterDiskType self, SseSerializer serializer);
 
   @protected
   void sse_encode_flutter_entity(FlutterEntity self, SseSerializer serializer);
 
   @protected
-  void sse_encode_flutter_entity_type(FlutterEntityType self, SseSerializer serializer);
+  void sse_encode_flutter_entity_type(
+      FlutterEntityType self, SseSerializer serializer);
 
   @protected
   void sse_encode_flutter_event(FlutterEvent self, SseSerializer serializer);
 
   @protected
-  void sse_encode_flutter_file_info(FlutterFileInfo self, SseSerializer serializer);
+  void sse_encode_flutter_file_info(
+      FlutterFileInfo self, SseSerializer serializer);
 
   @protected
-  void sse_encode_flutter_kanban_board(FlutterKanbanBoard self, SseSerializer serializer);
+  void sse_encode_flutter_kanban_board(
+      FlutterKanbanBoard self, SseSerializer serializer);
 
   @protected
-  void sse_encode_flutter_kanban_card(FlutterKanbanCard self, SseSerializer serializer);
+  void sse_encode_flutter_kanban_card(
+      FlutterKanbanCard self, SseSerializer serializer);
 
   @protected
-  void sse_encode_flutter_kanban_column(FlutterKanbanColumn self, SseSerializer serializer);
+  void sse_encode_flutter_kanban_column(
+      FlutterKanbanColumn self, SseSerializer serializer);
 
   @protected
-  void sse_encode_flutter_message(FlutterMessage self, SseSerializer serializer);
+  void sse_encode_flutter_message(
+      FlutterMessage self, SseSerializer serializer);
 
   @protected
-  void sse_encode_flutter_network_info(FlutterNetworkInfo self, SseSerializer serializer);
+  void sse_encode_flutter_network_info(
+      FlutterNetworkInfo self, SseSerializer serializer);
 
   @protected
-  void sse_encode_flutter_presence_record(FlutterPresenceRecord self, SseSerializer serializer);
+  void sse_encode_flutter_presence_record(
+      FlutterPresenceRecord self, SseSerializer serializer);
 
   @protected
-  void sse_encode_flutter_presence_status(FlutterPresenceStatus self, SseSerializer serializer);
+  void sse_encode_flutter_presence_status(
+      FlutterPresenceStatus self, SseSerializer serializer);
 
   @protected
-  void sse_encode_flutter_reaction(FlutterReaction self, SseSerializer serializer);
+  void sse_encode_flutter_reaction(
+      FlutterReaction self, SseSerializer serializer);
 
   @protected
-  void sse_encode_flutter_recovered_identity(FlutterRecoveredIdentity self, SseSerializer serializer);
+  void sse_encode_flutter_recovered_identity(
+      FlutterRecoveredIdentity self, SseSerializer serializer);
 
   @protected
-  void sse_encode_flutter_session_info(FlutterSessionInfo self, SseSerializer serializer);
+  void sse_encode_flutter_session_info(
+      FlutterSessionInfo self, SseSerializer serializer);
 
   @protected
-  void sse_encode_flutter_user_profile(FlutterUserProfile self, SseSerializer serializer);
+  void sse_encode_flutter_user_profile(
+      FlutterUserProfile self, SseSerializer serializer);
 
   @protected
-  void sse_encode_flutter_vault_info(FlutterVaultInfo self, SseSerializer serializer);
+  void sse_encode_flutter_vault_info(
+      FlutterVaultInfo self, SseSerializer serializer);
 
   @protected
   void sse_encode_i_32(int self, SseSerializer serializer);
@@ -492,40 +550,51 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_list_String(List<String> self, SseSerializer serializer);
 
   @protected
-  void sse_encode_list_flutter_contact(List<FlutterContact> self, SseSerializer serializer);
+  void sse_encode_list_flutter_contact(
+      List<FlutterContact> self, SseSerializer serializer);
 
   @protected
-  void sse_encode_list_flutter_entity(List<FlutterEntity> self, SseSerializer serializer);
+  void sse_encode_list_flutter_entity(
+      List<FlutterEntity> self, SseSerializer serializer);
 
   @protected
-  void sse_encode_list_flutter_event(List<FlutterEvent> self, SseSerializer serializer);
+  void sse_encode_list_flutter_event(
+      List<FlutterEvent> self, SseSerializer serializer);
 
   @protected
-  void sse_encode_list_flutter_file_info(List<FlutterFileInfo> self, SseSerializer serializer);
+  void sse_encode_list_flutter_file_info(
+      List<FlutterFileInfo> self, SseSerializer serializer);
 
   @protected
-  void sse_encode_list_flutter_kanban_board(List<FlutterKanbanBoard> self, SseSerializer serializer);
+  void sse_encode_list_flutter_kanban_board(
+      List<FlutterKanbanBoard> self, SseSerializer serializer);
 
   @protected
-  void sse_encode_list_flutter_kanban_card(List<FlutterKanbanCard> self, SseSerializer serializer);
+  void sse_encode_list_flutter_kanban_card(
+      List<FlutterKanbanCard> self, SseSerializer serializer);
 
   @protected
-  void sse_encode_list_flutter_kanban_column(List<FlutterKanbanColumn> self, SseSerializer serializer);
+  void sse_encode_list_flutter_kanban_column(
+      List<FlutterKanbanColumn> self, SseSerializer serializer);
 
   @protected
-  void sse_encode_list_flutter_message(List<FlutterMessage> self, SseSerializer serializer);
+  void sse_encode_list_flutter_message(
+      List<FlutterMessage> self, SseSerializer serializer);
 
   @protected
-  void sse_encode_list_flutter_reaction(List<FlutterReaction> self, SseSerializer serializer);
+  void sse_encode_list_flutter_reaction(
+      List<FlutterReaction> self, SseSerializer serializer);
 
   @protected
-  void sse_encode_list_flutter_vault_info(List<FlutterVaultInfo> self, SseSerializer serializer);
+  void sse_encode_list_flutter_vault_info(
+      List<FlutterVaultInfo> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_prim_u_8_loose(List<int> self, SseSerializer serializer);
 
   @protected
-  void sse_encode_list_prim_u_8_strict(Uint8List self, SseSerializer serializer);
+  void sse_encode_list_prim_u_8_strict(
+      Uint8List self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_String(String? self, SseSerializer serializer);
@@ -534,13 +603,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_opt_box_autoadd_bool(bool? self, SseSerializer serializer);
 
   @protected
-  void sse_encode_opt_box_autoadd_flutter_presence_record(FlutterPresenceRecord? self, SseSerializer serializer);
+  void sse_encode_opt_box_autoadd_flutter_presence_record(
+      FlutterPresenceRecord? self, SseSerializer serializer);
 
   @protected
-  void sse_encode_opt_box_autoadd_flutter_session_info(FlutterSessionInfo? self, SseSerializer serializer);
+  void sse_encode_opt_box_autoadd_flutter_session_info(
+      FlutterSessionInfo? self, SseSerializer serializer);
 
   @protected
-  void sse_encode_opt_box_autoadd_i_64(PlatformInt64? self, SseSerializer serializer);
+  void sse_encode_opt_box_autoadd_i_64(
+      PlatformInt64? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_box_autoadd_u_16(int? self, SseSerializer serializer);
@@ -573,15 +645,19 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 // Section: wire_class
 
 class RustLibWire implements BaseWire {
-  factory RustLibWire.fromExternalLibrary(ExternalLibrary lib) => RustLibWire(lib.ffiDynamicLibrary);
+  factory RustLibWire.fromExternalLibrary(ExternalLibrary lib) =>
+      RustLibWire(lib.ffiDynamicLibrary);
 
   /// Holds the symbol lookup function.
-  final ffi.Pointer<T> Function<T extends ffi.NativeType>(String symbolName) _lookup;
+  final ffi.Pointer<T> Function<T extends ffi.NativeType>(String symbolName)
+      _lookup;
 
   /// The symbols are looked up in [dynamicLibrary].
-  RustLibWire(ffi.DynamicLibrary dynamicLibrary) : _lookup = dynamicLibrary.lookup;
+  RustLibWire(ffi.DynamicLibrary dynamicLibrary)
+      : _lookup = dynamicLibrary.lookup;
 
-  void rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
+  void
+      rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
     ffi.Pointer<ffi.Void> ptr,
   ) {
     return _rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
@@ -596,7 +672,8 @@ class RustLibWire implements BaseWire {
       _rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApiPtr
           .asFunction<void Function(ffi.Pointer<ffi.Void>)>();
 
-  void rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
+  void
+      rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(
     ffi.Pointer<ffi.Void> ptr,
   ) {
     return _rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCommunitasApi(

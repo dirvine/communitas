@@ -3,12 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 
-import '../../../../main.dart';
 import '../../../bindings/api_exports.dart';
-import '../../../demo/demo_data.dart';
-
-/// Four-word identity for demo user login.
-const String kDemoUserFourWords = 'demo-user-test-mode';
 
 /// Authentication state for Communitas.
 class AuthState {
@@ -59,9 +54,6 @@ class AuthState {
       storagePath: storagePath ?? this.storagePath,
     );
   }
-
-  /// Check if currently logged in as demo user.
-  bool get isDemoUser => kDemoMode;
 }
 
 /// Vault information for identity storage.
@@ -83,44 +75,25 @@ class VaultInfo {
 
 /// Authentication state notifier.
 class AuthNotifier extends StateNotifier<AuthState> {
-  String? _demoStoragePath;
-  String? _demoFourWords;
-
   AuthNotifier() : super(const AuthState()) {
     _initializeAuth();
   }
 
-  Future<void> _initializeAuth() async {
-    if (kIsWeb) {
-      if (!kDemoMode) {
-        debugPrint('Web builds require DEMO_MODE=true. Falling back to demo data.');
-      }
-      await Future.delayed(const Duration(milliseconds: 500));
-      state = AuthState(
-        isAuthenticated: true,
-        fourWords: DemoData.demoIdentity.fourWords,
-        displayName: DemoData.demoIdentity.displayName,
-        availableVaults: [
-          VaultInfo(
-            id: 'demo-vault',
-            fourWords: DemoData.demoIdentity.fourWords,
-            displayName: DemoData.demoIdentity.displayName,
-            createdAt: DateTime.now().subtract(const Duration(days: 30)),
-            lastUsed: DateTime.now(),
-          ),
-        ],
-        currentVault: VaultInfo(
-          id: 'demo-vault',
-          fourWords: DemoData.demoIdentity.fourWords,
-          displayName: DemoData.demoIdentity.displayName,
-          createdAt: DateTime.now().subtract(const Duration(days: 30)),
-          lastUsed: DateTime.now(),
-        ),
-      );
-      return;
+  /// Start gossip network after successful authentication.
+  /// Called automatically by all login/create methods.
+  Future<void> _autoConnectNetwork(CommunitasApi api) async {
+    try {
+      debugPrint('Auto-connecting to gossip network...');
+      await api.gossipStart();
+      debugPrint('Gossip network started successfully');
+    } catch (e) {
+      // Log but don't fail login - network can be started manually later
+      debugPrint('Auto-connect to network failed (non-fatal): $e');
     }
+  }
 
-    // Native mode: Try to list existing vaults
+  Future<void> _initializeAuth() async {
+    // Try to list existing vaults
     try {
       await _loadVaults();
     } catch (e) {
@@ -130,21 +103,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   /// Get storage path for vaults
   Future<String> _getStoragePath() async {
-    if (kDemoMode && !kIsWeb) {
-      _demoStoragePath ??=
-          (await Directory.systemTemp.createTemp('communitas_demo_')).path;
-      return _demoStoragePath!;
-    }
-
     final appDir = await getApplicationSupportDirectory();
     return appDir.path;
   }
 
   /// Load existing vaults from storage
   Future<void> _loadVaults() async {
-    if (kIsWeb) return;
-
-    // For native mode, we need to create a temporary API to list vaults
+    // We need to create a temporary API to list vaults
     // This is a chicken-and-egg problem - we need an API to list vaults
     // but need vault info to create API. We work around by checking the vault directory.
     try {
@@ -178,87 +143,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  /// Login as demo user (bypasses normal auth flow).
-  /// Used when username "demo" and password "demo" are entered.
-  Future<bool> loginAsDemo() async {
-    const demoDisplayName = 'Demo User';
-
-    if (kIsWeb) {
-      await Future.delayed(const Duration(milliseconds: 300));
-      state = AuthState(
-        isAuthenticated: true,
-        fourWords: DemoData.demoIdentity.fourWords,
-        displayName: DemoData.demoIdentity.displayName,
-        availableVaults: [
-          VaultInfo(
-            id: 'demo-vault',
-            fourWords: DemoData.demoIdentity.fourWords,
-            displayName: DemoData.demoIdentity.displayName,
-            createdAt: DateTime.now().subtract(const Duration(days: 30)),
-            lastUsed: DateTime.now(),
-          ),
-        ],
-        currentVault: VaultInfo(
-          id: 'demo-vault',
-          fourWords: DemoData.demoIdentity.fourWords,
-          displayName: DemoData.demoIdentity.displayName,
-          createdAt: DateTime.now().subtract(const Duration(days: 30)),
-          lastUsed: DateTime.now(),
-        ),
-      );
-      return true;
-    }
-
-    try {
-      final storagePath = await _getStoragePath();
-      _demoFourWords ??= await generateIdWords();
-      final fourWords = _demoFourWords!;
-      const password = 'demo';
-
-      final api = await CommunitasApi.create(
-        fourWords: fourWords,
-        displayName: demoDisplayName,
-        deviceName: 'Flutter-${Platform.operatingSystem}',
-        storagePath: storagePath,
-      );
-
-      final exists = await api.authVaultExists(fourWords: fourWords);
-      if (!exists) {
-        await api.authCreateVault(
-          fourWords: fourWords,
-          displayName: demoDisplayName,
-          password: password,
-        );
-      }
-
-      final session = await api.authLogin(
-        fourWords: fourWords,
-        password: password,
-      );
-
-      state = state.copyWith(
-        isAuthenticated: true,
-        fourWords: session.fourWords,
-        displayName: session.displayName,
-        api: api,
-        storagePath: storagePath,
-        currentVault: VaultInfo(
-          id: session.sessionId,
-          fourWords: session.fourWords,
-          displayName: session.displayName,
-          createdAt: DateTime.now(),
-          lastUsed: DateTime.now(),
-        ),
-      );
-
-      await _loadVaults();
-      return true;
-    } catch (e) {
-      debugPrint('Demo login failed: $e');
-      return false;
-    }
-  }
-
   /// Login with password to unlock vault
   Future<bool> login(String fourWords, String password) async {
     try {
@@ -280,6 +164,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
       state = state.copyWith(
         isAuthenticated: true,
+        pubkeyHex: session.pubkeyHex,
         fourWords: session.fourWords,
         displayName: session.displayName,
         api: api,
@@ -292,6 +177,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
           lastUsed: DateTime.now(),
         ),
       );
+
+      // Auto-connect to gossip network
+      await _autoConnectNetwork(api);
+
       return true;
     } catch (e) {
       debugPrint('Login failed: $e');
@@ -299,24 +188,19 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  /// Create new identity with four-word address
+  /// Create new identity with display name and password.
+  ///
+  /// The vault identifier (four_words) is auto-generated internally.
+  /// Identity is based on ML-DSA-65 keypair, not the four-word address.
   Future<String?> createIdentity({
-    required String fourWords,
     required String displayName,
     required String password,
   }) async {
-    if (kIsWeb) {
-      await Future.delayed(const Duration(milliseconds: 300));
-      state = state.copyWith(
-        isAuthenticated: true,
-        fourWords: DemoData.demoIdentity.fourWords,
-        displayName: DemoData.demoIdentity.displayName,
-      );
-      return DemoData.demoIdentity.fourWords;
-    }
-
     try {
       final storagePath = await _getStoragePath();
+
+      // Auto-generate vault identifier (not user identity - just storage key)
+      final fourWords = await generateIdWords();
 
       // Create API with the new identity
       final api = await CommunitasApi.create(
@@ -341,6 +225,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
       state = state.copyWith(
         isAuthenticated: true,
+        pubkeyHex: session.pubkeyHex,
         fourWords: session.fourWords,
         displayName: session.displayName,
         api: api,
@@ -356,6 +241,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
       // Refresh vault list
       await _loadVaults();
+
+      // Auto-connect to gossip network
+      await _autoConnectNetwork(api);
 
       return fourWords;
     } catch (e) {
@@ -373,18 +261,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
     required String displayName,
     required String password,
   }) async {
-    if (kIsWeb) {
-      // Demo mode: simulate recovery with test identity
-      await Future.delayed(const Duration(milliseconds: 500));
-      const fourWords = 'recovered-demo-identity';
-      state = state.copyWith(
-        isAuthenticated: true,
-        fourWords: fourWords,
-        displayName: displayName,
-      );
-      return fourWords;
-    }
-
     try {
       final storagePath = await _getStoragePath();
 
@@ -440,6 +316,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
       // Refresh vault list
       await _loadVaults();
 
+      // Auto-connect to gossip network
+      await _autoConnectNetwork(api);
+
       return fourWords;
     } catch (e) {
       debugPrint('Recover identity failed: $e');
@@ -449,7 +328,15 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   /// Logout and lock vault
   Future<void> logout() async {
-    if (!kDemoMode && state.api != null) {
+    if (state.api != null) {
+      try {
+        // Stop gossip network before logout
+        debugPrint('Stopping gossip network...');
+        await state.api!.gossipStop();
+        debugPrint('Gossip network stopped');
+      } catch (e) {
+        debugPrint('Stop network error (non-fatal): $e');
+      }
       try {
         await state.api!.authLogout();
       } catch (e) {
@@ -461,38 +348,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
       currentVault: null,
       api: null,
     );
-  }
-
-  /// Clear demo storage and reset state (demo mode only).
-  Future<void> clearDemoData() async {
-    if (!kDemoMode) return;
-
-    try {
-      if (state.api != null) {
-        await state.api!.authLogout();
-      }
-    } catch (e) {
-      debugPrint('Demo logout error: $e');
-    }
-
-    if (_demoStoragePath != null) {
-      try {
-        final dir = Directory(_demoStoragePath!);
-        if (await dir.exists()) {
-          await dir.delete(recursive: true);
-        }
-      } catch (e) {
-        debugPrint('Failed to delete demo storage: $e');
-      }
-    }
-
-    _demoStoragePath = null;
-    _demoFourWords = null;
-    state = const AuthState();
-
-    if (kIsWeb) {
-      await _initializeAuth();
-    }
   }
 
   /// Get the current API instance
@@ -535,6 +390,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
       state = state.copyWith(
         isAuthenticated: true,
+        pubkeyHex: session.pubkeyHex,
         fourWords: session.fourWords,
         displayName: session.displayName,
         api: api,
@@ -549,6 +405,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
 
       await _loadVaults();
+
+      // Auto-connect to gossip network
+      await _autoConnectNetwork(api);
+
       return true;
     } catch (e) {
       debugPrint('Import identity failed: $e');
@@ -566,9 +426,4 @@ final authNotifierProvider =
 /// Current four-words provider (convenience).
 final currentFourWordsProvider = Provider<String?>((ref) {
   return ref.watch(authNotifierProvider).fourWords;
-});
-
-/// Whether currently logged in as demo user.
-final isDemoUserProvider = Provider<bool>((ref) {
-  return ref.watch(authNotifierProvider).isDemoUser;
 });

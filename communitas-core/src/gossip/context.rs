@@ -13,8 +13,12 @@
 //! - Presence → MLS-encrypted beacons (ChaCha20Poly1305)
 //! - Backup → Favourite contacts hold encrypted replicas (ChaCha20Poly1305)
 
+use super::CoordinatorRoles;
 use anyhow::{Context, Result};
 use bytes::Bytes;
+use saorsa_gossip_coordinator::{
+    CoordinatorPublisher, NatClass, PeriodicPublisher, coordinator_topic,
+};
 use saorsa_gossip_crdt_sync::{AntiEntropyManager, OrSet}; // Actual exports
 use saorsa_gossip_groups::GroupContext; // Actual export
 use saorsa_gossip_identity::Identity;
@@ -1371,6 +1375,93 @@ impl GossipContext {
                 crate::crdt::EntityType::Channel
             }
         }
+    }
+
+    // ========================================================================
+    // Coordinator Mode (for Bootstrap/Seed Nodes)
+    // ========================================================================
+
+    /// Start coordinator mode for this node
+    ///
+    /// This enables the node to act as a bootstrap/coordinator node that:
+    /// - Helps new peers join the network (bootstrap role)
+    /// - Provides address reflection for NAT detection (reflector role)
+    /// - Coordinates peer introductions for hole punching (rendezvous role)
+    /// - Forwards messages for peers behind symmetric NATs (relay role)
+    ///
+    /// Call this after `initialize()` for headless/bootstrap nodes.
+    ///
+    /// # Arguments
+    /// * `external_addrs` - List of external addresses this node is reachable at
+    /// * `publish_interval_secs` - How often to publish coordinator adverts (default: 300)
+    ///
+    /// # Returns
+    /// A JoinHandle for the background publishing task
+    pub async fn start_coordinator_mode(
+        &self,
+        external_addrs: Vec<std::net::SocketAddr>,
+        publish_interval_secs: Option<u64>,
+    ) -> Result<JoinHandle<()>> {
+        let interval = publish_interval_secs.unwrap_or(300); // 5 minutes default
+
+        // Get our peer ID
+        let peer_id = self.peer_id;
+
+        // Configure all coordinator roles (full bootstrap node)
+        let roles = CoordinatorRoles {
+            coordinator: true, // Help new peers join
+            reflector: true,   // Provide address observation
+            rendezvous: true,  // Coordinate peer introductions
+            relay: true,       // Forward messages for symmetric NATs
+        };
+
+        // Create the coordinator publisher
+        let publisher = CoordinatorPublisher::new(
+            peer_id,
+            roles,
+            external_addrs.clone(),
+            NatClass::Eim, // Bootstrap nodes typically have public IPs (Endpoint-Independent Mapping)
+        );
+
+        // Get the signing key from identity
+        let signing_key = self
+            .identity
+            .key_pair()
+            .get_secret_key_typed()
+            .map_err(|e| anyhow::anyhow!("Failed to get signing key: {}", e))?;
+        publisher.set_signing_key(signing_key).await;
+
+        info!(
+            "Starting coordinator mode with {} external addresses, publishing every {}s",
+            external_addrs.len(),
+            interval
+        );
+        info!("Coordinator roles: bootstrap, reflector, rendezvous, relay");
+
+        // Create periodic publisher
+        let periodic = PeriodicPublisher::new(publisher, interval);
+        let mut advert_rx = periodic.start().await;
+
+        // Get pubsub for publishing
+        let pubsub = self.pubsub.clone();
+        let topic = coordinator_topic();
+
+        // Spawn background task to publish adverts
+        let handle = tokio::spawn(async move {
+            while let Some(advert_bytes) = advert_rx.recv().await {
+                // Publish to coordinator topic
+                let pubsub_guard = pubsub.read().await;
+                if let Err(e) = pubsub_guard.publish(topic, advert_bytes).await {
+                    warn!("Failed to publish coordinator advert: {}", e);
+                } else {
+                    debug!("Published coordinator advert to gossip overlay");
+                }
+            }
+            info!("Coordinator publisher stopped");
+        });
+
+        info!("Coordinator mode started successfully");
+        Ok(handle)
     }
 }
 

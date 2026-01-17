@@ -305,6 +305,7 @@ impl Default for IntroducerConfig {
         Self {
             // Production bootstrap nodes (saorsa network)
             addresses: vec![
+                "77.42.75.115:11000".to_string(), // saorsa-1: Dublin bootstrap (primary)
                 "142.93.199.50:11000".to_string(), // saorsa-2: DigitalOcean NYC1 bootstrap
                 "147.182.234.192:11000".to_string(), // saorsa-3: DigitalOcean SFO3 bootstrap
             ],

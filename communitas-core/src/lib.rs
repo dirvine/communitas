@@ -19,9 +19,10 @@
 //! and the headless node/CLI, without any UI dependencies.
 
 // Security: Enforce no-panic policy in production code
+// Using `deny` instead of `forbid` to allow module-level overrides for generated code
 #![cfg_attr(
     not(test),
-    forbid(clippy::unwrap_used, clippy::expect_used, clippy::panic)
+    deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)
 )]
 // Allow these in tests for convenience
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
@@ -72,6 +73,13 @@ pub mod gossip;
 pub mod webrtc;
 
 // Generated flutter_rust_bridge bindings
+// Allow unwrap/expect/panic in auto-generated code (flutter_rust_bridge)
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::not_unsafe_ptr_arg_deref
+)]
 pub mod frb_generated;
 
 // Re-export commonly used types

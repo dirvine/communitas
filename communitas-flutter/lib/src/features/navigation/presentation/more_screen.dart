@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../main.dart';
 import '../../../core/router.dart';
 import '../../../shared/widgets/adaptive_layout.dart';
 import '../../../shared/widgets/sidebar.dart';
@@ -38,17 +37,6 @@ class MoreScreen extends ConsumerWidget {
                 }
               },
             ),
-            if (kDemoMode)
-              ListTile(
-                leading: const Icon(Icons.delete_outline),
-                title: const Text('Clear demo data'),
-                onTap: () async {
-                  await authNotifier.clearDemoData();
-                  if (context.mounted) {
-                    context.go(Routes.login);
-                  }
-                },
-              ),
           ],
         ),
       ),

@@ -1360,6 +1360,8 @@ pub struct FlutterSessionInfo {
     pub session_id: String,
     pub four_words: String,
     pub display_name: String,
+    /// Hex-encoded ML-DSA-87 public key (the user's cryptographic identity)
+    pub pubkey_hex: String,
 }
 
 impl From<crate::SessionInfo> for FlutterSessionInfo {
@@ -1368,6 +1370,7 @@ impl From<crate::SessionInfo> for FlutterSessionInfo {
             session_id: value.session_id,
             four_words: value.four_words,
             display_name: value.display_name,
+            pubkey_hex: value.pubkey_hex,
         }
     }
 }

@@ -357,7 +357,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (api == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Messaging is unavailable without the native backend.'),
+          content: Text('Please log in to send messages.'),
         ),
       );
       return false;

@@ -57,12 +57,12 @@ class _QuickSwitcherDialogState extends ConsumerState<QuickSwitcherDialog> {
 
     return Shortcuts(
       shortcuts: const {
-        LogicalKeySet(LogicalKeyboardKey.arrowDown): _MoveSelectionIntent(1),
-        LogicalKeySet(LogicalKeyboardKey.arrowUp): _MoveSelectionIntent(-1),
-        LogicalKeySet(LogicalKeyboardKey.enter): _ActivateSelectionIntent(),
-        LogicalKeySet(LogicalKeyboardKey.escape): _CloseSwitcherIntent(),
-        LogicalKeySet(LogicalKeyboardKey.keyN, control: true): _MoveSelectionIntent(1),
-        LogicalKeySet(LogicalKeyboardKey.keyP, control: true): _MoveSelectionIntent(-1),
+        SingleActivator(LogicalKeyboardKey.arrowDown): _MoveSelectionIntent(1),
+        SingleActivator(LogicalKeyboardKey.arrowUp): _MoveSelectionIntent(-1),
+        SingleActivator(LogicalKeyboardKey.enter): _ActivateSelectionIntent(),
+        SingleActivator(LogicalKeyboardKey.escape): _CloseSwitcherIntent(),
+        SingleActivator(LogicalKeyboardKey.keyN, control: true): _MoveSelectionIntent(1),
+        SingleActivator(LogicalKeyboardKey.keyP, control: true): _MoveSelectionIntent(-1),
       },
       child: Actions(
         actions: {

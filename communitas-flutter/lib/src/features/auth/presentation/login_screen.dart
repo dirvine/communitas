@@ -4,10 +4,9 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/router.dart';
 import '../../../core/theme/colors.dart';
-import '../../../../main.dart';
 import '../providers/auth_provider.dart';
 
-/// Login screen with vault selection and demo user support.
+/// Login screen with vault selection.
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
@@ -16,25 +15,21 @@ class LoginScreen extends ConsumerStatefulWidget {
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
-  final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
-  String? _selectedFourWords;
+  VaultInfo? _selectedVault;
 
   @override
   void dispose() {
-    _usernameController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
 
-  /// Check if the entered credentials are for demo user.
-  bool get _isDemoLogin =>
-      _usernameController.text.trim().toLowerCase() == 'demo' &&
-      _passwordController.text == 'demo';
-
   @override
   Widget build(BuildContext context) {
+    final authState = ref.watch(authNotifierProvider);
+    final vaults = authState.availableVaults;
+
     return Scaffold(
       body: Center(
         child: Container(
@@ -66,23 +61,62 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               ),
               const SizedBox(height: 48),
 
-              // Demo mode indicator (compile-time flag)
-              if (kDemoMode) ...[
+              // Vault selection
+              if (vaults.isNotEmpty) ...[
+                Text(
+                  'Select an account',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 8),
                 Container(
-                  padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: CommunitasColors.amber.withAlpha(51),
+                    border: Border.all(
+                      color: CommunitasColors.cream.withAlpha(77),
+                    ),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: CommunitasColors.amber),
                   ),
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                  child: Column(
                     children: [
-                      Icon(Icons.science, color: CommunitasColors.amber),
-                      SizedBox(width: 8),
+                      for (final vault in vaults)
+                        _buildVaultTile(vault),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+              ] else ...[
+                // No existing vaults message
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: CommunitasColors.jade.withAlpha(26),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: CommunitasColors.jade.withAlpha(77),
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.person_add_outlined,
+                        color: CommunitasColors.jade.withAlpha(204),
+                        size: 32,
+                      ),
+                      const SizedBox(height: 8),
                       Text(
-                        'Demo Mode',
-                        style: TextStyle(color: CommunitasColors.amber),
+                        'No accounts found',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: CommunitasColors.jade.withAlpha(204),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Create a new identity to get started',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: CommunitasColors.cream.withAlpha(153),
+                        ),
                       ),
                     ],
                   ),
@@ -90,96 +124,62 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 const SizedBox(height: 24),
               ],
 
-              // Demo login hint
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: CommunitasColors.jade.withAlpha(26),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: CommunitasColors.jade.withAlpha(77),
+              // Password field (only if vault selected)
+              if (_selectedVault != null) ...[
+                Text(
+                  'Unlock ${_selectedVault!.displayName}',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _passwordController,
+                  obscureText: true,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Password',
+                    prefixIcon: Icon(Icons.lock_outline),
+                    hintText: 'Enter your password',
                   ),
+                  textInputAction: TextInputAction.done,
+                  onSubmitted: (_) => _handleLogin(),
                 ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.lightbulb_outline,
-                      color: CommunitasColors.jade.withAlpha(204),
-                      size: 20,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Tip: Use "demo" / "demo" for quick testing',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: CommunitasColors.jade.withAlpha(204),
-                        ),
-                      ),
-                    ),
-                  ],
+                const SizedBox(height: 16),
+
+                // Unlock button
+                ElevatedButton(
+                  onPressed: _isLoading ? null : _handleLogin,
+                  child: _isLoading
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Unlock'),
                 ),
-              ),
-              const SizedBox(height: 16),
-
-              // Username field
-              TextField(
-                controller: _usernameController,
-                decoration: const InputDecoration(
-                  labelText: 'Username',
-                  prefixIcon: Icon(Icons.person_outline),
-                  hintText: 'Enter username or "demo"',
+                const SizedBox(height: 8),
+                TextButton(
+                  onPressed: () => setState(() => _selectedVault = null),
+                  child: const Text('Use a different account'),
                 ),
-                textInputAction: TextInputAction.next,
-                onChanged: (_) => setState(() {}),
-              ),
-              const SizedBox(height: 16),
+              ],
 
-              // Password field
-              TextField(
-                controller: _passwordController,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'Password',
-                  prefixIcon: Icon(Icons.lock_outline),
-                  hintText: 'Enter password',
+              if (_selectedVault == null) ...[
+                const SizedBox(height: 8),
+                // Create new identity
+                ElevatedButton.icon(
+                  onPressed: () => context.go(Routes.createIdentity),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Create new identity'),
                 ),
-                textInputAction: TextInputAction.done,
-                onSubmitted: (_) => _handleLogin(),
-                onChanged: (_) => setState(() {}),
-              ),
-              const SizedBox(height: 24),
+                const SizedBox(height: 8),
 
-              // Login button
-              ElevatedButton(
-                onPressed: _isLoading ? null : _handleLogin,
-                style: _isDemoLogin
-                    ? ElevatedButton.styleFrom(
-                        backgroundColor: CommunitasColors.amber,
-                        foregroundColor: CommunitasColors.deepForest,
-                      )
-                    : null,
-                child: _isLoading
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : Text(_isDemoLogin ? 'Login as Demo User' : 'Unlock'),
-              ),
-              const SizedBox(height: 16),
-
-              // Create new identity
-              TextButton(
-                onPressed: () => context.go(Routes.createIdentity),
-                child: const Text('Create new identity'),
-              ),
-
-              // Recover existing identity
-              TextButton(
-                onPressed: () => context.go(Routes.recoverIdentity),
-                child: const Text('Recover existing identity'),
-              ),
+                // Recover existing identity
+                TextButton.icon(
+                  onPressed: () => context.go(Routes.recoverIdentity),
+                  icon: const Icon(Icons.restore),
+                  label: const Text('Recover existing identity'),
+                ),
+              ],
             ],
           ),
         ),
@@ -187,29 +187,100 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     );
   }
 
+  Widget _buildVaultTile(VaultInfo vault) {
+    final isSelected = _selectedVault?.fourWords == vault.fourWords;
+    return InkWell(
+      onTap: () => setState(() {
+        _selectedVault = vault;
+        _passwordController.clear();
+      }),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: isSelected ? CommunitasColors.jade.withAlpha(51) : null,
+          border: Border(
+            bottom: BorderSide(
+              color: CommunitasColors.cream.withAlpha(26),
+            ),
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: CommunitasColors.jade.withAlpha(77),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Center(
+                child: Text(
+                  vault.displayName.isNotEmpty
+                      ? vault.displayName[0].toUpperCase()
+                      : '?',
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: CommunitasColors.cream,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    vault.displayName,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  Text(
+                    vault.fourWords,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: CommunitasColors.cream.withAlpha(153),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (isSelected)
+              const Icon(
+                Icons.check_circle,
+                color: CommunitasColors.jade,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _handleLogin() async {
+    if (_selectedVault == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select an account first.')),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
 
     try {
       final authNotifier = ref.read(authNotifierProvider.notifier);
-
-      bool success;
-
-      // Check for demo user login
-      if (_isDemoLogin) {
-        success = await authNotifier.loginAsDemo();
-      } else {
-        // Normal login flow
-        final fourWords = _selectedFourWords ?? 'ocean-forest-moon-star';
-        success = await authNotifier.login(fourWords, _passwordController.text);
-      }
+      final success = await authNotifier.login(
+        _selectedVault!.fourWords,
+        _passwordController.text,
+      );
 
       if (mounted) {
         if (success) {
           context.go(Routes.home);
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Login failed. Check your credentials.')),
+            const SnackBar(content: Text('Login failed. Check your password.')),
           );
         }
       }

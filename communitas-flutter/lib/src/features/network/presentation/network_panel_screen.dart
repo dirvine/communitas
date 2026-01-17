@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/colors.dart';
+import '../../../services/ffi_provider.dart';
 import '../../../shared/widgets/sidebar.dart';
 import '../../../shared/widgets/adaptive_layout.dart';
 import '../providers/presence_provider.dart';
@@ -25,6 +26,7 @@ class _NetworkPanelScreenState extends ConsumerState<NetworkPanelScreen> {
   final TextEditingController _connectionWordsController =
       TextEditingController();
   bool _isConnecting = false;
+  bool _isTogglingNetwork = false;
 
   @override
   void dispose() {
@@ -67,6 +69,27 @@ class _NetworkPanelScreenState extends ConsumerState<NetworkPanelScreen> {
         duration: const Duration(seconds: 2),
       ),
     );
+  }
+
+  Future<void> _toggleNetwork(bool isCurrentlyOnline) async {
+    setState(() => _isTogglingNetwork = true);
+
+    try {
+      final controller = ref.read(ffiNetworkControllerProvider.notifier);
+      if (isCurrentlyOnline) {
+        await controller.stopNetwork();
+      } else {
+        await controller.startNetwork();
+      }
+      // Refresh all network-related providers
+      ref.invalidate(networkStatusProvider);
+      ref.invalidate(currentUserPresenceProvider);
+      ref.invalidate(connectedPeersProvider);
+    } finally {
+      if (mounted) {
+        setState(() => _isTogglingNetwork = false);
+      }
+    }
   }
 
   @override
@@ -188,60 +211,92 @@ class _NetworkPanelScreenState extends ConsumerState<NetworkPanelScreen> {
         ),
         borderRadius: BorderRadius.circular(16),
       ),
-      child: Row(
+      child: Column(
         children: [
-          Container(
-            width: 64,
-            height: 64,
-            decoration: BoxDecoration(
-              color: (isOnline
-                      ? CommunitasColors.online
-                      : CommunitasColors.offline)
-                  .withOpacity(0.2),
-              borderRadius: BorderRadius.circular(32),
-            ),
-            child: Icon(
-              isOnline ? Icons.wifi : Icons.wifi_off,
-              color:
-                  isOnline ? CommunitasColors.online : CommunitasColors.offline,
-              size: 32,
-            ),
-          ),
-          const SizedBox(width: 24),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  isOnline ? 'Connected' : 'Offline',
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        color: isOnline
-                            ? CommunitasColors.online
-                            : CommunitasColors.offline,
-                      ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '$peerCount peers \u2022 $bootstrapCount bootstrap nodes',
-                  style: TextStyle(
-                    color: CommunitasColors.cream.withOpacity(0.7),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
+          Row(
             children: [
-              const Text('NAT Type'),
-              Text(
-                natType,
-                style: TextStyle(
-                  color: CommunitasColors.jade,
-                  fontWeight: FontWeight.w600,
+              Container(
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  color: (isOnline
+                          ? CommunitasColors.online
+                          : CommunitasColors.offline)
+                      .withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(32),
+                ),
+                child: Icon(
+                  isOnline ? Icons.wifi : Icons.wifi_off,
+                  color: isOnline
+                      ? CommunitasColors.online
+                      : CommunitasColors.offline,
+                  size: 32,
                 ),
               ),
+              const SizedBox(width: 24),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isOnline ? 'Connected' : 'Offline',
+                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                            color: isOnline
+                                ? CommunitasColors.online
+                                : CommunitasColors.offline,
+                          ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '$peerCount peers \u2022 $bootstrapCount bootstrap nodes',
+                      style: TextStyle(
+                        color: CommunitasColors.cream.withOpacity(0.7),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  const Text('NAT Type'),
+                  Text(
+                    natType,
+                    style: TextStyle(
+                      color: CommunitasColors.jade,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
             ],
+          ),
+          const SizedBox(height: 16),
+          // Connect/Disconnect toggle button
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _isTogglingNetwork ? null : () => _toggleNetwork(isOnline),
+              icon: _isTogglingNetwork
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Icon(isOnline ? Icons.wifi_off : Icons.wifi),
+              label: Text(
+                _isTogglingNetwork
+                    ? (isOnline ? 'Disconnecting...' : 'Connecting...')
+                    : (isOnline ? 'Disconnect from Network' : 'Connect to Network'),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isOnline
+                    ? CommunitasColors.error.withOpacity(0.8)
+                    : CommunitasColors.jade,
+                foregroundColor: CommunitasColors.cream,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
           ),
         ],
       ),

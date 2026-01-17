@@ -19,6 +19,9 @@ communitas-core = { version = "0.1.20", path = "../communitas-core" }
 
 # Networking provided by saorsa-gossip
 saorsa-gossip-transport.workspace = true
+saorsa-gossip-coordinator.workspace = true
+saorsa-gossip-types.workspace = true
+saorsa-gossip-pubsub.workspace = true
 # Post-Quantum Cryptography (ML-DSA-87 for application identity)
 saorsa-pqc = "0.3.12"
 four-word-networking = "2.6"

@@ -12,6 +12,9 @@ pub struct Session {
     pub id: String,
     pub four_words: String,
     pub display_name: String,
+    /// Hex-encoded ML-DSA-87 public key (the user's cryptographic identity)
+    #[serde(default)]
+    pub pubkey_hex: Option<String>,
     pub created_at: u64,
     pub last_activity: u64,
     pub expires_at: u64,
@@ -35,6 +38,27 @@ impl Session {
             id: generate_session_id(),
             four_words,
             display_name,
+            pubkey_hex: None,
+            created_at: now,
+            last_activity: now,
+            expires_at: now + timeout_seconds,
+            auth_method: AuthMethod::Password,
+        }
+    }
+
+    /// Create a new session with pubkey_hex
+    pub fn new_with_pubkey(
+        four_words: String,
+        display_name: String,
+        pubkey_hex: String,
+        timeout_seconds: u64,
+    ) -> Self {
+        let now = current_timestamp();
+        Self {
+            id: generate_session_id(),
+            four_words,
+            display_name,
+            pubkey_hex: Some(pubkey_hex),
             created_at: now,
             last_activity: now,
             expires_at: now + timeout_seconds,
@@ -51,6 +75,12 @@ impl Session {
         let mut session = Self::new(four_words, display_name, timeout_seconds);
         session.auth_method = AuthMethod::PasswordOnly;
         session
+    }
+
+    /// Set the pubkey_hex on an existing session
+    pub fn with_pubkey_hex(mut self, pubkey_hex: String) -> Self {
+        self.pubkey_hex = Some(pubkey_hex);
+        self
     }
 
     /// Check if the session has expired

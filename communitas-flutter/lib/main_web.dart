@@ -4,9 +4,9 @@
 import 'package:flutter/material.dart';
 
 /// Initialize web platform features.
-/// On web, we run in demo mode without Rust FFI.
+/// Web is not fully supported - FFI backend required for core functionality.
 Future<void> initializePlatform() async {
   debugPrint('Web platform detected - Rust FFI not available');
-  debugPrint('Running in demo mode with mock data');
-  // No-op on web - all features use demo/mock implementations
+  debugPrint('Native app required for full functionality');
+  // No-op on web - features will show appropriate errors when backend unavailable
 }

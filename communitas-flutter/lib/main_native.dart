@@ -19,7 +19,7 @@ Future<void> initializePlatform() async {
     }
   } catch (e) {
     throw FlutterError(
-      'Failed to initialize Rust bridge. Build the native library or run with DEMO_MODE=true. Error: $e',
+      'Failed to initialize Rust bridge. Build the native library with: cargo build --release -p communitas-bindings. Error: $e',
     );
   }
 }

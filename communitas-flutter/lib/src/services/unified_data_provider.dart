@@ -4,9 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../main.dart' show kDemoMode;
 import '../bindings/api_exports.dart';
-import '../demo/demo_data.dart';
 import '../features/auth/providers/auth_provider.dart';
 import 'ffi_provider.dart';
 
@@ -78,7 +76,7 @@ OrganizationCategory resolveOrganizationCategory(
   return OrganizationCategory.organization;
 }
 
-/// Unified entity model for both demo and FFI data.
+/// Unified entity model for FFI data.
 class UnifiedEntity {
   final String id;
   final String type;
@@ -98,18 +96,6 @@ class UnifiedEntity {
     this.parentId,
   });
 
-  factory UnifiedEntity.fromDemo(DemoEntity demo) {
-    return UnifiedEntity(
-      id: demo.id,
-      type: demo.type,
-      name: demo.name,
-      role: demo.role,
-      description: demo.description,
-      memberCount: demo.memberCount,
-      parentId: demo.parentId,
-    );
-  }
-
   /// Create from FFI FlutterEntity type.
   factory UnifiedEntity.fromFfi(
     FlutterEntity entity, {
@@ -127,7 +113,7 @@ class UnifiedEntity {
   }
 }
 
-/// Unified contact model for both demo and FFI data.
+/// Unified contact model for FFI data.
 class UnifiedContact {
   /// Hex-encoded ML-DSA-87 public key (THE identity, Level 5 PQC).
   final String pubkeyHex;
@@ -142,15 +128,6 @@ class UnifiedContact {
     required this.status,
   });
 
-  factory UnifiedContact.fromDemo(DemoContact demo) {
-    return UnifiedContact(
-      // Demo mode: use fourWords as stand-in for pubkeyHex
-      pubkeyHex: demo.fourWords,
-      displayName: demo.displayName,
-      status: demo.status,
-    );
-  }
-
   /// Create from FFI FlutterContact type.
   factory UnifiedContact.fromFfi(FlutterContact contact) {
     return UnifiedContact(
@@ -163,7 +140,7 @@ class UnifiedContact {
   }
 }
 
-/// Unified message model for both demo and FFI data.
+/// Unified message model for FFI data.
 class UnifiedMessage {
   final String id;
   final String senderId;
@@ -219,22 +196,6 @@ class UnifiedMessage {
     );
   }
 
-  factory UnifiedMessage.fromDemo(DemoMessage demo) {
-    return UnifiedMessage(
-      id: demo.id,
-      senderId: demo.senderId,
-      senderName: demo.senderName,
-      content: demo.content,
-      timestamp: demo.timestamp,
-      reactions: demo.reactions,
-      userReactions: const {},
-      editedAt: null,
-      replyToId: null,
-      hasThread: demo.hasThread,
-      threadReplyCount: demo.threadReplyCount,
-    );
-  }
-
   /// Create from FFI FlutterMessage type.
   factory UnifiedMessage.fromFfi(FlutterMessage message) {
     final reactionMap = <String, int>{};
@@ -278,33 +239,28 @@ class UnifiedMessage {
 final unifiedIdentityProvider = Provider<({String pubkeyHex, String displayName, String? fourWords})>((ref) {
   final auth = ref.watch(authNotifierProvider);
 
-  if (auth.isAuthenticated) {
-    // Use pubkeyHex if available, fallback to fourWords during migration
-    final pubkeyHex = auth.pubkeyHex ?? auth.fourWords ?? 'unknown-identity';
+  if (!auth.isAuthenticated) {
+    // Not authenticated - return empty identity
     return (
-      pubkeyHex: pubkeyHex,
-      displayName: auth.displayName ?? 'Unknown User',
-      fourWords: auth.fourWords,
+      pubkeyHex: '',
+      displayName: 'Not Logged In',
+      fourWords: null,
     );
   }
 
-  // Fallback to demo identity (using fourWords as stand-in for pubkeyHex)
+  // Use pubkeyHex if available, fallback to fourWords during migration
+  final pubkeyHex = auth.pubkeyHex ?? auth.fourWords ?? 'unknown-identity';
   return (
-    pubkeyHex: DemoData.demoIdentity.fourWords,
-    displayName: DemoData.demoIdentity.displayName,
-    fourWords: DemoData.demoIdentity.fourWords,
+    pubkeyHex: pubkeyHex,
+    displayName: auth.displayName ?? 'Unknown User',
+    fourWords: auth.fourWords,
   );
 });
 
 /// Provider for all organizations.
 final unifiedOrganizationsProvider = FutureProvider<List<UnifiedEntity>>((ref) async {
   final identity = ref.watch(unifiedIdentityProvider);
-  // Demo mode: use demo data
-  if (kDemoMode) {
-    return DemoData.organizations.map((e) => UnifiedEntity.fromDemo(e)).toList();
-  }
 
-  // FFI mode: use direct Rust bindings
   try {
     final orgs = await ref.watch(ffiOrganizationsProvider.future);
     return orgs
@@ -319,12 +275,7 @@ final unifiedOrganizationsProvider = FutureProvider<List<UnifiedEntity>>((ref) a
 /// Provider for all projects.
 final unifiedProjectsProvider = FutureProvider<List<UnifiedEntity>>((ref) async {
   final identity = ref.watch(unifiedIdentityProvider);
-  // Demo mode: use demo data
-  if (kDemoMode) {
-    return DemoData.projects.map((e) => UnifiedEntity.fromDemo(e)).toList();
-  }
 
-  // FFI mode: use direct Rust bindings
   try {
     final projects = await ref.watch(ffiProjectsProvider.future);
     return projects
@@ -339,12 +290,7 @@ final unifiedProjectsProvider = FutureProvider<List<UnifiedEntity>>((ref) async 
 /// Provider for all channels.
 final unifiedChannelsProvider = FutureProvider<List<UnifiedEntity>>((ref) async {
   final identity = ref.watch(unifiedIdentityProvider);
-  // Demo mode: use demo data
-  if (kDemoMode) {
-    return DemoData.channels.map((e) => UnifiedEntity.fromDemo(e)).toList();
-  }
 
-  // FFI mode: use direct Rust bindings
   try {
     final channels = await ref.watch(ffiChannelsProvider.future);
     return channels
@@ -359,12 +305,7 @@ final unifiedChannelsProvider = FutureProvider<List<UnifiedEntity>>((ref) async 
 /// Provider for all groups.
 final unifiedGroupsProvider = FutureProvider<List<UnifiedEntity>>((ref) async {
   final identity = ref.watch(unifiedIdentityProvider);
-  // Demo mode: use demo data
-  if (kDemoMode) {
-    return DemoData.groups.map((e) => UnifiedEntity.fromDemo(e)).toList();
-  }
 
-  // FFI mode: use direct Rust bindings
   try {
     final groups = await ref.watch(ffiGroupsProvider.future);
     return groups
@@ -377,15 +318,10 @@ final unifiedGroupsProvider = FutureProvider<List<UnifiedEntity>>((ref) async {
 });
 
 /// Provider for all contacts.
-///
 final unifiedContactsProvider = FutureProvider<List<UnifiedContact>>((ref) async {
-  if (kDemoMode && kIsWeb) {
-    return DemoData.contacts.map((e) => UnifiedContact.fromDemo(e)).toList();
-  }
-
   final api = ref.watch(communitasApiProvider);
   if (api == null) {
-    return DemoData.contacts.map((e) => UnifiedContact.fromDemo(e)).toList();
+    return [];
   }
 
   try {
@@ -398,17 +334,10 @@ final unifiedContactsProvider = FutureProvider<List<UnifiedContact>>((ref) async
 });
 
 /// Provider for messages in a channel.
-///
 final unifiedMessagesProvider = FutureProvider.family<List<UnifiedMessage>, String>((ref, channelId) async {
-  if (kDemoMode && kIsWeb) {
-    final demoMessages = DemoData.messages.map((e) => UnifiedMessage.fromDemo(e)).toList();
-    return _applyThreadCounts(demoMessages);
-  }
-
   final api = ref.watch(communitasApiProvider);
   if (api == null) {
-    final demoMessages = DemoData.messages.map((e) => UnifiedMessage.fromDemo(e)).toList();
-    return _applyThreadCounts(demoMessages);
+    return [];
   }
 
   try {
@@ -423,13 +352,9 @@ final unifiedMessagesProvider = FutureProvider.family<List<UnifiedMessage>, Stri
 /// Provider for direct messages with a peer.
 final unifiedDirectMessagesProvider =
     FutureProvider.family<List<UnifiedMessage>, String>((ref, peerId) async {
-  if (kDemoMode && kIsWeb) {
-    return DemoData.messages.map((e) => UnifiedMessage.fromDemo(e)).toList();
-  }
-
   final api = ref.watch(communitasApiProvider);
   if (api == null) {
-    return DemoData.messages.map((e) => UnifiedMessage.fromDemo(e)).toList();
+    return [];
   }
 
   try {

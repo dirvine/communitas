@@ -5,11 +5,11 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/router.dart';
 import '../../core/theme/colors.dart';
-import '../../features/auth/providers/auth_provider.dart';
 import '../../services/unified_data_provider.dart';
 import '../../services/navigation_state.dart';
 import '../../services/ffi_provider.dart';
 import '../../bindings/api_exports.dart';
+import '../../features/auth/providers/auth_provider.dart';
 import 'quick_switcher_dialog.dart';
 
 /// Main navigation sidebar for desktop layout.
@@ -1012,7 +1012,6 @@ class _SidebarState extends ConsumerState<Sidebar> {
 
   Widget _buildUserHeader(BuildContext context) {
     final identity = ref.watch(unifiedIdentityProvider);
-    final isDemoUser = ref.watch(isDemoUserProvider);
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -1071,47 +1070,70 @@ class _SidebarState extends ConsumerState<Sidebar> {
                   shape: BoxShape.circle,
                 ),
               ),
-            ],
-          ),
-          // Demo mode badge
-          if (isDemoUser) ...[
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: CommunitasColors.amber.withAlpha(51),
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(
-                  color: CommunitasColors.amber.withAlpha(128),
+              const SizedBox(width: 8),
+              PopupMenuButton<String>(
+                icon: Icon(
+                  Icons.more_vert,
+                  color: CommunitasColors.cream.withAlpha(179),
+                  size: 18,
                 ),
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.science,
-                    color: CommunitasColors.amber,
-                    size: 12,
+                tooltip: 'Account options',
+                onSelected: (value) => _handleUserMenuAction(value),
+                itemBuilder: (context) => [
+                  const PopupMenuItem(
+                    value: 'settings',
+                    child: Row(
+                      children: [
+                        Icon(Icons.settings, size: 18),
+                        SizedBox(width: 8),
+                        Text('Settings'),
+                      ],
+                    ),
                   ),
-                  SizedBox(width: 4),
-                  Text(
-                    'Demo Mode',
-                    style: TextStyle(
-                      color: CommunitasColors.amber,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      decoration: TextDecoration.none,
-                      fontFamily: 'Roboto',
-                      inherit: false,
+                  const PopupMenuItem(
+                    value: 'more',
+                    child: Row(
+                      children: [
+                        Icon(Icons.more_horiz, size: 18),
+                        SizedBox(width: 8),
+                        Text('More'),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuDivider(),
+                  const PopupMenuItem(
+                    value: 'logout',
+                    child: Row(
+                      children: [
+                        Icon(Icons.logout, size: 18, color: CommunitasColors.error),
+                        SizedBox(width: 8),
+                        Text('Logout', style: TextStyle(color: CommunitasColors.error)),
+                      ],
                     ),
                   ),
                 ],
               ),
-            ),
-          ],
+            ],
+          ),
         ],
       ),
     );
+  }
+
+  Future<void> _handleUserMenuAction(String action) async {
+    switch (action) {
+      case 'settings':
+      case 'more':
+        context.go(Routes.more);
+        break;
+      case 'logout':
+        final authNotifier = ref.read(authNotifierProvider.notifier);
+        await authNotifier.logout();
+        if (mounted) {
+          context.go(Routes.login);
+        }
+        break;
+    }
   }
 
   Future<void> _showCreateEntityDialog(

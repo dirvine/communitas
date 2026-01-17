@@ -2,13 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../main.dart';
-import '../../../bindings/api_exports.dart';
 import '../../../core/router.dart';
 import '../../../core/theme/colors.dart';
 import '../providers/auth_provider.dart';
 
-/// Create new identity screen with four-word address generation.
+/// Create new identity screen.
+///
+/// Users provide display name and password. The cryptographic identity
+/// (ML-DSA-65 keypair) is generated automatically by the Rust backend.
 class CreateIdentityScreen extends ConsumerStatefulWidget {
   const CreateIdentityScreen({super.key});
 
@@ -21,9 +22,7 @@ class _CreateIdentityScreenState extends ConsumerState<CreateIdentityScreen> {
   final _displayNameController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
-
-  String? _generatedFourWords;
-  bool _isGenerating = false;
+  bool _isCreating = false;
 
   @override
   void dispose() {
@@ -51,17 +50,13 @@ class _CreateIdentityScreenState extends ConsumerState<CreateIdentityScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Four-word address display
+                // Identity explanation
                 Container(
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
                     color: CommunitasColors.moss,
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: _generatedFourWords != null
-                          ? CommunitasColors.jade
-                          : CommunitasColors.fern,
-                    ),
+                    border: Border.all(color: CommunitasColors.fern),
                   ),
                   child: Column(
                     children: [
@@ -72,40 +67,23 @@ class _CreateIdentityScreenState extends ConsumerState<CreateIdentityScreen> {
                       ),
                       const SizedBox(height: 16),
                       Text(
-                        _generatedFourWords ?? 'Your Four-Word Address',
+                        'Your Cryptographic Identity',
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              color: _generatedFourWords != null
-                                  ? CommunitasColors.jade
-                                  : CommunitasColors.cream.withOpacity(0.5),
+                              color: CommunitasColors.jade,
                               fontWeight: FontWeight.bold,
                             ),
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'This is your unique, human-readable identity',
+                        'A unique ML-DSA-65 keypair will be generated for you. '
+                        'This is your permanent identity on the network.',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                               color: CommunitasColors.cream.withOpacity(0.7),
                             ),
                         textAlign: TextAlign.center,
                       ),
                     ],
-                  ),
-                ),
-                const SizedBox(height: 24),
-
-                // Generate button
-                OutlinedButton.icon(
-                  onPressed: _isGenerating ? null : _generateFourWords,
-                  icon: _isGenerating
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.refresh),
-                  label: Text(
-                    _generatedFourWords != null ? 'Regenerate' : 'Generate',
                   ),
                 ),
                 const SizedBox(height: 32),
@@ -118,6 +96,7 @@ class _CreateIdentityScreenState extends ConsumerState<CreateIdentityScreen> {
                     prefixIcon: Icon(Icons.person_outline),
                     helperText: 'How others will see you',
                   ),
+                  textInputAction: TextInputAction.next,
                 ),
                 const SizedBox(height: 16),
 
@@ -130,6 +109,7 @@ class _CreateIdentityScreenState extends ConsumerState<CreateIdentityScreen> {
                     prefixIcon: Icon(Icons.lock_outline),
                     helperText: 'Protects your local vault',
                   ),
+                  textInputAction: TextInputAction.next,
                 ),
                 const SizedBox(height: 16),
 
@@ -141,13 +121,21 @@ class _CreateIdentityScreenState extends ConsumerState<CreateIdentityScreen> {
                     labelText: 'Confirm Password',
                     prefixIcon: Icon(Icons.lock_outline),
                   ),
+                  textInputAction: TextInputAction.done,
+                  onSubmitted: (_) => _handleCreate(),
                 ),
                 const SizedBox(height: 32),
 
                 // Create button
                 ElevatedButton(
-                  onPressed: _generatedFourWords != null ? _handleCreate : null,
-                  child: const Text('Create Identity'),
+                  onPressed: _isCreating ? null : _handleCreate,
+                  child: _isCreating
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Create Identity'),
                 ),
                 const SizedBox(height: 16),
 
@@ -186,44 +174,7 @@ class _CreateIdentityScreenState extends ConsumerState<CreateIdentityScreen> {
     );
   }
 
-  Future<void> _generateFourWords() async {
-    setState(() => _isGenerating = true);
-
-    try {
-      String fourWords;
-      if (kDemoMode) {
-        // Demo mode: use a fixed demo identity
-        await Future.delayed(const Duration(milliseconds: 500));
-        fourWords = 'ocean-forest-moon-star';
-      } else {
-        // Native mode: generate real four-word address via FFI
-        fourWords = await generateIdWords();
-      }
-
-      setState(() {
-        _generatedFourWords = fourWords;
-        _isGenerating = false;
-      });
-    } catch (e) {
-      debugPrint('Error generating four words: $e');
-      setState(() => _isGenerating = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to generate identity: $e')),
-        );
-      }
-    }
-  }
-
   Future<void> _handleCreate() async {
-    // Validate password match
-    if (_passwordController.text != _confirmPasswordController.text) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Passwords do not match')),
-      );
-      return;
-    }
-
     // Validate display name
     if (_displayNameController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -240,21 +191,42 @@ class _CreateIdentityScreenState extends ConsumerState<CreateIdentityScreen> {
       return;
     }
 
-    // Create identity via auth provider
-    final authNotifier = ref.read(authNotifierProvider.notifier);
-    final result = await authNotifier.createIdentity(
-      fourWords: _generatedFourWords!,
-      displayName: _displayNameController.text.trim(),
-      password: _passwordController.text,
-    );
-
-    if (result != null && mounted) {
-      // Success - navigate to home
-      context.go(Routes.home);
-    } else if (mounted) {
+    // Validate password match
+    if (_passwordController.text != _confirmPasswordController.text) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to create identity')),
+        const SnackBar(content: Text('Passwords do not match')),
       );
+      return;
+    }
+
+    setState(() => _isCreating = true);
+
+    try {
+      // Create identity via auth provider (auto-generates vault identifier)
+      final authNotifier = ref.read(authNotifierProvider.notifier);
+      final result = await authNotifier.createIdentity(
+        displayName: _displayNameController.text.trim(),
+        password: _passwordController.text,
+      );
+
+      if (result != null && mounted) {
+        // Success - navigate to home
+        context.go(Routes.home);
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to create identity')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error creating identity: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isCreating = false);
+      }
     }
   }
 }

@@ -11,6 +11,7 @@
 use crate::encrypted_storage::{
     EncryptedStorageManager, PasskeyInfo, RecentIdentity, Session, VaultInfo,
 };
+use crate::keystore::Keystore;
 use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 
@@ -20,6 +21,8 @@ pub struct SessionInfo {
     pub session_id: String,
     pub four_words: String,
     pub display_name: String,
+    /// Hex-encoded ML-DSA-87 public key (the user's cryptographic identity)
+    pub pubkey_hex: String,
 }
 
 impl From<Session> for SessionInfo {
@@ -28,6 +31,8 @@ impl From<Session> for SessionInfo {
             session_id: session.id,
             four_words: session.four_words,
             display_name: session.display_name,
+            // Use pubkey_hex from session if available, otherwise empty
+            pubkey_hex: session.pubkey_hex.unwrap_or_default(),
         }
     }
 }
@@ -90,10 +95,24 @@ impl AuthService {
         tracing::info!("AuthService: Login attempt for {}", four_words);
 
         // Note: EncryptedStorageManager::login expects Option<Vec<u8>> for passkey, we pass None
-        let session = self
+        let mut session = self
             .storage_manager
             .login(four_words, password, None)
             .await?;
+
+        // Retrieve the ML-DSA-87 public key from keystore and attach to session
+        let id_hex = blake3::hash(four_words.as_bytes()).to_hex().to_string();
+        let keystore = Keystore::new();
+        if let Ok((pk_bytes, _)) = keystore.load_mldsa_keys(&id_hex) {
+            let pubkey_hex = hex::encode(&pk_bytes);
+            session = session.with_pubkey_hex(pubkey_hex);
+            tracing::debug!("Attached pubkey_hex to session for {}", four_words);
+        } else {
+            tracing::warn!(
+                "Could not load ML-DSA keys for {} - pubkey_hex will be empty",
+                four_words
+            );
+        }
 
         let session_info = SessionInfo::from(session.clone());
         self.active_session = Some(session);
@@ -121,6 +140,7 @@ impl AuthService {
             session_id: s.id.clone(),
             four_words: s.four_words.clone(),
             display_name: s.display_name.clone(),
+            pubkey_hex: s.pubkey_hex.clone().unwrap_or_default(),
         })
     }
 

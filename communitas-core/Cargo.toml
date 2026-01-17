@@ -8,6 +8,10 @@ repository.workspace = true
 homepage.workspace = true
 description = "Core business logic for Communitas - PQC collaboration with virtual disks"
 
+[lib]
+name = "communitas_bindings"
+crate-type = ["cdylib", "rlib"]
+
 [dependencies]
 # Saorsa Gossip - P2P networking layer (required, no longer optional)
 saorsa-gossip-types.workspace = true

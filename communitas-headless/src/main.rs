@@ -4,6 +4,9 @@
 // Security: CLI tools may use unwrap in controlled contexts
 // Core library crates maintain strict no-unwrap policies
 
+// Alias communitas_bindings (the actual lib name) as communitas_core
+extern crate communitas_bindings as communitas_core;
+
 use anyhow::{Context, Result, anyhow};
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
@@ -1467,6 +1470,45 @@ async fn run_node(args: Args) -> Result<()> {
         } else {
             info!("Added bootstrap node: {}", bootstrap);
         }
+    }
+
+    // Start coordinator mode (this node acts as a bootstrap/relay coordinator)
+    // Get external address from listen address
+    let listen_port = args.listen.port();
+    let external_addrs = if listen_port > 0 {
+        // Try to get public IP
+        let public_ip = local_ip_address::local_ip()
+            .unwrap_or_else(|_| std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)));
+        vec![std::net::SocketAddr::new(public_ip, listen_port)]
+    } else {
+        // Use config listen addresses if available
+        config.network.listen_addrs.clone()
+    };
+
+    if !external_addrs.is_empty() {
+        if let Some(gossip_ctx) = &context.gossip {
+            match gossip_ctx
+                .start_coordinator_mode(external_addrs.clone(), Some(60))
+                .await
+            {
+                Ok(_handle) => {
+                    info!(
+                        "Coordinator mode started with addresses: {:?}",
+                        external_addrs
+                    );
+                }
+                Err(e) => {
+                    warn!(
+                        "Failed to start coordinator mode: {}. Node will operate as regular peer.",
+                        e
+                    );
+                }
+            }
+        } else {
+            warn!("Gossip context not initialized - coordinator mode disabled");
+        }
+    } else {
+        warn!("No external addresses configured - coordinator mode disabled");
     }
 
     // Start health/metrics endpoint if enabled

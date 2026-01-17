@@ -6,6 +6,9 @@
 //! It bypasses the !Send issue that affects Axum handlers by running
 //! CoreContext operations in a standard async runtime without HTTP framework bounds.
 
+// Alias communitas_bindings (the actual lib name) as communitas_core
+extern crate communitas_bindings as communitas_core;
+
 use anyhow::Result;
 use communitas_core::{CoreContext, legacy_crdt::EntityType, types::DeviceType};
 use std::path::PathBuf;

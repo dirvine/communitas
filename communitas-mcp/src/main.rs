@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Saorsa Labs Limited
 //
 // Licensed under the AGPL-3.0 license
-//
+
 //! Communitas MCP Server
 //!
 //! Implements the Model Context Protocol (MCP) to enable AI agents to control
@@ -21,6 +21,9 @@
 //!
 //! ## Resources
 //! Queries are exposed as MCP resources for reading application state.
+
+// Alias communitas_bindings (the actual lib name) as communitas_core
+extern crate communitas_bindings as communitas_core;
 
 mod http;
 mod presence;

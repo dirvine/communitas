@@ -380,7 +380,8 @@ fn current_process_memory_mb() -> Option<usize> {
     let mut system = System::new();
     system.refresh_processes();
     match system.process(pid) {
-        Some(process) => Some((process.memory() / 1024) as usize),
+        // process.memory() returns bytes, divide by 1024*1024 to get MB
+        Some(process) => Some((process.memory() / (1024 * 1024)) as usize),
         None => {
             warn!("Failed to find current process in system info for memory monitoring");
             None

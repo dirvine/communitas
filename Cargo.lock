@@ -997,7 +997,7 @@ dependencies = [
 
 [[package]]
 name = "communitas-core"
-version = "0.1.57"
+version = "0.1.58"
 dependencies = [
  "ammonia",
  "anyhow",
@@ -1073,7 +1073,7 @@ dependencies = [
 
 [[package]]
 name = "communitas-headless"
-version = "0.1.57"
+version = "0.1.58"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -1113,7 +1113,7 @@ dependencies = [
 
 [[package]]
 name = "communitas-kanban"
-version = "0.1.57"
+version = "0.1.58"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1129,7 +1129,7 @@ dependencies = [
 
 [[package]]
 name = "communitas-mcp"
-version = "0.1.57"
+version = "0.1.58"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1162,7 +1162,7 @@ dependencies = [
 
 [[package]]
 name = "communitas-p2p-test"
-version = "0.1.57"
+version = "0.1.58"
 dependencies = [
  "anyhow",
  "communitas-core",

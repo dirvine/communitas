@@ -11,7 +11,7 @@ members = [
 # communitas-flutter - Flutter GUI with flutter_rust_bridge (separate build)
 
 [workspace.package]
-version = "0.1.54"
+version = "0.1.57"
 edition = "2024"
 authors = ["David Irvine <david.irvine@maidsafe.net>", "Saorsa Labs"]
 license = "GPL-3.0"

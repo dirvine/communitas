@@ -33,7 +33,7 @@ jobs:
             libfreetype6-dev
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@1.86.0
+        uses: dtolnay/rust-toolchain@1.87.0
         with:
           components: clippy
 

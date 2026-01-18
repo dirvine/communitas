@@ -1,8 +1,13 @@
 #![allow(non_snake_case)]
 #![allow(clippy::print_stderr)] // eprintln! used for bootstrap errors before logger init
 
+mod components;
+
 use communitas_core::generate_id_words;
-use communitas_ui_api::{OrganizationCategory, SampleWords, UnifiedEntity, UnifiedEntityType};
+use communitas_ui_api::{
+    OrganizationCategory, PresenceStatus, SampleWords, UnifiedContact, UnifiedEntity,
+    UnifiedEntityType,
+};
 use communitas_ui_service::{
     UiServices,
     auth::{AuthController, AuthService, AuthSession},
@@ -82,6 +87,8 @@ enum Route {
     },
     #[route("/project/:project_id/board")]
     ProjectBoardRoute { project_id: String },
+    #[route("/contact/:contact_id")]
+    ContactDetailRoute { contact_id: String },
     #[route("/contact/:contact_id/chat")]
     ContactChatRoute { contact_id: String },
 }
@@ -803,10 +810,71 @@ fn EntityListPanel(props: EntityListPanelProps) -> Element {
 }
 #[component]
 fn MessagesRoute() -> Element {
+    let mut selected_thread = use_signal(|| Option::<String>::None);
+    let mut reply_to = use_signal(|| Option::<communitas_ui_api::Message>::None);
+
+    let handle_thread_select = move |thread_id: String| {
+        selected_thread.set(Some(thread_id.clone()));
+        reply_to.set(None); // Clear reply when switching threads
+        info!(target = "ui.messages", event = "thread_selected", thread_id = %thread_id);
+    };
+
     render_authenticated_page(
         "Messages",
         rsx! {
-            PlaceholderPanel { title: "Messages".into(), body: "Stream and compose entity chats, DMs, and reactions.".into() }
+            div {
+                class: "flex gap-6 h-[calc(100vh-16rem)]",
+                // Thread list sidebar
+                div {
+                    class: "w-80 flex-shrink-0 rounded-xl border border-slate-800 bg-slate-900/50 overflow-hidden",
+                    components::ThreadListSidebar {
+                        selected_thread_id: selected_thread(),
+                        on_thread_select: handle_thread_select,
+                    }
+                }
+                // Message area
+                div {
+                    class: "flex-1 rounded-xl border border-slate-800 bg-slate-900/50 flex flex-col overflow-hidden",
+                    if let Some(thread_id) = selected_thread() {
+                        // Thread selected - show message list and composer
+                        div {
+                            class: "flex-1 overflow-hidden",
+                            components::MessageList {
+                                thread_id: thread_id.clone(),
+                                on_reply: move |msg: communitas_ui_api::Message| {
+                                    reply_to.set(Some(msg));
+                                },
+                            }
+                        }
+                        // Composer at bottom
+                        components::MessageComposer {
+                            thread_id: thread_id.clone(),
+                            reply_to: reply_to(),
+                            on_send: move |msg: communitas_ui_api::Message| {
+                                info!(target = "ui.messages", event = "message_sent", message_id = %msg.id);
+                                reply_to.set(None);
+                            },
+                            on_cancel_reply: Some(EventHandler::new(move |_| {
+                                reply_to.set(None);
+                            })),
+                        }
+                    } else {
+                        // No thread selected - show empty state
+                        div {
+                            class: "flex-1 flex items-center justify-center",
+                            div {
+                                class: "text-center",
+                                div {
+                                    class: "w-20 h-20 rounded-full bg-slate-800 flex items-center justify-center mb-4 mx-auto",
+                                    span { class: "text-3xl", "💬" }
+                                }
+                                p { class: "text-slate-400", "Select a conversation" }
+                                p { class: "text-slate-500 text-sm mt-1", "Choose a thread from the sidebar to start chatting" }
+                            }
+                        }
+                    }
+                }
+            }
         },
     )
 }
@@ -892,6 +960,16 @@ fn ProjectBoardRoute(project_id: String) -> Element {
 }
 
 #[component]
+fn ContactDetailRoute(contact_id: String) -> Element {
+    render_authenticated_page(
+        "Contact",
+        rsx! {
+            ContactDetailView { contact_id }
+        },
+    )
+}
+
+#[component]
 fn ContactChatRoute(contact_id: String) -> Element {
     render_authenticated_page(
         "Contact Chat",
@@ -916,22 +994,355 @@ fn EntityDetailsView(props: EntityDetailsViewProps) -> Element {
         .iter()
         .find(|entity| entity.id == props.entity_id)
         .cloned();
+    let mut reply_to = use_signal(|| Option::<communitas_ui_api::Message>::None);
+    let mut show_chat = use_signal(|| true);
 
     if let Some(entity) = entity {
+        let entity_for_header = entity.clone();
+        let thread_id = props.entity_id.clone();
+        let thread_id_for_composer = thread_id.clone();
+        let entity_id_for_edit = props.entity_id.clone();
+        let entity_id_for_leave = props.entity_id.clone();
+        let entity_id_for_members = props.entity_id.clone();
+
         rsx! {
-            div { class: "flex flex-col gap-4",
-                h2 { class: "text-2xl font-semibold text-white", "{entity.name}" }
-                p { class: "text-sm text-slate-400", "{entity.description}" }
-                div { class: "flex flex-wrap gap-4 text-sm text-slate-400",
-                    span { "{entity.member_count} members" }
-                    if matches!(entity.entity_type, UnifiedEntityType::Organization) {
-                        span {
-                            "Category: ",
-                            match entity.category {
-                                Some(OrganizationCategory::Community) => "Community",
-                                Some(OrganizationCategory::Organization) => "Organization",
-                                None => "Organization",
+            div {
+                class: "entity-detail-view flex flex-col h-[calc(100vh-16rem)]",
+                role: "main",
+                aria_label: format!("{} details", entity.name),
+                // Entity header
+                EntityHeader {
+                    entity: entity_for_header,
+                    on_edit: move |_| {
+                        info!(target = "ui.entity", event = "edit_clicked", entity_id = %entity_id_for_edit);
+                    },
+                    on_leave: move |_| {
+                        info!(target = "ui.entity", event = "leave_clicked", entity_id = %entity_id_for_leave);
+                    },
+                }
+                // Content area with tabs
+                div {
+                    class: "flex border-b border-slate-800 mt-4",
+                    button {
+                        class: format!(
+                            "px-4 py-2 text-sm font-medium transition {}",
+                            if show_chat() { "text-emerald-400 border-b-2 border-emerald-400" } else { "text-slate-400 hover:text-slate-200" }
+                        ),
+                        onclick: move |_| show_chat.set(true),
+                        "Chat"
+                    }
+                    button {
+                        class: format!(
+                            "px-4 py-2 text-sm font-medium transition {}",
+                            if !show_chat() { "text-emerald-400 border-b-2 border-emerald-400" } else { "text-slate-400 hover:text-slate-200" }
+                        ),
+                        onclick: move |_| show_chat.set(false),
+                        "Members"
+                    }
+                }
+                // Tab content
+                if show_chat() {
+                    // Chat panel
+                    div {
+                        class: "flex-1 flex flex-col overflow-hidden mt-4",
+                        div {
+                            class: "flex-1 overflow-hidden rounded-lg border border-slate-800 bg-slate-900/30",
+                            components::MessageList {
+                                thread_id: thread_id.clone(),
+                                on_reply: move |msg: communitas_ui_api::Message| {
+                                    reply_to.set(Some(msg));
+                                },
                             }
+                        }
+                        div {
+                            class: "mt-2",
+                            components::MessageComposer {
+                                thread_id: thread_id_for_composer,
+                                reply_to: reply_to(),
+                                on_send: move |msg: communitas_ui_api::Message| {
+                                    info!(target = "ui.entity", event = "message_sent", message_id = %msg.id);
+                                    reply_to.set(None);
+                                },
+                                on_cancel_reply: Some(EventHandler::new(move |_| {
+                                    reply_to.set(None);
+                                })),
+                            }
+                        }
+                    }
+                } else {
+                    // Members panel
+                    EntityMemberList {
+                        entity_id: entity_id_for_members.clone(),
+                    }
+                }
+            }
+        }
+    } else {
+        rsx! {
+            EntityNotFound { entity_id: props.entity_id.clone() }
+        }
+    }
+}
+
+/// Entity header showing name, type badge, description, and actions.
+#[derive(Props, Clone, PartialEq)]
+struct EntityHeaderProps {
+    entity: UnifiedEntity,
+    on_edit: EventHandler<()>,
+    on_leave: EventHandler<()>,
+}
+
+#[component]
+fn EntityHeader(props: EntityHeaderProps) -> Element {
+    let entity = &props.entity;
+    let type_badge = match entity.entity_type {
+        UnifiedEntityType::Organization => match entity.category {
+            Some(OrganizationCategory::Community) => (
+                "Community",
+                "bg-purple-500/20 text-purple-300 border-purple-500/30",
+            ),
+            Some(OrganizationCategory::Organization) | None => (
+                "Organization",
+                "bg-blue-500/20 text-blue-300 border-blue-500/30",
+            ),
+        },
+        UnifiedEntityType::Project => (
+            "Project",
+            "bg-amber-500/20 text-amber-300 border-amber-500/30",
+        ),
+        UnifiedEntityType::Group => (
+            "Group",
+            "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
+        ),
+        UnifiedEntityType::Channel => {
+            ("Channel", "bg-cyan-500/20 text-cyan-300 border-cyan-500/30")
+        }
+        UnifiedEntityType::Person => ("Person", "bg-pink-500/20 text-pink-300 border-pink-500/30"),
+    };
+
+    rsx! {
+        header {
+            class: "entity-header rounded-xl border border-slate-800 bg-slate-900/50 p-5",
+            role: "banner",
+            div {
+                class: "flex flex-col gap-3 md:flex-row md:items-start md:justify-between",
+                // Entity info
+                div {
+                    class: "flex-1",
+                    // Type badge
+                    span {
+                        class: format!("inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border {}", type_badge.1),
+                        "{type_badge.0}"
+                    }
+                    // Name
+                    h1 {
+                        class: "mt-2 text-2xl font-semibold text-white",
+                        "{entity.name}"
+                    }
+                    // Description
+                    if !entity.description.is_empty() {
+                        p {
+                            class: "mt-1 text-sm text-slate-400",
+                            "{entity.description}"
+                        }
+                    }
+                    // Member count
+                    div {
+                        class: "mt-3 flex items-center gap-4 text-sm text-slate-500",
+                        span {
+                            class: "flex items-center gap-1",
+                            span { class: "text-slate-600", "👥" }
+                            {format!("{} member{}", entity.member_count, if entity.member_count != 1 { "s" } else { "" })}
+                        }
+                    }
+                }
+                // Actions
+                div {
+                    class: "flex gap-2 mt-3 md:mt-0",
+                    button {
+                        class: "px-4 py-2 text-sm font-medium text-slate-300 border border-slate-700 rounded-lg hover:border-slate-600 hover:text-slate-200 transition",
+                        onclick: move |_| props.on_edit.call(()),
+                        "Edit"
+                    }
+                    button {
+                        class: "px-4 py-2 text-sm font-medium text-red-400 border border-red-500/30 rounded-lg hover:border-red-500/50 hover:bg-red-500/10 transition",
+                        onclick: move |_| props.on_leave.call(()),
+                        "Leave"
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Member list panel for entity.
+#[derive(Props, Clone, PartialEq)]
+struct EntityMemberListProps {
+    entity_id: String,
+}
+
+#[component]
+fn EntityMemberList(props: EntityMemberListProps) -> Element {
+    // TODO: Load actual members from service based on props.entity_id
+    let _entity_id = &props.entity_id;
+
+    rsx! {
+        aside {
+            class: "entity-member-list flex-1 overflow-y-auto mt-4 rounded-lg border border-slate-800 bg-slate-900/30 p-4",
+            role: "complementary",
+            aria_label: "Entity members",
+            h3 {
+                class: "text-sm font-medium text-slate-400 uppercase tracking-wider mb-4",
+                "Members"
+            }
+            // Placeholder members
+            div {
+                class: "space-y-2",
+                for i in 0..5 {
+                    div {
+                        key: "{i}",
+                        class: "flex items-center gap-3 p-2 rounded-lg hover:bg-slate-800/50 transition",
+                        // Avatar
+                        div {
+                            class: "w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-sm text-slate-300",
+                            "{(b'A' + i as u8) as char}"
+                        }
+                        // Info
+                        div {
+                            class: "flex-1 min-w-0",
+                            p {
+                                class: "text-sm font-medium text-slate-200 truncate",
+                                "Member {i + 1}"
+                            }
+                            p {
+                                class: "text-xs text-slate-500",
+                                "four-word-identity"
+                            }
+                        }
+                        // Presence dot placeholder
+                        span {
+                            class: "w-2 h-2 rounded-full bg-emerald-400",
+                            title: "Online",
+                        }
+                    }
+                }
+            }
+            // Load more hint
+            p {
+                class: "mt-4 text-center text-xs text-slate-600",
+                "Member list integration coming soon"
+            }
+        }
+    }
+}
+
+/// Not found state for entity.
+#[derive(Props, Clone, PartialEq)]
+struct EntityNotFoundProps {
+    entity_id: String,
+}
+
+#[component]
+fn EntityNotFound(props: EntityNotFoundProps) -> Element {
+    rsx! {
+        div {
+            class: "flex flex-col items-center justify-center py-16",
+            role: "alert",
+            div {
+                class: "w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center mb-4",
+                span { class: "text-2xl", "🔍" }
+            }
+            h2 {
+                class: "text-xl font-semibold text-slate-200",
+                "Entity not found"
+            }
+            p {
+                class: "mt-2 text-sm text-slate-500",
+                "The entity \"{props.entity_id}\" could not be found."
+            }
+            Link {
+                to: Route::DashboardRoute {},
+                class: "mt-4 px-4 py-2 text-sm font-medium text-emerald-400 border border-emerald-500/30 rounded-lg hover:bg-emerald-500/10 transition",
+                "Return to Dashboard"
+            }
+        }
+    }
+}
+
+// --- Contact Detail View ---
+
+#[derive(Props, PartialEq, Clone)]
+struct ContactDetailViewProps {
+    contact_id: String,
+}
+
+#[component]
+fn ContactDetailView(props: ContactDetailViewProps) -> Element {
+    let directory = use_directory_snapshot();
+    let snapshot = directory();
+    let contact = snapshot
+        .contacts
+        .iter()
+        .find(|c| c.id == props.contact_id)
+        .cloned();
+
+    let mut reply_to = use_signal(|| Option::<communitas_ui_api::Message>::None);
+
+    // Mock presence for now - will be wired to PresenceService
+    let presence = PresenceStatus::Online;
+    let last_seen: Option<u64> = None;
+
+    if let Some(contact) = contact {
+        let contact_id_for_edit = props.contact_id.clone();
+        let contact_id_for_block = props.contact_id.clone();
+        let contact_id_for_remove = props.contact_id.clone();
+        let thread_id = props.contact_id.clone();
+        let thread_id_for_composer = thread_id.clone();
+
+        rsx! {
+            div {
+                class: "contact-detail-view flex flex-col h-[calc(100vh-16rem)]",
+                role: "main",
+                aria_label: format!("{} contact details", contact.display_name),
+                // Contact header card
+                ContactCard {
+                    contact: contact.clone(),
+                    presence,
+                    last_seen,
+                    on_edit: move |_| {
+                        info!(target = "ui.contact", event = "edit_clicked", contact_id = %contact_id_for_edit);
+                    },
+                    on_block: move |_| {
+                        info!(target = "ui.contact", event = "block_clicked", contact_id = %contact_id_for_block);
+                    },
+                    on_remove: move |_| {
+                        info!(target = "ui.contact", event = "remove_clicked", contact_id = %contact_id_for_remove);
+                    },
+                }
+                // DM chat panel
+                div {
+                    class: "flex-1 flex flex-col overflow-hidden mt-4",
+                    div {
+                        class: "flex-1 overflow-hidden rounded-lg border border-slate-800 bg-slate-900/30",
+                        components::MessageList {
+                            thread_id: thread_id.clone(),
+                            on_reply: move |msg: communitas_ui_api::Message| {
+                                reply_to.set(Some(msg));
+                            },
+                        }
+                    }
+                    div {
+                        class: "mt-2",
+                        components::MessageComposer {
+                            thread_id: thread_id_for_composer,
+                            reply_to: reply_to(),
+                            on_send: move |msg: communitas_ui_api::Message| {
+                                info!(target = "ui.contact", event = "message_sent", message_id = %msg.id);
+                                reply_to.set(None);
+                            },
+                            on_cancel_reply: Some(EventHandler::new(move |_| {
+                                reply_to.set(None);
+                            })),
                         }
                     }
                 }
@@ -939,8 +1350,175 @@ fn EntityDetailsView(props: EntityDetailsViewProps) -> Element {
         }
     } else {
         rsx! {
-            PlaceholderPanel { title: "Entity".into(), body: format!("Entity {} not found", props.entity_id).into() }
+            ContactNotFound { contact_id: props.contact_id.clone() }
         }
+    }
+}
+
+/// Contact card showing avatar, name, presence badge, and actions.
+#[derive(Props, Clone, PartialEq)]
+struct ContactCardProps {
+    contact: UnifiedContact,
+    presence: PresenceStatus,
+    last_seen: Option<u64>,
+    on_edit: EventHandler<()>,
+    on_block: EventHandler<()>,
+    on_remove: EventHandler<()>,
+}
+
+#[component]
+fn ContactCard(props: ContactCardProps) -> Element {
+    let contact = &props.contact;
+    let first_char = contact
+        .display_name
+        .chars()
+        .next()
+        .unwrap_or('?')
+        .to_uppercase()
+        .to_string();
+
+    rsx! {
+        header {
+            class: "contact-card rounded-xl border border-slate-800 bg-slate-900/50 p-5",
+            role: "banner",
+            div {
+                class: "flex flex-col gap-4 md:flex-row md:items-center md:justify-between",
+                // Contact info
+                div {
+                    class: "flex items-center gap-4",
+                    // Avatar with presence dot
+                    div {
+                        class: "relative",
+                        div {
+                            class: "w-16 h-16 rounded-full bg-slate-700 flex items-center justify-center text-2xl text-slate-200 font-semibold",
+                            "{first_char}"
+                        }
+                        // Presence dot in corner
+                        div {
+                            class: "absolute -bottom-0.5 -right-0.5",
+                            components::PresenceDot {
+                                status: props.presence,
+                                size: "md",
+                            }
+                        }
+                    }
+                    // Name and details
+                    div {
+                        class: "flex flex-col",
+                        h1 {
+                            class: "text-xl font-semibold text-white",
+                            "{contact.display_name}"
+                        }
+                        // Four-word ID
+                        p {
+                            class: "text-sm text-slate-500 font-mono",
+                            "{contact.id}"
+                        }
+                        // Presence badge with text
+                        div {
+                            class: "mt-2",
+                            components::PresenceBadge {
+                                status: props.presence,
+                                size: "sm",
+                            }
+                        }
+                        // Last seen (if offline)
+                        if props.presence == PresenceStatus::Offline {
+                            if let Some(last_seen) = props.last_seen {
+                                p {
+                                    class: "text-xs text-slate-600 mt-1",
+                                    "Last seen {format_relative_time(last_seen)}"
+                                }
+                            }
+                        }
+                    }
+                }
+                // Actions
+                div {
+                    class: "flex gap-2 mt-3 md:mt-0",
+                    button {
+                        class: "px-4 py-2 text-sm font-medium text-slate-300 border border-slate-700 rounded-lg hover:border-slate-600 hover:text-slate-200 transition",
+                        onclick: move |_| props.on_edit.call(()),
+                        "Edit"
+                    }
+                    button {
+                        class: "px-4 py-2 text-sm font-medium text-amber-400 border border-amber-500/30 rounded-lg hover:border-amber-500/50 hover:bg-amber-500/10 transition",
+                        onclick: move |_| props.on_block.call(()),
+                        "Block"
+                    }
+                    button {
+                        class: "px-4 py-2 text-sm font-medium text-red-400 border border-red-500/30 rounded-lg hover:border-red-500/50 hover:bg-red-500/10 transition",
+                        onclick: move |_| props.on_remove.call(()),
+                        "Remove"
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Not found state for contact.
+#[derive(Props, Clone, PartialEq)]
+struct ContactNotFoundProps {
+    contact_id: String,
+}
+
+#[component]
+fn ContactNotFound(props: ContactNotFoundProps) -> Element {
+    rsx! {
+        div {
+            class: "flex flex-col items-center justify-center py-16",
+            role: "alert",
+            div {
+                class: "w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center mb-4",
+                span { class: "text-2xl", "👤" }
+            }
+            h2 {
+                class: "text-xl font-semibold text-slate-200",
+                "Contact not found"
+            }
+            p {
+                class: "mt-2 text-sm text-slate-500",
+                "The contact \"{props.contact_id}\" could not be found."
+            }
+            Link {
+                to: Route::ContactsRoute {},
+                class: "mt-4 px-4 py-2 text-sm font-medium text-emerald-400 border border-emerald-500/30 rounded-lg hover:bg-emerald-500/10 transition",
+                "Return to Contacts"
+            }
+        }
+    }
+}
+
+/// Format timestamp as relative time.
+fn format_relative_time(timestamp_ms: u64) -> String {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+
+    let diff_ms = now.saturating_sub(timestamp_ms);
+    let diff_secs = diff_ms / 1000;
+    let diff_mins = diff_secs / 60;
+    let diff_hours = diff_mins / 60;
+    let diff_days = diff_hours / 24;
+
+    if diff_mins < 1 {
+        "just now".to_string()
+    } else if diff_mins < 60 {
+        format!("{} min ago", diff_mins)
+    } else if diff_hours < 24 {
+        format!(
+            "{} hour{} ago",
+            diff_hours,
+            if diff_hours == 1 { "" } else { "s" }
+        )
+    } else {
+        format!(
+            "{} day{} ago",
+            diff_days,
+            if diff_days == 1 { "" } else { "s" }
+        )
     }
 }
 
@@ -1147,7 +1725,7 @@ fn route_navigation_event(route: &Route) -> Option<RouteNavigationEvent> {
         Route::ProjectBoardRoute { project_id } => Some(RouteNavigationEvent::Entity(
             EntityNavigationKey::new("project", project_id.clone()),
         )),
-        Route::ContactChatRoute { contact_id } => {
+        Route::ContactDetailRoute { contact_id } | Route::ContactChatRoute { contact_id } => {
             Some(RouteNavigationEvent::Contact(contact_id.clone()))
         }
         _ => None,
@@ -1187,6 +1765,17 @@ mod tests {
         match route_navigation_event(&route) {
             Some(RouteNavigationEvent::Contact(contact)) => assert_eq!(contact, "alice"),
             _ => panic!("expected contact event"),
+        }
+    }
+
+    #[test]
+    fn route_event_detects_contact_detail() {
+        let route = Route::ContactDetailRoute {
+            contact_id: "bob".into(),
+        };
+        match route_navigation_event(&route) {
+            Some(RouteNavigationEvent::Contact(contact)) => assert_eq!(contact, "bob"),
+            _ => panic!("expected contact event for detail route"),
         }
     }
 

@@ -1,3 +1,5 @@
+#![allow(clippy::print_stdout)] // CLI tool outputs JSON to stdout
+
 use anyhow::{Context, Result};
 use communitas_bindings::{
     app::CommunitasApp,

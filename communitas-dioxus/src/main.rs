@@ -1,4 +1,5 @@
 #![allow(non_snake_case)]
+#![allow(clippy::print_stderr)] // eprintln! used for bootstrap errors before logger init
 
 use communitas_core::generate_id_words;
 use communitas_ui_api::{OrganizationCategory, SampleWords, UnifiedEntity, UnifiedEntityType};

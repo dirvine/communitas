@@ -54,7 +54,7 @@ pub trait NavigationService: Send + Sync {
     fn subscribe(&self) -> watch::Receiver<NavigationStateSnapshot>;
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 struct NavigationPersistence {
     recent_entities: Vec<EntityNavigationKey>,
     recent_contacts: Vec<String>,
@@ -62,18 +62,6 @@ struct NavigationPersistence {
     starred_contacts: Vec<String>,
     #[serde(default)]
     last_updated_epoch_ms: u128,
-}
-
-impl Default for NavigationPersistence {
-    fn default() -> Self {
-        Self {
-            recent_entities: Vec::new(),
-            recent_contacts: Vec::new(),
-            starred_entities: Vec::new(),
-            starred_contacts: Vec::new(),
-            last_updated_epoch_ms: 0,
-        }
-    }
 }
 
 impl NavigationPersistence {

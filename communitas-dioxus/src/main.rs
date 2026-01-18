@@ -43,6 +43,7 @@ fn main() {
 }
 
 #[derive(Clone, Routable, Debug, PartialEq)]
+#[allow(clippy::enum_variant_names)] // Dioxus router convention uses Route suffix
 enum Route {
     #[route("/login")]
     LoginRoute {},
@@ -126,7 +127,7 @@ fn use_auth() -> Signal<AuthState> {
 fn use_navigation_snapshot() -> Signal<NavigationStateSnapshot> {
     let services = use_context::<Arc<UiServices>>();
     let snapshot = use_signal(|| services.navigation().current_snapshot());
-    let mut nav_signal = snapshot.clone();
+    let mut nav_signal = snapshot;
     use_future(move || {
         let mut rx = services.navigation().subscribe();
         async move {
@@ -144,7 +145,7 @@ fn use_navigation_snapshot() -> Signal<NavigationStateSnapshot> {
 fn use_directory_snapshot() -> Signal<DirectorySnapshot> {
     let services = use_context::<Arc<UiServices>>();
     let snapshot = use_signal(|| services.directory().current_snapshot());
-    let mut dir_signal = snapshot.clone();
+    let mut dir_signal = snapshot;
     use_future(move || {
         let mut rx = services.directory().subscribe();
         async move {
@@ -180,10 +181,10 @@ fn AppLifecycleManager() -> Element {
     use_future(move || {
         let services = services.clone();
         async move {
-            if matches!(phase, AuthPhase::Authenticated) {
-                if let Err(err) = services.directory().refresh_all().await {
-                    error!("failed to refresh directory snapshot: {err}");
-                }
+            if matches!(phase, AuthPhase::Authenticated)
+                && let Err(err) = services.directory().refresh_all().await
+            {
+                error!("failed to refresh directory snapshot: {err}");
             }
         }
     });
@@ -231,15 +232,14 @@ fn LoginRoute() -> Element {
     let mut password = use_signal(String::new);
 
     let login_action = {
-        let mut auth_signal = auth.clone();
-        let navigator = navigator.clone();
+        let mut auth_signal = auth;
         let auth_service = auth_service.clone();
         use_coroutine(move |mut rx: UnboundedReceiver<LoginRequest>| {
             let auth_service = auth_service.clone();
             async move {
                 while let Some(payload) = rx.next().await {
                     if let Err(err) =
-                        process_login(auth_signal.clone(), auth_service.clone(), payload).await
+                        process_login(auth_signal, auth_service.clone(), payload).await
                     {
                         auth_signal.with_mut(|state| {
                             state.error = Some(err);
@@ -329,16 +329,13 @@ fn CreateIdentityRoute() -> Element {
     let mut preview_words = use_signal(sample_words_from_core);
 
     let create_action = {
-        let mut auth = auth.clone();
-        let navigator = navigator.clone();
+        let mut auth = auth;
         let auth_service = auth_service.clone();
         use_coroutine(move |mut rx: UnboundedReceiver<CreateRequest>| {
             let auth_service = auth_service.clone();
             async move {
                 while let Some(payload) = rx.next().await {
-                    if let Err(err) =
-                        process_create(auth.clone(), auth_service.clone(), payload).await
-                    {
+                    if let Err(err) = process_create(auth, auth_service.clone(), payload).await {
                         auth.with_mut(|state| {
                             state.error = Some(err);
                             state.phase = AuthPhase::LoggedOut;
@@ -353,7 +350,7 @@ fn CreateIdentityRoute() -> Element {
 
     let busy = matches!(auth.read().phase, AuthPhase::Authenticating);
     let error_msg = auth.read().error.clone();
-    let mut auth_for_submit = auth.clone();
+    let mut auth_for_submit = auth;
 
     rsx! {
         AuthLayout {
@@ -453,16 +450,13 @@ fn RecoverIdentityRoute() -> Element {
     let mut password = use_signal(String::new);
 
     let recover_action = {
-        let mut auth = auth.clone();
-        let navigator = navigator.clone();
+        let mut auth = auth;
         let auth_service = auth_service.clone();
         use_coroutine(move |mut rx: UnboundedReceiver<RecoverRequest>| {
             let auth_service = auth_service.clone();
             async move {
                 while let Some(payload) = rx.next().await {
-                    if let Err(err) =
-                        process_recover(auth.clone(), auth_service.clone(), payload).await
-                    {
+                    if let Err(err) = process_recover(auth, auth_service.clone(), payload).await {
                         auth.with_mut(|state| {
                             state.error = Some(err);
                             state.phase = AuthPhase::LoggedOut;
@@ -998,14 +992,13 @@ fn AppShell(props: AppShellProps) -> Element {
     let mut sidebar_collapsed = use_signal(|| false);
 
     let logout_action = {
-        let mut auth = auth.clone();
-        let navigator = navigator.clone();
+        let mut auth = auth;
         let auth_service = auth_service.clone();
         use_coroutine(move |mut rx: UnboundedReceiver<()>| {
             let auth_service = auth_service.clone();
             async move {
                 while rx.next().await.is_some() {
-                    if let Err(err) = process_logout(auth.clone(), auth_service.clone()).await {
+                    if let Err(err) = process_logout(auth, auth_service.clone()).await {
                         auth.with_mut(|state| state.error = Some(err));
                     } else {
                         navigator.replace(Route::LoginRoute {});

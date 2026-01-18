@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use communitas_core::{
+use communitas_bindings::{
     app::CommunitasApp,
     command::{Query, QueryResponse},
 };
@@ -34,7 +34,7 @@ struct EntitySummary {
 struct ContactSummary {
     id: String,
     display_name: String,
-    status: String,
+    is_online: bool,
 }
 
 #[tokio::main]
@@ -54,7 +54,7 @@ async fn main() -> Result<()> {
         storage_dir.clone(),
     )
     .await
-    .context("failed to initialize CommunitasApp")?;
+    .map_err(|e| anyhow::anyhow!("failed to initialize CommunitasApp: {e}"))?;
 
     let profile = match app.query(Query::GetProfile).await? {
         QueryResponse::Profile {
@@ -90,7 +90,7 @@ async fn main() -> Result<()> {
             .map(|contact| ContactSummary {
                 id: contact.id,
                 display_name: contact.display_name,
-                status: contact.status,
+                is_online: contact.is_online,
             })
             .collect(),
         other => anyhow::bail!("unexpected response for contact list: {:?}", other),

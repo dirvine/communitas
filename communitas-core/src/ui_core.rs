@@ -37,7 +37,7 @@ static TRACING_INITIALIZED: AtomicBool = AtomicBool::new(false);
 ///
 /// # Arguments
 /// * `level` - Optional log level filter (e.g., "info", "debug", "warn").
-///             If not provided, defaults to "info" or respects RUST_LOG env var.
+///   If not provided, defaults to "info" or respects RUST_LOG env var.
 ///
 /// # Returns
 /// * `Ok(true)` - Tracing was successfully initialized
@@ -369,21 +369,21 @@ impl CommunitasApi {
         )
         .await?;
 
-        if let Some(parent_org_id) = parent_org_id {
-            if let Some(entity_id) = events.iter().find_map(|event| match event {
+        if let Some(parent_org_id) = parent_org_id
+            && let Some(entity_id) = events.iter().find_map(|event| match event {
                 UiEvent::EntityCreated { entity_id } => Some(entity_id.clone()),
                 _ => None,
-            }) {
-                let mut parent_events = execute_command(
-                    &self.app,
-                    Command::SetParentOrganization {
-                        entity_id,
-                        parent_org_id,
-                    },
-                )
-                .await?;
-                events.append(&mut parent_events);
-            }
+            })
+        {
+            let mut parent_events = execute_command(
+                &self.app,
+                Command::SetParentOrganization {
+                    entity_id,
+                    parent_org_id,
+                },
+            )
+            .await?;
+            events.append(&mut parent_events);
         }
 
         Ok(events)

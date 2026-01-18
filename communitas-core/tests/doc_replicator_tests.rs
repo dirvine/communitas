@@ -13,6 +13,9 @@
 //!
 //! Tests CRDT synchronization and collaborative editing via Yrs v0.19.
 
+// Alias communitas_bindings (the actual lib name) as communitas_core
+extern crate communitas_bindings as communitas_core;
+
 use communitas_core::doc_replicator::{DocReplicator, DocReplicatorConfig, StorageMode};
 use std::sync::Arc;
 

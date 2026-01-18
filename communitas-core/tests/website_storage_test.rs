@@ -11,7 +11,11 @@
 //! - 4-word address resolution
 //! - Markdown rendering and sanitization
 
+// Alias communitas_bindings (the actual lib name) as communitas_core
+extern crate communitas_bindings as communitas_core;
+
 use communitas_core::crdt_manager::CrdtManager;
+
 use communitas_core::website::{MarkdownPage, WebsiteManager, WebsiteMetadata};
 use std::sync::Arc;
 use tempfile::tempdir;

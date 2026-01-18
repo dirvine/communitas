@@ -3,7 +3,11 @@
 //! Tests message synchronization, out-of-order detection, missing message recovery,
 //! and multi-peer scenarios with property-based testing.
 
+// Alias communitas_bindings (the actual lib name) as communitas_core
+extern crate communitas_bindings as communitas_core;
+
 use communitas_core::crdt::*;
+
 use communitas_core::message_sync::MessageSyncService;
 use proptest::prelude::*;
 

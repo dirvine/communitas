@@ -7,6 +7,9 @@
 //! Tests to ensure errors are properly propagated and we don't silently
 //! lose data when filesystem or deserialization errors occur.
 
+// Alias communitas_bindings (the actual lib name) as communitas_core
+extern crate communitas_bindings as communitas_core;
+
 use communitas_core::crdt_manager::{CrdtError, CrdtManager};
 use std::fs;
 use std::os::unix::fs::PermissionsExt;

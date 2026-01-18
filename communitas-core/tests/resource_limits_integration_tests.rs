@@ -4,6 +4,9 @@
 //
 // Tests MESH_CAPABILITIES.md §8.3: Resource management
 
+// Alias communitas_bindings (the actual lib name) as communitas_core
+extern crate communitas_bindings as communitas_core;
+
 use communitas_core::{ResourceLimitError, ResourceLimits};
 use std::time::Duration;
 

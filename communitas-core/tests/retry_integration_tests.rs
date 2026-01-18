@@ -4,6 +4,9 @@
 //
 // Tests MESH_CAPABILITIES.md §3.2 Scenario C: Intermittent connectivity
 
+// Alias communitas_bindings (the actual lib name) as communitas_core
+extern crate communitas_bindings as communitas_core;
+
 use communitas_core::retry_utils::{RetryConfig, retry_dial, retry_with_backoff};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};

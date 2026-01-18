@@ -3,8 +3,13 @@
 //! Tests message synchronization between peers over real QUIC connections,
 //! including out-of-order handling, missing message recovery, and convergence.
 
+// Alias communitas_bindings (the actual lib name) as communitas_core
+extern crate communitas_bindings as communitas_core;
+
 use communitas_core::crdt::*;
+
 use communitas_core::message_sync::MessageSyncService;
+
 use communitas_core::test_harness::TestHarness;
 use std::time::Duration;
 

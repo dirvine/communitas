@@ -10,6 +10,9 @@
 //! 4. Introducer node cold start
 //! 5. Complete discovery flow without DHT
 
+// Alias communitas_bindings (the actual lib name) as communitas_core
+extern crate communitas_bindings as communitas_core;
+
 use communitas_core::gossip::discovery::{FoafDiscovery, IntroducerConfig, cold_start_discovery};
 use saorsa_gossip_types::PeerId;
 use std::sync::Arc;

@@ -3,6 +3,9 @@
 //! Tests vector clocks, causal ordering, and CRDT message synchronization
 //! using proptest for exhaustive property verification.
 
+// Alias communitas_bindings (the actual lib name) as communitas_core
+extern crate communitas_bindings as communitas_core;
+
 use communitas_core::crdt::*;
 use proptest::prelude::*;
 

@@ -3,6 +3,9 @@
 //! Tests presence beacon advertising, discovery, TTL expiration,
 //! and multi-group scenarios over real network.
 
+// Alias communitas_bindings (the actual lib name) as communitas_core
+extern crate communitas_bindings as communitas_core;
+
 use communitas_core::test_harness::TestHarness;
 use saorsa_gossip_presence::PresenceStatus;
 use saorsa_gossip_types::{PresenceRecord, TopicId};

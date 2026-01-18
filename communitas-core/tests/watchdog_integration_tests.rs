@@ -4,6 +4,9 @@
 //
 // Tests MESH_CAPABILITIES.md §3.2 Scenario A: Internet collapse detection
 
+// Alias communitas_bindings (the actual lib name) as communitas_core
+extern crate communitas_bindings as communitas_core;
+
 use communitas_core::{ConnectivityWatchdog, WatchdogConfig};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};

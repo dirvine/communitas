@@ -7,6 +7,9 @@
 //! Tests for retry logic with exponential backoff as specified in
 //! MESH_CAPABILITIES.md Section 3.2 Scenario C
 
+// Alias communitas_bindings (the actual lib name) as communitas_core
+extern crate communitas_bindings as communitas_core;
+
 use communitas_core::retry_utils::{BackoffConfig, RetryConfig, RetryResult, retry_with_backoff};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};

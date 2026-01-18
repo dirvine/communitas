@@ -1,3 +1,6 @@
+// Alias communitas_bindings (the actual lib name) as communitas_core
+extern crate communitas_bindings as communitas_core;
+
 use communitas_core::gossip::peer_cache::PeerCache;
 use tempfile::tempdir;
 

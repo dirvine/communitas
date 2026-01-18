@@ -126,7 +126,8 @@ jobs:
                       dirs[:] = [d for d in dirs if d != 'tests' and d != '__tests__']
                       
                       for file in files:
-                          if file.endswith('.rs') and 'test' not in file:
+                          # Skip test files and auto-generated flutter_rust_bridge code
+                          if file.endswith('.rs') and 'test' not in file and 'frb_generated' not in file:
                               filepath = os.path.join(root, file)
                               violations = check_file(filepath)
                               total_violations.extend(violations)

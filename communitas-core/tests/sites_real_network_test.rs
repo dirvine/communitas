@@ -69,6 +69,7 @@ async fn test_identity_keys_sign_manifest() {
 /// Test 2: Two-node QUIC communication (IPv4)
 #[tokio::test]
 #[serial]
+#[ignore] // Multi-node network test - run manually
 async fn test_two_nodes_quic_publish_and_fetch_ipv4() {
     init_tracing();
 
@@ -188,6 +189,7 @@ async fn test_two_nodes_quic_publish_and_fetch_ipv4() {
 /// Test 3: IPv6 Communication
 #[tokio::test]
 #[serial]
+#[ignore] // Multi-node network test - run manually
 async fn test_sites_over_ipv6() {
     init_tracing();
 
@@ -236,6 +238,7 @@ async fn test_sites_over_ipv6() {
 /// Test 4: Reject unsigned manifest (security)
 #[tokio::test]
 #[serial]
+#[ignore] // Multi-node network test - run manually
 async fn test_reject_unsigned_manifest() {
     init_tracing();
 
@@ -298,6 +301,7 @@ async fn test_reject_unsigned_manifest() {
 /// Test 5: Reject tampered manifest (security)
 #[tokio::test]
 #[serial]
+#[ignore] // Multi-node network test - run manually
 async fn test_reject_tampered_manifest() {
     init_tracing();
 
@@ -355,6 +359,7 @@ async fn test_reject_tampered_manifest() {
 /// Test 6: Large file throughput test
 #[tokio::test]
 #[serial]
+#[ignore] // Multi-node network test - run manually
 async fn test_large_file_throughput() {
     init_tracing();
 
@@ -415,6 +420,7 @@ async fn test_large_file_throughput() {
 /// Test 7: Concurrent fetches (stress test)
 #[tokio::test]
 #[serial]
+#[ignore] // Multi-node network test - run manually
 async fn test_concurrent_fetches() {
     init_tracing();
 
@@ -487,6 +493,7 @@ async fn test_concurrent_fetches() {
 /// Test 8: Address identification (IPv4 and IPv6)
 #[tokio::test]
 #[serial]
+#[ignore] // Multi-node network test - run manually
 async fn test_address_identification() {
     init_tracing();
 

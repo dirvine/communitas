@@ -1,0 +1,20 @@
+[package]
+name = "communitas-ui-service"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[dependencies]
+async-trait = { workspace = true }
+communitas-core = { package = "communitas-core", path = "../communitas-core" }
+communitas-ui-api = { path = "../communitas-ui-api" }
+dirs = "5.0"
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+whoami = "1.5"
+tracing = { workspace = true }

@@ -1,0 +1,10 @@
+[package]
+name = "communitas-ui-api"
+version.workspace = true
+authors.workspace = true
+homepage.workspace = true
+license.workspace = true
+repository.workspace = true
+edition.workspace = true
+
+[dependencies]

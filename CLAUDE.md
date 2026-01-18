@@ -6,15 +6,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Communitas is a local-first, PQC-ready collaboration platform that merges WhatsApp, Dropbox, Zoom, and Slack into one decentralized application. It uses connection words (four-word networking) to share peer connection details, provides per-entity virtual disks (org, group, channel, project, individual), and enables DNS-free website publishing via identity-bound website roots.
 
-**Platform Focus**: Cross-platform Flutter application (iOS, Android, Linux, Windows, Web).
+**Platform Focus**: Cross-platform Dioxus + Tauri application (macOS, Windows, Linux; experimental Android/iOS runners).
 
 ## Core Architecture
 
-### Flutter Application
-- **Location**: `communitas-flutter/`
-- **Framework**: Flutter with Dart
-- **Rust Integration**: flutter_rust_bridge for native bindings
-- **Platforms**: iOS, Android, Linux, Windows, Web
+### Dioxus Application
+- **Location**: `communitas-dioxus/`
+- **Framework**: Dioxus + Tauri 2 (all-Rust)
+- **State Management**: Signals/hooks backed by `communitas-ui-service`
+- **Platforms**: macOS, Windows, Linux (GA) with experimental Android/iOS builds via Tauri runners
 
 ### Rust Core Library
 - **Location**: `communitas-core/`
@@ -34,20 +34,17 @@ Communitas is a local-first, PQC-ready collaboration platform that merges WhatsA
 
 ## Development Commands
 
-### Quick Start - Flutter App
+### Quick Start - Dioxus App
 ```bash
-# Install Flutter dependencies
-cd communitas-flutter && flutter pub get
+# Install dx CLI (pinned)
+scripts/install_dx.sh
 
-# Run Flutter app (Android)
-flutter run -d android
+# Run Dioxus desktop app with hot reload
+cd communitas-dioxus
+dx serve --platform desktop --hotpatch
 
-# Run Flutter app (web)
-flutter run -d chrome
-
-# Build for release
-flutter build apk --release
-flutter build web --release
+# Bundle for release
+dx bundle --platform desktop
 ```
 
 ### Rust Development
@@ -102,12 +99,12 @@ The application uses a centralized `CoreContext` (communitas-core/src/core_conte
 - Kanban service for collaborative project management
 - Group key storage for membership updates
 
-### Flutter-Rust Bridge
-Commands flow through flutter_rust_bridge bindings:
-1. Flutter/Dart UI calls generated Dart functions
-2. flutter_rust_bridge marshals data to Rust
-3. Rust core processes request
-4. Results return via flutter_rust_bridge to Dart
+### Shared Rust UI Services
+Commands flow through the shared `UiServices` layer (ADR-019):
+1. Dioxus components or MCP tools call strongly-typed service traits (auth, directory, messaging, etc.).
+2. Services invoke `communitas-core` commands/queries.
+3. Watch channels broadcast state changes back to the UI.
+4. MCP uses the same services to ensure automation parity.
 
 ### Virtual Disk System
 Per-entity storage with different access policies:
@@ -130,11 +127,11 @@ Per-entity storage with different access policies:
 - Formatting: `cargo fmt --all` before commits.
 - Documentation: Prefer doc comments on public items; add when helpful.
 
-### Flutter/Dart Code
-- Follow Flutter best practices with proper state management
-- Use null safety properly
-- Proper error handling with Result-like patterns
-- Accessibility support for all UI components
+### UI Code
+- Follow Dioxus best practices (signals/hooks, context providers)
+- Keep UI logic thin; push orchestration into `communitas-ui-service`
+- Ensure accessibility (keyboard focus order, screen-reader labels)
+- Prefer structured errors surfaced from Rust services
 
 ### Git Workflow
 ```bash
@@ -142,7 +139,7 @@ Per-entity storage with different access policies:
 cargo fmt --all
 cargo clippy --all-features -- -D clippy::panic -D clippy::unwrap_used -D clippy::expect_used
 cargo test
-cd communitas-flutter && flutter analyze && flutter test
+cd communitas-dioxus && dx check --platform desktop
 
 # Commit with conventional format
 git commit -m "feat: add new feature"
@@ -152,13 +149,12 @@ git commit -m "docs: update documentation"
 
 ## Deployment
 
-### Flutter Application
+### Dioxus Application
 Cross-platform distribution:
-- macOS: DMG or Mac App Store
-- iOS: App Store
-- Android: Google Play
-- Web: Static hosting
-- Linux/Windows: Native installers
+- macOS: DMG/notarized bundle
+- Windows: MSI/NSIS installer (WebView2 bootstrap)
+- Linux: AppImage/deb/rpm bundles
+- Android/iOS: Experimental Tauri runners (manual provisioning)
 
 ### Headless Node
 Bootstrap and seed nodes for network support:
@@ -169,8 +165,8 @@ Bootstrap and seed nodes for network support:
 
 ### Common Issues
 - **P2P Connection Failures**: Check bootstrap node connectivity
-- **Build Failures**: Ensure Rust 1.85+ and Flutter 3.27+ installed
-- **Binding Generation**: Run flutter_rust_bridge code generation after Rust changes
+- **Build Failures**: Ensure Rust 1.85+, `dx` CLI 0.7.3, and required platform toolchains are installed
+- **Tauri Bundles**: Missing WebView dependencies block startup; run installer prerequisites
 
 ### Windows Build Issues
 The project requires CMake and Visual Studio Build Tools on Windows because `ant-quic` depends on `aws-lc-rs` (FIPS 140-3 certified cryptography), which compiles C code.
@@ -194,8 +190,8 @@ RUST_LOG=debug cargo run -p communitas-headless
 # Test debugging
 RUST_LOG=debug cargo test -- --nocapture
 
-# Flutter debugging
-flutter run --debug
+# UI debugging
+RUST_LOG=debug dx serve --platform desktop --hotpatch
 ```
 
 ## API Documentation

@@ -2,7 +2,7 @@
 
 All notable changes to the Communitas app will be documented in this file.
 
-> Note: entries prior to the Flutter+FFI pivot refer to legacy (pre-Flutter) UI integrations.
+> Note: entries prior to the all-Rust pivot refer to the retired thin-client FFI integrations retained in the archive.
 
 ## [0.2.8] - 2025-08-13
 

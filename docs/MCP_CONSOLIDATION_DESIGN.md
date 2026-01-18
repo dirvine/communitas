@@ -329,7 +329,7 @@ Test Scenarios:
 **Goal**: Remove communitas-bridge from workspace
 
 Tasks:
-- [x] Confirm Flutter remains FFI-first; MCP is for integrations only
+- [x] Confirm Dioxus remains Rust-native; MCP is for integrations only
 - [x] Remove communitas-bridge from Cargo.toml workspace
 - [x] Delete communitas-bridge directory
 - [x] Update documentation

@@ -4,7 +4,7 @@ Comprehensive technical architecture documentation for the Communitas local-firs
 
 ## Overview
 
-Communitas is a **local-first, post-quantum secure collaboration platform** that combines messaging, file sharing, voice/video calling, and web publishing into a single decentralized application. Built with Rust and Flutter (FFI via `flutter_rust_bridge`), it provides offline-capable functionality with real-time synchronization when connected.
+Communitas is a **local-first, post-quantum secure collaboration platform** that combines messaging, file sharing, voice/video calling, and web publishing into a single decentralized application. The entire stack is Rust—Dioxus/Tauri renders the UI while `communitas-core` handles all business logic—providing offline-capable functionality with real-time synchronization when connected.
 
 ### Core Principles
 
@@ -18,12 +18,11 @@ Communitas is a **local-first, post-quantum secure collaboration platform** that
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                FRONTEND (Flutter)                           │
-│  - Cross-platform UI (macOS, iOS, Android, Linux, Windows)  │
-│  - Riverpod state management                                │
-│  - Thin GUI over core capabilities                          │
+│                FRONTEND (Dioxus + Tauri)                    │
+│  - Cross-platform UI (macOS, Windows, Linux; experimental mobile) │
+│  - Dioxus signals/hooks backed by `communitas-ui-service`   │
+│  - Thin GUI over shared Rust services                       │
 └─────────────────────────────────────────────────────────────┘
-                           ↓ FFI (flutter_rust_bridge)
 ┌─────────────────────────────────────────────────────────────┐
 │              CORE LIBRARY (Rust)                            │
 │                                                             │
@@ -84,7 +83,7 @@ This architecture documentation is organized into the following sections:
 
 ### Core Components
 - **Core library modules**: identity, storage, messaging, permissions, networking
-- **Flutter UI**: thin presentation layer over FFI bindings
+- **Dioxus UI**: thin presentation layer over shared Rust services
 - **Platform integrations**: keyring, notifications, OS services
 
 ### Data & Storage
@@ -222,11 +221,11 @@ See [Gossip Protocol](gossip-protocol.md) for details.
 ## Technology Stack
 
 ### Frontend
-- **Framework**: Flutter (Dart)
-- **State Management**: Riverpod
-- **Routing**: GoRouter
-- **FFI**: flutter_rust_bridge (native bindings)
-- **Testing**: flutter test
+- **Framework**: Dioxus + Tauri (Rust)
+- **State Management**: Dioxus signals/hooks + `communitas-ui-service`
+- **Routing**: `dioxus-router`
+- **Core Access**: Shared Rust services (`communitas-ui-service` + `communitas-core`)
+- **Testing**: `dx check`, Dioxus SSR/component tests
 
 ### Core
 - **Language**: Rust 2024 edition
@@ -238,25 +237,25 @@ See [Gossip Protocol](gossip-protocol.md) for details.
 - **Service Management**: systemd, launchd
 - **Monitoring**: Prometheus, Grafana
 - **CI/CD**: GitHub Actions
-- **Package Manager**: Cargo + Flutter tooling
+- **Package Manager**: Cargo + `dx` CLI utilities
 
 ## Development Environment
 
 ### Prerequisites
 - Rust 1.85+
-- Flutter 3.27+
-- Platform-specific dependencies for Flutter desktop/mobile
+- `dx` CLI 0.7.x
+- Platform-specific dependencies for Tauri desktop/mobile
 
 ### Quick Start
 See the main [README.md](../../README.md) for setup instructions.
 
 ## Deployment Options
 
-### Flutter Application
-Native application for Windows, macOS, Linux, iOS, and Android:
-- Build via Flutter toolchain
+### Dioxus Application
+Native application for Windows, macOS, Linux (GA) with experimental Android/iOS runners:
+- Build via `dx bundle`
 - Native binaries packaged per platform
-- Web build supported only for demo mode
+- Web build supported only for demo mode (SSR)
 
 ### Headless Daemon
 Server deployment for bots and background services:
@@ -319,7 +318,7 @@ See [Security Architecture](security.md) for complete analysis.
 ## Testing Strategy
 
 ### Unit Tests
-- Frontend: Flutter widget/unit tests
+- Frontend: Dioxus component/unit tests
 - Backend: Cargo tests for Rust modules
 - Coverage target: >85%
 
@@ -367,7 +366,8 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for how to contribute to Communitas
 - [Main README](../../README.md) - Getting started and development workflow
 
 ### External Resources
-- [flutter_rust_bridge](https://github.com/fzyzcjy/flutter_rust_bridge)
+- [Dioxus Documentation](https://dioxuslabs.com/docs/)
+- [Tauri 2 Guide](https://tauri.app/v2/guides/)
 - [Yrs CRDT Documentation](https://docs.rs/yrs/)
 - [ant-quic Transport](https://github.com/maidsafe/ant-quic)
 

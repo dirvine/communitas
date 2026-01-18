@@ -2,10 +2,10 @@
 
 This project exposes three primary API surfaces:
 
-1. **Flutter FFI API** (preferred for native apps)
-   - Defined in `communitas-core/src/flutter_api.rs`
-   - Generated Dart bindings live in `communitas-flutter/lib/src/bindings`
-   - Uses `flutter_rust_bridge`
+1. **UI Core API** (preferred for native apps)
+   - Defined in `communitas-core/src/ui_core.rs`
+   - Consumed directly by the Rust-based UI service (`communitas-ui-service`) and Dioxus front-end
+   - Provides async helpers for auth, directory snapshots, messaging, files, etc.
 
 2. **Core Rust API**
    - Command/query model in `communitas-core/src/command.rs`
@@ -19,28 +19,31 @@ This project exposes three primary API surfaces:
 connection words (IP:port). Some APIs still use legacy field names like `fourWords` to carry the
 identity value during migration.
 
-## Flutter FFI Example
+## UI Core Example
 
-```dart
-final api = await CommunitasApi.create(
-  fourWords: 'pubkey_hex_goes_here',
-  displayName: 'Alice',
-  deviceName: 'Flutter-android',
-  storagePath: '/path/to/storage',
-);
+```rust
+use communitas_core::ui_core::CommunitasApi;
 
-await api.authCreateVault(
-  fourWords: 'pubkey_hex_goes_here',
-  displayName: 'Alice',
-  password: 'strong-password',
-);
+let api = CommunitasApi::create(
+    four_words.to_string(),
+    display_name.to_string(),
+    format!("Communitas-{device_name}"),
+    storage_path.to_string(),
+)
+.await?;
 
-final session = await api.authLogin(
-  fourWords: 'pubkey_hex_goes_here',
-  password: 'strong-password',
-);
+api.auth_create_vault(
+    four_words.to_string(),
+    display_name.to_string(),
+    password.to_string(),
+)
+.await?;
 
-final entities = await api.entityList();
+let session = api
+    .auth_login(four_words.to_string(), password.to_string())
+    .await?;
+
+let entities = api.entity_list().await?;
 ```
 
 ## Core Rust API

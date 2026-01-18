@@ -4,7 +4,7 @@
 **Status**: Definitive
 **Last Updated**: 2025-12-31
 
-This document is the **definitive source of truth** for the Communitas Flutter GUI.
+This document is the **definitive source of truth** for the Communitas Dioxus GUI.
 
 ---
 
@@ -44,12 +44,12 @@ Communitas is a **local-first, PQC-ready collaboration platform** that merges th
 
 | Platform | GUI Framework | Status |
 |----------|---------------|--------|
-| macOS | Flutter | Active |
-| iOS | Flutter | Planned |
-| Android | Flutter | Planned |
-| Linux | Flutter | Planned |
-| Windows | Flutter | Planned |
-| Web | Flutter (demo mode) | Planned |
+| macOS | Dioxus | Active |
+| iOS | Dioxus | Planned |
+| Android | Dioxus | Planned |
+| Linux | Dioxus | Planned |
+| Windows | Dioxus | Planned |
+| Web | Dioxus (demo mode) | Planned |
 
 ---
 
@@ -1012,7 +1012,7 @@ Display Name: Demo User
 
 | Name | Parent | Role |
 |------|--------|------|
-| Communitas Flutter | Saorsa Labs | Owner |
+| Communitas Dioxus | Saorsa Labs | Owner |
 | Documentation | Saorsa Labs | Member |
 
 #### Channels
@@ -1021,7 +1021,7 @@ Display Name: Demo User
 |------|--------|------|
 | general | Saorsa Labs | Member |
 | engineering | Saorsa Labs | Member |
-| design | Communitas Flutter | Member |
+| design | Communitas Dioxus | Member |
 
 #### Contacts
 

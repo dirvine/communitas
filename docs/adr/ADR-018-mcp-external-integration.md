@@ -10,7 +10,7 @@ Accepted (2025-01-15)
 
 Communitas needs to support two distinct integration patterns:
 
-1. **Internal UI**: Flutter app needs fast, direct access to Rust core
+1. **Internal UI**: Dioxus app needs fast, direct access to Rust core
 2. **External agents**: AI tools (Claude, saorsa-canvas, custom agents) need network access
 
 The Model Context Protocol (MCP) provides a standard interface for AI agents, but we need to define:
@@ -259,7 +259,7 @@ When MCP server runs on localhost (127.0.0.1), authentication is simplified:
 │                    Localhost Authentication Flow                         │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                          │
-│  User logged into Communitas Flutter App                                │
+│  User logged into Communitas Dioxus App                                 │
 │              │                                                           │
 │              │ App creates embedded MCP with same CommunitasApp         │
 │              │                                                           │
@@ -267,7 +267,7 @@ When MCP server runs on localhost (127.0.0.1), authentication is simplified:
 │  ┌─────────────────────────────────────────────────────────────────────┐│
 │  │  Embedded MCP Server (127.0.0.1:3040)                               ││
 │  │                                                                       ││
-│  │  - Shares CommunitasApp instance with Flutter                        ││
+│  │  - Shares CommunitasApp instance with Dioxus                          ││
 │  │  - No separate auth required                                         ││
 │  │  - External tools connect to localhost                               ││
 │  │  - Optional: Require delegate token for security                    ││
@@ -393,4 +393,4 @@ For external tools integrating with Communitas MCP:
 - MCP implementation: `communitas-mcp/src/`
 - Token system: `communitas-mcp/src/token.rs`
 - Auth states: `communitas-mcp/src/auth.rs`
-- See also: [ADR-017](ADR-017-flutter-rust-ffi-integration.md) for Flutter FFI
+- See also: [ADR-020](ADR-020-dioxus-desktop-adoption.md) for the Dioxus/Dioxus+MCP architecture

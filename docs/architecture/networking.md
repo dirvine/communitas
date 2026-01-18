@@ -1129,19 +1129,22 @@ Best provider:
   - Latency: 25ms
 ```
 
-#### Flutter FFI (Debug)
+#### UI Service Integration (Debug)
 
-```dart
-// Check network status from Flutter via FFI
-final status = await api.getNetworkInfo();
-print('Network status: $status');
+```rust
+// Check network status from the shared UI service
+let status = ui_services.navigation().network_status().await?;
+tracing::info!("Network status: {:?}", status);
 
 // Connect to a peer via connection words
-await api.connectByWords('ocean-forest-moon-star');
+ui_services
+    .network()
+    .connect_by_words("ocean-forest-moon-star")
+    .await?;
 
 // Get endpoint connection words
-const endpoint = await invoke('get_endpoint_four_words');
-console.log('Our endpoint:', endpoint);
+let endpoint = ui_services.network().our_connection_words().await?;
+tracing::info!("Our endpoint: {endpoint}");
 ```
 
 ## Performance Characteristics

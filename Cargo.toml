@@ -2,13 +2,14 @@
 resolver = "2"
 members = [
     "communitas-core",
+    "communitas-dioxus",    # Dioxus desktop prototype
     "communitas-headless",  # Bootstrap nodes
     "communitas-p2p-test",
     "communitas-kanban",    # CRDT-based Kanban system
     "communitas-mcp",       # MCP server for AI agent control (HTTP/HTTPS + stdio)
-    "tests/distributed/orchestrator",  # Distributed test orchestrator
+    "communitas-ui-api",    # Shared view models for GUI stacks
+    "tests/distributed/orchestrator", "communitas-ui-service",  # Distributed test orchestrator
 ]
-# communitas-flutter - Flutter GUI with flutter_rust_bridge (separate build)
 
 [workspace.package]
 version = "0.1.60"

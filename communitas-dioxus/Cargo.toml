@@ -1,0 +1,23 @@
+[package]
+name = "communitas-dioxus"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[dependencies]
+communitas-core = { package = "communitas-core", path = "../communitas-core" }
+communitas-ui-api = { path = "../communitas-ui-api" }
+communitas-ui-service = { path = "../communitas-ui-service" }
+dioxus = { version = "0.7", features = ["desktop", "router", "signals"] }
+dioxus-logger = "0.5.1"
+tracing.workspace = true
+futures.workspace = true
+
+[dev-dependencies]
+dioxus-ssr = "0.7"
+dioxus-history = "0.7"
+tempfile = "3.10"
+tokio = { workspace = true, features = ["full"] }

@@ -507,7 +507,7 @@ mod tests {
 
 ## See Also
 
-- [Flutter FFI API](README.md) - flutter_rust_bridge surface
+- [UI Core API](README.md) - Rust-native UI helper surface
 - [MCP Server](../../communitas-mcp/README.md) - AI agent interface
 - [Security Architecture](../architecture/security.md) - Cryptography details
 - [crates.io documentation](https://docs.rs/communitas-core)

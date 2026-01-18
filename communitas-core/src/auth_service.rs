@@ -1,7 +1,7 @@
 //! Shared Authentication Service
 //!
 //! This module provides a unified authentication service that can be used by all frontends
-//! (Flutter FFI, CLI, MCP, headless, etc.). It encapsulates all business logic for:
+//! (Dioxus UI, CLI, MCP, headless, etc.). It encapsulates all business logic for:
 //! - Multi-identity management
 //! - Vault creation and authentication
 //! - Passkey/biometric support

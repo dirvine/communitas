@@ -3,7 +3,7 @@
 ## Status
 
 Accepted (2025-12-24)
-Updated (2025-01-15) - Replaced HTTP bridge with FFI, added Flutter
+Updated (2026-01-18) - Replaced HTTP bridge with shared Rust services, added Dioxus UI
 
 ## Context
 
@@ -30,7 +30,7 @@ Communitas needs an architecture that:
 - Shared code across deployment targets
 - Independent testing of components
 - Minimal dependency coupling
-- Support for FFI bindings (Flutter via flutter_rust_bridge)
+- Support for shared Rust UI services (Dioxus via `communitas-ui-service`)
 
 ## Decision
 
@@ -42,7 +42,7 @@ Organize Communitas as a **Cargo workspace** with specialized crates:
 communitas/
 ├── Cargo.toml                    # Workspace root
 ├── communitas-core/              # Core library (no UI, no platform)
-├── communitas-flutter/           # Flutter cross-platform application
+├── communitas-dioxus/            # Dioxus/Tauri cross-platform application
 ├── communitas-headless/          # Headless daemon / bootstrap nodes
 ├── communitas-mcp/               # MCP server for AI agents (stdio + HTTPS)
 ├── communitas-kanban/            # CRDT-based Kanban system
@@ -53,8 +53,8 @@ communitas/
 
 | Crate | Purpose | Dependencies |
 |-------|---------|--------------|
-| **communitas-core** | Business logic, CRDT, storage, crypto, FFI | saorsa-*, yrs, flutter_rust_bridge |
-| **communitas-flutter** | Cross-platform UI (macOS, iOS, Android, Windows, Linux) | core (via FFI) |
+| **communitas-core** | Business logic, CRDT, storage, crypto, UI API | saorsa-*, yrs |
+| **communitas-dioxus** | Cross-platform UI (macOS, Windows, Linux; experimental mobile) | core (`ui_core`), communitas-ui-service |
 | **communitas-headless** | Bootstrap nodes, CLI, server mode | core, tokio |
 | **communitas-mcp** | MCP server for AI agents (stdio + HTTPS) | core, axum |
 | **communitas-kanban** | CRDT-based Kanban boards | core, yrs |
@@ -63,7 +63,7 @@ communitas/
 
 | Component | Access Method | Use Case |
 |-----------|--------------|----------|
-| **Flutter App** | FFI via flutter_rust_bridge | GUI operations, user interactions |
+| **Dioxus App** | Shared Rust services (`communitas-ui-service`) | GUI operations, user interactions |
 | **AI Agents** | MCP over stdio/HTTP | Claude Code, external tools |
 | **Headless Node** | Direct Rust API | Bootstrap, network infrastructure |
 
@@ -95,17 +95,17 @@ communitas/
 │          ▼                     ▼                     ▼              │
 │  ┌──────────────┐     ┌──────────────┐     ┌──────────────┐        │
 │  │ communitas-  │     │ communitas-  │     │ communitas-  │        │
-│  │   flutter    │     │   headless   │     │     mcp      │        │
+│  │   dioxus     │     │   headless   │     │     mcp      │        │
 │  │              │     │              │     │              │        │
-│  │ Cross-plat   │     │ Bootstrap    │     │ AI Agents    │        │
-│  │ GUI (FFI)    │     │ Nodes, CLI   │     │ stdio/HTTP   │        │
+│  │ All-Rust UI  │     │ Bootstrap    │     │ AI Agents    │        │
+│  │ Shell        │     │ Nodes, CLI   │     │ stdio/HTTP   │        │
 │  └──────────────┘     └──────────────┘     └──────────────┘        │
 │          │                                         │                │
-│          │ flutter_rust_bridge                     │ MCP JSON-RPC   │
+│          │ shared Rust services                    │ MCP JSON-RPC   │
 │          ▼                                         ▼                │
 │  ┌──────────────┐                         ┌──────────────┐         │
-│  │   Flutter    │                         │ AI Tools     │         │
-│  │   Dart UI    │                         │ Claude,      │         │
+│  │   Dioxus     │                         │ AI Tools     │         │
+│  │   Rust UI    │                         │ Claude,      │         │
 │  │              │                         │ Canvas, etc  │         │
 │  └──────────────┘                         └──────────────┘         │
 │                                                                     │
@@ -146,36 +146,33 @@ pub mod webrtc;            // Voice/video
 - GUI runtimes or frameworks
 - Platform APIs (keyring, notifications)
 
-### Flutter FFI Bindings (flutter_rust_bridge)
+### UI Core API (Rust-native)
 
-Exposes core functionality to Dart via FFI:
+Exposes core functionality to the shared UI service and Dioxus front-end:
 
 ```rust
-// communitas-core/src/flutter_api.rs
+// communitas-core/src/ui_core.rs
 
-#[flutter_rust_bridge::frb]
 impl CommunitasApi {
     // Authentication
-    pub async fn auth_login(&self, four_words: String, passphrase: String) -> Result<FlutterLoginResult>;
-    pub async fn auth_logout(&self) -> Result<()>;
+    pub async fn auth_login(&self, four_words: String, password: String) -> Result<UiSessionInfo, String>;
+    pub async fn auth_logout(&self) -> Result<(), String>;
 
     // Entities
-    pub async fn entity_list(&self) -> Result<Vec<FlutterEntity>>;
-    pub async fn entity_list_by_type(&self, entity_type: FlutterEntityType) -> Result<Vec<FlutterEntity>>;
-    pub async fn entity_create(&self, name: String, entity_type: FlutterEntityType) -> Result<Vec<FlutterEvent>>;
+    pub async fn entity_list(&self) -> Result<Vec<UiEntity>, String>;
+    pub async fn entity_list_by_type(&self, ty: UiEntityType) -> Result<Vec<UiEntity>, String>;
+    pub async fn entity_create(&self, name: String, ty: UiEntityType) -> Result<Vec<UiEvent>, String>;
 
     // Messaging
-    pub async fn message_send(&self, entity_id: String, text: String) -> Result<Vec<FlutterEvent>>;
+    pub async fn message_send(&self, entity_id: String, text: String) -> Result<Vec<UiEvent>, String>;
 
     // Networking
-    pub async fn gossip_get_network_info(&self) -> Result<FlutterNetworkInfo>;
-    pub async fn gossip_connect_to_peer(&self, four_words: String) -> Result<Vec<FlutterEvent>>;
+    pub async fn gossip_get_network_info(&self) -> Result<UiNetworkInfo, String>;
+    pub async fn gossip_connect_to_peer(&self, four_words: String) -> Result<Vec<UiEvent>, String>;
 }
 ```
 
-Generated bindings in `communitas-flutter/lib/src/bindings/`:
-- `flutter_api.dart` - Main API class
-- `api_exports.dart` - Type exports
+`communitas-ui-service` wraps this API to provide higher-level async traits for Dioxus components and MCP tooling.
 
 ### Feature Flags
 
@@ -202,19 +199,17 @@ resolver = "2"
 communitas-core = { path = "communitas-core" }
 tokio = { version = "1.40", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
-flutter_rust_bridge = "2.x"
 ```
 
-### Flutter Build Configuration
+### Dioxus Build Configuration
 
 ```bash
-# Generate FFI bindings after Rust API changes
-cd communitas-flutter
-flutter_rust_bridge_codegen generate
+# Run the Dioxus dev server with hot reload
+cd communitas-dioxus
+dx serve --platform desktop --hotpatch
 
 # Build for specific platform
-flutter build ios --release
-flutter build android --release
+dx bundle --platform desktop
 ```
 
 ## Consequences
@@ -273,8 +268,7 @@ cargo test -p communitas-core --features minimal
 
 - Workspace: `Cargo.toml` (root)
 - Core crate: `communitas-core/`
-- Flutter app: `communitas-flutter/`
-- FFI bindings: `communitas-flutter/lib/src/bindings/`
-- flutter_rust_bridge docs: https://cjycode.com/flutter_rust_bridge/
-- See also: [ADR-017](ADR-017-flutter-rust-ffi-integration.md) (FFI integration details)
+- Dioxus app: `communitas-dioxus/`
+- Shared UI service: `communitas-ui-service/`
+- See also: [ADR-017](ADR-017-legacy-thin-client-ffi-integration.md) (archived legacy context)
 - See also: [ADR-018](ADR-018-mcp-external-integration.md) (MCP for external tools)

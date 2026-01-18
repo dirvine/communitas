@@ -697,18 +697,15 @@ pub async fn gossip_add_bootstrap_peer(
 pub async fn gossip_get_online_peers() -> Result<Vec<PeerInfo>, String>
 ```
 
-### Frontend Integration (Flutter FFI)
+### Frontend Integration (Dioxus)
 
-```dart
-final api = await CommunitasApi.create(
-  fourWords: 'ocean-forest-moon-star',
-  displayName: 'Alice',
-  deviceName: 'MacBook Pro',
-  storagePath: '/path/to/storage',
-);
-
-await api.gossipStart();
-await api.gossipConnectToPeer(fourWords: 'bob-charlie-delta-echo');
+```rust
+let services = ui_services.clone();
+services.network().start().await?;
+services
+    .network()
+    .connect_by_words("bob-charlie-delta-echo")
+    .await?;
 ```
 
 ## See Also

@@ -15,7 +15,7 @@
 //!
 //! ```text
 //! ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐
-//! │   Iced GUI  │  │ Flutter GUI │  │ MCP Server  │  │     CLI     │
+//! │   Iced GUI  │  │ Dioxus GUI  │  │ MCP Server  │  │     CLI     │
 //! │  (Adapter)  │  │  (Adapter)  │  │  (Adapter)  │  │  (Adapter)  │
 //! └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘
 //!        │                │                │                │
@@ -2182,7 +2182,11 @@ impl CommunitasApp {
 
             Query::GetConnectionWords => {
                 let ctx = self.context.read().await;
-                let words = ctx.external_address.and_then(|addr| conn_words(&addr).ok());
+                // Fall back to listen_address if external_address not yet discovered
+                let words = ctx
+                    .external_address
+                    .or(ctx.listen_address)
+                    .and_then(|addr| conn_words(&addr).ok());
                 Ok(QueryResponse::OptionalString(words))
             }
 

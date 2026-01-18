@@ -8,6 +8,7 @@ src-tauri/target/
 
 # Node.js
 node_modules/
+tests/webdriverio/node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

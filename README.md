@@ -34,37 +34,37 @@ Technical implementation verified through comprehensive integration testing (wat
 ### Prerequisites
 
 **All Platforms:**
-- Flutter 3.27+
 - Rust 1.85+
+- `dx` CLI 0.7.3 (`scripts/install_dx.sh` installs the pinned release)
+- Node.js 18+ (Tailwind/Vite asset bundling)
 
 **Windows Additional Requirements:**
 - Visual Studio 2022 Build Tools (C++ workload)
-- CMake 3.20+ (required by aws-lc-sys for FIPS-certified cryptography)
+- Edge WebView2 runtime (Tauri uses system WebView; installer enforces `minimumWebview2Version`)
 - See [Windows Build Guide](docs/development/windows-build.md) for detailed setup
 
 **Linux:**
+- GTK3/WebKitGTK runtime (Tauri WebView dependency)
 - Build essentials, CMake, and platform libraries
-- See Flutter docs for GTK/WebKit dependencies
+- Refer to [docs/architecture/dioxus_milestone1_nav_auth.md](docs/architecture/dioxus_milestone1_nav_auth.md) for current dependency matrix
 
 ### Development Setup
 ```bash
 git clone https://github.com/dirvine/communitas.git
 cd communitas
 
-# Flutter app development
-cd communitas-flutter
-flutter pub get
-flutter run -d android  # or: -d ios, -d linux, -d windows
-# Web (limited functionality - FFI not available in browser)
-flutter run -d chrome
+scripts/install_dx.sh       # installs dx 0.7.3
+
+# Dioxus app development
+cd communitas-dioxus
+dx serve --platform desktop --hotpatch
 ```
 
 ### Testing
 ```bash
-# Flutter tests
-cd communitas-flutter
-flutter analyze
-flutter test
+# UI smoke + lint
+cd communitas-dioxus
+dx check --platform desktop
 
 # Rust linting (strict policy)
 cargo clippy --all-features -- -D clippy::panic -D clippy::unwrap_used -D clippy::expect_used
@@ -72,6 +72,9 @@ cargo clippy --all-features -- -D clippy::panic -D clippy::unwrap_used -D clippy
 # Rust unit tests
 cargo test
 ```
+
+To simulate authentication failures during QA, set `COMMUNITAS_UI_FORCE_AUTH_ERROR=1` before running the UI (`COMMUNITAS_UI_FORCE_AUTH_ERROR=1 dx serve --platform desktop`). This flag exercises the error-handling paths wired into `communitas-ui-service`.
+
 
 ---
 
@@ -119,7 +122,7 @@ cargo test
 
 ### Product & Architecture
 - **[App Specification](docs/APP_SPECIFICATION.md)**: Product requirements and UX expectations
-- **[Architecture Overview](docs/architecture/README.md)**: System architecture (Flutter + Rust core + gossip)
+- **[Architecture Overview](docs/architecture/README.md)**: System architecture (Dioxus + Rust core + gossip)
 - **[CRDT System](docs/architecture/crdt-system.md)**: Yrs document model and sync
 - **[Gossip Protocol](docs/architecture/gossip-protocol.md)**: P2P membership + dissemination
 - **[Networking](docs/architecture/networking.md)**: QUIC transport, NAT traversal, resilience
@@ -148,11 +151,11 @@ cargo test
 ## Project Structure
 
 ### Applications
-- **[communitas-flutter/](communitas-flutter/)**: Cross-platform Flutter application (macOS, iOS, Android, Linux, Windows; web demo only)
+- **[communitas-dioxus/](communitas-dioxus/)**: Cross-platform Dioxus + Tauri application (desktop-first, experimental mobile runners)
 - **[communitas-headless/](communitas-headless/)**: Headless daemon for system services ([README](communitas-headless/README.md))
 - **[communitas-mcp/](communitas-mcp/)**: MCP server for AI agent control (stdio + HTTPS with ML-DSA-65)
 
-Flutter is the only supported GUI; MCP is the integration surface for other local apps and automations.
+Dioxus is the supported GUI; MCP is the integration surface for other local apps and automations. Legacy thin-client assets remain in the archive solely for historical reference.
 
 ### Core Libraries
 - **[communitas-core/](communitas-core/)**: Shared Rust business logic and P2P networking
@@ -169,19 +172,17 @@ Flutter is the only supported GUI; MCP is the integration surface for other loca
 
 ### Key Commands
 ```bash
-# Flutter Development
-cd communitas-flutter
-flutter pub get
-flutter run -d android  # or: -d ios, -d linux, -d windows
+# UI Development
+cd communitas-dioxus
+dx serve --platform desktop --hotpatch
 
-# Production Build
-flutter build apk --release
-# or: flutter build ios --release
-# Web build (limited functionality - no native FFI in browser)
-flutter build web --release
+# Production Bundle
+dx bundle --platform desktop
+# Experimental mobile bundles (Android/iOS)
+dx bundle --platform android
 
 # Quality Checks
-flutter analyze && cargo clippy --all-features
+dx check --platform desktop && cargo clippy --all-features
 
 # Run as system service (see communitas-headless/README.md)
 communitas-headless --config /etc/communitas/headless.toml
@@ -193,16 +194,16 @@ communitas-headless --config /etc/communitas/headless.toml
 
 Communitas supports multiple deployment scenarios for different use cases:
 
-### Flutter Application (End Users)
-Full-featured cross-platform application for iOS, Android, Linux, and Windows.
+### Dioxus Application (End Users)
+Full-featured cross-platform application (desktop GA, experimental Android/iOS runners).
 ```bash
-cd communitas-flutter
-flutter build apk --release
-# or: flutter build ios --release
-# Web build (limited functionality - FFI not available in browser)
-flutter build web --release
+cd communitas-dioxus
+dx bundle --platform desktop
+# optional mobile targets (stability varies)
+dx bundle --platform android
+dx bundle --platform ios
 ```
-See [communitas-flutter/](communitas-flutter/) for details.
+See [communitas-dioxus/](communitas-dioxus/) for details.
 
 ### Headless Daemon (Servers & Bots)
 Run as a system service for automated operations, bots, or server infrastructure.
@@ -239,10 +240,10 @@ await connectToPeer(connectionWords);
 ```
 
 ### Network Participation
-- **Desktop Nodes**: Full participants with UI (Flutter macOS/Linux/Windows)
-- **Mobile Nodes**: Full participants on iOS and Android
+- **Desktop Nodes**: Full participants with the Dioxus/Tauri UI (macOS/Linux/Windows)
+- **Mobile Nodes**: Experimental Dioxus builds on Android/iOS (stability pending upstream Tauri updates)
 - **Headless Nodes**: Bootstrap/seed nodes for network infrastructure
-- **Web Clients**: Demo-only Flutter Web builds (no native FFI in browser)
+- **Web Clients**: Demo-only SSR builds (no native MCP exposure in browser)
 
 ---
 
@@ -282,12 +283,12 @@ await connectToPeer(connectionWords);
 
 1. **Code Style**: Follow existing patterns and conventions
 2. **Commit Format**: Conventional commits (`feat:`, `fix:`, `docs:`)
-3. **Quality Gates**: All code must pass Flutter + Rust linting
+3. **Quality Gates**: All code must pass Dioxus (`dx check`) + Rust linting
 4. **Testing**: Include tests for new functionality
 
 ### Development Standards
 - **No Panics**: Rust code forbids `unwrap`/`expect`/`panic!` in production (enforced by clippy)
-- **Type Safety**: Full Dart null safety with strict analysis
+- **Type Safety**: Rust-first surfaces with strict clippy/fmt enforcement
 - **Test Coverage**: 37+ integration tests covering resilience features
 - **Security First**: Post-quantum cryptography and secure defaults
 - **Partition Tolerance**: All features must operate correctly during network partitions

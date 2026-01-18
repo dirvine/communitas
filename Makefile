@@ -12,3 +12,12 @@ lint:
 
 test:
 	cargo test --workspace -- --nocapture
+
+.PHONY: dioxus-check
+dioxus-check:
+	./scripts/install_dx.sh
+	cd communitas-dioxus && dx check --platform desktop
+
+.PHONY: dioxus-bundle
+dioxus-bundle:
+	./scripts/ci_dx_bundle.sh

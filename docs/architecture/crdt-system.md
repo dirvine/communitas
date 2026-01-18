@@ -701,7 +701,7 @@ gossip_context.publish(topic, diff).await?;
 
 **Member Management**:
 ```rust
-// communitas-core/src/flutter_api.rs
+// communitas-core/src/legacy_ui_api.rs (removed)
 
 // FFI boundary
 pub async fn core_member_add(
@@ -752,15 +752,17 @@ pub async fn delete_message(
 
 ### Frontend Integration
 
-**Flutter (Riverpod + FFI)**:
-```dart
-final messages = await ref.watch(unifiedMessagesProvider(channelId).future);
+**Dioxus (signals + shared services)**:
+```rust
+let messages = ui_services
+    .messaging()
+    .thread(channel_id.clone())
+    .await?;
 
-await ref.read(ffiMessageControllerProvider.notifier).sendMessage(
-  entityId: channelId,
-  entityType: FlutterEntityType.channel,
-  text: 'Hello, World!',
-);
+ui_services
+    .messaging()
+    .send_message(channel_id, UnifiedEntityType::Channel, "Hello, World!")
+    .await?;
 ```
 
 ## Testing Strategy

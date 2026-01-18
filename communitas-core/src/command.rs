@@ -9,7 +9,7 @@
 //! Command/Event/Query Architecture for Headless Core
 //!
 //! This module implements the "Headless Core with Multi-Adapter" pattern that enables:
-//! - GUI adapters (Iced, Flutter) to control the application through execute/query/subscribe
+//! - GUI adapters (Iced, Dioxus) to control the application through execute/query/subscribe
 //! - AI agents to control the application via MCP server
 //! - CLI tools to automate workflows
 //! - Test harnesses to verify behavior
@@ -18,7 +18,7 @@
 //!
 //! ```text
 //! ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐
-//! │   Iced GUI  │  │ Flutter GUI │  │ MCP Server  │  │     CLI     │
+//! │   Iced GUI  │  │ Dioxus GUI  │  │ MCP Server  │  │     CLI     │
 //! │  (Adapter)  │  │  (Adapter)  │  │  (Adapter)  │  │  (Adapter)  │
 //! └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘
 //!        │                │                │                │

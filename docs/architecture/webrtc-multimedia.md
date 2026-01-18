@@ -2,14 +2,14 @@
 
 **Status**: Early / Experimental
 
-This document outlines the current WebRTC integration in Communitas and the boundaries between the Rust core and the Flutter host layer.
+This document outlines the current WebRTC integration in Communitas and the boundaries between the Rust core and the Dioxus/Tauri host layer.
 
 ## Overview
 
 - **Signaling**: Gossip-based signaling (`GossipSignalingTransport`)
 - **Identity**: Four-word addresses wrapped as `PeerIdentity`
 - **Transport**: QUIC via `saorsa-webrtc-core`
-- **Media Capture**: Implemented by the platform host layer (Flutter desktop/mobile)
+- **Media Capture**: Implemented by the platform host layer (Dioxus/Tauri desktop/mobile)
 
 ## Current Implementation (Core)
 

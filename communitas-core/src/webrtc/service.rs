@@ -427,7 +427,7 @@ impl CommunitasWebRtcService {
     ///
     /// Note: Full track muting requires platform-specific implementation.
     /// This currently updates state and logs the change. The actual track
-    /// control is handled by the platform host layer (e.g., Flutter desktop/mobile).
+    /// control is handled by the platform host layer (e.g., Dioxus/Tauri hosts).
     pub async fn set_video_enabled(&self, call_id: CallId, enabled: bool) -> Result<()> {
         info!("Setting video enabled={} for call {}", enabled, call_id);
 
@@ -463,7 +463,7 @@ impl CommunitasWebRtcService {
     ///
     /// Note: Full track muting requires platform-specific implementation.
     /// This currently updates state and logs the change. The actual track
-    /// control is handled by the platform host layer (e.g., Flutter desktop/mobile).
+    /// control is handled by the platform host layer (e.g., Dioxus/Tauri hosts).
     pub async fn set_audio_enabled(&self, call_id: CallId, enabled: bool) -> Result<()> {
         info!("Setting audio enabled={} for call {}", enabled, call_id);
 

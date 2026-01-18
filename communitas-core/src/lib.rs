@@ -26,9 +26,6 @@
 )]
 // Allow these in tests for convenience
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
-// flutter_rust_bridge uses cfg(frb_expand) in macro output.
-#![allow(unexpected_cfgs)]
-
 pub mod app; // CommunitasApp - The headless core with execute/query/subscribe API
 pub mod auth_service;
 pub mod command; // Command/Event/Query architecture for headless core
@@ -37,8 +34,8 @@ pub mod core_context;
 pub mod crdt; // New pure CRDT infrastructure
 pub mod crdt_manager;
 pub mod disk_service; // Per-entity virtual disk management
-pub mod flutter_api; // flutter_rust_bridge bindings for Flutter UI
-pub mod legacy_crdt; // Legacy vector clock CRDT (to be phased out)
+pub mod legacy_crdt;
+pub mod ui_core; // Shared UI API surface for native shells // Legacy vector clock CRDT (to be phased out)
 // pub mod dht_identity; // Removed: DHT not used in RC1b (gossip-based architecture)
 // pub mod dht_schemas; // Removed: DHT not used in RC1b (gossip-based architecture)
 pub mod doc_replicator;
@@ -71,16 +68,6 @@ pub mod gossip;
 
 // WebRTC real-time multimedia (voice, video, screen sharing)
 pub mod webrtc;
-
-// Generated flutter_rust_bridge bindings
-// Allow unwrap/expect/panic in auto-generated code (flutter_rust_bridge)
-#[allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::not_unsafe_ptr_arg_deref
-)]
-pub mod frb_generated;
 
 // Re-export commonly used types
 pub use auth_service::{AuthService, SessionInfo};

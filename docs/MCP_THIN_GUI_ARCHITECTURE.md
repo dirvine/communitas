@@ -1,27 +1,27 @@
-# MCP + Flutter Integration Architecture (FFI-first)
+# MCP + Dioxus Integration Architecture (All-Rust)
 
-**Version**: 2.0  
+**Version**: 3.0  
 **Status**: Active  
-**Last Updated**: 2026-01-16
+**Last Updated**: 2026-01-18
 
 ## Overview
 
-Communitas now follows an **FFI-first GUI architecture**:
+Communitas now follows an **all-Rust GUI architecture**:
 
-- **Flutter GUI** talks directly to `communitas-core` via **Flutter FFI** (flutter_rust_bridge).
+- **Dioxus + Tauri 2** renders every desktop surface while calling shared Rust `UiServices` directly (no Dart/FFI layer).
 - **MCP** exposes the same core features for **automation, AI agents, and other local apps**.
-- MCP is **not** the primary GUI backend; it is a parallel API surface.
+- MCP is **not** the primary GUI backend; it is a parallel API surface that stays bit-for-bit aligned with Dioxus because both consume the same services.
 
-This keeps the GUI thin while avoiding extra IPC hops for mobile/desktop UI.
+The previous multi-language thin-client and its FRB plumbing were fully archived on January 18, 2026 (ADR-020). Only Rust remains in the active UI stack.
 
 ---
 
 ## Architecture Principles
 
 1. **Core is the source of truth** — All business logic lives in Rust (`communitas-core`).
-2. **GUI is thin** — Flutter renders UI and calls FFI; minimal app logic in Dart.
+2. **GUI is thin** — Dioxus renders UI and calls the shared Rust `UiServices`; no intermediate languages or IPC layers.
 3. **MCP is for integrations** — CLI tools, AI agents, and local automation use MCP.
-4. **Consistent domain model** — Commands/Queries remain the same across adapters.
+4. **Consistent domain model** — Commands/Queries remain the same across adapters, guaranteeing automation = GUI parity.
 
 ---
 
@@ -49,27 +49,29 @@ This keeps the GUI thin while avoiding extra IPC hops for mobile/desktop UI.
 
 ---
 
-## Flutter FFI Scope (Current)
+## Dioxus Scope (Current)
 
-The Flutter app uses FFI to cover:
+The Dioxus app consumes `communitas-ui-service` to cover:
 - Vault lifecycle (create/import/export/recover)
 - Entities, membership, and messaging (threads, edits, reactions, direct messages)
-- Contacts management
+- Contacts management + favorites
 - Presence queries (peer presence + connection words + status)
+- Kanban, files, drive, and website publishing views
 - Demo mode (temporary local storage, clear demo data)
 
 ---
 
 ## Demo Mode Policy
 
-- **Web build** is **demo-only** (no FFI in browser).
+- **Web build** remains **demo-only** (no MCP exposure in browser).
 - Demo mode uses temporary local storage and supports quick login for testing.
+- Desktop builds gate demo telemetry to avoid contaminating production metrics.
 
 ---
 
-## Next Milestones (If Needed)
+## Next Milestones
 
 1. Harden WebRTC flows with multi-node testing
 2. Decide on DHT support vs. explicit de-scoping
 3. Add notifications/unread counts in core if required
-4. Expand Flutter UI coverage for remaining features
+4. Expand Dioxus UI coverage for remaining features (calls, canvas, mobile shells)

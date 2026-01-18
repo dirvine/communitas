@@ -41,7 +41,7 @@ The MCP server IS the app. Everything else is presentation.
           ▼                    ▼                    ▼
    ┌──────────────┐    ┌──────────────┐    ┌──────────────┐
    │  Native App  │    │  Web Client  │    │  AI Agent    │
-   │  (Flutter)   │    │  (localhost) │    │  (Claude)    │
+   │  (Dioxus)    │    │  (localhost) │    │  (Claude)    │
    └──────────────┘    └──────────────┘    └──────────────┘
 ```
 
@@ -451,10 +451,10 @@ async fn test_cross_node_messaging() {
 ## Phase 4: Thin Client Applications (Superseded)
 
 ### Status
-This phase has been superseded by the **FFI-first Flutter architecture**.
+This phase has been superseded by the **all-Rust Dioxus architecture**.
 
 ### Current Direction
-- Flutter uses direct FFI (`flutter_rust_bridge`) to `communitas-core`.
+- Dioxus uses shared Rust services (`communitas-ui-service`) linked directly to `communitas-core`.
 - MCP remains the integration layer for AI agents and local automation.
 - Web UI is demo-only; no production web client is planned.
 
@@ -465,11 +465,11 @@ See `docs/MCP_THIN_GUI_ARCHITECTURE.md` for the authoritative model.
 ## Phase 5: Presentation Layer Features (Removed)
 
 ### Status
-Removed from MCP scope. Presentation features live in the Flutter GUI or dedicated
+Removed from MCP scope. Presentation features live in the Dioxus GUI or dedicated
 client apps; MCP stays headless for automation and AI integrations.
 
 ### Rationale
-- Flutter + FFI is the only supported GUI path.
+- Dioxus + shared Rust services are the only supported GUI path.
 - MCP should stay thin and API-focused (no presentation rendering pipeline).
 
 ## Summary Timeline
@@ -479,7 +479,7 @@ client apps; MCP stays headless for automation and AI integrations.
 | 1. Authentication | Week 1-2 | Auth-required MCP server |
 | 2. Multi-Transport | Week 2-3 | Embedded + IPC + QUIC transports |
 | 3. Testing Infra | Week 3-4 | 8 nodes deployed, integration tests |
-| 4. Thin Clients | Week 4-6 | Flutter GUI via FFI (web demo-only) |
+| 4. Thin Clients | Week 4-6 | Dioxus GUI via shared Rust services (web demo-only) |
 | 5. Presentation | N/A | Removed from MCP scope |
 
 ## Success Criteria
@@ -487,7 +487,7 @@ client apps; MCP stays headless for automation and AI integrations.
 1. **Authentication**: `authenticate` tool required before any other tool works
 2. **Multi-Transport**: Same MCP server works embedded in app and over network
 3. **Testing**: 8 test accounts across VPS can communicate via MCP
-4. **Thin Clients**: Flutter GUI uses FFI; MCP remains for automation/external apps
+4. **Thin Clients**: Dioxus GUI uses shared Rust services; MCP remains for automation/external apps
 5. **AI-Ready**: Claude can connect and operate Communitas via MCP
 
 ## Files Changed/Created

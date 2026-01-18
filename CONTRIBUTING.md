@@ -3,29 +3,17 @@
 ## Setup
 1. Clone: `git clone https://github.com/dirvine/communitas`
 2. Rust: `rustup default stable`
-3. Flutter: Install Flutter 3.27+
+3. Install the pinned `dx` CLI: `scripts/install_dx.sh`
 4. Build core: `cargo build -p communitas-core`
-5. Flutter deps: `cd communitas-flutter && flutter pub get`
-6. Run native: `flutter run -d android` (or ios/linux/windows)
-7. Web (limited): `flutter run -d chrome`
-
-## FFI Codegen
-If you change `communitas-core/src/flutter_api.rs`, re-run codegen:
+5. UI dev loop:
 ```bash
-flutter_rust_bridge_codegen generate \
-  --rust-root communitas-core \
-  --rust-input crate::flutter_api \
-  --dart-output communitas-flutter/lib/src/bindings \
-  --rust-output communitas-core/src/frb_generated.rs \
-  --dart-format-line-length 120
-
-# Sanitize generated Rust (remove unwrap/panic paths to satisfy lint policy)
-python3 scripts/sanitize-frb-generated.py
+cd communitas-dioxus
+dx serve --platform desktop --hotpatch
 ```
 
 ## Conventions
 - Rust: `cargo fmt --all`, clippy denies (panic/unwrap/expect).
-- Flutter: `flutter analyze`, `flutter test`.
+- Dioxus: `dx check --platform desktop`, component/unit tests live in `communitas-dioxus`.
 - Commits: Conventional (feat/fix/chore).
 - Tests: prefer end-to-end flows for key behaviors.
 

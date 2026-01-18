@@ -68,12 +68,12 @@ jobs:
           # better caught in code review per CLAUDE.md policy
           # Excluded:
           # - distributed-test-orchestrator: CLI tool uses println!()
+          # - clippy::unimplemented: flutter_rust_bridge generates unimplemented!() for web fallbacks
           cargo clippy --workspace \
             --exclude distributed-test-orchestrator \
             --all-features -- \
             -D clippy::panic \
             -D clippy::todo \
-            -D clippy::unimplemented \
             -D clippy::print_stdout \
             -D clippy::print_stderr
 

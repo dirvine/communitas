@@ -74,3 +74,142 @@ pub enum UiServiceInitError {
     #[error("directory controller failed: {0}")]
     Directory(#[from] directory::DirectoryError),
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::auth::{AuthService, AuthStateSnapshot};
+    use crate::navigation::{EntityNavigationKey, NavigationService};
+    use tempfile::TempDir;
+
+    fn make_services(temp: &TempDir) -> UiServices {
+        let storage = UiStorage::from_path(temp.path()).unwrap();
+        UiServices::new(storage).unwrap()
+    }
+
+    #[test]
+    fn ui_services_constructs_all_components() {
+        let temp = TempDir::new().unwrap();
+        let services = make_services(&temp);
+
+        // All services should be accessible
+        let _ = services.storage();
+        let _ = services.auth();
+        let _ = services.navigation();
+        let _ = services.directory();
+    }
+
+    #[test]
+    fn services_share_storage_path() {
+        let temp = TempDir::new().unwrap();
+        let services = make_services(&temp);
+
+        let storage_root = services.storage().root();
+        assert_eq!(storage_root, temp.path());
+    }
+
+    #[test]
+    fn auth_starts_logged_out() {
+        let temp = TempDir::new().unwrap();
+        let services = make_services(&temp);
+
+        let rx = services.auth().subscribe();
+        match &*rx.borrow() {
+            AuthStateSnapshot::LoggedOut => {} // expected
+            other => panic!("expected LoggedOut, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn directory_starts_with_empty_snapshot() {
+        let temp = TempDir::new().unwrap();
+        let services = make_services(&temp);
+
+        let snap = services.directory().current_snapshot();
+        assert!(snap.identity.is_none());
+        assert!(snap.entities.is_empty());
+        assert!(snap.contacts.is_empty());
+    }
+
+    #[test]
+    fn navigation_starts_with_empty_recents() {
+        let temp = TempDir::new().unwrap();
+        let services = make_services(&temp);
+
+        let snap = services.navigation().current_snapshot();
+        assert!(snap.recent_entities.is_empty());
+        assert!(snap.recent_contacts.is_empty());
+        assert!(snap.starred_entities.is_empty());
+        assert!(snap.starred_contacts.is_empty());
+    }
+
+    #[tokio::test]
+    async fn navigation_updates_propagate_to_subscribers() {
+        let temp = TempDir::new().unwrap();
+        let services = make_services(&temp);
+
+        let mut rx = services.navigation().subscribe();
+
+        // Record an entity
+        let key = EntityNavigationKey::new("channel", "ch1");
+        services
+            .navigation()
+            .record_entity(key.clone())
+            .await
+            .unwrap();
+
+        // Wait for update
+        rx.changed().await.unwrap();
+
+        let snap = rx.borrow().clone();
+        assert_eq!(snap.recent_entities.len(), 1);
+        assert_eq!(snap.recent_entities[0], key);
+    }
+
+    #[tokio::test]
+    async fn directory_refresh_fails_without_auth() {
+        let temp = TempDir::new().unwrap();
+        let services = make_services(&temp);
+
+        // Not authenticated, so refresh should fail
+        let result = services.directory().refresh_all().await;
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn services_clone_shares_underlying_arcs() {
+        let temp = TempDir::new().unwrap();
+        let services1 = make_services(&temp);
+        let services2 = services1.clone();
+
+        // Both should point to the same underlying Arc
+        assert!(Arc::ptr_eq(&services1.auth(), &services2.auth()));
+        assert!(Arc::ptr_eq(
+            &services1.navigation(),
+            &services2.navigation()
+        ));
+        assert!(Arc::ptr_eq(&services1.directory(), &services2.directory()));
+    }
+
+    #[tokio::test]
+    async fn cloned_services_share_state_updates() {
+        let temp = TempDir::new().unwrap();
+        let services1 = make_services(&temp);
+        let services2 = services1.clone();
+
+        // Subscribe via services1
+        let mut rx = services1.navigation().subscribe();
+
+        // Record via services2
+        services2
+            .navigation()
+            .record_contact("alice".to_string())
+            .await
+            .unwrap();
+
+        // Should see update via services1's subscription
+        rx.changed().await.unwrap();
+        let snap = rx.borrow().clone();
+        assert_eq!(snap.recent_contacts, vec!["alice".to_string()]);
+    }
+}

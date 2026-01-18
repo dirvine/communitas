@@ -136,7 +136,11 @@ impl DirectoryService {
     }
 
     pub async fn refresh_all(&self) -> Result<(), DirectoryError> {
-        let api = self.auth.api().ok_or(DirectoryError::NotAuthenticated)?;
+        let api = self
+            .auth
+            .api_async()
+            .await
+            .ok_or(DirectoryError::NotAuthenticated)?;
         let snapshot = self.fetch_snapshot(api).await?;
         {
             let mut inner = self.inner.write().await;
@@ -152,6 +156,11 @@ impl DirectoryService {
 
     pub fn current_snapshot(&self) -> DirectorySnapshot {
         self.inner.blocking_read().clone()
+    }
+
+    /// Async-compatible snapshot (safe to call from within async context).
+    pub async fn snapshot(&self) -> DirectorySnapshot {
+        self.inner.read().await.clone()
     }
 }
 
@@ -354,5 +363,68 @@ mod tests {
 
         let unified = DirectoryService::map_contact(contact);
         assert_eq!(unified.display_name, "contact-3");
+    }
+
+    // Phase 2.2: Directory watcher / auth integration tests
+
+    #[tokio::test]
+    async fn refresh_all_fails_when_not_authenticated() {
+        let temp = TempDir::new().unwrap();
+        let service = make_directory_service(&temp);
+
+        // Auth is not logged in, so refresh_all should fail with NotAuthenticated
+        let result = service.refresh_all().await;
+        assert!(result.is_err());
+
+        match result.unwrap_err() {
+            DirectoryError::NotAuthenticated => {} // expected
+            other => panic!("expected NotAuthenticated, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn refresh_all_does_not_modify_snapshot_on_auth_error() {
+        let temp = TempDir::new().unwrap();
+        let service = make_directory_service(&temp);
+
+        // Get initial empty snapshot
+        let initial = service.snapshot().await;
+        assert!(initial.identity.is_none());
+
+        // Attempt refresh (will fail)
+        let _ = service.refresh_all().await;
+
+        // Snapshot should remain unchanged
+        let after = service.snapshot().await;
+        assert!(after.identity.is_none());
+        assert!(after.entities.is_empty());
+        assert!(after.contacts.is_empty());
+    }
+
+    #[tokio::test]
+    async fn subscriber_not_notified_on_failed_refresh() {
+        let temp = TempDir::new().unwrap();
+        let service = make_directory_service(&temp);
+        let mut rx = service.subscribe();
+
+        // Initial state - use borrow_and_update to mark as seen
+        let initial = rx.borrow_and_update().clone();
+        assert!(initial.identity.is_none());
+
+        // Attempt refresh (will fail due to no auth)
+        let _ = service.refresh_all().await;
+
+        // Should NOT have changed since refresh failed before publishing
+        assert!(!rx.has_changed().unwrap_or(false));
+    }
+
+    #[test]
+    fn auth_api_returns_none_when_not_logged_in() {
+        let temp = TempDir::new().unwrap();
+        let storage = UiStorage::from_path(temp.path()).unwrap();
+        let auth = Arc::new(AuthController::new(storage).unwrap());
+
+        // AuthController.api() should return None when not authenticated
+        assert!(auth.api().is_none());
     }
 }

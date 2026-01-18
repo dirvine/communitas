@@ -162,6 +162,11 @@ impl AuthController {
         self.inner.blocking_read().api.clone()
     }
 
+    /// Async-compatible API accessor (safe to call from within async context).
+    pub async fn api_async(&self) -> Option<CommunitasApi> {
+        self.inner.read().await.api.clone()
+    }
+
     fn fail_if_requested(&self) -> Result<(), AuthError> {
         if let AuthFailureMode::AlwaysFail = self.failure_mode {
             warn!(

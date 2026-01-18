@@ -10,6 +10,7 @@ use tokio::time::sleep;
 const DO_BOOTSTRAP_IP: &str = "138.197.29.195:4433";
 
 #[tokio::test]
+#[ignore] // Requires live production network - run manually with --ignored
 async fn test_production_network_gossip_sync() {
     // Initialize crypto provider
     let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();

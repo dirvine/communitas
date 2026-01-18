@@ -507,6 +507,7 @@ async fn create_connected_node(
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #[tokio::test]
+#[ignore] // Requires live VPS network - run manually with --ignored
 async fn test_full_infrastructure() {
     setup_crypto();
 

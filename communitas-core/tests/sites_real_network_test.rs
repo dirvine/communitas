@@ -31,6 +31,7 @@ fn init_tracing() {
 /// Test 1: Type conversion and local signing
 #[tokio::test]
 #[serial]
+#[ignore] // Network test - starts QUIC listener
 async fn test_identity_keys_sign_manifest() {
     init_tracing();
 
@@ -533,6 +534,7 @@ async fn test_address_identification() {
 /// Test 9: Raw key operations
 #[tokio::test]
 #[serial]
+#[ignore] // Network test - starts QUIC listener
 async fn test_raw_key_operations() {
     init_tracing();
 

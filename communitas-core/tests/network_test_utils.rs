@@ -4,28 +4,83 @@
 //
 // Provides infrastructure for testing Sites protocol over real QUIC networks
 
+// Alias communitas_bindings (the actual lib name) as communitas_core
+extern crate communitas_bindings as communitas_core;
+
 use communitas_core::gossip::{GossipContext, SiteId, SiteManifest};
+use std::collections::HashSet;
 use std::net::TcpListener;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tracing::{info, warn};
 
-/// Get a random available port for testing
-pub fn get_random_port() -> u16 {
-    TcpListener::bind("127.0.0.1:0")
-        .expect("Failed to bind to random port")
-        .local_addr()
-        .expect("Failed to get local addr")
-        .port()
+use lazy_static::lazy_static;
+
+lazy_static! {
+    /// Track ports that have been allocated but not yet bound by the actual UDP sockets
+    static ref ALLOCATED_PORTS: Mutex<HashSet<u16>> = Mutex::new(HashSet::new());
 }
 
-/// Get random IPv6 port
+/// Get a random available port for testing (returns base port for gossip, sites uses base+1)
+/// This function ensures both ports are available and not already allocated by other tests.
+pub fn get_random_port() -> u16 {
+    let mut allocated = ALLOCATED_PORTS.lock().expect("Port mutex poisoned");
+
+    // Try to find two consecutive free ports that aren't already allocated
+    for _ in 0..100 {
+        // Get first port
+        let listener1 = TcpListener::bind("127.0.0.1:0").expect("Failed to bind to random port");
+        let port1 = listener1.local_addr().expect("Failed to get local addr").port();
+        let port2 = port1 + 1;
+
+        // Check if either port is already allocated
+        if allocated.contains(&port1) || allocated.contains(&port2) {
+            drop(listener1);
+            continue;
+        }
+
+        // Try to get the next consecutive port
+        if let Ok(listener2) = TcpListener::bind(format!("127.0.0.1:{}", port2)) {
+            // Both ports available - mark them as allocated and return
+            allocated.insert(port1);
+            allocated.insert(port2);
+            drop(listener2);
+            drop(listener1);
+            return port1;
+        }
+        // port1+1 not available, try again with a different base
+        drop(listener1);
+    }
+    panic!("Could not find two consecutive free ports after 100 attempts");
+}
+
+/// Get random IPv6 port (returns base port for gossip, sites uses base+1)
 pub fn get_random_ipv6_port() -> u16 {
-    TcpListener::bind("[::1]:0")
-        .expect("Failed to bind to IPv6 random port")
-        .local_addr()
-        .expect("Failed to get local addr")
-        .port()
+    let mut allocated = ALLOCATED_PORTS.lock().expect("Port mutex poisoned");
+
+    // Try to find two consecutive free ports that aren't already allocated
+    for _ in 0..100 {
+        let listener1 =
+            TcpListener::bind("[::1]:0").expect("Failed to bind to IPv6 random port");
+        let port1 = listener1.local_addr().expect("Failed to get local addr").port();
+        let port2 = port1 + 1;
+
+        // Check if either port is already allocated
+        if allocated.contains(&port1) || allocated.contains(&port2) {
+            drop(listener1);
+            continue;
+        }
+
+        if let Ok(listener2) = TcpListener::bind(format!("[::1]:{}", port2)) {
+            allocated.insert(port1);
+            allocated.insert(port2);
+            drop(listener2);
+            drop(listener1);
+            return port1;
+        }
+        drop(listener1);
+    }
+    panic!("Could not find two consecutive free IPv6 ports after 100 attempts");
 }
 
 /// Test node wrapper with cleanup and metrics

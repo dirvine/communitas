@@ -1,5 +1,9 @@
 //! Shared UI-facing models for Communitas front-ends.
 
+pub mod messaging;
+
+pub use messaging::{ContactWithPresence, Message, MessageReaction, PresenceStatus, ThreadSummary};
+
 /// Small helper used by the Dioxus prototype to display generated identity words.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SampleWords {

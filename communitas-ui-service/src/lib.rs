@@ -2,14 +2,18 @@
 
 pub mod auth;
 pub mod directory;
+pub mod messaging;
 pub mod navigation;
+pub mod presence;
 pub mod storage;
 
 use std::sync::Arc;
 
 use auth::AuthController;
 use directory::DirectoryService;
+use messaging::MessagingService;
 use navigation::NavigationStore;
+use presence::PresenceService;
 use storage::UiStorage;
 use thiserror::Error;
 
@@ -20,6 +24,8 @@ pub struct UiServices {
     auth: Arc<AuthController>,
     navigation: Arc<NavigationStore>,
     directory: Arc<DirectoryService>,
+    messaging: Arc<MessagingService>,
+    presence: Arc<PresenceService>,
 }
 
 impl UiServices {
@@ -34,11 +40,15 @@ impl UiServices {
         let auth = Arc::new(AuthController::new(storage.clone())?);
         let navigation = Arc::new(NavigationStore::new(storage.clone())?);
         let directory = Arc::new(DirectoryService::new(auth.clone()));
+        let messaging = Arc::new(MessagingService::new(auth.clone()));
+        let presence = Arc::new(PresenceService::new(auth.clone(), directory.clone()));
         Ok(Self {
             storage,
             auth,
             navigation,
             directory,
+            messaging,
+            presence,
         })
     }
 
@@ -59,6 +69,16 @@ impl UiServices {
 
     pub fn directory(&self) -> Arc<DirectoryService> {
         self.directory.clone()
+    }
+
+    /// Messaging threads and messages service.
+    pub fn messaging(&self) -> Arc<MessagingService> {
+        self.messaging.clone()
+    }
+
+    /// Presence status tracking for contacts.
+    pub fn presence(&self) -> Arc<PresenceService> {
+        self.presence.clone()
     }
 }
 
@@ -97,6 +117,18 @@ mod tests {
         let _ = services.auth();
         let _ = services.navigation();
         let _ = services.directory();
+        let _ = services.messaging();
+        let _ = services.presence();
+    }
+
+    #[test]
+    fn presence_starts_empty() {
+        let temp = TempDir::new().unwrap();
+        let services = make_services(&temp);
+
+        let snap = services.presence().current_snapshot();
+        assert!(snap.statuses.is_empty());
+        assert!(snap.last_seen.is_empty());
     }
 
     #[test]
@@ -141,6 +173,16 @@ mod tests {
         assert!(snap.recent_contacts.is_empty());
         assert!(snap.starred_entities.is_empty());
         assert!(snap.starred_contacts.is_empty());
+    }
+
+    #[test]
+    fn messaging_starts_with_empty_threads() {
+        let temp = TempDir::new().unwrap();
+        let services = make_services(&temp);
+
+        let snap = services.messaging().current_snapshot();
+        assert!(snap.threads.is_empty());
+        assert!(!snap.loading);
     }
 
     #[tokio::test]
@@ -189,6 +231,8 @@ mod tests {
             &services2.navigation()
         ));
         assert!(Arc::ptr_eq(&services1.directory(), &services2.directory()));
+        assert!(Arc::ptr_eq(&services1.messaging(), &services2.messaging()));
+        assert!(Arc::ptr_eq(&services1.presence(), &services2.presence()));
     }
 
     #[tokio::test]

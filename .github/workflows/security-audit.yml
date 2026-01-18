@@ -71,26 +71,34 @@ jobs:
           def check_file(filepath):
               with open(filepath, 'r') as f:
                   content = f.read()
-              
+                  lines = content.split('\n')
+
               # Find all #[cfg(test)] module positions
               test_module_pattern = r'#\[cfg\(test\)\]'
               test_positions = []
               for match in re.finditer(test_module_pattern, content):
                   test_positions.append(match.start())
-              
+
               # Find line starts for mapping
               line_starts = [0]
               for i, char in enumerate(content):
                   if char == '\n':
                       line_starts.append(i + 1)
-              
+
               # Function to get line number from position
               def get_line_num(pos):
                   for i, start in enumerate(line_starts):
                       if pos < start:
                           return i
                   return len(line_starts)
-              
+
+              # Function to check if line is a doc comment
+              def is_doc_comment(line_num):
+                  if line_num < 1 or line_num > len(lines):
+                      return False
+                  line = lines[line_num - 1].strip()
+                  return line.startswith('///') or line.startswith('//!')
+
               # Find violations
               violations = []
               patterns = [
@@ -98,12 +106,16 @@ jobs:
                   (r'\.expect\(', 'expect()'),
                   (r'panic!\(', 'panic!()')
               ]
-              
+
               for pattern, name in patterns:
                   for match in re.finditer(pattern, content):
                       pos = match.start()
                       line_num = get_line_num(pos)
-                      
+
+                      # Skip doc comments (examples in documentation)
+                      if is_doc_comment(line_num):
+                          continue
+
                       # Check if this is after a #[cfg(test)] marker
                       in_test = False
                       for test_pos in test_positions:
@@ -111,10 +123,10 @@ jobs:
                           if line_num > test_line:
                               in_test = True
                               break
-                      
+
                       if not in_test:
                           violations.append((line_num, name, filepath))
-              
+
               return violations
           
           # Check all Rust files

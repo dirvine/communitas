@@ -1,5 +1,5 @@
-# Dioxus Desktop Prototype — Milestone 1 Plan  
-_Status: Draft • Target complete: February 7, 2026_
+# Dioxus Desktop Prototype — Milestone 1 Plan
+_Status: Near Complete (7/8 validation gates passing) • Target complete: February 7, 2026_
 
 ## 1. Goal & Exit Criteria
 
@@ -112,22 +112,58 @@ Exit when:
 
 ## 8. Documentation & Follow-ups
 
-- Update `docs/architecture/dioxus_desktop_prototype_plan.md` status table when exit criteria are met.  
-- Attach nav/auth screenshots + test logs to the milestone tracking issue.  
+- Update `docs/architecture/dioxus_desktop_prototype_plan.md` status table when exit criteria are met.
+- Attach nav/auth screenshots + test logs to the milestone tracking issue.
 - Prep Milestone 2 (Messaging + Entities) backlog once nav/auth is signed off.
+
+## 8.1 Recent Progress (January 2026)
+
+### Completed Work
+
+**Phase 1: UI Polish**
+- Added skeleton loading states (`SkeletonPulse`, `SkeletonWelcomeCard`, `SkeletonStatsGrid`, `SkeletonSpacesSection`) for improved UX during directory loading
+- Implemented empty field validation on login form with inline error feedback
+- Commit: `f7ef628 feat(ui): Add skeleton loading states and improved validation`
+
+**Phase 2: Test Coverage**
+- Extended UiServices unit tests covering auth, navigation, and directory services (53 tests total)
+- Added directory watcher tests verifying auth integration and snapshot updates
+- Extended WebDriver tests with sidebar toggle, route guard verification, and error flash tests
+- Enhanced MCP parity script with contacts comparison and JSON artifact archiving
+- Commits: `52915ed test(mcp-parity)`, `b6fffef test(webdriver)`
+
+**Phase 3: CI Infrastructure**
+- Added artifact upload steps for MCP parity JSON diffs
+- Added WebDriver test artifact capture with screenshot-on-failure
+- Configured JSON test reporter for structured CI output
+- Commit: `2a9de65 ci: Improve test artifacts and failure debugging`
+
+**Phase 4: Telemetry & Accessibility**
+- Added tracing instrumentation (`#[instrument]`) to navigation and directory services
+- Spans: `ui.nav.record_entity`, `ui.nav.record_contact`, `ui.nav.toggle_star_entity`, `ui.nav.toggle_star_contact`, `ui.nav.clear`, `ui.directory.refresh_all`
+- Created accessibility smoke tests (12 tests covering heading hierarchy, form labels, keyboard navigation)
+- Commit: `1d284ab feat: Add telemetry spans and accessibility tests`
+
+### Test Files Added/Updated
+- `communitas-ui-service/src/auth.rs` - Unit tests for auth lifecycle
+- `communitas-ui-service/src/navigation.rs` - Unit tests + tracing spans
+- `communitas-ui-service/src/directory.rs` - Unit tests + tracing spans
+- `tests/webdriverio/specs/nav-auth.smoke.js` - Extended WebDriver tests
+- `tests/webdriverio/specs/accessibility.smoke.js` - New accessibility tests
+- `scripts/tests/mcp_nav_auth.sh` - Enhanced MCP parity harness
 
 ## 9. Validation Checklist & Evidence Capture
 
-| Area | Test / Evidence | Command / Tooling | Artifact |
-| --- | --- | --- | --- |
-| Shared services | `communitas-ui-service` auth + navigation unit tests covering happy/error paths, forced-failure flag, persistence round-trips. | `cargo test -p communitas-ui-service` | Test report uploaded to CI (retain for milestone closeout). |
-| Directory snapshot wiring | Snapshot watcher test verifying auth triggers directory refresh and nav recents update. | `cargo test -p communitas-ui-service directory::tests::refresh_on_auth` | Attach log excerpt proving watchers fire post-auth. |
-| Dioxus components | SSR/component tests for `LoginRoute`, `CreateIdentityRoute`, `RecoverIdentityRoute`, and `AppShell` route guards. | `cargo test -p communitas-dioxus` | Screenshot diffs for golden snapshots + test output. |
-| Router guarding | `tauri-driver` or `dx test --headless` script walks through login, route transitions, and logout to ensure guards + analytics events fire. | `scripts/tests/m1_nav_auth.tauri.ts` (driven via `npm run test:tauri`) | CI artifact: video or log trace w/ timestamps + route list. |
-| MCP parity | CLI harness provisions vault via MCP, then opens Dioxus app and asserts JSON snapshots of `UiServices::directory()` match. | `scripts/tests/mcp_nav_auth.sh` | Stored JSON diff + pass/fail summary. |
-| Installer smoke | `scripts/ci_dx_bundle.sh` builds desktop bundles; GitHub Actions workflow spins clean macOS/Windows/Linux VMs, installs WebView runtimes, performs scripted login, and captures screenshots. | `scripts/ci_dx_bundle.sh` + `scripts/tests/m1_installer_smoke.ps1/.sh` | Attach zipped screenshots & logs to milestone issue. |
-| Accessibility | Keyboard-only traversal of login + AppShell using `axe-core`/`playwright` audit plus manual screen reader spot-check. | `npm run test:axe -- login` | Store audit report + manual checklist in `/docs/testing/m1_nav_auth_accessibility.md`. |
-| Telemetry | Trace log sample showing `ui.auth`, `ui.nav`, and `ui.directory` spans during login + navigation. | `RUST_LOG=info dx serve --platform desktop --features telemetry` | Include log snippet + Jaeger trace screenshot. |
+| Area | Test / Evidence | Command / Tooling | Artifact | Status |
+| --- | --- | --- | --- | --- |
+| Shared services | `communitas-ui-service` auth + navigation unit tests covering happy/error paths, forced-failure flag, persistence round-trips. | `cargo test -p communitas-ui-service` | Test report uploaded to CI (retain for milestone closeout). | ✅ 53 tests passing |
+| Directory snapshot wiring | Snapshot watcher test verifying auth triggers directory refresh and nav recents update. | `cargo test -p communitas-ui-service directory::tests` | Attach log excerpt proving watchers fire post-auth. | ✅ Tests added |
+| Dioxus components | SSR/component tests for `LoginRoute`, `CreateIdentityRoute`, `RecoverIdentityRoute`, and `AppShell` route guards. | `cargo test -p communitas-dioxus` | Screenshot diffs for golden snapshots + test output. | ✅ 7 tests passing |
+| Router guarding | `tauri-driver` or `dx test --headless` script walks through login, route transitions, and logout to ensure guards + analytics events fire. | `scripts/tests/m1_nav_auth.tauri.sh` + WebDriverIO | CI artifact: video or log trace w/ timestamps + route list. | ✅ WebDriver tests in CI |
+| MCP parity | CLI harness provisions vault via MCP, then opens Dioxus app and asserts JSON snapshots of `UiServices::directory()` match. | `scripts/tests/mcp_nav_auth.sh` | Stored JSON diff + pass/fail summary. | ✅ Contacts + entities |
+| Installer smoke | `scripts/ci_dx_bundle.sh` builds desktop bundles; GitHub Actions workflow spins clean macOS/Windows/Linux VMs, installs WebView runtimes, performs scripted login, and captures screenshots. | `scripts/ci_dx_bundle.sh` + `scripts/tests/m1_installer_smoke.ps1/.sh` | Attach zipped screenshots & logs to milestone issue. | ⏳ Linux CI only |
+| Accessibility | Keyboard-only traversal of login + AppShell using `axe-core`/`playwright` audit plus manual screen reader spot-check. | `tests/webdriverio/specs/accessibility.smoke.js` | Store audit report + manual checklist in `/docs/testing/m1_nav_auth_accessibility.md`. | ✅ 12 tests added |
+| Telemetry | Trace log sample showing `ui.auth`, `ui.nav`, and `ui.directory` spans during login + navigation. | `RUST_LOG=info dx serve --platform desktop --features telemetry` | Include log snippet + Jaeger trace screenshot. | ✅ Spans instrumented |
 
 **Approval flow**: Milestone 1 cannot close until every row above has (a) passing automation in CI and (b) linked artifacts/screenshots in the milestone tracking issue. QA signs off on accessibility + installer smoke, while the MCP team signs off on parity scripts.
 

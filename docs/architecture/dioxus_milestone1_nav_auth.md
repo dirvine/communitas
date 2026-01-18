@@ -1,5 +1,5 @@
 # Dioxus Desktop Prototype — Milestone 1 Plan
-_Status: Near Complete (7/8 validation gates passing) • Target complete: February 7, 2026_
+_Status: Complete (8/8 validation gates passing) • Target complete: February 7, 2026_
 
 ## 1. Goal & Exit Criteria
 
@@ -161,7 +161,7 @@ Exit when:
 | Dioxus components | SSR/component tests for `LoginRoute`, `CreateIdentityRoute`, `RecoverIdentityRoute`, and `AppShell` route guards. | `cargo test -p communitas-dioxus` | Screenshot diffs for golden snapshots + test output. | ✅ 7 tests passing |
 | Router guarding | `tauri-driver` or `dx test --headless` script walks through login, route transitions, and logout to ensure guards + analytics events fire. | `scripts/tests/m1_nav_auth.tauri.sh` + WebDriverIO | CI artifact: video or log trace w/ timestamps + route list. | ✅ WebDriver tests in CI |
 | MCP parity | CLI harness provisions vault via MCP, then opens Dioxus app and asserts JSON snapshots of `UiServices::directory()` match. | `scripts/tests/mcp_nav_auth.sh` | Stored JSON diff + pass/fail summary. | ✅ Contacts + entities |
-| Installer smoke | `scripts/ci_dx_bundle.sh` builds desktop bundles; GitHub Actions workflow spins clean macOS/Windows/Linux VMs, installs WebView runtimes, performs scripted login, and captures screenshots. | `scripts/ci_dx_bundle.sh` + `scripts/tests/m1_installer_smoke.ps1/.sh` | Attach zipped screenshots & logs to milestone issue. | ⏳ Linux CI only |
+| Installer smoke | `scripts/ci_dx_bundle.sh` builds desktop bundles; GitHub Actions workflow spins clean macOS/Windows/Linux VMs, installs WebView runtimes, performs scripted login, and captures screenshots. | `scripts/ci_dx_bundle.sh` + `scripts/tests/m1_installer_smoke.ps1/.sh` | Attach zipped screenshots & logs to milestone issue. | ✅ Linux + macOS CI |
 | Accessibility | Keyboard-only traversal of login + AppShell using `axe-core`/`playwright` audit plus manual screen reader spot-check. | `tests/webdriverio/specs/accessibility.smoke.js` | Store audit report + manual checklist in `/docs/testing/m1_nav_auth_accessibility.md`. | ✅ 12 tests added |
 | Telemetry | Trace log sample showing `ui.auth`, `ui.nav`, and `ui.directory` spans during login + navigation. | `RUST_LOG=info dx serve --platform desktop --features telemetry` | Include log snippet + Jaeger trace screenshot. | ✅ Spans instrumented |
 

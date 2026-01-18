@@ -5,12 +5,73 @@ on:
   pull_request:
 
 jobs:
-  rust:
+  # Core checks run on Linux (fastest)
+  rust-checks:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libssl-dev \
+            pkg-config \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libsoup-3.0-dev
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev \
+            || sudo apt-get install -y libwebkit2gtk-4.0-dev libjavascriptcoregtk-4.0-dev
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@1.88.0
+        with:
+          components: rustfmt, clippy
+
+      - name: Rust fmt
+        run: cargo fmt --all -- --check
+
+      - name: Rust clippy
+        run: cargo clippy --all-features -- -D clippy::panic -D clippy::unwrap_used -D clippy::expect_used
+
+      - name: Rust tests
+        run: cargo test --all-features
+
+      - name: MCP nav/auth parity check
+        run: ./scripts/tests/mcp_nav_auth.sh
+
+      - name: Upload MCP parity artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mcp-parity-artifacts
+          path: parity-artifacts/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # WebDriver tests run on multiple platforms
+  webdriver-tests:
+    needs: rust-checks
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            name: Linux
+          - os: macos-latest
+            name: macOS
+    runs-on: ${{ matrix.os }}
+    name: WebDriver (${{ matrix.name }})
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies (Linux)
+        if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -29,24 +90,20 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev \
             || sudo apt-get install -y libwebkit2gtk-4.0-dev libjavascriptcoregtk-4.0-dev
 
+      - name: Enable SafariDriver (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          sudo safaridriver --enable
+          # Verify safaridriver is working
+          safaridriver --version || true
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@1.88.0
-        with:
-          components: rustfmt, clippy
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 18
-
-      - name: Rust fmt
-        run: cargo fmt --all -- --check
-
-      - name: Rust clippy
-        run: cargo clippy --all-features -- -D clippy::panic -D clippy::unwrap_used -D clippy::expect_used
-
-      - name: Rust tests
-        run: cargo test --all-features
 
       - name: Install dx CLI
         run: ./scripts/install_dx.sh
@@ -60,24 +117,15 @@ jobs:
 
       - name: Tauri nav/auth smoke test
         run: ./scripts/tests/m1_nav_auth.tauri.sh
-
-      - name: MCP nav/auth parity check
-        run: ./scripts/tests/mcp_nav_auth.sh
-
-      - name: Upload MCP parity artifacts
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: mcp-parity-artifacts
-          path: parity-artifacts/
-          if-no-files-found: ignore
-          retention-days: 7
+        env:
+          # macOS uses Safari WebDriver via tauri-driver
+          WEBKIT_BROWSER: ${{ matrix.os == 'macos-latest' && 'Safari' || 'webkit' }}
 
       - name: Upload WebDriver test artifacts
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: webdriver-artifacts
+          name: webdriver-artifacts-${{ matrix.name }}
           path: tests/webdriverio/logs/
           if-no-files-found: ignore
           retention-days: 7

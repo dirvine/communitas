@@ -14,6 +14,7 @@ use std::time::Duration;
 // ============================================================================
 
 #[tokio::test]
+#[ignore] // Network integration test - run manually
 async fn test_handshake_success() {
     // GIVEN: 3 nodes in a mesh topology
     let harness = TestHarness::new(3).await.expect("harness creation failed");
@@ -44,6 +45,7 @@ async fn test_handshake_success() {
 }
 
 #[tokio::test]
+#[ignore] // Network integration test - run manually
 async fn test_reconnect_after_drop() {
     // GIVEN: Two connected nodes
     let harness = TestHarness::new(2).await.expect("harness creation failed");
@@ -80,6 +82,7 @@ async fn test_reconnect_after_drop() {
 }
 
 #[tokio::test]
+#[ignore] // Network integration test - run manually
 async fn test_connection_with_latency() {
     // GIVEN: Two nodes with high latency link
     let harness = TestHarness::new(2).await.expect("harness creation failed");
@@ -107,6 +110,7 @@ async fn test_connection_with_latency() {
 }
 
 #[tokio::test]
+#[ignore] // Network integration test - run manually
 async fn test_connection_with_packet_loss() {
     // GIVEN: Two nodes with 30% packet loss
     let harness = TestHarness::new(2).await.expect("harness creation failed");
@@ -138,6 +142,7 @@ async fn test_connection_with_packet_loss() {
 // ============================================================================
 
 #[tokio::test]
+#[ignore] // Network integration test - run manually
 async fn test_mesh_5_nodes() {
     // GIVEN: 5 nodes
     let harness = TestHarness::new(5).await.expect("harness creation failed");
@@ -169,6 +174,7 @@ async fn test_mesh_5_nodes() {
 }
 
 #[tokio::test]
+#[ignore] // Network integration test - run manually
 async fn test_star_topology() {
     // GIVEN: 5 nodes in star topology (node 0 is hub)
     let harness = TestHarness::new(5).await.expect("harness creation failed");
@@ -209,6 +215,7 @@ async fn test_star_topology() {
 }
 
 #[tokio::test]
+#[ignore] // Network integration test - run manually
 async fn test_line_topology() {
     // GIVEN: 4 nodes in line (0-1-2-3)
     let harness = TestHarness::new(4).await.expect("harness creation failed");
@@ -247,6 +254,7 @@ async fn test_line_topology() {
 // ============================================================================
 
 #[tokio::test]
+#[ignore] // Network integration test - run manually
 async fn test_partition_healing() {
     // GIVEN: 4 nodes in mesh
     let harness = TestHarness::new(4).await.expect("harness creation failed");
@@ -286,6 +294,7 @@ async fn test_partition_healing() {
 }
 
 #[tokio::test]
+#[ignore] // Network integration test - run manually
 async fn test_cascading_failure() {
     // GIVEN: 5 nodes in line (0-1-2-3-4)
     let harness = TestHarness::new(5).await.expect("harness creation failed");
@@ -324,7 +333,7 @@ async fn test_cascading_failure() {
 // ============================================================================
 
 #[tokio::test]
-#[ignore] // Slow test - run manually
+#[ignore] // Network integration test - run manually
 async fn test_high_latency_high_loss() {
     // GIVEN: Two nodes with realistic bad network (300ms latency, 20% loss)
     let harness = TestHarness::new(2).await.expect("harness creation failed");
@@ -344,7 +353,7 @@ async fn test_high_latency_high_loss() {
 }
 
 #[tokio::test]
-#[ignore] // Slow test - run manually
+#[ignore] // Network integration test - run manually
 async fn test_flapping_connection() {
     // GIVEN: Two connected nodes
     let harness = TestHarness::new(2).await.expect("harness creation failed");

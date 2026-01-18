@@ -6,6 +6,7 @@ use communitas_ui_api::{
 };
 use thiserror::Error;
 use tokio::sync::{RwLock, watch};
+use tracing::instrument;
 
 use crate::auth::{AuthController, AuthError};
 
@@ -135,6 +136,7 @@ impl DirectoryService {
         }
     }
 
+    #[instrument(name = "ui.directory.refresh_all", skip(self))]
     pub async fn refresh_all(&self) -> Result<(), DirectoryError> {
         let api = self
             .auth

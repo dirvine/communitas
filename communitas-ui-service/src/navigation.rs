@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::sync::{RwLock, watch};
+use tracing::instrument;
 
 use crate::storage::{JsonFile, StorageError, UiStorage};
 
@@ -135,6 +136,7 @@ impl NavigationStore {
 
 #[async_trait]
 impl NavigationService for NavigationStore {
+    #[instrument(name = "ui.nav.record_entity", skip(self), fields(entity_type = %key.entity_type, entity_id = %key.entity_id))]
     async fn record_entity(&self, key: EntityNavigationKey) -> Result<(), NavigationError> {
         let mut inner = self.inner.write().await;
         inner.recent_entities.retain(|existing| existing != &key);
@@ -147,6 +149,7 @@ impl NavigationService for NavigationStore {
         Ok(())
     }
 
+    #[instrument(name = "ui.nav.record_contact", skip(self), fields(contact_id = %contact_id))]
     async fn record_contact(&self, contact_id: String) -> Result<(), NavigationError> {
         let mut inner = self.inner.write().await;
         inner.recent_contacts.retain(|value| value != &contact_id);
@@ -159,6 +162,7 @@ impl NavigationService for NavigationStore {
         Ok(())
     }
 
+    #[instrument(name = "ui.nav.toggle_star_entity", skip(self), fields(entity_type = %key.entity_type, entity_id = %key.entity_id))]
     async fn toggle_star_entity(&self, key: EntityNavigationKey) -> Result<bool, NavigationError> {
         let mut inner = self.inner.write().await;
         let mut added = false;
@@ -179,6 +183,7 @@ impl NavigationService for NavigationStore {
         Ok(added)
     }
 
+    #[instrument(name = "ui.nav.toggle_star_contact", skip(self), fields(contact_id = %contact_id))]
     async fn toggle_star_contact(&self, contact_id: String) -> Result<bool, NavigationError> {
         let mut inner = self.inner.write().await;
         let mut added = false;
@@ -199,6 +204,7 @@ impl NavigationService for NavigationStore {
         Ok(added)
     }
 
+    #[instrument(name = "ui.nav.clear", skip(self))]
     async fn clear(&self) -> Result<(), NavigationError> {
         let mut inner = self.inner.write().await;
         *inner = NavigationPersistence::default();

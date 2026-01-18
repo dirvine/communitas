@@ -63,3 +63,21 @@ jobs:
 
       - name: MCP nav/auth parity check
         run: ./scripts/tests/mcp_nav_auth.sh
+
+      - name: Upload MCP parity artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mcp-parity-artifacts
+          path: parity-artifacts/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Upload WebDriver test artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: webdriver-artifacts
+          path: tests/webdriverio/logs/
+          if-no-files-found: ignore
+          retention-days: 7

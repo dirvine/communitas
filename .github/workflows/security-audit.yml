@@ -216,9 +216,10 @@ jobs:
 
       - name: Run Clippy (security lints)
         run: |
-          # Run clippy on library and binary targets only (excluding tests where unwrap/expect are allowed per CLAUDE.md)
+          # Run clippy with security-focused lints only
+          # NOTE: Do not use -D warnings here - general warnings are handled in ci.yml
+          # This audit focuses specifically on panic-inducing code patterns
           cargo clippy --workspace --all-features -- \
-            -D warnings \
             -D clippy::unwrap_used \
             -D clippy::expect_used \
             -D clippy::panic

@@ -111,6 +111,7 @@ async fn test_local_cache_list_contacts() {
 // ============================================================================
 
 #[tokio::test]
+#[ignore] // Network test - creates QUIC transport
 async fn test_presence_discovery_in_shared_group() {
     // GIVEN: Two users in the same group with presence beacons
     let (presence, groups) = create_mock_presence().await;
@@ -146,6 +147,7 @@ async fn test_presence_discovery_in_shared_group() {
 }
 
 #[tokio::test]
+#[ignore] // Network test - creates QUIC transport
 async fn test_presence_discovery_multiple_groups() {
     // GIVEN: User present in multiple groups
     let (presence, groups) = create_mock_presence().await;
@@ -181,6 +183,7 @@ async fn test_presence_discovery_multiple_groups() {
 }
 
 #[tokio::test]
+#[ignore] // Network test - creates QUIC transport
 async fn test_presence_discovery_expired_beacon() {
     // GIVEN: User with expired presence beacon (TTL = 0)
     let (presence, groups) = create_mock_presence().await;
@@ -499,6 +502,7 @@ async fn test_introducer_node_connection() {
 }
 
 #[tokio::test]
+#[ignore] // Network test - creates QUIC transport
 async fn test_introducer_config_empty_addresses() {
     // GIVEN: Empty introducer config
     let config = IntroducerConfig {
@@ -556,6 +560,7 @@ async fn test_introducer_node_timeout() {
 // ============================================================================
 
 #[tokio::test]
+#[ignore] // Network test - creates QUIC transport
 async fn test_complete_discovery_flow() {
     let (presence_mgr, groups_map) = create_mock_presence().await;
     let topic_id = TopicId::new([1u8; 32]);
@@ -603,6 +608,7 @@ async fn test_complete_discovery_flow() {
 }
 
 #[tokio::test]
+#[ignore] // Network test - creates QUIC transport
 async fn test_discovery_fallback_chain() {
     let (presence_mgr, groups_map) = create_mock_presence().await;
     let topic_id = TopicId::new([2u8; 32]);

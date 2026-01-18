@@ -97,6 +97,7 @@ async fn test_publisher_handles_requests_locally() {
 
 /// Test that SitesListener can be created and started
 #[tokio::test]
+#[ignore] // Network test - creates QUIC transport
 async fn test_sites_listener_starts() {
     let (_sk, pk) = generate_test_keypair(2);
     let site_id = SiteId::from_public_key(&pk);

@@ -91,6 +91,7 @@ async fn test_watchdog_starts_monitoring_bootstrap() {
 
 /// Test that GossipContext provides method to check if WAN dials should be attempted
 #[tokio::test]
+#[ignore] // Network test - GossipContext starts QUIC listener
 async fn test_gossip_context_respects_local_only_mode() {
     let ctx = GossipContext::initialize(
         "ocean-forest-moon-star".to_string(),

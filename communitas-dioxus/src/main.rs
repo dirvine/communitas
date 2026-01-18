@@ -257,6 +257,7 @@ fn LoginRoute() -> Element {
 
     let busy = matches!(auth.read().phase, AuthPhase::Authenticating);
     let error_msg = auth.read().error.clone();
+    let mut auth_for_validation = auth;
 
     rsx! {
         AuthLayout {
@@ -277,6 +278,13 @@ fn LoginRoute() -> Element {
                 class: "flex flex-col gap-4",
                 onsubmit: move |evt| {
                     evt.prevent_default();
+                    // Validate empty fields
+                    if four_words().trim().is_empty() || password().is_empty() {
+                        auth_for_validation.with_mut(|state| {
+                            state.error = Some("Please enter your four words and password".into());
+                        });
+                        return;
+                    }
                     login_action.send(LoginRequest {
                         four_words: four_words().trim().to_string(),
                         password: password().clone(),
@@ -564,6 +572,18 @@ fn DashboardRoute() -> Element {
 fn HomeOverview() -> Element {
     let directory = use_directory_snapshot();
     let snapshot = directory();
+
+    // Show skeleton while directory is loading (no identity yet)
+    if snapshot.identity.is_none() {
+        return rsx! {
+            div { class: "flex flex-col gap-8",
+                SkeletonWelcomeCard {}
+                SkeletonStatsGrid {}
+                SkeletonSpacesSection {}
+            }
+        };
+    }
+
     let display_name = snapshot
         .identity
         .as_ref()
@@ -1469,6 +1489,57 @@ fn sample_words_from_core() -> SampleWords {
         Err(err) => {
             error!("failed to generate id words: {err}");
             SampleWords::new(format!("identity error: {err}"))
+        }
+    }
+}
+
+// --- Skeleton loading components ---
+
+#[component]
+fn SkeletonPulse(class: &'static str) -> Element {
+    rsx! {
+        div { class: format!("animate-pulse bg-slate-800 rounded {class}") }
+    }
+}
+
+#[component]
+fn SkeletonWelcomeCard() -> Element {
+    rsx! {
+        div { class: "rounded-2xl border border-slate-900 bg-gradient-to-r from-slate-800/40 to-slate-700/20 p-6 shadow-lg",
+            SkeletonPulse { class: "h-3 w-24 mb-4" }
+            SkeletonPulse { class: "h-8 w-64 mb-2" }
+            SkeletonPulse { class: "h-4 w-48" }
+        }
+    }
+}
+
+#[component]
+fn SkeletonStatsGrid() -> Element {
+    rsx! {
+        div { class: "grid gap-4 md:grid-cols-3",
+            for _ in 0..6 {
+                div { class: "rounded-2xl border border-slate-900 bg-slate-950/80 p-4",
+                    SkeletonPulse { class: "h-3 w-20 mb-2" }
+                    SkeletonPulse { class: "h-7 w-12" }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn SkeletonSpacesSection() -> Element {
+    rsx! {
+        div { class: "flex flex-col gap-4",
+            SkeletonPulse { class: "h-7 w-32" }
+            div { class: "grid gap-4 lg:grid-cols-2",
+                for _ in 0..4 {
+                    div { class: "rounded-2xl border border-slate-900 bg-slate-950/80 p-4",
+                        SkeletonPulse { class: "h-5 w-24 mb-3" }
+                        SkeletonPulse { class: "h-4 w-32" }
+                    }
+                }
+            }
         }
     }
 }

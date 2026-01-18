@@ -7,7 +7,7 @@
 4. Build core: `cargo build -p communitas-core`
 5. Flutter deps: `cd communitas-flutter && flutter pub get`
 6. Run native: `flutter run -d android` (or ios/linux/windows)
-7. Web demo (demo-only): `flutter run -d chrome --dart-define=DEMO_MODE=true`
+7. Web (limited): `flutter run -d chrome`
 
 ## FFI Codegen
 If you change `communitas-core/src/flutter_api.rs`, re-run codegen:

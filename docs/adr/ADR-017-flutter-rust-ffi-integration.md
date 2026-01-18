@@ -88,9 +88,6 @@ final ffiOrganizationsProvider = FutureProvider<List<FlutterEntity>>((ref) async
 
 // unified_data_provider.dart wraps FFI with unified types
 final unifiedOrganizationsProvider = FutureProvider<List<UnifiedEntity>>((ref) async {
-  if (kDemoMode) {
-    return DemoData.organizations.map((e) => UnifiedEntity.fromDemo(e)).toList();
-  }
   final orgs = await ref.watch(ffiOrganizationsProvider.future);
   return orgs.map((e) => UnifiedEntity.fromFfi(e)).toList();
 });
@@ -187,19 +184,14 @@ final orgs = await ref.watch(ffiOrganizationsProvider.future);
 final orgs = await ref.watch(unifiedOrganizationsProvider.future);
 ```
 
-### Demo Mode
+### Web Platform
 
-Demo mode (`kDemoMode`) still uses `DemoData` for UI development without Rust core:
+Web builds automatically fall back to stub data since FFI is not available in browsers.
+Native platforms require the Rust core library to be built and available.
 
 ```dart
-final unifiedOrganizationsProvider = FutureProvider<List<UnifiedEntity>>((ref) async {
-  if (kDemoMode) {
-    return DemoData.organizations.map((e) => UnifiedEntity.fromDemo(e)).toList();
-  }
-  // Real FFI path
-  final orgs = await ref.watch(ffiOrganizationsProvider.future);
-  return orgs.map((e) => UnifiedEntity.fromFfi(e)).toList();
-});
+// Web platform stub (flutter_api_stub.dart) provides fallback behavior
+// Native platforms use real FFI bindings
 ```
 
 ## Alternatives Considered

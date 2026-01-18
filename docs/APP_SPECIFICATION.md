@@ -981,15 +981,17 @@ When user lacks edit permissions, show:
 
 ---
 
-## 12. Demo Mode
+## 12. Web Limited Mode
 
 ### 12.1 Activation
 
-| Method | How |
-|--------|-----|
-| Compile flag | `--dart-define=DEMO_MODE=true` |
-| Web default | FFI unavailable → auto demo mode |
-| Runtime toggle | Settings → Demo Mode switch |
+| Platform | Behavior |
+|----------|----------|
+| Web | Automatic - FFI unavailable, uses stub data |
+| Native (iOS, Android, Linux, Windows) | Full FFI backend required |
+
+Note: There is no explicit demo mode flag. Web builds automatically fall back to
+limited functionality with stub data since FFI is unavailable in browsers.
 
 ### 12.2 Pre-populated Data
 

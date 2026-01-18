@@ -55,8 +55,8 @@ cd communitas
 cd communitas-flutter
 flutter pub get
 flutter run -d android  # or: -d ios, -d linux, -d windows
-# Web demo (FFI not available in browser)
-flutter run -d chrome --dart-define=DEMO_MODE=true
+# Web (limited functionality - FFI not available in browser)
+flutter run -d chrome
 ```
 
 ### Testing
@@ -177,8 +177,8 @@ flutter run -d android  # or: -d ios, -d linux, -d windows
 # Production Build
 flutter build apk --release
 # or: flutter build ios --release
-# Web demo build only (no native FFI in browser)
-flutter build web --release --dart-define=DEMO_MODE=true
+# Web build (limited functionality - no native FFI in browser)
+flutter build web --release
 
 # Quality Checks
 flutter analyze && cargo clippy --all-features
@@ -199,8 +199,8 @@ Full-featured cross-platform application for iOS, Android, Linux, and Windows.
 cd communitas-flutter
 flutter build apk --release
 # or: flutter build ios --release
-# Web demo build only (FFI not available in browser)
-flutter build web --release --dart-define=DEMO_MODE=true
+# Web build (limited functionality - FFI not available in browser)
+flutter build web --release
 ```
 See [communitas-flutter/](communitas-flutter/) for details.
 

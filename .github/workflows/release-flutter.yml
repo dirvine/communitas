@@ -254,9 +254,9 @@ jobs:
         working-directory: communitas-flutter
         run: flutter pub get
 
-      - name: Build web (demo mode)
+      - name: Build web
         working-directory: communitas-flutter
-        run: flutter build web --release --dart-define=DEMO_MODE=true
+        run: flutter build web --release
 
       - name: Create web archive
         run: |

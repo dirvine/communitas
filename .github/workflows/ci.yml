@@ -219,7 +219,7 @@ jobs:
         working-directory: communitas-flutter
         run: |
           if [ "${{ matrix.platform }}" = "web" ]; then
-            flutter build web --release --dart-define=DEMO_MODE=true
+            flutter build web --release
           elif [ "${{ matrix.platform }}" = "macos" ]; then
             flutter build macos --release
           fi

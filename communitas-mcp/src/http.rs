@@ -101,7 +101,7 @@ impl HttpServerState {
 
         let vault_dir = self.get_vault_dir();
         let manager = TokenManager::new(vault_dir).await.map_err(|e| {
-            JsonRpcError::internal_error(&format!("Failed to initialize token manager: {}", e))
+            JsonRpcError::internal_error(&format!("Failed to initialize token manager: {e}"))
         })?;
 
         let mut write_guard = self.token_manager.write().await;
@@ -356,8 +356,9 @@ mod tests {
 async fn initialize_demo_mode(state: &HttpServerState) -> Result<()> {
     let four_words = match &state.args.four_words {
         Some(fw) => fw.clone(),
-        None => generate_id_words()
-            .map_err(|e| anyhow::anyhow!("Failed to generate identity: {}", e))?,
+        None => {
+            generate_id_words().map_err(|e| anyhow::anyhow!("Failed to generate identity: {e}"))?
+        }
     };
 
     let display_name = state.args.display_name.clone();
@@ -381,7 +382,7 @@ async fn initialize_demo_mode(state: &HttpServerState) -> Result<()> {
         storage_dir.clone(),
     )
     .await
-    .map_err(|e| anyhow::anyhow!("Failed to initialize app: {}", e))?;
+    .map_err(|e| anyhow::anyhow!("Failed to initialize app: {e}"))?;
 
     let mut app_lock = state.app.write().await;
     *app_lock = Some(app);
@@ -525,7 +526,7 @@ async fn handle_pre_auth_tool(
         "core_status" => {
             let initialized = state.is_authenticated().await;
             let result = serde_json::json!({
-                "content": [{"type": "text", "text": serde_json::to_string(&serde_json::json!({"initialized": initialized})).map_err(|e| JsonRpcError::internal_error(&format!("JSON serialization failed: {}", e)))?}],
+                "content": [{"type": "text", "text": serde_json::to_string(&serde_json::json!({"initialized": initialized})).map_err(|e| JsonRpcError::internal_error(&format!("JSON serialization failed: {e}")))?}],
                 "isError": false
             });
             serde_json::to_value(result).map_err(|e| JsonRpcError::internal_error(&e.to_string()))
@@ -553,7 +554,7 @@ async fn handle_authenticate_token(
 
     let delegate_token = token_manager.verify_token(token_str).map_err(|e| {
         error!("HTTP: Token verification failed: {}", e);
-        JsonRpcError::invalid_request(&format!("Invalid token: {}", e))
+        JsonRpcError::invalid_request(&format!("Invalid token: {e}"))
     })?;
 
     let storage_dir = state.get_storage_dir(&delegate_token.issuer);
@@ -590,8 +591,7 @@ async fn handle_authenticate_token(
         Err(e) => {
             error!("HTTP: Failed to initialize app for delegate: {}", e);
             Err(JsonRpcError::internal_error(&format!(
-                "Failed to initialize delegate session: {}",
-                e
+                "Failed to initialize delegate session: {e}"
             )))
         }
     }
@@ -609,16 +609,14 @@ async fn handle_list_vaults(state: &HttpServerState) -> Result<Value, JsonRpcErr
 
     let storage_manager = EncryptedStorageManager::new(storage_config)
         .await
-        .map_err(|e| {
-            JsonRpcError::internal_error(&format!("Failed to initialize storage: {}", e))
-        })?;
+        .map_err(|e| JsonRpcError::internal_error(&format!("Failed to initialize storage: {e}")))?;
 
     let auth_service = AuthService::new(storage_manager);
 
     let vaults = auth_service
         .list_vaults()
         .await
-        .map_err(|e| JsonRpcError::internal_error(&format!("Failed to list vaults: {}", e)))?;
+        .map_err(|e| JsonRpcError::internal_error(&format!("Failed to list vaults: {e}")))?;
 
     let vault_list: Vec<Value> = vaults
         .iter()
@@ -634,7 +632,7 @@ async fn handle_list_vaults(state: &HttpServerState) -> Result<Value, JsonRpcErr
         .collect();
 
     let result = serde_json::json!({
-        "content": [{"type": "text", "text": serde_json::to_string(&serde_json::json!({"vaults": vault_list, "count": vault_list.len()})).map_err(|e| JsonRpcError::internal_error(&format!("JSON serialization failed: {}", e)))?}],
+        "content": [{"type": "text", "text": serde_json::to_string(&serde_json::json!({"vaults": vault_list, "count": vault_list.len()})).map_err(|e| JsonRpcError::internal_error(&format!("JSON serialization failed: {e}")))?}],
         "isError": false
     });
     serde_json::to_value(result).map_err(|e| JsonRpcError::internal_error(&e.to_string()))
@@ -694,8 +692,7 @@ async fn handle_authenticate(state: &HttpServerState, args: Value) -> Result<Val
         Err(e) => {
             error!("HTTP: Authentication failed: {}", e);
             Err(JsonRpcError::internal_error(&format!(
-                "Authentication failed: {}",
-                e
+                "Authentication failed: {e}"
             )))
         }
     }
@@ -756,8 +753,7 @@ async fn handle_create_vault(state: &HttpServerState, args: Value) -> Result<Val
         Err(e) => {
             error!("HTTP: Failed to create vault: {}", e);
             Err(JsonRpcError::internal_error(&format!(
-                "Failed to create vault: {}",
-                e
+                "Failed to create vault: {e}"
             )))
         }
     }
@@ -865,8 +861,7 @@ async fn handle_resources_read(
         .to_string(),
         uri => {
             return Err(JsonRpcError::invalid_params(&format!(
-                "Unknown resource: {}",
-                uri
+                "Unknown resource: {uri}"
             )));
         }
     };

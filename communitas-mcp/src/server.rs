@@ -58,7 +58,7 @@ impl McpServer {
         if self.token_manager.is_none() {
             let vault_dir = self.get_vault_dir();
             let manager = TokenManager::new(vault_dir).await.map_err(|e| {
-                JsonRpcError::internal_error(&format!("Failed to initialize token manager: {}", e))
+                JsonRpcError::internal_error(&format!("Failed to initialize token manager: {e}"))
             })?;
             self.token_manager = Some(manager);
         }
@@ -177,10 +177,7 @@ impl McpServer {
         let four_words = match &self.args.four_words {
             Some(fw) => fw.clone(),
             None => generate_id_words().map_err(|e| {
-                JsonRpcError::internal_error(&format!(
-                    "Failed to generate four-word identity: {}",
-                    e
-                ))
+                JsonRpcError::internal_error(&format!("Failed to generate four-word identity: {e}"))
             })?,
         };
 
@@ -224,8 +221,7 @@ impl McpServer {
             Err(e) => {
                 error!("Failed to initialize demo mode: {}", e);
                 Err(JsonRpcError::internal_error(&format!(
-                    "Failed to initialize demo mode: {}",
-                    e
+                    "Failed to initialize demo mode: {e}"
                 )))
             }
         }
@@ -320,7 +316,7 @@ impl McpServer {
             "core_status" => {
                 let initialized = self.is_authenticated();
                 let result = serde_json::json!({
-                    "content": [{"type": "text", "text": serde_json::to_string(&serde_json::json!({"initialized": initialized})).map_err(|e| JsonRpcError::internal_error(&format!("JSON serialization failed: {}", e)))?}],
+                    "content": [{"type": "text", "text": serde_json::to_string(&serde_json::json!({"initialized": initialized})).map_err(|e| JsonRpcError::internal_error(&format!("JSON serialization failed: {e}")))?}],
                     "isError": false
                 });
                 serde_json::to_value(result)
@@ -374,7 +370,7 @@ impl McpServer {
         let storage_manager = EncryptedStorageManager::new(storage_config)
             .await
             .map_err(|e| {
-                JsonRpcError::internal_error(&format!("Failed to initialize storage: {}", e))
+                JsonRpcError::internal_error(&format!("Failed to initialize storage: {e}"))
             })?;
 
         let mut auth_service = AuthService::new(storage_manager);
@@ -385,8 +381,7 @@ impl McpServer {
             .map_err(|e| {
                 error!("Authentication failed: {}", e);
                 JsonRpcError::invalid_request(&format!(
-                    "Authentication failed: {}. Make sure vault exists and password is correct.",
-                    e
+                    "Authentication failed: {e}. Make sure vault exists and password is correct."
                 ))
             })?;
         match CommunitasApp::new(
@@ -418,8 +413,7 @@ impl McpServer {
             Err(e) => {
                 error!("Failed to initialize app after authentication: {}", e);
                 Err(JsonRpcError::internal_error(&format!(
-                    "Failed to initialize app: {}",
-                    e
+                    "Failed to initialize app: {e}"
                 )))
             }
         }
@@ -465,7 +459,7 @@ impl McpServer {
         let storage_manager = EncryptedStorageManager::new(storage_config)
             .await
             .map_err(|e| {
-                JsonRpcError::internal_error(&format!("Failed to initialize storage: {}", e))
+                JsonRpcError::internal_error(&format!("Failed to initialize storage: {e}"))
             })?;
 
         let mut auth_service = AuthService::new(storage_manager);
@@ -475,7 +469,7 @@ impl McpServer {
             .await
             .map_err(|e| {
                 error!("Failed to create vault: {}", e);
-                JsonRpcError::internal_error(&format!("Failed to create vault: {}", e))
+                JsonRpcError::internal_error(&format!("Failed to create vault: {e}"))
             })?;
 
         let session_info = auth_service
@@ -483,7 +477,7 @@ impl McpServer {
             .await
             .map_err(|e| {
                 error!("Failed to login after vault creation: {}", e);
-                JsonRpcError::internal_error(&format!("Vault created but login failed: {}", e))
+                JsonRpcError::internal_error(&format!("Vault created but login failed: {e}"))
             })?;
 
         match CommunitasApp::new(
@@ -515,8 +509,7 @@ impl McpServer {
             Err(e) => {
                 error!("Failed to initialize app after vault creation: {}", e);
                 Err(JsonRpcError::internal_error(&format!(
-                    "Vault created but app initialization failed: {}",
-                    e
+                    "Vault created but app initialization failed: {e}"
                 )))
             }
         }
@@ -530,7 +523,7 @@ impl McpServer {
         let token_manager = self.get_token_manager().await?;
         let delegate_token = token_manager.verify_token(token_str).map_err(|e| {
             error!("Token verification failed: {}", e);
-            JsonRpcError::invalid_request(&format!("Invalid token: {}", e))
+            JsonRpcError::invalid_request(&format!("Invalid token: {e}"))
         })?;
 
         let storage_dir = self.get_storage_dir(&delegate_token.issuer);
@@ -567,8 +560,7 @@ impl McpServer {
             Err(e) => {
                 error!("Failed to initialize app for delegate: {}", e);
                 Err(JsonRpcError::internal_error(&format!(
-                    "Failed to initialize delegate session: {}",
-                    e
+                    "Failed to initialize delegate session: {e}"
                 )))
             }
         }
@@ -607,7 +599,7 @@ impl McpServer {
         let token_manager = self.get_token_manager().await?;
         let token = token_manager
             .create_token(&issuer, &delegate_name, scopes.clone(), expires_in_hours)
-            .map_err(|e| JsonRpcError::internal_error(&format!("Failed to create token: {}", e)))?;
+            .map_err(|e| JsonRpcError::internal_error(&format!("Failed to create token: {e}")))?;
 
         info!(
             "Created delegate token for {} with {} scopes, expires in {} hours",
@@ -642,7 +634,7 @@ impl McpServer {
         let storage_manager = EncryptedStorageManager::new(storage_config)
             .await
             .map_err(|e| {
-                JsonRpcError::internal_error(&format!("Failed to initialize storage: {}", e))
+                JsonRpcError::internal_error(&format!("Failed to initialize storage: {e}"))
             })?;
 
         let auth_service = AuthService::new(storage_manager);
@@ -650,7 +642,7 @@ impl McpServer {
         let vaults = auth_service
             .list_vaults()
             .await
-            .map_err(|e| JsonRpcError::internal_error(&format!("Failed to list vaults: {}", e)))?;
+            .map_err(|e| JsonRpcError::internal_error(&format!("Failed to list vaults: {e}")))?;
 
         let vault_list: Vec<Value> = vaults
             .iter()
@@ -666,7 +658,7 @@ impl McpServer {
             .collect();
 
         let result = serde_json::json!({
-            "content": [{"type": "text", "text": serde_json::to_string(&serde_json::json!({"vaults": vault_list, "count": vault_list.len()})).map_err(|e| JsonRpcError::internal_error(&format!("JSON serialization failed: {}", e)))?}],
+            "content": [{"type": "text", "text": serde_json::to_string(&serde_json::json!({"vaults": vault_list, "count": vault_list.len()})).map_err(|e| JsonRpcError::internal_error(&format!("JSON serialization failed: {e}")))?}],
             "isError": false
         });
         serde_json::to_value(result).map_err(|e| JsonRpcError::internal_error(&e.to_string()))
@@ -704,7 +696,7 @@ impl McpServer {
         let storage_manager = EncryptedStorageManager::new(storage_config)
             .await
             .map_err(|e| {
-                JsonRpcError::internal_error(&format!("Failed to initialize storage: {}", e))
+                JsonRpcError::internal_error(&format!("Failed to initialize storage: {e}"))
             })?;
 
         let mut auth_service = AuthService::new(storage_manager);
@@ -712,9 +704,7 @@ impl McpServer {
         auth_service
             .delete_vault(&four_words_dashed, &password)
             .await
-            .map_err(|e| {
-                JsonRpcError::invalid_request(&format!("Failed to delete vault: {}", e))
-            })?;
+            .map_err(|e| JsonRpcError::invalid_request(&format!("Failed to delete vault: {e}")))?;
 
         info!("Vault deleted: {}", four_words_dashed);
 
@@ -734,7 +724,7 @@ impl McpServer {
         use base64::Engine;
         let backup_data = base64::engine::general_purpose::STANDARD
             .decode(backup_data_base64)
-            .map_err(|e| JsonRpcError::invalid_params(&format!("Invalid base64 data: {}", e)))?;
+            .map_err(|e| JsonRpcError::invalid_params(&format!("Invalid base64 data: {e}")))?;
 
         let storage_config = StorageConfig {
             vault_dir: self.get_vault_dir(),
@@ -745,20 +735,18 @@ impl McpServer {
         let storage_manager = EncryptedStorageManager::new(storage_config)
             .await
             .map_err(|e| {
-                JsonRpcError::internal_error(&format!("Failed to initialize storage: {}", e))
+                JsonRpcError::internal_error(&format!("Failed to initialize storage: {e}"))
             })?;
 
         let four_words = storage_manager
             .import_vault(&backup_data, &password)
             .await
-            .map_err(|e| {
-                JsonRpcError::invalid_request(&format!("Failed to import vault: {}", e))
-            })?;
+            .map_err(|e| JsonRpcError::invalid_request(&format!("Failed to import vault: {e}")))?;
 
         info!("Vault imported: {}", four_words);
 
         let result = serde_json::json!({
-            "content": [{"type": "text", "text": serde_json::to_string(&serde_json::json!({"success": true, "four_words": four_words, "message": "Vault imported successfully"})).map_err(|e| JsonRpcError::internal_error(&format!("JSON serialization failed: {}", e)))?}],
+            "content": [{"type": "text", "text": serde_json::to_string(&serde_json::json!({"success": true, "four_words": four_words, "message": "Vault imported successfully"})).map_err(|e| JsonRpcError::internal_error(&format!("JSON serialization failed: {e}")))?}],
             "isError": false
         });
         serde_json::to_value(result).map_err(|e| JsonRpcError::internal_error(&e.to_string()))
@@ -958,8 +946,7 @@ impl McpServer {
             }
             uri => {
                 return Err(JsonRpcError::invalid_params(&format!(
-                    "Unknown resource: {}",
-                    uri
+                    "Unknown resource: {uri}"
                 )));
             }
         };

@@ -122,7 +122,7 @@ async fn main() -> Result<()> {
     if args.http {
         if args.tls {
             let tls_config = http::create_tls_config(&args)
-                .map_err(|e| anyhow::anyhow!("TLS configuration failed: {}", e))?;
+                .map_err(|e| anyhow::anyhow!("TLS configuration failed: {e}"))?;
             http::run_https(args, tls_config).await?;
         } else {
             http::run_http(args).await?;

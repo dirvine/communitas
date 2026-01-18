@@ -185,8 +185,7 @@ pub fn create_spki(public_key: &MlDsaPublicKey) -> Result<Vec<u8>, TlsConfigErro
 
     if key_len != ML_DSA_65_PUBLIC_KEY_SIZE {
         return Err(TlsConfigError::InvalidPublicKey(format!(
-            "Expected {} bytes, got {}",
-            ML_DSA_65_PUBLIC_KEY_SIZE, key_len
+            "Expected {ML_DSA_65_PUBLIC_KEY_SIZE} bytes, got {key_len}"
         )));
     }
 
@@ -309,8 +308,7 @@ pub fn extract_key_from_spki(spki: &[u8]) -> Result<MlDsaPublicKey, TlsConfigErr
     let key_len = bit_string_len - 1;
     if key_len != ML_DSA_65_PUBLIC_KEY_SIZE {
         return Err(TlsConfigError::InvalidPublicKey(format!(
-            "Invalid key size: expected {}, got {}",
-            ML_DSA_65_PUBLIC_KEY_SIZE, key_len
+            "Invalid key size: expected {ML_DSA_65_PUBLIC_KEY_SIZE}, got {key_len}"
         )));
     }
 

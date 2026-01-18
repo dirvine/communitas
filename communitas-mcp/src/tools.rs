@@ -1436,7 +1436,7 @@ pub async fn call_tool(app: &CommunitasApp, name: &str, args: Option<Value>) -> 
         return result;
     }
 
-    error_result(&format!("Unknown tool: {}", name))
+    error_result(&format!("Unknown tool: {name}"))
 }
 
 // ============================================================================
@@ -2072,7 +2072,7 @@ async fn execute_get_reactions(app: &CommunitasApp, args: Value) -> ToolCallResu
             }))
         }
         Ok(_) => error_result("Unexpected response type"),
-        Err(e) => error_result(&format!("Failed to get reactions: {}", e)),
+        Err(e) => error_result(&format!("Failed to get reactions: {e}")),
     }
 }
 
@@ -2515,8 +2515,8 @@ async fn execute_set_presence(app: &CommunitasApp, args: Value) -> ToolCallResul
     };
 
     match PresenceOperations::update_presence(app, user_id, update).await {
-        Ok(_) => success_result(&format!("Presence set to {}", status_str)),
-        Err(e) => error_result(&format!("Failed to set presence: {}", e)),
+        Ok(_) => success_result(&format!("Presence set to {status_str}")),
+        Err(e) => error_result(&format!("Failed to set presence: {e}")),
     }
 }
 
@@ -2535,7 +2535,7 @@ async fn execute_get_presence(app: &CommunitasApp, args: Value) -> ToolCallResul
 
     match PresenceOperations::get_users_presence(app, user_ids).await {
         Ok(presences) => json_result(&json!({ "presences": presences })),
-        Err(e) => error_result(&format!("Failed to get presence: {}", e)),
+        Err(e) => error_result(&format!("Failed to get presence: {e}")),
     }
 }
 
@@ -2562,7 +2562,7 @@ async fn execute_subscribe_to_presence(app: &CommunitasApp, args: Value) -> Tool
             "subscription_id": sub_id,
             "message": format!("Subscribed to presence for {} entities", entity_ids.len())
         })),
-        Err(e) => error_result(&format!("Failed to subscribe to presence: {}", e)),
+        Err(e) => error_result(&format!("Failed to subscribe to presence: {e}")),
     }
 }
 
@@ -2637,7 +2637,7 @@ async fn execute_upload_with_metadata(app: &CommunitasApp, args: Value) -> ToolC
     // Decode base64 content
     let data = match BASE64_STANDARD.decode(content_base64) {
         Ok(d) => d,
-        Err(e) => return error_result(&format!("Failed to decode content: {}", e)),
+        Err(e) => return error_result(&format!("Failed to decode content: {e}")),
     };
 
     // 1. Write the main file
@@ -2652,10 +2652,10 @@ async fn execute_upload_with_metadata(app: &CommunitasApp, args: Value) -> ToolC
     }
 
     // 2. Write the metadata file
-    let meta_path = format!("{}.meta.json", path);
+    let meta_path = format!("{path}.meta.json");
     let meta_data = match serde_json::to_vec(&metadata) {
         Ok(d) => d,
-        Err(e) => return error_result(&format!("Failed to serialize metadata: {}", e)),
+        Err(e) => return error_result(&format!("Failed to serialize metadata: {e}")),
     };
 
     let cmd_meta = Command::WriteFile {
@@ -2676,7 +2676,7 @@ async fn execute_get_media_metadata(app: &CommunitasApp, args: Value) -> ToolCal
     let disk_type = require_disk_type!(args);
     let path = require_str!(args, "path");
 
-    let meta_path = format!("{}.meta.json", path);
+    let meta_path = format!("{path}.meta.json");
 
     let query = Query::ReadFile {
         entity_id,
@@ -2830,8 +2830,7 @@ async fn execute_network_connect(app: &CommunitasApp, args: Value) -> ToolCallRe
                 } = event
                 {
                     return error_result(&format!(
-                        "Connection to {} failed: {}",
-                        peer_four_words, reason
+                        "Connection to {peer_four_words} failed: {reason}"
                     ));
                 }
             }
@@ -2929,7 +2928,7 @@ async fn execute_connect_by_words(app: &CommunitasApp, args: Value) -> ToolCallR
     // Decode the 4 words to a SocketAddr
     let addr = match conn_from_words(&words) {
         Ok(addr) => addr,
-        Err(e) => return error_result(&format!("Invalid connection words '{}': {}", words, e)),
+        Err(e) => return error_result(&format!("Invalid connection words '{words}': {e}")),
     };
 
     // Connect to the peer's address directly
@@ -3553,7 +3552,7 @@ async fn execute_list_kanban_columns(app: &CommunitasApp, args: Value) -> ToolCa
                 .collect();
             json_result(&json!({"columns": list, "count": list.len()}))
         }
-        Err(e) => error_result(&format!("Failed to list columns: {}", e)),
+        Err(e) => error_result(&format!("Failed to list columns: {e}")),
     }
 }
 
@@ -3572,7 +3571,7 @@ async fn execute_get_kanban_column(app: &CommunitasApp, args: Value) -> ToolCall
             "color": column.color,
             "wip_limit": column.wip_limit
         })),
-        Err(e) => error_result(&format!("Failed to get column: {}", e)),
+        Err(e) => error_result(&format!("Failed to get column: {e}")),
     }
 }
 
@@ -3612,7 +3611,7 @@ async fn execute_update_kanban_column(app: &CommunitasApp, args: Value) -> ToolC
             "color": column.color,
             "wip_limit": column.wip_limit
         })),
-        Err(e) => error_result(&format!("Failed to update column: {}", e)),
+        Err(e) => error_result(&format!("Failed to update column: {e}")),
     }
 }
 
@@ -3625,7 +3624,7 @@ async fn execute_delete_kanban_column(app: &CommunitasApp, args: Value) -> ToolC
 
     match ctx.kanban_service.delete_column(&board_id, &column_id) {
         Ok(()) => success_result("Column deleted"),
-        Err(e) => error_result(&format!("Failed to delete column: {}", e)),
+        Err(e) => error_result(&format!("Failed to delete column: {e}")),
     }
 }
 
@@ -3645,7 +3644,7 @@ async fn execute_move_kanban_column(app: &CommunitasApp, args: Value) -> ToolCal
         .move_column(&board_id, &column_id, new_position)
     {
         Ok(()) => success_result("Column moved"),
-        Err(e) => error_result(&format!("Failed to move column: {}", e)),
+        Err(e) => error_result(&format!("Failed to move column: {e}")),
     }
 }
 
@@ -3676,7 +3675,7 @@ async fn execute_change_card_state(app: &CommunitasApp, args: Value) -> ToolCall
             "state": state_str,
             "success": true
         })),
-        Err(e) => error_result(&format!("Failed to change card state: {}", e)),
+        Err(e) => error_result(&format!("Failed to change card state: {e}")),
     }
 }
 
@@ -3695,7 +3694,7 @@ async fn execute_assign_user(app: &CommunitasApp, args: Value) -> ToolCallResult
         .assign_user(&board_id, &card_id, &user_id)
     {
         Ok(()) => success_result("User assigned to card"),
-        Err(e) => error_result(&format!("Failed to assign user: {}", e)),
+        Err(e) => error_result(&format!("Failed to assign user: {e}")),
     }
 }
 
@@ -3712,7 +3711,7 @@ async fn execute_unassign_user(app: &CommunitasApp, args: Value) -> ToolCallResu
         .unassign_user(&board_id, &card_id, &user_id)
     {
         Ok(()) => success_result("User unassigned from card"),
-        Err(e) => error_result(&format!("Failed to unassign user: {}", e)),
+        Err(e) => error_result(&format!("Failed to unassign user: {e}")),
     }
 }
 
@@ -3732,7 +3731,7 @@ async fn execute_create_kanban_tag(app: &CommunitasApp, args: Value) -> ToolCall
             "name": tag.name,
             "color": tag.color
         })),
-        Err(e) => error_result(&format!("Failed to create tag: {}", e)),
+        Err(e) => error_result(&format!("Failed to create tag: {e}")),
     }
 }
 
@@ -3756,7 +3755,7 @@ async fn execute_list_kanban_tags(app: &CommunitasApp, args: Value) -> ToolCallR
                 .collect();
             json_result(&json!({"tags": list, "count": list.len()}))
         }
-        Err(e) => error_result(&format!("Failed to list tags: {}", e)),
+        Err(e) => error_result(&format!("Failed to list tags: {e}")),
     }
 }
 
@@ -3770,7 +3769,7 @@ async fn execute_tag_card(app: &CommunitasApp, args: Value) -> ToolCallResult {
 
     match ctx.kanban_service.tag_card(&board_id, &card_id, &tag_id) {
         Ok(()) => success_result("Tag added to card"),
-        Err(e) => error_result(&format!("Failed to tag card: {}", e)),
+        Err(e) => error_result(&format!("Failed to tag card: {e}")),
     }
 }
 
@@ -3784,7 +3783,7 @@ async fn execute_untag_card(app: &CommunitasApp, args: Value) -> ToolCallResult 
 
     match ctx.kanban_service.untag_card(&board_id, &card_id, &tag_id) {
         Ok(()) => success_result("Tag removed from card"),
-        Err(e) => error_result(&format!("Failed to untag card: {}", e)),
+        Err(e) => error_result(&format!("Failed to untag card: {e}")),
     }
 }
 
@@ -3809,7 +3808,7 @@ async fn execute_add_step(app: &CommunitasApp, args: Value) -> ToolCallResult {
             "completed": step.completed,
             "position": step.position
         })),
-        Err(e) => error_result(&format!("Failed to add step: {}", e)),
+        Err(e) => error_result(&format!("Failed to add step: {e}")),
     }
 }
 
@@ -3828,7 +3827,7 @@ async fn execute_get_step(app: &CommunitasApp, args: Value) -> ToolCallResult {
             "completed": step.completed,
             "position": step.position
         })),
-        Err(e) => error_result(&format!("Failed to get step: {}", e)),
+        Err(e) => error_result(&format!("Failed to get step: {e}")),
     }
 }
 
@@ -3850,7 +3849,7 @@ async fn execute_toggle_step(app: &CommunitasApp, args: Value) -> ToolCallResult
             "completed": step.completed,
             "position": step.position
         })),
-        Err(e) => error_result(&format!("Failed to toggle step: {}", e)),
+        Err(e) => error_result(&format!("Failed to toggle step: {e}")),
     }
 }
 
@@ -3867,7 +3866,7 @@ async fn execute_delete_step(app: &CommunitasApp, args: Value) -> ToolCallResult
         .delete_step(&board_id, &card_id, &step_id)
     {
         Ok(()) => success_result("Step deleted"),
-        Err(e) => error_result(&format!("Failed to delete step: {}", e)),
+        Err(e) => error_result(&format!("Failed to delete step: {e}")),
     }
 }
 
@@ -3894,7 +3893,7 @@ async fn execute_add_comment(app: &CommunitasApp, args: Value) -> ToolCallResult
             "created_at": comment.created_at,
             "reply_to_id": comment.reply_to_id
         })),
-        Err(e) => error_result(&format!("Failed to add comment: {}", e)),
+        Err(e) => error_result(&format!("Failed to add comment: {e}")),
     }
 }
 
@@ -3921,7 +3920,7 @@ async fn execute_list_comments(app: &CommunitasApp, args: Value) -> ToolCallResu
                 .collect();
             json_result(&json!({"comments": list, "count": list.len()}))
         }
-        Err(e) => error_result(&format!("Failed to list comments: {}", e)),
+        Err(e) => error_result(&format!("Failed to list comments: {e}")),
     }
 }
 
@@ -3938,7 +3937,7 @@ async fn execute_delete_comment(app: &CommunitasApp, args: Value) -> ToolCallRes
         .delete_comment(&board_id, &card_id, &comment_id)
     {
         Ok(()) => success_result("Comment deleted"),
-        Err(e) => error_result(&format!("Failed to delete comment: {}", e)),
+        Err(e) => error_result(&format!("Failed to delete comment: {e}")),
     }
 }
 
@@ -4001,7 +4000,7 @@ async fn execute_join_entity(app: &CommunitasApp, args: Value) -> ToolCallResult
                 "role": role
             }))
         }
-        Err(e) => error_result(&format!("Failed to join entity: {}", e)),
+        Err(e) => error_result(&format!("Failed to join entity: {e}")),
     }
 }
 
@@ -4120,7 +4119,7 @@ async fn execute_update_kanban_board(app: &CommunitasApp, args: Value) -> ToolCa
                 success_result("Board updated")
             }
         }
-        Err(e) => error_result(&format!("Failed to update board: {}", e)),
+        Err(e) => error_result(&format!("Failed to update board: {e}")),
     }
 }
 
@@ -4135,7 +4134,7 @@ async fn execute_delete_kanban_board(app: &CommunitasApp, args: Value) -> ToolCa
             "success": true,
             "message": "Board deleted"
         })),
-        Err(e) => error_result(&format!("Failed to delete board: {}", e)),
+        Err(e) => error_result(&format!("Failed to delete board: {e}")),
     }
 }
 
@@ -4173,7 +4172,7 @@ async fn execute_list_kanban_cards(app: &CommunitasApp, args: Value) -> ToolCall
             json_result(&json!({ "cards": cards_json }))
         }
         Ok(_) => error_result("Unexpected response type"),
-        Err(e) => error_result(&format!("Failed to list cards: {}", e)),
+        Err(e) => error_result(&format!("Failed to list cards: {e}")),
     }
 }
 
@@ -4218,7 +4217,7 @@ async fn execute_workspace_init(app: &CommunitasApp, args: Value) -> ToolCallRes
     let board_cmd = Command::CreateKanbanBoard {
         entity_id: entity_id.clone(),
         board_name: board_name.clone(),
-        description: Some(format!("Default board for {}", name)),
+        description: Some(format!("Default board for {name}")),
     };
 
     let board_id = match app.execute(board_cmd).await {
@@ -4342,8 +4341,7 @@ async fn execute_create_identity(args: &Value) -> ToolCallResult {
     if !VALID_WORD_COUNTS.contains(&word_count) {
         tracing::warn!(word_count, "Invalid word count requested");
         return error_result(&format!(
-            "Invalid word_count: {}. BIP39 requires 12, 15, 18, 21, or 24 words",
-            word_count
+            "Invalid word_count: {word_count}. BIP39 requires 12, 15, 18, 21, or 24 words"
         ));
     }
 
@@ -4380,7 +4378,7 @@ async fn execute_create_identity(args: &Value) -> ToolCallResult {
                 has_passphrase = passphrase.is_some(),
                 "Identity creation failed"
             );
-            error_result(&format!("Failed to create identity: {}", e))
+            error_result(&format!("Failed to create identity: {e}"))
         }
     }
 }
@@ -4428,7 +4426,7 @@ async fn execute_recover_identity(args: &Value) -> ToolCallResult {
                 has_passphrase = passphrase.is_some(),
                 "Identity recovery failed"
             );
-            error_result(&format!("Failed to recover identity: {}", e))
+            error_result(&format!("Failed to recover identity: {e}"))
         }
     }
 }

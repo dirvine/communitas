@@ -70,7 +70,7 @@ impl TokenManager {
     ) -> Result<String> {
         let now = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
-            .map_err(|e| anyhow::anyhow!("System time before UNIX epoch: {}", e))?
+            .map_err(|e| anyhow::anyhow!("System time before UNIX epoch: {e}"))?
             .as_secs();
 
         let nonce: [u8; 16] = rand::thread_rng().r#gen();
@@ -91,7 +91,7 @@ impl TokenManager {
         let payload_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&payload);
         let sig_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(signature);
 
-        Ok(format!("{}.{}", payload_b64, sig_b64))
+        Ok(format!("{payload_b64}.{sig_b64}"))
     }
 
     pub fn verify_token(&self, token_str: &str) -> Result<DelegateToken> {

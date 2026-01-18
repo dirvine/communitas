@@ -20,6 +20,7 @@ use tracing::{error, info};
 
 static UI_SERVICES: OnceLock<Arc<UiServices>> = OnceLock::new();
 
+#[allow(clippy::expect_used)] // OnceLock guaranteed initialized in main() before UI renders
 fn ui_services() -> Arc<UiServices> {
     UI_SERVICES
         .get()

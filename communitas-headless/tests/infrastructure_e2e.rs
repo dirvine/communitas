@@ -27,6 +27,9 @@
 //!
 //! Run with: RUST_MIN_STACK=16777216 cargo test -p communitas-headless --test infrastructure_e2e -- --nocapture
 
+// Alias communitas_bindings (the actual lib name) as communitas_core
+extern crate communitas_bindings as communitas_core;
+
 use communitas_core::CoreContext;
 use communitas_core::crdt::EntityType;
 use communitas_core::disk_service::DiskType;

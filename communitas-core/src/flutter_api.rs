@@ -25,8 +25,59 @@ use crate::recovery::recover_identity;
 use base64::Engine;
 use flutter_rust_bridge::frb;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tracing_subscriber::EnvFilter;
+
+/// Track whether tracing has been initialized (can only be done once)
+static TRACING_INITIALIZED: AtomicBool = AtomicBool::new(false);
+
+/// Initialize the Rust tracing system for Flutter debugging.
+///
+/// This function sets up a tracing subscriber that outputs logs to stdout,
+/// which Flutter can capture and display in the debug console.
+///
+/// # Arguments
+/// * `level` - Optional log level filter (e.g., "info", "debug", "warn").
+///             If not provided, defaults to "info" or respects RUST_LOG env var.
+///
+/// # Returns
+/// * `Ok(true)` - Tracing was successfully initialized
+/// * `Ok(false)` - Tracing was already initialized (no-op)
+/// * `Err(String)` - Failed to initialize tracing
+///
+/// # Example
+/// Call this from Flutter before any other Rust operations:
+/// ```dart
+/// await initializeTracing(level: "debug");
+/// ```
+#[allow(unexpected_cfgs)]
+#[frb]
+pub fn initialize_tracing(level: Option<String>) -> Result<bool, String> {
+    // Only initialize once
+    if TRACING_INITIALIZED.swap(true, Ordering::SeqCst) {
+        return Ok(false);
+    }
+
+    let filter = if let Some(level) = level {
+        EnvFilter::try_new(&level).unwrap_or_else(|_| EnvFilter::new("info"))
+    } else {
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"))
+    };
+
+    tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_target(true)
+        .with_thread_ids(false)
+        .with_file(false)
+        .with_line_number(false)
+        .try_init()
+        .map_err(|e| format!("Failed to initialize tracing: {e}"))?;
+
+    tracing::info!("Communitas tracing initialized");
+    Ok(true)
+}
 
 /// Generate a random four-word identity
 #[allow(unexpected_cfgs)]

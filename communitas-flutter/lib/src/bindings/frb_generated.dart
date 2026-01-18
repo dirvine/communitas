@@ -68,7 +68,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.11.1';
 
   @override
-  int get rustContentHash => -1768860543;
+  int get rustContentHash => 653263865;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -397,6 +397,8 @@ abstract class RustLibApi extends BaseApi {
       {required CommunitasApi that, required String displayName});
 
   Future<String> crateFlutterApiGenerateIdWords();
+
+  Future<bool> crateFlutterApiInitializeTracing({String? level});
 
   Future<FlutterRecoveredIdentity> crateFlutterApiPreviewIdentityFromMnemonic(
       {required String mnemonic, String? passphrase});
@@ -2589,6 +2591,31 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<bool> crateFlutterApiInitializeTracing({String? level}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_opt_String(level, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 71, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_bool,
+        decodeErrorData: sse_decode_String,
+      ),
+      constMeta: kCrateFlutterApiInitializeTracingConstMeta,
+      argValues: [level],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateFlutterApiInitializeTracingConstMeta =>
+      const TaskConstMeta(
+        debugName: "initialize_tracing",
+        argNames: ["level"],
+      );
+
+  @override
   Future<FlutterRecoveredIdentity> crateFlutterApiPreviewIdentityFromMnemonic(
       {required String mnemonic, String? passphrase}) {
     return handler.executeNormal(NormalTask(
@@ -2597,7 +2624,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(mnemonic, serializer);
         sse_encode_opt_String(passphrase, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 71, port: port_);
+            funcId: 72, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_flutter_recovered_identity,
@@ -2624,7 +2651,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(mnemonic, serializer);
         sse_encode_opt_String(passphrase, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 72, port: port_);
+            funcId: 73, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_flutter_recovered_identity,
@@ -2650,7 +2677,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(mnemonic, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 73, port: port_);
+            funcId: 74, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bool,

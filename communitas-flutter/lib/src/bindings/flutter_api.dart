@@ -11,6 +11,28 @@ part 'flutter_api.freezed.dart';
 // These functions are ignored because they are not marked as `pub`: `execute_command_raw`, `execute_command`, `execute_query`, `map_event`, `split_four_words`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
 
+/// Initialize the Rust tracing system for Flutter debugging.
+///
+/// This function sets up a tracing subscriber that outputs logs to stdout,
+/// which Flutter can capture and display in the debug console.
+///
+/// # Arguments
+/// * `level` - Optional log level filter (e.g., "info", "debug", "warn").
+///             If not provided, defaults to "info" or respects RUST_LOG env var.
+///
+/// # Returns
+/// * `Ok(true)` - Tracing was successfully initialized
+/// * `Ok(false)` - Tracing was already initialized (no-op)
+/// * `Err(String)` - Failed to initialize tracing
+///
+/// # Example
+/// Call this from Flutter before any other Rust operations:
+/// ```dart
+/// await initializeTracing(level: "debug");
+/// ```
+Future<bool> initializeTracing({String? level}) =>
+    RustLib.instance.api.crateFlutterApiInitializeTracing(level: level);
+
 /// Generate a random four-word identity
 Future<String> generateIdWords() =>
     RustLib.instance.api.crateFlutterApiGenerateIdWords();

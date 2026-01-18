@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'src/bindings/frb_generated.dart';
+import 'src/bindings/flutter_api.dart' as api;
 
 /// Initialize native platform features (Rust bridge).
 Future<void> initializePlatform() async {
@@ -16,6 +17,17 @@ Future<void> initializePlatform() async {
     } else {
       await RustLib.init();
       debugPrint('Rust bridge initialized successfully (default loader)');
+    }
+
+    // Initialize Rust tracing to see logs in Flutter console
+    // Use "info" for normal operation, "debug" for troubleshooting
+    try {
+      final tracingInit = await api.initializeTracing(level: 'info');
+      if (tracingInit) {
+        debugPrint('Rust tracing initialized');
+      }
+    } catch (e) {
+      debugPrint('Rust tracing init failed (non-fatal): $e');
     }
   } catch (e) {
     throw FlutterError(

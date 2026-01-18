@@ -1,0 +1,26 @@
+[Unit]
+Description=Communitas Headless P2P Bootstrap Node
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/communitas
+ExecStart=/opt/communitas/communitas-headless --listen 0.0.0.0:11000
+Restart=always
+RestartSec=10
+Environment=RUST_LOG=info
+Environment=HOME=/opt/communitas
+
+# Security hardening (reduced to allow config directory access)
+NoNewPrivileges=yes
+ProtectSystem=strict
+PrivateTmp=yes
+ReadWritePaths=/opt/communitas
+
+# Resource limits
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

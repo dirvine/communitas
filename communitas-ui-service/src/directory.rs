@@ -168,3 +168,191 @@ fn resolve_org_category(name: &str, description: &str) -> OrganizationCategory {
         OrganizationCategory::Organization
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::storage::UiStorage;
+    use tempfile::TempDir;
+
+    fn make_directory_service(temp: &TempDir) -> DirectoryService {
+        let storage = UiStorage::from_path(temp.path()).unwrap();
+        let auth = Arc::new(AuthController::new(storage).unwrap());
+        DirectoryService::new(auth)
+    }
+
+    #[test]
+    fn directory_service_creates_with_empty_snapshot() {
+        let temp = TempDir::new().unwrap();
+        let service = make_directory_service(&temp);
+        let snap = service.current_snapshot();
+        assert!(snap.identity.is_none());
+        assert!(snap.entities.is_empty());
+        assert!(snap.contacts.is_empty());
+    }
+
+    #[test]
+    fn subscribe_returns_empty_snapshot_initially() {
+        let temp = TempDir::new().unwrap();
+        let service = make_directory_service(&temp);
+        let rx = service.subscribe();
+
+        let snap = rx.borrow().clone();
+        assert!(snap.identity.is_none());
+        assert!(snap.entities.is_empty());
+    }
+
+    #[test]
+    fn resolve_org_category_community_keywords() {
+        assert_eq!(
+            resolve_org_category("Rust Community", ""),
+            OrganizationCategory::Community
+        );
+        assert_eq!(
+            resolve_org_category("Acme", "nonprofit org"),
+            OrganizationCategory::Community
+        );
+        assert_eq!(
+            resolve_org_category("Mozilla Foundation", ""),
+            OrganizationCategory::Community
+        );
+        assert_eq!(
+            resolve_org_category("Dev Collective", ""),
+            OrganizationCategory::Community
+        );
+        assert_eq!(
+            resolve_org_category("Non-Profit Helpers", ""),
+            OrganizationCategory::Community
+        );
+    }
+
+    #[test]
+    fn resolve_org_category_default_organization() {
+        assert_eq!(
+            resolve_org_category("Acme Corp", "A software company"),
+            OrganizationCategory::Organization
+        );
+        assert_eq!(
+            resolve_org_category("Startup Inc", ""),
+            OrganizationCategory::Organization
+        );
+    }
+
+    fn make_entity(
+        id: &str,
+        entity_type: UiEntityType,
+        name: &str,
+        description: Option<&str>,
+        member_count: u64,
+        parent_org_id: Option<&str>,
+    ) -> UiEntity {
+        UiEntity {
+            id: id.to_string(),
+            entity_type,
+            name: name.to_string(),
+            description: description.map(|s| s.to_string()),
+            member_count,
+            parent_org_id: parent_org_id.map(|s| s.to_string()),
+            is_local_only: false,
+            created_at: 1704067200, // 2024-01-01 00:00:00 UTC
+            created_by: "test-user".to_string(),
+            network_four_words: None,
+        }
+    }
+
+    fn make_contact(
+        id: &str,
+        display_name: &str,
+        four_words: Option<&str>,
+        is_online: bool,
+    ) -> UiContact {
+        UiContact {
+            id: id.to_string(),
+            display_name: display_name.to_string(),
+            four_words: four_words.map(|s| s.to_string()),
+            is_online,
+            is_favourite: false,
+            last_seen: None,
+            created_at: 1704067200, // 2024-01-01 00:00:00 UTC
+        }
+    }
+
+    #[test]
+    fn map_entity_organization_with_category() {
+        let entity = make_entity(
+            "org-1",
+            UiEntityType::Organisation,
+            "Dev Community",
+            Some("A developer community"),
+            100,
+            None,
+        );
+
+        let unified = DirectoryService::map_entity(entity);
+        assert_eq!(unified.id, "org-1");
+        assert_eq!(unified.entity_type, UnifiedEntityType::Organization);
+        assert_eq!(unified.name, "Dev Community");
+        assert_eq!(unified.category, Some(OrganizationCategory::Community));
+    }
+
+    #[test]
+    fn map_entity_project_no_category() {
+        let entity = make_entity(
+            "proj-1",
+            UiEntityType::Project,
+            "My Project",
+            None,
+            5,
+            Some("org-1"),
+        );
+
+        let unified = DirectoryService::map_entity(entity);
+        assert_eq!(unified.entity_type, UnifiedEntityType::Project);
+        assert_eq!(unified.parent_id, Some("org-1".to_string()));
+        assert_eq!(unified.category, None);
+    }
+
+    #[test]
+    fn map_entity_types() {
+        let types = [
+            (UiEntityType::Organisation, UnifiedEntityType::Organization),
+            (UiEntityType::Project, UnifiedEntityType::Project),
+            (UiEntityType::Group, UnifiedEntityType::Group),
+            (UiEntityType::Channel, UnifiedEntityType::Channel),
+            (UiEntityType::Person, UnifiedEntityType::Person),
+        ];
+
+        for (ui_type, unified_type) in types {
+            let entity = make_entity("test", ui_type, "Test", None, 0, None);
+            let result = DirectoryService::map_entity(entity);
+            assert_eq!(result.entity_type, unified_type);
+        }
+    }
+
+    #[test]
+    fn map_contact_with_display_name() {
+        let contact = make_contact("contact-1", "Alice", Some("alpha-beta-gamma-delta"), true);
+
+        let unified = DirectoryService::map_contact(contact);
+        assert_eq!(unified.id, "contact-1");
+        assert_eq!(unified.display_name, "Alice");
+        assert_eq!(unified.status, "online");
+    }
+
+    #[test]
+    fn map_contact_fallback_to_four_words() {
+        let contact = make_contact("contact-2", "", Some("one-two-three-four"), false);
+
+        let unified = DirectoryService::map_contact(contact);
+        assert_eq!(unified.display_name, "one-two-three-four");
+        assert_eq!(unified.status, "offline");
+    }
+
+    #[test]
+    fn map_contact_fallback_to_id() {
+        let contact = make_contact("contact-3", "", None, false);
+
+        let unified = DirectoryService::map_contact(contact);
+        assert_eq!(unified.display_name, "contact-3");
+    }
+}

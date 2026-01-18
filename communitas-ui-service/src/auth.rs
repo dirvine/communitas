@@ -363,3 +363,167 @@ impl AuthService for AuthController {
         self.state_tx.subscribe()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    fn make_controller(temp: &TempDir) -> AuthController {
+        let storage = UiStorage::from_path(temp.path()).unwrap();
+        AuthController::new(storage).unwrap()
+    }
+
+    #[test]
+    fn auth_controller_creates_successfully() {
+        let temp = TempDir::new().unwrap();
+        let controller = make_controller(&temp);
+        assert!(controller.current_session().is_none());
+    }
+
+    #[test]
+    fn ensure_four_words_rejects_empty() {
+        let temp = TempDir::new().unwrap();
+        let controller = make_controller(&temp);
+
+        let result = controller.ensure_four_words("");
+        assert!(result.is_err());
+
+        let result = controller.ensure_four_words("   ");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn ensure_four_words_trims_whitespace() {
+        let temp = TempDir::new().unwrap();
+        let controller = make_controller(&temp);
+
+        let result = controller.ensure_four_words("  alpha-beta-gamma-delta  ");
+        assert_eq!(result.unwrap(), "alpha-beta-gamma-delta");
+    }
+
+    #[test]
+    fn ensure_display_name_rejects_empty() {
+        let temp = TempDir::new().unwrap();
+        let controller = make_controller(&temp);
+
+        let result = controller.ensure_display_name("");
+        assert!(result.is_err());
+
+        let result = controller.ensure_display_name("   ");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn ensure_display_name_trims_whitespace() {
+        let temp = TempDir::new().unwrap();
+        let controller = make_controller(&temp);
+
+        let result = controller.ensure_display_name("  Alice  ");
+        assert_eq!(result.unwrap(), "Alice");
+    }
+
+    #[test]
+    fn ensure_password_rejects_empty() {
+        let temp = TempDir::new().unwrap();
+        let controller = make_controller(&temp);
+
+        let result = controller.ensure_password("");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn ensure_password_allows_whitespace_only() {
+        let temp = TempDir::new().unwrap();
+        let controller = make_controller(&temp);
+
+        // Whitespace-only password is technically allowed (not trimmed)
+        let result = controller.ensure_password("   ");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn redact_identity_masks_correctly() {
+        assert_eq!(redact_identity("alpha-beta-gamma-delta"), "alpha-beta-••••");
+        assert_eq!(
+            redact_identity("word1-word2-word3-word4"),
+            "word1-word2-••••"
+        );
+        assert_eq!(redact_identity("alpha-beta"), "alpha-beta");
+        assert_eq!(redact_identity("single"), "single");
+    }
+
+    #[test]
+    fn subscribe_returns_logged_out_initially() {
+        let temp = TempDir::new().unwrap();
+        let controller = make_controller(&temp);
+        let rx = controller.subscribe();
+
+        match &*rx.borrow() {
+            AuthStateSnapshot::LoggedOut => {}
+            other => panic!("expected LoggedOut, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn set_state_broadcasts_to_subscribers() {
+        let temp = TempDir::new().unwrap();
+        let controller = make_controller(&temp);
+        let rx = controller.subscribe();
+
+        controller.set_state(AuthStateSnapshot::Authenticating);
+
+        match &*rx.borrow() {
+            AuthStateSnapshot::Authenticating => {}
+            other => panic!("expected Authenticating, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn auth_failure_mode_parses_env() {
+        // SAFETY: Tests run single-threaded by default with `cargo test`
+        // This test modifies env vars but restores them at the end.
+        unsafe {
+            // Default (no env var) should be None
+            env::remove_var("COMMUNITAS_UI_FORCE_AUTH_ERROR");
+            let mode = AuthFailureMode::from_env();
+            assert!(matches!(mode, AuthFailureMode::None));
+
+            // "1" enables failure mode
+            env::set_var("COMMUNITAS_UI_FORCE_AUTH_ERROR", "1");
+            let mode = AuthFailureMode::from_env();
+            assert!(matches!(mode, AuthFailureMode::AlwaysFail));
+
+            // "true" (case-insensitive) enables failure mode
+            env::set_var("COMMUNITAS_UI_FORCE_AUTH_ERROR", "TRUE");
+            let mode = AuthFailureMode::from_env();
+            assert!(matches!(mode, AuthFailureMode::AlwaysFail));
+
+            // Other values are ignored
+            env::set_var("COMMUNITAS_UI_FORCE_AUTH_ERROR", "no");
+            let mode = AuthFailureMode::from_env();
+            assert!(matches!(mode, AuthFailureMode::None));
+
+            // Cleanup
+            env::remove_var("COMMUNITAS_UI_FORCE_AUTH_ERROR");
+        }
+    }
+
+    #[test]
+    fn auth_session_from_ui_session_info() {
+        use communitas_core::ui_core::UiSessionInfo;
+
+        let info = UiSessionInfo {
+            session_id: "test-session-id".to_string(),
+            pubkey_hex: "abcd1234".to_string(),
+            four_words: "alpha-beta-gamma-delta".to_string(),
+            display_name: "Alice".to_string(),
+        };
+
+        let session = AuthSession::from((info, "DeviceName".to_string()));
+        assert_eq!(session.pubkey_hex, "abcd1234");
+        assert_eq!(session.four_words, "alpha-beta-gamma-delta");
+        assert_eq!(session.display_name, "Alice");
+        assert_eq!(session.device_name, "DeviceName");
+    }
+}

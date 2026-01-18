@@ -126,6 +126,11 @@ impl NavigationStore {
     pub fn current_snapshot(&self) -> NavigationStateSnapshot {
         self.inner.blocking_read().snapshot()
     }
+
+    /// Async-compatible snapshot (safe to call from within async context)
+    pub async fn snapshot(&self) -> NavigationStateSnapshot {
+        self.inner.read().await.snapshot()
+    }
 }
 
 #[async_trait]
@@ -205,5 +210,203 @@ impl NavigationService for NavigationStore {
 
     fn subscribe(&self) -> watch::Receiver<NavigationStateSnapshot> {
         self.tx.subscribe()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    fn make_store(temp: &TempDir) -> NavigationStore {
+        let storage = UiStorage::from_path(temp.path()).unwrap();
+        NavigationStore::new(storage).unwrap()
+    }
+
+    fn entity(t: &str, id: &str) -> EntityNavigationKey {
+        EntityNavigationKey::new(t, id)
+    }
+
+    #[test]
+    fn entity_navigation_key_composite() {
+        let key = entity("channel", "abc123");
+        assert_eq!(key.as_composite(), "channel:abc123");
+    }
+
+    #[test]
+    fn current_snapshot_outside_async() {
+        let temp = TempDir::new().unwrap();
+        let store = make_store(&temp);
+        let snap = store.current_snapshot();
+        assert!(snap.recent_entities.is_empty());
+    }
+
+    #[tokio::test]
+    async fn record_entity_adds_to_front() {
+        let temp = TempDir::new().unwrap();
+        let store = make_store(&temp);
+
+        store.record_entity(entity("channel", "ch1")).await.unwrap();
+        store.record_entity(entity("group", "g1")).await.unwrap();
+
+        let snap = store.snapshot().await;
+        assert_eq!(snap.recent_entities.len(), 2);
+        assert_eq!(snap.recent_entities[0], entity("group", "g1"));
+        assert_eq!(snap.recent_entities[1], entity("channel", "ch1"));
+    }
+
+    #[tokio::test]
+    async fn record_entity_dedups_and_moves_to_front() {
+        let temp = TempDir::new().unwrap();
+        let store = make_store(&temp);
+
+        store.record_entity(entity("channel", "ch1")).await.unwrap();
+        store.record_entity(entity("channel", "ch2")).await.unwrap();
+        store.record_entity(entity("channel", "ch1")).await.unwrap(); // duplicate
+
+        let snap = store.snapshot().await;
+        assert_eq!(snap.recent_entities.len(), 2);
+        assert_eq!(snap.recent_entities[0], entity("channel", "ch1"));
+        assert_eq!(snap.recent_entities[1], entity("channel", "ch2"));
+    }
+
+    #[tokio::test]
+    async fn record_entity_truncates_at_max() {
+        let temp = TempDir::new().unwrap();
+        let store = make_store(&temp);
+
+        for i in 0..25 {
+            store
+                .record_entity(entity("channel", &format!("ch{i}")))
+                .await
+                .unwrap();
+        }
+
+        let snap = store.snapshot().await;
+        assert_eq!(snap.recent_entities.len(), MAX_RECENT);
+    }
+
+    #[tokio::test]
+    async fn record_contact_adds_to_front() {
+        let temp = TempDir::new().unwrap();
+        let store = make_store(&temp);
+
+        store.record_contact("alice".to_string()).await.unwrap();
+        store.record_contact("bob".to_string()).await.unwrap();
+
+        let snap = store.snapshot().await;
+        assert_eq!(snap.recent_contacts.len(), 2);
+        assert_eq!(snap.recent_contacts[0], "bob");
+        assert_eq!(snap.recent_contacts[1], "alice");
+    }
+
+    #[tokio::test]
+    async fn record_contact_dedups_and_moves_to_front() {
+        let temp = TempDir::new().unwrap();
+        let store = make_store(&temp);
+
+        store.record_contact("alice".to_string()).await.unwrap();
+        store.record_contact("bob".to_string()).await.unwrap();
+        store.record_contact("alice".to_string()).await.unwrap();
+
+        let snap = store.snapshot().await;
+        assert_eq!(snap.recent_contacts.len(), 2);
+        assert_eq!(snap.recent_contacts[0], "alice");
+        assert_eq!(snap.recent_contacts[1], "bob");
+    }
+
+    #[tokio::test]
+    async fn toggle_star_entity_adds_then_removes() {
+        let temp = TempDir::new().unwrap();
+        let store = make_store(&temp);
+
+        let key = entity("channel", "ch1");
+
+        let added = store.toggle_star_entity(key.clone()).await.unwrap();
+        assert!(added);
+        assert_eq!(store.snapshot().await.starred_entities.len(), 1);
+
+        let added = store.toggle_star_entity(key).await.unwrap();
+        assert!(!added);
+        assert_eq!(store.snapshot().await.starred_entities.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn toggle_star_contact_adds_then_removes() {
+        let temp = TempDir::new().unwrap();
+        let store = make_store(&temp);
+
+        let added = store
+            .toggle_star_contact("alice".to_string())
+            .await
+            .unwrap();
+        assert!(added);
+        assert_eq!(store.snapshot().await.starred_contacts.len(), 1);
+
+        let added = store
+            .toggle_star_contact("alice".to_string())
+            .await
+            .unwrap();
+        assert!(!added);
+        assert_eq!(store.snapshot().await.starred_contacts.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn clear_resets_all_state() {
+        let temp = TempDir::new().unwrap();
+        let store = make_store(&temp);
+
+        store.record_entity(entity("channel", "ch1")).await.unwrap();
+        store.record_contact("alice".to_string()).await.unwrap();
+        store
+            .toggle_star_entity(entity("group", "g1"))
+            .await
+            .unwrap();
+        store.toggle_star_contact("bob".to_string()).await.unwrap();
+
+        store.clear().await.unwrap();
+
+        let snap = store.snapshot().await;
+        assert!(snap.recent_entities.is_empty());
+        assert!(snap.recent_contacts.is_empty());
+        assert!(snap.starred_entities.is_empty());
+        assert!(snap.starred_contacts.is_empty());
+    }
+
+    #[tokio::test]
+    async fn subscribe_receives_updates() {
+        let temp = TempDir::new().unwrap();
+        let store = make_store(&temp);
+        let mut rx = store.subscribe();
+
+        store.record_contact("alice".to_string()).await.unwrap();
+        rx.changed().await.unwrap();
+
+        let snap = rx.borrow().clone();
+        assert_eq!(snap.recent_contacts, vec!["alice".to_string()]);
+    }
+
+    #[test]
+    fn persistence_roundtrip() {
+        // Use blocking runtime for persistence test to avoid async/blocking_read conflict
+        let temp = TempDir::new().unwrap();
+
+        // Create runtime for first store
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+
+        rt.block_on(async {
+            let store = make_store(&temp);
+            store.record_entity(entity("channel", "ch1")).await.unwrap();
+            store.toggle_star_contact("bob".to_string()).await.unwrap();
+        });
+
+        // Re-open store from same storage path (outside async context)
+        let store2 = make_store(&temp);
+        let snap = store2.current_snapshot();
+        assert_eq!(snap.recent_entities, vec![entity("channel", "ch1")]);
+        assert_eq!(snap.starred_contacts, vec!["bob".to_string()]);
     }
 }

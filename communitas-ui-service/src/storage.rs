@@ -96,3 +96,78 @@ where
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[test]
+    fn storage_from_path_creates_directory() {
+        let temp = TempDir::new().unwrap();
+        let storage_path = temp.path().join("test_storage");
+        assert!(!storage_path.exists());
+
+        let storage = UiStorage::from_path(&storage_path).unwrap();
+        assert!(storage_path.exists());
+        assert_eq!(storage.root(), storage_path);
+    }
+
+    #[test]
+    fn storage_root_string_returns_utf8() {
+        let temp = TempDir::new().unwrap();
+        let storage = UiStorage::from_path(temp.path()).unwrap();
+        let root_str = storage.root_string().unwrap();
+        assert!(!root_str.is_empty());
+        assert!(root_str.contains(temp.path().file_name().unwrap().to_str().unwrap()));
+    }
+
+    #[test]
+    fn storage_navigation_state_file_returns_correct_path() {
+        let temp = TempDir::new().unwrap();
+        let storage = UiStorage::from_path(temp.path()).unwrap();
+        let nav_file = storage.navigation_state_file();
+        assert!(nav_file.ends_with("ui_navigation_state.json"));
+        assert_eq!(nav_file.parent().unwrap(), temp.path());
+    }
+
+    #[test]
+    fn json_file_save_load_roundtrip() {
+        let temp = TempDir::new().unwrap();
+        let file_path = temp.path().join("test.json");
+
+        #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+        struct TestData {
+            name: String,
+            count: u32,
+        }
+
+        let original = TestData {
+            name: "test".to_string(),
+            count: 42,
+        };
+
+        JsonFile::save(&file_path, &original).unwrap();
+        let loaded: Option<TestData> = JsonFile::load(&file_path).unwrap();
+
+        assert_eq!(loaded, Some(original));
+    }
+
+    #[test]
+    fn json_file_load_nonexistent_returns_none() {
+        let temp = TempDir::new().unwrap();
+        let file_path = temp.path().join("does_not_exist.json");
+
+        let loaded: Option<String> = JsonFile::load(&file_path).unwrap();
+        assert!(loaded.is_none());
+    }
+
+    #[test]
+    fn json_file_save_creates_parent_dirs() {
+        let temp = TempDir::new().unwrap();
+        let nested_path = temp.path().join("a").join("b").join("c").join("test.json");
+
+        JsonFile::save(&nested_path, &"test data".to_string()).unwrap();
+        assert!(nested_path.exists());
+    }
+}

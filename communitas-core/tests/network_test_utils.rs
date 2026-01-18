@@ -30,7 +30,10 @@ pub fn get_random_port() -> u16 {
     for _ in 0..100 {
         // Get first port
         let listener1 = TcpListener::bind("127.0.0.1:0").expect("Failed to bind to random port");
-        let port1 = listener1.local_addr().expect("Failed to get local addr").port();
+        let port1 = listener1
+            .local_addr()
+            .expect("Failed to get local addr")
+            .port();
         let port2 = port1 + 1;
 
         // Check if either port is already allocated
@@ -60,9 +63,11 @@ pub fn get_random_ipv6_port() -> u16 {
 
     // Try to find two consecutive free ports that aren't already allocated
     for _ in 0..100 {
-        let listener1 =
-            TcpListener::bind("[::1]:0").expect("Failed to bind to IPv6 random port");
-        let port1 = listener1.local_addr().expect("Failed to get local addr").port();
+        let listener1 = TcpListener::bind("[::1]:0").expect("Failed to bind to IPv6 random port");
+        let port1 = listener1
+            .local_addr()
+            .expect("Failed to get local addr")
+            .port();
         let port2 = port1 + 1;
 
         // Check if either port is already allocated

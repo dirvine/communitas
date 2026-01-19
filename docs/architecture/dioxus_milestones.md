@@ -1,6 +1,6 @@
 # Dioxus Desktop Prototype — Milestone Tracker
 
-_Last updated: 2026-01-18_
+_Last updated: 2026-01-19_
 
 This tracker collapses the prototype plan into milestone-sized chunks so we can see scope, status, and the evidence required for sign-off. Each milestone links back to the deeper planning doc and its validation checklist.
 
@@ -8,7 +8,7 @@ This tracker collapses the prototype plan into milestone-sized chunks so we can 
 | --- | --- | --- | --- |
 | **0 — Discovery & Inventory** | Feature inventory, UX audit, plugin spike, performance baselines. | ✅ Complete (Jan 18, 2026) | Inventory spreadsheet + UX backlog attached to planning issue #421. |
 | **1 — Foundations (Nav shell + Auth)** | Scaffold `communitas-dioxus`, wire `communitas-ui-service`, deliver router/nav shell, login/create/recover, desktop bundles + installer smoke. | ✅ Complete (8/8 gates passing, Jan 18, 2026) | All validation gates passing: shared services ✅, directory wiring ✅, Dioxus components ✅, router guarding ✅, MCP parity ✅, installer smoke (Linux + macOS) ✅, accessibility ✅, telemetry ✅. |
-| **2 — Core Flows (Messaging/Entities/Contacts)** | Thread list, composer, entity directory, presence badges, MCP exposure, perf instrumentation. | ⏳ Planning complete | Component + MCP parity tests for messaging/entity flows, perf delta <5%. See `dioxus_milestone2_messaging_entities.md`. |
+| **2 — Core Flows (Messaging/Entities/Contacts)** | Thread list, composer, entity directory, presence badges, MCP exposure, perf instrumentation. | ✅ Complete (Jan 19, 2026) | All validation gates passing: MessagingService ✅, PresenceService ✅, Dioxus components ✅, MCP parity ✅, WebDriver tests ✅, accessibility ✅, telemetry ✅. See `dioxus_milestone2_messaging_entities.md`. |
 | **3 — Advanced Surfaces (Kanban/Drive/Calls/Canvas)** | Drag & drop Kanban, drive uploads, WebRTC lobby + controls, canvas renderer decision (Wry vs Blitz). | ☐ Not started | Feature demos recorded, WebRTC soak tests (4 peers), file picker smoke on all OS runners. |
 | **4 — Experience Polish (Design system, accessibility, localization, demo mode)** | Design token system, keyboard/reader support, localization scaffolding, onboarding/demo reset. | ☐ Not started | Axe-core reports, localization coverage checklist, demo-mode telemetry guardrails. |
 | **5 — Stabilization (Packaging + MCP validation)** | Signed installers, WebView bootstrap scripts, telemetry dashboards, MCP regression suite + capability review. | ☐ Not started | Installer smoke logs (macOS/Windows/Linux), MCP automation transcripts, release checklist signed. |

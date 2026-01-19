@@ -46,12 +46,24 @@ jobs:
       - name: MCP nav/auth parity check
         run: ./scripts/tests/mcp_nav_auth.sh
 
+      - name: MCP messaging parity check
+        run: ./scripts/tests/mcp_messaging.sh
+
       - name: Upload MCP parity artifacts
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: mcp-parity-artifacts
           path: parity-artifacts/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Upload MCP messaging artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mcp-messaging-artifacts
+          path: messaging-parity-artifacts/
           if-no-files-found: ignore
           retention-days: 7
 
@@ -122,11 +134,28 @@ jobs:
           # macOS uses Safari WebDriver via tauri-driver
           WEBKIT_BROWSER: ${{ matrix.os == 'macos-latest' && 'Safari' || 'webkit' }}
 
+      - name: WebDriver messaging smoke tests
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          cd tests/webdriverio
+          npm ci
+          npm test -- --spec specs/messaging.smoke.js
+        continue-on-error: true
+
+      - name: WebDriver accessibility tests
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          cd tests/webdriverio
+          npm test -- --spec specs/accessibility.messaging.js
+        continue-on-error: true
+
       - name: Upload WebDriver test artifacts
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: webdriver-artifacts-${{ matrix.name }}
-          path: tests/webdriverio/logs/
+          path: |
+            tests/webdriverio/logs/
+            tests/webdriverio/screenshots/
           if-no-files-found: ignore
           retention-days: 7

@@ -123,6 +123,7 @@ impl UiServices {
         self.navigation.clone()
     }
 
+    /// Directory service for entities and contacts.
     pub fn directory(&self) -> Arc<DirectoryService> {
         self.directory.clone()
     }

@@ -1,0 +1,76 @@
+{
+  "description": "Test fixtures for MCP contact detail tools",
+  "contacts": [
+    {
+      "id": "contact-001",
+      "display_name": "Alice Johnson",
+      "four_words": "alpha-bravo-charlie-delta",
+      "bio": "Software engineer and coffee enthusiast",
+      "is_favourite": true,
+      "is_blocked": false,
+      "added_at": 1704067200000
+    },
+    {
+      "id": "contact-002",
+      "display_name": "Bob Smith",
+      "four_words": "echo-foxtrot-golf-hotel",
+      "bio": "Product designer",
+      "is_favourite": false,
+      "is_blocked": false,
+      "added_at": 1704153600000
+    },
+    {
+      "id": "contact-003",
+      "display_name": "Charlie Brown",
+      "four_words": "india-juliet-kilo-lima",
+      "bio": null,
+      "is_favourite": false,
+      "is_blocked": true,
+      "added_at": 1704240000000
+    }
+  ],
+  "presence": [
+    {
+      "contact_id": "contact-001",
+      "status": "online",
+      "last_seen": 1705600000000,
+      "activity": "active"
+    },
+    {
+      "contact_id": "contact-002",
+      "status": "away",
+      "last_seen": 1705596400000,
+      "activity": "idle"
+    },
+    {
+      "contact_id": "contact-003",
+      "status": "offline",
+      "last_seen": 1705500000000,
+      "activity": null
+    }
+  ],
+  "mutual_entities": {
+    "contact-001": ["org-001", "project-001", "channel-001"],
+    "contact-002": ["org-001"],
+    "contact-003": []
+  },
+  "test_cases": {
+    "get_contact_details": {
+      "contact_id": "contact-001",
+      "expected_display_name": "Alice Johnson",
+      "expected_presence": "online"
+    },
+    "block_contact": {
+      "contact_id": "contact-002",
+      "expected_success": true
+    },
+    "unblock_contact": {
+      "contact_id": "contact-003",
+      "expected_success": true
+    },
+    "remove_contact": {
+      "contact_id": "contact-002",
+      "expected_success": true
+    }
+  }
+}

@@ -1,0 +1,88 @@
+{
+  "description": "Test fixtures for MCP entity detail tools",
+  "entities": [
+    {
+      "id": "org-001",
+      "name": "Test Organization",
+      "entity_type": "organisation",
+      "description": "A test organization for parity testing",
+      "member_count": 25,
+      "created_at": 1704067200000,
+      "settings": {
+        "is_public": true,
+        "allow_member_invites": true
+      }
+    },
+    {
+      "id": "project-001",
+      "name": "Test Project",
+      "entity_type": "project",
+      "description": "A test project for parity testing",
+      "parent_org_id": "org-001",
+      "member_count": 10,
+      "created_at": 1704153600000,
+      "settings": {
+        "is_public": false,
+        "kanban_enabled": true
+      }
+    },
+    {
+      "id": "channel-001",
+      "name": "General Chat",
+      "entity_type": "channel",
+      "description": "General discussion channel",
+      "parent_entity_id": "project-001",
+      "member_count": 10,
+      "created_at": 1704240000000,
+      "settings": {
+        "is_public": true,
+        "allow_threads": true
+      }
+    }
+  ],
+  "members": [
+    {
+      "entity_id": "org-001",
+      "member_id": "user-001",
+      "role": "admin",
+      "joined_at": 1704067200000,
+      "presence": "online"
+    },
+    {
+      "entity_id": "org-001",
+      "member_id": "user-002",
+      "role": "member",
+      "joined_at": 1704153600000,
+      "presence": "away"
+    },
+    {
+      "entity_id": "project-001",
+      "member_id": "user-001",
+      "role": "owner",
+      "joined_at": 1704153600000,
+      "presence": "online"
+    }
+  ],
+  "test_cases": {
+    "get_entity_details": {
+      "entity_type": "organisation",
+      "entity_id": "org-001",
+      "expected_name": "Test Organization"
+    },
+    "list_entity_members": {
+      "entity_type": "organisation",
+      "entity_id": "org-001",
+      "limit": 10,
+      "offset": 0,
+      "expected_min_count": 2
+    },
+    "update_entity": {
+      "entity_type": "project",
+      "entity_id": "project-001",
+      "updates": {
+        "description": "Updated project description"
+      },
+      "expected_success": true
+    }
+  }
+}

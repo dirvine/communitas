@@ -1,0 +1,74 @@
+{
+  "description": "Test fixtures for MCP messaging CRUD lifecycle tests",
+  "threads": [
+    {
+      "thread_id": "entity:test-channel-1",
+      "entity_id": "test-channel-1",
+      "entity_type": "channel",
+      "display_name": "Test Channel",
+      "last_message_preview": "Initial message",
+      "last_message_timestamp": 1705600000000,
+      "unread_count": 0,
+      "is_muted": false
+    },
+    {
+      "thread_id": "contact:test-contact-1",
+      "contact_id": "test-contact-1",
+      "display_name": "Test Contact",
+      "last_message_preview": "Hello",
+      "last_message_timestamp": 1705590000000,
+      "unread_count": 2,
+      "is_muted": false
+    }
+  ],
+  "messages": [
+    {
+      "message_id": "msg-001",
+      "thread_id": "entity:test-channel-1",
+      "sender_id": "sender-1",
+      "sender_name": "Alice",
+      "text": "Original message text",
+      "timestamp": 1705600000000,
+      "edited": false,
+      "reactions": []
+    },
+    {
+      "message_id": "msg-002",
+      "thread_id": "entity:test-channel-1",
+      "sender_id": "sender-2",
+      "sender_name": "Bob",
+      "text": "Reply message",
+      "timestamp": 1705600010000,
+      "edited": false,
+      "reactions": []
+    }
+  ],
+  "test_cases": {
+    "send_message": {
+      "thread_id": "entity:test-channel-1",
+      "text": "Test message from parity harness",
+      "expected_success": true
+    },
+    "edit_message": {
+      "thread_id": "entity:test-channel-1",
+      "message_id": "msg-001",
+      "new_text": "Edited message text",
+      "expected_success": true
+    },
+    "delete_message": {
+      "thread_id": "entity:test-channel-1",
+      "message_id": "msg-002",
+      "expected_success": true
+    },
+    "react_to_message": {
+      "thread_id": "entity:test-channel-1",
+      "message_id": "msg-001",
+      "emoji": "thumbsup",
+      "expected_success": true
+    },
+    "mark_thread_read": {
+      "thread_id": "contact:test-contact-1",
+      "expected_unread_count": 0
+    }
+  }
+}

@@ -107,6 +107,8 @@ impl MessagingService {
         // Build thread summaries from entities
         let mut threads = Vec::with_capacity(entities.len());
         for entity in entities {
+            let default_timestamp = entity.created_at.max(0) as u64;
+
             // Get the latest message for preview
             let (preview, timestamp) = match self
                 .app
@@ -119,23 +121,19 @@ impl MessagingService {
                     // Get the most recent message (last in the list, assuming chronological order)
                     if let Some(msg) = messages.last() {
                         let preview_text = truncate_preview(&msg.text, 100);
-                        let ts = if msg.timestamp < 0 {
-                            0u64
-                        } else {
-                            msg.timestamp as u64
-                        };
+                        let ts = msg.timestamp.max(0) as u64;
                         (preview_text, ts)
                     } else {
-                        (String::new(), entity.created_at as u64)
+                        (String::new(), default_timestamp)
                     }
                 }
                 Ok(_) => {
                     debug!(entity_id = %entity.id, "Unexpected response for GetEntityMessages");
-                    (String::new(), entity.created_at as u64)
+                    (String::new(), default_timestamp)
                 }
                 Err(e) => {
                     debug!(entity_id = %entity.id, error = %e.message, "Failed to get messages for entity");
-                    (String::new(), entity.created_at as u64)
+                    (String::new(), default_timestamp)
                 }
             };
 

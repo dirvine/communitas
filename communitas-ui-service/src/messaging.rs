@@ -3,12 +3,14 @@
 use std::sync::Arc;
 
 use communitas_core::app::CommunitasApp;
+use communitas_core::command::{Query, QueryResponse};
 use communitas_ui_api::{Message, ThreadSummary};
 use thiserror::Error;
 use tokio::sync::watch;
-use tracing::instrument;
+use tracing::{debug, instrument, warn};
 
 use crate::auth::{AuthController, AuthService, AuthStateSnapshot};
+use crate::messaging_convert::core_entity_type_to_ui;
 
 /// Errors returned by the messaging service.
 #[derive(Debug, Error)]
@@ -68,6 +70,9 @@ impl MessagingService {
 
     /// List all conversation threads for the current user.
     ///
+    /// Each thread corresponds to an entity (channel, group, project, etc.) that
+    /// the user has joined. The thread includes a preview of the latest message.
+    ///
     /// # Errors
     /// Returns [`MessagingError::NotAuthenticated`] if no user is logged in.
     #[instrument(skip(self), name = "ui.messaging.list_threads")]
@@ -75,8 +80,88 @@ impl MessagingService {
         if !self.is_authenticated() {
             return Err(MessagingError::NotAuthenticated);
         }
-        // TODO: Wire to core Query::ListThreads when available
-        Ok(self.rx.borrow().threads.clone())
+
+        // Set loading state
+        self.set_loading(true);
+
+        // Query all entities from the core app
+        let entities = match self.app.query(Query::ListEntities).await {
+            Ok(QueryResponse::EntityList(entities)) => entities,
+            Ok(_) => {
+                warn!("Unexpected response type for ListEntities query");
+                self.set_loading(false);
+                return Ok(vec![]);
+            }
+            Err(e) => {
+                warn!(error = %e.message, "Failed to list entities");
+                self.set_loading(false);
+                return Ok(vec![]);
+            }
+        };
+
+        debug!(
+            entity_count = entities.len(),
+            "Fetched entities for threads"
+        );
+
+        // Build thread summaries from entities
+        let mut threads = Vec::with_capacity(entities.len());
+        for entity in entities {
+            // Get the latest message for preview
+            let (preview, timestamp) = match self
+                .app
+                .query(Query::GetEntityMessages {
+                    entity_id: entity.id.clone(),
+                })
+                .await
+            {
+                Ok(QueryResponse::Messages(messages)) => {
+                    // Get the most recent message (last in the list, assuming chronological order)
+                    if let Some(msg) = messages.last() {
+                        let preview_text = truncate_preview(&msg.text, 100);
+                        let ts = if msg.timestamp < 0 {
+                            0u64
+                        } else {
+                            msg.timestamp as u64
+                        };
+                        (preview_text, ts)
+                    } else {
+                        (String::new(), entity.created_at as u64)
+                    }
+                }
+                Ok(_) => {
+                    debug!(entity_id = %entity.id, "Unexpected response for GetEntityMessages");
+                    (String::new(), entity.created_at as u64)
+                }
+                Err(e) => {
+                    debug!(entity_id = %entity.id, error = %e.message, "Failed to get messages for entity");
+                    (String::new(), entity.created_at as u64)
+                }
+            };
+
+            let entity_type = core_entity_type_to_ui(&entity.entity_type);
+
+            threads.push(ThreadSummary {
+                thread_id: entity.id.clone(),
+                entity_id: Some(entity.id),
+                entity_type: Some(entity_type),
+                contact_id: None,
+                display_name: entity.name,
+                last_message_preview: preview,
+                last_message_timestamp: timestamp,
+                unread_count: 0, // TODO: Track unread counts separately
+                is_muted: false,
+            });
+        }
+
+        // Sort by most recent message first
+        threads.sort_by(|a, b| b.last_message_timestamp.cmp(&a.last_message_timestamp));
+
+        // Update watch channel
+        self.set_threads(threads.clone());
+
+        debug!(thread_count = threads.len(), "Returning threads");
+        Ok(threads)
     }
 
     /// Get messages for a thread with pagination.
@@ -286,6 +371,16 @@ impl MessagingService {
     }
 }
 
+/// Truncate text to max length, adding ellipsis if truncated.
+fn truncate_preview(text: &str, max_len: usize) -> String {
+    if text.chars().count() <= max_len {
+        text.to_string()
+    } else {
+        let truncated: String = text.chars().take(max_len.saturating_sub(3)).collect();
+        format!("{truncated}...")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -403,5 +498,34 @@ mod tests {
 
         service.set_loading(false);
         assert!(!rx.borrow().loading);
+    }
+
+    #[test]
+    fn truncate_preview_short_text() {
+        let text = "Hello";
+        assert_eq!(truncate_preview(text, 100), "Hello");
+    }
+
+    #[test]
+    fn truncate_preview_exact_length() {
+        let text = "A".repeat(100);
+        assert_eq!(truncate_preview(&text, 100), text);
+    }
+
+    #[test]
+    fn truncate_preview_long_text() {
+        let text = "A".repeat(150);
+        let result = truncate_preview(&text, 100);
+        assert!(result.ends_with("..."));
+        assert_eq!(result.chars().count(), 100);
+    }
+
+    #[test]
+    fn truncate_preview_unicode() {
+        let text = "🎉".repeat(50); // 50 emoji characters
+        let result = truncate_preview(&text, 20);
+        assert!(result.ends_with("..."));
+        // Should have 17 emoji + "..."
+        assert_eq!(result.chars().count(), 20);
     }
 }

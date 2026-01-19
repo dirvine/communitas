@@ -782,10 +782,28 @@ struct WelcomeCardProps {
 #[component]
 fn WelcomeCard(props: WelcomeCardProps) -> Element {
     rsx! {
-        div { class: "rounded-2xl border border-slate-900 bg-gradient-to-r from-emerald-800/40 to-emerald-500/20 p-6 shadow-lg",
-            span { class: "text-xs uppercase tracking-[0.4em] text-emerald-200", "Communitas" }
-            h2 { class: "mt-2 text-3xl font-semibold text-white", "Welcome back, {props.display_name}" }
-            p { class: "text-slate-300", "Your local-first collaboration hub" }
+        div {
+            class: "rounded-2xl border p-6 shadow-lg",
+            style: format!(
+                "background: linear-gradient(to right, {}40, {}20); border-color: {};",
+                colors::PRIMARY_HOVER,
+                colors::PRIMARY,
+                colors::BORDER_DEFAULT
+            ),
+            span {
+                class: "text-xs uppercase tracking-[0.4em]",
+                style: format!("color: {};", colors::PRIMARY),
+                "Communitas"
+            }
+            h2 {
+                class: "mt-2 text-3xl font-semibold",
+                style: format!("color: {};", colors::TEXT_PRIMARY),
+                "Welcome back, {props.display_name}"
+            }
+            p {
+                style: format!("color: {};", colors::TEXT_SECONDARY),
+                "Your local-first collaboration hub"
+            }
         }
     }
 }
@@ -807,9 +825,23 @@ fn StatsGrid(props: StatsGridProps) -> Element {
         div { class: "grid gap-4 md:grid-cols-3",
             {props.stats.iter().map(|item| {
                 rsx! {
-                    div { class: "rounded-2xl border border-slate-900 bg-slate-950/80 p-4",
-                        span { class: "text-sm uppercase tracking-[0.3em] text-slate-500", "{item.label}" }
-                        h3 { class: "text-2xl font-semibold text-white", "{item.value}" }
+                    div {
+                        class: "rounded-2xl border p-4",
+                        style: format!(
+                            "background-color: {}; border-color: {};",
+                            colors::SURFACE_CARD,
+                            colors::BORDER_DEFAULT
+                        ),
+                        span {
+                            class: "text-sm uppercase tracking-[0.3em]",
+                            style: format!("color: {};", colors::TEXT_MUTED),
+                            "{item.label}"
+                        }
+                        h3 {
+                            class: "text-2xl font-semibold",
+                            style: format!("color: {};", colors::TEXT_PRIMARY),
+                            "{item.value}"
+                        }
                     }
                 }
             })}
@@ -829,31 +861,31 @@ struct SpacesSectionProps {
 fn SpacesSection(props: SpacesSectionProps) -> Element {
     rsx! {
         div { class: "flex flex-col gap-4",
-            h3 { class: "text-2xl font-semibold text-white", "Your Spaces" }
+            h3 {
+                class: "text-2xl font-semibold",
+                style: format!("color: {};", colors::TEXT_PRIMARY),
+                "Your Spaces"
+            }
             div { class: "grid gap-4 lg:grid-cols-2",
                 EntityListPanel {
                     title: "Personal",
                     entities: props.personal.clone(),
                     empty_label: "No personal groups yet",
-                    accent_class: "border-emerald-500/40",
                 }
                 EntityListPanel {
                     title: "Communities",
                     entities: props.communities.clone(),
                     empty_label: "No communities yet",
-                    accent_class: "border-emerald-500/20",
                 }
                 EntityListPanel {
                     title: "Organizations",
                     entities: props.organizations.clone(),
                     empty_label: "No organizations yet",
-                    accent_class: "border-emerald-300/20",
                 }
                 EntityListPanel {
                     title: "Projects",
                     entities: props.projects.clone(),
                     empty_label: "No projects yet",
-                    accent_class: "border-emerald-200/30",
                 }
             }
         }
@@ -865,17 +897,30 @@ struct EntityListPanelProps {
     title: &'static str,
     entities: Vec<UnifiedEntity>,
     empty_label: &'static str,
-    accent_class: &'static str,
 }
 
 #[component]
 fn EntityListPanel(props: EntityListPanelProps) -> Element {
     let services = use_context::<Arc<UiServices>>();
     rsx! {
-        div { class: format!("rounded-2xl border bg-slate-950/80 p-4 {}", props.accent_class),
-            h4 { class: "text-lg font-semibold text-white", "{props.title}" }
+        div {
+            class: "rounded-2xl border p-4",
+            style: format!(
+                "background-color: {}; border-color: {};",
+                colors::SURFACE_CARD,
+                colors::BORDER_DEFAULT
+            ),
+            h4 {
+                class: "text-lg font-semibold",
+                style: format!("color: {};", colors::TEXT_PRIMARY),
+                "{props.title}"
+            }
             if props.entities.is_empty() {
-                p { class: "text-sm text-slate-500", "{props.empty_label}" }
+                p {
+                    class: "text-sm",
+                    style: format!("color: {};", colors::TEXT_MUTED),
+                    "{props.empty_label}"
+                }
             } else {
                 div { class: "mt-3 flex flex-col gap-2",
                     {props.entities.iter().take(5).map(|entity| {
@@ -887,12 +932,25 @@ fn EntityListPanel(props: EntityListPanelProps) -> Element {
                         rsx! {
                             Link {
                                 to: route.clone(),
-                                class: "flex flex-col rounded-xl border border-slate-900/80 bg-slate-950/60 px-3 py-2 text-left hover:border-emerald-400",
+                                class: "flex flex-col rounded-xl border px-3 py-2 text-left transition-colors",
+                                style: format!(
+                                    "background-color: {}; border-color: {};",
+                                    colors::SURFACE_ELEVATED,
+                                    colors::BORDER_DEFAULT
+                                ),
                                 onclick: move |_| {
                                     record_entity_visit(services.clone(), nav_key.clone());
                                 },
-                                span { class: "text-sm font-semibold text-white", "{entity_name}" }
-                                span { class: "text-xs text-slate-500", "{member_count} members" }
+                                span {
+                                    class: "text-sm font-semibold",
+                                    style: format!("color: {};", colors::TEXT_PRIMARY),
+                                    "{entity_name}"
+                                }
+                                span {
+                                    class: "text-xs",
+                                    style: format!("color: {};", colors::TEXT_MUTED),
+                                    "{member_count} members"
+                                }
                             }
                         }
                     })}
@@ -2236,14 +2294,24 @@ fn sample_words_from_core() -> SampleWords {
 #[component]
 fn SkeletonPulse(class: &'static str) -> Element {
     rsx! {
-        div { class: format!("animate-pulse bg-slate-800 rounded {class}") }
+        div {
+            class: format!("animate-pulse rounded {class}"),
+            style: format!("background-color: {};", colors::SURFACE_ELEVATED),
+        }
     }
 }
 
 #[component]
 fn SkeletonWelcomeCard() -> Element {
     rsx! {
-        div { class: "rounded-2xl border border-slate-900 bg-gradient-to-r from-slate-800/40 to-slate-700/20 p-6 shadow-lg",
+        div {
+            class: "rounded-2xl border p-6 shadow-lg",
+            style: format!(
+                "background: linear-gradient(to right, {}40, {}20); border-color: {};",
+                colors::SURFACE_ELEVATED,
+                colors::SURFACE_CARD,
+                colors::BORDER_DEFAULT
+            ),
             SkeletonPulse { class: "h-3 w-24 mb-4" }
             SkeletonPulse { class: "h-8 w-64 mb-2" }
             SkeletonPulse { class: "h-4 w-48" }
@@ -2256,7 +2324,13 @@ fn SkeletonStatsGrid() -> Element {
     rsx! {
         div { class: "grid gap-4 md:grid-cols-3",
             for _ in 0..6 {
-                div { class: "rounded-2xl border border-slate-900 bg-slate-950/80 p-4",
+                div {
+                    class: "rounded-2xl border p-4",
+                    style: format!(
+                        "background-color: {}; border-color: {};",
+                        colors::SURFACE_CARD,
+                        colors::BORDER_DEFAULT
+                    ),
                     SkeletonPulse { class: "h-3 w-20 mb-2" }
                     SkeletonPulse { class: "h-7 w-12" }
                 }
@@ -2272,7 +2346,13 @@ fn SkeletonSpacesSection() -> Element {
             SkeletonPulse { class: "h-7 w-32" }
             div { class: "grid gap-4 lg:grid-cols-2",
                 for _ in 0..4 {
-                    div { class: "rounded-2xl border border-slate-900 bg-slate-950/80 p-4",
+                    div {
+                        class: "rounded-2xl border p-4",
+                        style: format!(
+                            "background-color: {}; border-color: {};",
+                            colors::SURFACE_CARD,
+                            colors::BORDER_DEFAULT
+                        ),
                         SkeletonPulse { class: "h-5 w-24 mb-3" }
                         SkeletonPulse { class: "h-4 w-32" }
                     }

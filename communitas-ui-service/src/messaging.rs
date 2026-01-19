@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+use communitas_core::app::CommunitasApp;
 use communitas_ui_api::{Message, ThreadSummary};
 use thiserror::Error;
 use tokio::sync::watch;
@@ -34,15 +35,21 @@ pub struct MessagingSnapshot {
 /// Service for thread listing, message retrieval, and message sending.
 pub struct MessagingService {
     auth: Arc<AuthController>,
+    app: Arc<CommunitasApp>,
     tx: watch::Sender<MessagingSnapshot>,
     rx: watch::Receiver<MessagingSnapshot>,
 }
 
 impl MessagingService {
-    /// Create a new messaging service linked to the auth controller.
-    pub fn new(auth: Arc<AuthController>) -> Self {
+    /// Create a new messaging service linked to the auth controller and core app.
+    pub fn new(auth: Arc<AuthController>, app: Arc<CommunitasApp>) -> Self {
         let (tx, rx) = watch::channel(MessagingSnapshot::default());
-        Self { auth, tx, rx }
+        Self { auth, app, tx, rx }
+    }
+
+    /// Get a reference to the core app.
+    pub fn app(&self) -> &Arc<CommunitasApp> {
+        &self.app
     }
 
     /// Subscribe to messaging state updates.
@@ -140,6 +147,80 @@ impl MessagingService {
         Err(MessagingError::Internal("not yet implemented".to_string()))
     }
 
+    /// Mark a thread as read, clearing unread count.
+    #[instrument(skip(self), name = "ui.messaging.mark_read", fields(thread_id))]
+    pub async fn mark_thread_read(&self, thread_id: &str) -> Result<(), MessagingError> {
+        if !self.is_authenticated() {
+            return Err(MessagingError::NotAuthenticated);
+        }
+
+        // Update local thread state
+        let mut snap = self.rx.borrow().clone();
+        if let Some(thread) = snap.threads.iter_mut().find(|t| t.thread_id == thread_id) {
+            thread.unread_count = 0;
+            let _ = self.tx.send(snap);
+            // TODO: Wire to core Command::MarkThreadRead
+            Ok(())
+        } else {
+            Err(MessagingError::ThreadNotFound(thread_id.to_string()))
+        }
+    }
+
+    /// Get unread count for a specific thread.
+    #[instrument(skip(self), name = "ui.messaging.get_unread", fields(thread_id))]
+    pub async fn get_thread_unread_count(&self, thread_id: &str) -> Result<u32, MessagingError> {
+        if !self.is_authenticated() {
+            return Err(MessagingError::NotAuthenticated);
+        }
+
+        let snap = self.rx.borrow();
+        if let Some(thread) = snap.threads.iter().find(|t| t.thread_id == thread_id) {
+            Ok(thread.unread_count)
+        } else {
+            Err(MessagingError::ThreadNotFound(thread_id.to_string()))
+        }
+    }
+
+    /// Add a reaction to a message.
+    #[instrument(
+        skip(self),
+        name = "ui.messaging.react",
+        fields(thread_id, message_id, emoji)
+    )]
+    pub async fn add_reaction(
+        &self,
+        thread_id: &str,
+        message_id: &str,
+        emoji: &str,
+    ) -> Result<(), MessagingError> {
+        let _ = (thread_id, message_id, emoji); // Suppress unused warnings for now
+        if !self.is_authenticated() {
+            return Err(MessagingError::NotAuthenticated);
+        }
+        // TODO: Wire to core Command::AddReaction
+        Ok(())
+    }
+
+    /// Remove a reaction from a message.
+    #[instrument(
+        skip(self),
+        name = "ui.messaging.unreact",
+        fields(thread_id, message_id, emoji)
+    )]
+    pub async fn remove_reaction(
+        &self,
+        thread_id: &str,
+        message_id: &str,
+        emoji: &str,
+    ) -> Result<(), MessagingError> {
+        let _ = (thread_id, message_id, emoji); // Suppress unused warnings for now
+        if !self.is_authenticated() {
+            return Err(MessagingError::NotAuthenticated);
+        }
+        // TODO: Wire to core Command::RemoveReaction
+        Ok(())
+    }
+
     /// Internal: update the thread list (called by core events).
     pub fn set_threads(&self, threads: Vec<ThreadSummary>) {
         let mut snap = self.rx.borrow().clone();
@@ -170,16 +251,29 @@ mod tests {
     use communitas_ui_api::UnifiedEntityType;
     use tempfile::TempDir;
 
-    fn make_service(temp: &TempDir) -> MessagingService {
+    async fn make_service(temp: &TempDir) -> MessagingService {
         let storage = UiStorage::from_path(temp.path()).unwrap();
         let auth = Arc::new(AuthController::new(storage).unwrap());
-        MessagingService::new(auth)
+        let app = Arc::new(
+            CommunitasApp::new(
+                "ocean-forest-moon-star".to_string(),
+                "TestUser".to_string(),
+                "TestDevice".to_string(),
+                temp.path()
+                    .join("app_storage")
+                    .to_string_lossy()
+                    .to_string(),
+            )
+            .await
+            .unwrap(),
+        );
+        MessagingService::new(auth, app)
     }
 
-    #[test]
-    fn messaging_service_starts_empty() {
+    #[tokio::test]
+    async fn messaging_service_starts_empty() {
         let temp = TempDir::new().unwrap();
-        let service = make_service(&temp);
+        let service = make_service(&temp).await;
         let snap = service.current_snapshot();
         assert!(snap.threads.is_empty());
         assert!(!snap.loading);
@@ -188,7 +282,7 @@ mod tests {
     #[tokio::test]
     async fn list_threads_fails_when_not_authenticated() {
         let temp = TempDir::new().unwrap();
-        let service = make_service(&temp);
+        let service = make_service(&temp).await;
         let result = service.list_threads().await;
         assert!(result.is_err());
         match result {
@@ -200,7 +294,7 @@ mod tests {
     #[tokio::test]
     async fn get_messages_fails_when_not_authenticated() {
         let temp = TempDir::new().unwrap();
-        let service = make_service(&temp);
+        let service = make_service(&temp).await;
         let result = service.get_messages("thread1", 50, None).await;
         assert!(result.is_err());
         match result {
@@ -212,7 +306,7 @@ mod tests {
     #[tokio::test]
     async fn send_message_fails_when_not_authenticated() {
         let temp = TempDir::new().unwrap();
-        let service = make_service(&temp);
+        let service = make_service(&temp).await;
         let result = service.send_message("thread1", "Hello", None).await;
         assert!(result.is_err());
         match result {
@@ -221,19 +315,19 @@ mod tests {
         }
     }
 
-    #[test]
-    fn subscribe_returns_receiver() {
+    #[tokio::test]
+    async fn subscribe_returns_receiver() {
         let temp = TempDir::new().unwrap();
-        let service = make_service(&temp);
+        let service = make_service(&temp).await;
         let rx = service.subscribe();
         let snap = rx.borrow().clone();
         assert!(snap.threads.is_empty());
     }
 
-    #[test]
-    fn set_threads_updates_subscribers() {
+    #[tokio::test]
+    async fn set_threads_updates_subscribers() {
         let temp = TempDir::new().unwrap();
-        let service = make_service(&temp);
+        let service = make_service(&temp).await;
         let rx = service.subscribe();
 
         let threads = vec![ThreadSummary {
@@ -256,10 +350,10 @@ mod tests {
         assert!(!snap.loading);
     }
 
-    #[test]
-    fn set_loading_updates_subscribers() {
+    #[tokio::test]
+    async fn set_loading_updates_subscribers() {
         let temp = TempDir::new().unwrap();
-        let service = make_service(&temp);
+        let service = make_service(&temp).await;
         let rx = service.subscribe();
 
         service.set_loading(true);

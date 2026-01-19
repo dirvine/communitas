@@ -7,6 +7,7 @@ pub mod directory;
 pub mod drive;
 pub mod kanban;
 pub mod messaging;
+pub mod messaging_convert;
 pub mod navigation;
 pub mod presence;
 pub mod storage;
@@ -16,6 +17,8 @@ use std::sync::Arc;
 use auth::AuthController;
 use call::CallService;
 use canvas::CanvasService;
+use communitas_core::app::CommunitasApp;
+use communitas_core::generate_id_words;
 use directory::DirectoryService;
 use drive::DriveService;
 use kanban::KanbanService;
@@ -41,18 +44,47 @@ pub struct UiServices {
 }
 
 impl UiServices {
-    /// Discover standard Communitas storage paths and create all service controllers.
+    /// Bootstrap UiServices with auto-discovered storage and a generated identity.
+    ///
+    /// This is a convenience method for applications that need to start without
+    /// prior authentication. A temporary identity is created, and the user can
+    /// log in or create a new identity through the auth service later.
+    ///
+    /// # Errors
+    /// Returns an error if storage discovery fails or the app cannot be initialized.
     pub fn bootstrap() -> Result<Self, UiServiceInitError> {
         let storage = UiStorage::discover()?;
-        Self::new(storage)
+        let storage_path = storage.root_string()?;
+
+        // Generate a bootstrap identity
+        let id_words =
+            generate_id_words().map_err(|e| UiServiceInitError::AppInit(e.to_string()))?;
+
+        // Create the app using a blocking runtime since bootstrap is called from sync context
+        let rt = tokio::runtime::Runtime::new()
+            .map_err(|e| UiServiceInitError::AppInit(format!("failed to create runtime: {e}")))?;
+
+        let app = rt
+            .block_on(async {
+                CommunitasApp::new(
+                    id_words,
+                    "Bootstrap User".to_string(),
+                    "Desktop".to_string(),
+                    storage_path,
+                )
+                .await
+            })
+            .map_err(|e| UiServiceInitError::AppInit(e.to_string()))?;
+
+        Self::new(storage, Arc::new(app))
     }
 
-    /// Create services using the provided storage configuration.
-    pub fn new(storage: UiStorage) -> Result<Self, UiServiceInitError> {
+    /// Create services using the provided storage configuration and core app.
+    pub fn new(storage: UiStorage, app: Arc<CommunitasApp>) -> Result<Self, UiServiceInitError> {
         let auth = Arc::new(AuthController::new(storage.clone())?);
         let navigation = Arc::new(NavigationStore::new(storage.clone())?);
         let directory = Arc::new(DirectoryService::new(auth.clone()));
-        let messaging = Arc::new(MessagingService::new(auth.clone()));
+        let messaging = Arc::new(MessagingService::new(auth.clone(), app));
         let presence = Arc::new(PresenceService::new(auth.clone(), directory.clone()));
         let kanban = Arc::new(KanbanService::new(auth.clone()));
         let canvas = Arc::new(CanvasService::new(auth.clone()));
@@ -133,6 +165,8 @@ pub enum UiServiceInitError {
     Navigation(#[from] navigation::NavigationError),
     #[error("directory controller failed: {0}")]
     Directory(#[from] directory::DirectoryError),
+    #[error("app initialization failed: {0}")]
+    AppInit(String),
 }
 
 #[cfg(test)]
@@ -142,15 +176,28 @@ mod tests {
     use crate::navigation::{EntityNavigationKey, NavigationService};
     use tempfile::TempDir;
 
-    fn make_services(temp: &TempDir) -> UiServices {
+    async fn make_services(temp: &TempDir) -> UiServices {
         let storage = UiStorage::from_path(temp.path()).unwrap();
-        UiServices::new(storage).unwrap()
+        let app = Arc::new(
+            CommunitasApp::new(
+                "ocean-forest-moon-star".to_string(),
+                "TestUser".to_string(),
+                "TestDevice".to_string(),
+                temp.path()
+                    .join("app_storage")
+                    .to_string_lossy()
+                    .to_string(),
+            )
+            .await
+            .unwrap(),
+        );
+        UiServices::new(storage, app).unwrap()
     }
 
-    #[test]
-    fn ui_services_constructs_all_components() {
+    #[tokio::test]
+    async fn ui_services_constructs_all_components() {
         let temp = TempDir::new().unwrap();
-        let services = make_services(&temp);
+        let services = make_services(&temp).await;
 
         // All services should be accessible
         let _ = services.storage();
@@ -165,29 +212,29 @@ mod tests {
         let _ = services.call();
     }
 
-    #[test]
-    fn presence_starts_empty() {
+    #[tokio::test]
+    async fn presence_starts_empty() {
         let temp = TempDir::new().unwrap();
-        let services = make_services(&temp);
+        let services = make_services(&temp).await;
 
         let snap = services.presence().current_snapshot();
         assert!(snap.statuses.is_empty());
         assert!(snap.last_seen.is_empty());
     }
 
-    #[test]
-    fn services_share_storage_path() {
+    #[tokio::test]
+    async fn services_share_storage_path() {
         let temp = TempDir::new().unwrap();
-        let services = make_services(&temp);
+        let services = make_services(&temp).await;
 
         let storage_root = services.storage().root();
         assert_eq!(storage_root, temp.path());
     }
 
-    #[test]
-    fn auth_starts_logged_out() {
+    #[tokio::test]
+    async fn auth_starts_logged_out() {
         let temp = TempDir::new().unwrap();
-        let services = make_services(&temp);
+        let services = make_services(&temp).await;
 
         let rx = services.auth().subscribe();
         match &*rx.borrow() {
@@ -196,10 +243,10 @@ mod tests {
         }
     }
 
-    #[test]
-    fn directory_starts_with_empty_snapshot() {
+    #[tokio::test]
+    async fn directory_starts_with_empty_snapshot() {
         let temp = TempDir::new().unwrap();
-        let services = make_services(&temp);
+        let services = make_services(&temp).await;
 
         let snap = services.directory().current_snapshot();
         assert!(snap.identity.is_none());
@@ -207,10 +254,10 @@ mod tests {
         assert!(snap.contacts.is_empty());
     }
 
-    #[test]
-    fn navigation_starts_with_empty_recents() {
+    #[tokio::test]
+    async fn navigation_starts_with_empty_recents() {
         let temp = TempDir::new().unwrap();
-        let services = make_services(&temp);
+        let services = make_services(&temp).await;
 
         let snap = services.navigation().current_snapshot();
         assert!(snap.recent_entities.is_empty());
@@ -219,30 +266,30 @@ mod tests {
         assert!(snap.starred_contacts.is_empty());
     }
 
-    #[test]
-    fn messaging_starts_with_empty_threads() {
+    #[tokio::test]
+    async fn messaging_starts_with_empty_threads() {
         let temp = TempDir::new().unwrap();
-        let services = make_services(&temp);
+        let services = make_services(&temp).await;
 
         let snap = services.messaging().current_snapshot();
         assert!(snap.threads.is_empty());
         assert!(!snap.loading);
     }
 
-    #[test]
-    fn kanban_starts_with_empty_boards() {
+    #[tokio::test]
+    async fn kanban_starts_with_empty_boards() {
         let temp = TempDir::new().unwrap();
-        let services = make_services(&temp);
+        let services = make_services(&temp).await;
 
         let snap = services.kanban().current_snapshot();
         assert!(snap.boards.is_empty());
         assert!(!snap.loading);
     }
 
-    #[test]
-    fn canvas_starts_with_empty_scene() {
+    #[tokio::test]
+    async fn canvas_starts_with_empty_scene() {
         let temp = TempDir::new().unwrap();
-        let services = make_services(&temp);
+        let services = make_services(&temp).await;
 
         let snap = services.canvas().current_snapshot();
         assert!(snap.elements.is_empty());
@@ -250,10 +297,10 @@ mod tests {
         assert!(!snap.loading);
     }
 
-    #[test]
-    fn drive_starts_with_empty_snapshot() {
+    #[tokio::test]
+    async fn drive_starts_with_empty_snapshot() {
         let temp = TempDir::new().unwrap();
-        let services = make_services(&temp);
+        let services = make_services(&temp).await;
 
         let snap = services.drive().current_snapshot();
         assert!(snap.uploads.is_empty());
@@ -265,7 +312,7 @@ mod tests {
     #[tokio::test]
     async fn navigation_updates_propagate_to_subscribers() {
         let temp = TempDir::new().unwrap();
-        let services = make_services(&temp);
+        let services = make_services(&temp).await;
 
         let mut rx = services.navigation().subscribe();
 
@@ -288,17 +335,17 @@ mod tests {
     #[tokio::test]
     async fn directory_refresh_fails_without_auth() {
         let temp = TempDir::new().unwrap();
-        let services = make_services(&temp);
+        let services = make_services(&temp).await;
 
         // Not authenticated, so refresh should fail
         let result = services.directory().refresh_all().await;
         assert!(result.is_err());
     }
 
-    #[test]
-    fn services_clone_shares_underlying_arcs() {
+    #[tokio::test]
+    async fn services_clone_shares_underlying_arcs() {
         let temp = TempDir::new().unwrap();
-        let services1 = make_services(&temp);
+        let services1 = make_services(&temp).await;
         let services2 = services1.clone();
 
         // Both should point to the same underlying Arc
@@ -318,7 +365,7 @@ mod tests {
     #[tokio::test]
     async fn cloned_services_share_state_updates() {
         let temp = TempDir::new().unwrap();
-        let services1 = make_services(&temp);
+        let services1 = make_services(&temp).await;
         let services2 = services1.clone();
 
         // Subscribe via services1

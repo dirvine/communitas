@@ -10,7 +10,7 @@ use tokio::sync::watch;
 use tracing::{debug, instrument, warn};
 
 use crate::auth::{AuthController, AuthService, AuthStateSnapshot};
-use crate::messaging_convert::core_entity_type_to_ui;
+use crate::messaging_convert::{core_entity_type_to_ui, core_message_to_ui};
 
 /// Errors returned by the messaging service.
 #[derive(Debug, Error)]
@@ -164,8 +164,16 @@ impl MessagingService {
 
     /// Get messages for a thread with pagination.
     ///
+    /// Messages are returned sorted by timestamp descending (newest first).
+    ///
+    /// # Arguments
+    /// * `thread_id` - The entity ID of the thread
+    /// * `limit` - Maximum number of messages to return
+    /// * `before` - Optional cursor: only return messages with timestamp < before
+    ///
     /// # Errors
-    /// Returns [`MessagingError::NotAuthenticated`] if no user is logged in.
+    /// - [`MessagingError::NotAuthenticated`] if no user is logged in.
+    /// - [`MessagingError::ThreadNotFound`] if the thread does not exist.
     #[instrument(
         skip(self),
         name = "ui.messaging.get_messages",
@@ -177,12 +185,50 @@ impl MessagingService {
         limit: usize,
         before: Option<u64>,
     ) -> Result<Vec<Message>, MessagingError> {
-        let _ = (thread_id, limit, before); // Suppress unused warnings for now
         if !self.is_authenticated() {
             return Err(MessagingError::NotAuthenticated);
         }
-        // TODO: Wire to core Query::GetMessages
-        Ok(vec![])
+
+        // Query messages for the entity
+        let messages = match self
+            .app
+            .query(Query::GetEntityMessages {
+                entity_id: thread_id.to_string(),
+            })
+            .await
+        {
+            Ok(QueryResponse::Messages(msgs)) => msgs,
+            Ok(_) => {
+                warn!(thread_id, "Unexpected response type for GetEntityMessages");
+                return Err(MessagingError::ThreadNotFound(thread_id.to_string()));
+            }
+            Err(e) => {
+                debug!(thread_id, error = %e.message, "Thread not found or query failed");
+                return Err(MessagingError::ThreadNotFound(thread_id.to_string()));
+            }
+        };
+
+        // Convert to UI types
+        let mut ui_messages: Vec<Message> = messages.iter().map(core_message_to_ui).collect();
+
+        // Apply pagination: filter by before cursor
+        if let Some(before_ts) = before {
+            ui_messages.retain(|m| m.timestamp < before_ts);
+        }
+
+        // Sort by timestamp descending (newest first)
+        ui_messages.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+
+        // Apply limit
+        ui_messages.truncate(limit);
+
+        debug!(
+            thread_id,
+            message_count = ui_messages.len(),
+            "Returning messages for thread"
+        );
+
+        Ok(ui_messages)
     }
 
     /// Send a message to a thread.

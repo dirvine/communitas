@@ -23,6 +23,7 @@ use std::{
     borrow::Cow,
     sync::{Arc, OnceLock},
 };
+use styles::{button, input};
 use tokens::colors;
 use tracing::{error, info};
 
@@ -275,12 +276,24 @@ fn LoginRoute() -> Element {
             subtitle: "Unlock your Communitas vault with your four-word identity and passphrase.",
             error: error_msg,
             footer: Some(rsx! {
-                div { class: "flex flex-col gap-2 text-sm text-slate-400",
+                div {
+                    class: "flex flex-col gap-2 text-sm",
+                    style: format!("color: {};", colors::TEXT_SECONDARY),
                     span {
                         "Need a vault? "
-                        Link { to: Route::CreateIdentityRoute {}, class: "text-emerald-400 hover:underline", "Create one" }
+                        Link {
+                            to: Route::CreateIdentityRoute {},
+                            class: "hover:underline",
+                            style: format!("color: {};", colors::PRIMARY),
+                            "Create one"
+                        }
                         " or "
-                        Link { to: Route::RecoverIdentityRoute {}, class: "text-emerald-400 hover:underline", "recover" }
+                        Link {
+                            to: Route::RecoverIdentityRoute {},
+                            class: "hover:underline",
+                            style: format!("color: {};", colors::PRIMARY),
+                            "recover"
+                        }
                     }
                 }
             }),
@@ -301,10 +314,15 @@ fn LoginRoute() -> Element {
                     });
                 },
                 label { class: "flex flex-col gap-2",
-                    span { class: "text-sm font-medium text-slate-200", "Four words" }
+                    span {
+                        class: "text-sm font-medium",
+                        style: format!("color: {};", colors::TEXT_PRIMARY),
+                        "Four words"
+                    }
                     input {
                         r#type: "text",
-                        class: "rounded-lg border border-slate-700 bg-slate-900/60 px-4 py-3 text-slate-100 focus:border-emerald-400 focus:outline-none",
+                        class: "rounded-lg px-4 py-3 focus:outline-none",
+                        style: input::default(),
                         placeholder: "forest-ocean-light-house",
                         disabled: busy,
                         value: "{four_words}",
@@ -312,10 +330,15 @@ fn LoginRoute() -> Element {
                     }
                 }
                 label { class: "flex flex-col gap-2",
-                    span { class: "text-sm font-medium text-slate-200", "Vault password" }
+                    span {
+                        class: "text-sm font-medium",
+                        style: format!("color: {};", colors::TEXT_PRIMARY),
+                        "Vault password"
+                    }
                     input {
                         r#type: "password",
-                        class: "rounded-lg border border-slate-700 bg-slate-900/60 px-4 py-3 text-slate-100 focus:border-emerald-400 focus:outline-none",
+                        class: "rounded-lg px-4 py-3 focus:outline-none",
+                        style: input::default(),
                         placeholder: "********",
                         disabled: busy,
                         value: "{password}",
@@ -323,7 +346,8 @@ fn LoginRoute() -> Element {
                     }
                 }
                 button {
-                    class: "rounded-lg bg-emerald-500 px-4 py-3 font-semibold text-slate-900 shadow-lg shadow-emerald-500/30 transition hover:bg-emerald-400 disabled:opacity-50",
+                    class: "rounded-lg px-4 py-3 font-semibold shadow-lg transition disabled:opacity-50",
+                    style: button::primary(),
                     r#type: "submit",
                     disabled: busy,
                     if busy { "Signing in..." } else { "Sign in" }
@@ -378,10 +402,17 @@ fn CreateIdentityRoute() -> Element {
             subtitle: "Choose a display name and passphrase. Four words are auto-generated from the Rust core.",
             error: error_msg,
             footer: Some(rsx! {
-                div { class: "flex flex-col gap-2 text-sm text-slate-400",
+                div {
+                    class: "flex flex-col gap-2 text-sm",
+                    style: format!("color: {};", colors::TEXT_SECONDARY),
                     span {
                         "Already have a vault? "
-                        Link { to: Route::LoginRoute {}, class: "text-emerald-400 hover:underline", "Sign in" }
+                        Link {
+                            to: Route::LoginRoute {},
+                            class: "hover:underline",
+                            style: format!("color: {};", colors::PRIMARY),
+                            "Sign in"
+                        }
                     }
                 }
             }),
@@ -402,21 +433,41 @@ fn CreateIdentityRoute() -> Element {
                     });
                 },
                 label { class: "flex flex-col gap-2",
-                    span { class: "text-sm font-medium text-slate-200", "Display name" }
+                    span {
+                        class: "text-sm font-medium",
+                        style: format!("color: {};", colors::TEXT_PRIMARY),
+                        "Display name"
+                    }
                     input {
                         r#type: "text",
-                        class: "rounded-lg border border-slate-700 bg-slate-900/60 px-4 py-3 text-slate-100 focus:border-emerald-400 focus:outline-none",
+                        class: "rounded-lg px-4 py-3 focus:outline-none",
+                        style: input::default(),
                         placeholder: "Aurora Station",
                         disabled: busy,
                         value: "{display_name}",
                         oninput: move |evt| display_name.set(evt.value()),
                     }
                 }
-                div { class: "rounded-lg border border-slate-700 bg-slate-900/60 p-4",
-                    span { class: "text-xs uppercase tracking-[0.4em] text-slate-500", "four words" }
-                    p { class: "mt-2 font-mono text-lg text-emerald-300 break-words", "{preview_words().as_str()}" }
+                div {
+                    class: "rounded-lg border p-4",
+                    style: format!(
+                        "background-color: {}; border-color: {};",
+                        colors::SURFACE_BG,
+                        colors::BORDER_DEFAULT
+                    ),
+                    span {
+                        class: "text-xs uppercase tracking-[0.4em]",
+                        style: format!("color: {};", colors::TEXT_MUTED),
+                        "four words"
+                    }
+                    p {
+                        class: "mt-2 font-mono text-lg break-words",
+                        style: format!("color: {};", colors::PRIMARY),
+                        "{preview_words().as_str()}"
+                    }
                     button {
-                        class: "mt-3 text-sm font-semibold text-emerald-400 hover:text-emerald-300",
+                        class: "mt-3 text-sm font-semibold",
+                        style: format!("color: {};", colors::PRIMARY),
                         r#type: "button",
                         disabled: busy,
                         onclick: move |_| preview_words.set(sample_words_from_core()),
@@ -424,27 +475,38 @@ fn CreateIdentityRoute() -> Element {
                     }
                 }
                 label { class: "flex flex-col gap-2",
-                    span { class: "text-sm font-medium text-slate-200", "Password" }
+                    span {
+                        class: "text-sm font-medium",
+                        style: format!("color: {};", colors::TEXT_PRIMARY),
+                        "Password"
+                    }
                     input {
                         r#type: "password",
-                        class: "rounded-lg border border-slate-700 bg-slate-900/60 px-4 py-3 text-slate-100 focus:border-emerald-400 focus:outline-none",
+                        class: "rounded-lg px-4 py-3 focus:outline-none",
+                        style: input::default(),
                         disabled: busy,
                         value: "{password}",
                         oninput: move |evt| password.set(evt.value()),
                     }
                 }
                 label { class: "flex flex-col gap-2",
-                    span { class: "text-sm font-medium text-slate-200", "Confirm password" }
+                    span {
+                        class: "text-sm font-medium",
+                        style: format!("color: {};", colors::TEXT_PRIMARY),
+                        "Confirm password"
+                    }
                     input {
                         r#type: "password",
-                        class: "rounded-lg border border-slate-700 bg-slate-900/60 px-4 py-3 text-slate-100 focus:border-emerald-400 focus:outline-none",
+                        class: "rounded-lg px-4 py-3 focus:outline-none",
+                        style: input::default(),
                         disabled: busy,
                         value: "{confirm}",
                         oninput: move |evt| confirm.set(evt.value()),
                     }
                 }
                 button {
-                    class: "rounded-lg bg-emerald-500 px-4 py-3 font-semibold text-slate-900 shadow-lg shadow-emerald-500/30 transition hover:bg-emerald-400 disabled:opacity-50",
+                    class: "rounded-lg px-4 py-3 font-semibold shadow-lg transition disabled:opacity-50",
+                    style: button::primary(),
                     r#type: "submit",
                     disabled: busy,
                     if busy { "Creating..." } else { "Create identity" }
@@ -498,10 +560,17 @@ fn RecoverIdentityRoute() -> Element {
             subtitle: "Paste your BIP39 mnemonic and optional passphrase to recreate your Communitas vault.",
             error: error_msg,
             footer: Some(rsx! {
-                div { class: "flex flex-col gap-2 text-sm text-slate-400",
+                div {
+                    class: "flex flex-col gap-2 text-sm",
+                    style: format!("color: {};", colors::TEXT_SECONDARY),
                     span {
                         "Remembered your password? "
-                        Link { to: Route::LoginRoute {}, class: "text-emerald-400 hover:underline", "Sign in" }
+                        Link {
+                            to: Route::LoginRoute {},
+                            class: "hover:underline",
+                            style: format!("color: {};", colors::PRIMARY),
+                            "Sign in"
+                        }
                     }
                 }
             }),
@@ -518,9 +587,14 @@ fn RecoverIdentityRoute() -> Element {
                     });
                 },
                 label { class: "flex flex-col gap-2",
-                    span { class: "text-sm font-medium text-slate-200", "Mnemonic phrase" }
+                    span {
+                        class: "text-sm font-medium",
+                        style: format!("color: {};", colors::TEXT_PRIMARY),
+                        "Mnemonic phrase"
+                    }
                     textarea {
-                        class: "h-32 rounded-lg border border-slate-700 bg-slate-900/60 px-4 py-3 text-slate-100 focus:border-emerald-400 focus:outline-none",
+                        class: "h-32 rounded-lg px-4 py-3 focus:outline-none",
+                        style: input::default(),
                         placeholder: "abandon ability able about...",
                         disabled: busy,
                         value: "{mnemonic}",
@@ -528,37 +602,53 @@ fn RecoverIdentityRoute() -> Element {
                     }
                 }
                 label { class: "flex flex-col gap-2",
-                    span { class: "text-sm font-medium text-slate-200", "Passphrase (optional)" }
+                    span {
+                        class: "text-sm font-medium",
+                        style: format!("color: {};", colors::TEXT_PRIMARY),
+                        "Passphrase (optional)"
+                    }
                     input {
                         r#type: "text",
-                        class: "rounded-lg border border-slate-700 bg-slate-900/60 px-4 py-3 text-slate-100 focus:border-emerald-400 focus:outline-none",
+                        class: "rounded-lg px-4 py-3 focus:outline-none",
+                        style: input::default(),
                         disabled: busy,
                         value: "{passphrase}",
                         oninput: move |evt| passphrase.set(evt.value()),
                     }
                 }
                 label { class: "flex flex-col gap-2",
-                    span { class: "text-sm font-medium text-slate-200", "Display name" }
+                    span {
+                        class: "text-sm font-medium",
+                        style: format!("color: {};", colors::TEXT_PRIMARY),
+                        "Display name"
+                    }
                     input {
                         r#type: "text",
-                        class: "rounded-lg border border-slate-700 bg-slate-900/60 px-4 py-3 text-slate-100 focus:border-emerald-400 focus:outline-none",
+                        class: "rounded-lg px-4 py-3 focus:outline-none",
+                        style: input::default(),
                         disabled: busy,
                         value: "{display_name}",
                         oninput: move |evt| display_name.set(evt.value()),
                     }
                 }
                 label { class: "flex flex-col gap-2",
-                    span { class: "text-sm font-medium text-slate-200", "Vault password" }
+                    span {
+                        class: "text-sm font-medium",
+                        style: format!("color: {};", colors::TEXT_PRIMARY),
+                        "Vault password"
+                    }
                     input {
                         r#type: "password",
-                        class: "rounded-lg border border-slate-700 bg-slate-900/60 px-4 py-3 text-slate-100 focus:border-emerald-400 focus:outline-none",
+                        class: "rounded-lg px-4 py-3 focus:outline-none",
+                        style: input::default(),
                         disabled: busy,
                         value: "{password}",
                         oninput: move |evt| password.set(evt.value()),
                     }
                 }
                 button {
-                    class: "rounded-lg bg-emerald-500 px-4 py-3 font-semibold text-slate-900 shadow-lg shadow-emerald-500/30 transition hover:bg-emerald-400 disabled:opacity-50",
+                    class: "rounded-lg px-4 py-3 font-semibold shadow-lg transition disabled:opacity-50",
+                    style: button::primary(),
                     r#type: "submit",
                     disabled: busy,
                     if busy { "Recovering..." } else { "Recover identity" }
@@ -2084,15 +2174,41 @@ struct AuthLayoutProps {
 #[component]
 fn AuthLayout(props: AuthLayoutProps) -> Element {
     rsx! {
-        main { class: "min-h-screen bg-slate-950 px-4 py-16 text-slate-100 sm:px-0",
-            div { class: "mx-auto flex max-w-xl flex-col gap-6 rounded-3xl border border-slate-900 bg-slate-950/80 p-8",
+        main {
+            class: "min-h-screen px-4 py-16 sm:px-0",
+            style: format!("background-color: {}; color: {};", colors::SURFACE_BG, colors::TEXT_PRIMARY),
+            div {
+                class: "mx-auto flex max-w-xl flex-col gap-6 rounded-3xl border p-8",
+                style: format!(
+                    "background-color: {}; border-color: {};",
+                    colors::SURFACE_CARD,
+                    colors::BORDER_DEFAULT
+                ),
                 div { class: "flex flex-col gap-1",
-                    span { class: "text-xs uppercase tracking-[0.5em] text-emerald-400", "Communitas" }
-                    h1 { class: "text-3xl font-semibold tracking-tight", "{props.title}" }
-                    p { class: "text-sm text-slate-400", "{props.subtitle}" }
+                    span {
+                        class: "text-xs uppercase tracking-[0.5em]",
+                        style: format!("color: {};", colors::PRIMARY),
+                        "Communitas"
+                    }
+                    h1 {
+                        class: "text-3xl font-semibold tracking-tight",
+                        style: format!("color: {};", colors::TEXT_PRIMARY),
+                        "{props.title}"
+                    }
+                    p {
+                        class: "text-sm",
+                        style: format!("color: {};", colors::TEXT_SECONDARY),
+                        "{props.subtitle}"
+                    }
                 }
                 if let Some(err) = props.error {
-                    div { class: "rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200",
+                    div {
+                        class: "rounded-xl border px-4 py-3 text-sm",
+                        style: format!(
+                            "border-color: {}; background-color: rgba(239, 68, 68, 0.1); color: {};",
+                            colors::DANGER,
+                            colors::DANGER
+                        ),
                         "{err}"
                     }
                 }

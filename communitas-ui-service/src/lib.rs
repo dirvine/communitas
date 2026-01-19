@@ -80,6 +80,10 @@ impl UiServices {
     }
 
     /// Create services using the provided storage configuration and core app.
+    ///
+    /// # Errors
+    /// Returns [`UiServiceInitError`] if the auth controller or navigation store
+    /// cannot be initialized from the provided storage.
     pub fn new(storage: UiStorage, app: Arc<CommunitasApp>) -> Result<Self, UiServiceInitError> {
         let auth = Arc::new(AuthController::new(storage.clone())?);
         let navigation = Arc::new(NavigationStore::new(storage.clone())?);

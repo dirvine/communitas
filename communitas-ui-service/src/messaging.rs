@@ -42,6 +42,10 @@ pub struct MessagingService {
 
 impl MessagingService {
     /// Create a new messaging service linked to the auth controller and core app.
+    ///
+    /// # Arguments
+    /// * `auth` - Shared authentication controller for checking login state
+    /// * `app` - Shared reference to the core application
     pub fn new(auth: Arc<AuthController>, app: Arc<CommunitasApp>) -> Self {
         let (tx, rx) = watch::channel(MessagingSnapshot::default());
         Self { auth, app, tx, rx }
@@ -63,6 +67,9 @@ impl MessagingService {
     }
 
     /// List all conversation threads for the current user.
+    ///
+    /// # Errors
+    /// Returns [`MessagingError::NotAuthenticated`] if no user is logged in.
     #[instrument(skip(self), name = "ui.messaging.list_threads")]
     pub async fn list_threads(&self) -> Result<Vec<ThreadSummary>, MessagingError> {
         if !self.is_authenticated() {
@@ -73,6 +80,9 @@ impl MessagingService {
     }
 
     /// Get messages for a thread with pagination.
+    ///
+    /// # Errors
+    /// Returns [`MessagingError::NotAuthenticated`] if no user is logged in.
     #[instrument(
         skip(self),
         name = "ui.messaging.get_messages",
@@ -93,6 +103,11 @@ impl MessagingService {
     }
 
     /// Send a message to a thread.
+    ///
+    /// # Errors
+    /// - [`MessagingError::NotAuthenticated`] if no user is logged in.
+    /// - [`MessagingError::SendFailed`] if the message could not be delivered.
+    /// - [`MessagingError::Internal`] for other failures.
     #[instrument(skip(self, text), name = "ui.messaging.send", fields(thread_id, has_reply = reply_to.is_some()))]
     pub async fn send_message(
         &self,
@@ -109,6 +124,10 @@ impl MessagingService {
     }
 
     /// Edit an existing message.
+    ///
+    /// # Errors
+    /// - [`MessagingError::NotAuthenticated`] if no user is logged in.
+    /// - [`MessagingError::Internal`] if the edit fails.
     #[instrument(
         skip(self, new_text),
         name = "ui.messaging.edit",
@@ -129,6 +148,10 @@ impl MessagingService {
     }
 
     /// Delete a message.
+    ///
+    /// # Errors
+    /// - [`MessagingError::NotAuthenticated`] if no user is logged in.
+    /// - [`MessagingError::Internal`] if the delete fails.
     #[instrument(
         skip(self),
         name = "ui.messaging.delete",
@@ -148,6 +171,10 @@ impl MessagingService {
     }
 
     /// Mark a thread as read, clearing unread count.
+    ///
+    /// # Errors
+    /// - [`MessagingError::NotAuthenticated`] if no user is logged in.
+    /// - [`MessagingError::ThreadNotFound`] if the thread does not exist.
     #[instrument(skip(self), name = "ui.messaging.mark_read", fields(thread_id))]
     pub async fn mark_thread_read(&self, thread_id: &str) -> Result<(), MessagingError> {
         if !self.is_authenticated() {
@@ -158,6 +185,7 @@ impl MessagingService {
         let mut snap = self.rx.borrow().clone();
         if let Some(thread) = snap.threads.iter_mut().find(|t| t.thread_id == thread_id) {
             thread.unread_count = 0;
+            // Send cannot fail: self.rx guarantees at least one receiver exists
             let _ = self.tx.send(snap);
             // TODO: Wire to core Command::MarkThreadRead
             Ok(())
@@ -167,6 +195,10 @@ impl MessagingService {
     }
 
     /// Get unread count for a specific thread.
+    ///
+    /// # Errors
+    /// - [`MessagingError::NotAuthenticated`] if no user is logged in.
+    /// - [`MessagingError::ThreadNotFound`] if the thread does not exist.
     #[instrument(skip(self), name = "ui.messaging.get_unread", fields(thread_id))]
     pub async fn get_thread_unread_count(&self, thread_id: &str) -> Result<u32, MessagingError> {
         if !self.is_authenticated() {
@@ -182,6 +214,10 @@ impl MessagingService {
     }
 
     /// Add a reaction to a message.
+    ///
+    /// # Errors
+    /// - [`MessagingError::NotAuthenticated`] if no user is logged in.
+    /// - [`MessagingError::Internal`] if the reaction fails.
     #[instrument(
         skip(self),
         name = "ui.messaging.react",
@@ -198,10 +234,14 @@ impl MessagingService {
             return Err(MessagingError::NotAuthenticated);
         }
         // TODO: Wire to core Command::AddReaction
-        Ok(())
+        Err(MessagingError::Internal("not yet implemented".to_string()))
     }
 
     /// Remove a reaction from a message.
+    ///
+    /// # Errors
+    /// - [`MessagingError::NotAuthenticated`] if no user is logged in.
+    /// - [`MessagingError::Internal`] if the removal fails.
     #[instrument(
         skip(self),
         name = "ui.messaging.unreact",
@@ -218,7 +258,7 @@ impl MessagingService {
             return Err(MessagingError::NotAuthenticated);
         }
         // TODO: Wire to core Command::RemoveReaction
-        Ok(())
+        Err(MessagingError::Internal("not yet implemented".to_string()))
     }
 
     /// Internal: update the thread list (called by core events).
@@ -226,6 +266,7 @@ impl MessagingService {
         let mut snap = self.rx.borrow().clone();
         snap.threads = threads;
         snap.loading = false;
+        // Send cannot fail: self.rx guarantees at least one receiver exists
         let _ = self.tx.send(snap);
     }
 
@@ -233,6 +274,7 @@ impl MessagingService {
     pub fn set_loading(&self, loading: bool) {
         let mut snap = self.rx.borrow().clone();
         snap.loading = loading;
+        // Send cannot fail: self.rx guarantees at least one receiver exists
         let _ = self.tx.send(snap);
     }
 

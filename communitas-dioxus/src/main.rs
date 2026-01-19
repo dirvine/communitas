@@ -2,6 +2,7 @@
 #![allow(clippy::print_stderr)] // eprintln! used for bootstrap errors before logger init
 
 mod components;
+pub mod styles;
 pub mod tokens;
 
 use communitas_core::generate_id_words;

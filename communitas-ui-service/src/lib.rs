@@ -252,7 +252,8 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let services = make_services(&temp).await;
 
-        let snap = services.directory().current_snapshot();
+        // Use async snapshot() instead of current_snapshot() to avoid blocking_read in async context
+        let snap = services.directory().snapshot().await;
         assert!(snap.identity.is_none());
         assert!(snap.entities.is_empty());
         assert!(snap.contacts.is_empty());
@@ -263,7 +264,8 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let services = make_services(&temp).await;
 
-        let snap = services.navigation().current_snapshot();
+        // Use async snapshot() instead of current_snapshot() to avoid blocking_read in async context
+        let snap = services.navigation().snapshot().await;
         assert!(snap.recent_entities.is_empty());
         assert!(snap.recent_contacts.is_empty());
         assert!(snap.starred_entities.is_empty());
@@ -336,14 +338,26 @@ mod tests {
         assert_eq!(snap.recent_entities[0], key);
     }
 
-    #[tokio::test]
-    async fn directory_refresh_fails_without_auth() {
-        let temp = TempDir::new().unwrap();
-        let services = make_services(&temp).await;
+    // Uses a thread with larger stack (8MB) to avoid stack overflow from
+    // large async state machine in CommunitasApp + DirectoryService::refresh_all chain
+    #[test]
+    fn directory_refresh_fails_without_auth() {
+        std::thread::Builder::new()
+            .stack_size(8 * 1024 * 1024)
+            .spawn(|| {
+                let rt = tokio::runtime::Runtime::new().unwrap();
+                rt.block_on(async {
+                    let temp = TempDir::new().unwrap();
+                    let services = make_services(&temp).await;
 
-        // Not authenticated, so refresh should fail
-        let result = services.directory().refresh_all().await;
-        assert!(result.is_err());
+                    // Not authenticated, so refresh should fail
+                    let result = services.directory().refresh_all().await;
+                    assert!(result.is_err());
+                });
+            })
+            .unwrap()
+            .join()
+            .unwrap();
     }
 
     #[tokio::test]

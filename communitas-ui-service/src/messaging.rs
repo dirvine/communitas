@@ -118,7 +118,7 @@ impl MessagingService {
                 .await
             {
                 Ok(QueryResponse::Messages(messages)) => {
-                    // Get the most recent message (last in the list, assuming chronological order)
+                    // Get the most recent message (last in the list; core returns messages chronologically)
                     if let Some(msg) = messages.last() {
                         let preview_text = truncate_preview(&msg.text, 100);
                         let ts = msg.timestamp.max(0) as u64;
@@ -189,7 +189,10 @@ impl MessagingService {
             return Err(MessagingError::NotAuthenticated);
         }
 
-        // Query messages for the entity
+        // Query messages for the entity.
+        // Note: The core API doesn't distinguish "entity not found" from other query failures,
+        // so we map all errors to ThreadNotFound. An unexpected response type (Ok(_)) indicates
+        // a programming error or API mismatch and is logged at warn level.
         let messages = match self
             .app
             .query(Query::GetEntityMessages {
@@ -211,16 +214,8 @@ impl MessagingService {
         // Convert to UI types
         let mut ui_messages: Vec<Message> = messages.iter().map(core_message_to_ui).collect();
 
-        // Apply pagination: filter by before cursor
-        if let Some(before_ts) = before {
-            ui_messages.retain(|m| m.timestamp < before_ts);
-        }
-
-        // Sort by timestamp descending (newest first)
-        ui_messages.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
-
-        // Apply limit
-        ui_messages.truncate(limit);
+        // Apply pagination (filter, sort, truncate)
+        apply_pagination(&mut ui_messages, limit, before);
 
         debug!(
             thread_id,
@@ -415,6 +410,25 @@ impl MessagingService {
     }
 }
 
+/// Apply pagination to a list of messages: filter by cursor, sort descending, and truncate.
+///
+/// This is extracted for testability. The function:
+/// 1. Filters messages with `timestamp < before` if a cursor is provided
+/// 2. Sorts by timestamp descending (newest first)
+/// 3. Truncates to the specified limit
+fn apply_pagination(messages: &mut Vec<Message>, limit: usize, before: Option<u64>) {
+    // Filter by before cursor
+    if let Some(before_ts) = before {
+        messages.retain(|m| m.timestamp < before_ts);
+    }
+
+    // Sort by timestamp descending (newest first)
+    messages.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+
+    // Apply limit
+    messages.truncate(limit);
+}
+
 /// Truncate text to max length, adding ellipsis if truncated.
 fn truncate_preview(text: &str, max_len: usize) -> String {
     if text.chars().count() <= max_len {
@@ -571,5 +585,127 @@ mod tests {
         assert!(result.ends_with("..."));
         // Should have 17 emoji + "..."
         assert_eq!(result.chars().count(), 20);
+    }
+
+    // Helper to create test messages with specific timestamps
+    fn make_test_message(id: &str, timestamp: u64) -> Message {
+        Message {
+            id: id.to_string(),
+            thread_id: "thread1".to_string(),
+            sender_id: "sender1".to_string(),
+            sender_name: "Sender".to_string(),
+            text: format!("Message {id}"),
+            timestamp,
+            edited: false,
+            reply_to_id: None,
+            reactions: vec![],
+        }
+    }
+
+    #[test]
+    fn apply_pagination_empty_input() {
+        let mut messages: Vec<Message> = vec![];
+        apply_pagination(&mut messages, 10, None);
+        assert!(messages.is_empty());
+    }
+
+    #[test]
+    fn apply_pagination_limit_only() {
+        let mut messages = vec![
+            make_test_message("1", 100),
+            make_test_message("2", 200),
+            make_test_message("3", 300),
+            make_test_message("4", 400),
+            make_test_message("5", 500),
+        ];
+        apply_pagination(&mut messages, 3, None);
+
+        assert_eq!(messages.len(), 3);
+        // Should be sorted descending (newest first) and limited to 3
+        assert_eq!(messages[0].id, "5");
+        assert_eq!(messages[1].id, "4");
+        assert_eq!(messages[2].id, "3");
+    }
+
+    #[test]
+    fn apply_pagination_before_cursor_only() {
+        let mut messages = vec![
+            make_test_message("1", 100),
+            make_test_message("2", 200),
+            make_test_message("3", 300),
+            make_test_message("4", 400),
+            make_test_message("5", 500),
+        ];
+        // Only return messages with timestamp < 350
+        apply_pagination(&mut messages, 100, Some(350));
+
+        assert_eq!(messages.len(), 3);
+        // Messages 1, 2, 3 should remain (timestamps 100, 200, 300)
+        // Sorted descending: 3, 2, 1
+        assert_eq!(messages[0].id, "3");
+        assert_eq!(messages[1].id, "2");
+        assert_eq!(messages[2].id, "1");
+    }
+
+    #[test]
+    fn apply_pagination_limit_and_before() {
+        let mut messages = vec![
+            make_test_message("1", 100),
+            make_test_message("2", 200),
+            make_test_message("3", 300),
+            make_test_message("4", 400),
+            make_test_message("5", 500),
+        ];
+        // Filter to timestamp < 450, then limit to 2
+        apply_pagination(&mut messages, 2, Some(450));
+
+        assert_eq!(messages.len(), 2);
+        // Messages 1, 2, 3, 4 pass filter (timestamp < 450)
+        // Sorted descending: 4, 3, 2, 1
+        // Limited to 2: 4, 3
+        assert_eq!(messages[0].id, "4");
+        assert_eq!(messages[1].id, "3");
+    }
+
+    #[test]
+    fn apply_pagination_sorts_descending() {
+        // Input in random order
+        let mut messages = vec![
+            make_test_message("3", 300),
+            make_test_message("1", 100),
+            make_test_message("5", 500),
+            make_test_message("2", 200),
+            make_test_message("4", 400),
+        ];
+        apply_pagination(&mut messages, 100, None);
+
+        // Should be sorted by timestamp descending
+        assert_eq!(messages.len(), 5);
+        assert_eq!(messages[0].timestamp, 500);
+        assert_eq!(messages[1].timestamp, 400);
+        assert_eq!(messages[2].timestamp, 300);
+        assert_eq!(messages[3].timestamp, 200);
+        assert_eq!(messages[4].timestamp, 100);
+    }
+
+    #[test]
+    fn apply_pagination_before_excludes_exact_match() {
+        let mut messages = vec![
+            make_test_message("1", 100),
+            make_test_message("2", 200),
+            make_test_message("3", 300),
+        ];
+        // timestamp < 200 should exclude message with timestamp 200
+        apply_pagination(&mut messages, 100, Some(200));
+
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].id, "1");
+    }
+
+    #[test]
+    fn apply_pagination_limit_zero() {
+        let mut messages = vec![make_test_message("1", 100), make_test_message("2", 200)];
+        apply_pagination(&mut messages, 0, None);
+        assert!(messages.is_empty());
     }
 }

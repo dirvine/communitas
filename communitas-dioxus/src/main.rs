@@ -23,6 +23,7 @@ use std::{
     borrow::Cow,
     sync::{Arc, OnceLock},
 };
+use tokens::colors;
 use tracing::{error, info};
 
 static UI_SERVICES: OnceLock<Arc<UiServices>> = OnceLock::new();
@@ -1660,8 +1661,18 @@ fn AppShell(props: AppShellProps) -> Element {
                         }
                     }
                 } else {
-                    nav { class: "w-full max-w-sm space-y-4 rounded-2xl border border-slate-900 bg-slate-950/80 p-4 lg:w-80",
-                        span { class: "text-xs uppercase tracking-[0.4em] text-slate-500", "Navigation" }
+                    nav {
+                        class: "w-full max-w-sm space-y-4 rounded-2xl border p-4 lg:w-80",
+                        style: format!(
+                            "background-color: {}; border-color: {};",
+                            colors::SURFACE_BG,
+                            colors::BORDER_DEFAULT
+                        ),
+                        span {
+                            class: "text-xs uppercase tracking-[0.4em]",
+                            style: format!("color: {};", colors::TEXT_MUTED),
+                            "Navigation"
+                        }
                         {nav_links.into_iter().map(|item| {
                             let route = (item.to)();
                             let active = current_route == route;
@@ -1670,19 +1681,29 @@ fn AppShell(props: AppShellProps) -> Element {
                             rsx! {
                                 Link {
                                     to: link_route,
-                                    class: format!(
-                                        "block rounded-xl border px-4 py-3 transition {}",
-                                        if active {
-                                            "border-emerald-400 bg-emerald-400/10 text-emerald-200"
-                                        } else {
-                                            "border-transparent text-slate-400 hover:text-emerald-200 hover:border-slate-800"
-                                        }
-                                    ),
+                                    class: "block rounded-xl border px-4 py-3 transition",
+                                    style: if active {
+                                        format!(
+                                            "border-color: {}; background-color: {}; color: {};",
+                                            colors::PRIMARY,
+                                            "rgba(16, 185, 129, 0.1)", // PRIMARY with 10% opacity
+                                            colors::PRIMARY
+                                        )
+                                    } else {
+                                        format!(
+                                            "border-color: transparent; color: {};",
+                                            colors::TEXT_SECONDARY
+                                        )
+                                    },
                                     onclick: move |_| {
                                         info!(target = "ui.nav", event = "navigate_click", destination = label);
                                     },
                                     span { class: "text-base font-semibold", "{item.label}" }
-                                    p { class: "text-sm text-slate-500", "{item.description}" }
+                                    p {
+                                        class: "text-sm",
+                                        style: format!("color: {};", colors::TEXT_MUTED),
+                                        "{item.description}"
+                                    }
                                 }
                             }
                         })}
@@ -2002,7 +2023,11 @@ fn SidebarEntityList(props: SidebarEntityListProps) -> Element {
     let services = use_context::<Arc<UiServices>>();
     rsx! {
         div { class: "space-y-2",
-            h5 { class: "text-xs uppercase tracking-[0.3em] text-slate-500", "{props.title}" }
+            h5 {
+                class: "text-xs uppercase tracking-[0.3em]",
+                style: format!("color: {};", colors::TEXT_MUTED),
+                "{props.title}"
+            }
             {props.entities.iter().take(5).map(|entity| {
                 let services = services.clone();
                 let nav_key = nav_key_for(entity);
@@ -2011,7 +2036,13 @@ fn SidebarEntityList(props: SidebarEntityListProps) -> Element {
                 rsx! {
                     Link {
                         to: route.clone(),
-                        class: "block rounded-xl border border-slate-900/60 bg-slate-950/40 px-3 py-2 text-sm text-slate-200 hover:border-emerald-400",
+                        class: "block rounded-xl border px-3 py-2 text-sm transition",
+                        style: format!(
+                            "background-color: {}; border-color: {}; color: {};",
+                            colors::SURFACE_BG,
+                            colors::BORDER_DEFAULT,
+                            colors::TEXT_PRIMARY
+                        ),
                         onclick: move |_| {
                             record_entity_visit(services.clone(), nav_key.clone());
                         },

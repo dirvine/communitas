@@ -346,6 +346,35 @@ pub fn list_tools(authenticated: bool) -> Vec<Tool> {
                 "required": ["entity_id"]
             }),
         },
+        // Thread listing tools (for AI agents)
+        Tool {
+            name: "list_threads".to_string(),
+            description: "List all conversation threads for the authenticated user. Returns threads from both entities (channels, groups) and direct messages with contacts.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "limit": {"type": "integer", "description": "Maximum number of threads to return (default: 50, max: 100)"},
+                    "filter": {
+                        "type": "string",
+                        "enum": ["all", "unread", "entities", "contacts"],
+                        "description": "Filter threads by type (default: all)"
+                    }
+                }
+            }),
+        },
+        Tool {
+            name: "list_messages".to_string(),
+            description: "Get messages from a specific thread with pagination support.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "thread_id": {"type": "string", "description": "Thread ID to get messages from"},
+                    "limit": {"type": "integer", "description": "Maximum number of messages to return (default: 50, max: 100)"},
+                    "before": {"type": "integer", "description": "Unix timestamp in milliseconds - get messages before this time (for pagination)"}
+                },
+                "required": ["thread_id"]
+            }),
+        },
         // Kanban tools
         Tool {
             name: "create_kanban_board".to_string(),
@@ -1500,6 +1529,9 @@ async fn dispatch_message_tools(
         // Thread operations
         "create_thread" => Some(execute_create_thread(app, args.clone()).await),
         "get_thread_messages" => Some(execute_get_thread_messages(app, args.clone()).await),
+        // Thread listing (for AI agents)
+        "list_threads" => Some(execute_list_threads(app, args.clone()).await),
+        "list_messages" => Some(execute_list_messages(app, args.clone()).await),
         _ => None,
     }
 }
@@ -2401,6 +2433,160 @@ async fn execute_get_messages(app: &CommunitasApp, args: Value) -> ToolCallResul
                 })
                 .collect();
             json_result(&json!({"messages": list}))
+        }
+        Ok(_) => error_result("Unexpected response type"),
+        Err(e) => error_result(&format!("Failed to get messages: {}", e.message)),
+    }
+}
+
+/// List all conversation threads (entities + contacts) for the authenticated user.
+///
+/// Returns threads matching the `communitas-ui-api::ThreadSummary` format for MCP parity.
+#[tracing::instrument(skip(app), name = "mcp.tools.list_threads")]
+async fn execute_list_threads(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let limit = args["limit"].as_u64().unwrap_or(50).min(100) as usize;
+    let filter = args["filter"].as_str().unwrap_or("all");
+
+    // Get entities to build thread list
+    let entities_query = Query::ListEntities;
+    let entities_result = app.query(entities_query).await;
+
+    // Get contacts to build thread list
+    let contacts_query = Query::ListContacts;
+    let contacts_result = app.query(contacts_query).await;
+
+    let mut threads: Vec<Value> = Vec::new();
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+
+    // Build entity threads
+    if (filter == "all" || filter == "entities" || filter == "unread")
+        && let Ok(QueryResponse::EntityList(entities)) = entities_result
+    {
+        for entity in entities.iter().take(limit) {
+            // Map entity_type to UI-compatible type string
+            let entity_type_str = match entity.entity_type.as_str() {
+                "Organisation" => "organisation",
+                "Project" => "project",
+                "Group" => "group",
+                "Channel" => "channel",
+                other => other,
+            };
+
+            threads.push(json!({
+                "thread_id": format!("entity:{}", entity.id),
+                "entity_id": entity.id,
+                "entity_type": entity_type_str,
+                "contact_id": null,
+                "display_name": entity.name,
+                "last_message_preview": "",
+                "last_message_timestamp": now_ms.saturating_sub(3_600_000), // 1 hour ago placeholder
+                "unread_count": 0,
+                "is_muted": false
+            }));
+        }
+    }
+
+    // Build contact threads (DMs)
+    if (filter == "all" || filter == "contacts" || filter == "unread")
+        && let Ok(QueryResponse::ContactList(contacts)) = contacts_result
+    {
+        for contact in contacts.iter().take(limit.saturating_sub(threads.len())) {
+            threads.push(json!({
+                "thread_id": format!("contact:{}", contact.id),
+                "entity_id": null,
+                "entity_type": null,
+                "contact_id": contact.id,
+                "display_name": contact.display_name,
+                "last_message_preview": "",
+                "last_message_timestamp": now_ms.saturating_sub(7_200_000), // 2 hours ago placeholder
+                "unread_count": 0,
+                "is_muted": false
+            }));
+        }
+    }
+
+    // Sort by timestamp descending (most recent first)
+    threads.sort_by(|a, b| {
+        let ts_a = a["last_message_timestamp"].as_u64().unwrap_or(0);
+        let ts_b = b["last_message_timestamp"].as_u64().unwrap_or(0);
+        ts_b.cmp(&ts_a)
+    });
+
+    // Apply limit
+    threads.truncate(limit);
+
+    json_result(&json!({
+        "threads": threads,
+        "total_count": threads.len()
+    }))
+}
+
+/// Get messages from a specific thread with pagination support.
+///
+/// Thread IDs are formatted as "entity:{entity_id}" or "contact:{contact_id}".
+#[tracing::instrument(skip(app), name = "mcp.tools.list_messages")]
+async fn execute_list_messages(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let thread_id = match args["thread_id"].as_str() {
+        Some(id) => id,
+        None => return error_result("thread_id is required"),
+    };
+    let limit = args["limit"].as_u64().unwrap_or(50).min(100) as usize;
+    let before_timestamp = args["before"].as_u64();
+
+    // Parse thread_id to determine if entity or contact
+    let (entity_id, _is_contact) = if let Some(stripped) = thread_id.strip_prefix("entity:") {
+        (stripped.to_string(), false)
+    } else if let Some(stripped) = thread_id.strip_prefix("contact:") {
+        (stripped.to_string(), true)
+    } else {
+        // Fallback: treat as entity_id directly for backwards compatibility
+        (thread_id.to_string(), false)
+    };
+
+    // Query messages from the entity
+    let query = Query::GetEntityMessages {
+        entity_id: entity_id.clone(),
+    };
+
+    match app.query(query).await {
+        Ok(QueryResponse::Messages(mut messages)) => {
+            // Apply before filter if provided (convert u64 to i64 for comparison)
+            if let Some(before_ts) = before_timestamp {
+                let before_ts_i64 = before_ts as i64;
+                messages.retain(|m| m.timestamp < before_ts_i64);
+            }
+
+            // Sort by timestamp descending and limit
+            messages.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+            messages.truncate(limit);
+
+            // Reverse to get chronological order (oldest first)
+            messages.reverse();
+
+            let list: Vec<Value> = messages
+                .iter()
+                .map(|m| {
+                    json!({
+                        "id": m.id,
+                        "thread_id": thread_id,
+                        "sender_id": m.author,
+                        "sender_name": m.author, // TODO: resolve display name
+                        "text": m.text,
+                        "timestamp": m.timestamp,
+                        "reply_to_id": m.reply_to_id,
+                        "edited": false,
+                        "reactions": []
+                    })
+                })
+                .collect();
+
+            json_result(&json!({
+                "messages": list,
+                "has_more": messages.len() == limit
+            }))
         }
         Ok(_) => error_result("Unexpected response type"),
         Err(e) => error_result(&format!("Failed to get messages: {}", e.message)),

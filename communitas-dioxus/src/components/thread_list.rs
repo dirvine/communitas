@@ -1,5 +1,6 @@
 //! Thread list sidebar component for messaging UI.
 
+use crate::tokens::colors;
 use communitas_ui_api::{ThreadSummary, UnifiedEntityType};
 use communitas_ui_service::UiServices;
 use dioxus::prelude::*;
@@ -120,19 +121,26 @@ fn ThreadFilterTabs(props: ThreadFilterTabsProps) -> Element {
 
     rsx! {
         div {
-            class: "thread-filter-tabs flex gap-1 p-2 border-b border-slate-800",
+            class: "thread-filter-tabs flex gap-1 p-2 border-b",
+            style: format!("border-color: {};", colors::BORDER_DEFAULT),
             role: "tablist",
             aria_label: "Filter threads",
             for f in filters {
                 button {
-                    class: format!(
-                        "px-3 py-1.5 text-xs font-medium rounded-lg transition {}",
-                        if props.current == f {
-                            "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                        } else {
-                            "text-slate-400 hover:text-slate-200 hover:bg-slate-800"
-                        }
-                    ),
+                    class: "px-3 py-1.5 text-xs font-medium rounded-lg transition",
+                    style: if props.current == f {
+                        format!(
+                            "background-color: {}20; color: {}; border: 1px solid {}30;",
+                            colors::PRIMARY,
+                            colors::PRIMARY,
+                            colors::PRIMARY
+                        )
+                    } else {
+                        format!(
+                            "color: {}; background-color: transparent;",
+                            colors::TEXT_SECONDARY
+                        )
+                    },
                     role: "tab",
                     aria_selected: props.current == f,
                     onclick: move |_| props.on_change.call(f),
@@ -159,12 +167,14 @@ fn ThreadListItem(props: ThreadListItemProps) -> Element {
 
     rsx! {
         button {
-            class: format!(
-                "thread-list-item w-full text-left px-3 py-3 border-b border-slate-800/50 transition {}",
+            class: "thread-list-item w-full text-left px-3 py-3 border-b transition",
+            style: format!(
+                "border-color: {}50; {}",
+                colors::BORDER_DEFAULT,
                 if props.selected {
-                    "bg-emerald-500/10 border-l-2 border-l-emerald-400"
+                    format!("background-color: {}10; border-left: 2px solid {};", colors::PRIMARY, colors::PRIMARY)
                 } else {
-                    "hover:bg-slate-800/50"
+                    "background-color: transparent;".to_string()
                 }
             ),
             role: "listitem",
@@ -174,7 +184,8 @@ fn ThreadListItem(props: ThreadListItemProps) -> Element {
                 class: "flex items-start gap-3",
                 // Avatar/icon
                 div {
-                    class: "flex-shrink-0 w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center text-sm",
+                    class: "flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-sm",
+                    style: format!("background-color: {};", colors::SURFACE_ELEVATED),
                     "{type_icon}"
                 }
                 // Content
@@ -183,23 +194,26 @@ fn ThreadListItem(props: ThreadListItemProps) -> Element {
                     div {
                         class: "flex items-center justify-between gap-2",
                         span {
-                            class: format!(
-                                "font-medium truncate {}",
-                                if thread.unread_count > 0 { "text-white" } else { "text-slate-200" }
+                            class: "font-medium truncate",
+                            style: format!(
+                                "color: {};",
+                                if thread.unread_count > 0 { colors::TEXT_PRIMARY } else { colors::TEXT_SECONDARY }
                             ),
                             "{thread.display_name}"
                         }
                         span {
-                            class: "text-xs text-slate-500 flex-shrink-0",
+                            class: "text-xs flex-shrink-0",
+                            style: format!("color: {};", colors::TEXT_MUTED),
                             "{time_display}"
                         }
                     }
                     div {
                         class: "flex items-center justify-between gap-2 mt-0.5",
                         p {
-                            class: format!(
-                                "text-sm truncate {}",
-                                if thread.unread_count > 0 { "text-slate-300" } else { "text-slate-500" }
+                            class: "text-sm truncate",
+                            style: format!(
+                                "color: {};",
+                                if thread.unread_count > 0 { colors::TEXT_SECONDARY } else { colors::TEXT_MUTED }
                             ),
                             "{thread.last_message_preview}"
                         }
@@ -229,7 +243,8 @@ fn UnreadBadge(props: UnreadBadgeProps) -> Element {
 
     rsx! {
         span {
-            class: "flex-shrink-0 min-w-[1.25rem] h-5 px-1.5 rounded-full bg-emerald-500 text-xs font-semibold text-slate-900 flex items-center justify-center",
+            class: "flex-shrink-0 min-w-[1.25rem] h-5 px-1.5 rounded-full text-xs font-semibold flex items-center justify-center",
+            style: format!("background-color: {}; color: {};", colors::PRIMARY, colors::TEXT_INVERSE),
             aria_label: format!("{} unread messages", props.count),
             "{display}"
         }
@@ -244,12 +259,22 @@ fn ThreadListSkeleton() -> Element {
             class: "animate-pulse",
             for _ in 0..5 {
                 div {
-                    class: "flex items-start gap-3 px-3 py-3 border-b border-slate-800/50",
-                    div { class: "w-10 h-10 rounded-full bg-slate-800" }
+                    class: "flex items-start gap-3 px-3 py-3 border-b",
+                    style: format!("border-color: {}50;", colors::BORDER_DEFAULT),
+                    div {
+                        class: "w-10 h-10 rounded-full",
+                        style: format!("background-color: {};", colors::SURFACE_ELEVATED),
+                    }
                     div {
                         class: "flex-1",
-                        div { class: "h-4 w-32 bg-slate-800 rounded mb-2" }
-                        div { class: "h-3 w-48 bg-slate-800/60 rounded" }
+                        div {
+                            class: "h-4 w-32 rounded mb-2",
+                            style: format!("background-color: {};", colors::SURFACE_ELEVATED),
+                        }
+                        div {
+                            class: "h-3 w-48 rounded",
+                            style: format!("background-color: {}60;", colors::SURFACE_ELEVATED),
+                        }
                     }
                 }
             }
@@ -276,16 +301,19 @@ fn EmptyThreadList(props: EmptyThreadListProps) -> Element {
         div {
             class: "flex flex-col items-center justify-center py-12 px-4 text-center",
             div {
-                class: "w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center mb-4",
+                class: "w-16 h-16 rounded-full flex items-center justify-center mb-4",
+                style: format!("background-color: {};", colors::SURFACE_ELEVATED),
                 span { class: "text-2xl", "💬" }
             }
             p {
-                class: "text-slate-400 text-sm",
+                class: "text-sm",
+                style: format!("color: {};", colors::TEXT_SECONDARY),
                 "{message}"
             }
             if props.filter == ThreadFilter::All {
                 p {
-                    class: "text-slate-500 text-xs mt-1",
+                    class: "text-xs mt-1",
+                    style: format!("color: {};", colors::TEXT_MUTED),
                     "Start a conversation with a contact or entity"
                 }
             }

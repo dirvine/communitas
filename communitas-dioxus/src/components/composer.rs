@@ -1,5 +1,6 @@
 //! Message composer component for sending messages.
 
+use crate::tokens::colors;
 use communitas_ui_api::Message;
 use communitas_ui_service::UiServices;
 use dioxus::events::MouseData;
@@ -95,7 +96,8 @@ pub fn MessageComposer(props: MessageComposerProps) -> Element {
 
     rsx! {
         div {
-            class: "message-composer border-t border-slate-800 bg-slate-900/80 p-4",
+            class: "message-composer border-t p-4",
+            style: format!("border-color: {}; background-color: {}e6;", colors::BORDER_DEFAULT, colors::SURFACE_BG),
             // Reply indicator
             if let Some(reply) = &props.reply_to {
                 ReplyIndicator {
@@ -113,11 +115,13 @@ pub fn MessageComposer(props: MessageComposerProps) -> Element {
             // Error message
             if let Some(err) = error_msg() {
                 div {
-                    class: "composer-error mb-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300",
+                    class: "composer-error mb-3 rounded-lg border px-3 py-2 text-sm",
+                    style: format!("border-color: {}30; background-color: {}10; color: {};", colors::DANGER, colors::DANGER, colors::DANGER),
                     role: "alert",
                     p { "{err}" }
                     button {
-                        class: "text-xs text-red-400 hover:text-red-300 mt-1",
+                        class: "text-xs mt-1 hover:opacity-80",
+                        style: format!("color: {};", colors::DANGER),
                         onclick: move |_| error_msg.set(None),
                         "Dismiss"
                     }
@@ -128,7 +132,8 @@ pub fn MessageComposer(props: MessageComposerProps) -> Element {
                 class: "composer-input-row flex items-end gap-3",
                 // Attachment button (placeholder)
                 button {
-                    class: "composer-attach-btn flex-shrink-0 w-10 h-10 rounded-lg border border-slate-700 bg-slate-800 flex items-center justify-center text-slate-400 hover:border-slate-600 hover:text-slate-300 disabled:opacity-50",
+                    class: "composer-attach-btn flex-shrink-0 w-10 h-10 rounded-lg border flex items-center justify-center hover:opacity-80 disabled:opacity-50",
+                    style: format!("border-color: {}; background-color: {}; color: {};", colors::BORDER_DEFAULT, colors::SURFACE_CARD, colors::TEXT_SECONDARY),
                     title: "Attach file (coming soon)",
                     disabled: true,
                     aria_label: "Attach file",
@@ -138,7 +143,8 @@ pub fn MessageComposer(props: MessageComposerProps) -> Element {
                 div {
                     class: "flex-1 relative",
                     textarea {
-                        class: "composer-textarea w-full min-h-[2.5rem] max-h-32 px-4 py-2.5 rounded-lg border border-slate-700 bg-slate-800 text-slate-100 placeholder-slate-500 focus:border-emerald-400 focus:outline-none resize-none",
+                        class: "composer-textarea w-full min-h-[2.5rem] max-h-32 px-4 py-2.5 rounded-lg border focus:outline-none resize-none",
+                        style: format!("border-color: {}; background-color: {}; color: {};", colors::BORDER_DEFAULT, colors::SURFACE_CARD, colors::TEXT_PRIMARY),
                         placeholder: "Type a message...",
                         value: "{text}",
                         disabled: sending(),
@@ -150,7 +156,8 @@ pub fn MessageComposer(props: MessageComposerProps) -> Element {
                 }
                 // Emoji button (placeholder)
                 button {
-                    class: "composer-emoji-btn flex-shrink-0 w-10 h-10 rounded-lg border border-slate-700 bg-slate-800 flex items-center justify-center text-slate-400 hover:border-slate-600 hover:text-slate-300 disabled:opacity-50",
+                    class: "composer-emoji-btn flex-shrink-0 w-10 h-10 rounded-lg border flex items-center justify-center hover:opacity-80 disabled:opacity-50",
+                    style: format!("border-color: {}; background-color: {}; color: {};", colors::BORDER_DEFAULT, colors::SURFACE_CARD, colors::TEXT_SECONDARY),
                     title: "Add emoji (coming soon)",
                     disabled: true,
                     aria_label: "Add emoji",
@@ -158,14 +165,18 @@ pub fn MessageComposer(props: MessageComposerProps) -> Element {
                 }
                 // Send button
                 button {
-                    class: format!(
-                        "composer-send-btn flex-shrink-0 px-5 h-10 rounded-lg font-semibold transition {}",
-                        if can_send {
-                            "bg-emerald-500 text-slate-900 hover:bg-emerald-400 shadow-lg shadow-emerald-500/20"
-                        } else {
-                            "bg-slate-700 text-slate-400 cursor-not-allowed"
-                        }
-                    ),
+                    class: "composer-send-btn flex-shrink-0 px-5 h-10 rounded-lg font-semibold transition",
+                    style: if can_send {
+                        format!(
+                            "background-color: {}; color: {}; box-shadow: 0 4px 6px {}20;",
+                            colors::PRIMARY, colors::TEXT_INVERSE, colors::PRIMARY
+                        )
+                    } else {
+                        format!(
+                            "background-color: {}; color: {}; cursor: not-allowed;",
+                            colors::SURFACE_ELEVATED, colors::TEXT_SECONDARY
+                        )
+                    },
                     disabled: !can_send,
                     onclick: handle_click,
                     aria_label: "Send message",
@@ -183,7 +194,8 @@ pub fn MessageComposer(props: MessageComposerProps) -> Element {
             // Character count hint
             if text().len() > 500 {
                 div {
-                    class: "mt-2 text-xs text-slate-500",
+                    class: "mt-2 text-xs",
+                    style: format!("color: {};", colors::TEXT_MUTED),
                     "{text().len()} characters"
                 }
             }
@@ -208,29 +220,34 @@ fn ReplyIndicator(props: ReplyIndicatorProps) -> Element {
 
     rsx! {
         div {
-            class: "reply-indicator mb-3 flex items-start gap-3 rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-2",
+            class: "reply-indicator mb-3 flex items-start gap-3 rounded-lg border px-3 py-2",
+            style: format!("border-color: {}; background-color: {}80;", colors::BORDER_DEFAULT, colors::SURFACE_CARD),
             role: "status",
             aria_label: format!("Replying to {}", props.message.sender_name),
             // Reply icon
             div {
-                class: "flex-shrink-0 text-slate-500",
+                class: "flex-shrink-0",
+                style: format!("color: {};", colors::TEXT_MUTED),
                 "↩"
             }
             // Reply content
             div {
                 class: "flex-1 min-w-0",
                 span {
-                    class: "text-xs text-emerald-400 font-medium",
+                    class: "text-xs font-medium",
+                    style: format!("color: {};", colors::PRIMARY),
                     "Replying to {props.message.sender_name}"
                 }
                 p {
-                    class: "text-sm text-slate-400 truncate mt-0.5",
+                    class: "text-sm truncate mt-0.5",
+                    style: format!("color: {};", colors::TEXT_SECONDARY),
                     "{preview}"
                 }
             }
             // Cancel button
             button {
-                class: "flex-shrink-0 w-6 h-6 rounded flex items-center justify-center text-slate-500 hover:text-slate-300 hover:bg-slate-700",
+                class: "flex-shrink-0 w-6 h-6 rounded flex items-center justify-center hover:opacity-80",
+                style: format!("color: {};", colors::TEXT_MUTED),
                 onclick: move |_| props.on_cancel.call(()),
                 aria_label: "Cancel reply",
                 "×"
@@ -244,7 +261,8 @@ fn ReplyIndicator(props: ReplyIndicatorProps) -> Element {
 fn SendingSpinner() -> Element {
     rsx! {
         div {
-            class: "w-4 h-4 border-2 border-slate-900/30 border-t-slate-900 rounded-full animate-spin",
+            class: "w-4 h-4 border-2 rounded-full animate-spin",
+            style: format!("border-color: {}30; border-top-color: {};", colors::TEXT_INVERSE, colors::TEXT_INVERSE),
         }
     }
 }

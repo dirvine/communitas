@@ -1,5 +1,6 @@
 //! Message list component for displaying conversation messages.
 
+use crate::tokens::colors;
 use communitas_ui_api::Message;
 use communitas_ui_service::UiServices;
 use dioxus::prelude::*;
@@ -103,11 +104,13 @@ pub fn MessageList(props: MessageListProps) -> Element {
             // Error display
             if let Some(err) = error_msg() {
                 div {
-                    class: "px-4 py-3 m-3 rounded-lg border border-red-500/30 bg-red-500/10 text-sm text-red-300",
+                    class: "px-4 py-3 m-3 rounded-lg border text-sm",
+                    style: format!("border-color: {}30; background-color: {}10; color: {};", colors::DANGER, colors::DANGER, colors::DANGER),
                     role: "alert",
                     p { "{err}" }
                     button {
-                        class: "text-xs text-red-400 hover:text-red-300 mt-1",
+                        class: "text-xs mt-1 hover:opacity-80",
+                        style: format!("color: {};", colors::DANGER),
                         onclick: move |_| error_msg.set(None),
                         "Dismiss"
                     }
@@ -116,9 +119,11 @@ pub fn MessageList(props: MessageListProps) -> Element {
             // Load more button at top
             if has_more() && !loading() && !messages().is_empty() {
                 div {
-                    class: "flex justify-center py-3 border-b border-slate-800/50",
+                    class: "flex justify-center py-3 border-b",
+                    style: format!("border-color: {}50;", colors::BORDER_DEFAULT),
                     button {
-                        class: "px-4 py-2 text-sm text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 rounded-lg transition disabled:opacity-50",
+                        class: "px-4 py-2 text-sm rounded-lg transition disabled:opacity-50 hover:opacity-80",
+                        style: format!("color: {};", colors::TEXT_SECONDARY),
                         disabled: loading_more(),
                         onclick: handle_load_more,
                         if loading_more() {
@@ -213,16 +218,19 @@ fn MessageGroupView(props: MessageGroupViewProps) -> Element {
                 class: "flex items-center gap-2 mb-1",
                 // Avatar
                 div {
-                    class: "w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-sm text-slate-300",
+                    class: "w-8 h-8 rounded-full flex items-center justify-center text-sm",
+                    style: format!("background-color: {}; color: {};", colors::SURFACE_ELEVATED, colors::TEXT_SECONDARY),
                     {group.sender_name.chars().next().unwrap_or('?').to_uppercase().to_string()}
                 }
                 span {
-                    class: "text-sm font-medium text-emerald-400",
+                    class: "text-sm font-medium",
+                    style: format!("color: {};", colors::PRIMARY),
                     "{group.sender_name}"
                 }
                 if let Some(msg) = first_msg {
                     span {
-                        class: "text-xs text-slate-500",
+                        class: "text-xs",
+                        style: format!("color: {};", colors::TEXT_MUTED),
                         "{format_timestamp(msg.timestamp)}"
                     }
                 }
@@ -259,7 +267,8 @@ fn MessageBubble(props: MessageBubbleProps) -> Element {
 
     rsx! {
         div {
-            class: "message-bubble group relative rounded-lg px-3 py-2 hover:bg-slate-800/30 transition",
+            class: "message-bubble group relative rounded-lg px-3 py-2 transition",
+            style: if hovered() { format!("background-color: {}30;", colors::SURFACE_CARD) } else { String::new() },
             role: "article",
             aria_label: format!("Message from {}", msg.sender_name),
             onmouseenter: move |_| hovered.set(true),
@@ -267,27 +276,34 @@ fn MessageBubble(props: MessageBubbleProps) -> Element {
             // Reply-to indicator if present
             if let Some(_reply_to) = &msg.reply_to_id {
                 div {
-                    class: "text-xs text-slate-500 mb-1 flex items-center gap-1",
-                    span { class: "text-slate-600", "↩" }
+                    class: "text-xs mb-1 flex items-center gap-1",
+                    style: format!("color: {};", colors::TEXT_MUTED),
+                    span {
+                        style: format!("color: {};", colors::TEXT_MUTED),
+                        "↩"
+                    }
                     "Replying to a message"
                 }
             }
             // Message text
             div {
-                class: "text-slate-200 whitespace-pre-wrap break-words",
+                class: "whitespace-pre-wrap break-words",
+                style: format!("color: {};", colors::TEXT_PRIMARY),
                 "{msg.text}"
             }
             // Edited indicator
             if msg.edited {
                 span {
-                    class: "text-xs text-slate-500 ml-1",
+                    class: "text-xs ml-1",
+                    style: format!("color: {};", colors::TEXT_MUTED),
                     "(edited)"
                 }
             }
             // Timestamp for multi-message groups
             if props.show_time {
                 div {
-                    class: "text-xs text-slate-600 mt-1",
+                    class: "text-xs mt-1",
+                    style: format!("color: {};", colors::TEXT_MUTED),
                     "{format_time_only(msg.timestamp)}"
                 }
             }
@@ -297,12 +313,17 @@ fn MessageBubble(props: MessageBubbleProps) -> Element {
                     class: "flex flex-wrap gap-1 mt-2",
                     for reaction in &msg.reactions {
                         span {
-                            class: format!(
-                                "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs {}",
-                                if reaction.reacted_by_me { "bg-emerald-500/20 border border-emerald-500/30" } else { "bg-slate-800" }
-                            ),
+                            class: "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs",
+                            style: if reaction.reacted_by_me {
+                                format!("background-color: {}20; border: 1px solid {}30;", colors::PRIMARY, colors::PRIMARY)
+                            } else {
+                                format!("background-color: {};", colors::SURFACE_CARD)
+                            },
                             "{reaction.emoji}"
-                            span { class: "text-slate-400", "{reaction.count}" }
+                            span {
+                                style: format!("color: {};", colors::TEXT_SECONDARY),
+                                "{reaction.count}"
+                            }
                         }
                     }
                 }
@@ -312,7 +333,8 @@ fn MessageBubble(props: MessageBubbleProps) -> Element {
                 div {
                     class: "absolute right-2 top-1 flex gap-1",
                     button {
-                        class: "w-7 h-7 rounded flex items-center justify-center text-slate-400 hover:text-slate-200 hover:bg-slate-700/50",
+                        class: "w-7 h-7 rounded flex items-center justify-center hover:opacity-80",
+                        style: format!("color: {};", colors::TEXT_SECONDARY),
                         title: "Reply",
                         onclick: {
                             let msg = msg.clone();
@@ -336,11 +358,20 @@ fn MessageListSkeleton() -> Element {
             for _ in 0..5 {
                 div {
                     class: "flex items-start gap-2",
-                    div { class: "w-8 h-8 rounded-full bg-slate-800" }
+                    div {
+                        class: "w-8 h-8 rounded-full",
+                        style: format!("background-color: {};", colors::SURFACE_CARD)
+                    }
                     div {
                         class: "flex-1",
-                        div { class: "h-4 w-24 bg-slate-800 rounded mb-2" }
-                        div { class: "h-16 bg-slate-800/60 rounded" }
+                        div {
+                            class: "h-4 w-24 rounded mb-2",
+                            style: format!("background-color: {};", colors::SURFACE_CARD)
+                        }
+                        div {
+                            class: "h-16 rounded",
+                            style: format!("background-color: {}60;", colors::SURFACE_CARD)
+                        }
                     }
                 }
             }
@@ -355,15 +386,17 @@ fn EmptyMessageList() -> Element {
         div {
             class: "flex flex-col items-center justify-center h-full text-center py-12",
             div {
-                class: "w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center mb-4",
+                class: "w-16 h-16 rounded-full flex items-center justify-center mb-4",
+                style: format!("background-color: {};", colors::SURFACE_CARD),
                 span { class: "text-2xl", "💬" }
             }
             p {
-                class: "text-slate-400",
+                style: format!("color: {};", colors::TEXT_SECONDARY),
                 "No messages yet"
             }
             p {
-                class: "text-slate-500 text-sm mt-1",
+                class: "text-sm mt-1",
+                style: format!("color: {};", colors::TEXT_MUTED),
                 "Send a message to start the conversation"
             }
         }
@@ -375,7 +408,8 @@ fn EmptyMessageList() -> Element {
 fn LoadingSpinner() -> Element {
     rsx! {
         div {
-            class: "w-4 h-4 border-2 border-slate-600 border-t-slate-300 rounded-full animate-spin",
+            class: "w-4 h-4 border-2 rounded-full animate-spin",
+            style: format!("border-color: {}; border-top-color: {};", colors::TEXT_MUTED, colors::TEXT_SECONDARY),
         }
     }
 }

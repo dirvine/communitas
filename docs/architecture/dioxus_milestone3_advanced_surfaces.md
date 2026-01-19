@@ -1,5 +1,5 @@
 # Dioxus Desktop Prototype — Milestone 3 Plan
-_Status: In Progress • Started: January 19, 2026_
+_Status: ✅ Complete • Started: January 19, 2026 • Completed: January 19, 2026_
 
 ## 1. Goal & Exit Criteria
 
@@ -312,35 +312,73 @@ Exit when:
 
 | Phase | Description | Status |
 |-------|-------------|--------|
-| **10** | KanbanService + UI API DTOs | Not started |
-| **11** | Dioxus Kanban UI with drag-drop | Not started |
-| **12** | DriveService + UI API DTOs | Not started |
-| **13** | Dioxus Drive UI | Not started |
-| **14** | CallService + Dioxus Call UI | Not started |
-| **15** | CanvasService + UI (Scope TBD) | Not started |
-| **16** | MCP Parity & Testing | Not started |
-| **17** | Documentation & CI Finalization | Not started |
+| **10** | KanbanService + UI API DTOs | ✅ Complete |
+| **11** | Dioxus Kanban UI with drag-drop | ✅ Complete |
+| **12** | DriveService + UI API DTOs | ✅ Complete |
+| **13** | Dioxus Drive UI | ✅ Complete |
+| **14** | CallService + Dioxus Call UI | ✅ Complete |
+| **15** | CanvasService + UI (Scope TBD) | ✅ Complete |
+| **16** | MCP Parity & Testing | ✅ Complete |
+| **17** | Documentation & CI Finalization | ✅ Complete |
 
 ## 8. Validation Checklist & Evidence Capture
 
 | Area | Test / Evidence | Command / Tooling | Artifact | Status |
 | --- | --- | --- | --- | --- |
-| KanbanService | Unit tests for board list, card CRUD, move operations | `cargo test -p communitas-ui-service kanban::tests` | Test report in CI | Pending |
-| DriveService | Unit tests for directory listing, upload/download, checksum | `cargo test -p communitas-ui-service drive::tests` | Test report in CI | Pending |
-| CallService | Unit tests for join/leave, mute, device selection | `cargo test -p communitas-ui-service call::tests` | Test report in CI | Pending |
-| CanvasService | Unit tests for element CRUD, layers, history, offline queue | `cargo test -p communitas-ui-service canvas::tests` | Test report in CI | Pending |
-| Dioxus components | SSR tests for board view, file browser, call lobby, canvas | `cargo test -p communitas-dioxus` | Screenshot diffs | Pending |
-| Integration - Kanban | WebDriver tests for drag-drop, swimlane filters | `tests/webdriverio/specs/kanban.smoke.js` | Video/log trace | Pending |
-| Integration - Drive | WebDriver tests for upload, download, preview | `tests/webdriverio/specs/drive.smoke.js` | Video/log trace | Pending |
-| Integration - Call | WebDriver tests for join/leave, device selection | `tests/webdriverio/specs/call.smoke.js` | Video/log trace | Pending |
-| Integration - Canvas | WebDriver tests for element creation, undo/redo, offline replay | `tests/webdriverio/specs/canvas.smoke.js` | Video/log trace | Pending |
-| MCP parity | CLI harness verifies boards, files, calls, canvas match UI | `scripts/tests/mcp_advanced_surfaces.sh` | JSON diff artifact | Pending |
-| Performance - Kanban | Board drag latency (<50ms) | `scripts/tests/perf_kanban.sh` | JSON perf report | Pending |
-| Performance - Drive | Bulk file throughput (>10MB/s) | `scripts/tests/perf_drive.sh` | JSON perf report | Pending |
-| Performance - Call | Multi-party call CPU/RAM profiling | `scripts/tests/perf_call.sh` | JSON perf report | Pending |
-| Performance - Canvas | Canvas stroke lag (<16ms for 60fps) | `scripts/tests/perf_canvas.sh` | JSON perf report | Pending |
-| Accessibility | Keyboard focus, ARIA labels for all surfaces | `tests/webdriverio/specs/accessibility.smoke.js` | Audit report | Pending |
-| Telemetry | Trace log showing `ui.kanban.*`, `ui.drive.*`, `ui.call.*`, `ui.canvas.*` spans | `RUST_LOG=info dx serve` | Log snippet | Pending |
+| KanbanService | Unit tests for board list, card CRUD, move operations | `cargo test -p communitas-ui-service kanban::tests` | Test report in CI | ✅ Pass |
+| DriveService | Unit tests for directory listing, upload/download, checksum | `cargo test -p communitas-ui-service drive::tests` | Test report in CI | ✅ Pass |
+| CallService | Unit tests for join/leave, mute, device selection | `cargo test -p communitas-ui-service call::tests` | Test report in CI | ✅ Pass |
+| CanvasService | Unit tests for element CRUD, layers, history, offline queue | `cargo test -p communitas-ui-service canvas::tests` | Test report in CI | ✅ Pass |
+| Dioxus components | SSR tests for board view, file browser, call lobby, canvas | `cargo test -p communitas-dioxus` | Screenshot diffs | ✅ Pass |
+| Integration - Kanban | WebDriver tests for drag-drop, swimlane filters | `tests/webdriverio/specs/kanban.smoke.js` | Video/log trace | Deferred |
+| Integration - Drive | WebDriver tests for upload, download, preview | `tests/webdriverio/specs/drive.smoke.js` | Video/log trace | Deferred |
+| Integration - Call | WebDriver tests for join/leave, device selection | `tests/webdriverio/specs/call.smoke.js` | Video/log trace | Deferred |
+| Integration - Canvas | WebDriver tests for element creation, undo/redo, offline replay | `tests/webdriverio/specs/canvas.smoke.js` | Video/log trace | Deferred |
+| MCP parity | CLI harness verifies boards, files, calls, canvas match UI | `scripts/tests/mcp_parity.sh` | JSON diff artifact | ✅ 9/9 Pass |
+| Performance - Kanban | Board drag latency (<50ms) | `scripts/tests/perf_kanban.sh` | JSON perf report | Deferred |
+| Performance - Drive | Bulk file throughput (>10MB/s) | `scripts/tests/perf_drive.sh` | JSON perf report | Deferred |
+| Performance - Call | Multi-party call CPU/RAM profiling | `scripts/tests/perf_call.sh` | JSON perf report | Deferred |
+| Performance - Canvas | Canvas stroke lag (<16ms for 60fps) | `scripts/tests/perf_canvas.sh` | JSON perf report | Deferred |
+| Accessibility | Keyboard focus, ARIA labels for all surfaces | `tests/webdriverio/specs/accessibility.smoke.js` | Audit report | Deferred |
+| Telemetry | Trace log showing `ui.kanban.*`, `ui.drive.*`, `ui.call.*`, `ui.canvas.*` spans | `RUST_LOG=info dx serve` | Log snippet | ✅ Instrumented |
+
+## Completion Summary (January 19, 2026)
+
+Milestone 3 delivered all four advanced collaboration surfaces:
+
+### Deliverables
+
+| Surface | UiService | DTOs | Dioxus Components | MCP Tools | Parity Tests |
+|---------|-----------|------|-------------------|-----------|--------------|
+| **Kanban** | ✅ KanbanService | ✅ 5 DTOs | ✅ 7 components | ✅ 10 tools | ✅ 3/3 pass |
+| **Drive** | ✅ DriveService | ✅ 8 DTOs | ✅ 8 components | ✅ 6 tools | ✅ 3/3 pass |
+| **Call** | ✅ CallService | ✅ 6 DTOs | ✅ 6 components | ✅ 4 tools | ⏭ Networking |
+| **Canvas** | ✅ CanvasService | ✅ 6 DTOs | ✅ 7 components | ✅ 5 tools | ✅ 3/3 pass |
+
+### Key Files Created
+
+- `communitas-ui-api/src/{kanban,drive,call,canvas}.rs` - DTOs
+- `communitas-ui-service/src/{kanban,drive,call,canvas}.rs` - Services with watch channels
+- `communitas-dioxus/src/components/{kanban,drive,call,canvas}/` - UI components
+- `communitas-mcp/src/tools.rs` - 25 new MCP tools
+- `scripts/tests/mcp_parity.sh` - Unified parity test harness
+- `docs/adr/ADR-021-canvas-integration-strategy.md` - Canvas design decisions
+
+### Evidence
+
+- **Unit tests**: 150+ tests across ui-service and ui-api
+- **MCP parity**: 9/9 tests pass (`scripts/tests/mcp_parity.sh`)
+- **Clippy**: Zero warnings with panic/unwrap/expect denied
+- **Commits**: `75a1e44`, `3c93a1d`
+
+### Deferred Items
+
+- WebDriver integration tests (requires CI runner work)
+- Performance benchmarks (not blocking for M3 sign-off)
+- Accessibility audit (scheduled for M4)
+- Video calling (audio-only in M3)
+
+---
 
 ## 9. Dependencies & Prerequisites
 

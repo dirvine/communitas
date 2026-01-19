@@ -90,3 +90,166 @@ Adopt **Dioxus + Tauri 2** as the primary desktop client, packaged as the
 - docs/architecture/dioxus_desktop_prototype_plan.md
 - docs/MCP_THIN_GUI_ARCHITECTURE.md
 - ADR-017, ADR-018, ADR-019
+
+---
+
+## M3 Addendum: Advanced Surface Patterns (2026-01-19)
+
+Milestone 3 delivered four advanced surfaces (Kanban, Drive, Calls, Canvas). This addendum documents the Dioxus patterns established.
+
+### Drag-and-Drop Patterns
+
+**Event handling** uses Dioxus's native drag events:
+
+```rust
+rsx! {
+    div {
+        draggable: true,
+        ondragstart: move |e| dragging.set(Some(card_id)),
+        ondragover: move |e| e.prevent_default(),
+        ondrop: move |e| {
+            if let Some(card) = dragging.take() {
+                kanban_service.move_card(card, target_column);
+            }
+        },
+        // ...
+    }
+}
+```
+
+**Optimistic UI**: Update local state immediately, reconcile on service confirmation. Show CRDT conflict banners when remote changes arrive mid-drag.
+
+**Keyboard fallback**: Arrow keys + Enter/Space for users who cannot drag.
+
+### Virtualization Patterns
+
+Column virtualization for Kanban boards with many columns:
+
+```rust
+fn use_virtualized_columns(
+    columns: &[Column],
+    viewport_width: f32,
+    column_width: f32,
+) -> Vec<&Column> {
+    let visible_count = (viewport_width / column_width).ceil() as usize + 2; // buffer
+    let scroll_offset = use_scroll_position();
+    let start = (scroll_offset / column_width) as usize;
+    columns.iter().skip(start).take(visible_count).collect()
+}
+```
+
+**Buffer zones** (2 columns on each side) ensure smooth scrolling without visual pops.
+
+### Real-Time Collaboration Patterns
+
+**Watch channels** from `UiServices` provide reactive updates:
+
+```rust
+let snapshot = use_signal(|| service.snapshot());
+use_effect(move || {
+    let mut rx = service.subscribe();
+    spawn(async move {
+        while let Ok(update) = rx.recv().await {
+            snapshot.set(update);
+        }
+    });
+});
+```
+
+**Remote cursors** (Canvas): Render colored cursors for each participant with debounced position updates (50ms).
+
+**CRDT conflict UI**: Flash banner when local and remote edits conflict, with "Keep Mine" / "Accept Theirs" / "Merge" options.
+
+### Media Handling Patterns (Calls)
+
+**Device enumeration** happens once at component mount:
+
+```rust
+let devices = use_resource(|| async {
+    call_service.enumerate_devices().await
+});
+```
+
+**Graceful degradation**: If camera fails, offer listen-only mode. If microphone fails, show clear error with retry button.
+
+**Permission flow**: Request permissions progressively—start with audio, add video only when user clicks camera button.
+
+### Canvas Rendering Patterns
+
+**Wry WebView** (default): Canvas uses HTML5 `<canvas>` element via Dioxus's WebView backend. This provides broad compatibility.
+
+**Blitz feature flag**: For future GPU-accelerated rendering:
+
+```toml
+[features]
+blitz = ["dioxus/blitz"]
+```
+
+**Layer management**: Z-index stack with explicit ordering. Layers expose `bring_to_front()` / `send_to_back()` via context menu.
+
+**History scrubber**: Store snapshots at key moments (every 10 operations or manual checkpoint). Scrubber component renders thumbnails.
+
+### Performance Patterns
+
+**Lazy loading**: Directory/file lists load first 50 items, fetch more on scroll.
+
+**Debounced inputs**: Search boxes debounce 300ms before triggering queries.
+
+**Memoization**: Use `use_memo` for expensive computations:
+
+```rust
+let filtered_cards = use_memo(move || {
+    cards.iter()
+        .filter(|c| c.title.contains(&search_term()))
+        .collect::<Vec<_>>()
+});
+```
+
+**Background tasks**: Long operations (file upload, video encoding) run in Tokio tasks with progress channels feeding the UI.
+
+### Component Structure
+
+Each surface follows the same module pattern:
+
+```
+communitas-dioxus/src/components/{surface}/
+├── mod.rs           # Re-exports
+├── {main_view}.rs   # Primary container component
+├── {list}.rs        # List/grid rendering
+├── {item}.rs        # Individual item component
+├── {modal}.rs       # Detail/edit modals
+└── {toolbar}.rs     # Surface-specific toolbar
+```
+
+### Service Integration
+
+All surfaces use the shared `UiServices` pattern (ADR-019):
+
+```rust
+fn SomeComponent() -> Element {
+    let services = use_context::<UiServices>();
+    let kanban = services.kanban();
+
+    // Read from snapshot signal
+    let boards = kanban.boards();
+
+    // Write via service methods
+    let create_board = move |name: String| {
+        spawn(async move {
+            kanban.create_board(name).await;
+        });
+    };
+
+    rsx! { /* ... */ }
+}
+```
+
+### MCP Parity
+
+Every UI action has a corresponding MCP tool. The parity test harness (`scripts/tests/mcp_parity.sh`) validates round-trip consistency:
+
+1. Create via MCP → Read via MCP → Verify match
+2. Create via UI → Read via MCP → Verify match
+3. Create via MCP → Read via UI → Verify match
+
+This ensures AI agents and human users have identical capabilities.

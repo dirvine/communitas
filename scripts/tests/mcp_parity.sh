@@ -51,11 +51,22 @@ FOUR_WORDS="${MCP_DEMO_FOUR_WORDS:-demo-parity-unified-test}"
 DISPLAY_NAME="${MCP_DEMO_DISPLAY:-Parity Unified}"
 LOG_FILE="${TMP_ROOT}/mcp.log"
 
+# Fixed artifacts directory for CI
+if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
+  CI_ARTIFACTS_DIR="${GITHUB_WORKSPACE:-$(pwd)}/m3-parity-artifacts"
+  mkdir -p "${CI_ARTIFACTS_DIR}"
+fi
+
 cleanup() {
   if [[ -n "${SERVER_PID:-}" ]]; then
     kill "${SERVER_PID}" >/dev/null 2>&1 || true
   fi
-  if [[ "${VERBOSE}" != "true" ]]; then
+  # Copy artifacts for CI before cleanup
+  if [[ -n "${GITHUB_ACTIONS:-}" ]] && [[ -d "${TMP_ROOT}/artifacts" ]]; then
+    cp -r "${TMP_ROOT}/artifacts/"* "${CI_ARTIFACTS_DIR}/" 2>/dev/null || true
+    log "Artifacts copied to: ${CI_ARTIFACTS_DIR}"
+  fi
+  if [[ "${VERBOSE}" != "true" ]] && [[ -z "${GITHUB_ACTIONS:-}" ]]; then
     rm -rf "${TMP_ROOT}"
   else
     echo "[mcp-parity] artifacts preserved at: ${TMP_ROOT}"

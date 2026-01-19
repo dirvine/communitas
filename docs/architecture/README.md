@@ -86,6 +86,12 @@ This architecture documentation is organized into the following sections:
 - **Dioxus UI**: thin presentation layer over shared Rust services
 - **Platform integrations**: keyring, notifications, OS services
 
+### Collaboration Surfaces (Milestone 3)
+- **[Kanban](dioxus_milestone3_advanced_surfaces.md#41-kanbanservice-implementation-phase-10)**: Boards, columns, cards with drag-drop and CRDT sync
+- **[Drive](dioxus_milestone3_advanced_surfaces.md#43-driveservice-implementation-phase-12)**: Virtual disk browser with upload/download and quota
+- **[Call](dioxus_milestone3_advanced_surfaces.md#45-callservice-implementation-phase-14)**: WebRTC audio calls with device selection
+- **[Canvas](dioxus_milestone3_advanced_surfaces.md#47-canvasservice-implementation-phase-15)**: Collaborative whiteboard with layers and history
+
 ### Data & Storage
 - **[CRDT System](crdt-system.md)** - Conflict-free replicated data types
   - Document taxonomy and organization
@@ -144,6 +150,10 @@ For detailed rationale behind architectural decisions, see our ADRs:
 | [ADR-009](../adr/ADR-009-modular-crate-architecture.md) | Modular Crate Architecture | Cargo workspace structure |
 | [ADR-010](../adr/ADR-010-cross-organization-invites.md) | Cross-Organization Invites | Identity-based invite system |
 | [ADR-011](../adr/ADR-011-encrypted-vault-storage.md) | Encrypted Vault Storage | Multi-layer local encryption |
+| [ADR-018](../adr/ADR-018-mcp-external-integration.md) | MCP External Integration | AI agent automation interface |
+| [ADR-019](../adr/ADR-019-shared-rust-ui-service.md) | Shared Rust UI Service | Unified services for Dioxus + MCP |
+| [ADR-020](../adr/ADR-020-dioxus-desktop-adoption.md) | Dioxus Desktop Adoption | All-Rust UI stack decision |
+| [ADR-021](../adr/ADR-021-canvas-integration-strategy.md) | Canvas Integration Strategy | Collaborative whiteboard architecture |
 
 See the [ADR Index](../adr/README.md) for more details and templates for new ADRs.
 

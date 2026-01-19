@@ -3490,9 +3490,7 @@ async fn execute_list_contacts(app: &CommunitasApp, args: Value) -> ToolCallResu
                     });
 
                     // Include presence info if requested
-                    if include_presence
-                        && let Some(obj) = contact_json.as_object_mut()
-                    {
+                    if include_presence && let Some(obj) = contact_json.as_object_mut() {
                         obj.insert("is_online".to_string(), json!(c.is_online));
                         obj.insert("last_seen".to_string(), json!(c.last_seen));
                         // Map is_online to presence status string
@@ -3532,7 +3530,11 @@ async fn execute_get_contact_presence(app: &CommunitasApp, args: Value) -> ToolC
     match app.query(query).await {
         Ok(QueryResponse::Contact(contact)) => {
             // Determine presence status from is_online
-            let presence_status = if contact.is_online { "online" } else { "offline" };
+            let presence_status = if contact.is_online {
+                "online"
+            } else {
+                "offline"
+            };
 
             // Get current timestamp for last_active if online
             let now_ms = std::time::SystemTime::now()

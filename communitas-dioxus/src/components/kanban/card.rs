@@ -1,7 +1,10 @@
 //! Kanban card component with drag-and-drop support.
 
 use communitas_ui_api::kanban::{CardState, CardView, ChecklistProgress, TagView};
+use communitas_ui_service::UiServices;
+use communitas_ui_service::kanban::MoveDirection;
 use dioxus::prelude::*;
+use std::sync::Arc;
 use tracing::info;
 
 /// Kanban card component that can be dragged between columns.
@@ -11,10 +14,15 @@ pub struct KanbanCardProps {
     pub card: CardView,
     /// The board ID this card belongs to.
     pub board_id: String,
+    /// The column ID this card belongs to.
+    pub column_id: String,
+    /// Callback to announce card moves for screen readers.
+    pub on_move_announce: EventHandler<String>,
 }
 
 #[component]
 pub fn KanbanCard(props: KanbanCardProps) -> Element {
+    let services = use_context::<Arc<UiServices>>();
     let card = &props.card;
 
     // Drag state
@@ -23,10 +31,18 @@ pub fn KanbanCard(props: KanbanCardProps) -> Element {
     // Modal state
     let mut show_detail_modal = use_signal(|| false);
 
+    // Moving state (for visual feedback)
+    let mut is_moving = use_signal(|| false);
+
     let card_id = card.id.clone();
     let card_id_for_drag_start = card_id.clone();
     let card_id_for_drag_end = card_id.clone();
+    let card_id_for_keyboard = card_id.clone();
     let board_id = props.board_id.clone();
+    let board_id_for_keyboard = board_id.clone();
+    let column_id = props.column_id.clone();
+    let card_position = card.position;
+    let on_move_announce = props.on_move_announce;
 
     // Format due date
     let due_date_display = card.due_date.map(|ts| {
@@ -56,15 +72,22 @@ pub fn KanbanCard(props: KanbanCardProps) -> Element {
         CardState::Archived => "border-l-slate-700",
     };
 
+    // Generate description ID for aria-describedby
+    let desc_id = format!("card-desc-{}", card.id);
+    let has_description = card.description.as_ref().is_some_and(|d| !d.is_empty());
+
     rsx! {
         div {
             class: format!(
-                "kanban-card rounded-lg border border-l-4 bg-slate-800 p-3 cursor-pointer transition hover:bg-slate-750 {} {}",
+                "kanban-card rounded-lg border border-l-4 bg-slate-800 p-3 cursor-pointer transition hover:bg-slate-750 {} {} {}",
                 state_color,
-                if is_dragging() { "opacity-50 border-slate-600" } else { "border-slate-700" }
+                if is_dragging() { "opacity-50 border-slate-600" } else { "border-slate-700" },
+                if is_moving() { "ring-2 ring-emerald-400 ring-offset-2 ring-offset-slate-900" } else { "" }
             ),
             role: "listitem",
             aria_label: format!("Card: {}", card.title),
+            aria_describedby: if has_description { desc_id.clone() } else { String::new() },
+            aria_grabbed: if is_dragging() { "true" } else { "false" },
             tabindex: "0",
             draggable: "true",
             // Drag handlers
@@ -81,10 +104,75 @@ pub fn KanbanCard(props: KanbanCardProps) -> Element {
             onclick: move |_| {
                 show_detail_modal.set(true);
             },
-            // Keyboard support
+            // Keyboard support (Enter to open detail, Ctrl+Arrow to move)
             onkeydown: move |evt| {
                 if evt.key() == Key::Enter {
                     show_detail_modal.set(true);
+                    return;
+                }
+
+                // Handle Ctrl+Arrow for keyboard card movement
+                if evt.modifiers().ctrl() {
+                    let direction = match evt.key() {
+                        Key::ArrowLeft => Some(MoveDirection::Left),
+                        Key::ArrowRight => Some(MoveDirection::Right),
+                        Key::ArrowUp => Some(MoveDirection::Up),
+                        Key::ArrowDown => Some(MoveDirection::Down),
+                        _ => None,
+                    };
+
+                    if let Some(dir) = direction {
+                        evt.prevent_default();
+                        let services = services.clone();
+                        let board_id = board_id_for_keyboard.clone();
+                        let card_id = card_id_for_keyboard.clone();
+                        let column_id = column_id.clone();
+                        let on_announce = on_move_announce;
+
+                        is_moving.set(true);
+
+                        spawn(async move {
+                            match services
+                                .kanban()
+                                .move_card_keyboard(&board_id, &card_id, &column_id, card_position, dir)
+                                .await
+                            {
+                                Ok(result) => {
+                                    // Announce for screen readers
+                                    let message = match dir {
+                                        MoveDirection::Left | MoveDirection::Right => {
+                                            format!(
+                                                "Card {} moved to {}",
+                                                result.card_title, result.target_column_name
+                                            )
+                                        }
+                                        MoveDirection::Up => {
+                                            format!("Card {} moved up", result.card_title)
+                                        }
+                                        MoveDirection::Down => {
+                                            format!("Card {} moved down", result.card_title)
+                                        }
+                                    };
+                                    on_announce.call(message);
+                                    info!(
+                                        target = "ui.kanban",
+                                        event = "card_moved_keyboard",
+                                        card_id = %result.card_id,
+                                        direction = ?dir,
+                                        target_column = %result.target_column_name
+                                    );
+                                }
+                                Err(err) => {
+                                    // Don't announce errors that indicate no-op (already at edge)
+                                    tracing::debug!(
+                                        target = "ui.kanban",
+                                        "keyboard move rejected: {err}"
+                                    );
+                                }
+                            }
+                            is_moving.set(false);
+                        });
+                    }
                 }
             },
             // Card content
@@ -99,6 +187,7 @@ pub fn KanbanCard(props: KanbanCardProps) -> Element {
                 if let Some(desc) = &card.description {
                     if !desc.is_empty() {
                         p {
+                            id: "{desc_id}",
                             class: "text-xs text-slate-400 line-clamp-2",
                             "{desc}"
                         }
@@ -318,5 +407,70 @@ mod tests {
         assert_ne!(CardState::InProgress, CardState::InReview);
         assert_ne!(CardState::InReview, CardState::Done);
         assert_ne!(CardState::Done, CardState::Archived);
+    }
+
+    #[test]
+    fn card_aria_grabbed_state() {
+        // When dragging, aria-grabbed should be "true"
+        let is_dragging = true;
+        let grabbed = if is_dragging { "true" } else { "false" };
+        assert_eq!(grabbed, "true");
+
+        // When not dragging, aria-grabbed should be "false"
+        let is_dragging = false;
+        let grabbed = if is_dragging { "true" } else { "false" };
+        assert_eq!(grabbed, "false");
+    }
+
+    #[test]
+    fn card_description_id_format() {
+        let card_id = "card-123";
+        let desc_id = format!("card-desc-{}", card_id);
+        assert_eq!(desc_id, "card-desc-card-123");
+    }
+
+    #[test]
+    fn card_aria_describedby_with_description() {
+        let card_id = "card-456";
+        let description = Some("This is a test description".to_string());
+        let has_description = description.as_ref().is_some_and(|d| !d.is_empty());
+
+        let desc_id = format!("card-desc-{}", card_id);
+        let describedby = if has_description {
+            desc_id.clone()
+        } else {
+            String::new()
+        };
+        assert_eq!(describedby, "card-desc-card-456");
+    }
+
+    #[test]
+    fn card_aria_describedby_without_description() {
+        let card_id = "card-789";
+        let description: Option<String> = None;
+        let has_description = description.as_ref().is_some_and(|d| !d.is_empty());
+
+        let desc_id = format!("card-desc-{}", card_id);
+        let describedby = if has_description {
+            desc_id
+        } else {
+            String::new()
+        };
+        assert!(describedby.is_empty());
+    }
+
+    #[test]
+    fn card_aria_describedby_with_empty_description() {
+        let card_id = "card-empty";
+        let description = Some(String::new());
+        let has_description = description.as_ref().is_some_and(|d| !d.is_empty());
+
+        let desc_id = format!("card-desc-{}", card_id);
+        let describedby = if has_description {
+            desc_id
+        } else {
+            String::new()
+        };
+        assert!(describedby.is_empty());
     }
 }

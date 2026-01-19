@@ -184,6 +184,14 @@ fn ListView(props: ListViewProps) -> Element {
                         let path = entry.path.clone();
                         let is_selected = props.selected.contains(&entry.path);
 
+                        // Generate aria-label with file info
+                        let file_type = if entry.is_directory {
+                            "folder"
+                        } else {
+                            entry.mime_type.as_deref().unwrap_or("file")
+                        };
+                        let size_str = format_size(entry.size_bytes, entry.is_directory);
+
                         rsx! {
                             tr {
                                 key: "{path}",
@@ -195,6 +203,9 @@ fn ListView(props: ListViewProps) -> Element {
                                         "hover:bg-slate-800/50"
                                     }
                                 ),
+                                role: "row",
+                                aria_label: format!("{}, {}, {}", entry.name, file_type, size_str),
+                                aria_selected: is_selected,
                                 onclick: move |evt| {
                                     let multi = evt.modifiers().ctrl() || evt.modifiers().meta();
                                     props.on_select.call((entry_clone.path.clone(), multi));
@@ -297,6 +308,13 @@ fn GridView(props: GridViewProps) -> Element {
                     let path = entry.path.clone();
                     let is_selected = props.selected.contains(&entry.path);
 
+                    // Generate aria-label for grid items
+                    let grid_file_type = if entry.is_directory {
+                        "folder"
+                    } else {
+                        entry.mime_type.as_deref().unwrap_or("file")
+                    };
+
                     rsx! {
                         div {
                             key: "{path}",
@@ -309,6 +327,8 @@ fn GridView(props: GridViewProps) -> Element {
                                 }
                             ),
                             role: "gridcell",
+                            aria_label: format!("{}, {}", entry.name, grid_file_type),
+                            aria_selected: is_selected,
                             tabindex: "0",
                             onclick: move |evt| {
                                 let multi = evt.modifiers().ctrl() || evt.modifiers().meta();
@@ -457,5 +477,43 @@ mod tests {
             checksum: None,
         };
         assert_eq!(file_icon(&entry), "🖼️");
+    }
+
+    #[test]
+    fn file_list_aria_label_for_file() {
+        let name = "document.pdf";
+        let file_type = "application/pdf";
+        let size_str = "1.5 MB";
+
+        let aria_label = format!("{}, {}, {}", name, file_type, size_str);
+        assert_eq!(aria_label, "document.pdf, application/pdf, 1.5 MB");
+    }
+
+    #[test]
+    fn file_list_aria_label_for_folder() {
+        let name = "Documents";
+        let file_type = "folder";
+        let size_str = "—";
+
+        let aria_label = format!("{}, {}, {}", name, file_type, size_str);
+        assert_eq!(aria_label, "Documents, folder, —");
+    }
+
+    #[test]
+    fn grid_view_aria_label_for_file() {
+        let name = "image.png";
+        let grid_file_type = "image/png";
+
+        let aria_label = format!("{}, {}", name, grid_file_type);
+        assert_eq!(aria_label, "image.png, image/png");
+    }
+
+    #[test]
+    fn grid_view_aria_label_for_folder() {
+        let name = "Downloads";
+        let grid_file_type = "folder";
+
+        let aria_label = format!("{}, {}", name, grid_file_type);
+        assert_eq!(aria_label, "Downloads, folder");
     }
 }

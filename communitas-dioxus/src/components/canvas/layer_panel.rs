@@ -117,6 +117,8 @@ pub fn LayerPanel(props: LayerPanelProps) -> Element {
             // Layer list
             div {
                 class: "flex-1 overflow-y-auto",
+                role: "listbox",
+                aria_label: "Canvas layers",
                 if sorted_layers.is_empty() {
                     div {
                         class: "p-4 text-center text-slate-500 text-sm",
@@ -200,12 +202,20 @@ fn LayerItem(props: LayerItemProps) -> Element {
         "text-slate-500"
     };
 
+    // Build descriptive aria-label
+    let visibility_state = if layer.visible { "visible" } else { "hidden" };
+    let lock_state = if layer.locked { ", locked" } else { "" };
+    let opacity_percent = (layer.opacity * 100.0) as i32;
+
     rsx! {
         div {
             class: format!("layer-item flex items-center gap-2 p-2 cursor-pointer transition-colors {}", bg_class),
-            role: "button",
+            role: "option",
             aria_selected: props.is_active,
-            aria_label: format!("Layer: {}", layer.name),
+            aria_label: format!(
+                "Layer {}, {}{}, {}% opacity",
+                layer.name, visibility_state, lock_state, opacity_percent
+            ),
             onclick: move |_| props.on_select.call(()),
             // Visibility toggle
             button {
@@ -324,5 +334,37 @@ mod tests {
         let opacity = 0.75_f32;
         let percent = (opacity * 100.0) as i32;
         assert_eq!(percent, 75);
+    }
+
+    #[test]
+    fn layer_aria_label_visible_unlocked() {
+        let layer = make_layer("l1", "Background", 0);
+        let visibility_state = if layer.visible { "visible" } else { "hidden" };
+        let lock_state = if layer.locked { ", locked" } else { "" };
+        let opacity_percent = (layer.opacity * 100.0) as i32;
+
+        let aria_label = format!(
+            "Layer {}, {}{}, {}% opacity",
+            layer.name, visibility_state, lock_state, opacity_percent
+        );
+        assert_eq!(aria_label, "Layer Background, visible, 100% opacity");
+    }
+
+    #[test]
+    fn layer_aria_label_hidden_locked() {
+        let mut layer = make_layer("l2", "Overlay", 5);
+        layer.visible = false;
+        layer.locked = true;
+        layer.opacity = 0.5;
+
+        let visibility_state = if layer.visible { "visible" } else { "hidden" };
+        let lock_state = if layer.locked { ", locked" } else { "" };
+        let opacity_percent = (layer.opacity * 100.0) as i32;
+
+        let aria_label = format!(
+            "Layer {}, {}{}, {}% opacity",
+            layer.name, visibility_state, lock_state, opacity_percent
+        );
+        assert_eq!(aria_label, "Layer Overlay, hidden, locked, 50% opacity");
     }
 }

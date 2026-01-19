@@ -94,6 +94,12 @@ fn TreeNode(props: TreeNodeProps) -> Element {
                 }
             ),
             role: "treeitem",
+            aria_level: "{props.depth + 1}",
+            aria_label: format!(
+                "{} folder{}",
+                props.name,
+                if props.is_expanded { ", expanded" } else { ", collapsed" }
+            ),
             aria_expanded: "{props.is_expanded}",
             aria_selected: "{props.is_current}",
             tabindex: "0",
@@ -137,5 +143,49 @@ mod tests {
         let path = "/test".to_string();
         assert_eq!(name, "Test Folder");
         assert_eq!(path, "/test");
+    }
+
+    #[test]
+    fn tree_node_aria_level_from_depth() {
+        // aria-level is 1-indexed (depth 0 = level 1)
+        let depth = 0u32;
+        let aria_level = depth + 1;
+        assert_eq!(aria_level, 1);
+
+        let depth = 2u32;
+        let aria_level = depth + 1;
+        assert_eq!(aria_level, 3);
+    }
+
+    #[test]
+    fn tree_node_aria_label_expanded() {
+        let name = "Documents";
+        let is_expanded = true;
+        let aria_label = format!(
+            "{} folder{}",
+            name,
+            if is_expanded {
+                ", expanded"
+            } else {
+                ", collapsed"
+            }
+        );
+        assert_eq!(aria_label, "Documents folder, expanded");
+    }
+
+    #[test]
+    fn tree_node_aria_label_collapsed() {
+        let name = "Photos";
+        let is_expanded = false;
+        let aria_label = format!(
+            "{} folder{}",
+            name,
+            if is_expanded {
+                ", expanded"
+            } else {
+                ", collapsed"
+            }
+        );
+        assert_eq!(aria_label, "Photos folder, collapsed");
     }
 }

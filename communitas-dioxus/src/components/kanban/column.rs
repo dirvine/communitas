@@ -15,6 +15,8 @@ pub struct KanbanColumnProps {
     pub column: ColumnView,
     /// The board ID this column belongs to.
     pub board_id: String,
+    /// Callback to announce card moves for screen readers.
+    pub on_move_announce: EventHandler<String>,
 }
 
 #[component]
@@ -56,6 +58,7 @@ pub fn KanbanColumn(props: KanbanColumnProps) -> Element {
             ),
             role: "listitem",
             aria_label: format!("Column: {}", column.name),
+            aria_dropeffect: if is_drag_over() { "move" } else { "none" },
             // Drop zone handlers
             ondragover: move |evt| {
                 evt.prevent_default();
@@ -76,6 +79,12 @@ pub fn KanbanColumn(props: KanbanColumnProps) -> Element {
                     class: "flex items-center gap-2",
                     h3 {
                         class: "font-semibold text-white truncate",
+                        role: "heading",
+                        aria_level: "3",
+                        aria_label: format!(
+                            "{} column, {} cards",
+                            column.name, card_count
+                        ),
                         "{column.name}"
                     }
                     span {
@@ -129,6 +138,8 @@ pub fn KanbanColumn(props: KanbanColumnProps) -> Element {
                             key: "{card_id}",
                             card: card.clone(),
                             board_id: board_id.clone(),
+                            column_id: column_id.clone(),
+                            on_move_announce: props.on_move_announce,
                         }
                     }
                 })}
@@ -291,5 +302,36 @@ mod tests {
             .map(|limit| card_count > limit as usize)
             .unwrap_or(false);
         assert!(!wip_exceeded);
+    }
+
+    #[test]
+    fn column_header_aria_label_format() {
+        let column_name = "To Do";
+        let card_count = 5usize;
+
+        let aria_label = format!("{} column, {} cards", column_name, card_count);
+        assert_eq!(aria_label, "To Do column, 5 cards");
+    }
+
+    #[test]
+    fn column_header_aria_label_empty_column() {
+        let column_name = "Done";
+        let card_count = 0usize;
+
+        let aria_label = format!("{} column, {} cards", column_name, card_count);
+        assert_eq!(aria_label, "Done column, 0 cards");
+    }
+
+    #[test]
+    fn column_dropeffect_state() {
+        // When dragging over, aria-dropeffect should be "move"
+        let is_drag_over = true;
+        let dropeffect = if is_drag_over { "move" } else { "none" };
+        assert_eq!(dropeffect, "move");
+
+        // When not dragging, aria-dropeffect should be "none"
+        let is_drag_over = false;
+        let dropeffect = if is_drag_over { "move" } else { "none" };
+        assert_eq!(dropeffect, "none");
     }
 }

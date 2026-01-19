@@ -56,11 +56,33 @@ pub fn CanvasView(props: CanvasViewProps) -> Element {
         snapshot.viewport_height / snapshot.zoom
     );
 
+    // Status announcement for screen readers
+    let selected_count = snapshot.elements.iter().filter(|e| e.selected).count();
+    let status_text = if snapshot.loading {
+        "Loading canvas".to_string()
+    } else if selected_count > 0 {
+        format!(
+            "{} element{} selected",
+            selected_count,
+            if selected_count == 1 { "" } else { "s" }
+        )
+    } else {
+        format!("{} elements on canvas", snapshot.elements.len())
+    };
+
     rsx! {
         div {
             class: "canvas-view relative w-full h-full bg-slate-900 overflow-hidden",
             role: "application",
             aria_label: "Canvas drawing area",
+            // Aria-live region for status announcements
+            div {
+                role: "status",
+                aria_live: "polite",
+                aria_atomic: "true",
+                class: "sr-only",
+                "{status_text}"
+            }
             // Loading overlay
             if snapshot.loading {
                 div {
@@ -454,5 +476,89 @@ mod tests {
         );
 
         assert_eq!(view_box, "-50 -25 400 300");
+    }
+
+    #[test]
+    fn canvas_status_text_loading() {
+        let loading = true;
+        let selected_count = 0usize;
+        let element_count = 5usize;
+
+        let status_text = if loading {
+            "Loading canvas".to_string()
+        } else if selected_count > 0 {
+            format!(
+                "{} element{} selected",
+                selected_count,
+                if selected_count == 1 { "" } else { "s" }
+            )
+        } else {
+            format!("{} elements on canvas", element_count)
+        };
+
+        assert_eq!(status_text, "Loading canvas");
+    }
+
+    #[test]
+    fn canvas_status_text_single_selection() {
+        let loading = false;
+        let selected_count = 1usize;
+        let element_count = 5usize;
+
+        let status_text = if loading {
+            "Loading canvas".to_string()
+        } else if selected_count > 0 {
+            format!(
+                "{} element{} selected",
+                selected_count,
+                if selected_count == 1 { "" } else { "s" }
+            )
+        } else {
+            format!("{} elements on canvas", element_count)
+        };
+
+        assert_eq!(status_text, "1 element selected");
+    }
+
+    #[test]
+    fn canvas_status_text_multiple_selection() {
+        let loading = false;
+        let selected_count = 3usize;
+        let element_count = 5usize;
+
+        let status_text = if loading {
+            "Loading canvas".to_string()
+        } else if selected_count > 0 {
+            format!(
+                "{} element{} selected",
+                selected_count,
+                if selected_count == 1 { "" } else { "s" }
+            )
+        } else {
+            format!("{} elements on canvas", element_count)
+        };
+
+        assert_eq!(status_text, "3 elements selected");
+    }
+
+    #[test]
+    fn canvas_status_text_no_selection() {
+        let loading = false;
+        let selected_count = 0usize;
+        let element_count = 8usize;
+
+        let status_text = if loading {
+            "Loading canvas".to_string()
+        } else if selected_count > 0 {
+            format!(
+                "{} element{} selected",
+                selected_count,
+                if selected_count == 1 { "" } else { "s" }
+            )
+        } else {
+            format!("{} elements on canvas", element_count)
+        };
+
+        assert_eq!(status_text, "8 elements on canvas");
     }
 }

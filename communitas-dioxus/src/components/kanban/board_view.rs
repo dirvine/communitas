@@ -55,12 +55,23 @@ pub fn BoardView(props: BoardViewProps) -> Element {
     let mut new_column_name = use_signal(String::new);
     let mut adding_column = use_signal(|| false);
 
+    // Aria-live announcement for screen readers
+    let mut announcement = use_signal(String::new);
+
     let board_id_for_add = props.board_id.clone();
 
     rsx! {
         div {
             class: "board-view flex flex-col h-full",
             role: "main",
+            // Aria-live region for screen reader announcements
+            div {
+                role: "status",
+                aria_live: "polite",
+                aria_atomic: "true",
+                class: "sr-only",
+                "{announcement}"
+            }
             // Loading state
             if loading() {
                 BoardViewSkeleton {}
@@ -115,6 +126,9 @@ pub fn BoardView(props: BoardViewProps) -> Element {
                                     key: "{col_id}",
                                     column: column.clone(),
                                     board_id: props.board_id.clone(),
+                                    on_move_announce: move |msg: String| {
+                                        announcement.set(msg);
+                                    },
                                 }
                             }
                         })}

@@ -13,6 +13,34 @@ use thiserror::Error;
 use tokio::sync::watch;
 use tracing::instrument;
 
+/// Direction for keyboard-based card movement.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MoveDirection {
+    /// Move card to previous column (Ctrl+Left).
+    Left,
+    /// Move card to next column (Ctrl+Right).
+    Right,
+    /// Move card up within current column (Ctrl+Up).
+    Up,
+    /// Move card down within current column (Ctrl+Down).
+    Down,
+}
+
+/// Result of a keyboard card move operation.
+#[derive(Debug, Clone)]
+pub struct CardMoveResult {
+    /// The ID of the card that was moved.
+    pub card_id: String,
+    /// The title of the card that was moved.
+    pub card_title: String,
+    /// The ID of the column the card moved to.
+    pub target_column_id: String,
+    /// The name of the column the card moved to.
+    pub target_column_name: String,
+    /// New position within the column.
+    pub new_position: u32,
+}
+
 use crate::auth::{AuthController, AuthService, AuthStateSnapshot};
 
 /// Errors returned by the kanban service.
@@ -400,6 +428,131 @@ impl KanbanService {
         self.core
             .move_card(board_id, card_id, target_column, position)?;
         Ok(())
+    }
+
+    /// Move a card using keyboard shortcuts (Ctrl+Arrow).
+    ///
+    /// Returns information about the move for aria-live announcements.
+    #[instrument(
+        skip(self),
+        name = "ui.kanban.move_card_keyboard",
+        fields(board_id, card_id, direction)
+    )]
+    pub async fn move_card_keyboard(
+        &self,
+        board_id: &str,
+        card_id: &str,
+        current_column_id: &str,
+        current_position: u32,
+        direction: MoveDirection,
+    ) -> Result<CardMoveResult, KanbanError> {
+        if !self.is_authenticated() {
+            return Err(KanbanError::NotAuthenticated);
+        }
+
+        // Get board data for column list
+        let columns = self.core.list_columns(board_id)?;
+        if columns.is_empty() {
+            return Err(KanbanError::InvalidOperation(
+                "board has no columns".to_string(),
+            ));
+        }
+
+        // Find current column index
+        let current_col_idx = columns
+            .iter()
+            .position(|c| c.id == current_column_id)
+            .ok_or_else(|| KanbanError::ColumnNotFound(current_column_id.to_string()))?;
+
+        // Get the card for its title
+        let card = self.core.get_card(board_id, card_id)?;
+
+        // Calculate target column and position based on direction
+        let (target_column_id, target_column_name, new_position) = match direction {
+            MoveDirection::Left => {
+                // Move to previous column (or stay if at first column)
+                if current_col_idx == 0 {
+                    return Err(KanbanError::InvalidOperation(
+                        "card is already in first column".to_string(),
+                    ));
+                }
+                let target_col = &columns[current_col_idx - 1];
+                let cards_in_target = self
+                    .core
+                    .list_cards_in_column(board_id, &target_col.id)
+                    .unwrap_or_default();
+                // Insert at end of target column
+                (
+                    target_col.id.clone(),
+                    target_col.name.clone(),
+                    cards_in_target.len() as u32,
+                )
+            }
+            MoveDirection::Right => {
+                // Move to next column (or stay if at last column)
+                if current_col_idx >= columns.len() - 1 {
+                    return Err(KanbanError::InvalidOperation(
+                        "card is already in last column".to_string(),
+                    ));
+                }
+                let target_col = &columns[current_col_idx + 1];
+                let cards_in_target = self
+                    .core
+                    .list_cards_in_column(board_id, &target_col.id)
+                    .unwrap_or_default();
+                // Insert at end of target column
+                (
+                    target_col.id.clone(),
+                    target_col.name.clone(),
+                    cards_in_target.len() as u32,
+                )
+            }
+            MoveDirection::Up => {
+                // Move up within current column
+                if current_position == 0 {
+                    return Err(KanbanError::InvalidOperation(
+                        "card is already at top of column".to_string(),
+                    ));
+                }
+                let current_col = &columns[current_col_idx];
+                (
+                    current_col.id.clone(),
+                    current_col.name.clone(),
+                    current_position - 1,
+                )
+            }
+            MoveDirection::Down => {
+                // Move down within current column
+                let current_col = &columns[current_col_idx];
+                let cards_in_column = self
+                    .core
+                    .list_cards_in_column(board_id, &current_col.id)
+                    .unwrap_or_default();
+                let max_pos = cards_in_column.len().saturating_sub(1) as u32;
+                if current_position >= max_pos {
+                    return Err(KanbanError::InvalidOperation(
+                        "card is already at bottom of column".to_string(),
+                    ));
+                }
+                (
+                    current_col.id.clone(),
+                    current_col.name.clone(),
+                    current_position + 1,
+                )
+            }
+        };
+
+        // Perform the move
+        self.core
+            .move_card(board_id, card_id, &target_column_id, new_position)?;
+
+        Ok(CardMoveResult {
+            card_id: card_id.to_string(),
+            card_title: card.title,
+            target_column_id,
+            target_column_name,
+            new_position,
+        })
     }
 
     /// Update a card's properties.
@@ -826,5 +979,42 @@ mod tests {
         assert!(update.assignees.is_none());
         assert!(update.tags.is_none());
         assert!(update.due_date.is_none());
+    }
+
+    #[test]
+    fn move_direction_variants() {
+        assert_ne!(MoveDirection::Left, MoveDirection::Right);
+        assert_ne!(MoveDirection::Up, MoveDirection::Down);
+        assert_eq!(MoveDirection::Left, MoveDirection::Left);
+    }
+
+    #[test]
+    fn card_move_result_fields() {
+        let result = CardMoveResult {
+            card_id: "card-1".to_string(),
+            card_title: "Test Card".to_string(),
+            target_column_id: "col-2".to_string(),
+            target_column_name: "In Progress".to_string(),
+            new_position: 0,
+        };
+        assert_eq!(result.card_id, "card-1");
+        assert_eq!(result.card_title, "Test Card");
+        assert_eq!(result.target_column_id, "col-2");
+        assert_eq!(result.target_column_name, "In Progress");
+        assert_eq!(result.new_position, 0);
+    }
+
+    #[tokio::test]
+    async fn move_card_keyboard_fails_when_not_authenticated() {
+        let temp = TempDir::new().unwrap();
+        let service = make_service(&temp);
+        let result = service
+            .move_card_keyboard("board-1", "card-1", "col-1", 0, MoveDirection::Right)
+            .await;
+        assert!(result.is_err());
+        match result {
+            Err(KanbanError::NotAuthenticated) => {}
+            other => panic!("expected NotAuthenticated, got {other:?}"),
+        }
     }
 }

@@ -145,7 +145,10 @@ fn BoardCard(props: BoardCardProps) -> Element {
             to: crate::Route::ProjectBoardRoute { project_id: board_id.clone() },
             class: "board-card rounded-xl border border-slate-800 bg-slate-900/60 p-4 transition hover:border-emerald-400 hover:bg-slate-900/80",
             role: "listitem",
-            aria_label: format!("Board: {}", board.name),
+            aria_label: format!(
+                "{}, {} cards, {} columns",
+                board.name, board.card_count, board.column_count
+            ),
             div {
                 class: "flex flex-col gap-3",
                 // Board name
@@ -349,5 +352,42 @@ mod tests {
             .collect();
         assert_eq!(filtered.len(), 1);
         assert_eq!(filtered[0].name, "Board 1");
+    }
+
+    #[test]
+    fn board_card_aria_label_format() {
+        let board = BoardSummary {
+            id: "board-1".to_string(),
+            name: "Sprint Planning".to_string(),
+            entity_id: "entity-1".to_string(),
+            column_count: 4,
+            card_count: 12,
+            last_activity: None,
+        };
+
+        // Test the ARIA label format matches expected pattern
+        let aria_label = format!(
+            "{}, {} cards, {} columns",
+            board.name, board.card_count, board.column_count
+        );
+        assert_eq!(aria_label, "Sprint Planning, 12 cards, 4 columns");
+    }
+
+    #[test]
+    fn board_card_aria_label_with_zero_counts() {
+        let board = BoardSummary {
+            id: "board-empty".to_string(),
+            name: "New Board".to_string(),
+            entity_id: "entity-1".to_string(),
+            column_count: 0,
+            card_count: 0,
+            last_activity: None,
+        };
+
+        let aria_label = format!(
+            "{}, {} cards, {} columns",
+            board.name, board.card_count, board.column_count
+        );
+        assert_eq!(aria_label, "New Board, 0 cards, 0 columns");
     }
 }

@@ -1,0 +1,830 @@
+//! Kanban service for board and card operations with reactive subscriptions.
+
+use std::sync::Arc;
+
+use communitas_kanban::{
+    CardState as CoreCardState, CardUpdate as CoreCardUpdate, KanbanService as CoreKanbanService,
+};
+use communitas_ui_api::{
+    BoardSettings, BoardSummary, BoardView, CardDetail, CardState, CardView, ChecklistProgress,
+    ColumnView, CommentView, StepView, TagView,
+};
+use thiserror::Error;
+use tokio::sync::watch;
+use tracing::instrument;
+
+use crate::auth::{AuthController, AuthService, AuthStateSnapshot};
+
+/// Errors returned by the kanban service.
+#[derive(Debug, Error)]
+pub enum KanbanError {
+    #[error("not authenticated")]
+    NotAuthenticated,
+    #[error("board not found: {0}")]
+    BoardNotFound(String),
+    #[error("card not found: {0}")]
+    CardNotFound(String),
+    #[error("column not found: {0}")]
+    ColumnNotFound(String),
+    #[error("step not found: {0}")]
+    StepNotFound(String),
+    #[error("invalid operation: {0}")]
+    InvalidOperation(String),
+    #[error("storage error: {0}")]
+    StorageError(String),
+}
+
+impl From<communitas_kanban::KanbanError> for KanbanError {
+    fn from(err: communitas_kanban::KanbanError) -> Self {
+        match err {
+            communitas_kanban::KanbanError::BoardNotFound(id) => KanbanError::BoardNotFound(id),
+            communitas_kanban::KanbanError::CardNotFound(id) => KanbanError::CardNotFound(id),
+            communitas_kanban::KanbanError::ColumnNotFound(id) => KanbanError::ColumnNotFound(id),
+            communitas_kanban::KanbanError::StepNotFound(id) => KanbanError::StepNotFound(id),
+            other => KanbanError::StorageError(other.to_string()),
+        }
+    }
+}
+
+/// Snapshot of kanban state for reactive UI updates.
+#[derive(Debug, Clone, Default)]
+pub struct KanbanSnapshot {
+    /// All boards for the current entity.
+    pub boards: Vec<BoardSummary>,
+    /// Whether boards are currently being loaded.
+    pub loading: bool,
+}
+
+/// Update payload for card modifications.
+#[derive(Debug, Clone, Default)]
+pub struct CardUpdate {
+    /// New title for the card.
+    pub title: Option<String>,
+    /// New description for the card.
+    pub description: Option<String>,
+    /// New assignees (replaces existing).
+    pub assignees: Option<Vec<String>>,
+    /// New tags (replaces existing).
+    pub tags: Option<Vec<String>>,
+    /// New due date (None to clear, Some(None) to explicitly clear).
+    pub due_date: Option<Option<i64>>,
+}
+
+/// Service for kanban board and card operations.
+pub struct KanbanService {
+    auth: Arc<AuthController>,
+    core: CoreKanbanService,
+    tx: watch::Sender<KanbanSnapshot>,
+    rx: watch::Receiver<KanbanSnapshot>,
+}
+
+impl KanbanService {
+    /// Create a new kanban service linked to the auth controller.
+    pub fn new(auth: Arc<AuthController>) -> Self {
+        let (tx, rx) = watch::channel(KanbanSnapshot::default());
+        // Initialize core service with a default peer_id; will be updated on auth
+        let core = CoreKanbanService::new("anonymous");
+        Self { auth, core, tx, rx }
+    }
+
+    /// Subscribe to kanban state updates.
+    pub fn subscribe(&self) -> watch::Receiver<KanbanSnapshot> {
+        self.rx.clone()
+    }
+
+    /// Get the current kanban snapshot without subscribing.
+    pub fn current_snapshot(&self) -> KanbanSnapshot {
+        self.rx.borrow().clone()
+    }
+
+    /// List all boards for an entity (project/group).
+    #[instrument(skip(self), name = "ui.kanban.list_boards", fields(entity_id))]
+    pub async fn list_boards(&self, entity_id: &str) -> Result<Vec<BoardSummary>, KanbanError> {
+        if !self.is_authenticated() {
+            return Err(KanbanError::NotAuthenticated);
+        }
+
+        let boards = self.core.list_boards(entity_id)?;
+        let summaries: Vec<BoardSummary> = boards
+            .into_iter()
+            .map(|b| {
+                // Count columns and cards for summary
+                let column_count = self
+                    .core
+                    .list_columns(&b.id)
+                    .map(|cols| cols.len() as u32)
+                    .unwrap_or(0);
+                let card_count = self
+                    .core
+                    .list_columns(&b.id)
+                    .map(|cols| {
+                        cols.iter()
+                            .filter_map(|c| {
+                                self.core
+                                    .list_cards_in_column(&b.id, &c.id)
+                                    .ok()
+                                    .map(|cards| cards.len() as u32)
+                            })
+                            .sum()
+                    })
+                    .unwrap_or(0);
+
+                BoardSummary {
+                    id: b.id,
+                    name: b.name,
+                    entity_id: b.project_id,
+                    column_count,
+                    card_count,
+                    last_activity: Some(b.updated_at * 1000), // Convert to ms
+                }
+            })
+            .collect();
+
+        // Update snapshot
+        let mut snap = self.rx.borrow().clone();
+        snap.boards = summaries.clone();
+        snap.loading = false;
+        let _ = self.tx.send(snap);
+
+        Ok(summaries)
+    }
+
+    /// Get a full board view with columns and cards.
+    #[instrument(skip(self), name = "ui.kanban.get_board", fields(board_id))]
+    pub async fn get_board(&self, board_id: &str) -> Result<BoardView, KanbanError> {
+        if !self.is_authenticated() {
+            return Err(KanbanError::NotAuthenticated);
+        }
+
+        let board = self.core.get_board(board_id)?;
+        let columns = self.core.list_columns(board_id)?;
+        let tags = self.core.list_tags(board_id)?;
+
+        // Build tag lookup
+        let tag_lookup: std::collections::HashMap<String, TagView> = tags
+            .into_iter()
+            .map(|t| {
+                (
+                    t.id.clone(),
+                    TagView {
+                        id: t.id,
+                        name: t.name,
+                        color: t.color,
+                    },
+                )
+            })
+            .collect();
+
+        let column_views: Vec<ColumnView> = columns
+            .into_iter()
+            .map(|col| {
+                let cards = self
+                    .core
+                    .list_cards_in_column(board_id, &col.id)
+                    .unwrap_or_default();
+                let card_views: Vec<CardView> = cards
+                    .into_iter()
+                    .map(|card| self.card_to_view(&card, &tag_lookup))
+                    .collect();
+
+                ColumnView {
+                    id: col.id,
+                    name: col.name,
+                    position: col.position,
+                    cards: card_views,
+                    wip_limit: col.wip_limit,
+                }
+            })
+            .collect();
+
+        Ok(BoardView {
+            id: board.id,
+            name: board.name,
+            entity_id: board.project_id,
+            description: board.description,
+            columns: column_views,
+            settings: self.settings_to_view(&board.settings),
+            created_at: board.created_at * 1000,
+            updated_at: board.updated_at * 1000,
+        })
+    }
+
+    /// Get detailed card information including steps, comments, and activity.
+    #[instrument(skip(self), name = "ui.kanban.get_card", fields(board_id, card_id))]
+    pub async fn get_card(&self, board_id: &str, card_id: &str) -> Result<CardDetail, KanbanError> {
+        if !self.is_authenticated() {
+            return Err(KanbanError::NotAuthenticated);
+        }
+
+        let card = self.core.get_card(board_id, card_id)?;
+        let tags = self.core.list_tags(board_id)?;
+        let comments = self.core.list_comments(board_id, card_id)?;
+
+        // Build tag lookup
+        let tag_lookup: std::collections::HashMap<String, TagView> = tags
+            .into_iter()
+            .map(|t| {
+                (
+                    t.id.clone(),
+                    TagView {
+                        id: t.id,
+                        name: t.name,
+                        color: t.color,
+                    },
+                )
+            })
+            .collect();
+
+        // Get steps (checklist items) - need to count them for progress
+        // Steps are part of the card in the core, but we need to fetch via get_step
+        // For now, we'll return empty steps and activity as the core doesn't expose list_steps
+        let steps: Vec<StepView> = Vec::new(); // TODO: Wire when list_steps is available
+        let step_count = 0u32;
+        let completed_count = 0u32;
+
+        let checklist_progress = if step_count > 0 {
+            Some(ChecklistProgress {
+                completed: completed_count,
+                total: step_count,
+            })
+        } else {
+            None
+        };
+
+        let comment_views: Vec<CommentView> = comments
+            .into_iter()
+            .map(|c| CommentView {
+                id: c.id,
+                author_id: c.author_id.clone(),
+                author_name: c.author_id, // TODO: Resolve to display name
+                text: c.content,
+                created_at: c.created_at * 1000,
+            })
+            .collect();
+
+        let tag_views: Vec<TagView> = card
+            .tag_ids
+            .iter()
+            .filter_map(|id| tag_lookup.get(id).cloned())
+            .collect();
+
+        Ok(CardDetail {
+            id: card.id,
+            title: card.title,
+            description: if card.description.is_empty() {
+                None
+            } else {
+                Some(card.description)
+            },
+            state: self.core_state_to_ui(card.state),
+            assignees: card.assignee_ids,
+            tags: tag_views,
+            due_date: card.due_date.map(|d| d * 1000),
+            checklist_progress,
+            position: card.position,
+            steps,
+            comments: comment_views,
+            attachments: Vec::new(), // TODO: Wire when attachments are available
+            activity: Vec::new(),    // TODO: Wire activity log
+        })
+    }
+
+    /// Create a new board.
+    #[instrument(skip(self), name = "ui.kanban.create_board", fields(entity_id, name))]
+    pub async fn create_board(
+        &self,
+        entity_id: &str,
+        name: &str,
+        template: Option<&str>,
+    ) -> Result<BoardSummary, KanbanError> {
+        let _ = template; // Template support is a future enhancement
+        if !self.is_authenticated() {
+            return Err(KanbanError::NotAuthenticated);
+        }
+
+        let board = self.core.create_board(entity_id, name.to_string(), None)?;
+
+        Ok(BoardSummary {
+            id: board.id,
+            name: board.name,
+            entity_id: board.project_id,
+            column_count: 0,
+            card_count: 0,
+            last_activity: Some(board.created_at * 1000),
+        })
+    }
+
+    /// Create a new column in a board.
+    #[instrument(
+        skip(self),
+        name = "ui.kanban.create_column",
+        fields(board_id, name, position)
+    )]
+    pub async fn create_column(
+        &self,
+        board_id: &str,
+        name: &str,
+        position: u32,
+    ) -> Result<ColumnView, KanbanError> {
+        if !self.is_authenticated() {
+            return Err(KanbanError::NotAuthenticated);
+        }
+
+        let col = self
+            .core
+            .add_column(board_id, name.to_string(), Some(position))?;
+
+        Ok(ColumnView {
+            id: col.id,
+            name: col.name,
+            position: col.position,
+            cards: Vec::new(),
+            wip_limit: col.wip_limit,
+        })
+    }
+
+    /// Create a new card in a column.
+    #[instrument(
+        skip(self),
+        name = "ui.kanban.create_card",
+        fields(board_id, column_id, title)
+    )]
+    pub async fn create_card(
+        &self,
+        board_id: &str,
+        column_id: &str,
+        title: &str,
+    ) -> Result<CardView, KanbanError> {
+        if !self.is_authenticated() {
+            return Err(KanbanError::NotAuthenticated);
+        }
+
+        let card = self
+            .core
+            .create_card(board_id, column_id, title.to_string(), None)?;
+
+        Ok(CardView {
+            id: card.id,
+            title: card.title,
+            description: if card.description.is_empty() {
+                None
+            } else {
+                Some(card.description)
+            },
+            state: self.core_state_to_ui(card.state),
+            assignees: card.assignee_ids,
+            tags: Vec::new(),
+            due_date: card.due_date.map(|d| d * 1000),
+            checklist_progress: None,
+            position: card.position,
+        })
+    }
+
+    /// Move a card to a different column or position.
+    #[instrument(
+        skip(self),
+        name = "ui.kanban.move_card",
+        fields(board_id, card_id, target_column, position)
+    )]
+    pub async fn move_card(
+        &self,
+        board_id: &str,
+        card_id: &str,
+        target_column: &str,
+        position: u32,
+    ) -> Result<(), KanbanError> {
+        if !self.is_authenticated() {
+            return Err(KanbanError::NotAuthenticated);
+        }
+
+        self.core
+            .move_card(board_id, card_id, target_column, position)?;
+        Ok(())
+    }
+
+    /// Update a card's properties.
+    #[instrument(
+        skip(self, updates),
+        name = "ui.kanban.update_card",
+        fields(board_id, card_id)
+    )]
+    pub async fn update_card(
+        &self,
+        board_id: &str,
+        card_id: &str,
+        updates: CardUpdate,
+    ) -> Result<CardView, KanbanError> {
+        if !self.is_authenticated() {
+            return Err(KanbanError::NotAuthenticated);
+        }
+
+        // Apply basic updates
+        let core_update = CoreCardUpdate {
+            title: updates.title,
+            description: updates.description,
+            due_date: updates.due_date,
+            ..Default::default()
+        };
+        let card = self.core.update_card(board_id, card_id, core_update)?;
+
+        // Handle assignee changes if specified
+        if let Some(new_assignees) = updates.assignees {
+            // Remove existing assignees
+            for assignee in &card.assignee_ids {
+                let _ = self.core.unassign_user(board_id, card_id, assignee);
+            }
+            // Add new assignees
+            for assignee in &new_assignees {
+                let _ = self.core.assign_user(board_id, card_id, assignee);
+            }
+        }
+
+        // Handle tag changes if specified
+        if let Some(new_tags) = updates.tags {
+            // Remove existing tags
+            for tag_id in &card.tag_ids {
+                let _ = self.core.untag_card(board_id, card_id, tag_id);
+            }
+            // Add new tags
+            for tag_id in &new_tags {
+                let _ = self.core.tag_card(board_id, card_id, tag_id);
+            }
+        }
+
+        // Fetch updated card
+        let updated = self.core.get_card(board_id, card_id)?;
+        let tags = self.core.list_tags(board_id)?;
+        let tag_lookup: std::collections::HashMap<String, TagView> = tags
+            .into_iter()
+            .map(|t| {
+                (
+                    t.id.clone(),
+                    TagView {
+                        id: t.id,
+                        name: t.name,
+                        color: t.color,
+                    },
+                )
+            })
+            .collect();
+
+        Ok(self.card_to_view(&updated, &tag_lookup))
+    }
+
+    /// Archive a card.
+    #[instrument(skip(self), name = "ui.kanban.archive_card", fields(board_id, card_id))]
+    pub async fn archive_card(&self, board_id: &str, card_id: &str) -> Result<(), KanbanError> {
+        if !self.is_authenticated() {
+            return Err(KanbanError::NotAuthenticated);
+        }
+
+        self.core
+            .change_card_state(board_id, card_id, CoreCardState::Archived)?;
+        Ok(())
+    }
+
+    /// Add a checklist step to a card.
+    #[instrument(
+        skip(self),
+        name = "ui.kanban.add_step",
+        fields(board_id, card_id, title)
+    )]
+    pub async fn add_step(
+        &self,
+        board_id: &str,
+        card_id: &str,
+        title: &str,
+    ) -> Result<StepView, KanbanError> {
+        if !self.is_authenticated() {
+            return Err(KanbanError::NotAuthenticated);
+        }
+
+        let step = self
+            .core
+            .add_step(board_id, card_id, title.to_string(), None)?;
+
+        Ok(StepView {
+            id: step.id,
+            title: step.text,
+            completed: step.completed,
+        })
+    }
+
+    /// Toggle a step's completion status.
+    #[instrument(
+        skip(self),
+        name = "ui.kanban.toggle_step",
+        fields(board_id, card_id, step_id)
+    )]
+    pub async fn toggle_step(
+        &self,
+        board_id: &str,
+        card_id: &str,
+        step_id: &str,
+    ) -> Result<StepView, KanbanError> {
+        if !self.is_authenticated() {
+            return Err(KanbanError::NotAuthenticated);
+        }
+
+        let step = self.core.toggle_step(board_id, card_id, step_id)?;
+
+        Ok(StepView {
+            id: step.id,
+            title: step.text,
+            completed: step.completed,
+        })
+    }
+
+    /// Add a comment to a card.
+    #[instrument(
+        skip(self, text),
+        name = "ui.kanban.add_comment",
+        fields(board_id, card_id)
+    )]
+    pub async fn add_comment(
+        &self,
+        board_id: &str,
+        card_id: &str,
+        text: &str,
+    ) -> Result<CommentView, KanbanError> {
+        if !self.is_authenticated() {
+            return Err(KanbanError::NotAuthenticated);
+        }
+
+        let comment = self
+            .core
+            .add_comment(board_id, card_id, text.to_string(), None)?;
+
+        Ok(CommentView {
+            id: comment.id,
+            author_id: comment.author_id.clone(),
+            author_name: comment.author_id, // TODO: Resolve to display name
+            text: comment.content,
+            created_at: comment.created_at * 1000,
+        })
+    }
+
+    /// Internal: set loading state.
+    pub fn set_loading(&self, loading: bool) {
+        let mut snap = self.rx.borrow().clone();
+        snap.loading = loading;
+        let _ = self.tx.send(snap);
+    }
+
+    /// Internal: update the board list (called by core events).
+    pub fn set_boards(&self, boards: Vec<BoardSummary>) {
+        let mut snap = self.rx.borrow().clone();
+        snap.boards = boards;
+        snap.loading = false;
+        let _ = self.tx.send(snap);
+    }
+
+    // ===== Helper Methods =====
+
+    fn is_authenticated(&self) -> bool {
+        matches!(
+            &*self.auth.subscribe().borrow(),
+            AuthStateSnapshot::Authenticated(_)
+        )
+    }
+
+    fn core_state_to_ui(&self, state: CoreCardState) -> CardState {
+        match state {
+            CoreCardState::Open => CardState::Todo,
+            CoreCardState::Closed => CardState::Done,
+            CoreCardState::Postponed => CardState::InReview,
+            CoreCardState::Archived => CardState::Archived,
+        }
+    }
+
+    fn card_to_view(
+        &self,
+        card: &communitas_kanban::Card,
+        tag_lookup: &std::collections::HashMap<String, TagView>,
+    ) -> CardView {
+        let tag_views: Vec<TagView> = card
+            .tag_ids
+            .iter()
+            .filter_map(|id| tag_lookup.get(id).cloned())
+            .collect();
+
+        CardView {
+            id: card.id.clone(),
+            title: card.title.clone(),
+            description: if card.description.is_empty() {
+                None
+            } else {
+                Some(card.description.clone())
+            },
+            state: self.core_state_to_ui(card.state),
+            assignees: card.assignee_ids.clone(),
+            tags: tag_views,
+            due_date: card.due_date.map(|d| d * 1000),
+            checklist_progress: None, // TODO: Calculate from steps
+            position: card.position,
+        }
+    }
+
+    fn settings_to_view(&self, settings: &communitas_kanban::BoardSettings) -> BoardSettings {
+        BoardSettings {
+            enable_wip_limits: true, // Always exposed in UI
+            enable_due_dates: settings.enable_due_dates,
+            enable_checklists: settings.enable_steps,
+            default_column_id: settings.default_column_id.clone(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::storage::UiStorage;
+    use tempfile::TempDir;
+
+    fn make_service(temp: &TempDir) -> KanbanService {
+        let storage = UiStorage::from_path(temp.path()).unwrap();
+        let auth = Arc::new(AuthController::new(storage).unwrap());
+        KanbanService::new(auth)
+    }
+
+    #[test]
+    fn kanban_service_starts_empty() {
+        let temp = TempDir::new().unwrap();
+        let service = make_service(&temp);
+        let snap = service.current_snapshot();
+        assert!(snap.boards.is_empty());
+        assert!(!snap.loading);
+    }
+
+    #[tokio::test]
+    async fn list_boards_fails_when_not_authenticated() {
+        let temp = TempDir::new().unwrap();
+        let service = make_service(&temp);
+        let result = service.list_boards("entity-1").await;
+        assert!(result.is_err());
+        match result {
+            Err(KanbanError::NotAuthenticated) => {}
+            other => panic!("expected NotAuthenticated, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn get_board_fails_when_not_authenticated() {
+        let temp = TempDir::new().unwrap();
+        let service = make_service(&temp);
+        let result = service.get_board("board-1").await;
+        assert!(result.is_err());
+        match result {
+            Err(KanbanError::NotAuthenticated) => {}
+            other => panic!("expected NotAuthenticated, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn create_board_fails_when_not_authenticated() {
+        let temp = TempDir::new().unwrap();
+        let service = make_service(&temp);
+        let result = service.create_board("entity-1", "Test Board", None).await;
+        assert!(result.is_err());
+        match result {
+            Err(KanbanError::NotAuthenticated) => {}
+            other => panic!("expected NotAuthenticated, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn create_card_fails_when_not_authenticated() {
+        let temp = TempDir::new().unwrap();
+        let service = make_service(&temp);
+        let result = service.create_card("board-1", "col-1", "Task 1").await;
+        assert!(result.is_err());
+        match result {
+            Err(KanbanError::NotAuthenticated) => {}
+            other => panic!("expected NotAuthenticated, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn move_card_fails_when_not_authenticated() {
+        let temp = TempDir::new().unwrap();
+        let service = make_service(&temp);
+        let result = service.move_card("board-1", "card-1", "col-2", 0).await;
+        assert!(result.is_err());
+        match result {
+            Err(KanbanError::NotAuthenticated) => {}
+            other => panic!("expected NotAuthenticated, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn archive_card_fails_when_not_authenticated() {
+        let temp = TempDir::new().unwrap();
+        let service = make_service(&temp);
+        let result = service.archive_card("board-1", "card-1").await;
+        assert!(result.is_err());
+        match result {
+            Err(KanbanError::NotAuthenticated) => {}
+            other => panic!("expected NotAuthenticated, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn add_step_fails_when_not_authenticated() {
+        let temp = TempDir::new().unwrap();
+        let service = make_service(&temp);
+        let result = service.add_step("board-1", "card-1", "Step 1").await;
+        assert!(result.is_err());
+        match result {
+            Err(KanbanError::NotAuthenticated) => {}
+            other => panic!("expected NotAuthenticated, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn toggle_step_fails_when_not_authenticated() {
+        let temp = TempDir::new().unwrap();
+        let service = make_service(&temp);
+        let result = service.toggle_step("board-1", "card-1", "step-1").await;
+        assert!(result.is_err());
+        match result {
+            Err(KanbanError::NotAuthenticated) => {}
+            other => panic!("expected NotAuthenticated, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn add_comment_fails_when_not_authenticated() {
+        let temp = TempDir::new().unwrap();
+        let service = make_service(&temp);
+        let result = service.add_comment("board-1", "card-1", "Hello").await;
+        assert!(result.is_err());
+        match result {
+            Err(KanbanError::NotAuthenticated) => {}
+            other => panic!("expected NotAuthenticated, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn subscribe_returns_receiver() {
+        let temp = TempDir::new().unwrap();
+        let service = make_service(&temp);
+        let rx = service.subscribe();
+        let snap = rx.borrow().clone();
+        assert!(snap.boards.is_empty());
+    }
+
+    #[test]
+    fn set_boards_updates_subscribers() {
+        let temp = TempDir::new().unwrap();
+        let service = make_service(&temp);
+        let rx = service.subscribe();
+
+        let boards = vec![BoardSummary {
+            id: "b1".to_string(),
+            name: "Sprint Board".to_string(),
+            entity_id: "proj-1".to_string(),
+            column_count: 3,
+            card_count: 10,
+            last_activity: Some(1234567890000),
+        }];
+
+        service.set_boards(boards);
+
+        let snap = rx.borrow().clone();
+        assert_eq!(snap.boards.len(), 1);
+        assert_eq!(snap.boards[0].id, "b1");
+        assert!(!snap.loading);
+    }
+
+    #[test]
+    fn set_loading_updates_subscribers() {
+        let temp = TempDir::new().unwrap();
+        let service = make_service(&temp);
+        let rx = service.subscribe();
+
+        service.set_loading(true);
+        assert!(rx.borrow().loading);
+
+        service.set_loading(false);
+        assert!(!rx.borrow().loading);
+    }
+
+    #[test]
+    fn kanban_error_display() {
+        let err = KanbanError::BoardNotFound("b1".to_string());
+        assert_eq!(format!("{}", err), "board not found: b1");
+
+        let err = KanbanError::NotAuthenticated;
+        assert_eq!(format!("{}", err), "not authenticated");
+    }
+
+    #[test]
+    fn card_update_default() {
+        let update = CardUpdate::default();
+        assert!(update.title.is_none());
+        assert!(update.description.is_none());
+        assert!(update.assignees.is_none());
+        assert!(update.tags.is_none());
+        assert!(update.due_date.is_none());
+    }
+}

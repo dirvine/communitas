@@ -654,6 +654,235 @@ impl EntityDiskService {
 
         Ok(())
     }
+
+    /// Move a file or directory within an entity's virtual disk
+    pub async fn move_file(
+        &self,
+        entity_id: &str,
+        disk_type: DiskType,
+        source_path: &str,
+        dest_path: &str,
+    ) -> Result<FileInfo> {
+        if source_path.is_empty() || source_path == "/" {
+            bail!("Cannot move root directory");
+        }
+        if dest_path.is_empty() || dest_path == "/" {
+            bail!("Cannot move to root directory");
+        }
+
+        let source_fs_path = self.get_file_path(entity_id, disk_type, source_path);
+        let dest_fs_path = self.get_file_path(entity_id, disk_type, dest_path);
+
+        if !source_fs_path.exists() {
+            bail!(
+                "Source not found: {}:{}{}",
+                entity_id,
+                disk_type,
+                source_path
+            );
+        }
+
+        // Create parent directories for destination
+        if let Some(parent) = dest_fs_path.parent() {
+            tokio::fs::create_dir_all(parent).await.with_context(|| {
+                format!(
+                    "Failed to create parent directories for {}",
+                    dest_fs_path.display()
+                )
+            })?;
+        }
+
+        // Perform the move
+        tokio::fs::rename(&source_fs_path, &dest_fs_path)
+            .await
+            .with_context(|| {
+                format!(
+                    "Failed to move {} to {}",
+                    source_fs_path.display(),
+                    dest_fs_path.display()
+                )
+            })?;
+
+        // Update index: remove old entry, add new entry
+        let is_directory = dest_fs_path.is_dir();
+        let name = std::path::Path::new(dest_path)
+            .file_name()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_else(|| dest_path.to_string());
+        let now = chrono::Utc::now().timestamp();
+
+        let (size_bytes, content_hash) = if is_directory {
+            (0, String::new())
+        } else {
+            let data = tokio::fs::read(&dest_fs_path).await?;
+            (data.len() as u64, blake3::hash(&data).to_string())
+        };
+
+        // Remove old index entry
+        {
+            let old_key = Self::index_key(entity_id, disk_type, source_path);
+            let mut index = self.index.write().await;
+            index.remove(&old_key);
+        }
+
+        // Add new index entry
+        let metadata = DiskFileMetadata {
+            entity_id: entity_id.to_string(),
+            disk_type,
+            path: dest_path.to_string(),
+            name: name.clone(),
+            is_directory,
+            size_bytes,
+            modified_at: now,
+            content_hash: content_hash.clone(),
+            file_path: dest_fs_path,
+        };
+
+        {
+            let new_key = Self::index_key(entity_id, disk_type, dest_path);
+            let mut index = self.index.write().await;
+            index.insert(new_key, metadata);
+        }
+
+        self.save_index().await?;
+
+        debug!(
+            "Moved {}:{}{} to {}",
+            entity_id, disk_type, source_path, dest_path
+        );
+
+        Ok(FileInfo {
+            path: dest_path.to_string(),
+            name,
+            is_directory,
+            size_bytes,
+            modified_at: now,
+            content_hash,
+        })
+    }
+
+    /// Copy a file or directory within an entity's virtual disk
+    pub async fn copy_file(
+        &self,
+        entity_id: &str,
+        disk_type: DiskType,
+        source_path: &str,
+        dest_path: &str,
+    ) -> Result<FileInfo> {
+        if source_path.is_empty() || source_path == "/" {
+            bail!("Cannot copy root directory");
+        }
+        if dest_path.is_empty() || dest_path == "/" {
+            bail!("Cannot copy to root directory");
+        }
+
+        let source_fs_path = self.get_file_path(entity_id, disk_type, source_path);
+        let dest_fs_path = self.get_file_path(entity_id, disk_type, dest_path);
+
+        if !source_fs_path.exists() {
+            bail!(
+                "Source not found: {}:{}{}",
+                entity_id,
+                disk_type,
+                source_path
+            );
+        }
+
+        // Create parent directories for destination
+        if let Some(parent) = dest_fs_path.parent() {
+            tokio::fs::create_dir_all(parent).await.with_context(|| {
+                format!(
+                    "Failed to create parent directories for {}",
+                    dest_fs_path.display()
+                )
+            })?;
+        }
+
+        let is_directory = source_fs_path.is_dir();
+
+        if is_directory {
+            // Recursively copy directory
+            Self::copy_dir_recursive(&source_fs_path, &dest_fs_path).await?;
+        } else {
+            // Copy single file
+            tokio::fs::copy(&source_fs_path, &dest_fs_path)
+                .await
+                .with_context(|| {
+                    format!(
+                        "Failed to copy {} to {}",
+                        source_fs_path.display(),
+                        dest_fs_path.display()
+                    )
+                })?;
+        }
+
+        let name = std::path::Path::new(dest_path)
+            .file_name()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_else(|| dest_path.to_string());
+        let now = chrono::Utc::now().timestamp();
+
+        let (size_bytes, content_hash) = if is_directory {
+            (0, String::new())
+        } else {
+            let data = tokio::fs::read(&dest_fs_path).await?;
+            (data.len() as u64, blake3::hash(&data).to_string())
+        };
+
+        // Add new index entry
+        let metadata = DiskFileMetadata {
+            entity_id: entity_id.to_string(),
+            disk_type,
+            path: dest_path.to_string(),
+            name: name.clone(),
+            is_directory,
+            size_bytes,
+            modified_at: now,
+            content_hash: content_hash.clone(),
+            file_path: dest_fs_path,
+        };
+
+        {
+            let new_key = Self::index_key(entity_id, disk_type, dest_path);
+            let mut index = self.index.write().await;
+            index.insert(new_key, metadata);
+        }
+
+        self.save_index().await?;
+
+        debug!(
+            "Copied {}:{}{} to {}",
+            entity_id, disk_type, source_path, dest_path
+        );
+
+        Ok(FileInfo {
+            path: dest_path.to_string(),
+            name,
+            is_directory,
+            size_bytes,
+            modified_at: now,
+            content_hash,
+        })
+    }
+
+    /// Helper to recursively copy a directory
+    async fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<()> {
+        tokio::fs::create_dir_all(dst).await?;
+
+        let mut entries = tokio::fs::read_dir(src).await?;
+        while let Some(entry) = entries.next_entry().await? {
+            let entry_path = entry.path();
+            let dest_path = dst.join(entry.file_name());
+
+            if entry_path.is_dir() {
+                Box::pin(Self::copy_dir_recursive(&entry_path, &dest_path)).await?;
+            } else {
+                tokio::fs::copy(&entry_path, &dest_path).await?;
+            }
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]

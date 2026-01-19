@@ -88,6 +88,9 @@ clap = "4"
 # CRDT
 yrs = { version = "0.19", features = ["sync"] }
 
+# Canvas (Saorsa Canvas integration - ADR-021)
+canvas-core = { path = "../saorsa-canvas/canvas-core", default-features = false, features = ["std"] }
+
 # Security patches for transitive dependencies
 
 [profile.release]

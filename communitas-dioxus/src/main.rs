@@ -884,7 +884,7 @@ fn ProjectsRoute() -> Element {
     render_authenticated_page(
         "Projects",
         rsx! {
-            PlaceholderPanel { title: "Projects & Kanban".into(), body: "Kanban boards with drag-and-drop CRDT synchronization land here.".into() }
+            components::kanban::BoardListPage {}
         },
     )
 }
@@ -944,7 +944,7 @@ fn EntityDriveRoute(entity_type: String, entity_id: String) -> Element {
     render_authenticated_page(
         "Entity Drive",
         rsx! {
-            PlaceholderPanel { title: "Entity Drive".into(), body: format!("Drive for {entity_type} {entity_id}").into() }
+            components::DriveBrowser { entity_id: entity_id.clone() }
         },
     )
 }
@@ -954,7 +954,7 @@ fn ProjectBoardRoute(project_id: String) -> Element {
     render_authenticated_page(
         "Project Board",
         rsx! {
-            PlaceholderPanel { title: "Kanban Board".into(), body: format!("Project board for {project_id}").into() }
+            components::kanban::BoardView { board_id: project_id }
         },
     )
 }

@@ -9,7 +9,9 @@ homepage.workspace = true
 
 [dependencies]
 async-trait = { workspace = true }
+canvas-core = { workspace = true }
 communitas-core = { package = "communitas-core", path = "../communitas-core" }
+communitas-kanban = { path = "../communitas-kanban" }
 communitas-ui-api = { path = "../communitas-ui-api" }
 dirs = "5.0"
 serde = { workspace = true, features = ["derive"] }

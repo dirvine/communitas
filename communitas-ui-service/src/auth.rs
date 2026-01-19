@@ -86,12 +86,15 @@ pub struct AuthController {
     device_name: String,
     inner: RwLock<AuthInner>,
     state_tx: watch::Sender<AuthStateSnapshot>,
+    /// Keep one receiver alive so send() never fails when there are no external subscribers.
+    #[allow(dead_code)]
+    state_rx: watch::Receiver<AuthStateSnapshot>,
     failure_mode: AuthFailureMode,
 }
 
 impl AuthController {
     pub fn new(storage: UiStorage) -> Result<Self, AuthError> {
-        let (state_tx, _) = watch::channel(AuthStateSnapshot::LoggedOut);
+        let (state_tx, state_rx) = watch::channel(AuthStateSnapshot::LoggedOut);
         let failure_mode = AuthFailureMode::from_env();
         Ok(Self {
             storage,
@@ -101,6 +104,7 @@ impl AuthController {
                 session: None,
             }),
             state_tx,
+            state_rx,
             failure_mode,
         })
     }
@@ -176,6 +180,18 @@ impl AuthController {
             return Err(AuthError::State("forced auth failure"));
         }
         Ok(())
+    }
+
+    /// Enable demo mode for testing and development. Sets an authenticated state with a demo session.
+    /// This is useful for unit tests and demo scenarios that need to bypass real authentication.
+    pub fn enable_demo_mode(&self) {
+        let demo_session = AuthSession {
+            pubkey_hex: "demo_pubkey_hex_1234567890".to_string(),
+            four_words: "demo-test-user-mode".to_string(),
+            display_name: "Demo User".to_string(),
+            device_name: "Test Device".to_string(),
+        };
+        self.set_state(AuthStateSnapshot::Authenticated(demo_session));
     }
 }
 

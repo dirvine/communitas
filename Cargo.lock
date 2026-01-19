@@ -818,6 +818,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "canvas-core"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "cbc"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1139,6 +1150,8 @@ dependencies = [
 name = "communitas-dioxus"
 version = "0.1.60"
 dependencies = [
+ "base64 0.22.1",
+ "chrono",
  "communitas-core",
  "communitas-ui-api",
  "communitas-ui-service",
@@ -1262,13 +1275,19 @@ dependencies = [
 [[package]]
 name = "communitas-ui-api"
 version = "0.1.60"
+dependencies = [
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "communitas-ui-service"
 version = "0.1.60"
 dependencies = [
  "async-trait",
+ "canvas-core",
  "communitas-core",
+ "communitas-kanban",
  "communitas-ui-api",
  "dirs 5.0.1",
  "serde",

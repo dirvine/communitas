@@ -297,6 +297,22 @@ pub enum Command {
         path: String,
     },
 
+    /// Move or rename a file/directory on an entity's virtual disk
+    MoveFile {
+        entity_id: String,
+        disk_type: DiskTypeArg,
+        source_path: String,
+        dest_path: String,
+    },
+
+    /// Copy a file/directory on an entity's virtual disk
+    CopyFile {
+        entity_id: String,
+        disk_type: DiskTypeArg,
+        source_path: String,
+        dest_path: String,
+    },
+
     // ========================================================================
     // Kanban Commands
     // ========================================================================
@@ -435,6 +451,88 @@ pub enum Command {
 
     /// Delete a website
     DeleteWebsite { entity_id: String },
+
+    // ========================================================================
+    // Canvas Commands (Collaborative whiteboard)
+    // ========================================================================
+    /// Add a text element to the canvas
+    CanvasAddText {
+        entity_id: String,
+        content: String,
+        x: f32,
+        y: f32,
+        font_size: Option<f32>,
+        color: Option<String>,
+    },
+
+    /// Add an image element to the canvas
+    CanvasAddImage {
+        entity_id: String,
+        src: String,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+    },
+
+    /// Add a chart element to the canvas
+    CanvasAddChart {
+        entity_id: String,
+        chart_type: String,
+        data: String,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+    },
+
+    /// Remove an element from the canvas
+    CanvasRemoveElement {
+        entity_id: String,
+        element_id: String,
+    },
+
+    /// Update the transform of a canvas element
+    CanvasUpdateTransform {
+        entity_id: String,
+        element_id: String,
+        x: Option<f32>,
+        y: Option<f32>,
+        width: Option<f32>,
+        height: Option<f32>,
+        rotation: Option<f32>,
+        z_index: Option<i32>,
+    },
+
+    /// Select an element on the canvas
+    CanvasSelectElement {
+        entity_id: String,
+        element_id: String,
+    },
+
+    /// Deselect all elements on the canvas
+    CanvasDeselectAll { entity_id: String },
+
+    /// Set the canvas viewport dimensions
+    CanvasSetViewport {
+        entity_id: String,
+        width: f32,
+        height: f32,
+    },
+
+    /// Set the canvas view (zoom and pan)
+    CanvasSetView {
+        entity_id: String,
+        zoom: Option<f32>,
+        pan_x: Option<f32>,
+        pan_y: Option<f32>,
+    },
+
+    /// Clear all elements from the canvas
+    CanvasClear { entity_id: String },
+
+    /// Import a canvas scene from JSON
+    CanvasImport { entity_id: String, json: String },
 }
 
 /// Disk type argument for commands (serializable)
@@ -711,6 +809,22 @@ pub enum Event {
         path: String,
     },
 
+    /// File/directory was moved or renamed
+    FileMoved {
+        entity_id: String,
+        disk_type: DiskTypeArg,
+        source_path: String,
+        dest_path: String,
+    },
+
+    /// File/directory was copied
+    FileCopied {
+        entity_id: String,
+        disk_type: DiskTypeArg,
+        source_path: String,
+        dest_path: String,
+    },
+
     // ========================================================================
     // Kanban Events
     // ========================================================================
@@ -834,6 +948,75 @@ pub enum Event {
 
     /// A website was deleted
     WebsiteDeleted { entity_id: String },
+
+    // ========================================================================
+    // Canvas Events
+    // ========================================================================
+    /// Canvas text element was added
+    CanvasTextAdded {
+        entity_id: String,
+        element_id: String,
+        content: String,
+    },
+
+    /// Canvas image element was added
+    CanvasImageAdded {
+        entity_id: String,
+        element_id: String,
+        src: String,
+    },
+
+    /// Canvas chart element was added
+    CanvasChartAdded {
+        entity_id: String,
+        element_id: String,
+        chart_type: String,
+    },
+
+    /// Canvas element was removed
+    CanvasElementRemoved {
+        entity_id: String,
+        element_id: String,
+    },
+
+    /// Canvas element transform was updated
+    CanvasTransformUpdated {
+        entity_id: String,
+        element_id: String,
+    },
+
+    /// Canvas element was selected
+    CanvasElementSelected {
+        entity_id: String,
+        element_id: String,
+    },
+
+    /// All canvas elements were deselected
+    CanvasDeselected { entity_id: String },
+
+    /// Canvas viewport was updated
+    CanvasViewportUpdated {
+        entity_id: String,
+        width: f32,
+        height: f32,
+    },
+
+    /// Canvas view was updated (zoom/pan)
+    CanvasViewUpdated {
+        entity_id: String,
+        zoom: f32,
+        pan_x: f32,
+        pan_y: f32,
+    },
+
+    /// Canvas was cleared
+    CanvasCleared { entity_id: String },
+
+    /// Canvas was imported from JSON
+    CanvasImported {
+        entity_id: String,
+        element_count: usize,
+    },
 
     // ========================================================================
     // Error Events
@@ -977,6 +1160,16 @@ pub enum Query {
         disk_type: DiskTypeArg,
     },
 
+    /// List all available disks for an entity
+    ListDisks { entity_id: String },
+
+    /// Get a file preview (thumbnail for images, text excerpt for text files)
+    GetFilePreview {
+        entity_id: String,
+        disk_type: DiskTypeArg,
+        path: String,
+    },
+
     // ========================================================================
     // Kanban Queries
     // ========================================================================
@@ -1031,6 +1224,9 @@ pub enum Query {
     /// Get call participants
     GetCallParticipants { call_id: String },
 
+    /// Get call status including mute/video state
+    GetCallStatus { call_id: String },
+
     // ========================================================================
     // Contact Queries
     // ========================================================================
@@ -1051,6 +1247,18 @@ pub enum Query {
     // ========================================================================
     /// Get website information for an entity
     GetWebsite { entity_id: String },
+
+    // ========================================================================
+    // Canvas Queries
+    // ========================================================================
+    /// Get the current canvas snapshot for an entity
+    GetCanvasSnapshot { entity_id: String },
+
+    /// Export the canvas scene as JSON
+    CanvasExport { entity_id: String },
+
+    /// Get the element at specific coordinates
+    CanvasElementAt { entity_id: String, x: f32, y: f32 },
 }
 
 // ============================================================================
@@ -1110,8 +1318,14 @@ pub enum QueryResponse {
     /// File list
     FileList(Vec<FileInfoResponse>),
 
+    /// File preview (thumbnail/excerpt)
+    FilePreview(FilePreviewResponse),
+
     /// Disk statistics
     DiskStats(DiskStatsResponse),
+
+    /// List of disks
+    DiskList(Vec<DiskInfoResponse>),
 
     /// Kanban board
     KanbanBoard(KanbanBoardResponse),
@@ -1140,6 +1354,9 @@ pub enum QueryResponse {
     /// Call participants
     CallParticipants(Vec<String>),
 
+    /// Call status with mute/video state
+    CallStatus(CallStatusResponse),
+
     /// Contact information
     Contact(ContactResponse),
 
@@ -1154,6 +1371,15 @@ pub enum QueryResponse {
 
     /// Cached peer presence record (ADR-014)
     CachedPeerPresence(Option<PeerPresenceRecord>),
+
+    /// Canvas snapshot with all elements and view state
+    CanvasSnapshot(CanvasSnapshotResponse),
+
+    /// Canvas exported as JSON
+    CanvasExportJson(String),
+
+    /// Canvas element at coordinates (or None if none found)
+    CanvasElement(Option<CanvasElementResponse>),
 }
 
 // ============================================================================
@@ -1249,6 +1475,30 @@ pub struct DiskStatsResponse {
     pub dir_count: u32,
 }
 
+/// Disk info response data
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiskInfoResponse {
+    pub disk_type: DiskTypeArg,
+    pub entity_id: String,
+    pub total_bytes: u64,
+    pub used_bytes: u64,
+    pub available_bytes: u64,
+    pub file_count: u64,
+}
+
+/// File preview response data
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FilePreviewResponse {
+    pub path: String,
+    pub mime_type: String,
+    pub size_bytes: u64,
+    pub thumbnail: Option<Vec<u8>>,
+    pub text_preview: Option<String>,
+    pub checksum: String,
+    pub created_at: i64,
+    pub modified_at: i64,
+}
+
 /// Kanban board response data
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KanbanBoardResponse {
@@ -1298,6 +1548,18 @@ pub struct CallResponse {
     pub started_at: i64,
 }
 
+/// Call status response with detailed state
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CallStatusResponse {
+    pub call_id: String,
+    pub entity_id: String,
+    pub participant_count: usize,
+    pub started_at: i64,
+    pub is_muted: bool,
+    pub is_video_enabled: bool,
+    pub is_screen_sharing: bool,
+}
+
 /// Contact response data
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ContactResponse {
@@ -1321,6 +1583,36 @@ pub struct WebsiteResponse {
     pub published_at: i64,
     pub size_bytes: usize,
     pub url: String,
+}
+
+/// Canvas snapshot response data
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CanvasSnapshotResponse {
+    pub entity_id: String,
+    pub elements: Vec<CanvasElementResponse>,
+    pub viewport_width: f32,
+    pub viewport_height: f32,
+    pub zoom: f32,
+    pub pan_x: f32,
+    pub pan_y: f32,
+    pub loading: bool,
+}
+
+/// Canvas element response data
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CanvasElementResponse {
+    pub id: String,
+    pub element_type: String,
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+    pub rotation: f32,
+    pub z_index: i32,
+    pub selected: bool,
+    pub interactive: bool,
+    /// Type-specific data (content for text, src for image, etc.)
+    pub data: serde_json::Value,
 }
 
 // ============================================================================
@@ -1359,6 +1651,9 @@ pub enum Subscription {
 
     /// Subscribe to call events
     CallEvents,
+
+    /// Subscribe to canvas events for an entity
+    CanvasEvents { entity_id: String },
 }
 
 // ============================================================================

@@ -1,7 +1,11 @@
 //! Shared Rust service layer consumed by all Communitas UI surfaces (Dioxus + MCP).
 
 pub mod auth;
+pub mod call;
+pub mod canvas;
 pub mod directory;
+pub mod drive;
+pub mod kanban;
 pub mod messaging;
 pub mod navigation;
 pub mod presence;
@@ -10,7 +14,11 @@ pub mod storage;
 use std::sync::Arc;
 
 use auth::AuthController;
+use call::CallService;
+use canvas::CanvasService;
 use directory::DirectoryService;
+use drive::DriveService;
+use kanban::KanbanService;
 use messaging::MessagingService;
 use navigation::NavigationStore;
 use presence::PresenceService;
@@ -26,6 +34,10 @@ pub struct UiServices {
     directory: Arc<DirectoryService>,
     messaging: Arc<MessagingService>,
     presence: Arc<PresenceService>,
+    kanban: Arc<KanbanService>,
+    canvas: Arc<CanvasService>,
+    drive: Arc<DriveService>,
+    call: Arc<CallService>,
 }
 
 impl UiServices {
@@ -42,6 +54,10 @@ impl UiServices {
         let directory = Arc::new(DirectoryService::new(auth.clone()));
         let messaging = Arc::new(MessagingService::new(auth.clone()));
         let presence = Arc::new(PresenceService::new(auth.clone(), directory.clone()));
+        let kanban = Arc::new(KanbanService::new(auth.clone()));
+        let canvas = Arc::new(CanvasService::new(auth.clone()));
+        let drive = Arc::new(DriveService::new(auth.clone()));
+        let call = Arc::new(CallService::new(auth.clone()));
         Ok(Self {
             storage,
             auth,
@@ -49,6 +65,10 @@ impl UiServices {
             directory,
             messaging,
             presence,
+            kanban,
+            canvas,
+            drive,
+            call,
         })
     }
 
@@ -79,6 +99,26 @@ impl UiServices {
     /// Presence status tracking for contacts.
     pub fn presence(&self) -> Arc<PresenceService> {
         self.presence.clone()
+    }
+
+    /// Kanban boards and cards service.
+    pub fn kanban(&self) -> Arc<KanbanService> {
+        self.kanban.clone()
+    }
+
+    /// Canvas drawing and visual surfaces service.
+    pub fn canvas(&self) -> Arc<CanvasService> {
+        self.canvas.clone()
+    }
+
+    /// Drive and virtual disk service.
+    pub fn drive(&self) -> Arc<DriveService> {
+        self.drive.clone()
+    }
+
+    /// Real-time voice/video call service.
+    pub fn call(&self) -> Arc<CallService> {
+        self.call.clone()
     }
 }
 
@@ -119,6 +159,10 @@ mod tests {
         let _ = services.directory();
         let _ = services.messaging();
         let _ = services.presence();
+        let _ = services.kanban();
+        let _ = services.canvas();
+        let _ = services.drive();
+        let _ = services.call();
     }
 
     #[test]
@@ -185,6 +229,39 @@ mod tests {
         assert!(!snap.loading);
     }
 
+    #[test]
+    fn kanban_starts_with_empty_boards() {
+        let temp = TempDir::new().unwrap();
+        let services = make_services(&temp);
+
+        let snap = services.kanban().current_snapshot();
+        assert!(snap.boards.is_empty());
+        assert!(!snap.loading);
+    }
+
+    #[test]
+    fn canvas_starts_with_empty_scene() {
+        let temp = TempDir::new().unwrap();
+        let services = make_services(&temp);
+
+        let snap = services.canvas().current_snapshot();
+        assert!(snap.elements.is_empty());
+        assert!(snap.selected_ids.is_empty());
+        assert!(!snap.loading);
+    }
+
+    #[test]
+    fn drive_starts_with_empty_snapshot() {
+        let temp = TempDir::new().unwrap();
+        let services = make_services(&temp);
+
+        let snap = services.drive().current_snapshot();
+        assert!(snap.uploads.is_empty());
+        assert!(snap.downloads.is_empty());
+        assert!(snap.current_directory.is_empty());
+        assert!(!snap.loading);
+    }
+
     #[tokio::test]
     async fn navigation_updates_propagate_to_subscribers() {
         let temp = TempDir::new().unwrap();
@@ -233,6 +310,9 @@ mod tests {
         assert!(Arc::ptr_eq(&services1.directory(), &services2.directory()));
         assert!(Arc::ptr_eq(&services1.messaging(), &services2.messaging()));
         assert!(Arc::ptr_eq(&services1.presence(), &services2.presence()));
+        assert!(Arc::ptr_eq(&services1.kanban(), &services2.kanban()));
+        assert!(Arc::ptr_eq(&services1.canvas(), &services2.canvas()));
+        assert!(Arc::ptr_eq(&services1.drive(), &services2.drive()));
     }
 
     #[tokio::test]

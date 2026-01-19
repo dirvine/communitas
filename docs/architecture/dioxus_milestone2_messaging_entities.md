@@ -9,7 +9,7 @@ Exit when:
 
 1. Dioxus renders a thread list showing all conversations (entity + contact DMs) with unread counts, timestamps, and previews.
 2. Users can compose, send, edit, and delete messages within any entity or contact chat, with optimistic UI updates.
-3. Entity detail views show entity info, member list, chat history, and a composer—matching Flutter archive behavior.
+3. Entity detail views show entity info, member list, chat history, and a composer—matching the archived legacy desktop behavior without reintroducing Flutter.
 4. Contact cards display presence badges (online/offline/away) updated via watch channels.
 5. `UiServices` exposes `MessagingService` and `PresenceService` consumed by both Dioxus and MCP; no Dioxus-only messaging code remains.
 6. MCP parity tests confirm `list_threads`, `get_messages`, `send_message`, and contact/presence queries return identical data to what Dioxus displays.

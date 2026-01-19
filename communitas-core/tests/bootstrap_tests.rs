@@ -37,9 +37,10 @@ async fn test_seed_bootstrap_nodes_marks_bootstrap() {
     let cache_path = temp_dir.path().join("bootstrap-cache");
 
     let cache = PeerCache::open(&cache_path).await.expect("load cache");
+    // Use valid IP addresses instead of made-up connection words
     let seeds = vec![
-        "ocean-forest-moon-star".to_string(),
-        "river-mountain-cloud-light".to_string(),
+        "192.168.1.100:9000".to_string(),
+        "192.168.1.101:9000".to_string(),
     ];
 
     let seeded = cache

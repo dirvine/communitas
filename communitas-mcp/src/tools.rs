@@ -904,6 +904,71 @@ pub fn list_tools(authenticated: bool) -> Vec<Tool> {
                 "required": ["entity_id", "disk_type", "path"]
             }),
         },
+        Tool {
+            name: "create_directory".to_string(),
+            description: "Create a directory on an entity's virtual disk".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string", "description": "Entity ID"},
+                    "disk_type": {"type": "string", "enum": ["private", "public", "shared"], "description": "Disk type"},
+                    "path": {"type": "string", "description": "Directory path to create"}
+                },
+                "required": ["entity_id", "disk_type", "path"]
+            }),
+        },
+        Tool {
+            name: "move_file".to_string(),
+            description: "Move or rename a file/directory on an entity's virtual disk".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string", "description": "Entity ID"},
+                    "disk_type": {"type": "string", "enum": ["private", "public", "shared"], "description": "Disk type"},
+                    "source_path": {"type": "string", "description": "Source path"},
+                    "dest_path": {"type": "string", "description": "Destination path"}
+                },
+                "required": ["entity_id", "disk_type", "source_path", "dest_path"]
+            }),
+        },
+        Tool {
+            name: "copy_file".to_string(),
+            description: "Copy a file/directory on an entity's virtual disk".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string", "description": "Entity ID"},
+                    "disk_type": {"type": "string", "enum": ["private", "public", "shared"], "description": "Disk type"},
+                    "source_path": {"type": "string", "description": "Source path"},
+                    "dest_path": {"type": "string", "description": "Destination path"}
+                },
+                "required": ["entity_id", "disk_type", "source_path", "dest_path"]
+            }),
+        },
+        Tool {
+            name: "list_disks".to_string(),
+            description: "List all virtual disks available for an entity".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string", "description": "Entity ID"}
+                },
+                "required": ["entity_id"]
+            }),
+        },
+        Tool {
+            name: "get_file_preview".to_string(),
+            description: "Get a preview of a file (thumbnail for images, text excerpt for text files)".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string", "description": "Entity ID"},
+                    "disk_type": {"type": "string", "enum": ["private", "public", "shared"], "description": "Disk type"},
+                    "path": {"type": "string", "description": "File path"}
+                },
+                "required": ["entity_id", "disk_type", "path"]
+            }),
+        },
         // Query tools (read operations)
         Tool {
             name: "get_entity".to_string(),
@@ -1071,6 +1136,52 @@ pub fn list_tools(authenticated: bool) -> Vec<Tool> {
                 "properties": {
                     "call_id": {"type": "string", "description": "Call ID"},
                     "enabled": {"type": "boolean", "description": "Set true to start sharing, false to stop", "default": true}
+                },
+                "required": ["call_id"]
+            }),
+        },
+        Tool {
+            name: "toggle_mute".to_string(),
+            description: "Toggle audio mute state in a call".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "call_id": {"type": "string", "description": "Call ID"},
+                    "muted": {"type": "boolean", "description": "Set true to mute, false to unmute"}
+                },
+                "required": ["call_id", "muted"]
+            }),
+        },
+        Tool {
+            name: "toggle_video".to_string(),
+            description: "Toggle video state in a call".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "call_id": {"type": "string", "description": "Call ID"},
+                    "enabled": {"type": "boolean", "description": "Set true to enable video, false to disable"}
+                },
+                "required": ["call_id", "enabled"]
+            }),
+        },
+        Tool {
+            name: "get_call_status".to_string(),
+            description: "Get current call status including mute/video state".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "call_id": {"type": "string", "description": "Call ID"}
+                },
+                "required": ["call_id"]
+            }),
+        },
+        Tool {
+            name: "get_call_participants".to_string(),
+            description: "Get list of participants in a call".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "call_id": {"type": "string", "description": "Call ID"}
                 },
                 "required": ["call_id"]
             }),
@@ -1465,6 +1576,194 @@ pub fn list_tools(authenticated: bool) -> Vec<Tool> {
                 "required": ["name"]
             }),
         },
+        // ========== Canvas Tools ==========
+        Tool {
+            name: "canvas_get_snapshot".to_string(),
+            description: "Get the current canvas snapshot including all elements, viewport, and view settings".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string", "description": "Entity ID for the canvas context"}
+                },
+                "required": ["entity_id"]
+            }),
+        },
+        Tool {
+            name: "canvas_add_text".to_string(),
+            description: "Add a text element to the canvas".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string", "description": "Entity ID for the canvas context"},
+                    "content": {"type": "string", "description": "Text content to display"},
+                    "x": {"type": "number", "description": "X position in pixels"},
+                    "y": {"type": "number", "description": "Y position in pixels"},
+                    "font_size": {"type": "number", "description": "Font size in pixels", "default": 16},
+                    "color": {"type": "string", "description": "Text color (CSS color string)", "default": "#000000"}
+                },
+                "required": ["entity_id", "content", "x", "y"]
+            }),
+        },
+        Tool {
+            name: "canvas_add_image".to_string(),
+            description: "Add an image element to the canvas".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string", "description": "Entity ID for the canvas context"},
+                    "src": {"type": "string", "description": "Image source URL or data URI"},
+                    "x": {"type": "number", "description": "X position in pixels"},
+                    "y": {"type": "number", "description": "Y position in pixels"},
+                    "width": {"type": "number", "description": "Image width in pixels"},
+                    "height": {"type": "number", "description": "Image height in pixels"}
+                },
+                "required": ["entity_id", "src", "x", "y", "width", "height"]
+            }),
+        },
+        Tool {
+            name: "canvas_add_chart".to_string(),
+            description: "Add a chart element to the canvas".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string", "description": "Entity ID for the canvas context"},
+                    "chart_type": {"type": "string", "description": "Chart type (e.g., 'bar', 'line', 'pie')"},
+                    "data": {"type": "object", "description": "Chart data as JSON object"},
+                    "x": {"type": "number", "description": "X position in pixels"},
+                    "y": {"type": "number", "description": "Y position in pixels"},
+                    "width": {"type": "number", "description": "Chart width in pixels"},
+                    "height": {"type": "number", "description": "Chart height in pixels"}
+                },
+                "required": ["entity_id", "chart_type", "data", "x", "y", "width", "height"]
+            }),
+        },
+        Tool {
+            name: "canvas_remove_element".to_string(),
+            description: "Remove an element from the canvas".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string", "description": "Entity ID for the canvas context"},
+                    "element_id": {"type": "string", "description": "ID of the element to remove"}
+                },
+                "required": ["entity_id", "element_id"]
+            }),
+        },
+        Tool {
+            name: "canvas_update_transform".to_string(),
+            description: "Update an element's position, size, rotation, and z-index".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string", "description": "Entity ID for the canvas context"},
+                    "element_id": {"type": "string", "description": "ID of the element to update"},
+                    "x": {"type": "number", "description": "X position in pixels"},
+                    "y": {"type": "number", "description": "Y position in pixels"},
+                    "width": {"type": "number", "description": "Width in pixels"},
+                    "height": {"type": "number", "description": "Height in pixels"},
+                    "rotation": {"type": "number", "description": "Rotation in radians", "default": 0},
+                    "z_index": {"type": "integer", "description": "Z-index for layering", "default": 0}
+                },
+                "required": ["entity_id", "element_id", "x", "y", "width", "height"]
+            }),
+        },
+        Tool {
+            name: "canvas_select_element".to_string(),
+            description: "Select an element on the canvas".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string", "description": "Entity ID for the canvas context"},
+                    "element_id": {"type": "string", "description": "ID of the element to select"}
+                },
+                "required": ["entity_id", "element_id"]
+            }),
+        },
+        Tool {
+            name: "canvas_deselect_all".to_string(),
+            description: "Deselect all elements on the canvas".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string", "description": "Entity ID for the canvas context"}
+                },
+                "required": ["entity_id"]
+            }),
+        },
+        Tool {
+            name: "canvas_set_viewport".to_string(),
+            description: "Set the viewport dimensions of the canvas".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string", "description": "Entity ID for the canvas context"},
+                    "width": {"type": "number", "description": "Viewport width in pixels"},
+                    "height": {"type": "number", "description": "Viewport height in pixels"}
+                },
+                "required": ["entity_id", "width", "height"]
+            }),
+        },
+        Tool {
+            name: "canvas_set_view".to_string(),
+            description: "Set zoom and pan for the canvas view".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string", "description": "Entity ID for the canvas context"},
+                    "zoom": {"type": "number", "description": "Zoom level (1.0 = 100%)"},
+                    "pan_x": {"type": "number", "description": "Pan offset X in pixels"},
+                    "pan_y": {"type": "number", "description": "Pan offset Y in pixels"}
+                },
+                "required": ["entity_id", "zoom", "pan_x", "pan_y"]
+            }),
+        },
+        Tool {
+            name: "canvas_clear".to_string(),
+            description: "Clear all elements from the canvas".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string", "description": "Entity ID for the canvas context"}
+                },
+                "required": ["entity_id"]
+            }),
+        },
+        Tool {
+            name: "canvas_export".to_string(),
+            description: "Export the canvas scene as JSON".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string", "description": "Entity ID for the canvas context"}
+                },
+                "required": ["entity_id"]
+            }),
+        },
+        Tool {
+            name: "canvas_import".to_string(),
+            description: "Import a canvas scene from JSON".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string", "description": "Entity ID for the canvas context"},
+                    "json": {"type": "string", "description": "JSON string containing the scene data"}
+                },
+                "required": ["entity_id", "json"]
+            }),
+        },
+        Tool {
+            name: "canvas_element_at".to_string(),
+            description: "Get the element at the specified canvas coordinates".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string", "description": "Entity ID for the canvas context"},
+                    "x": {"type": "number", "description": "X coordinate in canvas space"},
+                    "y": {"type": "number", "description": "Y coordinate in canvas space"}
+                },
+                "required": ["entity_id", "x", "y"]
+            }),
+        },
     ]);
 
     tools
@@ -1487,6 +1786,9 @@ pub async fn call_tool(app: &CommunitasApp, name: &str, args: Option<Value>) -> 
         return result;
     }
     if let Some(result) = dispatch_kanban_tools(app, name, &args).await {
+        return result;
+    }
+    if let Some(result) = dispatch_canvas_tools(app, name, &args).await {
         return result;
     }
     if let Some(result) = dispatch_file_tools(app, name, &args).await {
@@ -1627,6 +1929,30 @@ async fn dispatch_kanban_tools(
     }
 }
 
+async fn dispatch_canvas_tools(
+    app: &CommunitasApp,
+    name: &str,
+    args: &Value,
+) -> Option<ToolCallResult> {
+    match name {
+        "canvas_get_snapshot" => Some(execute_canvas_get_snapshot(app, args.clone()).await),
+        "canvas_add_text" => Some(execute_canvas_add_text(app, args.clone()).await),
+        "canvas_add_image" => Some(execute_canvas_add_image(app, args.clone()).await),
+        "canvas_add_chart" => Some(execute_canvas_add_chart(app, args.clone()).await),
+        "canvas_remove_element" => Some(execute_canvas_remove_element(app, args.clone()).await),
+        "canvas_update_transform" => Some(execute_canvas_update_transform(app, args.clone()).await),
+        "canvas_select_element" => Some(execute_canvas_select_element(app, args.clone()).await),
+        "canvas_deselect_all" => Some(execute_canvas_deselect_all(app, args.clone()).await),
+        "canvas_set_viewport" => Some(execute_canvas_set_viewport(app, args.clone()).await),
+        "canvas_set_view" => Some(execute_canvas_set_view(app, args.clone()).await),
+        "canvas_clear" => Some(execute_canvas_clear(app, args.clone()).await),
+        "canvas_export" => Some(execute_canvas_export(app, args.clone()).await),
+        "canvas_import" => Some(execute_canvas_import(app, args.clone()).await),
+        "canvas_element_at" => Some(execute_canvas_element_at(app, args.clone()).await),
+        _ => None,
+    }
+}
+
 async fn dispatch_file_tools(
     app: &CommunitasApp,
     name: &str,
@@ -1638,6 +1964,12 @@ async fn dispatch_file_tools(
         "delete_file" => Some(execute_delete_file(app, args.clone()).await),
         "list_files" => Some(execute_list_files(app, args.clone()).await),
         "get_disk_stats" => Some(execute_get_disk_stats(app, args.clone()).await),
+        // Directory operations
+        "create_directory" => Some(execute_create_directory(app, args.clone()).await),
+        "move_file" => Some(execute_move_file(app, args.clone()).await),
+        "copy_file" => Some(execute_copy_file(app, args.clone()).await),
+        "list_disks" => Some(execute_list_disks(app, args.clone()).await),
+        "get_file_preview" => Some(execute_get_file_preview(app, args.clone()).await),
         // Media operations
         "upload_with_metadata" => Some(execute_upload_with_metadata(app, args.clone()).await),
         "get_media_metadata" => Some(execute_get_media_metadata(app, args.clone()).await),
@@ -1707,6 +2039,10 @@ async fn dispatch_social_tools(
         "join_call" => Some(execute_join_call(app, args.clone()).await),
         "end_call" => Some(execute_end_call(app, args.clone()).await),
         "share_screen" => Some(execute_share_screen(app, args.clone()).await),
+        "toggle_mute" => Some(execute_toggle_mute(app, args.clone()).await),
+        "toggle_video" => Some(execute_toggle_video(app, args.clone()).await),
+        "get_call_status" => Some(execute_get_call_status(app, args.clone()).await),
+        "get_call_participants" => Some(execute_get_call_participants(app, args.clone()).await),
         _ => None,
     }
 }
@@ -4829,5 +5165,549 @@ async fn execute_validate_mnemonic(args: &Value) -> ToolCallResult {
             "word_count": word_count,
             "error": e.to_string()
         })),
+    }
+}
+
+// ========== Canvas Executors ==========
+
+async fn execute_canvas_get_snapshot(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let entity_id = require_str!(args, "entity_id");
+
+    let query = Query::GetCanvasSnapshot { entity_id };
+
+    match app.query(query).await {
+        Ok(QueryResponse::CanvasSnapshot(snapshot)) => {
+            let elements: Vec<Value> = snapshot
+                .elements
+                .iter()
+                .map(|e| {
+                    json!({
+                        "id": e.id,
+                        "element_type": e.element_type,
+                        "x": e.x,
+                        "y": e.y,
+                        "width": e.width,
+                        "height": e.height,
+                        "rotation": e.rotation,
+                        "z_index": e.z_index,
+                        "selected": e.selected,
+                        "interactive": e.interactive,
+                        "data": e.data
+                    })
+                })
+                .collect();
+            json_result(&json!({
+                "entity_id": snapshot.entity_id,
+                "elements": elements,
+                "element_count": elements.len(),
+                "viewport_width": snapshot.viewport_width,
+                "viewport_height": snapshot.viewport_height,
+                "zoom": snapshot.zoom,
+                "pan_x": snapshot.pan_x,
+                "pan_y": snapshot.pan_y,
+                "loading": snapshot.loading
+            }))
+        }
+        Ok(_) => error_result("Unexpected response type"),
+        Err(e) => error_result(&format!("Failed to get canvas snapshot: {}", e.message)),
+    }
+}
+
+async fn execute_canvas_add_text(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let entity_id = require_str!(args, "entity_id");
+    let content = require_str!(args, "content");
+    let x = args.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+    let y = args.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+    let font_size = args
+        .get("font_size")
+        .and_then(|v| v.as_f64())
+        .map(|v| v as f32);
+    let color = opt_str(&args, "color");
+
+    let cmd = Command::CanvasAddText {
+        entity_id,
+        content,
+        x,
+        y,
+        font_size,
+        color,
+    };
+
+    match app.execute(cmd).await {
+        Ok(events) => {
+            let element_id = events.iter().find_map(|e| {
+                if let Event::CanvasTextAdded { element_id, .. } = e {
+                    Some(element_id.clone())
+                } else {
+                    None
+                }
+            });
+            json_result(&json!({
+                "success": true,
+                "message": "Text element added to canvas",
+                "element_id": element_id
+            }))
+        }
+        Err(e) => error_result(&format!("Failed to add text to canvas: {}", e.message)),
+    }
+}
+
+async fn execute_canvas_add_image(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let entity_id = require_str!(args, "entity_id");
+    let src = require_str!(args, "src");
+    let x = args.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+    let y = args.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+    let width = args.get("width").and_then(|v| v.as_f64()).unwrap_or(100.0) as f32;
+    let height = args.get("height").and_then(|v| v.as_f64()).unwrap_or(100.0) as f32;
+
+    let cmd = Command::CanvasAddImage {
+        entity_id,
+        src,
+        x,
+        y,
+        width,
+        height,
+    };
+
+    match app.execute(cmd).await {
+        Ok(events) => {
+            let element_id = events.iter().find_map(|e| {
+                if let Event::CanvasImageAdded { element_id, .. } = e {
+                    Some(element_id.clone())
+                } else {
+                    None
+                }
+            });
+            json_result(&json!({
+                "success": true,
+                "message": "Image element added to canvas",
+                "element_id": element_id
+            }))
+        }
+        Err(e) => error_result(&format!("Failed to add image to canvas: {}", e.message)),
+    }
+}
+
+async fn execute_canvas_add_chart(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let entity_id = require_str!(args, "entity_id");
+    let chart_type = require_str!(args, "chart_type");
+    let data = require_str!(args, "data");
+    let x = args.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+    let y = args.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+    let width = args.get("width").and_then(|v| v.as_f64()).unwrap_or(300.0) as f32;
+    let height = args.get("height").and_then(|v| v.as_f64()).unwrap_or(200.0) as f32;
+
+    let cmd = Command::CanvasAddChart {
+        entity_id,
+        chart_type,
+        data,
+        x,
+        y,
+        width,
+        height,
+    };
+
+    match app.execute(cmd).await {
+        Ok(events) => {
+            let element_id = events.iter().find_map(|e| {
+                if let Event::CanvasChartAdded { element_id, .. } = e {
+                    Some(element_id.clone())
+                } else {
+                    None
+                }
+            });
+            json_result(&json!({
+                "success": true,
+                "message": "Chart element added to canvas",
+                "element_id": element_id
+            }))
+        }
+        Err(e) => error_result(&format!("Failed to add chart to canvas: {}", e.message)),
+    }
+}
+
+async fn execute_canvas_remove_element(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let entity_id = require_str!(args, "entity_id");
+    let element_id = require_str!(args, "element_id");
+
+    let cmd = Command::CanvasRemoveElement {
+        entity_id,
+        element_id,
+    };
+
+    match app.execute(cmd).await {
+        Ok(_) => success_result("Canvas element removed"),
+        Err(e) => error_result(&format!("Failed to remove canvas element: {}", e.message)),
+    }
+}
+
+async fn execute_canvas_update_transform(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let entity_id = require_str!(args, "entity_id");
+    let element_id = require_str!(args, "element_id");
+    let x = args.get("x").and_then(|v| v.as_f64()).map(|v| v as f32);
+    let y = args.get("y").and_then(|v| v.as_f64()).map(|v| v as f32);
+    let width = args.get("width").and_then(|v| v.as_f64()).map(|v| v as f32);
+    let height = args
+        .get("height")
+        .and_then(|v| v.as_f64())
+        .map(|v| v as f32);
+    let rotation = args
+        .get("rotation")
+        .and_then(|v| v.as_f64())
+        .map(|v| v as f32);
+    let z_index = args
+        .get("z_index")
+        .and_then(|v| v.as_i64())
+        .map(|v| v as i32);
+
+    let cmd = Command::CanvasUpdateTransform {
+        entity_id,
+        element_id,
+        x,
+        y,
+        width,
+        height,
+        rotation,
+        z_index,
+    };
+
+    match app.execute(cmd).await {
+        Ok(_) => success_result("Canvas element transform updated"),
+        Err(e) => error_result(&format!("Failed to update canvas transform: {}", e.message)),
+    }
+}
+
+async fn execute_canvas_select_element(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let entity_id = require_str!(args, "entity_id");
+    let element_id = require_str!(args, "element_id");
+
+    let cmd = Command::CanvasSelectElement {
+        entity_id,
+        element_id,
+    };
+
+    match app.execute(cmd).await {
+        Ok(_) => success_result("Canvas element selected"),
+        Err(e) => error_result(&format!("Failed to select canvas element: {}", e.message)),
+    }
+}
+
+async fn execute_canvas_deselect_all(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let entity_id = require_str!(args, "entity_id");
+
+    let cmd = Command::CanvasDeselectAll { entity_id };
+
+    match app.execute(cmd).await {
+        Ok(_) => success_result("All canvas elements deselected"),
+        Err(e) => error_result(&format!(
+            "Failed to deselect canvas elements: {}",
+            e.message
+        )),
+    }
+}
+
+async fn execute_canvas_set_viewport(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let entity_id = require_str!(args, "entity_id");
+    let width = args.get("width").and_then(|v| v.as_f64()).unwrap_or(800.0) as f32;
+    let height = args.get("height").and_then(|v| v.as_f64()).unwrap_or(600.0) as f32;
+
+    let cmd = Command::CanvasSetViewport {
+        entity_id,
+        width,
+        height,
+    };
+
+    match app.execute(cmd).await {
+        Ok(_) => success_result("Canvas viewport updated"),
+        Err(e) => error_result(&format!("Failed to set canvas viewport: {}", e.message)),
+    }
+}
+
+async fn execute_canvas_set_view(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let entity_id = require_str!(args, "entity_id");
+    let zoom = args.get("zoom").and_then(|v| v.as_f64()).map(|v| v as f32);
+    let pan_x = args.get("pan_x").and_then(|v| v.as_f64()).map(|v| v as f32);
+    let pan_y = args.get("pan_y").and_then(|v| v.as_f64()).map(|v| v as f32);
+
+    let cmd = Command::CanvasSetView {
+        entity_id,
+        zoom,
+        pan_x,
+        pan_y,
+    };
+
+    match app.execute(cmd).await {
+        Ok(_) => success_result("Canvas view updated"),
+        Err(e) => error_result(&format!("Failed to set canvas view: {}", e.message)),
+    }
+}
+
+async fn execute_canvas_clear(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let entity_id = require_str!(args, "entity_id");
+
+    let cmd = Command::CanvasClear { entity_id };
+
+    match app.execute(cmd).await {
+        Ok(_) => success_result("Canvas cleared"),
+        Err(e) => error_result(&format!("Failed to clear canvas: {}", e.message)),
+    }
+}
+
+async fn execute_canvas_export(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let entity_id = require_str!(args, "entity_id");
+
+    let query = Query::CanvasExport { entity_id };
+
+    match app.query(query).await {
+        Ok(QueryResponse::CanvasExportJson(json)) => json_result(&json!({
+            "success": true,
+            "json": json
+        })),
+        Ok(_) => error_result("Unexpected response type"),
+        Err(e) => error_result(&format!("Failed to export canvas: {}", e.message)),
+    }
+}
+
+async fn execute_canvas_import(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let entity_id = require_str!(args, "entity_id");
+    let json = require_str!(args, "json");
+
+    let cmd = Command::CanvasImport { entity_id, json };
+
+    match app.execute(cmd).await {
+        Ok(_) => success_result("Canvas imported successfully"),
+        Err(e) => error_result(&format!("Failed to import canvas: {}", e.message)),
+    }
+}
+
+async fn execute_canvas_element_at(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let entity_id = require_str!(args, "entity_id");
+    let x = args.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+    let y = args.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+
+    let query = Query::CanvasElementAt { entity_id, x, y };
+
+    match app.query(query).await {
+        Ok(QueryResponse::CanvasElement(Some(element))) => json_result(&json!({
+            "found": true,
+            "element": {
+                "id": element.id,
+                "element_type": element.element_type,
+                "x": element.x,
+                "y": element.y,
+                "width": element.width,
+                "height": element.height,
+                "rotation": element.rotation,
+                "z_index": element.z_index,
+                "selected": element.selected,
+                "interactive": element.interactive,
+                "data": element.data
+            }
+        })),
+        Ok(QueryResponse::CanvasElement(None)) => json_result(&json!({
+            "found": false,
+            "element": null
+        })),
+        Ok(_) => error_result("Unexpected response type"),
+        Err(e) => error_result(&format!(
+            "Failed to find element at position: {}",
+            e.message
+        )),
+    }
+}
+
+// ============================================================================
+// Drive MCP Executor Functions
+// ============================================================================
+
+async fn execute_create_directory(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let entity_id = require_str!(args, "entity_id");
+    let disk_type = require_disk_type!(args);
+    let path = require_str!(args, "path");
+
+    let cmd = Command::CreateDirectory {
+        entity_id,
+        disk_type,
+        path,
+    };
+
+    match app.execute(cmd).await {
+        Ok(_) => success_result("Directory created successfully"),
+        Err(e) => error_result(&format!("Failed to create directory: {}", e.message)),
+    }
+}
+
+async fn execute_move_file(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let entity_id = require_str!(args, "entity_id");
+    let disk_type = require_disk_type!(args);
+    let source_path = require_str!(args, "source_path");
+    let dest_path = require_str!(args, "dest_path");
+
+    let cmd = Command::MoveFile {
+        entity_id,
+        disk_type,
+        source_path,
+        dest_path,
+    };
+
+    match app.execute(cmd).await {
+        Ok(_) => success_result("File moved successfully"),
+        Err(e) => error_result(&format!("Failed to move file: {}", e.message)),
+    }
+}
+
+async fn execute_copy_file(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let entity_id = require_str!(args, "entity_id");
+    let disk_type = require_disk_type!(args);
+    let source_path = require_str!(args, "source_path");
+    let dest_path = require_str!(args, "dest_path");
+
+    let cmd = Command::CopyFile {
+        entity_id,
+        disk_type,
+        source_path,
+        dest_path,
+    };
+
+    match app.execute(cmd).await {
+        Ok(_) => success_result("File copied successfully"),
+        Err(e) => error_result(&format!("Failed to copy file: {}", e.message)),
+    }
+}
+
+async fn execute_list_disks(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let entity_id = require_str!(args, "entity_id");
+
+    let query = Query::ListDisks { entity_id };
+
+    match app.query(query).await {
+        Ok(QueryResponse::DiskList(disks)) => {
+            let disk_data: Vec<_> = disks
+                .iter()
+                .map(|d| {
+                    json!({
+                        "disk_type": format!("{:?}", d.disk_type).to_lowercase(),
+                        "entity_id": d.entity_id,
+                        "total_bytes": d.total_bytes,
+                        "used_bytes": d.used_bytes,
+                        "available_bytes": d.available_bytes,
+                        "file_count": d.file_count
+                    })
+                })
+                .collect();
+            json_result(&json!({
+                "disks": disk_data
+            }))
+        }
+        Ok(_) => error_result("Unexpected response type"),
+        Err(e) => error_result(&format!("Failed to list disks: {}", e.message)),
+    }
+}
+
+async fn execute_get_file_preview(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let entity_id = require_str!(args, "entity_id");
+    let disk_type = require_disk_type!(args);
+    let path = require_str!(args, "path");
+
+    let query = Query::GetFilePreview {
+        entity_id,
+        disk_type,
+        path,
+    };
+
+    match app.query(query).await {
+        Ok(QueryResponse::FilePreview(preview)) => {
+            let mut result = json!({
+                "path": preview.path,
+                "mime_type": preview.mime_type,
+                "size_bytes": preview.size_bytes,
+                "checksum": preview.checksum,
+                "created_at": preview.created_at,
+                "modified_at": preview.modified_at
+            });
+            if let Some(text) = &preview.text_preview {
+                result["text_preview"] = json!(text);
+            }
+            if preview.thumbnail.is_some() {
+                result["has_thumbnail"] = json!(true);
+            }
+            json_result(&result)
+        }
+        Ok(_) => error_result("Unexpected response type"),
+        Err(e) => error_result(&format!("Failed to get file preview: {}", e.message)),
+    }
+}
+
+// ============================================================================
+// Call MCP Executor Functions
+// ============================================================================
+
+async fn execute_toggle_mute(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let call_id = require_str!(args, "call_id");
+    let muted = bool_or(&args, "muted", true);
+
+    let cmd = Command::ToggleAudio {
+        call_id: call_id.clone(),
+        enabled: !muted, // enabled=true means unmuted, so invert
+    };
+
+    match app.execute(cmd).await {
+        Ok(_) => json_result(&json!({
+            "call_id": call_id,
+            "muted": muted
+        })),
+        Err(e) => error_result(&format!("Failed to toggle mute: {}", e.message)),
+    }
+}
+
+async fn execute_toggle_video(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let call_id = require_str!(args, "call_id");
+    let enabled = bool_or(&args, "enabled", true);
+
+    let cmd = Command::ToggleVideo {
+        call_id: call_id.clone(),
+        enabled,
+    };
+
+    match app.execute(cmd).await {
+        Ok(_) => json_result(&json!({
+            "call_id": call_id,
+            "video_enabled": enabled
+        })),
+        Err(e) => error_result(&format!("Failed to toggle video: {}", e.message)),
+    }
+}
+
+async fn execute_get_call_status(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let call_id = require_str!(args, "call_id");
+
+    let query = Query::GetCallStatus { call_id };
+
+    match app.query(query).await {
+        Ok(QueryResponse::CallStatus(status)) => json_result(&json!({
+            "call_id": status.call_id,
+            "entity_id": status.entity_id,
+            "participant_count": status.participant_count,
+            "started_at": status.started_at,
+            "is_muted": status.is_muted,
+            "is_video_enabled": status.is_video_enabled,
+            "is_screen_sharing": status.is_screen_sharing
+        })),
+        Ok(_) => error_result("Unexpected response type"),
+        Err(e) => error_result(&format!("Failed to get call status: {}", e.message)),
+    }
+}
+
+async fn execute_get_call_participants(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let call_id = require_str!(args, "call_id");
+
+    let query = Query::GetCallParticipants { call_id };
+
+    match app.query(query).await {
+        Ok(QueryResponse::CallParticipants(participants)) => json_result(&json!({
+            "participants": participants
+        })),
+        Ok(_) => error_result("Unexpected response type"),
+        Err(e) => error_result(&format!("Failed to get call participants: {}", e.message)),
     }
 }

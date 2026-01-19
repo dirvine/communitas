@@ -1,7 +1,28 @@
 //! Shared UI-facing models for Communitas front-ends.
 
+pub mod call;
+pub mod canvas;
+pub mod drive;
+pub mod kanban;
 pub mod messaging;
 
+pub use call::{
+    CallInfo, CallSettings, CallSnapshot, CallState, DeviceType, MediaDevice, MediaError,
+    MediaErrorKind, Participant,
+};
+pub use canvas::{
+    CanvasElement, CanvasInfo, CanvasSnapshot, CanvasState, ElementType, HistoryActionType,
+    HistoryEntry, Layer, OfflineOperation, OfflineStatus, OperationType, Point, RemoteCursor,
+    ToolType, Transform,
+};
+pub use drive::{
+    DirectoryEntry, DiskInfo, DiskType, DownloadProgress, DownloadState, FileMetadata, FilePreview,
+    QuotaInfo, UploadProgress, UploadState,
+};
+pub use kanban::{
+    ActivityEntry, AttachmentView, BoardSettings, BoardSummary, BoardView, CardDetail, CardState,
+    CardView, ChecklistProgress, ColumnView, CommentView, StepView, TagView,
+};
 pub use messaging::{ContactWithPresence, Message, MessageReaction, PresenceStatus, ThreadSummary};
 
 /// Small helper used by the Dioxus prototype to display generated identity words.

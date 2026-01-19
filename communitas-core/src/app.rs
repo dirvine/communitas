@@ -52,9 +52,10 @@
 //! ```
 
 use crate::command::{
-    CallResponse, ContactResponse, DiskStatsResponse, EntityResponse, FileInfoResponse,
-    InviteResponse, MemberResponse, MessageResponse, PresenceResponse, ReactionResponse,
-    SyncStateResponse, WebsiteResponse,
+    CallResponse, CallStatusResponse, CanvasSnapshotResponse, ContactResponse, DiskInfoResponse,
+    DiskStatsResponse, EntityResponse, FileInfoResponse, FilePreviewResponse, InviteResponse,
+    MemberResponse, MessageResponse, PresenceResponse, ReactionResponse, SyncStateResponse,
+    WebsiteResponse,
 };
 use crate::command::{
     Command, CommandError, CommandResult, DiskTypeArg, Event, Query, QueryError, QueryResponse,
@@ -1166,6 +1167,62 @@ impl CommunitasApp {
                 Ok(vec![event])
             }
 
+            Command::MoveFile {
+                entity_id,
+                disk_type,
+                source_path,
+                dest_path,
+            } => {
+                let ctx = self.context.read().await;
+                let disk_type_internal = disk_type_from_arg(disk_type);
+
+                ctx.disk_service
+                    .move_file(&entity_id, disk_type_internal, &source_path, &dest_path)
+                    .await
+                    .map_err(|e| CommandError {
+                        command_type: command_type.clone(),
+                        message: format!("{}", e),
+                        code: "MOVE_FILE_FAILED".to_string(),
+                    })?;
+
+                let event = Event::FileMoved {
+                    entity_id,
+                    disk_type,
+                    source_path,
+                    dest_path,
+                };
+                self.broadcast_event(event.clone());
+                Ok(vec![event])
+            }
+
+            Command::CopyFile {
+                entity_id,
+                disk_type,
+                source_path,
+                dest_path,
+            } => {
+                let ctx = self.context.read().await;
+                let disk_type_internal = disk_type_from_arg(disk_type);
+
+                ctx.disk_service
+                    .copy_file(&entity_id, disk_type_internal, &source_path, &dest_path)
+                    .await
+                    .map_err(|e| CommandError {
+                        command_type: command_type.clone(),
+                        message: format!("{}", e),
+                        code: "COPY_FILE_FAILED".to_string(),
+                    })?;
+
+                let event = Event::FileCopied {
+                    entity_id,
+                    disk_type,
+                    source_path,
+                    dest_path,
+                };
+                self.broadcast_event(event.clone());
+                Ok(vec![event])
+            }
+
             // ================================================================
             // Kanban Commands
             // ================================================================
@@ -2131,6 +2188,157 @@ impl CommunitasApp {
                 self.broadcast_event(event.clone());
                 Ok(vec![event])
             }
+
+            // Canvas Commands - stub implementations for MCP parity
+            // TODO: Implement full canvas service integration
+            Command::CanvasAddText {
+                entity_id,
+                content,
+                x: _,
+                y: _,
+                font_size: _,
+                color: _,
+            } => {
+                let element_id = uuid::Uuid::new_v4().to_string();
+                let event = Event::CanvasTextAdded {
+                    entity_id,
+                    element_id,
+                    content,
+                };
+                self.broadcast_event(event.clone());
+                Ok(vec![event])
+            }
+
+            Command::CanvasAddImage {
+                entity_id,
+                src,
+                x: _,
+                y: _,
+                width: _,
+                height: _,
+            } => {
+                let element_id = uuid::Uuid::new_v4().to_string();
+                let event = Event::CanvasImageAdded {
+                    entity_id,
+                    element_id,
+                    src,
+                };
+                self.broadcast_event(event.clone());
+                Ok(vec![event])
+            }
+
+            Command::CanvasAddChart {
+                entity_id,
+                chart_type,
+                data: _,
+                x: _,
+                y: _,
+                width: _,
+                height: _,
+            } => {
+                let element_id = uuid::Uuid::new_v4().to_string();
+                let event = Event::CanvasChartAdded {
+                    entity_id,
+                    element_id,
+                    chart_type,
+                };
+                self.broadcast_event(event.clone());
+                Ok(vec![event])
+            }
+
+            Command::CanvasRemoveElement {
+                entity_id,
+                element_id,
+            } => {
+                let event = Event::CanvasElementRemoved {
+                    entity_id,
+                    element_id,
+                };
+                self.broadcast_event(event.clone());
+                Ok(vec![event])
+            }
+
+            Command::CanvasUpdateTransform {
+                entity_id,
+                element_id,
+                x: _,
+                y: _,
+                width: _,
+                height: _,
+                rotation: _,
+                z_index: _,
+            } => {
+                let event = Event::CanvasTransformUpdated {
+                    entity_id,
+                    element_id,
+                };
+                self.broadcast_event(event.clone());
+                Ok(vec![event])
+            }
+
+            Command::CanvasSelectElement {
+                entity_id,
+                element_id,
+            } => {
+                let event = Event::CanvasElementSelected {
+                    entity_id,
+                    element_id,
+                };
+                self.broadcast_event(event.clone());
+                Ok(vec![event])
+            }
+
+            Command::CanvasDeselectAll { entity_id } => {
+                let event = Event::CanvasDeselected { entity_id };
+                self.broadcast_event(event.clone());
+                Ok(vec![event])
+            }
+
+            Command::CanvasSetViewport {
+                entity_id,
+                width,
+                height,
+            } => {
+                let event = Event::CanvasViewportUpdated {
+                    entity_id,
+                    width,
+                    height,
+                };
+                self.broadcast_event(event.clone());
+                Ok(vec![event])
+            }
+
+            Command::CanvasSetView {
+                entity_id,
+                zoom,
+                pan_x,
+                pan_y,
+            } => {
+                let event = Event::CanvasViewUpdated {
+                    entity_id,
+                    zoom: zoom.unwrap_or(1.0),
+                    pan_x: pan_x.unwrap_or(0.0),
+                    pan_y: pan_y.unwrap_or(0.0),
+                };
+                self.broadcast_event(event.clone());
+                Ok(vec![event])
+            }
+
+            Command::CanvasClear { entity_id } => {
+                let event = Event::CanvasCleared { entity_id };
+                self.broadcast_event(event.clone());
+                Ok(vec![event])
+            }
+
+            Command::CanvasImport { entity_id, json: _ } => {
+                // TODO: Parse JSON and create elements
+                let event = Event::CanvasImported {
+                    entity_id,
+                    element_count: 0, // Stub - would be actual count
+                };
+                self.broadcast_event(event.clone());
+                Ok(vec![event])
+            }
         }
     }
 
@@ -2632,6 +2840,96 @@ impl CommunitasApp {
                 }))
             }
 
+            Query::ListDisks { entity_id } => {
+                let ctx = self.context.read().await;
+
+                // Get stats for all disk types
+                let mut disks = Vec::new();
+                for disk_type in [DiskType::Private, DiskType::Public, DiskType::Shared] {
+                    if let Ok(stats) = ctx.disk_service.get_stats(&entity_id, disk_type).await {
+                        let disk_type_arg = match disk_type {
+                            DiskType::Private => DiskTypeArg::Private,
+                            DiskType::Public => DiskTypeArg::Public,
+                            DiskType::Shared => DiskTypeArg::Shared,
+                        };
+                        disks.push(DiskInfoResponse {
+                            disk_type: disk_type_arg,
+                            entity_id: entity_id.clone(),
+                            total_bytes: 10 * 1024 * 1024 * 1024, // 10GB placeholder
+                            used_bytes: stats.used_bytes,
+                            available_bytes: 10 * 1024 * 1024 * 1024 - stats.used_bytes,
+                            file_count: stats.file_count as u64,
+                        });
+                    }
+                }
+
+                Ok(QueryResponse::DiskList(disks))
+            }
+
+            Query::GetFilePreview {
+                entity_id,
+                disk_type,
+                path,
+            } => {
+                let ctx = self.context.read().await;
+                let disk_type_internal = disk_type_from_arg(disk_type);
+
+                let data = ctx
+                    .disk_service
+                    .read_file(&entity_id, disk_type_internal, &path)
+                    .await
+                    .map_err(|e| QueryError {
+                        query_type: query_type.clone(),
+                        message: format!("{}", e),
+                        code: "GET_FILE_PREVIEW_FAILED".to_string(),
+                    })?;
+
+                // Determine MIME type from extension
+                let mime_type = path
+                    .rsplit('.')
+                    .next()
+                    .map(|ext| match ext.to_lowercase().as_str() {
+                        "txt" | "md" | "rs" | "js" | "ts" | "json" => "text/plain",
+                        "html" => "text/html",
+                        "css" => "text/css",
+                        "png" => "image/png",
+                        "jpg" | "jpeg" => "image/jpeg",
+                        "gif" => "image/gif",
+                        "svg" => "image/svg+xml",
+                        "pdf" => "application/pdf",
+                        _ => "application/octet-stream",
+                    })
+                    .unwrap_or("application/octet-stream")
+                    .to_string();
+
+                // Generate text preview for text files
+                let text_preview = if mime_type.starts_with("text/") {
+                    String::from_utf8(data.clone())
+                        .ok()
+                        .map(|s| s.chars().take(500).collect::<String>())
+                } else {
+                    None
+                };
+
+                // Compute checksum using blake3
+                let checksum = blake3::hash(&data).to_string();
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_millis() as i64)
+                    .unwrap_or(0);
+
+                Ok(QueryResponse::FilePreview(FilePreviewResponse {
+                    path,
+                    mime_type,
+                    size_bytes: data.len() as u64,
+                    thumbnail: None, // Image thumbnail generation not implemented
+                    text_preview,
+                    checksum,
+                    created_at: now,
+                    modified_at: now,
+                }))
+            }
+
             // ================================================================
             // Kanban Queries
             // ================================================================
@@ -3021,6 +3319,45 @@ impl CommunitasApp {
                 Ok(QueryResponse::CallParticipants(list))
             }
 
+            Query::GetCallStatus { call_id } => {
+                let ctx = self.context.read().await;
+                let webrtc = ctx.webrtc.as_ref().ok_or_else(|| QueryError {
+                    query_type: query_type.clone(),
+                    message: "WebRTC not initialized".to_string(),
+                    code: "WEBRTC_NOT_AVAILABLE".to_string(),
+                })?;
+
+                let uuid = uuid::Uuid::parse_str(&call_id).map_err(|e| QueryError {
+                    query_type: query_type.clone(),
+                    message: format!("Invalid call id: {e}"),
+                    code: "INVALID_CALL_ID".to_string(),
+                })?;
+
+                let call_id_typed = crate::webrtc::CallId(uuid);
+
+                let participants =
+                    webrtc
+                        .get_call_participants(call_id_typed)
+                        .await
+                        .map_err(|e| QueryError {
+                            query_type: query_type.clone(),
+                            message: format!("Failed to get call status: {e}"),
+                            code: "CALL_STATUS_FAILED".to_string(),
+                        })?;
+
+                // Get call state - WebRTC manager tracks mute/video state internally
+                // For now, return default state; real implementation would query WebRTC
+                Ok(QueryResponse::CallStatus(CallStatusResponse {
+                    call_id,
+                    entity_id: String::new(), // Would be retrieved from call info
+                    participant_count: participants.len(),
+                    started_at: 0, // Would be retrieved from call info
+                    is_muted: false,
+                    is_video_enabled: false,
+                    is_screen_sharing: false,
+                }))
+            }
+
             // ================================================================
             // Contact Queries
             // ================================================================
@@ -3262,6 +3599,43 @@ impl CommunitasApp {
                     size_bytes,
                     url,
                 }))
+            }
+
+            // Canvas Queries - stub implementations for MCP parity
+            Query::GetCanvasSnapshot { entity_id } => {
+                // Return an empty canvas snapshot for now
+                // TODO: Implement full canvas state management
+                Ok(QueryResponse::CanvasSnapshot(CanvasSnapshotResponse {
+                    entity_id,
+                    elements: vec![],
+                    viewport_width: 800.0,
+                    viewport_height: 600.0,
+                    zoom: 1.0,
+                    pan_x: 0.0,
+                    pan_y: 0.0,
+                    loading: false,
+                }))
+            }
+
+            Query::CanvasExport { entity_id } => {
+                // Return empty canvas JSON for now
+                let export = serde_json::json!({
+                    "entity_id": entity_id,
+                    "elements": [],
+                    "viewport": {"width": 800.0, "height": 600.0},
+                    "view": {"zoom": 1.0, "pan_x": 0.0, "pan_y": 0.0}
+                });
+                Ok(QueryResponse::CanvasExportJson(export.to_string()))
+            }
+
+            Query::CanvasElementAt {
+                entity_id: _,
+                x: _,
+                y: _,
+            } => {
+                // Return None for now - no element at position
+                // TODO: Implement hit testing
+                Ok(QueryResponse::CanvasElement(None))
             }
         }
     }

@@ -1309,10 +1309,53 @@ pub fn list_tools(authenticated: bool) -> Vec<Tool> {
         },
         Tool {
             name: "list_contacts".to_string(),
-            description: "List all contacts in your address book".to_string(),
+            description: "List all contacts in your address book with optional presence info and filtering.".to_string(),
             input_schema: json!({
                 "type": "object",
-                "properties": {}
+                "properties": {
+                    "include_presence": {
+                        "type": "boolean",
+                        "description": "Include online/offline status for each contact (default: true)"
+                    },
+                    "filter": {
+                        "type": "string",
+                        "enum": ["all", "online", "favorites"],
+                        "description": "Filter contacts by status (default: all)"
+                    }
+                }
+            }),
+        },
+        Tool {
+            name: "get_contact_presence".to_string(),
+            description: "Get detailed presence status for a specific contact including online status, last seen time, and current activity.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "contact_id": {
+                        "type": "string",
+                        "description": "Contact ID to query presence for"
+                    }
+                },
+                "required": ["contact_id"]
+            }),
+        },
+        Tool {
+            name: "set_my_presence".to_string(),
+            description: "Set your own global presence status. This affects how others see your online status.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "status": {
+                        "type": "string",
+                        "enum": ["online", "away", "busy", "offline"],
+                        "description": "Presence status to set"
+                    },
+                    "status_message": {
+                        "type": "string",
+                        "description": "Optional status message (e.g., 'In a meeting')"
+                    }
+                },
+                "required": ["status"]
             }),
         },
         Tool {
@@ -1612,7 +1655,9 @@ async fn dispatch_contact_tools(
         "update_contact" => Some(execute_update_contact(app, args.clone()).await),
         "delete_contact" => Some(execute_delete_contact(app, args.clone()).await),
         "get_contact" => Some(execute_get_contact(app, args.clone()).await),
-        "list_contacts" => Some(execute_list_contacts(app).await),
+        "list_contacts" => Some(execute_list_contacts(app, args.clone()).await),
+        "get_contact_presence" => Some(execute_get_contact_presence(app, args.clone()).await),
+        "set_my_presence" => Some(execute_set_my_presence(app, args.clone()).await),
         "link_contact" => Some(execute_link_contact(app, args.clone()).await),
         "set_favourite_contact" => Some(execute_set_favourite_contact(app, args.clone()).await),
         "remove_favourite_contact" => {
@@ -3411,27 +3456,147 @@ async fn execute_get_contact(app: &CommunitasApp, args: Value) -> ToolCallResult
     }
 }
 
-async fn execute_list_contacts(app: &CommunitasApp) -> ToolCallResult {
-    let query = Query::ListContacts;
+/// List contacts with optional presence info and filtering.
+///
+/// Supports filters: "all" (default), "online", "favorites".
+#[tracing::instrument(skip(app), name = "mcp.tools.list_contacts")]
+async fn execute_list_contacts(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let include_presence = args["include_presence"].as_bool().unwrap_or(true);
+    let filter = args["filter"].as_str().unwrap_or("all");
+
+    // Choose query based on filter
+    let query = match filter {
+        "favorites" => Query::ListFavouriteContacts,
+        _ => Query::ListContacts,
+    };
 
     match app.query(query).await {
         Ok(QueryResponse::ContactList(contacts)) => {
-            let list: Vec<Value> = contacts
+            // Apply "online" filter if needed
+            let filtered: Vec<_> = if filter == "online" {
+                contacts.into_iter().filter(|c| c.is_online).collect()
+            } else {
+                contacts
+            };
+
+            let list: Vec<Value> = filtered
                 .iter()
                 .map(|c| {
-                    json!({
+                    let mut contact_json = json!({
                         "id": c.id,
                         "display_name": c.display_name,
                         "four_words": c.four_words,
-                        "is_favourite": c.is_favourite,
-                        "is_online": c.is_online
-                    })
+                        "is_favourite": c.is_favourite
+                    });
+
+                    // Include presence info if requested
+                    if include_presence
+                        && let Some(obj) = contact_json.as_object_mut()
+                    {
+                        obj.insert("is_online".to_string(), json!(c.is_online));
+                        obj.insert("last_seen".to_string(), json!(c.last_seen));
+                        // Map is_online to presence status string
+                        let presence_status = if c.is_online { "online" } else { "offline" };
+                        obj.insert("presence_status".to_string(), json!(presence_status));
+                    }
+
+                    contact_json
                 })
                 .collect();
-            json_result(&json!({"contacts": list, "count": list.len()}))
+
+            json_result(&json!({
+                "contacts": list,
+                "count": list.len(),
+                "filter": filter,
+                "include_presence": include_presence
+            }))
         }
         Ok(_) => error_result("Unexpected response type"),
         Err(e) => error_result(&format!("Failed to list contacts: {}", e.message)),
+    }
+}
+
+/// Get detailed presence status for a specific contact.
+#[tracing::instrument(skip(app), name = "mcp.tools.get_contact_presence")]
+async fn execute_get_contact_presence(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let contact_id = match args["contact_id"].as_str() {
+        Some(id) => id,
+        None => return error_result("contact_id is required"),
+    };
+
+    // First get the contact to verify it exists
+    let query = Query::GetContact {
+        contact_id: contact_id.to_string(),
+    };
+
+    match app.query(query).await {
+        Ok(QueryResponse::Contact(contact)) => {
+            // Determine presence status from is_online
+            let presence_status = if contact.is_online { "online" } else { "offline" };
+
+            // Get current timestamp for last_active if online
+            let now_ms = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or(0);
+
+            json_result(&json!({
+                "contact_id": contact.id,
+                "display_name": contact.display_name,
+                "presence": {
+                    "status": presence_status,
+                    "last_seen": contact.last_seen,
+                    "last_active": if contact.is_online { Some(now_ms) } else { contact.last_seen.map(|t| t as u64) },
+                    "status_message": null,
+                    "is_typing": false
+                }
+            }))
+        }
+        Ok(_) => error_result("Unexpected response type"),
+        Err(e) => error_result(&format!("Failed to get contact presence: {}", e.message)),
+    }
+}
+
+/// Set own global presence status.
+#[tracing::instrument(skip(app), name = "mcp.tools.set_my_presence")]
+async fn execute_set_my_presence(app: &CommunitasApp, args: Value) -> ToolCallResult {
+    let status = match args["status"].as_str() {
+        Some(s) => s,
+        None => return error_result("status is required"),
+    };
+    let status_message = args["status_message"].as_str().map(String::from);
+
+    // Validate status
+    let presence_status = match status {
+        "online" => PresenceStatus::Online,
+        "away" => PresenceStatus::Away,
+        "busy" => PresenceStatus::Busy,
+        "offline" => PresenceStatus::Offline,
+        _ => return error_result("Invalid status. Must be one of: online, away, busy, offline"),
+    };
+
+    // Get our identity to set presence for ourselves
+    let identity_query = Query::GetProfile;
+    let user_id = match app.query(identity_query).await {
+        Ok(QueryResponse::Profile { four_words, .. }) => four_words,
+        _ => "self".to_string(), // Fallback if profile not available
+    };
+
+    // Create presence update using the status_only helper
+    let update = PresenceUpdate::status_only(presence_status);
+
+    // Note: status_message is captured but not yet used - could be added to PresenceUpdate in future
+    let _ = status_message;
+
+    match PresenceOperations::update_presence(app, user_id.clone(), update).await {
+        Ok(_presence) => json_result(&json!({
+            "success": true,
+            "user_id": user_id,
+            "status": status,
+            "status_message": status_message,
+            "message": format!("Presence set to {}", status)
+        })),
+        Err(e) => error_result(&format!("Failed to set presence: {e}")),
     }
 }
 

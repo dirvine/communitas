@@ -20,6 +20,7 @@ use tracing::instrument;
 
 use crate::auth::{AuthController, AuthService, AuthStateSnapshot};
 use communitas_core::app::CommunitasApp;
+use communitas_core::command::{DiskTypeArg, Query, QueryResponse};
 
 /// Get current timestamp in milliseconds since Unix epoch.
 fn current_timestamp_millis() -> i64 {
@@ -34,6 +35,15 @@ fn compute_checksum(data: &[u8]) -> String {
     // Simple checksum: sum of bytes XOR'd with length
     let sum: u64 = data.iter().map(|&b| b as u64).sum();
     format!("{:016x}{:08x}", sum, data.len())
+}
+
+/// Convert core DiskTypeArg to UI DiskType.
+fn disk_type_from_arg(arg: DiskTypeArg) -> DiskType {
+    match arg {
+        DiskTypeArg::Private => DiskType::Private,
+        DiskTypeArg::Public => DiskType::Public,
+        DiskTypeArg::Shared => DiskType::Shared,
+    }
 }
 
 /// Errors returned by the drive service.
@@ -63,6 +73,8 @@ pub enum DriveError {
     DownloadNotFound(String),
     #[error("storage error: {0}")]
     StorageError(String),
+    #[error("query error: {0}")]
+    QueryError(String),
 }
 
 /// Snapshot of drive state for reactive UI updates.
@@ -131,33 +143,34 @@ impl DriveService {
             return Err(DriveError::NotAuthenticated);
         }
 
-        // Mock implementation: return the three standard disk types
-        let disks = vec![
-            DiskInfo {
-                disk_type: DiskType::Private,
+        // Query the core for disk list
+        let response = self
+            .app
+            .query(Query::ListDisks {
                 entity_id: entity_id.to_string(),
-                total_bytes: 10 * 1024 * 1024 * 1024, // 10 GB
-                used_bytes: 0,
-                available_bytes: 10 * 1024 * 1024 * 1024,
-                file_count: 0,
-            },
-            DiskInfo {
-                disk_type: DiskType::Public,
-                entity_id: entity_id.to_string(),
-                total_bytes: 5 * 1024 * 1024 * 1024, // 5 GB
-                used_bytes: 0,
-                available_bytes: 5 * 1024 * 1024 * 1024,
-                file_count: 0,
-            },
-            DiskInfo {
-                disk_type: DiskType::Shared,
-                entity_id: entity_id.to_string(),
-                total_bytes: 20 * 1024 * 1024 * 1024, // 20 GB
-                used_bytes: 0,
-                available_bytes: 20 * 1024 * 1024 * 1024,
-                file_count: 0,
-            },
-        ];
+            })
+            .await
+            .map_err(|e| DriveError::QueryError(e.to_string()))?;
+
+        // Extract disk list from response
+        let disks = match response {
+            QueryResponse::DiskList(disk_list) => disk_list
+                .into_iter()
+                .map(|info| DiskInfo {
+                    disk_type: disk_type_from_arg(info.disk_type),
+                    entity_id: info.entity_id,
+                    total_bytes: info.total_bytes,
+                    used_bytes: info.used_bytes,
+                    available_bytes: info.available_bytes,
+                    file_count: info.file_count,
+                })
+                .collect(),
+            _ => {
+                return Err(DriveError::QueryError(
+                    "unexpected response type from ListDisks query".to_string(),
+                ));
+            }
+        };
 
         Ok(disks)
     }

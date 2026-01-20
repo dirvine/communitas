@@ -3,7 +3,7 @@
 use std::sync::{Arc, Weak};
 
 use communitas_core::app::CommunitasApp;
-use communitas_core::command::{Command, Query, QueryError, QueryResponse};
+use communitas_core::command::{Command, Event, Query, QueryError, QueryResponse, Subscription};
 use communitas_kanban::{
     BoardUpdate as CoreBoardUpdate, CardState as CoreCardState, CardUpdate as CoreCardUpdate,
     KanbanService as CoreKanbanService,
@@ -13,7 +13,7 @@ use communitas_ui_api::{
     ColumnView, CommentView, StepView, TagView,
 };
 use thiserror::Error;
-use tokio::sync::{RwLock, watch};
+use tokio::sync::{RwLock, broadcast, watch};
 use tracing::{debug, info, instrument, trace, warn};
 
 /// Direction for keyboard-based card movement.
@@ -106,6 +106,9 @@ pub struct CardUpdate {
 /// The service automatically reinitializes its CRDT backend when the user authenticates,
 /// ensuring operations are attributed to the correct peer_id. When the user logs out,
 /// boards are cleared and the CRDT backend resets to anonymous.
+///
+/// Subscribes to CRDT events for the currently loaded entity, providing reactive
+/// updates when boards, columns, or cards are modified (locally or remotely).
 pub struct KanbanService {
     auth: Arc<AuthController>,
     app: Arc<CommunitasApp>,
@@ -113,6 +116,8 @@ pub struct KanbanService {
     core: Arc<RwLock<CoreKanbanService>>,
     tx: watch::Sender<KanbanSnapshot>,
     rx: watch::Receiver<KanbanSnapshot>,
+    /// Currently loaded entity ID (for event subscription).
+    current_entity_id: Arc<RwLock<Option<String>>>,
 }
 
 impl KanbanService {
@@ -121,10 +126,13 @@ impl KanbanService {
     /// Spawns a background task that watches for authentication state changes and
     /// reinitializes the CRDT backend with the authenticated peer_id when the user logs in.
     /// When the user logs out, the backend resets to anonymous and boards are cleared.
+    ///
+    /// Also subscribes to kanban CRDT events for reactive updates when an entity is loaded.
     pub fn new(auth: Arc<AuthController>, app: Arc<CommunitasApp>) -> Self {
         let (tx, rx) = watch::channel(KanbanSnapshot::default());
         // Initialize core service with a default peer_id; will be updated on auth
         let core = Arc::new(RwLock::new(CoreKanbanService::new("anonymous")));
+        let current_entity_id = Arc::new(RwLock::new(None));
 
         let service = Self {
             auth,
@@ -132,6 +140,7 @@ impl KanbanService {
             core,
             tx,
             rx,
+            current_entity_id,
         };
 
         // Spawn auth state watcher using a weak reference to avoid reference cycles
@@ -214,6 +223,141 @@ impl KanbanService {
         }
     }
 
+    /// Subscribe to CRDT events for an entity.
+    ///
+    /// Spawns a background task to process kanban events and update the watch channel
+    /// reactively when boards, columns, or cards are modified.
+    fn subscribe_to_entity_events(&self, entity_id: String) {
+        let event_rx = self.app.subscribe(Subscription::KanbanEvents {
+            entity_id: entity_id.clone(),
+        });
+
+        let tx = self.tx.clone();
+        let app = Arc::clone(&self.app);
+        let auth = Arc::clone(&self.auth);
+        let entity_id_for_loop = entity_id;
+
+        tokio::spawn(async move {
+            Self::kanban_event_loop(event_rx, tx, app, auth, entity_id_for_loop).await;
+        });
+    }
+
+    /// Background event loop that processes kanban events and updates the watch channel.
+    ///
+    /// This runs continuously, refreshing boards when relevant events occur.
+    async fn kanban_event_loop(
+        mut event_rx: broadcast::Receiver<Event>,
+        tx: watch::Sender<KanbanSnapshot>,
+        app: Arc<CommunitasApp>,
+        auth: Arc<AuthController>,
+        entity_id: String,
+    ) {
+        loop {
+            match event_rx.recv().await {
+                Ok(event) => {
+                    let should_refresh = matches!(
+                        event,
+                        Event::KanbanBoardCreated { .. }
+                            | Event::KanbanColumnCreated { .. }
+                            | Event::KanbanCardCreated { .. }
+                            | Event::KanbanCardMoved { .. }
+                            | Event::KanbanCardUpdated { .. }
+                            | Event::KanbanCardDeleted { .. }
+                            | Event::KanbanBoardUpdated { .. }
+                            | Event::KanbanBoardDeleted { .. }
+                    );
+
+                    if should_refresh {
+                        trace!(?event, "Kanban event received, refreshing boards");
+                        Self::refresh_boards_internal(&tx, &app, &auth, &entity_id).await;
+                    }
+                }
+                Err(broadcast::error::RecvError::Lagged(n)) => {
+                    // We missed some events, refresh to catch up
+                    debug!(
+                        missed_events = n,
+                        "Kanban event receiver lagged, refreshing boards"
+                    );
+                    Self::refresh_boards_internal(&tx, &app, &auth, &entity_id).await;
+                }
+                Err(broadcast::error::RecvError::Closed) => {
+                    // Channel closed, stop the loop
+                    debug!("Kanban event channel closed, stopping event loop");
+                    break;
+                }
+            }
+        }
+    }
+
+    /// Internal helper to refresh boards and update the watch channel.
+    ///
+    /// Used by both the event loop and explicit refresh calls.
+    async fn refresh_boards_internal(
+        tx: &watch::Sender<KanbanSnapshot>,
+        app: &Arc<CommunitasApp>,
+        auth: &Arc<AuthController>,
+        entity_id: &str,
+    ) {
+        let is_authenticated = matches!(
+            &*auth.subscribe().borrow(),
+            AuthStateSnapshot::Authenticated(_)
+        );
+
+        if !is_authenticated {
+            trace!("Not authenticated, skipping board refresh");
+            return;
+        }
+
+        // Query boards from CommunitasApp
+        let boards = match app
+            .query(Query::ListKanbanBoards {
+                entity_id: entity_id.to_string(),
+            })
+            .await
+        {
+            Ok(QueryResponse::KanbanBoardList(board_list)) => {
+                debug!(
+                    entity_id = %entity_id,
+                    count = board_list.len(),
+                    "Refreshed boards from CommunitasApp"
+                );
+                board_list
+                    .into_iter()
+                    .map(|b| BoardSummary {
+                        id: b.id,
+                        name: b.name,
+                        entity_id: b.entity_id,
+                        column_count: b.column_count as u32,
+                        card_count: 0, // Card count requires additional query
+                        last_activity: None,
+                    })
+                    .collect()
+            }
+            Ok(other) => {
+                warn!(
+                    entity_id = %entity_id,
+                    response_type = ?std::mem::discriminant(&other),
+                    "Unexpected response type while refreshing boards"
+                );
+                return;
+            }
+            Err(e) => {
+                debug!(
+                    entity_id = %entity_id,
+                    error = %e,
+                    "Failed to refresh boards from CommunitasApp"
+                );
+                return;
+            }
+        };
+
+        // Update the watch channel
+        let mut snap = tx.borrow().clone();
+        snap.boards = boards;
+        snap.loading = false;
+        let _ = tx.send(snap);
+    }
+
     /// Get a reference to the underlying CommunitasApp.
     pub fn app(&self) -> Arc<CommunitasApp> {
         Arc::clone(&self.app)
@@ -232,10 +376,25 @@ impl KanbanService {
     /// List all boards for an entity (project/group).
     ///
     /// Queries CommunitasApp for network-synced board data with local CRDT fallback.
+    /// Also subscribes to CRDT events for the entity if not already subscribed.
     #[instrument(skip(self), name = "ui.kanban.list_boards", fields(entity_id))]
     pub async fn list_boards(&self, entity_id: &str) -> Result<Vec<BoardSummary>, KanbanError> {
         if !self.is_authenticated() {
             return Err(KanbanError::NotAuthenticated);
+        }
+
+        // Subscribe to events if this is a new entity
+        {
+            let mut current = self.current_entity_id.write().await;
+            if current.as_deref() != Some(entity_id) {
+                debug!(
+                    entity_id = %entity_id,
+                    previous = ?current.as_deref(),
+                    "Subscribing to CRDT events for new entity"
+                );
+                self.subscribe_to_entity_events(entity_id.to_string());
+                *current = Some(entity_id.to_string());
+            }
         }
 
         // Try CommunitasApp query first for network-synced data

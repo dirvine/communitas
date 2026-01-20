@@ -480,8 +480,14 @@ impl CanvasService {
     }
 
     /// Remove an element from the canvas.
+    ///
+    /// If `entity_id` is provided, the removal is also persisted via CommunitasApp.
     #[instrument(skip(self))]
-    pub async fn remove_element(&self, element_id: &str) -> Result<(), CanvasError> {
+    pub async fn remove_element(
+        &self,
+        entity_id: Option<&str>,
+        element_id: &str,
+    ) -> Result<(), CanvasError> {
         self.require_auth()?;
 
         let id = ElementId::parse(element_id)
@@ -493,6 +499,19 @@ impl CanvasService {
                 .write()
                 .map_err(|_| CanvasError::Canvas("failed to acquire scene lock".to_string()))?;
             scene.remove_element(&id)?;
+        }
+
+        // Persist via CommunitasApp if entity_id provided
+        if let Some(eid) = entity_id {
+            let cmd = Command::CanvasRemoveElement {
+                entity_id: eid.to_string(),
+                element_id: id.to_string(),
+            };
+            self.app
+                .execute(cmd)
+                .await
+                .map_err(|e| CanvasError::CommandFailed(e.to_string()))?;
+            tracing::debug!(element_id = %id, entity_id = eid, "persisted element removal via command");
         }
 
         self.publish_snapshot(false);
@@ -918,7 +937,7 @@ mod tests {
             .unwrap();
         assert_eq!(canvas.current_snapshot().elements.len(), 1);
 
-        canvas.remove_element(&id).await.unwrap();
+        canvas.remove_element(None, &id).await.unwrap();
         assert!(canvas.current_snapshot().elements.is_empty());
     }
 
@@ -928,7 +947,7 @@ mod tests {
         let canvas = make_authenticated_service(&temp).await;
 
         let result = canvas
-            .remove_element("00000000-0000-0000-0000-000000000000")
+            .remove_element(None, "00000000-0000-0000-0000-000000000000")
             .await;
         assert!(matches!(result, Err(CanvasError::Canvas(_))));
     }

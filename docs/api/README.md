@@ -50,4 +50,4 @@ let entities = api.entity_list().await?;
 See [core-api.md](core-api.md) for core library interfaces and data types.
 
 ## MCP API
-See `communitas-mcp/README.md` for tool definitions and usage examples.
+See [mcp-api.md](mcp-api.md) for comprehensive tool documentation, examples, and MCP-UI parity details.

@@ -31,6 +31,8 @@ use communitas_mcp::auth::{
     AuthState, AuthenticatedSession, DelegateSession, DemoSession, requires_auth,
 };
 use communitas_mcp::token::TokenManager;
+use communitas_ui_service::UiServices;
+use communitas_ui_service::storage::UiStorage;
 use serde_json::Value;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -43,8 +45,10 @@ const MAX_BODY_BYTES: usize = 2 * 1024 * 1024;
 
 /// HTTP server state
 pub struct HttpServerState {
-    /// The Communitas application instance
-    app: RwLock<Option<CommunitasApp>>,
+    /// The Communitas application instance (Arc for sharing with UiServices)
+    app: RwLock<Option<Arc<CommunitasApp>>>,
+    /// UI services for MCP-Dioxus parity
+    services: RwLock<Option<UiServices>>,
     /// Authentication state
     auth_state: RwLock<AuthState>,
     /// CLI arguments
@@ -59,6 +63,7 @@ impl HttpServerState {
     pub fn new(args: Args) -> Self {
         Self {
             app: RwLock::new(None),
+            services: RwLock::new(None),
             auth_state: RwLock::new(AuthState::Unauthenticated),
             args,
             protocol_initialized: RwLock::new(false),
@@ -109,6 +114,46 @@ impl HttpServerState {
         drop(write_guard);
 
         Ok(self.token_manager.read().await)
+    }
+
+    /// Initialize UiServices from storage path and CommunitasApp.
+    ///
+    /// This ensures MCP tools use the same code path as Dioxus UI components,
+    /// guaranteeing feature parity between automation and interactive use.
+    async fn init_services(
+        &self,
+        storage_dir: &str,
+        app: CommunitasApp,
+    ) -> Result<(), JsonRpcError> {
+        let app = Arc::new(app);
+
+        let storage = UiStorage::from_path(storage_dir).map_err(|e| {
+            error!("HTTP: Failed to create UiStorage: {}", e);
+            JsonRpcError::internal_error(&format!("Failed to create UiStorage: {e}"))
+        })?;
+
+        let services = UiServices::new(storage, app.clone()).map_err(|e| {
+            error!("HTTP: Failed to create UiServices: {}", e);
+            JsonRpcError::internal_error(&format!("Failed to create UiServices: {e}"))
+        })?;
+
+        // Enable demo mode authentication on the services auth controller
+        // so that UI service operations work without interactive login
+        services.auth().enable_demo_mode();
+
+        // Store the Arc<CommunitasApp> (shared with UiServices)
+        {
+            let mut app_lock = self.app.write().await;
+            *app_lock = Some(app);
+        }
+
+        // Store the services
+        {
+            let mut services_lock = self.services.write().await;
+            *services_lock = Some(services);
+        }
+
+        Ok(())
     }
 }
 
@@ -384,8 +429,10 @@ async fn initialize_demo_mode(state: &HttpServerState) -> Result<()> {
     .await
     .map_err(|e| anyhow::anyhow!("Failed to initialize app: {e}"))?;
 
-    let mut app_lock = state.app.write().await;
-    *app_lock = Some(app);
+    state
+        .init_services(&storage_dir, app)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to initialize services: {:?}", e))?;
 
     let mut auth_lock = state.auth_state.write().await;
     *auth_lock = AuthState::DemoMode(DemoSession {
@@ -507,7 +554,12 @@ async fn handle_tools_call(
         .as_ref()
         .ok_or_else(|| JsonRpcError::internal_error("App not initialized"))?;
 
-    let result = tools::call_tool(app, &params.name, params.arguments).await;
+    let services_lock = state.services.read().await;
+    let services = services_lock
+        .as_ref()
+        .ok_or_else(|| JsonRpcError::internal_error("Services not initialized"))?;
+
+    let result = tools::call_tool(app, services, &params.name, params.arguments).await;
     serde_json::to_value(result).map_err(|e| JsonRpcError::internal_error(&e.to_string()))
 }
 
@@ -568,8 +620,7 @@ async fn handle_authenticate_token(
     .await
     {
         Ok(app) => {
-            let mut app_lock = state.app.write().await;
-            *app_lock = Some(app);
+            state.init_services(&storage_dir, app).await?;
 
             let mut auth_lock = state.auth_state.write().await;
             *auth_lock = AuthState::Delegate(DelegateSession {
@@ -669,8 +720,7 @@ async fn handle_authenticate(state: &HttpServerState, args: Value) -> Result<Val
     .await
     {
         Ok(app) => {
-            let mut app_lock = state.app.write().await;
-            *app_lock = Some(app);
+            state.init_services(&storage_dir, app).await?;
 
             let mut auth_lock = state.auth_state.write().await;
             *auth_lock = AuthState::Authenticated(AuthenticatedSession {
@@ -730,8 +780,7 @@ async fn handle_create_vault(state: &HttpServerState, args: Value) -> Result<Val
     .await
     {
         Ok(app) => {
-            let mut app_lock = state.app.write().await;
-            *app_lock = Some(app);
+            state.init_services(&storage_dir, app).await?;
 
             let mut auth_lock = state.auth_state.write().await;
             *auth_lock = AuthState::Authenticated(AuthenticatedSession {

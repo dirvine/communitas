@@ -16,6 +16,8 @@ use communitas_core::{
     conn_from_words,
     crdt::EntityType,
 };
+use communitas_ui_api::UnifiedEntityType;
+use communitas_ui_service::UiServices;
 use serde_json::{Value, json};
 use tracing::warn;
 
@@ -1770,7 +1772,21 @@ pub fn list_tools(authenticated: bool) -> Vec<Tool> {
 }
 
 /// Execute a tool call
-pub async fn call_tool(app: &CommunitasApp, name: &str, args: Option<Value>) -> ToolCallResult {
+///
+/// # Arguments
+/// * `app` - The CommunitasApp for direct core operations (legacy path)
+/// * `services` - The UiServices for service-layer operations (preferred path)
+/// * `name` - Tool name to execute
+/// * `args` - Optional JSON arguments
+///
+/// Tool implementations are being migrated from using `app` directly to using
+/// `services` for MCP-Dioxus parity (see PLAN-31).
+pub async fn call_tool(
+    app: &CommunitasApp,
+    services: &UiServices,
+    name: &str,
+    args: Option<Value>,
+) -> ToolCallResult {
     let args = args.unwrap_or(json!({}));
 
     // Try each category dispatcher in turn
@@ -1782,7 +1798,8 @@ pub async fn call_tool(app: &CommunitasApp, name: &str, args: Option<Value>) -> 
     if let Some(result) = dispatch_entity_tools(app, name, &args).await {
         return result;
     }
-    if let Some(result) = dispatch_message_tools(app, name, &args).await {
+    // Messaging tools use UiServices for MCP-Dioxus parity (PLAN-31)
+    if let Some(result) = dispatch_message_tools(services, app, name, &args).await {
         return result;
     }
     if let Some(result) = dispatch_kanban_tools(app, name, &args).await {
@@ -1856,26 +1873,28 @@ async fn dispatch_entity_tools(
 }
 
 async fn dispatch_message_tools(
+    services: &UiServices,
     app: &CommunitasApp,
     name: &str,
     args: &Value,
 ) -> Option<ToolCallResult> {
     match name {
-        // Message CRUD
-        "send_message" => Some(execute_send_message(app, args.clone()).await),
-        "delete_message" => Some(execute_delete_message(app, args.clone()).await),
-        "edit_message" => Some(execute_edit_message(app, args.clone()).await),
-        "get_messages" => Some(execute_get_messages(app, args.clone()).await),
-        // Reactions
-        "add_reaction" => Some(execute_add_reaction(app, args.clone()).await),
-        "remove_reaction" => Some(execute_remove_reaction(app, args.clone()).await),
+        // Message CRUD - migrated to use UiServices (PLAN-31)
+        "send_message" => Some(execute_send_message(services, args.clone()).await),
+        "delete_message" => Some(execute_delete_message(services, args.clone()).await),
+        "edit_message" => Some(execute_edit_message(services, args.clone()).await),
+        "get_messages" => Some(execute_get_messages(services, args.clone()).await),
+        // Reactions - migrated to use UiServices (PLAN-31)
+        "add_reaction" => Some(execute_add_reaction(services, args.clone()).await),
+        "remove_reaction" => Some(execute_remove_reaction(services, args.clone()).await),
+        // Reactions - not yet migrated, still use app directly
         "get_reactions" => Some(execute_get_reactions(app, args.clone()).await),
         "get_available_reactions" => Some(execute_get_available_reactions(app, args.clone()).await),
-        // Thread operations
+        // Thread operations - not yet migrated
         "create_thread" => Some(execute_create_thread(app, args.clone()).await),
         "get_thread_messages" => Some(execute_get_thread_messages(app, args.clone()).await),
-        // Thread listing (for AI agents)
-        "list_threads" => Some(execute_list_threads(app, args.clone()).await),
+        // Thread listing - migrated to use UiServices (PLAN-31)
+        "list_threads" => Some(execute_list_threads(services, args.clone()).await),
         "list_messages" => Some(execute_list_messages(app, args.clone()).await),
         _ => None,
     }
@@ -2323,102 +2342,83 @@ async fn execute_remove_member(app: &CommunitasApp, args: Value) -> ToolCallResu
     }
 }
 
-async fn execute_send_message(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let entity_id = str_or_default(&args, "entity_id");
-    let entity_type = require_entity_type!(args);
+/// Send a message via UiServices MessagingService for MCP-Dioxus parity.
+async fn execute_send_message(services: &UiServices, args: Value) -> ToolCallResult {
+    let thread_id = str_or_default(&args, "entity_id");
     let text = str_or_default(&args, "text");
-    let reply_to_id = opt_str(&args, "reply_to_id");
+    let reply_to = opt_str(&args, "reply_to_id");
 
-    let cmd = Command::SendMessage {
-        entity_id,
-        entity_type,
-        text,
-        author: String::new(), // Will be filled by the service
-        reply_to_id,
-        attachments: None,
-    };
-
-    match app.execute(cmd).await {
-        Ok(events) => {
-            // Extract message_id from the MessageSent event
-            let message_id = events.iter().find_map(|e| match e {
-                Event::MessageSent { message_id, .. } => Some(message_id.clone()),
-                _ => None,
-            });
-
+    // Use MessagingService for parity with Dioxus UI
+    match services
+        .messaging()
+        .send_message(&thread_id, &text, reply_to.as_deref())
+        .await
+    {
+        Ok(message) => {
             let result = json!({
                 "success": true,
                 "message": "Message sent successfully",
-                "id": message_id
+                "id": message.id
             });
             json_result(&result)
         }
-        Err(e) => error_result(&format!("Failed to send message: {}", e.message)),
+        Err(e) => error_result(&format!("Failed to send message: {}", e)),
     }
 }
 
-async fn execute_delete_message(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let entity_id = str_or_default(&args, "entity_id");
-    let entity_type = require_entity_type!(args);
+/// Delete a message via UiServices MessagingService for MCP-Dioxus parity.
+async fn execute_delete_message(services: &UiServices, args: Value) -> ToolCallResult {
+    let thread_id = str_or_default(&args, "entity_id");
     let message_id = str_or_default(&args, "message_id");
 
-    let cmd = Command::DeleteMessage {
-        entity_id,
-        entity_type,
-        message_id,
-    };
-
-    match app.execute(cmd).await {
-        Ok(_) => success_result("Message deleted successfully"),
-        Err(e) => error_result(&format!("Failed to delete message: {}", e.message)),
+    // Use MessagingService for parity with Dioxus UI
+    match services
+        .messaging()
+        .delete_message(&thread_id, &message_id)
+        .await
+    {
+        Ok(()) => success_result("Message deleted successfully"),
+        Err(e) => error_result(&format!("Failed to delete message: {}", e)),
     }
 }
 
-async fn execute_edit_message(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let entity_id = str_or_default(&args, "entity_id");
-    let entity_type = require_entity_type!(args);
+/// Edit a message via UiServices MessagingService for MCP-Dioxus parity.
+async fn execute_edit_message(services: &UiServices, args: Value) -> ToolCallResult {
+    let thread_id = str_or_default(&args, "entity_id");
     let message_id = str_or_default(&args, "message_id");
     let new_text = str_or_default(&args, "new_text");
 
-    let cmd = Command::EditMessage {
-        entity_id,
-        entity_type,
-        message_id,
-        new_text,
-    };
-
-    match app.execute(cmd).await {
-        Ok(events) => {
-            let edited_at = events.iter().find_map(|e| match e {
-                Event::MessageEdited { edited_at, .. } => Some(*edited_at),
-                _ => None,
-            });
+    // Use MessagingService for parity with Dioxus UI
+    match services
+        .messaging()
+        .edit_message(&thread_id, &message_id, &new_text)
+        .await
+    {
+        Ok(message) => {
             let result = json!({
                 "success": true,
                 "message": "Message edited successfully",
-                "edited_at": edited_at
+                "edited": message.edited
             });
             json_result(&result)
         }
-        Err(e) => error_result(&format!("Failed to edit message: {}", e.message)),
+        Err(e) => error_result(&format!("Failed to edit message: {}", e)),
     }
 }
 
-async fn execute_add_reaction(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let entity_id = str_or_default(&args, "entity_id");
-    let entity_type = require_entity_type!(args);
+/// Add a reaction via UiServices MessagingService for MCP-Dioxus parity.
+async fn execute_add_reaction(services: &UiServices, args: Value) -> ToolCallResult {
+    let thread_id = str_or_default(&args, "entity_id");
     let message_id = str_or_default(&args, "message_id");
     let emoji = str_or_default(&args, "emoji");
 
-    let cmd = Command::AddReaction {
-        entity_id,
-        entity_type,
-        message_id,
-        emoji: emoji.clone(),
-    };
-
-    match app.execute(cmd).await {
-        Ok(_) => {
+    // Use MessagingService for parity with Dioxus UI
+    match services
+        .messaging()
+        .add_reaction(&thread_id, &message_id, &emoji)
+        .await
+    {
+        Ok(()) => {
             let result = json!({
                 "success": true,
                 "message": "Reaction added successfully",
@@ -2426,25 +2426,23 @@ async fn execute_add_reaction(app: &CommunitasApp, args: Value) -> ToolCallResul
             });
             json_result(&result)
         }
-        Err(e) => error_result(&format!("Failed to add reaction: {}", e.message)),
+        Err(e) => error_result(&format!("Failed to add reaction: {}", e)),
     }
 }
 
-async fn execute_remove_reaction(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let entity_id = str_or_default(&args, "entity_id");
-    let entity_type = require_entity_type!(args);
+/// Remove a reaction via UiServices MessagingService for MCP-Dioxus parity.
+async fn execute_remove_reaction(services: &UiServices, args: Value) -> ToolCallResult {
+    let thread_id = str_or_default(&args, "entity_id");
     let message_id = str_or_default(&args, "message_id");
     let emoji = str_or_default(&args, "emoji");
 
-    let cmd = Command::RemoveReaction {
-        entity_id,
-        entity_type,
-        message_id,
-        emoji: emoji.clone(),
-    };
-
-    match app.execute(cmd).await {
-        Ok(_) => {
+    // Use MessagingService for parity with Dioxus UI
+    match services
+        .messaging()
+        .remove_reaction(&thread_id, &message_id, &emoji)
+        .await
+    {
+        Ok(()) => {
             let result = json!({
                 "success": true,
                 "message": "Reaction removed successfully",
@@ -2452,7 +2450,7 @@ async fn execute_remove_reaction(app: &CommunitasApp, args: Value) -> ToolCallRe
             });
             json_result(&result)
         }
-        Err(e) => error_result(&format!("Failed to remove reaction: {}", e.message)),
+        Err(e) => error_result(&format!("Failed to remove reaction: {}", e)),
     }
 }
 
@@ -2794,115 +2792,104 @@ async fn execute_list_members(app: &CommunitasApp, args: Value) -> ToolCallResul
     }
 }
 
-async fn execute_get_messages(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let entity_id = str_or_default(&args, "entity_id");
+/// Get messages via UiServices MessagingService for MCP-Dioxus parity.
+async fn execute_get_messages(services: &UiServices, args: Value) -> ToolCallResult {
+    let thread_id = str_or_default(&args, "entity_id");
+    let limit = args["limit"].as_u64().unwrap_or(50).min(100) as usize;
+    let before = args["before"].as_u64();
 
-    let query = Query::GetEntityMessages { entity_id };
-
-    match app.query(query).await {
-        Ok(QueryResponse::Messages(messages)) => {
+    // Use MessagingService for parity with Dioxus UI
+    match services
+        .messaging()
+        .get_messages(&thread_id, limit, before)
+        .await
+    {
+        Ok(messages) => {
             let list: Vec<Value> = messages
                 .iter()
                 .map(|m| {
+                    // Manually serialize reactions since MessageReaction doesn't impl Serialize
+                    let reactions: Vec<Value> = m
+                        .reactions
+                        .iter()
+                        .map(|r| {
+                            json!({
+                                "emoji": r.emoji,
+                                "count": r.count,
+                                "reacted_by_me": r.reacted_by_me
+                            })
+                        })
+                        .collect();
                     json!({
                         "id": m.id,
-                        "author": m.author,
+                        "sender_name": m.sender_name,
                         "text": m.text,
                         "timestamp": m.timestamp,
-                        "reply_to_id": m.reply_to_id
+                        "reply_to_id": m.reply_to_id,
+                        "edited": m.edited,
+                        "reactions": reactions
                     })
                 })
                 .collect();
             json_result(&json!({"messages": list}))
         }
-        Ok(_) => error_result("Unexpected response type"),
-        Err(e) => error_result(&format!("Failed to get messages: {}", e.message)),
+        Err(e) => error_result(&format!("Failed to get messages: {}", e)),
     }
 }
 
-/// List all conversation threads (entities + contacts) for the authenticated user.
+/// List all conversation threads via UiServices MessagingService for MCP-Dioxus parity.
 ///
-/// Returns threads matching the `communitas-ui-api::ThreadSummary` format for MCP parity.
-#[tracing::instrument(skip(app), name = "mcp.tools.list_threads")]
-async fn execute_list_threads(app: &CommunitasApp, args: Value) -> ToolCallResult {
+/// Returns threads matching the `communitas-ui-api::ThreadSummary` format.
+#[tracing::instrument(skip(services), name = "mcp.tools.list_threads")]
+async fn execute_list_threads(services: &UiServices, args: Value) -> ToolCallResult {
     let limit = args["limit"].as_u64().unwrap_or(50).min(100) as usize;
     let filter = args["filter"].as_str().unwrap_or("all");
 
-    // Get entities to build thread list
-    let entities_query = Query::ListEntities;
-    let entities_result = app.query(entities_query).await;
+    // Use MessagingService for parity with Dioxus UI
+    match services.messaging().list_threads().await {
+        Ok(threads) => {
+            // Apply filter if specified
+            let filtered: Vec<Value> = threads
+                .iter()
+                .filter(|t| {
+                    match filter {
+                        "entities" => t.entity_id.is_some(),
+                        "contacts" => t.contact_id.is_some(),
+                        "unread" => t.unread_count > 0,
+                        _ => true, // "all"
+                    }
+                })
+                .take(limit)
+                .map(|t| {
+                    // Convert entity_type since UnifiedEntityType doesn't impl Serialize
+                    let entity_type_str = t.entity_type.as_ref().map(|et| match et {
+                        UnifiedEntityType::Organization => "organization",
+                        UnifiedEntityType::Project => "project",
+                        UnifiedEntityType::Group => "group",
+                        UnifiedEntityType::Channel => "channel",
+                        UnifiedEntityType::Person => "person",
+                    });
+                    json!({
+                        "thread_id": t.thread_id,
+                        "entity_id": t.entity_id,
+                        "entity_type": entity_type_str,
+                        "contact_id": t.contact_id,
+                        "display_name": t.display_name,
+                        "last_message_preview": t.last_message_preview,
+                        "last_message_timestamp": t.last_message_timestamp,
+                        "unread_count": t.unread_count,
+                        "is_muted": t.is_muted
+                    })
+                })
+                .collect();
 
-    // Get contacts to build thread list
-    let contacts_query = Query::ListContacts;
-    let contacts_result = app.query(contacts_query).await;
-
-    let mut threads: Vec<Value> = Vec::new();
-    let now_ms = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0);
-
-    // Build entity threads
-    if (filter == "all" || filter == "entities" || filter == "unread")
-        && let Ok(QueryResponse::EntityList(entities)) = entities_result
-    {
-        for entity in entities.iter().take(limit) {
-            // Map entity_type to UI-compatible type string
-            let entity_type_str = match entity.entity_type.as_str() {
-                "Organisation" => "organisation",
-                "Project" => "project",
-                "Group" => "group",
-                "Channel" => "channel",
-                other => other,
-            };
-
-            threads.push(json!({
-                "thread_id": format!("entity:{}", entity.id),
-                "entity_id": entity.id,
-                "entity_type": entity_type_str,
-                "contact_id": null,
-                "display_name": entity.name,
-                "last_message_preview": "",
-                "last_message_timestamp": now_ms.saturating_sub(3_600_000), // 1 hour ago placeholder
-                "unread_count": 0,
-                "is_muted": false
-            }));
+            json_result(&json!({
+                "threads": filtered,
+                "total_count": filtered.len()
+            }))
         }
+        Err(e) => error_result(&format!("Failed to list threads: {}", e)),
     }
-
-    // Build contact threads (DMs)
-    if (filter == "all" || filter == "contacts" || filter == "unread")
-        && let Ok(QueryResponse::ContactList(contacts)) = contacts_result
-    {
-        for contact in contacts.iter().take(limit.saturating_sub(threads.len())) {
-            threads.push(json!({
-                "thread_id": format!("contact:{}", contact.id),
-                "entity_id": null,
-                "entity_type": null,
-                "contact_id": contact.id,
-                "display_name": contact.display_name,
-                "last_message_preview": "",
-                "last_message_timestamp": now_ms.saturating_sub(7_200_000), // 2 hours ago placeholder
-                "unread_count": 0,
-                "is_muted": false
-            }));
-        }
-    }
-
-    // Sort by timestamp descending (most recent first)
-    threads.sort_by(|a, b| {
-        let ts_a = a["last_message_timestamp"].as_u64().unwrap_or(0);
-        let ts_b = b["last_message_timestamp"].as_u64().unwrap_or(0);
-        ts_b.cmp(&ts_a)
-    });
-
-    // Apply limit
-    threads.truncate(limit);
-
-    json_result(&json!({
-        "threads": threads,
-        "total_count": threads.len()
-    }))
 }
 
 /// Get messages from a specific thread with pagination support.

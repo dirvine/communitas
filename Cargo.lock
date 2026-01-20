@@ -1234,6 +1234,7 @@ dependencies = [
  "clap",
  "communitas-core",
  "communitas-kanban",
+ "communitas-ui-api",
  "communitas-ui-service",
  "futures",
  "hex",

@@ -21,6 +21,7 @@ path = "src/main.rs"
 communitas-core = { version = "0.1.22", path = "../communitas-core" }
 communitas-kanban = { version = "0.1.22", path = "../communitas-kanban" }
 communitas-ui-service = { path = "../communitas-ui-service" }
+communitas-ui-api = { path = "../communitas-ui-api" }
 
 # CLI parsing
 clap = { workspace = true, features = ["derive"] }

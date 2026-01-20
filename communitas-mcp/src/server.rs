@@ -24,6 +24,8 @@ use communitas_mcp::auth::{
     AuthState, AuthenticatedSession, DelegateSession, DemoSession, Scope, requires_auth,
 };
 use communitas_mcp::token::TokenManager;
+use communitas_ui_service::UiServices;
+use communitas_ui_service::storage::UiStorage;
 use serde_json::Value;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -33,7 +35,8 @@ use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
 pub struct McpServer {
-    app: Arc<RwLock<Option<CommunitasApp>>>,
+    app: Arc<RwLock<Option<Arc<CommunitasApp>>>>,
+    services: Arc<RwLock<Option<UiServices>>>,
     auth_state: AuthState,
     protocol_initialized: bool,
     demo_mode: bool,
@@ -46,6 +49,7 @@ impl McpServer {
         let demo_mode = args.demo;
         Self {
             app: Arc::new(RwLock::new(None)),
+            services: Arc::new(RwLock::new(None)),
             auth_state: AuthState::Unauthenticated,
             protocol_initialized: false,
             demo_mode,
@@ -87,6 +91,46 @@ impl McpServer {
             .join(four_words)
             .to_string_lossy()
             .to_string()
+    }
+
+    /// Initialize UiServices from storage path and CommunitasApp.
+    ///
+    /// This ensures MCP tools use the same code path as Dioxus UI components,
+    /// guaranteeing feature parity between automation and interactive use.
+    async fn init_services(
+        &mut self,
+        storage_dir: &str,
+        app: CommunitasApp,
+    ) -> Result<(), JsonRpcError> {
+        let app = Arc::new(app);
+
+        let storage = UiStorage::from_path(storage_dir).map_err(|e| {
+            error!("Failed to create UiStorage: {}", e);
+            JsonRpcError::internal_error(&format!("Failed to create UiStorage: {e}"))
+        })?;
+
+        let services = UiServices::new(storage, app.clone()).map_err(|e| {
+            error!("Failed to create UiServices: {}", e);
+            JsonRpcError::internal_error(&format!("Failed to create UiServices: {e}"))
+        })?;
+
+        // Enable demo mode authentication on the services auth controller
+        // so that UI service operations work without interactive login
+        services.auth().enable_demo_mode();
+
+        // Store the Arc<CommunitasApp> (shared with UiServices)
+        {
+            let mut app_lock = self.app.write().await;
+            *app_lock = Some(app);
+        }
+
+        // Store the services
+        {
+            let mut services_lock = self.services.write().await;
+            *services_lock = Some(services);
+        }
+
+        Ok(())
     }
 
     pub async fn handle_request(&mut self, request: JsonRpcRequest) -> Option<JsonRpcResponse> {
@@ -195,36 +239,30 @@ impl McpServer {
             four_words, storage_dir
         );
 
-        // Initialize the CommunitasApp
-        match CommunitasApp::new(
+        // Initialize the CommunitasApp and UiServices
+        let app = CommunitasApp::new(
             four_words.clone(),
             display_name.clone(),
             device_name,
             storage_dir.clone(),
         )
         .await
-        {
-            Ok(app) => {
-                let mut app_lock = self.app.write().await;
-                *app_lock = Some(app);
+        .map_err(|e| {
+            error!("Failed to initialize demo mode: {}", e);
+            JsonRpcError::internal_error(&format!("Failed to initialize demo mode: {e}"))
+        })?;
 
-                self.auth_state = AuthState::DemoMode(DemoSession {
-                    four_words,
-                    display_name,
-                    started_at: SystemTime::now(),
-                    storage_dir,
-                });
+        self.init_services(&storage_dir, app).await?;
 
-                info!("Demo mode initialized successfully");
-                Ok(())
-            }
-            Err(e) => {
-                error!("Failed to initialize demo mode: {}", e);
-                Err(JsonRpcError::internal_error(&format!(
-                    "Failed to initialize demo mode: {e}"
-                )))
-            }
-        }
+        self.auth_state = AuthState::DemoMode(DemoSession {
+            four_words,
+            display_name,
+            started_at: SystemTime::now(),
+            storage_dir,
+        });
+
+        info!("Demo mode initialized successfully");
+        Ok(())
     }
 
     /// Handle tools/list request
@@ -291,7 +329,12 @@ impl McpServer {
             .as_ref()
             .ok_or_else(|| JsonRpcError::internal_error("App not initialized"))?;
 
-        let result = tools::call_tool(app, &params.name, params.arguments).await;
+        let services_lock = self.services.read().await;
+        let services = services_lock
+            .as_ref()
+            .ok_or_else(|| JsonRpcError::internal_error("Services not initialized"))?;
+
+        let result = tools::call_tool(app, services, &params.name, params.arguments).await;
 
         serde_json::to_value(result).map_err(|e| JsonRpcError::internal_error(&e.to_string()))
     }
@@ -384,39 +427,32 @@ impl McpServer {
                     "Authentication failed: {e}. Make sure vault exists and password is correct."
                 ))
             })?;
-        match CommunitasApp::new(
+        let app = CommunitasApp::new(
             four_words_dashed.clone(),
             session_info.display_name.clone(),
             device_name.clone(),
             storage_dir.clone(),
         )
         .await
-        {
-            Ok(app) => {
-                let mut app_lock = self.app.write().await;
-                *app_lock = Some(app);
+        .map_err(|e| {
+            error!("Failed to initialize app after authentication: {}", e);
+            JsonRpcError::internal_error(&format!("Failed to initialize app: {e}"))
+        })?;
 
-                self.auth_state = AuthState::Authenticated(AuthenticatedSession {
-                    four_words: four_words_dashed.clone(),
-                    display_name: session_info.display_name,
-                    device_name,
-                    started_at: SystemTime::now(),
-                    storage_dir,
-                });
+        self.init_services(&storage_dir, app).await?;
 
-                info!("User authenticated successfully: {}", four_words_dashed);
+        self.auth_state = AuthState::Authenticated(AuthenticatedSession {
+            four_words: four_words_dashed.clone(),
+            display_name: session_info.display_name,
+            device_name,
+            started_at: SystemTime::now(),
+            storage_dir,
+        });
 
-                let result = tools::success_result("Authentication successful");
-                serde_json::to_value(result)
-                    .map_err(|e| JsonRpcError::internal_error(&e.to_string()))
-            }
-            Err(e) => {
-                error!("Failed to initialize app after authentication: {}", e);
-                Err(JsonRpcError::internal_error(&format!(
-                    "Failed to initialize app: {e}"
-                )))
-            }
-        }
+        info!("User authenticated successfully: {}", four_words_dashed);
+
+        let result = tools::success_result("Authentication successful");
+        serde_json::to_value(result).map_err(|e| JsonRpcError::internal_error(&e.to_string()))
     }
 
     async fn handle_create_vault(&mut self, args: Value) -> Result<Value, JsonRpcError> {
@@ -480,39 +516,34 @@ impl McpServer {
                 JsonRpcError::internal_error(&format!("Vault created but login failed: {e}"))
             })?;
 
-        match CommunitasApp::new(
+        let app = CommunitasApp::new(
             four_words_dashed.clone(),
             session_info.display_name.clone(),
             device_name.clone(),
             storage_dir.clone(),
         )
         .await
-        {
-            Ok(app) => {
-                let mut app_lock = self.app.write().await;
-                *app_lock = Some(app);
+        .map_err(|e| {
+            error!("Failed to initialize app after vault creation: {}", e);
+            JsonRpcError::internal_error(&format!(
+                "Vault created but app initialization failed: {e}"
+            ))
+        })?;
 
-                self.auth_state = AuthState::Authenticated(AuthenticatedSession {
-                    four_words: four_words_dashed.clone(),
-                    display_name: session_info.display_name,
-                    device_name,
-                    started_at: SystemTime::now(),
-                    storage_dir,
-                });
+        self.init_services(&storage_dir, app).await?;
 
-                info!("Vault created successfully for: {}", four_words_dashed);
+        self.auth_state = AuthState::Authenticated(AuthenticatedSession {
+            four_words: four_words_dashed.clone(),
+            display_name: session_info.display_name,
+            device_name,
+            started_at: SystemTime::now(),
+            storage_dir,
+        });
 
-                let result = tools::success_result("Vault created and authenticated successfully");
-                serde_json::to_value(result)
-                    .map_err(|e| JsonRpcError::internal_error(&e.to_string()))
-            }
-            Err(e) => {
-                error!("Failed to initialize app after vault creation: {}", e);
-                Err(JsonRpcError::internal_error(&format!(
-                    "Vault created but app initialization failed: {e}"
-                )))
-            }
-        }
+        info!("Vault created successfully for: {}", four_words_dashed);
+
+        let result = tools::success_result("Vault created and authenticated successfully");
+        serde_json::to_value(result).map_err(|e| JsonRpcError::internal_error(&e.to_string()))
     }
 
     async fn handle_authenticate_token(&mut self, args: Value) -> Result<Value, JsonRpcError> {
@@ -528,42 +559,35 @@ impl McpServer {
 
         let storage_dir = self.get_storage_dir(&delegate_token.issuer);
 
-        match CommunitasApp::new(
+        let app = CommunitasApp::new(
             delegate_token.issuer.clone(),
             delegate_token.delegate_name.clone(),
             "delegate-session".to_string(),
             storage_dir.clone(),
         )
         .await
-        {
-            Ok(app) => {
-                let mut app_lock = self.app.write().await;
-                *app_lock = Some(app);
+        .map_err(|e| {
+            error!("Failed to initialize app for delegate: {}", e);
+            JsonRpcError::internal_error(&format!("Failed to initialize delegate session: {e}"))
+        })?;
 
-                self.auth_state = AuthState::Delegate(DelegateSession {
-                    issuer_four_words: delegate_token.issuer.clone(),
-                    delegate_name: delegate_token.delegate_name,
-                    scopes: delegate_token.scopes,
-                    started_at: SystemTime::now(),
-                    storage_dir,
-                });
+        self.init_services(&storage_dir, app).await?;
 
-                info!(
-                    "Delegate authenticated successfully for issuer: {}",
-                    delegate_token.issuer
-                );
+        self.auth_state = AuthState::Delegate(DelegateSession {
+            issuer_four_words: delegate_token.issuer.clone(),
+            delegate_name: delegate_token.delegate_name,
+            scopes: delegate_token.scopes,
+            started_at: SystemTime::now(),
+            storage_dir,
+        });
 
-                let result = tools::success_result("Delegate token authentication successful");
-                serde_json::to_value(result)
-                    .map_err(|e| JsonRpcError::internal_error(&e.to_string()))
-            }
-            Err(e) => {
-                error!("Failed to initialize app for delegate: {}", e);
-                Err(JsonRpcError::internal_error(&format!(
-                    "Failed to initialize delegate session: {e}"
-                )))
-            }
-        }
+        info!(
+            "Delegate authenticated successfully for issuer: {}",
+            delegate_token.issuer
+        );
+
+        let result = tools::success_result("Delegate token authentication successful");
+        serde_json::to_value(result).map_err(|e| JsonRpcError::internal_error(&e.to_string()))
     }
 
     async fn handle_create_delegate_token(&mut self, args: Value) -> Result<Value, JsonRpcError> {

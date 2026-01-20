@@ -2877,6 +2877,618 @@ fn test_canvas_operations_parity() {
     });
 }
 
+/// Test adding image elements via MCP routes through CanvasService.
+#[test]
+fn test_canvas_add_image_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Add image element via MCP
+        let result = call_tool(
+            &app,
+            &services,
+            "canvas_add_image",
+            Some(json!({
+                "entity_id": "test-entity",
+                "src": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+                "x": 50.0,
+                "y": 50.0,
+                "width": 100.0,
+                "height": 100.0
+            })),
+        )
+        .await;
+
+        // Tool should execute
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from canvas_add_image"
+        );
+    });
+}
+
+/// Test adding chart elements via MCP routes through CanvasService.
+#[test]
+fn test_canvas_add_chart_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Add chart element via MCP
+        let result = call_tool(
+            &app,
+            &services,
+            "canvas_add_chart",
+            Some(json!({
+                "entity_id": "test-entity",
+                "chart_type": "bar",
+                "data": {
+                    "labels": ["A", "B", "C"],
+                    "values": [10, 20, 30]
+                },
+                "x": 200.0,
+                "y": 200.0,
+                "width": 300.0,
+                "height": 200.0
+            })),
+        )
+        .await;
+
+        // Tool should execute
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from canvas_add_chart"
+        );
+    });
+}
+
+/// Test removing elements via MCP routes through CanvasService.
+#[test]
+fn test_canvas_remove_element_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to remove a non-existent element
+        let result = call_tool(
+            &app,
+            &services,
+            "canvas_remove_element",
+            Some(json!({
+                "entity_id": "test-entity",
+                "element_id": "nonexistent-element-id"
+            })),
+        )
+        .await;
+
+        // Tool should execute (may return error for non-existent element)
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from canvas_remove_element"
+        );
+    });
+}
+
+/// Test updating element transforms via MCP routes through CanvasService.
+#[test]
+fn test_canvas_update_transform_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to update transform of a non-existent element
+        let result = call_tool(
+            &app,
+            &services,
+            "canvas_update_transform",
+            Some(json!({
+                "entity_id": "test-entity",
+                "element_id": "nonexistent-element-id",
+                "x": 150.0,
+                "y": 150.0,
+                "width": 200.0,
+                "height": 100.0,
+                "rotation": 0.5,
+                "z_index": 1
+            })),
+        )
+        .await;
+
+        // Tool should execute (may return error for non-existent element)
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from canvas_update_transform"
+        );
+    });
+}
+
+/// Test selecting elements via MCP routes through CanvasService.
+#[test]
+fn test_canvas_select_element_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to select a non-existent element
+        let result = call_tool(
+            &app,
+            &services,
+            "canvas_select_element",
+            Some(json!({
+                "entity_id": "test-entity",
+                "element_id": "nonexistent-element-id"
+            })),
+        )
+        .await;
+
+        // Tool should execute
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from canvas_select_element"
+        );
+    });
+}
+
+/// Test deselecting all elements via MCP routes through CanvasService.
+#[test]
+fn test_canvas_deselect_all_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Deselect all elements
+        let result = call_tool(
+            &app,
+            &services,
+            "canvas_deselect_all",
+            Some(json!({
+                "entity_id": "test-entity"
+            })),
+        )
+        .await;
+
+        // Tool should execute successfully
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from canvas_deselect_all"
+        );
+    });
+}
+
+/// Test setting viewport via MCP routes through CanvasService.
+#[test]
+fn test_canvas_set_viewport_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Set viewport dimensions
+        let result = call_tool(
+            &app,
+            &services,
+            "canvas_set_viewport",
+            Some(json!({
+                "entity_id": "test-entity",
+                "width": 1920.0,
+                "height": 1080.0
+            })),
+        )
+        .await;
+
+        // Tool should execute successfully
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from canvas_set_viewport"
+        );
+        assert!(!result.is_error, "Expected canvas_set_viewport to succeed");
+    });
+}
+
+/// Test setting view (zoom/pan) via MCP routes through CanvasService.
+#[test]
+fn test_canvas_set_view_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Set view zoom and pan
+        let result = call_tool(
+            &app,
+            &services,
+            "canvas_set_view",
+            Some(json!({
+                "entity_id": "test-entity",
+                "zoom": 1.5,
+                "pan_x": 100.0,
+                "pan_y": 50.0
+            })),
+        )
+        .await;
+
+        // Tool should execute successfully
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from canvas_set_view"
+        );
+        assert!(!result.is_error, "Expected canvas_set_view to succeed");
+    });
+}
+
+/// Test clearing canvas via MCP routes through CanvasService.
+#[test]
+fn test_canvas_clear_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Clear the canvas
+        let result = call_tool(
+            &app,
+            &services,
+            "canvas_clear",
+            Some(json!({
+                "entity_id": "test-entity"
+            })),
+        )
+        .await;
+
+        // Tool should execute successfully
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from canvas_clear"
+        );
+        assert!(!result.is_error, "Expected canvas_clear to succeed");
+    });
+}
+
+/// Test exporting canvas via MCP routes through CanvasService.
+#[test]
+fn test_canvas_export_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Export the canvas
+        let result = call_tool(
+            &app,
+            &services,
+            "canvas_export",
+            Some(json!({
+                "entity_id": "test-entity"
+            })),
+        )
+        .await;
+
+        // Tool should execute successfully
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from canvas_export"
+        );
+        assert!(!result.is_error, "Expected canvas_export to succeed");
+    });
+}
+
+/// Test importing canvas via MCP routes through CanvasService.
+#[test]
+fn test_canvas_import_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Import a simple canvas scene
+        let scene_json = json!({
+            "elements": [],
+            "viewport": {"width": 800, "height": 600},
+            "view": {"zoom": 1.0, "pan_x": 0.0, "pan_y": 0.0}
+        });
+
+        let result = call_tool(
+            &app,
+            &services,
+            "canvas_import",
+            Some(json!({
+                "entity_id": "test-entity",
+                "json": scene_json.to_string()
+            })),
+        )
+        .await;
+
+        // Tool should execute (may succeed or fail based on import validation)
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from canvas_import"
+        );
+    });
+}
+
+/// Test getting element at coordinates via MCP routes through CanvasService.
+#[test]
+fn test_canvas_element_at_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Query element at specific coordinates
+        let result = call_tool(
+            &app,
+            &services,
+            "canvas_element_at",
+            Some(json!({
+                "entity_id": "test-entity",
+                "x": 100.0,
+                "y": 100.0
+            })),
+        )
+        .await;
+
+        // Tool should execute (returns null for empty canvas)
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from canvas_element_at"
+        );
+    });
+}
+
+// =============================================================================
+// Canvas Validation Tests
+// =============================================================================
+
+/// Test validation for missing entity_id in canvas_get_snapshot.
+#[test]
+fn test_canvas_validation_missing_entity_id() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to get snapshot without entity_id
+        let result = call_tool(&app, &services, "canvas_get_snapshot", Some(json!({}))).await;
+
+        // Should fail validation
+        assert!(
+            result.is_error,
+            "Expected validation error for missing entity_id"
+        );
+    });
+}
+
+/// Test validation for missing required fields in canvas_add_text.
+#[test]
+fn test_canvas_validation_add_text_missing_content() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to add text without content
+        let result = call_tool(
+            &app,
+            &services,
+            "canvas_add_text",
+            Some(json!({
+                "entity_id": "test-entity",
+                "x": 100.0,
+                "y": 100.0
+            })),
+        )
+        .await;
+
+        // Should fail validation
+        assert!(
+            result.is_error,
+            "Expected validation error for missing content in canvas_add_text"
+        );
+    });
+}
+
+/// Test validation for missing coordinates in canvas_add_text.
+#[test]
+fn test_canvas_validation_add_text_missing_coords() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to add text without x, y coordinates
+        let result = call_tool(
+            &app,
+            &services,
+            "canvas_add_text",
+            Some(json!({
+                "entity_id": "test-entity",
+                "content": "Test text"
+            })),
+        )
+        .await;
+
+        // Should fail validation
+        assert!(
+            result.is_error,
+            "Expected validation error for missing coordinates in canvas_add_text"
+        );
+    });
+}
+
+/// Test validation for missing src in canvas_add_image.
+#[test]
+fn test_canvas_validation_add_image_missing_src() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to add image without src
+        let result = call_tool(
+            &app,
+            &services,
+            "canvas_add_image",
+            Some(json!({
+                "entity_id": "test-entity",
+                "x": 50.0,
+                "y": 50.0,
+                "width": 100.0,
+                "height": 100.0
+            })),
+        )
+        .await;
+
+        // Should fail validation
+        assert!(
+            result.is_error,
+            "Expected validation error for missing src in canvas_add_image"
+        );
+    });
+}
+
+/// Test validation for missing chart_type in canvas_add_chart.
+#[test]
+fn test_canvas_validation_add_chart_missing_type() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to add chart without chart_type
+        let result = call_tool(
+            &app,
+            &services,
+            "canvas_add_chart",
+            Some(json!({
+                "entity_id": "test-entity",
+                "data": {"values": [1, 2, 3]},
+                "x": 100.0,
+                "y": 100.0,
+                "width": 300.0,
+                "height": 200.0
+            })),
+        )
+        .await;
+
+        // Should fail validation
+        assert!(
+            result.is_error,
+            "Expected validation error for missing chart_type in canvas_add_chart"
+        );
+    });
+}
+
+/// Test validation for missing element_id in canvas_remove_element.
+#[test]
+fn test_canvas_validation_remove_element_missing_id() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to remove element without element_id
+        let result = call_tool(
+            &app,
+            &services,
+            "canvas_remove_element",
+            Some(json!({
+                "entity_id": "test-entity"
+            })),
+        )
+        .await;
+
+        // Should fail validation
+        assert!(
+            result.is_error,
+            "Expected validation error for missing element_id in canvas_remove_element"
+        );
+    });
+}
+
+/// Test validation for missing element_id in canvas_update_transform.
+#[test]
+fn test_canvas_validation_update_transform_missing_id() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to update transform without element_id
+        let result = call_tool(
+            &app,
+            &services,
+            "canvas_update_transform",
+            Some(json!({
+                "entity_id": "test-entity",
+                "x": 100.0,
+                "y": 100.0,
+                "width": 200.0,
+                "height": 100.0
+            })),
+        )
+        .await;
+
+        // Should fail validation
+        assert!(
+            result.is_error,
+            "Expected validation error for missing element_id in canvas_update_transform"
+        );
+    });
+}
+/// Test validation for missing json in canvas_import.
+#[test]
+fn test_canvas_validation_import_missing_json() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to import without json
+        let result = call_tool(
+            &app,
+            &services,
+            "canvas_import",
+            Some(json!({
+                "entity_id": "test-entity"
+            })),
+        )
+        .await;
+
+        // Should fail validation
+        assert!(
+            result.is_error,
+            "Expected validation error for missing json in canvas_import"
+        );
+    });
+}
+
+/// Test that all 14 canvas tools are registered.
+#[test]
+fn test_all_canvas_tools_registered() {
+    let tools = list_tools(true);
+    let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
+
+    // Complete list of all 14 canvas tools
+    let canvas_tools = [
+        // Read operations (2)
+        "canvas_get_snapshot",
+        "canvas_element_at",
+        // Add element operations (3)
+        "canvas_add_text",
+        "canvas_add_image",
+        "canvas_add_chart",
+        // Modify element operations (2)
+        "canvas_remove_element",
+        "canvas_update_transform",
+        // Selection operations (2)
+        "canvas_select_element",
+        "canvas_deselect_all",
+        // View operations (2)
+        "canvas_set_viewport",
+        "canvas_set_view",
+        // Scene operations (3)
+        "canvas_clear",
+        "canvas_export",
+        "canvas_import",
+    ];
+
+    for tool in &canvas_tools {
+        assert!(
+            tool_names.contains(tool),
+            "Expected {} tool to be registered (found {} tools total)",
+            tool,
+            tool_names.len()
+        );
+    }
+}
+
 // =============================================================================
 // Error Consistency Tests
 // =============================================================================

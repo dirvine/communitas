@@ -153,26 +153,23 @@ impl DriveService {
             .map_err(|e| DriveError::QueryError(e.to_string()))?;
 
         // Extract disk list from response
-        let disks = match response {
-            QueryResponse::DiskList(disk_list) => disk_list
-                .into_iter()
-                .map(|info| DiskInfo {
-                    disk_type: disk_type_from_arg(info.disk_type),
-                    entity_id: info.entity_id,
-                    total_bytes: info.total_bytes,
-                    used_bytes: info.used_bytes,
-                    available_bytes: info.available_bytes,
-                    file_count: info.file_count,
-                })
-                .collect(),
-            _ => {
-                return Err(DriveError::QueryError(
-                    "unexpected response type from ListDisks query".to_string(),
-                ));
-            }
+        let QueryResponse::DiskList(disk_list) = response else {
+            return Err(DriveError::QueryError(
+                "unexpected response type from ListDisks query".to_string(),
+            ));
         };
 
-        Ok(disks)
+        Ok(disk_list
+            .into_iter()
+            .map(|info| DiskInfo {
+                disk_type: disk_type_from_arg(info.disk_type),
+                entity_id: info.entity_id,
+                total_bytes: info.total_bytes,
+                used_bytes: info.used_bytes,
+                available_bytes: info.available_bytes,
+                file_count: info.file_count,
+            })
+            .collect())
     }
 
     /// Get quota information for a specific disk.

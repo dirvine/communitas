@@ -163,7 +163,7 @@ function Main {
     }
 
     # Create temp directory for download
-    $tempDir = Join-Path $env:TEMP "CommunutasWebView2Install"
+    $tempDir = Join-Path $env:TEMP "CommunitasWebView2Install"
     if (-not (Test-Path $tempDir)) {
         New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
     }

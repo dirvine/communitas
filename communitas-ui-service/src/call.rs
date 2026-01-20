@@ -164,6 +164,22 @@ impl DeviceEnumerator for NoDeviceEnumerator {
     }
 }
 
+/// Verify that a device with the given ID and type exists in the available devices list.
+fn verify_device_exists(
+    available_devices: &[MediaDevice],
+    device_id: &str,
+    device_type: DeviceType,
+) -> Result<(), CallError> {
+    if available_devices
+        .iter()
+        .any(|d| d.id == device_id && d.device_type == device_type)
+    {
+        Ok(())
+    } else {
+        Err(CallError::DeviceNotFound(device_id.to_string()))
+    }
+}
+
 /// Service for real-time voice/video communication.
 pub struct CallService {
     auth: Arc<AuthController>,
@@ -304,6 +320,11 @@ impl CallService {
     /// Uses the configured [`DeviceEnumerator`] to discover audio and video devices.
     /// Returns mock devices by default; for real devices, provide a platform-specific
     /// enumerator via [`CallService::with_device_enumerator`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CallError::NotAuthenticated`] if the user is not logged in.
+    /// Returns [`CallError::DeviceEnumerationFailed`] if the platform device enumeration fails.
     #[instrument(skip(self), name = "ui.call.list_devices")]
     pub async fn list_devices(&self) -> Result<Vec<MediaDevice>, CallError> {
         let rx = self.auth.subscribe();
@@ -327,84 +348,80 @@ impl CallService {
     /// Refresh the list of available devices.
     ///
     /// Call this when the user plugs in or unplugs a device.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CallError::NotAuthenticated`] if the user is not logged in.
+    /// Returns [`CallError::DeviceEnumerationFailed`] if the platform device enumeration fails.
     #[instrument(skip(self), name = "ui.call.refresh_devices")]
     pub async fn refresh_devices(&self) -> Result<Vec<MediaDevice>, CallError> {
         self.list_devices().await
     }
 
-    /// Select a microphone device.
-    #[instrument(skip(self), name = "ui.call.select_microphone", fields(device_id))]
-    pub async fn select_microphone(&self, device_id: &str) -> Result<(), CallError> {
+    /// Select a device of the specified type.
+    async fn select_device(
+        &self,
+        device_id: &str,
+        device_type: DeviceType,
+    ) -> Result<(), CallError> {
         let mut state = self.state.write().await;
+        verify_device_exists(&state.available_devices, device_id, device_type)?;
 
-        // Verify device exists
-        if !state
-            .available_devices
-            .iter()
-            .any(|d| d.id == device_id && d.device_type == DeviceType::Microphone)
-        {
-            return Err(CallError::DeviceNotFound(device_id.to_string()));
+        match device_type {
+            DeviceType::Microphone => {
+                state.settings.selected_microphone = Some(device_id.to_string());
+            }
+            DeviceType::Speaker => {
+                state.settings.selected_speaker = Some(device_id.to_string());
+            }
+            DeviceType::Camera => {
+                state.settings.selected_camera = Some(device_id.to_string());
+            }
         }
-
-        state.settings.selected_microphone = Some(device_id.to_string());
         drop(state);
         self.broadcast().await;
         Ok(())
+    }
+
+    /// Select a microphone device.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CallError::DeviceNotFound`] if the device ID is not in the available devices list.
+    #[instrument(skip(self), name = "ui.call.select_microphone", fields(device_id))]
+    pub async fn select_microphone(&self, device_id: &str) -> Result<(), CallError> {
+        self.select_device(device_id, DeviceType::Microphone).await
     }
 
     /// Select a speaker device.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CallError::DeviceNotFound`] if the device ID is not in the available devices list.
     #[instrument(skip(self), name = "ui.call.select_speaker", fields(device_id))]
     pub async fn select_speaker(&self, device_id: &str) -> Result<(), CallError> {
-        let mut state = self.state.write().await;
-
-        // Verify device exists
-        if !state
-            .available_devices
-            .iter()
-            .any(|d| d.id == device_id && d.device_type == DeviceType::Speaker)
-        {
-            return Err(CallError::DeviceNotFound(device_id.to_string()));
-        }
-
-        state.settings.selected_speaker = Some(device_id.to_string());
-        drop(state);
-        self.broadcast().await;
-        Ok(())
+        self.select_device(device_id, DeviceType::Speaker).await
     }
 
     /// Select a camera device.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CallError::DeviceNotFound`] if the device ID is not in the available devices list.
     #[instrument(skip(self), name = "ui.call.select_camera", fields(device_id))]
     pub async fn select_camera(&self, device_id: &str) -> Result<(), CallError> {
-        let mut state = self.state.write().await;
-
-        // Verify device exists
-        if !state
-            .available_devices
-            .iter()
-            .any(|d| d.id == device_id && d.device_type == DeviceType::Camera)
-        {
-            return Err(CallError::DeviceNotFound(device_id.to_string()));
-        }
-
-        state.settings.selected_camera = Some(device_id.to_string());
-        drop(state);
-        self.broadcast().await;
-        Ok(())
+        self.select_device(device_id, DeviceType::Camera).await
     }
 
     /// Test a microphone and return the current audio level (0.0-1.0).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CallError::DeviceNotFound`] if the device ID is not in the available devices list.
     #[instrument(skip(self), name = "ui.call.test_microphone", fields(device_id))]
     pub async fn test_microphone(&self, device_id: &str) -> Result<f32, CallError> {
         let state = self.state.read().await;
-
-        // Verify device exists
-        if !state
-            .available_devices
-            .iter()
-            .any(|d| d.id == device_id && d.device_type == DeviceType::Microphone)
-        {
-            return Err(CallError::DeviceNotFound(device_id.to_string()));
-        }
+        verify_device_exists(&state.available_devices, device_id, DeviceType::Microphone)?;
 
         // Mock implementation: return a simulated audio level
         // Real implementation would use platform APIs to capture audio
@@ -412,18 +429,14 @@ impl CallService {
     }
 
     /// Test a speaker by playing a test sound.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CallError::DeviceNotFound`] if the device ID is not in the available devices list.
     #[instrument(skip(self), name = "ui.call.test_speaker", fields(device_id))]
     pub async fn test_speaker(&self, device_id: &str) -> Result<(), CallError> {
         let state = self.state.read().await;
-
-        // Verify device exists
-        if !state
-            .available_devices
-            .iter()
-            .any(|d| d.id == device_id && d.device_type == DeviceType::Speaker)
-        {
-            return Err(CallError::DeviceNotFound(device_id.to_string()));
-        }
+        verify_device_exists(&state.available_devices, device_id, DeviceType::Speaker)?;
 
         // Mock implementation: would play test sound via platform APIs
         Ok(())
@@ -432,6 +445,11 @@ impl CallService {
     // ===== Call Management =====
 
     /// Join a call for the specified entity.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CallError::NotAuthenticated`] if the user is not logged in.
+    /// Returns [`CallError::AlreadyInCall`] if the user is already in an active call.
     #[instrument(skip(self), name = "ui.call.join", fields(entity_id))]
     pub async fn join_call(&self, entity_id: &str) -> Result<CallInfo, CallError> {
         let rx = self.auth.subscribe();
@@ -490,6 +508,10 @@ impl CallService {
     }
 
     /// Leave the current call.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CallError::NotInCall`] if the user is not currently in a call.
     #[instrument(skip(self), name = "ui.call.leave")]
     pub async fn leave_call(&self) -> Result<(), CallError> {
         let mut state = self.state.write().await;
@@ -540,6 +562,10 @@ impl CallService {
     // ===== Call Controls =====
 
     /// Toggle mute state and return the new muted state.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CallError::NotInCall`] if the user is not currently in a call.
     #[instrument(skip(self), name = "ui.call.toggle_mute")]
     pub async fn toggle_mute(&self) -> Result<bool, CallError> {
         let mut state = self.state.write().await;
@@ -575,6 +601,10 @@ impl CallService {
     }
 
     /// Toggle video state and return the new enabled state.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CallError::NotInCall`] if the user is not currently in a call.
     #[instrument(skip(self), name = "ui.call.toggle_video")]
     pub async fn toggle_video(&self) -> Result<bool, CallError> {
         let mut state = self.state.write().await;
@@ -610,6 +640,10 @@ impl CallService {
     }
 
     /// Set audio input enabled state.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CallError::NotInCall`] if the user is not currently in a call.
     #[instrument(skip(self), name = "ui.call.set_audio_input")]
     pub async fn set_audio_input_enabled(&self, enabled: bool) -> Result<(), CallError> {
         let mut state = self.state.write().await;
@@ -651,6 +685,13 @@ impl CallService {
     }
 
     /// Retry media capture for the specified device type.
+    ///
+    /// Clears any media errors for the specified device type and exits listen-only mode
+    /// if no errors remain.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CallError::MediaError`] if the retry attempt fails to capture media.
     #[instrument(skip(self), name = "ui.call.retry_media", fields(?device_type))]
     pub async fn retry_media(&self, device_type: DeviceType) -> Result<(), CallError> {
         let mut state = self.state.write().await;

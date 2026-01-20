@@ -1,6 +1,7 @@
 //! Shared utility functions for UI services.
 
 use std::time::{SystemTime, UNIX_EPOCH};
+use tracing::warn;
 
 /// Get current timestamp in milliseconds since Unix epoch.
 ///
@@ -10,7 +11,13 @@ pub fn current_timestamp_millis() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_millis() as i64)
-        .unwrap_or(0)
+        .unwrap_or_else(|e| {
+            warn!(
+                error = %e,
+                "System clock is before Unix epoch - returning 0 timestamp"
+            );
+            0
+        })
 }
 
 #[cfg(test)]

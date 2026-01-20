@@ -3,11 +3,11 @@
 use std::sync::Arc;
 
 use communitas_core::app::CommunitasApp;
-use communitas_core::command::{Command, Event, Query, QueryResponse};
+use communitas_core::command::{Command, Event, Query, QueryResponse, Subscription};
 use communitas_ui_api::{Message, ThreadSummary};
 use thiserror::Error;
-use tokio::sync::watch;
-use tracing::{debug, instrument, warn};
+use tokio::sync::{broadcast, watch};
+use tracing::{debug, instrument, trace, warn};
 
 use crate::auth::{AuthController, AuthService, AuthStateSnapshot};
 use crate::messaging_convert::{core_entity_type_to_ui, core_message_to_ui};
@@ -46,12 +46,156 @@ pub struct MessagingService {
 impl MessagingService {
     /// Create a new messaging service linked to the auth controller and core app.
     ///
+    /// Automatically subscribes to message events from the core app and updates
+    /// the watch channel reactively when messages are sent, received, edited,
+    /// deleted, or when reactions are added/removed.
+    ///
     /// # Arguments
     /// * `auth` - Shared authentication controller for checking login state
     /// * `app` - Shared reference to the core application
     pub fn new(auth: Arc<AuthController>, app: Arc<CommunitasApp>) -> Self {
         let (tx, rx) = watch::channel(MessagingSnapshot::default());
+
+        // Subscribe to message events for reactive updates
+        let event_rx = app.subscribe(Subscription::MessageEvents);
+
+        // Clone what we need for the background task
+        let tx_clone = tx.clone();
+        let app_clone = app.clone();
+        let auth_clone = auth.clone();
+
+        // Spawn background task to process events
+        tokio::spawn(async move {
+            Self::event_loop(event_rx, tx_clone, app_clone, auth_clone).await;
+        });
+
         Self { auth, app, tx, rx }
+    }
+
+    /// Background event loop that processes message events and updates the watch channel.
+    ///
+    /// This runs continuously, refreshing the thread list whenever a relevant event occurs.
+    async fn event_loop(
+        mut event_rx: broadcast::Receiver<Event>,
+        tx: watch::Sender<MessagingSnapshot>,
+        app: Arc<CommunitasApp>,
+        auth: Arc<AuthController>,
+    ) {
+        loop {
+            match event_rx.recv().await {
+                Ok(event) => {
+                    let should_refresh = matches!(
+                        event,
+                        Event::MessageSent { .. }
+                            | Event::MessageReceived { .. }
+                            | Event::MessageDeleted { .. }
+                            | Event::MessageEdited { .. }
+                            | Event::ReactionAdded { .. }
+                            | Event::ReactionRemoved { .. }
+                    );
+
+                    if should_refresh {
+                        trace!(?event, "Message event received, refreshing threads");
+                        Self::refresh_threads_internal(&tx, &app, &auth).await;
+                    }
+                }
+                Err(broadcast::error::RecvError::Lagged(n)) => {
+                    // We missed some events, refresh to catch up
+                    debug!(
+                        missed_events = n,
+                        "Event receiver lagged, refreshing threads"
+                    );
+                    Self::refresh_threads_internal(&tx, &app, &auth).await;
+                }
+                Err(broadcast::error::RecvError::Closed) => {
+                    // Channel closed, stop the loop
+                    debug!("Event channel closed, stopping event loop");
+                    break;
+                }
+            }
+        }
+    }
+
+    /// Internal helper to refresh threads and update the watch channel.
+    ///
+    /// Used by both the event loop and explicit refresh calls.
+    async fn refresh_threads_internal(
+        tx: &watch::Sender<MessagingSnapshot>,
+        app: &Arc<CommunitasApp>,
+        auth: &Arc<AuthController>,
+    ) {
+        // Check authentication
+        let is_authenticated = matches!(
+            &*auth.subscribe().borrow(),
+            AuthStateSnapshot::Authenticated(_)
+        );
+
+        if !is_authenticated {
+            trace!("Not authenticated, skipping thread refresh");
+            return;
+        }
+
+        // Query entities
+        let entities = match app.query(Query::ListEntities).await {
+            Ok(QueryResponse::EntityList(entities)) => entities,
+            Ok(_) => {
+                trace!("Unexpected response type for ListEntities in refresh");
+                return;
+            }
+            Err(e) => {
+                trace!(error = %e.message, "Failed to list entities in refresh");
+                return;
+            }
+        };
+
+        // Build thread summaries
+        let mut threads = Vec::with_capacity(entities.len());
+        for entity in entities {
+            let default_timestamp = entity.created_at.max(0) as u64;
+
+            let (preview, timestamp) = match app
+                .query(Query::GetEntityMessages {
+                    entity_id: entity.id.clone(),
+                })
+                .await
+            {
+                Ok(QueryResponse::Messages(messages)) => {
+                    if let Some(msg) = messages.last() {
+                        let preview_text = truncate_preview(&msg.text, 100);
+                        let ts = msg.timestamp.max(0) as u64;
+                        (preview_text, ts)
+                    } else {
+                        (String::new(), default_timestamp)
+                    }
+                }
+                _ => (String::new(), default_timestamp),
+            };
+
+            let entity_type = core_entity_type_to_ui(&entity.entity_type);
+
+            threads.push(ThreadSummary {
+                thread_id: entity.id.clone(),
+                entity_id: Some(entity.id),
+                entity_type: Some(entity_type),
+                contact_id: None,
+                display_name: entity.name,
+                last_message_preview: preview,
+                last_message_timestamp: timestamp,
+                unread_count: 0,
+                is_muted: false,
+            });
+        }
+
+        // Sort by most recent message first
+        threads.sort_by(|a, b| b.last_message_timestamp.cmp(&a.last_message_timestamp));
+
+        // Update watch channel
+        let _ = tx.send(MessagingSnapshot {
+            threads,
+            loading: false,
+        });
+
+        trace!("Thread list refreshed via event");
     }
 
     /// Get a reference to the core app.
@@ -67,6 +211,15 @@ impl MessagingService {
     /// Get the current messaging snapshot without subscribing.
     pub fn current_snapshot(&self) -> MessagingSnapshot {
         self.rx.borrow().clone()
+    }
+
+    /// Manually refresh the thread list from the core app.
+    ///
+    /// This is typically not needed as the service automatically refreshes
+    /// when message events are received. Use this for explicit user-triggered
+    /// refreshes or to ensure the latest data after authentication changes.
+    pub async fn refresh_threads(&self) {
+        Self::refresh_threads_internal(&self.tx, &self.app, &self.auth).await;
     }
 
     /// List all conversation threads for the current user.
@@ -1130,5 +1283,23 @@ mod tests {
             Err(MessagingError::NotAuthenticated) => {}
             other => panic!("expected NotAuthenticated, got {other:?}"),
         }
+    }
+
+    #[tokio::test]
+    async fn refresh_threads_updates_watch_channel() {
+        let temp = TempDir::new().unwrap();
+        let service = make_service(&temp).await;
+
+        // Initial state should be empty
+        let snap = service.current_snapshot();
+        assert!(snap.threads.is_empty());
+        assert!(!snap.loading);
+
+        // Refresh (not authenticated, so threads remain empty)
+        service.refresh_threads().await;
+
+        let snap = service.current_snapshot();
+        assert!(snap.threads.is_empty());
+        assert!(!snap.loading);
     }
 }

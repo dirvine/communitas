@@ -238,7 +238,10 @@ impl DriveService {
                 path: path.to_string(),
             })
             .await
-            .map_err(|e| DriveError::QueryError(e.to_string()))?;
+            .map_err(|e| {
+                self.set_loading(false);
+                DriveError::QueryError(e.to_string())
+            })?;
 
         // Extract file list from response
         let QueryResponse::FileList(file_list) = response else {

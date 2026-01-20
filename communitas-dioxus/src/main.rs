@@ -26,6 +26,7 @@ use std::{
 };
 use styles::{button, input};
 use tokens::colors;
+use native_dialog::{MessageDialog, MessageType};
 use tracing::{error, info};
 
 static UI_SERVICES: OnceLock<Arc<UiServices>> = OnceLock::new();
@@ -45,6 +46,14 @@ fn main() {
     // Check WebView availability BEFORE expensive service initialization
     if let Err(err) = platform::check_webview_available() {
         eprintln!("WebView not available: {err}");
+        // Show native dialog since Dioxus UI won't work without WebView
+        let _ = MessageDialog::new()
+            .set_type(MessageType::Error)
+            .set_title("Communitas - Missing Dependency")
+            .set_text(&format!(
+                "Communitas cannot start because a required component is missing.\n\n{err}"
+            ))
+            .show_alert();
         std::process::exit(1);
     }
     let services = UiServices::bootstrap().unwrap_or_else(|err| {

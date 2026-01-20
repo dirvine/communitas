@@ -17,6 +17,7 @@ tracing.workspace = true
 futures.workspace = true
 chrono.workspace = true
 base64.workspace = true
+native-dialog = "0.7"
 
 [dev-dependencies]
 dioxus-ssr = "0.7"

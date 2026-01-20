@@ -35,8 +35,8 @@ where
         .expect("Test thread panicked");
 }
 
-/// Helper to create UiServices with demo authentication enabled.
-async fn make_authenticated_services(temp: &TempDir) -> UiServices {
+/// Helper to create UiServices without authentication (for testing auth guards).
+async fn make_unauthenticated_services(temp: &TempDir) -> UiServices {
     let storage = UiStorage::from_path(temp.path()).unwrap();
     let app = Arc::new(
         CommunitasApp::new(
@@ -51,11 +51,14 @@ async fn make_authenticated_services(temp: &TempDir) -> UiServices {
         .await
         .unwrap(),
     );
-    let services = UiServices::new(storage, app).unwrap();
+    UiServices::new(storage, app).unwrap()
+}
 
+/// Helper to create UiServices with demo authentication enabled.
+async fn make_authenticated_services(temp: &TempDir) -> UiServices {
+    let services = make_unauthenticated_services(temp).await;
     // Enable demo mode to authenticate
     services.auth().enable_demo_mode();
-
     services
 }
 
@@ -124,23 +127,7 @@ fn test_device_enumeration_requires_auth() {
 
 async fn test_device_enumeration_requires_auth_inner() {
     let temp = TempDir::new().unwrap();
-    let storage = UiStorage::from_path(temp.path()).unwrap();
-    let app = Arc::new(
-        CommunitasApp::new(
-            "ocean-forest-moon-star".to_string(),
-            "TestUser".to_string(),
-            "TestDevice".to_string(),
-            temp.path()
-                .join("app_storage")
-                .to_string_lossy()
-                .to_string(),
-        )
-        .await
-        .unwrap(),
-    );
-    let services = UiServices::new(storage, app).unwrap();
-
-    // Do NOT enable demo mode - stay unauthenticated
+    let services = make_unauthenticated_services(&temp).await;
     let call = services.call();
 
     let result = call.list_devices().await;
@@ -240,23 +227,7 @@ fn test_start_call_requires_auth() {
 
 async fn test_start_call_requires_auth_inner() {
     let temp = TempDir::new().unwrap();
-    let storage = UiStorage::from_path(temp.path()).unwrap();
-    let app = Arc::new(
-        CommunitasApp::new(
-            "ocean-forest-moon-star".to_string(),
-            "TestUser".to_string(),
-            "TestDevice".to_string(),
-            temp.path()
-                .join("app_storage")
-                .to_string_lossy()
-                .to_string(),
-        )
-        .await
-        .unwrap(),
-    );
-    let services = UiServices::new(storage, app).unwrap();
-
-    // Do NOT enable demo mode
+    let services = make_unauthenticated_services(&temp).await;
     let call = services.call();
 
     let result = call.start_call("entity-1", false).await;
@@ -331,36 +302,39 @@ async fn test_leave_call_when_not_in_call_inner() {
     assert!(matches!(result.unwrap_err(), CallError::NotInCall));
 }
 
-/// Test the AlreadyInCall guard logic.
+/// Test that start_call returns CoreError without networking.
 ///
-/// In test/headless mode, WebRTC isn't available so we can't actually start
-/// a call. Instead we verify that the first call attempt fails with CoreError
-/// (expected behavior without networking).
+/// In test/headless mode, WebRTC isn't available so starting a call fails
+/// gracefully with CoreError. This test verifies the error handling path
+/// when networking is unavailable.
+///
+/// Note: AlreadyInCall guard logic cannot be tested without active networking
+/// to successfully start a first call.
 #[test]
-fn test_cannot_start_call_while_in_call() {
+fn test_start_call_fails_without_networking() {
     run_with_large_stack(|| {
         let rt = tokio::runtime::Runtime::new().unwrap();
-        rt.block_on(test_cannot_start_call_while_in_call_inner());
+        rt.block_on(test_start_call_fails_without_networking_inner());
     });
 }
 
-async fn test_cannot_start_call_while_in_call_inner() {
+async fn test_start_call_fails_without_networking_inner() {
     let temp = TempDir::new().unwrap();
     let services = make_authenticated_services(&temp).await;
     let call = services.call();
 
     // Create a test entity
-    let entity_id = create_test_entity(&services, "Double Call Test").await;
+    let entity_id = create_test_entity(&services, "No Networking Test").await;
 
-    // Try to start first call - will fail with CoreError in test mode
-    let first_result = call.start_call(&entity_id, false).await;
+    // Try to start call - will fail with CoreError in test mode
+    let result = call.start_call(&entity_id, false).await;
 
-    // In test mode, should fail with CoreError due to no networking
-    assert!(first_result.is_err());
+    // Should fail with CoreError due to no networking
+    assert!(result.is_err());
     assert!(
-        matches!(first_result.as_ref().unwrap_err(), CallError::CoreError(_)),
+        matches!(result.as_ref().unwrap_err(), CallError::CoreError(_)),
         "Expected CoreError without networking, got: {:?}",
-        first_result
+        result
     );
 
     // State remains Idle since call never started
@@ -668,23 +642,7 @@ fn test_call_queries_require_auth() {
 
 async fn test_call_queries_require_auth_inner() {
     let temp = TempDir::new().unwrap();
-    let storage = UiStorage::from_path(temp.path()).unwrap();
-    let app = Arc::new(
-        CommunitasApp::new(
-            "ocean-forest-moon-star".to_string(),
-            "TestUser".to_string(),
-            "TestDevice".to_string(),
-            temp.path()
-                .join("app_storage")
-                .to_string_lossy()
-                .to_string(),
-        )
-        .await
-        .unwrap(),
-    );
-    let services = UiServices::new(storage, app).unwrap();
-
-    // Do NOT enable demo mode
+    let services = make_unauthenticated_services(&temp).await;
     let call = services.call();
 
     // All queries should fail
@@ -767,23 +725,7 @@ fn test_join_call_requires_auth() {
 
 async fn test_join_call_requires_auth_inner() {
     let temp = TempDir::new().unwrap();
-    let storage = UiStorage::from_path(temp.path()).unwrap();
-    let app = Arc::new(
-        CommunitasApp::new(
-            "ocean-forest-moon-star".to_string(),
-            "TestUser".to_string(),
-            "TestDevice".to_string(),
-            temp.path()
-                .join("app_storage")
-                .to_string_lossy()
-                .to_string(),
-        )
-        .await
-        .unwrap(),
-    );
-    let services = UiServices::new(storage, app).unwrap();
-
-    // Do NOT enable demo mode
+    let services = make_unauthenticated_services(&temp).await;
     let call = services.call();
 
     let result = call.join_call("call-123").await;

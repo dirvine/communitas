@@ -849,22 +849,59 @@ impl CanvasService {
     }
 
     /// Export the scene as JSON.
-    #[instrument(skip(self))]
-    pub async fn export_json(&self) -> Result<String, CanvasError> {
-        let scene = self
-            .scene
-            .read()
-            .map_err(|_| CanvasError::Canvas("failed to acquire scene lock".to_string()))?;
-        scene
-            .to_json()
-            .map_err(|e| CanvasError::Serialization(e.to_string()))
+    ///
+    /// If `entity_id` is provided, exports from persistence via Query::CanvasExport.
+    /// Otherwise, exports the local scene state.
+    #[instrument(skip(self, entity_id))]
+    pub async fn export_json(&self, entity_id: Option<&str>) -> Result<String, CanvasError> {
+        // If entity_id provided, query persisted state
+        if let Some(eid) = entity_id {
+            let query = Query::CanvasExport {
+                entity_id: eid.to_string(),
+            };
+            let response = self
+                .app
+                .query(query)
+                .await
+                .map_err(|e| CanvasError::QueryFailed(e.to_string()))?;
+
+            match response {
+                QueryResponse::CanvasExportJson(json) => {
+                    tracing::debug!(entity_id = eid, "exported canvas from persistence");
+                    Ok(json)
+                }
+                _ => {
+                    tracing::warn!(entity_id = eid, "unexpected response type for CanvasExport");
+                    Err(CanvasError::UnexpectedResponse)
+                }
+            }
+        } else {
+            // Local export from current scene
+            let scene = self
+                .scene
+                .read()
+                .map_err(|_| CanvasError::Canvas("failed to acquire scene lock".to_string()))?;
+            let json = scene
+                .to_json()
+                .map_err(|e| CanvasError::Serialization(e.to_string()))?;
+            tracing::debug!("exported local canvas");
+            Ok(json)
+        }
     }
 
     /// Import a scene from JSON.
-    #[instrument(skip(self, json))]
-    pub async fn import_json(&self, json: &str) -> Result<(), CanvasError> {
+    ///
+    /// If `entity_id` is provided, also persists via Command::CanvasImport.
+    /// Invalid JSON is handled gracefully with a serialization error.
+    #[instrument(skip(self, entity_id, json))]
+    pub async fn import_json(
+        &self,
+        entity_id: Option<&str>,
+        json: &str,
+    ) -> Result<(), CanvasError> {
         self.require_auth()?;
 
+        // Validate and parse JSON first (handles invalid JSON gracefully)
         let new_scene =
             Scene::from_json(json).map_err(|e| CanvasError::Serialization(e.to_string()))?;
 
@@ -874,6 +911,19 @@ impl CanvasService {
                 .write()
                 .map_err(|_| CanvasError::Canvas("failed to acquire scene lock".to_string()))?;
             *scene = new_scene;
+        }
+
+        // Persist via CommunitasApp if entity_id provided
+        if let Some(eid) = entity_id {
+            let cmd = Command::CanvasImport {
+                entity_id: eid.to_string(),
+                json: json.to_string(),
+            };
+            self.app
+                .execute(cmd)
+                .await
+                .map_err(|e| CanvasError::CommandFailed(e.to_string()))?;
+            tracing::debug!(entity_id = eid, "persisted imported canvas via command");
         }
 
         self.publish_snapshot(false);
@@ -1508,32 +1558,44 @@ mod tests {
         assert!(canvas.current_snapshot().elements.is_empty());
     }
 
-    #[tokio::test]
-    async fn export_import_json_roundtrip() {
-        let temp = TempDir::new().unwrap();
-        let canvas = make_authenticated_service(&temp).await;
+    // Uses a thread with larger stack (8MB) to avoid stack overflow from
+    // large async state machine in CommunitasApp + export/import chain
+    #[test]
+    fn export_import_json_roundtrip() {
+        std::thread::Builder::new()
+            .stack_size(8 * 1024 * 1024)
+            .spawn(|| {
+                let rt = tokio::runtime::Runtime::new().unwrap();
+                rt.block_on(async {
+                    let temp = TempDir::new().unwrap();
+                    let canvas = make_authenticated_service(&temp).await;
 
-        canvas
-            .add_text(
-                None,
-                "Export me".to_string(),
-                50.0,
-                50.0,
-                18.0,
-                "#ff0000".to_string(),
-            )
-            .await
+                    canvas
+                        .add_text(
+                            None,
+                            "Export me".to_string(),
+                            50.0,
+                            50.0,
+                            18.0,
+                            "#ff0000".to_string(),
+                        )
+                        .await
+                        .unwrap();
+
+                    let json = canvas.export_json(None).await.unwrap();
+                    assert!(!json.is_empty());
+
+                    canvas.clear().await.unwrap();
+                    assert!(canvas.current_snapshot().elements.is_empty());
+
+                    canvas.import_json(None, &json).await.unwrap();
+                    let snap = canvas.current_snapshot();
+                    assert_eq!(snap.elements.len(), 1);
+                });
+            })
+            .unwrap()
+            .join()
             .unwrap();
-
-        let json = canvas.export_json().await.unwrap();
-        assert!(!json.is_empty());
-
-        canvas.clear().await.unwrap();
-        assert!(canvas.current_snapshot().elements.is_empty());
-
-        canvas.import_json(&json).await.unwrap();
-        let snap = canvas.current_snapshot();
-        assert_eq!(snap.elements.len(), 1);
     }
 
     #[tokio::test]

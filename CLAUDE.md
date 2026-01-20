@@ -168,6 +168,29 @@ Bootstrap and seed nodes for network support:
 - **Build Failures**: Ensure Rust 1.85+, `dx` CLI 0.7.3, and required platform toolchains are installed
 - **Tauri Bundles**: Missing WebView dependencies block startup; run installer prerequisites
 
+### WebView Requirements
+
+Communitas requires a platform-specific WebView runtime. The app checks for this at startup and shows a helpful error dialog if missing.
+
+| Platform | WebView | Status |
+|----------|---------|--------|
+| macOS | WebKit | Always present (bundled with Safari) |
+| Linux | WebKitGTK | Must be installed separately |
+| Windows | WebView2 | Usually present (Edge/Win11), may need install |
+
+**Install WebView dependencies:**
+
+```bash
+# Linux (detect package manager automatically)
+sudo scripts/install-webview-linux.sh
+
+# Windows (PowerShell)
+scripts\install-webview-windows.ps1
+scripts\install-webview-windows.ps1 -UserInstall  # No admin required
+```
+
+See [docs/development/prerequisites.md](docs/development/prerequisites.md) for detailed requirements.
+
 ### Windows Build Issues
 The project requires CMake and Visual Studio Build Tools on Windows because `ant-quic` depends on `aws-lc-rs` (FIPS 140-3 certified cryptography), which compiles C code.
 

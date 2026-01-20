@@ -2,6 +2,7 @@
 #![allow(clippy::print_stderr)] // eprintln! used for bootstrap errors before logger init
 
 mod components;
+mod platform;
 pub mod styles;
 pub mod tokens;
 
@@ -47,6 +48,10 @@ fn main() {
     });
     if UI_SERVICES.set(Arc::new(services)).is_err() {
         eprintln!("UI services already initialized");
+        std::process::exit(1);
+    }
+    if let Err(err) = platform::check_webview_available() {
+        eprintln!("WebView not available: {err}");
         std::process::exit(1);
     }
     info!("starting Communitas Dioxus prototype");

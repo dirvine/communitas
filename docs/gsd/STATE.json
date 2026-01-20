@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "project": "communitas",
+  "active": true,
+  "milestone": {
+    "number": 5,
+    "name": "M5 Stabilization"
+  },
+  "phase": {
+    "number": "5.2",
+    "name": "WebView Provisioning",
+    "plans": ["PLAN-32"],
+    "status": "planning"
+  },
+  "progress": {
+    "total_tasks": 5,
+    "completed_tasks": 0,
+    "current_task": "PLAN-32.1: Add platform detection module"
+  },
+  "status": "planning",
+  "last_review": null,
+  "last_updated": "2026-01-20T21:35:00Z",
+  "notes": "Phase 5.2: WebView dependency detection and graceful error handling"
+}

@@ -485,9 +485,15 @@ impl MessagingService {
 
     /// Add a reaction to a message.
     ///
+    /// # Arguments
+    /// * `thread_id` - The entity ID of the thread containing the message.
+    /// * `message_id` - The ID of the message to react to.
+    /// * `emoji` - The emoji to add as a reaction (e.g., "👍", "❤️").
+    ///
     /// # Errors
     /// - [`MessagingError::NotAuthenticated`] if no user is logged in.
-    /// - [`MessagingError::Internal`] if the reaction fails.
+    /// - [`MessagingError::Internal`] if the reaction fails (e.g., message not found,
+    ///   invalid emoji, or no confirmation event received).
     #[instrument(
         skip(self),
         name = "ui.messaging.react",
@@ -499,19 +505,51 @@ impl MessagingService {
         message_id: &str,
         emoji: &str,
     ) -> Result<(), MessagingError> {
-        let _ = (thread_id, message_id, emoji); // Suppress unused warnings for now
         if !self.is_authenticated() {
             return Err(MessagingError::NotAuthenticated);
         }
-        // TODO: Wire to core Command::AddReaction
-        Err(MessagingError::Internal("not yet implemented".to_string()))
+
+        let entity_type = self.resolve_entity_type(thread_id).await;
+
+        // Build and execute the AddReaction command
+        let cmd = Command::AddReaction {
+            entity_id: thread_id.to_string(),
+            entity_type,
+            message_id: message_id.to_string(),
+            emoji: emoji.to_string(),
+        };
+
+        let events =
+            self.app.execute(cmd).await.map_err(|e| {
+                MessagingError::Internal(format!("Add reaction failed: {}", e.message))
+            })?;
+
+        // Verify the ReactionAdded event was returned
+        let added = events.iter().any(|event| {
+            matches!(event, Event::ReactionAdded { message_id: mid, emoji: e, .. } if mid == message_id && e == emoji)
+        });
+
+        if !added {
+            return Err(MessagingError::Internal(
+                "No ReactionAdded event returned".to_string(),
+            ));
+        }
+
+        debug!(thread_id, message_id, emoji, "Reaction added successfully");
+        Ok(())
     }
 
     /// Remove a reaction from a message.
     ///
+    /// # Arguments
+    /// * `thread_id` - The entity ID of the thread containing the message.
+    /// * `message_id` - The ID of the message to remove the reaction from.
+    /// * `emoji` - The emoji to remove (e.g., "👍", "❤️").
+    ///
     /// # Errors
     /// - [`MessagingError::NotAuthenticated`] if no user is logged in.
-    /// - [`MessagingError::Internal`] if the removal fails.
+    /// - [`MessagingError::Internal`] if the removal fails (e.g., message not found,
+    ///   reaction not present, or no confirmation event received).
     #[instrument(
         skip(self),
         name = "ui.messaging.unreact",
@@ -523,12 +561,40 @@ impl MessagingService {
         message_id: &str,
         emoji: &str,
     ) -> Result<(), MessagingError> {
-        let _ = (thread_id, message_id, emoji); // Suppress unused warnings for now
         if !self.is_authenticated() {
             return Err(MessagingError::NotAuthenticated);
         }
-        // TODO: Wire to core Command::RemoveReaction
-        Err(MessagingError::Internal("not yet implemented".to_string()))
+
+        let entity_type = self.resolve_entity_type(thread_id).await;
+
+        // Build and execute the RemoveReaction command
+        let cmd = Command::RemoveReaction {
+            entity_id: thread_id.to_string(),
+            entity_type,
+            message_id: message_id.to_string(),
+            emoji: emoji.to_string(),
+        };
+
+        let events = self.app.execute(cmd).await.map_err(|e| {
+            MessagingError::Internal(format!("Remove reaction failed: {}", e.message))
+        })?;
+
+        // Verify the ReactionRemoved event was returned
+        let removed = events.iter().any(|event| {
+            matches!(event, Event::ReactionRemoved { message_id: mid, emoji: e, .. } if mid == message_id && e == emoji)
+        });
+
+        if !removed {
+            return Err(MessagingError::Internal(
+                "No ReactionRemoved event returned".to_string(),
+            ));
+        }
+
+        debug!(
+            thread_id,
+            message_id, emoji, "Reaction removed successfully"
+        );
+        Ok(())
     }
 
     /// Internal: update the thread list (called by core events).
@@ -1039,6 +1105,30 @@ mod tests {
                 panic!("should be authenticated via demo mode");
             }
             Err(e) => panic!("unexpected error: {e}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn add_reaction_fails_when_not_authenticated() {
+        let temp = TempDir::new().unwrap();
+        let service = make_service(&temp).await;
+        let result = service.add_reaction("thread1", "msg1", "👍").await;
+        assert!(result.is_err());
+        match result {
+            Err(MessagingError::NotAuthenticated) => {}
+            other => panic!("expected NotAuthenticated, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn remove_reaction_fails_when_not_authenticated() {
+        let temp = TempDir::new().unwrap();
+        let service = make_service(&temp).await;
+        let result = service.remove_reaction("thread1", "msg1", "👍").await;
+        assert!(result.is_err());
+        match result {
+            Err(MessagingError::NotAuthenticated) => {}
+            other => panic!("expected NotAuthenticated, got {other:?}"),
         }
     }
 }

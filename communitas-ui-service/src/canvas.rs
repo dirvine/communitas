@@ -523,6 +523,7 @@ impl CanvasService {
     #[instrument(skip(self))]
     pub async fn update_transform(
         &self,
+        entity_id: Option<&str>,
         element_id: &str,
         transform: TransformView,
     ) -> Result<(), CanvasError> {
@@ -547,6 +548,25 @@ impl CanvasService {
                 .get_element_mut(id)
                 .ok_or_else(|| CanvasError::ElementNotFound(element_id.to_string()))?;
             element.transform = Transform::from(transform);
+        }
+
+        // Persist via CommunitasApp if entity_id provided
+        if let Some(eid) = entity_id {
+            let cmd = Command::CanvasUpdateTransform {
+                entity_id: eid.to_string(),
+                element_id: id.to_string(),
+                x: Some(transform.x),
+                y: Some(transform.y),
+                width: Some(transform.width),
+                height: Some(transform.height),
+                rotation: Some(transform.rotation),
+                z_index: Some(transform.z_index),
+            };
+            self.app
+                .execute(cmd)
+                .await
+                .map_err(|e| CanvasError::CommandFailed(e.to_string()))?;
+            tracing::debug!(element_id = %id, entity_id = eid, "persisted transform update via command");
         }
 
         self.publish_snapshot(false);
@@ -978,7 +998,10 @@ mod tests {
             z_index: 1,
         };
 
-        canvas.update_transform(&id, new_transform).await.unwrap();
+        canvas
+            .update_transform(None, &id, new_transform)
+            .await
+            .unwrap();
 
         let snap = canvas.current_snapshot();
         let elem = &snap.elements[0];
@@ -1005,7 +1028,7 @@ mod tests {
             z_index: 0,
         };
 
-        let result = canvas.update_transform(&id, invalid_transform).await;
+        let result = canvas.update_transform(None, &id, invalid_transform).await;
         assert!(matches!(result, Err(CanvasError::InvalidTransform(_))));
     }
 
@@ -1154,7 +1177,10 @@ mod tests {
             rotation: 0.0,
             z_index: 0,
         };
-        canvas.update_transform(id, new_transform).await.unwrap();
+        canvas
+            .update_transform(None, id, new_transform)
+            .await
+            .unwrap();
 
         // Point inside element
         let found = canvas.element_at(150.0, 125.0);

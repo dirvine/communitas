@@ -14,7 +14,7 @@ use tracing::instrument;
 
 use crate::auth::{AuthController, AuthService, AuthStateSnapshot};
 use communitas_core::app::CommunitasApp;
-use communitas_core::command::Command;
+use communitas_core::command::{Command, Query, QueryResponse};
 
 /// Errors that can occur during canvas operations.
 #[derive(Debug, Error)]
@@ -42,6 +42,14 @@ pub enum CanvasError {
     /// Command execution failed.
     #[error("command execution failed: {0}")]
     CommandFailed(String),
+
+    /// Query execution failed.
+    #[error("query execution failed: {0}")]
+    QueryFailed(String),
+
+    /// Unexpected response type from query.
+    #[error("unexpected response type")]
+    UnexpectedResponse,
 }
 
 impl From<canvas_core::CanvasError> for CanvasError {
@@ -715,6 +723,156 @@ impl CanvasService {
     pub fn element_at(&self, x: f32, y: f32) -> Option<String> {
         let scene = self.scene.read().ok()?;
         scene.element_at(x, y).map(|id| id.to_string())
+    }
+
+    /// Load canvas state from persistence via Query::GetCanvasSnapshot.
+    ///
+    /// Fetches the persisted canvas state for the given entity and updates
+    /// the local scene. Publishes the updated snapshot to subscribers.
+    #[instrument(skip(self))]
+    pub async fn load_canvas(&self, entity_id: &str) -> Result<(), CanvasError> {
+        self.require_auth()?;
+
+        // Set loading state
+        self.publish_snapshot(true);
+
+        // Query the canvas snapshot
+        let query = Query::GetCanvasSnapshot {
+            entity_id: entity_id.to_string(),
+        };
+        let response = self
+            .app
+            .query(query)
+            .await
+            .map_err(|e| CanvasError::QueryFailed(e.to_string()))?;
+
+        // Handle response
+        match response {
+            QueryResponse::CanvasSnapshot(snap) => {
+                // Convert core snapshot to UI snapshot using canvas_convert
+
+                // Update the local scene with loaded elements
+                // Note: We recreate the scene since canvas_convert produces UI types,
+                // and we need to sync the internal Scene state
+                {
+                    let mut scene = self.scene.write().map_err(|_| {
+                        CanvasError::Canvas("failed to acquire scene lock".to_string())
+                    })?;
+
+                    // Clear existing scene
+                    scene.clear();
+
+                    // Set viewport from loaded snapshot
+                    scene.set_viewport(snap.viewport_width, snap.viewport_height);
+                    scene.zoom = snap.zoom;
+                    scene.pan_x = snap.pan_x;
+                    scene.pan_y = snap.pan_y;
+
+                    // Restore elements from the core response
+                    // We use the core response directly since it has the data we need
+                    for elem in &snap.elements {
+                        use canvas_core::{Element, ElementKind, Transform};
+
+                        let kind = match elem.element_type.as_str() {
+                            "text" => {
+                                let content = elem
+                                    .data
+                                    .get("content")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("")
+                                    .to_string();
+                                let font_size =
+                                    elem.data
+                                        .get("font_size")
+                                        .and_then(|v| v.as_f64())
+                                        .unwrap_or(16.0) as f32;
+                                let color = elem
+                                    .data
+                                    .get("color")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("#000000")
+                                    .to_string();
+                                ElementKind::Text {
+                                    content,
+                                    font_size,
+                                    color,
+                                }
+                            }
+                            "image" => {
+                                let src = elem
+                                    .data
+                                    .get("src")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("")
+                                    .to_string();
+                                let format = if src.ends_with(".svg") {
+                                    canvas_core::ImageFormat::Svg
+                                } else if src.ends_with(".webp") {
+                                    canvas_core::ImageFormat::WebP
+                                } else if src.ends_with(".jpg") || src.ends_with(".jpeg") {
+                                    canvas_core::ImageFormat::Jpeg
+                                } else {
+                                    canvas_core::ImageFormat::Png
+                                };
+                                ElementKind::Image { src, format }
+                            }
+                            "chart" => {
+                                let chart_type = elem
+                                    .data
+                                    .get("chart_type")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("bar")
+                                    .to_string();
+                                let data = elem
+                                    .data
+                                    .get("data")
+                                    .cloned()
+                                    .unwrap_or(serde_json::json!({}));
+                                ElementKind::Chart { chart_type, data }
+                            }
+                            _ => {
+                                // Default to text for unknown types
+                                let content = elem
+                                    .data
+                                    .get("content")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("")
+                                    .to_string();
+                                ElementKind::Text {
+                                    content,
+                                    font_size: 16.0,
+                                    color: "#000000".to_string(),
+                                }
+                            }
+                        };
+
+                        let element = Element::new(kind).with_transform(Transform {
+                            x: elem.x,
+                            y: elem.y,
+                            width: elem.width,
+                            height: elem.height,
+                            rotation: elem.rotation,
+                            z_index: elem.z_index,
+                        });
+
+                        let _ = scene.add_element(element);
+                    }
+                }
+
+                tracing::info!(
+                    entity_id,
+                    elements_count = snap.elements.len(),
+                    "loaded canvas from persistence"
+                );
+                self.publish_snapshot(false);
+                Ok(())
+            }
+            _ => {
+                tracing::warn!(entity_id, "unexpected response type for GetCanvasSnapshot");
+                self.publish_snapshot(false);
+                Err(CanvasError::UnexpectedResponse)
+            }
+        }
     }
 
     // --- Private helpers ---

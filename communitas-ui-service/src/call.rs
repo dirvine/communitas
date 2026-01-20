@@ -575,14 +575,23 @@ impl CallService {
         Ok(call_info)
     }
 
-    /// Join a call for the specified entity.
+    /// Join an existing call by its call ID.
+    ///
+    /// This method joins a call by executing `Command::JoinCall` through
+    /// the Communitas core. The call state is updated via the watch channel when
+    /// the `Event::CallJoined` response is received.
+    ///
+    /// # Arguments
+    ///
+    /// * `call_id` - The ID of the call to join.
     ///
     /// # Errors
     ///
     /// Returns [`CallError::NotAuthenticated`] if the user is not logged in.
     /// Returns [`CallError::AlreadyInCall`] if the user is already in an active call.
-    #[instrument(skip(self), name = "ui.call.join", fields(entity_id))]
-    pub async fn join_call(&self, entity_id: &str) -> Result<CallInfo, CallError> {
+    /// Returns [`CallError::CoreError`] if the core command execution fails.
+    #[instrument(skip(self), name = "ui.call.join", fields(call_id))]
+    pub async fn join_call(&self, call_id: &str) -> Result<CallInfo, CallError> {
         let rx = self.auth.subscribe();
         let (identity_name, four_words) = match &*rx.borrow() {
             AuthStateSnapshot::LoggedOut | AuthStateSnapshot::Authenticating => {
@@ -593,20 +602,66 @@ impl CallService {
             }
         };
 
-        let mut state = self.state.write().await;
-
-        // Check if already in a call
-        if state.call_state.is_active() {
-            return Err(CallError::AlreadyInCall);
+        // Check if already in call and transition to connecting state
+        {
+            let mut state = self.state.write().await;
+            if state.call_state.is_active() {
+                return Err(CallError::AlreadyInCall);
+            }
+            state.call_state = CallState::Connecting;
         }
-
-        // Transition to connecting state
-        state.call_state = CallState::Connecting;
-        drop(state);
         self.broadcast().await;
 
-        // Mock implementation: simulate connection delay and create call
-        let my_participant_id = format!("participant-{}", current_timestamp_millis());
+        // Build and execute the JoinCall command
+        let cmd = Command::JoinCall {
+            call_id: call_id.to_string(),
+        };
+
+        let events = match self.app.execute(cmd).await {
+            Ok(events) => events,
+            Err(e) => {
+                // Reset state to Idle on failure
+                {
+                    let mut state = self.state.write().await;
+                    state.call_state = CallState::Idle;
+                }
+                self.broadcast().await;
+                return Err(CallError::CoreError(e.message.clone()));
+            }
+        };
+
+        // Find the CallJoined event in the response
+        let call_joined = events.iter().find_map(|event| {
+            if let Event::CallJoined {
+                call_id: joined_call_id,
+            } = event
+            {
+                Some(joined_call_id.clone())
+            } else {
+                None
+            }
+        });
+
+        let joined_call_id = match call_joined {
+            Some(id) => id,
+            None => {
+                // Reset state to Idle if no CallJoined event
+                {
+                    let mut state = self.state.write().await;
+                    state.call_state = CallState::Idle;
+                }
+                self.broadcast().await;
+                return Err(CallError::CoreError(
+                    "No CallJoined event returned from core".to_string(),
+                ));
+            }
+        };
+
+        debug!(call_id = %joined_call_id, "Joined call successfully");
+
+        // Create participant for self
+        let now = current_timestamp_millis();
+        let my_participant_id = format!("participant-{}", now);
         let participant = Participant {
             id: my_participant_id.clone(),
             display_name: identity_name,
@@ -615,24 +670,27 @@ impl CallService {
             is_video_enabled: false,
             is_speaking: false,
             audio_level: 0.0,
-            joined_at: current_timestamp_millis(),
+            joined_at: now,
         };
 
+        // Build call info
         let call_info = CallInfo {
-            call_id: format!("call-{}-{}", entity_id, current_timestamp_millis()),
-            entity_id: entity_id.to_string(),
-            entity_name: format!("Call: {}", entity_id),
+            call_id: joined_call_id,
+            entity_id: String::new(), // Will be populated by actual call metadata
+            entity_name: String::new(),
             participants: vec![participant.clone()],
-            started_at: current_timestamp_millis(),
+            started_at: now,
             duration_seconds: 0,
             my_participant_id,
         };
 
-        let mut state = self.state.write().await;
-        state.call_state = CallState::InCall;
-        state.current_call = Some(call_info.clone());
-        state.participants = vec![participant];
-        drop(state);
+        // Update state to InCall
+        {
+            let mut state = self.state.write().await;
+            state.call_state = CallState::InCall;
+            state.current_call = Some(call_info.clone());
+            state.participants = vec![participant];
+        }
         self.broadcast().await;
 
         Ok(call_info)
@@ -640,51 +698,75 @@ impl CallService {
 
     /// Leave the current call.
     ///
+    /// This method leaves the current call by executing `Command::LeaveCall` through
+    /// the Communitas core. The call state is cleaned up when the `Event::CallLeft`
+    /// response is received.
+    ///
     /// # Errors
     ///
     /// Returns [`CallError::NotInCall`] if the user is not currently in a call.
+    /// Returns [`CallError::CoreError`] if the core command execution fails.
     #[instrument(skip(self), name = "ui.call.leave")]
     pub async fn leave_call(&self) -> Result<(), CallError> {
-        let mut state = self.state.write().await;
+        // Get current call_id from state
+        let call_id = {
+            let state = self.state.read().await;
+            if !state.call_state.is_active() {
+                return Err(CallError::NotInCall);
+            }
+            state
+                .current_call
+                .as_ref()
+                .map(|c| c.call_id.clone())
+                .ok_or(CallError::NotInCall)?
+        };
 
-        if !state.call_state.is_active() {
-            return Err(CallError::NotInCall);
+        // Transition to disconnecting state
+        {
+            let mut state = self.state.write().await;
+            state.call_state = CallState::Disconnected;
+        }
+        self.broadcast().await;
+
+        // Build and execute the LeaveCall command
+        let cmd = Command::LeaveCall { call_id };
+
+        let events = match self.app.execute(cmd).await {
+            Ok(events) => events,
+            Err(e) => {
+                // Reset state to InCall on failure (we're still in the call)
+                {
+                    let mut state = self.state.write().await;
+                    state.call_state = CallState::InCall;
+                }
+                self.broadcast().await;
+                return Err(CallError::CoreError(e.message.clone()));
+            }
+        };
+
+        // Verify CallLeft event in the response
+        let call_left = events
+            .iter()
+            .any(|event| matches!(event, Event::CallLeft { .. }));
+
+        if !call_left {
+            warn!("No CallLeft event returned from core, but cleaning up state anyway");
         }
 
         // Clean up call state
-        state.call_state = CallState::Disconnected;
-        state.current_call = None;
-        state.participants.clear();
-        state.media_errors.clear();
-        state.listen_only_mode = false;
-
-        drop(state);
+        {
+            let mut state = self.state.write().await;
+            state.call_state = CallState::Idle;
+            state.current_call = None;
+            state.participants.clear();
+            state.media_errors.clear();
+            state.listen_only_mode = false;
+        }
         self.broadcast().await;
 
-        // Reset to idle after brief delay
-        let tx = self.tx.clone();
-        let state_clone = self.state.clone();
-        tokio::spawn(async move {
-            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-            let mut state = state_clone.write().await;
-            state.call_state = CallState::Idle;
-            drop(state);
-            let state = state_clone.read().await;
-            let snapshot = CallSnapshot {
-                state: state.call_state,
-                call_info: state.current_call.clone(),
-                participants: state.participants.clone(),
-                media_errors: state.media_errors.clone(),
-                available_devices: state.available_devices.clone(),
-                settings: state.settings.clone(),
-                listen_only_mode: state.listen_only_mode,
-            };
-            let _ = tx.send(snapshot);
-        });
-
+        debug!("Left call successfully");
         Ok(())
     }
-
     /// Get the current call info.
     pub fn get_current_call(&self) -> Option<CallInfo> {
         self.rx.borrow().call_info.clone()
@@ -1012,7 +1094,7 @@ mod tests {
         let temp = TempDir::new().expect("temp dir");
         let service = make_service(&temp).await;
 
-        let result = service.join_call("entity1").await;
+        let result = service.join_call("call-123").await;
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), CallError::NotAuthenticated));
     }

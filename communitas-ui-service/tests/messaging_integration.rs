@@ -272,9 +272,8 @@ async fn test_watch_channel_updates_inner() {
     // Subscribe to watch channel
     let rx = messaging.subscribe();
 
-    // Get initial snapshot
-    let initial = rx.borrow().clone();
-    let initial_thread_count = initial.threads.len();
+    // Get initial thread count
+    let initial_thread_count = rx.borrow().threads.len();
 
     // Send a message directly via the app to trigger events
     messaging

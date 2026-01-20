@@ -246,26 +246,7 @@ impl MessagingService {
             _ => return Err(MessagingError::NotAuthenticated),
         };
 
-        // Query the entity to get its type
-        let entity_type = match self
-            .app
-            .query(Query::GetEntity {
-                entity_id: thread_id.to_string(),
-            })
-            .await
-        {
-            Ok(QueryResponse::Entity(entity)) => entity.entity_type,
-            Ok(_) => {
-                warn!(thread_id, "Unexpected response type for GetEntity");
-                // Default to Channel if entity type cannot be determined
-                EntityType::Channel
-            }
-            Err(e) => {
-                debug!(thread_id, error = %e.message, "Could not determine entity type, using Channel");
-                // Default to Channel for backward compatibility
-                EntityType::Channel
-            }
-        };
+        let entity_type = self.resolve_entity_type(thread_id).await;
 
         // Build and execute the SendMessage command
         let cmd = Command::SendMessage {
@@ -340,29 +321,11 @@ impl MessagingService {
         message_id: &str,
         new_text: &str,
     ) -> Result<Message, MessagingError> {
-        // Verify authentication
         if !self.is_authenticated() {
             return Err(MessagingError::NotAuthenticated);
         }
 
-        // Query the entity to get its type
-        let entity_type = match self
-            .app
-            .query(Query::GetEntity {
-                entity_id: thread_id.to_string(),
-            })
-            .await
-        {
-            Ok(QueryResponse::Entity(entity)) => entity.entity_type,
-            Ok(_) => {
-                warn!(thread_id, "Unexpected response type for GetEntity");
-                EntityType::Channel
-            }
-            Err(e) => {
-                debug!(thread_id, error = %e.message, "Could not determine entity type, using Channel");
-                EntityType::Channel
-            }
-        };
+        let entity_type = self.resolve_entity_type(thread_id).await;
 
         // Build and execute the EditMessage command
         let cmd = Command::EditMessage {
@@ -432,29 +395,11 @@ impl MessagingService {
         thread_id: &str,
         message_id: &str,
     ) -> Result<(), MessagingError> {
-        // Verify authentication
         if !self.is_authenticated() {
             return Err(MessagingError::NotAuthenticated);
         }
 
-        // Query the entity to get its type
-        let entity_type = match self
-            .app
-            .query(Query::GetEntity {
-                entity_id: thread_id.to_string(),
-            })
-            .await
-        {
-            Ok(QueryResponse::Entity(entity)) => entity.entity_type,
-            Ok(_) => {
-                warn!(thread_id, "Unexpected response type for GetEntity");
-                EntityType::Channel
-            }
-            Err(e) => {
-                debug!(thread_id, error = %e.message, "Could not determine entity type, using Channel");
-                EntityType::Channel
-            }
-        };
+        let entity_type = self.resolve_entity_type(thread_id).await;
 
         // Build and execute the DeleteMessage command
         let cmd = Command::DeleteMessage {
@@ -597,6 +542,29 @@ impl MessagingService {
             &*self.auth.subscribe().borrow(),
             AuthStateSnapshot::Authenticated(_)
         )
+    }
+
+    /// Resolve the entity type for a thread, defaulting to Channel if unavailable.
+    ///
+    /// This is used by message operations that need the entity type for commands.
+    async fn resolve_entity_type(&self, thread_id: &str) -> EntityType {
+        match self
+            .app
+            .query(Query::GetEntity {
+                entity_id: thread_id.to_string(),
+            })
+            .await
+        {
+            Ok(QueryResponse::Entity(entity)) => entity.entity_type,
+            Ok(_) => {
+                warn!(thread_id, "Unexpected response type for GetEntity");
+                EntityType::Channel
+            }
+            Err(e) => {
+                debug!(thread_id, error = %e.message, "Could not determine entity type, using Channel");
+                EntityType::Channel
+            }
+        }
     }
 }
 

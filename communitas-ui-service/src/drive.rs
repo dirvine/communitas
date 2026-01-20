@@ -37,6 +37,14 @@ fn compute_checksum(data: &[u8]) -> String {
     format!("{:016x}{:08x}", sum, data.len())
 }
 
+/// Extract the file or directory name from a path.
+fn extract_name_from_path(path: &str, default: &str) -> String {
+    path.split('/')
+        .rfind(|s| !s.is_empty())
+        .unwrap_or(default)
+        .to_string()
+}
+
 /// Convert core DiskTypeArg to UI DiskType.
 fn disk_type_from_arg(arg: DiskTypeArg) -> DiskType {
     match arg {
@@ -318,13 +326,7 @@ impl DriveService {
             ));
         }
 
-        // Extract directory name from path
-        let name = path
-            .split('/')
-            .rfind(|s| !s.is_empty())
-            .unwrap_or("new_folder")
-            .to_string();
-
+        let name = extract_name_from_path(path, "new_folder");
         let now = current_timestamp_millis();
 
         let entry = DirectoryEntry {
@@ -412,15 +414,43 @@ impl DriveService {
             return Err(DriveError::NotAuthenticated);
         }
 
-        let name = to
-            .split('/')
-            .rfind(|s| !s.is_empty())
-            .unwrap_or("moved")
-            .to_string();
+        // Build and execute the MoveFile command
+        let cmd = Command::MoveFile {
+            entity_id: entity_id.to_string(),
+            disk_type: disk_type_to_arg(disk_type),
+            source_path: from.to_string(),
+            dest_path: to.to_string(),
+        };
 
+        let events = self
+            .app
+            .execute(cmd)
+            .await
+            .map_err(|e| DriveError::StorageError(e.message))?;
+
+        // Verify move by finding the FileMoved event
+        let moved = events.iter().any(|event| {
+            matches!(
+                event,
+                Event::FileMoved {
+                    entity_id: eid,
+                    source_path: sp,
+                    dest_path: dp,
+                    ..
+                } if eid == entity_id && sp == from && dp == to
+            )
+        });
+
+        if !moved {
+            return Err(DriveError::StorageError(
+                "move command succeeded but FileMoved event not found".to_string(),
+            ));
+        }
+
+        let name = extract_name_from_path(to, "moved");
         let now = current_timestamp_millis();
 
-        Ok(DirectoryEntry {
+        let entry = DirectoryEntry {
             name,
             path: to.to_string(),
             is_directory: false,
@@ -429,7 +459,17 @@ impl DriveService {
             modified_at: now,
             created_at: now,
             checksum: None,
-        })
+        };
+
+        // Update watch channel - remove from source, add at destination
+        {
+            let mut snap = self.rx.borrow().clone();
+            snap.current_directory.retain(|e| e.path != from);
+            snap.current_directory.push(entry.clone());
+            let _ = self.tx.send(snap);
+        }
+
+        Ok(entry)
     }
 
     /// Copy a file or directory.
@@ -445,15 +485,43 @@ impl DriveService {
             return Err(DriveError::NotAuthenticated);
         }
 
-        let name = to
-            .split('/')
-            .rfind(|s| !s.is_empty())
-            .unwrap_or("copy")
-            .to_string();
+        // Build and execute the CopyFile command
+        let cmd = Command::CopyFile {
+            entity_id: entity_id.to_string(),
+            disk_type: disk_type_to_arg(disk_type),
+            source_path: from.to_string(),
+            dest_path: to.to_string(),
+        };
 
+        let events = self
+            .app
+            .execute(cmd)
+            .await
+            .map_err(|e| DriveError::StorageError(e.message))?;
+
+        // Verify copy by finding the FileCopied event
+        let copied = events.iter().any(|event| {
+            matches!(
+                event,
+                Event::FileCopied {
+                    entity_id: eid,
+                    source_path: sp,
+                    dest_path: dp,
+                    ..
+                } if eid == entity_id && sp == from && dp == to
+            )
+        });
+
+        if !copied {
+            return Err(DriveError::StorageError(
+                "copy command succeeded but FileCopied event not found".to_string(),
+            ));
+        }
+
+        let name = extract_name_from_path(to, "copy");
         let now = current_timestamp_millis();
 
-        Ok(DirectoryEntry {
+        let entry = DirectoryEntry {
             name,
             path: to.to_string(),
             is_directory: false,
@@ -462,10 +530,17 @@ impl DriveService {
             modified_at: now,
             created_at: now,
             checksum: None,
-        })
-    }
+        };
 
-    // ===== File Operations =====
+        // Update watch channel - add copied file
+        {
+            let mut snap = self.rx.borrow().clone();
+            snap.current_directory.push(entry.clone());
+            let _ = self.tx.send(snap);
+        }
+
+        Ok(entry)
+    }
 
     /// Get preview information for a file.
     #[instrument(skip(self), name = "ui.drive.get_file_preview", fields(entity_id, ?disk_type, path))]
@@ -576,13 +651,7 @@ impl DriveService {
             })
             .unwrap_or(content.len() as u64);
 
-        // Extract file name from path
-        let name = path
-            .split('/')
-            .rfind(|s| !s.is_empty())
-            .unwrap_or("file")
-            .to_string();
-
+        let name = extract_name_from_path(path, "file");
         let now = current_timestamp_millis();
         let checksum = compute_checksum(content);
 
@@ -643,12 +712,7 @@ impl DriveService {
             format!("upload-{}", *counter)
         };
 
-        let file_name = path
-            .split('/')
-            .rfind(|s| !s.is_empty())
-            .unwrap_or("file")
-            .to_string();
-
+        let file_name = extract_name_from_path(path, "file");
         let total_bytes = content.len() as u64;
         let now = current_timestamp_millis();
 
@@ -782,11 +846,7 @@ impl DriveService {
             format!("download-{}", *counter)
         };
 
-        let file_name = path
-            .split('/')
-            .rfind(|s| !s.is_empty())
-            .unwrap_or("file")
-            .to_string();
+        let file_name = extract_name_from_path(path, "file");
 
         // Mock file size
         let total_bytes = 1024 * 100; // 100 KB

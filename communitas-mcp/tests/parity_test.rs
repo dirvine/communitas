@@ -5464,3 +5464,878 @@ fn test_network_call_tools_coexist() {
         );
     });
 }
+// =============================================================================
+// Auth Tool Registration Tests
+// =============================================================================
+
+#[test]
+fn test_all_auth_tools_registered() {
+    let tools = list_tools(true);
+    let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
+
+    // Complete list of all 10 auth/session tools
+    let auth_tools = [
+        // Pre-auth tools (8)
+        "authenticate",
+        "create_vault",
+        "authenticate_token",
+        "health_check",
+        "core_status",
+        "list_vaults",
+        "delete_vault",
+        "import_vault",
+        // Session tools (2)
+        "get_session",
+        "logout",
+    ];
+
+    for tool in &auth_tools {
+        assert!(
+            tool_names.contains(tool),
+            "Expected {} tool to be registered (found {} tools total)",
+            tool,
+            tool_names.len()
+        );
+    }
+}
+
+#[test]
+fn test_preauth_auth_tools_available() {
+    let tools = list_tools(false);
+    let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
+
+    // These auth tools should be available pre-auth
+    let preauth_auth_tools = [
+        "authenticate",
+        "create_vault",
+        "authenticate_token",
+        "health_check",
+        "core_status",
+        "list_vaults",
+        "delete_vault",
+        "import_vault",
+    ];
+
+    for tool in &preauth_auth_tools {
+        assert!(
+            tool_names.contains(tool),
+            "Expected {} tool to be available pre-auth",
+            tool
+        );
+    }
+}
+
+// =============================================================================
+// Entity Tool Registration Tests
+// =============================================================================
+
+#[test]
+fn test_all_entity_tools_registered() {
+    let tools = list_tools(true);
+    let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
+
+    // Complete list of all 7 entity tools
+    let entity_tools = [
+        // CRUD operations (4)
+        "create_entity",
+        "update_entity",
+        "delete_entity",
+        "get_entity",
+        // List and membership (3)
+        "list_entities",
+        "add_member",
+        "remove_member",
+    ];
+
+    for tool in &entity_tools {
+        assert!(
+            tool_names.contains(tool),
+            "Expected {} tool to be registered (found {} tools total)",
+            tool,
+            tool_names.len()
+        );
+    }
+}
+
+// =============================================================================
+// Identity Tool Registration Tests
+// =============================================================================
+
+#[test]
+fn test_all_identity_tools_registered() {
+    let tools = list_tools(true);
+    let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
+
+    // Complete list of all 4 identity tools
+    let identity_tools = [
+        // Creation and recovery (3) - pre-auth
+        "create_identity",
+        "recover_identity",
+        "validate_mnemonic",
+        // Export (1) - requires auth
+        "export_vault",
+    ];
+
+    for tool in &identity_tools {
+        assert!(
+            tool_names.contains(tool),
+            "Expected {} tool to be registered (found {} tools total)",
+            tool,
+            tool_names.len()
+        );
+    }
+}
+
+#[test]
+fn test_preauth_identity_tools_available() {
+    let tools = list_tools(false);
+    let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
+
+    // These identity tools should be available pre-auth
+    let preauth_identity_tools = ["create_identity", "recover_identity", "validate_mnemonic"];
+
+    for tool in &preauth_identity_tools {
+        assert!(
+            tool_names.contains(tool),
+            "Expected {} tool to be available pre-auth",
+            tool
+        );
+    }
+}
+
+// =============================================================================
+// Session Tool Parity Tests (Dispatched via call_tool)
+// =============================================================================
+
+/// Test get_session routes through dispatch_session_tools.
+#[test]
+fn test_get_session_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Get session (may return no session if not authenticated)
+        let result = call_tool(&app, &services, "get_session", None).await;
+
+        // Tool should execute via dispatch_session_tools
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from get_session"
+        );
+        let text = result.content.first().and_then(extract_text).unwrap_or("");
+        assert!(
+            !text.contains("Unknown tool"),
+            "Tool should be routed through dispatch_session_tools"
+        );
+    });
+}
+
+// =============================================================================
+// Entity Tool Parity Tests
+// =============================================================================
+
+/// Test create_entity routes correctly.
+#[test]
+fn test_create_entity_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to create an entity
+        let result = call_tool(
+            &app,
+            &services,
+            "create_entity",
+            Some(json!({
+                "name": "Test Entity",
+                "entity_type": "group"
+            })),
+        )
+        .await;
+
+        // Tool should execute (may fail due to auth state)
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from create_entity"
+        );
+        let text = result.content.first().and_then(extract_text).unwrap_or("");
+        assert!(
+            !text.contains("Unknown tool"),
+            "Tool should be routed correctly"
+        );
+    });
+}
+
+/// Test create_entity validation - missing entity_type returns error.
+#[test]
+fn test_create_entity_validation_missing_entity_type() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        let result = call_tool(
+            &app,
+            &services,
+            "create_entity",
+            Some(json!({
+                "name": "Test Entity"
+            })),
+        )
+        .await;
+
+        assert!(
+            result.is_error,
+            "Expected validation error for missing entity_type"
+        );
+    });
+}
+
+/// Test update_entity routes correctly.
+#[test]
+fn test_update_entity_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to update a non-existent entity
+        let result = call_tool(
+            &app,
+            &services,
+            "update_entity",
+            Some(json!({
+                "entity_type": "group",
+                "entity_id": "nonexistent-entity",
+                "name": "Updated Name"
+            })),
+        )
+        .await;
+
+        // Tool should execute
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from update_entity"
+        );
+        let text = result.content.first().and_then(extract_text).unwrap_or("");
+        assert!(
+            !text.contains("Unknown tool"),
+            "Tool should be routed correctly"
+        );
+    });
+}
+
+/// Test update_entity validation - missing entity_type returns error.
+#[test]
+fn test_update_entity_validation_missing_entity_type() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        let result = call_tool(
+            &app,
+            &services,
+            "update_entity",
+            Some(json!({
+                "entity_id": "test-entity"
+            })),
+        )
+        .await;
+
+        assert!(
+            result.is_error,
+            "Expected validation error for missing entity_type"
+        );
+    });
+}
+
+/// Test delete_entity routes correctly.
+#[test]
+fn test_delete_entity_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to delete a non-existent entity
+        let result = call_tool(
+            &app,
+            &services,
+            "delete_entity",
+            Some(json!({
+                "entity_type": "group",
+                "entity_id": "nonexistent-entity"
+            })),
+        )
+        .await;
+
+        // Tool should execute
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from delete_entity"
+        );
+        let text = result.content.first().and_then(extract_text).unwrap_or("");
+        assert!(
+            !text.contains("Unknown tool"),
+            "Tool should be routed correctly"
+        );
+    });
+}
+
+/// Test delete_entity validation - missing entity_type returns error.
+#[test]
+fn test_delete_entity_validation_missing_entity_type() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        let result = call_tool(
+            &app,
+            &services,
+            "delete_entity",
+            Some(json!({
+                "entity_id": "test-entity"
+            })),
+        )
+        .await;
+
+        assert!(
+            result.is_error,
+            "Expected validation error for missing entity_type"
+        );
+    });
+}
+
+/// Test get_entity routes correctly.
+#[test]
+fn test_get_entity_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to get a non-existent entity
+        let result = call_tool(
+            &app,
+            &services,
+            "get_entity",
+            Some(json!({
+                "entity_id": "nonexistent-entity"
+            })),
+        )
+        .await;
+
+        // Tool should execute
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from get_entity"
+        );
+        let text = result.content.first().and_then(extract_text).unwrap_or("");
+        assert!(
+            !text.contains("Unknown tool"),
+            "Tool should be routed correctly"
+        );
+    });
+}
+
+/// Test list_entities routes correctly.
+#[test]
+fn test_list_entities_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // List all entities
+        let result = call_tool(&app, &services, "list_entities", None).await;
+
+        // Tool should execute
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from list_entities"
+        );
+        let text = result.content.first().and_then(extract_text).unwrap_or("");
+        assert!(
+            !text.contains("Unknown tool"),
+            "Tool should be routed correctly"
+        );
+    });
+}
+
+/// Test list_entities with type filter.
+#[test]
+fn test_list_entities_with_filter_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // List entities filtered by type
+        let result = call_tool(
+            &app,
+            &services,
+            "list_entities",
+            Some(json!({
+                "entity_type": "group"
+            })),
+        )
+        .await;
+
+        // Tool should execute
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from list_entities with filter"
+        );
+        let text = result.content.first().and_then(extract_text).unwrap_or("");
+        assert!(
+            !text.contains("Unknown tool"),
+            "Tool should be routed correctly"
+        );
+    });
+}
+
+/// Test add_member routes correctly.
+#[test]
+fn test_add_member_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to add a member to a non-existent entity
+        let result = call_tool(
+            &app,
+            &services,
+            "add_member",
+            Some(json!({
+                "entity_type": "group",
+                "entity_id": "nonexistent-entity",
+                "member_id": "ocean.forest.moon.star",
+                "role": "member"
+            })),
+        )
+        .await;
+
+        // Tool should execute
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from add_member"
+        );
+        let text = result.content.first().and_then(extract_text).unwrap_or("");
+        assert!(
+            !text.contains("Unknown tool"),
+            "Tool should be routed correctly"
+        );
+    });
+}
+
+/// Test add_member validation - missing entity_type returns error.
+#[test]
+fn test_add_member_validation_missing_entity_type() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        let result = call_tool(
+            &app,
+            &services,
+            "add_member",
+            Some(json!({
+                "entity_id": "test-entity",
+                "member_id": "ocean.forest.moon.star",
+                "role": "member"
+            })),
+        )
+        .await;
+
+        assert!(
+            result.is_error,
+            "Expected validation error for missing entity_type"
+        );
+    });
+}
+
+/// Test remove_member routes correctly.
+#[test]
+fn test_remove_member_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to remove a member from a non-existent entity
+        let result = call_tool(
+            &app,
+            &services,
+            "remove_member",
+            Some(json!({
+                "entity_type": "group",
+                "entity_id": "nonexistent-entity",
+                "member_id": "ocean.forest.moon.star"
+            })),
+        )
+        .await;
+
+        // Tool should execute
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from remove_member"
+        );
+        let text = result.content.first().and_then(extract_text).unwrap_or("");
+        assert!(
+            !text.contains("Unknown tool"),
+            "Tool should be routed correctly"
+        );
+    });
+}
+
+/// Test remove_member validation - missing entity_type returns error.
+#[test]
+fn test_remove_member_validation_missing_entity_type() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        let result = call_tool(
+            &app,
+            &services,
+            "remove_member",
+            Some(json!({
+                "entity_id": "test-entity",
+                "member_id": "ocean.forest.moon.star"
+            })),
+        )
+        .await;
+
+        assert!(
+            result.is_error,
+            "Expected validation error for missing entity_type"
+        );
+    });
+}
+
+// =============================================================================
+// Identity Tool Parity Tests (Dispatched via dispatch_recovery_tools)
+// =============================================================================
+
+/// Test create_identity routes correctly via dispatch_recovery_tools.
+#[test]
+fn test_create_identity_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Create identity with default word count
+        let result = call_tool(&app, &services, "create_identity", None).await;
+
+        // Tool should execute
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from create_identity"
+        );
+        let text = result.content.first().and_then(extract_text).unwrap_or("");
+        assert!(
+            !text.contains("Unknown tool"),
+            "Tool should be routed through dispatch_recovery_tools"
+        );
+    });
+}
+
+/// Test create_identity with custom word count.
+#[test]
+fn test_create_identity_with_word_count_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Create identity with 12-word mnemonic
+        let result = call_tool(
+            &app,
+            &services,
+            "create_identity",
+            Some(json!({
+                "word_count": 12
+            })),
+        )
+        .await;
+
+        // Tool should execute
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from create_identity with word_count"
+        );
+        let text = result.content.first().and_then(extract_text).unwrap_or("");
+        assert!(
+            !text.contains("Unknown tool"),
+            "Tool should be routed through dispatch_recovery_tools"
+        );
+    });
+}
+
+/// Test recover_identity routes correctly via dispatch_recovery_tools.
+#[test]
+fn test_recover_identity_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Test with a valid BIP39 mnemonic (12 words)
+        let result = call_tool(
+            &app,
+            &services,
+            "recover_identity",
+            Some(json!({
+                "mnemonic_words": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+            })),
+        )
+        .await;
+
+        // Tool should execute
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from recover_identity"
+        );
+        let text = result.content.first().and_then(extract_text).unwrap_or("");
+        assert!(
+            !text.contains("Unknown tool"),
+            "Tool should be routed through dispatch_recovery_tools"
+        );
+    });
+}
+
+/// Test recover_identity validation - missing mnemonic_words returns error.
+#[test]
+fn test_recover_identity_validation_missing_mnemonic() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        let result = call_tool(&app, &services, "recover_identity", Some(json!({}))).await;
+
+        assert!(
+            result.is_error,
+            "Expected validation error for missing mnemonic_words"
+        );
+    });
+}
+
+/// Test validate_mnemonic routes correctly via dispatch_recovery_tools.
+#[test]
+fn test_validate_mnemonic_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Validate a valid BIP39 mnemonic
+        let result = call_tool(
+            &app,
+            &services,
+            "validate_mnemonic",
+            Some(json!({
+                "mnemonic_words": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+            })),
+        )
+        .await;
+
+        // Tool should execute
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from validate_mnemonic"
+        );
+        let text = result.content.first().and_then(extract_text).unwrap_or("");
+        assert!(
+            !text.contains("Unknown tool"),
+            "Tool should be routed through dispatch_recovery_tools"
+        );
+    });
+}
+
+/// Test validate_mnemonic with invalid mnemonic.
+#[test]
+fn test_validate_mnemonic_invalid_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Validate an invalid mnemonic (wrong checksum)
+        let result = call_tool(
+            &app,
+            &services,
+            "validate_mnemonic",
+            Some(json!({
+                "mnemonic_words": "invalid words that are not a valid bip39 mnemonic phrase here"
+            })),
+        )
+        .await;
+
+        // Tool should execute but indicate invalid mnemonic
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from validate_mnemonic with invalid input"
+        );
+    });
+}
+
+/// Test validate_mnemonic validation - missing mnemonic_words returns error.
+#[test]
+fn test_validate_mnemonic_validation_missing_mnemonic() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        let result = call_tool(&app, &services, "validate_mnemonic", Some(json!({}))).await;
+
+        assert!(
+            result.is_error,
+            "Expected validation error for missing mnemonic_words"
+        );
+    });
+}
+
+// =============================================================================
+// Auth Tools Server-Level Tests (Not Dispatched via call_tool)
+// =============================================================================
+// Note: These tools (health_check, core_status, authenticate, create_vault,
+// authenticate_token, list_vaults, delete_vault, import_vault, logout, export_vault)
+// are handled at the HTTP server level (server.rs), not through call_tool.
+// We only test that they are registered in list_tools.
+
+/// Test that server-level auth tools return Unknown tool when called via call_tool.
+/// This verifies they are handled separately in server.rs.
+#[test]
+fn test_server_level_auth_tools_not_dispatched() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // These tools are registered but handled at server level, not via call_tool
+        let server_level_tools = [
+            "health_check",
+            "core_status",
+            "list_vaults",
+            "authenticate",
+            "create_vault",
+            "authenticate_token",
+            "delete_vault",
+            "import_vault",
+            "logout",
+            "export_vault",
+        ];
+
+        for tool_name in &server_level_tools {
+            let result = call_tool(&app, &services, tool_name, None).await;
+            let text = result.content.first().and_then(extract_text).unwrap_or("");
+
+            // These tools are not dispatched via call_tool (handled in server.rs)
+            // They should return "Unknown tool" when called directly
+            assert!(
+                text.contains("Unknown tool"),
+                "Server-level tool {} should not be dispatched via call_tool",
+                tool_name
+            );
+        }
+    });
+}
+
+// =============================================================================
+// Entity Flow Integration Tests
+// =============================================================================
+
+/// Test entity CRUD flow via call_tool.
+#[test]
+fn test_entity_crud_flow() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // All entity tools should route correctly through dispatch_entity_tools
+
+        // Create entity
+        let create_result = call_tool(
+            &app,
+            &services,
+            "create_entity",
+            Some(json!({
+                "name": "Flow Test Group",
+                "entity_type": "group"
+            })),
+        )
+        .await;
+        assert!(
+            !create_result.content.is_empty(),
+            "create_entity should respond"
+        );
+        let text = create_result
+            .content
+            .first()
+            .and_then(extract_text)
+            .unwrap_or("");
+        assert!(
+            !text.contains("Unknown tool"),
+            "create_entity should be dispatched"
+        );
+
+        // List entities
+        let list_result = call_tool(&app, &services, "list_entities", None).await;
+        assert!(
+            !list_result.content.is_empty(),
+            "list_entities should respond"
+        );
+        let text = list_result
+            .content
+            .first()
+            .and_then(extract_text)
+            .unwrap_or("");
+        assert!(
+            !text.contains("Unknown tool"),
+            "list_entities should be dispatched"
+        );
+    });
+}
+
+/// Test identity creation and validation flow via call_tool.
+#[test]
+fn test_identity_flow_integration() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // 1. Create identity
+        let create_result = call_tool(
+            &app,
+            &services,
+            "create_identity",
+            Some(json!({ "word_count": 12 })),
+        )
+        .await;
+        assert!(
+            !create_result.content.is_empty(),
+            "create_identity should respond"
+        );
+        let text = create_result
+            .content
+            .first()
+            .and_then(extract_text)
+            .unwrap_or("");
+        assert!(
+            !text.contains("Unknown tool"),
+            "create_identity should be dispatched"
+        );
+
+        // 2. Validate a known valid mnemonic
+        let validate_result = call_tool(
+            &app,
+            &services,
+            "validate_mnemonic",
+            Some(json!({
+                "mnemonic_words": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+            })),
+        )
+        .await;
+        assert!(
+            !validate_result.content.is_empty(),
+            "validate_mnemonic should respond"
+        );
+        let text = validate_result
+            .content
+            .first()
+            .and_then(extract_text)
+            .unwrap_or("");
+        assert!(
+            !text.contains("Unknown tool"),
+            "validate_mnemonic should be dispatched"
+        );
+    });
+}

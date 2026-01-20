@@ -32,6 +32,7 @@ use tracing::{debug, instrument, warn};
 use crate::auth::{AuthController, AuthService, AuthStateSnapshot};
 use crate::util::current_timestamp_millis;
 use communitas_core::app::CommunitasApp;
+use communitas_core::command::{Command, Event};
 
 /// Errors returned by the call service.
 #[derive(Debug, Error)]
@@ -54,6 +55,8 @@ pub enum CallError {
     DeviceEnumerationFailed(String),
     #[error("operation timed out")]
     Timeout,
+    #[error("core error: {0}")]
+    CoreError(String),
 }
 
 /// Trait for platform-specific device enumeration.
@@ -443,6 +446,119 @@ impl CallService {
     }
 
     // ===== Call Management =====
+
+    /// Start a new call for the specified entity using CommunitasApp.
+    ///
+    /// This method creates a real call by executing `Command::StartCall` through
+    /// the Communitas core. The call state is updated via the watch channel when
+    /// the `Event::CallStarted` response is received.
+    ///
+    /// # Arguments
+    ///
+    /// * `entity_id` - The entity (channel, group, etc.) to start the call in.
+    /// * `video_enabled` - Whether to enable video from the start.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CallError::NotAuthenticated`] if the user is not logged in.
+    /// Returns [`CallError::AlreadyInCall`] if the user is already in an active call.
+    /// Returns [`CallError::CoreError`] if the core command execution fails.
+    #[instrument(skip(self), name = "ui.call.start", fields(entity_id, video_enabled))]
+    pub async fn start_call(
+        &self,
+        entity_id: &str,
+        video_enabled: bool,
+    ) -> Result<CallInfo, CallError> {
+        let rx = self.auth.subscribe();
+        let (identity_name, four_words) = match &*rx.borrow() {
+            AuthStateSnapshot::LoggedOut | AuthStateSnapshot::Authenticating => {
+                return Err(CallError::NotAuthenticated);
+            }
+            AuthStateSnapshot::Authenticated(session) => {
+                (session.display_name.clone(), session.four_words.clone())
+            }
+        };
+
+        {
+            let state = self.state.read().await;
+            if state.call_state.is_active() {
+                return Err(CallError::AlreadyInCall);
+            }
+        }
+
+        // Transition to connecting state
+        {
+            let mut state = self.state.write().await;
+            state.call_state = CallState::Connecting;
+        }
+        self.broadcast().await;
+
+        // Build and execute the StartCall command
+        let cmd = Command::StartCall {
+            entity_id: entity_id.to_string(),
+            video_enabled,
+        };
+
+        let events = self
+            .app
+            .execute(cmd)
+            .await
+            .map_err(|e| CallError::CoreError(e.message.clone()))?;
+
+        // Find the CallStarted event in the response
+        let call_started = events.iter().find_map(|event| {
+            if let Event::CallStarted {
+                call_id,
+                entity_id: eid,
+            } = event
+            {
+                Some((call_id.clone(), eid.clone()))
+            } else {
+                None
+            }
+        });
+
+        let (call_id, returned_entity_id) = call_started.ok_or_else(|| {
+            CallError::CoreError("No CallStarted event returned from core".to_string())
+        })?;
+
+        debug!(call_id = %call_id, entity_id = %returned_entity_id, "Call started successfully");
+
+        // Create participant for self
+        let my_participant_id = format!("participant-{}", current_timestamp_millis());
+        let participant = Participant {
+            id: my_participant_id.clone(),
+            display_name: identity_name,
+            four_words,
+            is_muted: false,
+            is_video_enabled: video_enabled,
+            is_speaking: false,
+            audio_level: 0.0,
+            joined_at: current_timestamp_millis(),
+        };
+
+        // Build call info
+        let call_info = CallInfo {
+            call_id,
+            entity_id: returned_entity_id.clone(),
+            entity_name: format!("Call: {}", returned_entity_id),
+            participants: vec![participant.clone()],
+            started_at: current_timestamp_millis(),
+            duration_seconds: 0,
+            my_participant_id,
+        };
+
+        // Update state to InCall
+        {
+            let mut state = self.state.write().await;
+            state.call_state = CallState::InCall;
+            state.current_call = Some(call_info.clone());
+            state.participants = vec![participant];
+        }
+        self.broadcast().await;
+
+        Ok(call_info)
+    }
 
     /// Join a call for the specified entity.
     ///

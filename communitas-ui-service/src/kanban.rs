@@ -1,6 +1,6 @@
 //! Kanban service for board and card operations with reactive subscriptions.
 
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 
 use communitas_core::app::CommunitasApp;
 use communitas_kanban::{
@@ -11,8 +11,8 @@ use communitas_ui_api::{
     ColumnView, CommentView, StepView, TagView,
 };
 use thiserror::Error;
-use tokio::sync::watch;
-use tracing::instrument;
+use tokio::sync::{RwLock, watch};
+use tracing::{debug, info, instrument, trace};
 
 /// Direction for keyboard-based card movement.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -100,26 +100,115 @@ pub struct CardUpdate {
 }
 
 /// Service for kanban board and card operations.
+///
+/// The service automatically reinitializes its CRDT backend when the user authenticates,
+/// ensuring operations are attributed to the correct peer_id. When the user logs out,
+/// boards are cleared and the CRDT backend resets to anonymous.
 pub struct KanbanService {
     auth: Arc<AuthController>,
     app: Arc<CommunitasApp>,
-    core: CoreKanbanService,
+    /// CRDT backend wrapped in RwLock to allow reinitialization on auth changes.
+    core: Arc<RwLock<CoreKanbanService>>,
     tx: watch::Sender<KanbanSnapshot>,
     rx: watch::Receiver<KanbanSnapshot>,
 }
 
 impl KanbanService {
     /// Create a new kanban service linked to the auth controller.
+    ///
+    /// Spawns a background task that watches for authentication state changes and
+    /// reinitializes the CRDT backend with the authenticated peer_id when the user logs in.
+    /// When the user logs out, the backend resets to anonymous and boards are cleared.
     pub fn new(auth: Arc<AuthController>, app: Arc<CommunitasApp>) -> Self {
         let (tx, rx) = watch::channel(KanbanSnapshot::default());
         // Initialize core service with a default peer_id; will be updated on auth
-        let core = CoreKanbanService::new("anonymous");
-        Self {
+        let core = Arc::new(RwLock::new(CoreKanbanService::new("anonymous")));
+
+        let service = Self {
             auth,
             app,
             core,
             tx,
             rx,
+        };
+
+        // Spawn auth state watcher using a weak reference to avoid reference cycles
+        service.spawn_auth_watcher();
+
+        service
+    }
+
+    /// Spawn a background task to watch authentication state changes.
+    ///
+    /// Uses a weak reference to self to avoid reference cycles. When auth state changes
+    /// to Authenticated, reinitializes CoreKanbanService with the real peer_id.
+    /// When auth state changes to LoggedOut, resets to anonymous and clears boards.
+    fn spawn_auth_watcher(&self) {
+        let mut auth_rx = self.auth.subscribe();
+        let core = Arc::downgrade(&self.core);
+        let tx = self.tx.clone();
+
+        tokio::spawn(async move {
+            // Process the initial state (clone to avoid holding borrow across await)
+            let initial_state = auth_rx.borrow().clone();
+            Self::handle_auth_change(&initial_state, &core, &tx).await;
+
+            // Watch for changes
+            loop {
+                if auth_rx.changed().await.is_err() {
+                    debug!("Auth channel closed, stopping kanban auth watcher");
+                    break;
+                }
+
+                let state = auth_rx.borrow().clone();
+                Self::handle_auth_change(&state, &core, &tx).await;
+            }
+        });
+    }
+
+    /// Handle an authentication state change.
+    ///
+    /// When transitioning to Authenticated, reinitializes the CRDT backend with the
+    /// user's four_words as the peer_id. When transitioning to LoggedOut, resets
+    /// to anonymous and clears the board list.
+    async fn handle_auth_change(
+        state: &AuthStateSnapshot,
+        core_weak: &Weak<RwLock<CoreKanbanService>>,
+        tx: &watch::Sender<KanbanSnapshot>,
+    ) {
+        let Some(core) = core_weak.upgrade() else {
+            trace!("KanbanService dropped, stopping auth watcher");
+            return;
+        };
+
+        match state {
+            AuthStateSnapshot::Authenticated(session) => {
+                let peer_id = &session.four_words;
+                info!(peer_id = %peer_id, "Reinitializing CoreKanbanService with authenticated peer_id");
+
+                let mut core_guard = core.write().await;
+                *core_guard = CoreKanbanService::new(peer_id);
+                drop(core_guard);
+
+                // Note: We don't clear boards here - the UI will call list_boards
+                // when it needs to load boards for an entity
+                trace!("CoreKanbanService reinitialized for authenticated user");
+            }
+            AuthStateSnapshot::LoggedOut => {
+                info!("User logged out, resetting CoreKanbanService to anonymous");
+
+                let mut core_guard = core.write().await;
+                *core_guard = CoreKanbanService::new("anonymous");
+                drop(core_guard);
+
+                // Clear the board list on logout
+                let _ = tx.send(KanbanSnapshot::default());
+                trace!("Boards cleared on logout");
+            }
+            AuthStateSnapshot::Authenticating => {
+                // Transitional state, nothing to do
+                trace!("Auth state is Authenticating, waiting for completion");
+            }
         }
     }
 
@@ -145,24 +234,22 @@ impl KanbanService {
             return Err(KanbanError::NotAuthenticated);
         }
 
-        let boards = self.core.list_boards(entity_id)?;
+        let core = self.core.read().await;
+        let boards = core.list_boards(entity_id)?;
         let summaries: Vec<BoardSummary> = boards
             .into_iter()
             .map(|b| {
                 // Count columns and cards for summary
-                let column_count = self
-                    .core
+                let column_count = core
                     .list_columns(&b.id)
                     .map(|cols| cols.len() as u32)
                     .unwrap_or(0);
-                let card_count = self
-                    .core
+                let card_count = core
                     .list_columns(&b.id)
                     .map(|cols| {
                         cols.iter()
                             .filter_map(|c| {
-                                self.core
-                                    .list_cards_in_column(&b.id, &c.id)
+                                core.list_cards_in_column(&b.id, &c.id)
                                     .ok()
                                     .map(|cards| cards.len() as u32)
                             })
@@ -180,6 +267,7 @@ impl KanbanService {
                 }
             })
             .collect();
+        drop(core);
 
         // Update snapshot
         let mut snap = self.rx.borrow().clone();
@@ -197,9 +285,10 @@ impl KanbanService {
             return Err(KanbanError::NotAuthenticated);
         }
 
-        let board = self.core.get_board(board_id)?;
-        let columns = self.core.list_columns(board_id)?;
-        let tags = self.core.list_tags(board_id)?;
+        let core = self.core.read().await;
+        let board = core.get_board(board_id)?;
+        let columns = core.list_columns(board_id)?;
+        let tags = core.list_tags(board_id)?;
 
         // Build tag lookup
         let tag_lookup: std::collections::HashMap<String, TagView> = tags
@@ -219,8 +308,7 @@ impl KanbanService {
         let column_views: Vec<ColumnView> = columns
             .into_iter()
             .map(|col| {
-                let cards = self
-                    .core
+                let cards = core
                     .list_cards_in_column(board_id, &col.id)
                     .unwrap_or_default();
                 let card_views: Vec<CardView> = cards
@@ -257,9 +345,11 @@ impl KanbanService {
             return Err(KanbanError::NotAuthenticated);
         }
 
-        let card = self.core.get_card(board_id, card_id)?;
-        let tags = self.core.list_tags(board_id)?;
-        let comments = self.core.list_comments(board_id, card_id)?;
+        let core = self.core.read().await;
+        let card = core.get_card(board_id, card_id)?;
+        let tags = core.list_tags(board_id)?;
+        let comments = core.list_comments(board_id, card_id)?;
+        drop(core);
 
         // Build tag lookup
         let tag_lookup: std::collections::HashMap<String, TagView> = tags
@@ -343,7 +433,8 @@ impl KanbanService {
             return Err(KanbanError::NotAuthenticated);
         }
 
-        let board = self.core.create_board(entity_id, name.to_string(), None)?;
+        let core = self.core.read().await;
+        let board = core.create_board(entity_id, name.to_string(), None)?;
 
         Ok(BoardSummary {
             id: board.id,
@@ -371,9 +462,8 @@ impl KanbanService {
             return Err(KanbanError::NotAuthenticated);
         }
 
-        let col = self
-            .core
-            .add_column(board_id, name.to_string(), Some(position))?;
+        let core = self.core.read().await;
+        let col = core.add_column(board_id, name.to_string(), Some(position))?;
 
         Ok(ColumnView {
             id: col.id,
@@ -400,9 +490,8 @@ impl KanbanService {
             return Err(KanbanError::NotAuthenticated);
         }
 
-        let card = self
-            .core
-            .create_card(board_id, column_id, title.to_string(), None)?;
+        let core = self.core.read().await;
+        let card = core.create_card(board_id, column_id, title.to_string(), None)?;
 
         Ok(CardView {
             id: card.id,
@@ -438,8 +527,8 @@ impl KanbanService {
             return Err(KanbanError::NotAuthenticated);
         }
 
-        self.core
-            .move_card(board_id, card_id, target_column, position)?;
+        let core = self.core.read().await;
+        core.move_card(board_id, card_id, target_column, position)?;
         Ok(())
     }
 
@@ -463,8 +552,10 @@ impl KanbanService {
             return Err(KanbanError::NotAuthenticated);
         }
 
+        let core = self.core.read().await;
+
         // Get board data for column list
-        let columns = self.core.list_columns(board_id)?;
+        let columns = core.list_columns(board_id)?;
         if columns.is_empty() {
             return Err(KanbanError::InvalidOperation(
                 "board has no columns".to_string(),
@@ -478,7 +569,7 @@ impl KanbanService {
             .ok_or_else(|| KanbanError::ColumnNotFound(current_column_id.to_string()))?;
 
         // Get the card for its title
-        let card = self.core.get_card(board_id, card_id)?;
+        let card = core.get_card(board_id, card_id)?;
 
         // Calculate target column and position based on direction
         let (target_column_id, target_column_name, new_position) = match direction {
@@ -490,8 +581,7 @@ impl KanbanService {
                     ));
                 }
                 let target_col = &columns[current_col_idx - 1];
-                let cards_in_target = self
-                    .core
+                let cards_in_target = core
                     .list_cards_in_column(board_id, &target_col.id)
                     .unwrap_or_default();
                 // Insert at end of target column
@@ -509,8 +599,7 @@ impl KanbanService {
                     ));
                 }
                 let target_col = &columns[current_col_idx + 1];
-                let cards_in_target = self
-                    .core
+                let cards_in_target = core
                     .list_cards_in_column(board_id, &target_col.id)
                     .unwrap_or_default();
                 // Insert at end of target column
@@ -537,8 +626,7 @@ impl KanbanService {
             MoveDirection::Down => {
                 // Move down within current column
                 let current_col = &columns[current_col_idx];
-                let cards_in_column = self
-                    .core
+                let cards_in_column = core
                     .list_cards_in_column(board_id, &current_col.id)
                     .unwrap_or_default();
                 let max_pos = cards_in_column.len().saturating_sub(1) as u32;
@@ -556,8 +644,7 @@ impl KanbanService {
         };
 
         // Perform the move
-        self.core
-            .move_card(board_id, card_id, &target_column_id, new_position)?;
+        core.move_card(board_id, card_id, &target_column_id, new_position)?;
 
         Ok(CardMoveResult {
             card_id: card_id.to_string(),
@@ -584,6 +671,8 @@ impl KanbanService {
             return Err(KanbanError::NotAuthenticated);
         }
 
+        let core = self.core.read().await;
+
         // Apply basic updates
         let core_update = CoreCardUpdate {
             title: updates.title,
@@ -591,17 +680,17 @@ impl KanbanService {
             due_date: updates.due_date,
             ..Default::default()
         };
-        let card = self.core.update_card(board_id, card_id, core_update)?;
+        let card = core.update_card(board_id, card_id, core_update)?;
 
         // Handle assignee changes if specified
         if let Some(new_assignees) = updates.assignees {
             // Remove existing assignees
             for assignee in &card.assignee_ids {
-                let _ = self.core.unassign_user(board_id, card_id, assignee);
+                let _ = core.unassign_user(board_id, card_id, assignee);
             }
             // Add new assignees
             for assignee in &new_assignees {
-                let _ = self.core.assign_user(board_id, card_id, assignee);
+                let _ = core.assign_user(board_id, card_id, assignee);
             }
         }
 
@@ -609,17 +698,19 @@ impl KanbanService {
         if let Some(new_tags) = updates.tags {
             // Remove existing tags
             for tag_id in &card.tag_ids {
-                let _ = self.core.untag_card(board_id, card_id, tag_id);
+                let _ = core.untag_card(board_id, card_id, tag_id);
             }
             // Add new tags
             for tag_id in &new_tags {
-                let _ = self.core.tag_card(board_id, card_id, tag_id);
+                let _ = core.tag_card(board_id, card_id, tag_id);
             }
         }
 
         // Fetch updated card
-        let updated = self.core.get_card(board_id, card_id)?;
-        let tags = self.core.list_tags(board_id)?;
+        let updated = core.get_card(board_id, card_id)?;
+        let tags = core.list_tags(board_id)?;
+        drop(core);
+
         let tag_lookup: std::collections::HashMap<String, TagView> = tags
             .into_iter()
             .map(|t| {
@@ -644,8 +735,8 @@ impl KanbanService {
             return Err(KanbanError::NotAuthenticated);
         }
 
-        self.core
-            .change_card_state(board_id, card_id, CoreCardState::Archived)?;
+        let core = self.core.read().await;
+        core.change_card_state(board_id, card_id, CoreCardState::Archived)?;
         Ok(())
     }
 
@@ -665,9 +756,8 @@ impl KanbanService {
             return Err(KanbanError::NotAuthenticated);
         }
 
-        let step = self
-            .core
-            .add_step(board_id, card_id, title.to_string(), None)?;
+        let core = self.core.read().await;
+        let step = core.add_step(board_id, card_id, title.to_string(), None)?;
 
         Ok(StepView {
             id: step.id,
@@ -692,7 +782,8 @@ impl KanbanService {
             return Err(KanbanError::NotAuthenticated);
         }
 
-        let step = self.core.toggle_step(board_id, card_id, step_id)?;
+        let core = self.core.read().await;
+        let step = core.toggle_step(board_id, card_id, step_id)?;
 
         Ok(StepView {
             id: step.id,
@@ -717,9 +808,8 @@ impl KanbanService {
             return Err(KanbanError::NotAuthenticated);
         }
 
-        let comment = self
-            .core
-            .add_comment(board_id, card_id, text.to_string(), None)?;
+        let core = self.core.read().await;
+        let comment = core.add_comment(board_id, card_id, text.to_string(), None)?;
 
         Ok(CommentView {
             id: comment.id,

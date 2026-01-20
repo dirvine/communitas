@@ -306,6 +306,18 @@ impl CallService {
 
     // ===== Call Queries =====
 
+    /// Check that the user is authenticated for query operations.
+    fn require_auth_for_query(&self) -> Result<(), CallError> {
+        let rx = self.auth.subscribe();
+        if matches!(
+            &*rx.borrow(),
+            AuthStateSnapshot::LoggedOut | AuthStateSnapshot::Authenticating
+        ) {
+            return Err(CallError::NotAuthenticated);
+        }
+        Ok(())
+    }
+
     /// Query the current status of a call from the core.
     ///
     /// Unlike [`get_call_state`] which returns locally cached state, this method
@@ -318,10 +330,7 @@ impl CallService {
     /// Returns [`CallError::CoreError`] if the query fails or returns unexpected data.
     #[instrument(skip(self), name = "ui.call.query_call_status")]
     pub async fn query_call_status(&self, call_id: &str) -> Result<CallStatusResponse, CallError> {
-        let rx = self.auth.subscribe();
-        if matches!(&*rx.borrow(), AuthStateSnapshot::LoggedOut) {
-            return Err(CallError::NotAuthenticated);
-        }
+        self.require_auth_for_query()?;
 
         let response = self
             .app
@@ -350,10 +359,7 @@ impl CallService {
     /// Returns [`CallError::CoreError`] if the query fails or returns unexpected data.
     #[instrument(skip(self), name = "ui.call.query_call_participants")]
     pub async fn query_call_participants(&self, call_id: &str) -> Result<Vec<String>, CallError> {
-        let rx = self.auth.subscribe();
-        if matches!(&*rx.borrow(), AuthStateSnapshot::LoggedOut) {
-            return Err(CallError::NotAuthenticated);
-        }
+        self.require_auth_for_query()?;
 
         let response = self
             .app
@@ -383,10 +389,7 @@ impl CallService {
     /// Returns [`CallError::CoreError`] if the query fails or returns unexpected data.
     #[instrument(skip(self), name = "ui.call.list_active_calls")]
     pub async fn list_active_calls(&self) -> Result<Vec<CallResponse>, CallError> {
-        let rx = self.auth.subscribe();
-        if matches!(&*rx.borrow(), AuthStateSnapshot::LoggedOut) {
-            return Err(CallError::NotAuthenticated);
-        }
+        self.require_auth_for_query()?;
 
         let response = self
             .app

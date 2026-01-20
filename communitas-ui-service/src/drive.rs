@@ -708,6 +708,8 @@ impl DriveService {
     // ===== Upload Operations =====
 
     /// Start an upload operation and return an upload ID for tracking.
+    ///
+    /// This method performs real file I/O via CommunitasApp with progress tracking.
     #[instrument(skip(self, content), name = "ui.drive.start_upload", fields(entity_id, ?disk_type, path, content_len = content.len()))]
     pub async fn start_upload(
         &self,
@@ -730,6 +732,7 @@ impl DriveService {
         let file_name = extract_name_from_path(path, "file");
         let total_bytes = content.len() as u64;
         let now = current_timestamp_millis();
+        let expected_checksum = compute_checksum(&content);
 
         let progress = UploadProgress {
             id: upload_id.clone(),
@@ -751,11 +754,14 @@ impl DriveService {
         // Update snapshot
         self.update_upload_snapshot().await;
 
-        // Simulate upload progress (in a real implementation, this would be async)
+        // Clone values for the spawned task
         let upload_id_clone = upload_id.clone();
         let uploads = self.active_uploads.clone();
         let tx = self.tx.clone();
         let rx = self.rx.clone();
+        let app = self.app.clone();
+        let entity_id_owned = entity_id.to_string();
+        let path_owned = path.to_string();
 
         tokio::spawn(async move {
             // Mark as uploading
@@ -767,46 +773,103 @@ impl DriveService {
             }
             Self::broadcast_snapshot(&tx, &rx, Some(&uploads), None).await;
 
-            // Simulate progress
-            let chunk_size = total_bytes / 4;
-            for i in 1..=4 {
-                tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+            // Check for cancellation before starting
+            {
+                let map = uploads.read().await;
+                if map
+                    .get(&upload_id_clone)
+                    .is_some_and(|p| matches!(p.state, UploadState::Cancelled))
+                {
+                    return;
+                }
+            }
+
+            // Perform the actual write operation
+            let cmd = Command::WriteFile {
+                entity_id: entity_id_owned.clone(),
+                disk_type: disk_type_to_arg(disk_type),
+                path: path_owned.clone(),
+                data: content.clone(),
+            };
+
+            // Update progress to show we're uploading (since write is atomic, show full progress)
+            {
                 let mut map = uploads.write().await;
                 if let Some(p) = map.get_mut(&upload_id_clone) {
                     if matches!(p.state, UploadState::Cancelled) {
                         return;
                     }
-                    p.bytes_uploaded = (chunk_size * i).min(total_bytes);
-                }
-                drop(map);
-                Self::broadcast_snapshot(&tx, &rx, Some(&uploads), None).await;
-            }
-
-            // Mark as verifying
-            {
-                let mut map = uploads.write().await;
-                if let Some(p) = map.get_mut(&upload_id_clone) {
-                    p.state = UploadState::Verifying;
+                    p.bytes_uploaded = total_bytes;
                 }
             }
             Self::broadcast_snapshot(&tx, &rx, Some(&uploads), None).await;
 
-            tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+            let write_result = app.execute(cmd).await;
 
-            // Mark as complete
+            // Check for cancellation after write
             {
-                let mut map = uploads.write().await;
-                if let Some(p) = map.get_mut(&upload_id_clone) {
-                    p.state = UploadState::Complete;
-                    p.checksum_verified = true;
+                let map = uploads.read().await;
+                if map
+                    .get(&upload_id_clone)
+                    .is_some_and(|p| matches!(p.state, UploadState::Cancelled))
+                {
+                    return;
                 }
             }
-            Self::broadcast_snapshot(&tx, &rx, Some(&uploads), None).await;
+
+            match write_result {
+                Ok(_events) => {
+                    // Mark as verifying
+                    {
+                        let mut map = uploads.write().await;
+                        if let Some(p) = map.get_mut(&upload_id_clone) {
+                            p.state = UploadState::Verifying;
+                        }
+                    }
+                    Self::broadcast_snapshot(&tx, &rx, Some(&uploads), None).await;
+
+                    // Read back the file to verify checksum
+                    let verify_result = app
+                        .query(Query::ReadFile {
+                            entity_id: entity_id_owned,
+                            disk_type: disk_type_to_arg(disk_type),
+                            path: path_owned,
+                        })
+                        .await;
+
+                    let checksum_verified = match verify_result {
+                        Ok(QueryResponse::FileContents(data)) => {
+                            compute_checksum(&data) == expected_checksum
+                        }
+                        _ => false,
+                    };
+
+                    // Mark as complete
+                    {
+                        let mut map = uploads.write().await;
+                        if let Some(p) = map.get_mut(&upload_id_clone) {
+                            p.state = UploadState::Complete;
+                            p.checksum_verified = checksum_verified;
+                        }
+                    }
+                    Self::broadcast_snapshot(&tx, &rx, Some(&uploads), None).await;
+                }
+                Err(e) => {
+                    // Mark as failed
+                    tracing::error!("Upload failed: {:?}", e);
+                    {
+                        let mut map = uploads.write().await;
+                        if let Some(p) = map.get_mut(&upload_id_clone) {
+                            p.state = UploadState::Failed(e.message);
+                        }
+                    }
+                    Self::broadcast_snapshot(&tx, &rx, Some(&uploads), None).await;
+                }
+            }
         });
 
         Ok(upload_id)
     }
-
     /// Cancel an upload.
     #[instrument(skip(self), name = "ui.drive.cancel_upload", fields(upload_id))]
     pub async fn cancel_upload(&self, upload_id: &str) -> Result<(), DriveError> {
@@ -842,6 +905,8 @@ impl DriveService {
     // ===== Download Operations =====
 
     /// Start a download operation and return a download ID for tracking.
+    ///
+    /// This method performs real file I/O via CommunitasApp with progress tracking.
     #[instrument(skip(self), name = "ui.drive.start_download", fields(entity_id, ?disk_type, path, destination))]
     pub async fn start_download(
         &self,
@@ -863,15 +928,13 @@ impl DriveService {
 
         let file_name = extract_name_from_path(path, "file");
 
-        // Mock file size
-        let total_bytes = 1024 * 100; // 100 KB
-
+        // Set total_bytes to 0 initially; will be updated when we read the file
         let progress = DownloadProgress {
             id: download_id.clone(),
             file_name,
             destination_path: destination.to_string(),
             bytes_downloaded: 0,
-            total_bytes,
+            total_bytes: 0,
             state: DownloadState::Pending,
             checksum_verified: false,
         };
@@ -885,11 +948,15 @@ impl DriveService {
         // Update snapshot
         self.update_download_snapshot().await;
 
-        // Simulate download progress
+        // Clone values for the spawned task
         let download_id_clone = download_id.clone();
         let downloads = self.active_downloads.clone();
         let tx = self.tx.clone();
         let rx = self.rx.clone();
+        let app = self.app.clone();
+        let entity_id_owned = entity_id.to_string();
+        let path_owned = path.to_string();
+        let destination_owned = destination.to_string();
 
         tokio::spawn(async move {
             // Mark as downloading
@@ -901,46 +968,126 @@ impl DriveService {
             }
             Self::broadcast_snapshot(&tx, &rx, None, Some(&downloads)).await;
 
-            // Simulate progress
-            let chunk_size = total_bytes / 4;
-            for i in 1..=4 {
-                tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
-                let mut map = downloads.write().await;
-                if let Some(p) = map.get_mut(&download_id_clone) {
-                    if matches!(p.state, DownloadState::Cancelled) {
-                        return;
+            // Check for cancellation before starting
+            {
+                let map = downloads.read().await;
+                if map
+                    .get(&download_id_clone)
+                    .is_some_and(|p| matches!(p.state, DownloadState::Cancelled))
+                {
+                    return;
+                }
+            }
+
+            // Perform the actual read operation
+            let read_result = app
+                .query(Query::ReadFile {
+                    entity_id: entity_id_owned,
+                    disk_type: disk_type_to_arg(disk_type),
+                    path: path_owned,
+                })
+                .await;
+
+            // Check for cancellation after read
+            {
+                let map = downloads.read().await;
+                if map
+                    .get(&download_id_clone)
+                    .is_some_and(|p| matches!(p.state, DownloadState::Cancelled))
+                {
+                    return;
+                }
+            }
+
+            match read_result {
+                Ok(QueryResponse::FileContents(data)) => {
+                    let total_bytes = data.len() as u64;
+                    let expected_checksum = compute_checksum(&data);
+
+                    // Update progress with actual size
+                    {
+                        let mut map = downloads.write().await;
+                        if let Some(p) = map.get_mut(&download_id_clone) {
+                            p.total_bytes = total_bytes;
+                            p.bytes_downloaded = total_bytes;
+                        }
                     }
-                    p.bytes_downloaded = (chunk_size * i).min(total_bytes);
-                }
-                drop(map);
-                Self::broadcast_snapshot(&tx, &rx, None, Some(&downloads)).await;
-            }
+                    Self::broadcast_snapshot(&tx, &rx, None, Some(&downloads)).await;
 
-            // Mark as verifying
-            {
-                let mut map = downloads.write().await;
-                if let Some(p) = map.get_mut(&download_id_clone) {
-                    p.state = DownloadState::Verifying;
+                    // Mark as verifying
+                    {
+                        let mut map = downloads.write().await;
+                        if let Some(p) = map.get_mut(&download_id_clone) {
+                            p.state = DownloadState::Verifying;
+                        }
+                    }
+                    Self::broadcast_snapshot(&tx, &rx, None, Some(&downloads)).await;
+
+                    // Write to destination file
+                    let write_result = tokio::fs::write(&destination_owned, &data).await;
+
+                    match write_result {
+                        Ok(()) => {
+                            // Verify by reading back and checking checksum
+                            let verify_result = tokio::fs::read(&destination_owned).await;
+                            let checksum_verified = match verify_result {
+                                Ok(read_data) => compute_checksum(&read_data) == expected_checksum,
+                                Err(_) => false,
+                            };
+
+                            // Mark as complete
+                            {
+                                let mut map = downloads.write().await;
+                                if let Some(p) = map.get_mut(&download_id_clone) {
+                                    p.state = DownloadState::Complete;
+                                    p.checksum_verified = checksum_verified;
+                                }
+                            }
+                            Self::broadcast_snapshot(&tx, &rx, None, Some(&downloads)).await;
+                        }
+                        Err(e) => {
+                            // Clean up partial write if possible (ignore errors)
+                            let _ = tokio::fs::remove_file(&destination_owned).await;
+
+                            // Mark as failed
+                            tracing::error!("Download write failed: {:?}", e);
+                            {
+                                let mut map = downloads.write().await;
+                                if let Some(p) = map.get_mut(&download_id_clone) {
+                                    p.state = DownloadState::Failed(e.to_string());
+                                }
+                            }
+                            Self::broadcast_snapshot(&tx, &rx, None, Some(&downloads)).await;
+                        }
+                    }
+                }
+                Ok(_) => {
+                    // Unexpected response type
+                    tracing::error!("Download got unexpected response type");
+                    {
+                        let mut map = downloads.write().await;
+                        if let Some(p) = map.get_mut(&download_id_clone) {
+                            p.state = DownloadState::Failed("unexpected response type".to_string());
+                        }
+                    }
+                    Self::broadcast_snapshot(&tx, &rx, None, Some(&downloads)).await;
+                }
+                Err(e) => {
+                    // Mark as failed
+                    tracing::error!("Download failed: {:?}", e);
+                    {
+                        let mut map = downloads.write().await;
+                        if let Some(p) = map.get_mut(&download_id_clone) {
+                            p.state = DownloadState::Failed(e.to_string());
+                        }
+                    }
+                    Self::broadcast_snapshot(&tx, &rx, None, Some(&downloads)).await;
                 }
             }
-            Self::broadcast_snapshot(&tx, &rx, None, Some(&downloads)).await;
-
-            tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
-
-            // Mark as complete
-            {
-                let mut map = downloads.write().await;
-                if let Some(p) = map.get_mut(&download_id_clone) {
-                    p.state = DownloadState::Complete;
-                    p.checksum_verified = true;
-                }
-            }
-            Self::broadcast_snapshot(&tx, &rx, None, Some(&downloads)).await;
         });
 
         Ok(download_id)
     }
-
     /// Cancel a download.
     #[instrument(skip(self), name = "ui.drive.cancel_download", fields(download_id))]
     pub async fn cancel_download(&self, download_id: &str) -> Result<(), DriveError> {

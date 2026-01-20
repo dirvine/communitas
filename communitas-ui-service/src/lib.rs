@@ -3,6 +3,7 @@
 pub mod auth;
 pub mod call;
 pub mod canvas;
+pub mod canvas_convert;
 pub mod directory;
 pub mod drive;
 pub mod kanban;

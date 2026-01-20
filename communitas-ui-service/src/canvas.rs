@@ -266,7 +266,7 @@ impl CanvasService {
         }
     }
 
-    /// Returns a reference to the Communitas app.
+    /// Returns a clone of the Communitas app handle.
     #[must_use]
     pub fn app(&self) -> Arc<CommunitasApp> {
         self.app.clone()

@@ -23,11 +23,11 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use communitas_ui_api::call::{
     CallInfo, CallSettings, CallSnapshot, CallState, DeviceType, MediaDevice, MediaError,
-    Participant,
+    MediaErrorKind, Participant,
 };
 use thiserror::Error;
 use tokio::sync::{RwLock, watch};
-use tracing::{debug, instrument, warn};
+use tracing::{debug, error, instrument, warn};
 
 use crate::auth::{AuthController, AuthService, AuthStateSnapshot};
 use crate::util::current_timestamp_millis;
@@ -1250,6 +1250,158 @@ impl CallService {
         self.rx.borrow().listen_only_mode
     }
 
+    /// Handle disconnection of a media device during a call.
+    ///
+    /// This method should be called when a device is disconnected while the application
+    /// is running. It reports a `DeviceNotFound` error, clears the selected device from
+    /// settings, and enters listen-only mode if the disconnected device was a microphone.
+    ///
+    /// # Arguments
+    ///
+    /// * `device_id` - The ID of the disconnected device.
+    /// * `device_type` - The type of the disconnected device.
+    #[instrument(skip(self), name = "ui.call.handle_device_disconnection", fields(?device_id, ?device_type))]
+    pub async fn handle_device_disconnection(&self, device_id: &str, device_type: DeviceType) {
+        warn!(
+            device_id = %device_id,
+            device_type = ?device_type,
+            "Device disconnected"
+        );
+
+        // Report the device not found error
+        let error = MediaError::new(
+            device_type,
+            MediaErrorKind::DeviceNotFound,
+            format!("Device '{}' was disconnected", device_id),
+        );
+
+        {
+            let mut state = self.state.write().await;
+            state.media_errors.push(error);
+
+            // Clear the selected device setting
+            match device_type {
+                DeviceType::Microphone => {
+                    state.settings.selected_microphone = None;
+                    // Enter listen-only mode when microphone is lost
+                    state.listen_only_mode = true;
+                }
+                DeviceType::Speaker => {
+                    state.settings.selected_speaker = None;
+                }
+                DeviceType::Camera => {
+                    state.settings.selected_camera = None;
+                }
+            }
+
+            // Remove the device from available devices
+            state.available_devices.retain(|d| d.id != device_id);
+        }
+
+        self.broadcast().await;
+    }
+
+    /// Handle device changes (hot-plug detection).
+    ///
+    /// This method should be called by the platform layer when media devices are
+    /// added or removed (e.g., USB microphone plugged in/unplugged). It refreshes
+    /// the device list and checks if any currently selected devices are missing.
+    ///
+    /// If a selected device is no longer available, [`handle_device_disconnection`]
+    /// is called to report the error and update settings.
+    #[instrument(skip(self), name = "ui.call.on_devices_changed")]
+    pub async fn on_devices_changed(&self) {
+        debug!("Device change detected, refreshing device list");
+
+        // Try to enumerate devices, tolerating failures
+        let new_devices = match self.device_enumerator.enumerate_devices().await {
+            Ok(devices) => devices,
+            Err(e) => {
+                error!(error = %e, "Failed to enumerate devices after device change");
+                // Report the enumeration failure as a media error
+                let error = MediaError::new(
+                    DeviceType::Microphone, // Use microphone as generic device type
+                    MediaErrorKind::Unknown,
+                    format!("Failed to enumerate devices: {}", e),
+                );
+                self.report_media_error(error).await;
+                return;
+            }
+        };
+
+        // Get current selections and check for missing devices
+        let (missing_mic, missing_speaker, missing_camera) = {
+            let state = self.state.read().await;
+
+            let mic_missing = state
+                .settings
+                .selected_microphone
+                .as_ref()
+                .map(|id| {
+                    !new_devices
+                        .iter()
+                        .any(|d| d.id == *id && d.device_type == DeviceType::Microphone)
+                })
+                .unwrap_or(false);
+
+            let speaker_missing = state
+                .settings
+                .selected_speaker
+                .as_ref()
+                .map(|id| {
+                    !new_devices
+                        .iter()
+                        .any(|d| d.id == *id && d.device_type == DeviceType::Speaker)
+                })
+                .unwrap_or(false);
+
+            let camera_missing = state
+                .settings
+                .selected_camera
+                .as_ref()
+                .map(|id| {
+                    !new_devices
+                        .iter()
+                        .any(|d| d.id == *id && d.device_type == DeviceType::Camera)
+                })
+                .unwrap_or(false);
+
+            (
+                mic_missing
+                    .then(|| state.settings.selected_microphone.clone())
+                    .flatten(),
+                speaker_missing
+                    .then(|| state.settings.selected_speaker.clone())
+                    .flatten(),
+                camera_missing
+                    .then(|| state.settings.selected_camera.clone())
+                    .flatten(),
+            )
+        };
+
+        // Update the available devices
+        {
+            let mut state = self.state.write().await;
+            state.available_devices = new_devices;
+        }
+
+        // Handle disconnections for missing devices
+        if let Some(mic_id) = missing_mic {
+            self.handle_device_disconnection(&mic_id, DeviceType::Microphone)
+                .await;
+        }
+        if let Some(speaker_id) = missing_speaker {
+            self.handle_device_disconnection(&speaker_id, DeviceType::Speaker)
+                .await;
+        }
+        if let Some(camera_id) = missing_camera {
+            self.handle_device_disconnection(&camera_id, DeviceType::Camera)
+                .await;
+        }
+
+        self.broadcast().await;
+    }
+
     // ===== Settings =====
 
     /// Get current call settings.
@@ -1596,5 +1748,132 @@ mod tests {
         let result = service.list_active_calls().await;
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), CallError::NotAuthenticated));
+    }
+
+    // ===== Device Disconnection Tests =====
+
+    #[tokio::test]
+    async fn handle_device_disconnection_reports_error() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        // Initially no errors
+        assert!(service.get_media_errors().is_empty());
+
+        // Simulate device disconnection
+        service
+            .handle_device_disconnection("mic-1", DeviceType::Microphone)
+            .await;
+
+        let errors = service.get_media_errors();
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].device_type, DeviceType::Microphone);
+        assert_eq!(errors[0].error_kind, MediaErrorKind::DeviceNotFound);
+        assert!(errors[0].message.contains("mic-1"));
+    }
+
+    #[tokio::test]
+    async fn handle_device_disconnection_clears_selection() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        // Set up initial settings with selected microphone
+        let settings = CallSettings {
+            selected_microphone: Some("mic-1".to_string()),
+            selected_speaker: Some("speaker-1".to_string()),
+            selected_camera: None,
+            ..Default::default()
+        };
+        service
+            .update_settings(settings)
+            .await
+            .expect("should update");
+
+        // Verify microphone is selected
+        assert_eq!(
+            service.get_settings().selected_microphone,
+            Some("mic-1".to_string())
+        );
+
+        // Disconnect the microphone
+        service
+            .handle_device_disconnection("mic-1", DeviceType::Microphone)
+            .await;
+
+        // Microphone selection should be cleared
+        assert!(service.get_settings().selected_microphone.is_none());
+        // Speaker should remain selected
+        assert_eq!(
+            service.get_settings().selected_speaker,
+            Some("speaker-1".to_string())
+        );
+        // Should enter listen-only mode because microphone was lost
+        assert!(service.is_listen_only());
+    }
+
+    #[tokio::test]
+    async fn on_devices_changed_detects_missing_device() {
+        let temp = TempDir::new().expect("temp dir");
+        let storage = UiStorage::from_path(temp.path()).expect("storage should init");
+        let auth = Arc::new(AuthController::new(storage).expect("auth should init"));
+        let app = Arc::new(
+            CommunitasApp::new(
+                "ocean-forest-moon-star".to_string(),
+                "TestUser".to_string(),
+                "TestDevice".to_string(),
+                temp.path()
+                    .join("app_storage")
+                    .to_string_lossy()
+                    .to_string(),
+            )
+            .await
+            .expect("app should init"),
+        );
+
+        // Create service with mock enumerator (has mock-mic-default, etc.)
+        let service = CallService::new(auth, app);
+
+        // Initially populate devices
+        let _ = service.list_devices().await; // Will fail due to no auth, but sets up mock devices internally
+
+        // Set selected microphone to a mock device
+        {
+            let mut state = service.state.write().await;
+            state.available_devices = vec![MediaDevice {
+                id: "mic-to-remove".to_string(),
+                name: "Microphone to Remove".to_string(),
+                device_type: DeviceType::Microphone,
+                is_default: true,
+                is_available: true,
+            }];
+            state.settings.selected_microphone = Some("mic-to-remove".to_string());
+        }
+
+        // Broadcast to sync watch channel with state
+        service.broadcast().await;
+
+        // Verify microphone is selected
+        assert_eq!(
+            service.get_settings().selected_microphone,
+            Some("mic-to-remove".to_string())
+        );
+
+        // Simulate device change - the mock enumerator will return different devices
+        // (mock-mic-default, etc.), so "mic-to-remove" will be missing
+        service.on_devices_changed().await;
+
+        // The selected microphone should be cleared because it's no longer in the device list
+        assert!(service.get_settings().selected_microphone.is_none());
+
+        // Should have a DeviceNotFound error
+        let errors = service.get_media_errors();
+        assert!(!errors.is_empty());
+        assert!(errors.iter().any(|e| {
+            e.device_type == DeviceType::Microphone
+                && e.error_kind == MediaErrorKind::DeviceNotFound
+        }));
+
+        // Should be in listen-only mode
+        assert!(service.is_listen_only());
     }
 }

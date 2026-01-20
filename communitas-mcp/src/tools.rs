@@ -17,6 +17,7 @@ use communitas_core::{
     crdt::EntityType,
 };
 use communitas_ui_api::UnifiedEntityType;
+use communitas_ui_api::drive::DiskType as UiDiskType;
 use communitas_ui_service::UiServices;
 use serde_json::{Value, json};
 use tracing::warn;
@@ -1808,7 +1809,8 @@ pub async fn call_tool(
     if let Some(result) = dispatch_canvas_tools(app, name, &args).await {
         return result;
     }
-    if let Some(result) = dispatch_file_tools(app, name, &args).await {
+    // Drive/file tools use UiServices for MCP-Dioxus parity (PLAN-31)
+    if let Some(result) = dispatch_file_tools(services, name, &args).await {
         return result;
     }
     if let Some(result) = dispatch_contact_tools(app, name, &args).await {
@@ -1973,25 +1975,29 @@ async fn dispatch_canvas_tools(
 }
 
 async fn dispatch_file_tools(
-    app: &CommunitasApp,
+    services: &UiServices,
     name: &str,
     args: &Value,
 ) -> Option<ToolCallResult> {
     match name {
-        "write_file" => Some(execute_write_file(app, args.clone()).await),
-        "read_file" => Some(execute_read_file(app, args.clone()).await),
-        "delete_file" => Some(execute_delete_file(app, args.clone()).await),
-        "list_files" => Some(execute_list_files(app, args.clone()).await),
-        "get_disk_stats" => Some(execute_get_disk_stats(app, args.clone()).await),
+        "write_file" => Some(execute_write_file(services, args.clone()).await),
+        "read_file" => Some(execute_read_file(services, args.clone()).await),
+        "delete_file" => Some(execute_delete_file(services, args.clone()).await),
+        "list_files" => Some(execute_list_files(services, args.clone()).await),
+        "get_disk_stats" => Some(execute_get_disk_stats(services, args.clone()).await),
         // Directory operations
-        "create_directory" => Some(execute_create_directory(app, args.clone()).await),
-        "move_file" => Some(execute_move_file(app, args.clone()).await),
-        "copy_file" => Some(execute_copy_file(app, args.clone()).await),
-        "list_disks" => Some(execute_list_disks(app, args.clone()).await),
-        "get_file_preview" => Some(execute_get_file_preview(app, args.clone()).await),
-        // Media operations
-        "upload_with_metadata" => Some(execute_upload_with_metadata(app, args.clone()).await),
-        "get_media_metadata" => Some(execute_get_media_metadata(app, args.clone()).await),
+        "create_directory" => Some(execute_create_directory(services, args.clone()).await),
+        "move_file" => Some(execute_move_file(services, args.clone()).await),
+        "copy_file" => Some(execute_copy_file(services, args.clone()).await),
+        "list_disks" => Some(execute_list_disks(services, args.clone()).await),
+        "get_file_preview" => Some(execute_get_file_preview(services, args.clone()).await),
+        // Media operations - still use app directly for now (no service equivalent yet)
+        "upload_with_metadata" => {
+            Some(execute_upload_with_metadata(services.drive().app().as_ref(), args.clone()).await)
+        }
+        "get_media_metadata" => {
+            Some(execute_get_media_metadata(services.drive().app().as_ref(), args.clone()).await)
+        }
         _ => None,
     }
 }
@@ -2103,6 +2109,16 @@ fn parse_disk_type(s: &str) -> Option<DiskTypeArg> {
     }
 }
 
+/// Parse disk type string to UI DiskType for DriveService calls.
+fn parse_ui_disk_type(s: &str) -> Option<UiDiskType> {
+    match s.to_lowercase().as_str() {
+        "private" => Some(UiDiskType::Private),
+        "public" => Some(UiDiskType::Public),
+        "shared" => Some(UiDiskType::Shared),
+        _ => None,
+    }
+}
+
 pub fn success_result(message: &str) -> ToolCallResult {
     ToolCallResult {
         content: vec![ToolContent::Text {
@@ -2191,6 +2207,16 @@ macro_rules! require_entity_type {
 macro_rules! require_disk_type {
     ($args:expr) => {
         match $args["disk_type"].as_str().and_then(parse_disk_type) {
+            Some(t) => t,
+            None => return error_result("Invalid or missing disk_type"),
+        }
+    };
+}
+
+/// Require a UI disk type for DriveService calls.
+macro_rules! require_ui_disk_type {
+    ($args:expr) => {
+        match $args["disk_type"].as_str().and_then(parse_ui_disk_type) {
             Some(t) => t,
             None => return error_result("Invalid or missing disk_type"),
         }
@@ -2667,50 +2693,50 @@ async fn execute_accept_invite(app: &CommunitasApp, args: Value) -> ToolCallResu
     }
 }
 
-async fn execute_write_file(app: &CommunitasApp, args: Value) -> ToolCallResult {
+async fn execute_write_file(services: &UiServices, args: Value) -> ToolCallResult {
     let entity_id = str_or_default(&args, "entity_id");
-    let disk_type = require_disk_type!(args);
+    let disk_type = require_ui_disk_type!(args);
     let path = str_or_default(&args, "path");
     let content_str = match args["content"].as_str() {
         Some(s) => s,
         None => return error_result("content is required for write_file"),
     };
-    let data = content_str.as_bytes().to_vec();
+    let data = content_str.as_bytes();
 
-    let cmd = Command::WriteFile {
-        entity_id,
-        disk_type,
-        path,
-        data,
-    };
-
-    match app.execute(cmd).await {
-        Ok(_) => success_result("File written successfully"),
-        Err(e) => error_result(&format!("Failed to write file: {}", e.message)),
+    match services
+        .drive()
+        .write_file(&entity_id, disk_type, &path, data)
+        .await
+    {
+        Ok(entry) => json_result(&json!({
+            "success": true,
+            "message": "File written successfully",
+            "path": entry.path,
+            "size_bytes": entry.size_bytes
+        })),
+        Err(e) => error_result(&format!("Failed to write file: {}", e)),
     }
 }
 
-async fn execute_read_file(app: &CommunitasApp, args: Value) -> ToolCallResult {
+async fn execute_read_file(services: &UiServices, args: Value) -> ToolCallResult {
     let entity_id = str_or_default(&args, "entity_id");
-    let disk_type = require_disk_type!(args);
+    let disk_type = require_ui_disk_type!(args);
     let path = str_or_default(&args, "path");
 
-    let query = Query::ReadFile {
-        entity_id,
-        disk_type,
-        path,
-    };
-
-    match app.query(query).await {
-        Ok(QueryResponse::FileContents(content)) => match String::from_utf8(content) {
+    match services
+        .drive()
+        .read_file(&entity_id, disk_type, &path)
+        .await
+    {
+        Ok(content) => match String::from_utf8(content.clone()) {
             Ok(text) => json_result(&json!({"content": text})),
             Err(_) => {
                 // Binary content - return as base64
-                json_result(&json!({"content_base64": "Binary content"}))
+                let encoded = BASE64_STANDARD.encode(&content);
+                json_result(&json!({"content_base64": encoded}))
             }
         },
-        Ok(_) => error_result("Unexpected response type"),
-        Err(e) => error_result(&format!("Failed to read file: {}", e.message)),
+        Err(e) => error_result(&format!("Failed to read file: {}", e)),
     }
 }
 
@@ -2961,40 +2987,39 @@ async fn execute_list_messages(app: &CommunitasApp, args: Value) -> ToolCallResu
     }
 }
 
-async fn execute_list_files(app: &CommunitasApp, args: Value) -> ToolCallResult {
+async fn execute_list_files(services: &UiServices, args: Value) -> ToolCallResult {
     let entity_id = match args["entity_id"].as_str() {
         Some(s) => s.to_string(),
         None => return error_result("entity_id is required for list_files"),
     };
-    let disk_type = match args["disk_type"].as_str().and_then(parse_disk_type) {
+    let disk_type = match args["disk_type"].as_str().and_then(parse_ui_disk_type) {
         Some(t) => t,
         None => return error_result("Invalid or missing disk_type"),
     };
     let path = args["path"].as_str().unwrap_or("/").to_string();
 
-    let query = Query::ListFiles {
-        entity_id,
-        disk_type,
-        path,
-    };
-
-    match app.query(query).await {
-        Ok(QueryResponse::FileList(files)) => {
-            let list: Vec<Value> = files
+    match services
+        .drive()
+        .list_directory(&entity_id, disk_type, &path)
+        .await
+    {
+        Ok(entries) => {
+            let list: Vec<Value> = entries
                 .iter()
-                .map(|f| {
+                .map(|e| {
                     json!({
-                        "path": f.path,
-                        "name": f.name,
-                        "is_directory": f.is_directory,
-                        "size_bytes": f.size_bytes
+                        "path": e.path,
+                        "name": e.name,
+                        "is_directory": e.is_directory,
+                        "size_bytes": e.size_bytes,
+                        "modified_at": e.modified_at,
+                        "mime_type": e.mime_type
                     })
                 })
                 .collect();
             json_result(&json!({"files": list}))
         }
-        Ok(_) => error_result("Unexpected response type"),
-        Err(e) => error_result(&format!("Failed to list files: {}", e.message)),
+        Err(e) => error_result(&format!("Failed to list files: {}", e)),
     }
 }
 
@@ -4682,42 +4707,34 @@ async fn execute_join_entity(app: &CommunitasApp, args: Value) -> ToolCallResult
 
 // ========== File Operations Executors ==========
 
-async fn execute_delete_file(app: &CommunitasApp, args: Value) -> ToolCallResult {
+async fn execute_delete_file(services: &UiServices, args: Value) -> ToolCallResult {
     let entity_id = require_str!(args, "entity_id");
-    let disk_type = require_disk_type!(args);
+    let disk_type = require_ui_disk_type!(args);
     let path = require_str!(args, "path");
 
-    let cmd = Command::DeleteFile {
-        entity_id,
-        disk_type,
-        path,
-    };
-
-    match app.execute(cmd).await {
-        Ok(_) => success_result("File deleted"),
-        Err(e) => error_result(&format!("Failed to delete file: {}", e.message)),
+    match services
+        .drive()
+        .delete_path(&entity_id, disk_type, &path)
+        .await
+    {
+        Ok(()) => success_result("File deleted"),
+        Err(e) => error_result(&format!("Failed to delete file: {}", e)),
     }
 }
 
-async fn execute_get_disk_stats(app: &CommunitasApp, args: Value) -> ToolCallResult {
+async fn execute_get_disk_stats(services: &UiServices, args: Value) -> ToolCallResult {
     let entity_id = require_str!(args, "entity_id");
-    let disk_type = require_disk_type!(args);
+    let disk_type = require_ui_disk_type!(args);
 
-    let query = Query::GetDiskStats {
-        entity_id,
-        disk_type,
-    };
-
-    match app.query(query).await {
-        Ok(QueryResponse::DiskStats(stats)) => json_result(&json!({
-            "entity_id": stats.entity_id,
-            "disk_type": format!("{:?}", stats.disk_type),
-            "used_bytes": stats.used_bytes,
-            "file_count": stats.file_count,
-            "dir_count": stats.dir_count
+    match services.drive().get_quota(&entity_id, disk_type).await {
+        Ok(quota) => json_result(&json!({
+            "entity_id": entity_id,
+            "disk_type": format!("{:?}", quota.disk_type),
+            "used_bytes": quota.used_bytes,
+            "quota_bytes": quota.quota_bytes,
+            "percent_used": quota.percent_used
         })),
-        Ok(_) => error_result("Unexpected response type"),
-        Err(e) => error_result(&format!("Failed to get disk stats: {}", e.message)),
+        Err(e) => error_result(&format!("Failed to get disk stats: {}", e)),
     }
 }
 
@@ -5507,68 +5524,71 @@ async fn execute_canvas_element_at(app: &CommunitasApp, args: Value) -> ToolCall
 // Drive MCP Executor Functions
 // ============================================================================
 
-async fn execute_create_directory(app: &CommunitasApp, args: Value) -> ToolCallResult {
+async fn execute_create_directory(services: &UiServices, args: Value) -> ToolCallResult {
     let entity_id = require_str!(args, "entity_id");
-    let disk_type = require_disk_type!(args);
+    let disk_type = require_ui_disk_type!(args);
     let path = require_str!(args, "path");
 
-    let cmd = Command::CreateDirectory {
-        entity_id,
-        disk_type,
-        path,
-    };
-
-    match app.execute(cmd).await {
-        Ok(_) => success_result("Directory created successfully"),
-        Err(e) => error_result(&format!("Failed to create directory: {}", e.message)),
+    match services
+        .drive()
+        .create_directory(&entity_id, disk_type, &path)
+        .await
+    {
+        Ok(entry) => json_result(&json!({
+            "success": true,
+            "message": "Directory created successfully",
+            "path": entry.path,
+            "name": entry.name
+        })),
+        Err(e) => error_result(&format!("Failed to create directory: {}", e)),
     }
 }
 
-async fn execute_move_file(app: &CommunitasApp, args: Value) -> ToolCallResult {
+async fn execute_move_file(services: &UiServices, args: Value) -> ToolCallResult {
     let entity_id = require_str!(args, "entity_id");
-    let disk_type = require_disk_type!(args);
+    let disk_type = require_ui_disk_type!(args);
     let source_path = require_str!(args, "source_path");
     let dest_path = require_str!(args, "dest_path");
 
-    let cmd = Command::MoveFile {
-        entity_id,
-        disk_type,
-        source_path,
-        dest_path,
-    };
-
-    match app.execute(cmd).await {
-        Ok(_) => success_result("File moved successfully"),
-        Err(e) => error_result(&format!("Failed to move file: {}", e.message)),
+    match services
+        .drive()
+        .move_path(&entity_id, disk_type, &source_path, &dest_path)
+        .await
+    {
+        Ok(entry) => json_result(&json!({
+            "success": true,
+            "message": "File moved successfully",
+            "new_path": entry.path
+        })),
+        Err(e) => error_result(&format!("Failed to move file: {}", e)),
     }
 }
 
-async fn execute_copy_file(app: &CommunitasApp, args: Value) -> ToolCallResult {
+async fn execute_copy_file(services: &UiServices, args: Value) -> ToolCallResult {
     let entity_id = require_str!(args, "entity_id");
-    let disk_type = require_disk_type!(args);
+    let disk_type = require_ui_disk_type!(args);
     let source_path = require_str!(args, "source_path");
     let dest_path = require_str!(args, "dest_path");
 
-    let cmd = Command::CopyFile {
-        entity_id,
-        disk_type,
-        source_path,
-        dest_path,
-    };
-
-    match app.execute(cmd).await {
-        Ok(_) => success_result("File copied successfully"),
-        Err(e) => error_result(&format!("Failed to copy file: {}", e.message)),
+    match services
+        .drive()
+        .copy_path(&entity_id, disk_type, &source_path, &dest_path)
+        .await
+    {
+        Ok(entry) => json_result(&json!({
+            "success": true,
+            "message": "File copied successfully",
+            "new_path": entry.path
+        })),
+        Err(e) => error_result(&format!("Failed to copy file: {}", e)),
     }
 }
 
-async fn execute_list_disks(app: &CommunitasApp, args: Value) -> ToolCallResult {
+async fn execute_list_disks(services: &UiServices, args: Value) -> ToolCallResult {
     let entity_id = require_str!(args, "entity_id");
 
-    let query = Query::ListDisks { entity_id };
-
-    match app.query(query).await {
-        Ok(QueryResponse::DiskList(disks)) => {
+    match services.drive().list_disks(&entity_id).await {
+        Ok(disks) => {
             let disk_data: Vec<_> = disks
                 .iter()
                 .map(|d| {
@@ -5586,31 +5606,28 @@ async fn execute_list_disks(app: &CommunitasApp, args: Value) -> ToolCallResult 
                 "disks": disk_data
             }))
         }
-        Ok(_) => error_result("Unexpected response type"),
-        Err(e) => error_result(&format!("Failed to list disks: {}", e.message)),
+        Err(e) => error_result(&format!("Failed to list disks: {}", e)),
     }
 }
 
-async fn execute_get_file_preview(app: &CommunitasApp, args: Value) -> ToolCallResult {
+async fn execute_get_file_preview(services: &UiServices, args: Value) -> ToolCallResult {
     let entity_id = require_str!(args, "entity_id");
-    let disk_type = require_disk_type!(args);
+    let disk_type = require_ui_disk_type!(args);
     let path = require_str!(args, "path");
 
-    let query = Query::GetFilePreview {
-        entity_id,
-        disk_type,
-        path,
-    };
-
-    match app.query(query).await {
-        Ok(QueryResponse::FilePreview(preview)) => {
+    match services
+        .drive()
+        .get_file_preview(&entity_id, disk_type, &path)
+        .await
+    {
+        Ok(preview) => {
             let mut result = json!({
                 "path": preview.path,
                 "mime_type": preview.mime_type,
                 "size_bytes": preview.size_bytes,
-                "checksum": preview.checksum,
-                "created_at": preview.created_at,
-                "modified_at": preview.modified_at
+                "checksum": preview.metadata.checksum,
+                "created_at": preview.metadata.created_at,
+                "modified_at": preview.metadata.modified_at
             });
             if let Some(text) = &preview.text_preview {
                 result["text_preview"] = json!(text);
@@ -5620,8 +5637,7 @@ async fn execute_get_file_preview(app: &CommunitasApp, args: Value) -> ToolCallR
             }
             json_result(&result)
         }
-        Ok(_) => error_result("Unexpected response type"),
-        Err(e) => error_result(&format!("Failed to get file preview: {}", e.message)),
+        Err(e) => error_result(&format!("Failed to get file preview: {}", e)),
     }
 }
 

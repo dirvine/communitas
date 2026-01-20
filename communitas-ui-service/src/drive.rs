@@ -554,21 +554,36 @@ impl DriveService {
             return Err(DriveError::NotAuthenticated);
         }
 
-        let now = current_timestamp_millis();
-        let checksum = compute_checksum(b"mock content");
+        // Query the core for file preview
+        let response = self
+            .app
+            .query(Query::GetFilePreview {
+                entity_id: entity_id.to_string(),
+                disk_type: disk_type_to_arg(disk_type),
+                path: path.to_string(),
+            })
+            .await
+            .map_err(|e| DriveError::QueryError(e.to_string()))?;
+
+        // Extract file preview from response
+        let QueryResponse::FilePreview(preview) = response else {
+            return Err(DriveError::QueryError(
+                "unexpected response type from GetFilePreview query".to_string(),
+            ));
+        };
 
         Ok(FilePreview {
-            path: path.to_string(),
-            mime_type: "text/plain".to_string(),
-            size_bytes: 0,
-            thumbnail: None,
-            text_preview: None,
+            path: preview.path,
+            mime_type: preview.mime_type,
+            size_bytes: preview.size_bytes,
+            thumbnail: preview.thumbnail,
+            text_preview: preview.text_preview,
             metadata: FileMetadata {
-                created_at: now,
-                modified_at: now,
-                checksum,
-                block_count: 0,
-                encryption: None,
+                created_at: preview.created_at,
+                modified_at: preview.modified_at,
+                checksum: preview.checksum,
+                block_count: 0,   // Not provided by core response
+                encryption: None, // Not provided by core response
             },
         })
     }

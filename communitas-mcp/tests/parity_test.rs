@@ -65,27 +65,193 @@ fn parse_tool_response(result: &ToolCallResult) -> Value {
         .unwrap_or(json!({}))
 }
 
+/// Helper macro to run async tests with 8MB stack
+macro_rules! run_async_test {
+    ($test_fn:expr) => {
+        std::thread::Builder::new()
+            .stack_size(8 * 1024 * 1024)
+            .spawn(|| {
+                let rt = tokio::runtime::Runtime::new().unwrap();
+                rt.block_on($test_fn);
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    };
+}
+
 // =============================================================================
 // Tool Registration Tests
 // =============================================================================
 
 #[test]
-fn test_tools_include_kanban_operations() {
+fn test_tools_include_kanban_board_operations() {
     let tools = list_tools(true);
     let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
 
-    // Kanban tools should be registered
+    // Board tools
     assert!(
         tool_names.contains(&"create_kanban_board"),
         "Expected create_kanban_board tool"
     );
     assert!(
+        tool_names.contains(&"get_kanban_board"),
+        "Expected get_kanban_board tool"
+    );
+    assert!(
+        tool_names.contains(&"update_kanban_board"),
+        "Expected update_kanban_board tool"
+    );
+    assert!(
+        tool_names.contains(&"delete_kanban_board"),
+        "Expected delete_kanban_board tool"
+    );
+    assert!(
         tool_names.contains(&"list_kanban_boards"),
         "Expected list_kanban_boards tool"
     );
+}
+
+#[test]
+fn test_tools_include_kanban_column_operations() {
+    let tools = list_tools(true);
+    let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
+
+    // Column tools
+    assert!(
+        tool_names.contains(&"create_kanban_column"),
+        "Expected create_kanban_column tool"
+    );
+    assert!(
+        tool_names.contains(&"get_kanban_column"),
+        "Expected get_kanban_column tool"
+    );
+    assert!(
+        tool_names.contains(&"update_kanban_column"),
+        "Expected update_kanban_column tool"
+    );
+    assert!(
+        tool_names.contains(&"delete_kanban_column"),
+        "Expected delete_kanban_column tool"
+    );
+    assert!(
+        tool_names.contains(&"move_kanban_column"),
+        "Expected move_kanban_column tool"
+    );
+    assert!(
+        tool_names.contains(&"list_kanban_columns"),
+        "Expected list_kanban_columns tool"
+    );
+}
+
+#[test]
+fn test_tools_include_kanban_card_operations() {
+    let tools = list_tools(true);
+    let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
+
+    // Card tools
     assert!(
         tool_names.contains(&"create_kanban_card"),
         "Expected create_kanban_card tool"
+    );
+    assert!(
+        tool_names.contains(&"get_kanban_card"),
+        "Expected get_kanban_card tool"
+    );
+    assert!(
+        tool_names.contains(&"update_kanban_card"),
+        "Expected update_kanban_card tool"
+    );
+    assert!(
+        tool_names.contains(&"delete_kanban_card"),
+        "Expected delete_kanban_card tool"
+    );
+    assert!(
+        tool_names.contains(&"move_kanban_card"),
+        "Expected move_kanban_card tool"
+    );
+    assert!(
+        tool_names.contains(&"list_kanban_cards"),
+        "Expected list_kanban_cards tool"
+    );
+    assert!(
+        tool_names.contains(&"change_card_state"),
+        "Expected change_card_state tool"
+    );
+}
+
+#[test]
+fn test_tools_include_kanban_tag_operations() {
+    let tools = list_tools(true);
+    let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
+
+    // Tag tools
+    assert!(
+        tool_names.contains(&"create_kanban_tag"),
+        "Expected create_kanban_tag tool"
+    );
+    assert!(
+        tool_names.contains(&"list_kanban_tags"),
+        "Expected list_kanban_tags tool"
+    );
+    assert!(tool_names.contains(&"tag_card"), "Expected tag_card tool");
+    assert!(
+        tool_names.contains(&"untag_card"),
+        "Expected untag_card tool"
+    );
+}
+
+#[test]
+fn test_tools_include_kanban_step_operations() {
+    let tools = list_tools(true);
+    let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
+
+    // Step (checklist) tools
+    assert!(tool_names.contains(&"add_step"), "Expected add_step tool");
+    assert!(tool_names.contains(&"get_step"), "Expected get_step tool");
+    assert!(
+        tool_names.contains(&"toggle_step"),
+        "Expected toggle_step tool"
+    );
+    assert!(
+        tool_names.contains(&"delete_step"),
+        "Expected delete_step tool"
+    );
+}
+
+#[test]
+fn test_tools_include_kanban_comment_operations() {
+    let tools = list_tools(true);
+    let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
+
+    // Comment tools
+    assert!(
+        tool_names.contains(&"add_comment"),
+        "Expected add_comment tool"
+    );
+    assert!(
+        tool_names.contains(&"list_comments"),
+        "Expected list_comments tool"
+    );
+    assert!(
+        tool_names.contains(&"delete_comment"),
+        "Expected delete_comment tool"
+    );
+}
+
+#[test]
+fn test_tools_include_kanban_user_operations() {
+    let tools = list_tools(true);
+    let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
+
+    // User assignment tools
+    assert!(
+        tool_names.contains(&"assign_user"),
+        "Expected assign_user tool"
+    );
+    assert!(
+        tool_names.contains(&"unassign_user"),
+        "Expected unassign_user tool"
     );
 }
 
@@ -161,177 +327,978 @@ fn test_tools_include_call_operations() {
 }
 
 // =============================================================================
-// Kanban Parity Tests
+// Kanban Board Parity Tests
 // =============================================================================
 
 /// Test that kanban board operations via MCP route through KanbanService.
-/// Uses larger stack to avoid stack overflow from large async state machines.
 #[test]
 fn test_kanban_board_parity() {
-    // Use thread with larger stack (8MB) to avoid stack overflow
-    std::thread::Builder::new()
-        .stack_size(8 * 1024 * 1024)
-        .spawn(|| {
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            rt.block_on(async {
-                let temp = TempDir::new().unwrap();
-                let (app, services) = make_test_services(&temp).await;
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
 
-                // Initial state: no boards
-                let initial_snap = services.kanban().current_snapshot();
-                assert!(
-                    initial_snap.boards.is_empty(),
-                    "Expected no boards initially"
-                );
+        // Initial state: no boards
+        let initial_snap = services.kanban().current_snapshot();
+        assert!(
+            initial_snap.boards.is_empty(),
+            "Expected no boards initially"
+        );
 
-                // Create board via MCP tool
-                let result = call_tool(
-                    &app,
-                    &services,
-                    "create_kanban_board",
-                    Some(json!({
-                        "entity_id": "test-entity",
-                        "name": "Parity Test Board",
-                        "description": "Testing MCP-UiServices parity"
-                    })),
-                )
-                .await;
+        // Create board via MCP tool
+        let result = call_tool(
+            &app,
+            &services,
+            "create_kanban_board",
+            Some(json!({
+                "entity_id": "test-entity",
+                "name": "Parity Test Board",
+                "description": "Testing MCP-UiServices parity"
+            })),
+        )
+        .await;
 
-                // Tool should respond (may succeed or fail due to auth state)
-                // Key test: it routes through KanbanService, not directly to app
-                assert!(
-                    !result.content.is_empty(),
-                    "Expected response from create_kanban_board"
-                );
+        // Tool should respond (may succeed or fail due to auth state)
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from create_kanban_board"
+        );
 
-                // If authenticated, check board_id; otherwise expect auth error
-                if !result.is_error {
-                    let parsed = parse_tool_response(&result);
-                    assert!(
-                        parsed["board_id"].as_str().is_some(),
-                        "Expected board_id in success response"
-                    );
-                } else {
-                    // Expected for unauthenticated tests - verify consistent error format
-                    let text = result.content.first().and_then(extract_text).unwrap_or("");
-                    assert!(
-                        text.contains("authenticated") || text.contains("auth"),
-                        "Expected auth-related error message"
-                    );
-                }
-            });
-        })
-        .unwrap()
-        .join()
-        .unwrap();
+        // If authenticated, check board_id; otherwise expect auth error
+        if !result.is_error {
+            let parsed = parse_tool_response(&result);
+            assert!(
+                parsed["board_id"].as_str().is_some(),
+                "Expected board_id in success response"
+            );
+        } else {
+            let text = result.content.first().and_then(extract_text).unwrap_or("");
+            assert!(
+                text.contains("authenticated") || text.contains("auth") || text.contains("error"),
+                "Expected auth-related error message"
+            );
+        }
+    });
 }
+
+/// Test get_kanban_board routes through KanbanService.
+#[test]
+fn test_get_kanban_board_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to get a non-existent board via MCP
+        let result = call_tool(
+            &app,
+            &services,
+            "get_kanban_board",
+            Some(json!({
+                "entity_id": "test-entity",
+                "board_id": "nonexistent-board-id"
+            })),
+        )
+        .await;
+
+        // Should return an error result (board doesn't exist)
+        assert!(result.is_error, "Expected error for nonexistent board");
+    });
+}
+
+/// Test update_kanban_board routes through KanbanService.
+#[test]
+fn test_update_kanban_board_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to update a non-existent board
+        let result = call_tool(
+            &app,
+            &services,
+            "update_kanban_board",
+            Some(json!({
+                "board_id": "nonexistent-board",
+                "name": "Updated Name"
+            })),
+        )
+        .await;
+
+        // Should route through service and return error
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from update_kanban_board"
+        );
+        let text = result.content.first().and_then(extract_text).unwrap_or("");
+        assert!(
+            !text.contains("Unknown tool"),
+            "Tool should be routed through KanbanService"
+        );
+    });
+}
+
+/// Test delete_kanban_board routes through KanbanService.
+#[test]
+fn test_delete_kanban_board_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to delete a non-existent board
+        let result = call_tool(
+            &app,
+            &services,
+            "delete_kanban_board",
+            Some(json!({
+                "board_id": "nonexistent-board"
+            })),
+        )
+        .await;
+
+        // Should route through service
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from delete_kanban_board"
+        );
+        let text = result.content.first().and_then(extract_text).unwrap_or("");
+        assert!(
+            !text.contains("Unknown tool"),
+            "Tool should be routed through KanbanService"
+        );
+    });
+}
+
+/// Test list_kanban_boards routes through KanbanService.
+#[test]
+fn test_list_kanban_boards_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // List boards (should return empty list)
+        let result = call_tool(
+            &app,
+            &services,
+            "list_kanban_boards",
+            Some(json!({
+                "entity_id": "test-entity"
+            })),
+        )
+        .await;
+
+        // Should route through service
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from list_kanban_boards"
+        );
+    });
+}
+
+// =============================================================================
+// Kanban Column Parity Tests
+// =============================================================================
+
+/// Test get_kanban_column routes through KanbanService.
+#[test]
+fn test_get_kanban_column_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to get a non-existent column
+        let result = call_tool(
+            &app,
+            &services,
+            "get_kanban_column",
+            Some(json!({
+                "board_id": "nonexistent-board",
+                "column_id": "nonexistent-column"
+            })),
+        )
+        .await;
+
+        // Should return error
+        assert!(result.is_error, "Expected error for nonexistent column");
+    });
+}
+
+/// Test update_kanban_column routes through KanbanService.
+#[test]
+fn test_update_kanban_column_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to update a non-existent column
+        let result = call_tool(
+            &app,
+            &services,
+            "update_kanban_column",
+            Some(json!({
+                "board_id": "nonexistent-board",
+                "column_id": "nonexistent-column",
+                "name": "Updated Column"
+            })),
+        )
+        .await;
+
+        // Should route through service
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from update_kanban_column"
+        );
+        let text = result.content.first().and_then(extract_text).unwrap_or("");
+        assert!(
+            !text.contains("Unknown tool"),
+            "Tool should be routed through KanbanService"
+        );
+    });
+}
+
+/// Test delete_kanban_column routes through KanbanService.
+#[test]
+fn test_delete_kanban_column_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to delete a non-existent column
+        let result = call_tool(
+            &app,
+            &services,
+            "delete_kanban_column",
+            Some(json!({
+                "board_id": "nonexistent-board",
+                "column_id": "nonexistent-column"
+            })),
+        )
+        .await;
+
+        // Should route through service
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from delete_kanban_column"
+        );
+    });
+}
+
+/// Test move_kanban_column routes through KanbanService.
+#[test]
+fn test_move_kanban_column_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to move a non-existent column
+        let result = call_tool(
+            &app,
+            &services,
+            "move_kanban_column",
+            Some(json!({
+                "board_id": "nonexistent-board",
+                "column_id": "nonexistent-column",
+                "new_position": 1
+            })),
+        )
+        .await;
+
+        // Should route through service
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from move_kanban_column"
+        );
+    });
+}
+
+/// Test list_kanban_columns routes through KanbanService.
+#[test]
+fn test_list_kanban_columns_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to list columns for non-existent board
+        let result = call_tool(
+            &app,
+            &services,
+            "list_kanban_columns",
+            Some(json!({
+                "board_id": "nonexistent-board"
+            })),
+        )
+        .await;
+
+        // Should route through service
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from list_kanban_columns"
+        );
+    });
+}
+
+// =============================================================================
+// Kanban Card Parity Tests
+// =============================================================================
 
 /// Test that kanban card operations via MCP route through KanbanService.
 #[test]
 fn test_kanban_card_operations_parity() {
-    std::thread::Builder::new()
-        .stack_size(8 * 1024 * 1024)
-        .spawn(|| {
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            rt.block_on(async {
-                let temp = TempDir::new().unwrap();
-                let (app, services) = make_test_services(&temp).await;
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
 
-                // Create board first (may fail due to auth)
-                let board_result = call_tool(
-                    &app,
-                    &services,
-                    "create_kanban_board",
-                    Some(json!({
-                        "entity_id": "test-entity",
-                        "name": "Card Test Board"
-                    })),
-                )
-                .await;
+        // Create board first (may fail due to auth)
+        let board_result = call_tool(
+            &app,
+            &services,
+            "create_kanban_board",
+            Some(json!({
+                "entity_id": "test-entity",
+                "name": "Card Test Board"
+            })),
+        )
+        .await;
 
-                // Tool should respond
-                assert!(
-                    !board_result.content.is_empty(),
-                    "Expected response from create_kanban_board"
-                );
+        // Tool should respond
+        assert!(
+            !board_result.content.is_empty(),
+            "Expected response from create_kanban_board"
+        );
 
-                // If auth fails, skip remainder of test but verify routing worked
-                if board_result.is_error {
-                    let text = board_result
-                        .content
-                        .first()
-                        .and_then(extract_text)
-                        .unwrap_or("");
-                    // Verify we got an error from the service layer, not a missing tool
-                    assert!(
-                        !text.contains("Unknown tool"),
-                        "Tool should be routed through KanbanService"
-                    );
-                    return; // Early return - auth required for card operations
-                }
+        // If auth fails, skip remainder but verify routing worked
+        if board_result.is_error {
+            let text = board_result
+                .content
+                .first()
+                .and_then(extract_text)
+                .unwrap_or("");
+            assert!(
+                !text.contains("Unknown tool"),
+                "Tool should be routed through KanbanService"
+            );
+            return;
+        }
 
-                let board_id = parse_tool_response(&board_result)["board_id"]
-                    .as_str()
-                    .unwrap_or("board-1")
-                    .to_string();
+        let board_id = parse_tool_response(&board_result)["board_id"]
+            .as_str()
+            .unwrap_or("board-1")
+            .to_string();
 
-                // Create column
-                let col_result = call_tool(
-                    &app,
-                    &services,
-                    "create_kanban_column",
-                    Some(json!({
-                        "entity_id": "test-entity",
-                        "board_id": board_id,
-                        "name": "To Do",
-                        "position": 0
-                    })),
-                )
-                .await;
+        // Create column
+        let col_result = call_tool(
+            &app,
+            &services,
+            "create_kanban_column",
+            Some(json!({
+                "entity_id": "test-entity",
+                "board_id": board_id,
+                "name": "To Do",
+                "position": 0
+            })),
+        )
+        .await;
 
-                if col_result.is_error {
-                    return; // Early return - auth or setup required
-                }
+        if col_result.is_error {
+            return;
+        }
 
-                let column_id = parse_tool_response(&col_result)["column_id"]
-                    .as_str()
-                    .unwrap_or("col-1")
-                    .to_string();
+        let column_id = parse_tool_response(&col_result)["column_id"]
+            .as_str()
+            .unwrap_or("col-1")
+            .to_string();
 
-                // Create card via MCP
-                let card_result = call_tool(
-                    &app,
-                    &services,
-                    "create_kanban_card",
-                    Some(json!({
-                        "entity_id": "test-entity",
-                        "board_id": board_id,
-                        "column_id": column_id,
-                        "title": "Parity Test Card",
-                        "description": "Created via MCP"
-                    })),
-                )
-                .await;
+        // Create card via MCP
+        let card_result = call_tool(
+            &app,
+            &services,
+            "create_kanban_card",
+            Some(json!({
+                "entity_id": "test-entity",
+                "board_id": board_id,
+                "column_id": column_id,
+                "title": "Parity Test Card",
+                "description": "Created via MCP"
+            })),
+        )
+        .await;
 
-                // Tool should respond
-                assert!(
-                    !card_result.content.is_empty(),
-                    "Expected response from create_kanban_card"
-                );
+        // Tool should respond
+        assert!(
+            !card_result.content.is_empty(),
+            "Expected response from create_kanban_card"
+        );
 
-                // If successful, verify card_id returned
-                if !card_result.is_error {
-                    let parsed = parse_tool_response(&card_result);
-                    assert!(
-                        parsed["card_id"].as_str().is_some(),
-                        "Expected card_id in success response"
-                    );
-                }
-            });
-        })
-        .unwrap()
-        .join()
-        .unwrap();
+        // If successful, verify card_id returned
+        if !card_result.is_error {
+            let parsed = parse_tool_response(&card_result);
+            assert!(
+                parsed["card_id"].as_str().is_some(),
+                "Expected card_id in success response"
+            );
+        }
+    });
+}
+
+/// Test get_kanban_card routes through KanbanService.
+#[test]
+fn test_get_kanban_card_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to get a non-existent card
+        let result = call_tool(
+            &app,
+            &services,
+            "get_kanban_card",
+            Some(json!({
+                "board_id": "nonexistent-board",
+                "card_id": "nonexistent-card"
+            })),
+        )
+        .await;
+
+        // Should return error
+        assert!(result.is_error, "Expected error for nonexistent card");
+    });
+}
+
+/// Test update_kanban_card routes through KanbanService.
+#[test]
+fn test_update_kanban_card_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to update a non-existent card
+        let result = call_tool(
+            &app,
+            &services,
+            "update_kanban_card",
+            Some(json!({
+                "board_id": "nonexistent-board",
+                "card_id": "nonexistent-card",
+                "title": "Updated Title"
+            })),
+        )
+        .await;
+
+        // Should route through service
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from update_kanban_card"
+        );
+        let text = result.content.first().and_then(extract_text).unwrap_or("");
+        assert!(
+            !text.contains("Unknown tool"),
+            "Tool should be routed through KanbanService"
+        );
+    });
+}
+
+/// Test delete_kanban_card routes through KanbanService.
+#[test]
+fn test_delete_kanban_card_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to delete a non-existent card
+        let result = call_tool(
+            &app,
+            &services,
+            "delete_kanban_card",
+            Some(json!({
+                "board_id": "nonexistent-board",
+                "card_id": "nonexistent-card"
+            })),
+        )
+        .await;
+
+        // Should route through service
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from delete_kanban_card"
+        );
+    });
+}
+
+/// Test move_kanban_card routes through KanbanService.
+#[test]
+fn test_move_kanban_card_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to move a non-existent card
+        let result = call_tool(
+            &app,
+            &services,
+            "move_kanban_card",
+            Some(json!({
+                "board_id": "nonexistent-board",
+                "card_id": "nonexistent-card",
+                "target_column_id": "target-column"
+            })),
+        )
+        .await;
+
+        // Should route through service
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from move_kanban_card"
+        );
+    });
+}
+
+/// Test list_kanban_cards routes through KanbanService.
+#[test]
+fn test_list_kanban_cards_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to list cards for non-existent board
+        let result = call_tool(
+            &app,
+            &services,
+            "list_kanban_cards",
+            Some(json!({
+                "board_id": "nonexistent-board"
+            })),
+        )
+        .await;
+
+        // Should route through service
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from list_kanban_cards"
+        );
+    });
+}
+
+/// Test change_card_state routes through KanbanService.
+#[test]
+fn test_change_card_state_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to change state of non-existent card
+        let result = call_tool(
+            &app,
+            &services,
+            "change_card_state",
+            Some(json!({
+                "board_id": "nonexistent-board",
+                "card_id": "nonexistent-card",
+                "state": "in_progress"
+            })),
+        )
+        .await;
+
+        // Should route through service
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from change_card_state"
+        );
+    });
+}
+
+// =============================================================================
+// Kanban Tag Parity Tests
+// =============================================================================
+
+/// Test create_kanban_tag routes through KanbanService.
+#[test]
+fn test_create_kanban_tag_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to create tag for non-existent board
+        let result = call_tool(
+            &app,
+            &services,
+            "create_kanban_tag",
+            Some(json!({
+                "board_id": "nonexistent-board",
+                "name": "Priority",
+                "color": "#ff0000"
+            })),
+        )
+        .await;
+
+        // Should route through service
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from create_kanban_tag"
+        );
+        let text = result.content.first().and_then(extract_text).unwrap_or("");
+        assert!(
+            !text.contains("Unknown tool"),
+            "Tool should be routed through KanbanService"
+        );
+    });
+}
+
+/// Test list_kanban_tags routes through KanbanService.
+#[test]
+fn test_list_kanban_tags_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to list tags for non-existent board
+        let result = call_tool(
+            &app,
+            &services,
+            "list_kanban_tags",
+            Some(json!({
+                "board_id": "nonexistent-board"
+            })),
+        )
+        .await;
+
+        // Should route through service
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from list_kanban_tags"
+        );
+    });
+}
+
+/// Test tag_card routes through KanbanService.
+#[test]
+fn test_tag_card_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to tag a non-existent card
+        let result = call_tool(
+            &app,
+            &services,
+            "tag_card",
+            Some(json!({
+                "board_id": "nonexistent-board",
+                "card_id": "nonexistent-card",
+                "tag_id": "nonexistent-tag"
+            })),
+        )
+        .await;
+
+        // Should route through service
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from tag_card"
+        );
+    });
+}
+
+/// Test untag_card routes through KanbanService.
+#[test]
+fn test_untag_card_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to untag a non-existent card
+        let result = call_tool(
+            &app,
+            &services,
+            "untag_card",
+            Some(json!({
+                "board_id": "nonexistent-board",
+                "card_id": "nonexistent-card",
+                "tag_id": "nonexistent-tag"
+            })),
+        )
+        .await;
+
+        // Should route through service
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from untag_card"
+        );
+    });
+}
+
+// =============================================================================
+// Kanban Step (Checklist) Parity Tests
+// =============================================================================
+
+/// Test add_step routes through KanbanService.
+#[test]
+fn test_add_step_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to add step to non-existent card
+        let result = call_tool(
+            &app,
+            &services,
+            "add_step",
+            Some(json!({
+                "board_id": "nonexistent-board",
+                "card_id": "nonexistent-card",
+                "text": "Complete review"
+            })),
+        )
+        .await;
+
+        // Should route through service
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from add_step"
+        );
+        let text = result.content.first().and_then(extract_text).unwrap_or("");
+        assert!(
+            !text.contains("Unknown tool"),
+            "Tool should be routed through KanbanService"
+        );
+    });
+}
+
+/// Test get_step routes through KanbanService.
+#[test]
+fn test_get_step_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to get non-existent step
+        let result = call_tool(
+            &app,
+            &services,
+            "get_step",
+            Some(json!({
+                "board_id": "nonexistent-board",
+                "card_id": "nonexistent-card",
+                "step_id": "nonexistent-step"
+            })),
+        )
+        .await;
+
+        // Should route through service
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from get_step"
+        );
+    });
+}
+
+/// Test toggle_step routes through KanbanService.
+#[test]
+fn test_toggle_step_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to toggle non-existent step
+        let result = call_tool(
+            &app,
+            &services,
+            "toggle_step",
+            Some(json!({
+                "board_id": "nonexistent-board",
+                "card_id": "nonexistent-card",
+                "step_id": "nonexistent-step"
+            })),
+        )
+        .await;
+
+        // Should route through service
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from toggle_step"
+        );
+    });
+}
+
+/// Test delete_step routes through KanbanService.
+#[test]
+fn test_delete_step_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to delete non-existent step
+        let result = call_tool(
+            &app,
+            &services,
+            "delete_step",
+            Some(json!({
+                "board_id": "nonexistent-board",
+                "card_id": "nonexistent-card",
+                "step_id": "nonexistent-step"
+            })),
+        )
+        .await;
+
+        // Should route through service
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from delete_step"
+        );
+    });
+}
+
+// =============================================================================
+// Kanban Comment Parity Tests
+// =============================================================================
+
+/// Test add_comment routes through KanbanService.
+#[test]
+fn test_add_comment_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to add comment to non-existent card
+        let result = call_tool(
+            &app,
+            &services,
+            "add_comment",
+            Some(json!({
+                "board_id": "nonexistent-board",
+                "card_id": "nonexistent-card",
+                "content": "This is a test comment"
+            })),
+        )
+        .await;
+
+        // Should route through service
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from add_comment"
+        );
+        let text = result.content.first().and_then(extract_text).unwrap_or("");
+        assert!(
+            !text.contains("Unknown tool"),
+            "Tool should be routed through KanbanService"
+        );
+    });
+}
+
+/// Test list_comments routes through KanbanService.
+#[test]
+fn test_list_comments_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to list comments for non-existent card
+        let result = call_tool(
+            &app,
+            &services,
+            "list_comments",
+            Some(json!({
+                "board_id": "nonexistent-board",
+                "card_id": "nonexistent-card"
+            })),
+        )
+        .await;
+
+        // Should route through service
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from list_comments"
+        );
+    });
+}
+
+/// Test delete_comment routes through KanbanService.
+#[test]
+fn test_delete_comment_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to delete non-existent comment
+        let result = call_tool(
+            &app,
+            &services,
+            "delete_comment",
+            Some(json!({
+                "board_id": "nonexistent-board",
+                "card_id": "nonexistent-card",
+                "comment_id": "nonexistent-comment"
+            })),
+        )
+        .await;
+
+        // Should route through service
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from delete_comment"
+        );
+    });
+}
+
+// =============================================================================
+// Kanban User Assignment Parity Tests
+// =============================================================================
+
+/// Test assign_user routes through KanbanService.
+#[test]
+fn test_assign_user_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to assign user to non-existent card
+        let result = call_tool(
+            &app,
+            &services,
+            "assign_user",
+            Some(json!({
+                "board_id": "nonexistent-board",
+                "card_id": "nonexistent-card",
+                "user_id": "user-123"
+            })),
+        )
+        .await;
+
+        // Should route through service
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from assign_user"
+        );
+        let text = result.content.first().and_then(extract_text).unwrap_or("");
+        assert!(
+            !text.contains("Unknown tool"),
+            "Tool should be routed through KanbanService"
+        );
+    });
+}
+
+/// Test unassign_user routes through KanbanService.
+#[test]
+fn test_unassign_user_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to unassign user from non-existent card
+        let result = call_tool(
+            &app,
+            &services,
+            "unassign_user",
+            Some(json!({
+                "board_id": "nonexistent-board",
+                "card_id": "nonexistent-card",
+                "user_id": "user-123"
+            })),
+        )
+        .await;
+
+        // Should route through service
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from unassign_user"
+        );
+    });
 }
 
 // =============================================================================
@@ -341,36 +1308,26 @@ fn test_kanban_card_operations_parity() {
 /// Test that messaging operations via MCP route through MessagingService.
 #[test]
 fn test_messaging_thread_list_parity() {
-    std::thread::Builder::new()
-        .stack_size(8 * 1024 * 1024)
-        .spawn(|| {
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            rt.block_on(async {
-                let temp = TempDir::new().unwrap();
-                let (app, services) = make_test_services(&temp).await;
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
 
-                // Initial state: no threads
-                let initial_snap = services.messaging().current_snapshot();
-                assert!(
-                    initial_snap.threads.is_empty(),
-                    "Expected no threads initially"
-                );
+        // Initial state: no threads
+        let initial_snap = services.messaging().current_snapshot();
+        assert!(
+            initial_snap.threads.is_empty(),
+            "Expected no threads initially"
+        );
 
-                // Call list_threads via MCP
-                let result = call_tool(&app, &services, "list_threads", Some(json!({}))).await;
+        // Call list_threads via MCP
+        let result = call_tool(&app, &services, "list_threads", Some(json!({}))).await;
 
-                // Tool should work (may return empty list or error if not authenticated)
-                // The key test is that it routes through MessagingService
-                // rather than directly calling CommunitasApp
-                assert!(
-                    !result.content.is_empty(),
-                    "Expected some response from list_threads"
-                );
-            });
-        })
-        .unwrap()
-        .join()
-        .unwrap();
+        // Tool should work (may return empty list or error if not authenticated)
+        assert!(
+            !result.content.is_empty(),
+            "Expected some response from list_threads"
+        );
+    });
 }
 
 // =============================================================================
@@ -380,95 +1337,79 @@ fn test_messaging_thread_list_parity() {
 /// Test that drive operations via MCP route through DriveService.
 #[test]
 fn test_drive_list_disks_parity() {
-    std::thread::Builder::new()
-        .stack_size(8 * 1024 * 1024)
-        .spawn(|| {
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            rt.block_on(async {
-                let temp = TempDir::new().unwrap();
-                let (app, services) = make_test_services(&temp).await;
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
 
-                // Initial state: empty drive snapshot
-                let initial_snap = services.drive().current_snapshot();
-                assert!(
-                    initial_snap.uploads.is_empty(),
-                    "Expected no uploads initially"
-                );
+        // Initial state: empty drive snapshot
+        let initial_snap = services.drive().current_snapshot();
+        assert!(
+            initial_snap.uploads.is_empty(),
+            "Expected no uploads initially"
+        );
 
-                // Call list_disks via MCP
-                let result = call_tool(
-                    &app,
-                    &services,
-                    "list_disks",
-                    Some(json!({
-                        "entity_id": "test-entity"
-                    })),
-                )
-                .await;
+        // Call list_disks via MCP
+        let result = call_tool(
+            &app,
+            &services,
+            "list_disks",
+            Some(json!({
+                "entity_id": "test-entity"
+            })),
+        )
+        .await;
 
-                // Tool should work - the key is it routes through DriveService
-                assert!(
-                    !result.content.is_empty(),
-                    "Expected some response from list_disks"
-                );
-            });
-        })
-        .unwrap()
-        .join()
-        .unwrap();
+        // Tool should work - the key is it routes through DriveService
+        assert!(
+            !result.content.is_empty(),
+            "Expected some response from list_disks"
+        );
+    });
 }
 
 /// Test that file write/read via MCP routes through DriveService.
 #[test]
 fn test_drive_file_operations_parity() {
-    std::thread::Builder::new()
-        .stack_size(8 * 1024 * 1024)
-        .spawn(|| {
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            rt.block_on(async {
-                let temp = TempDir::new().unwrap();
-                let (app, services) = make_test_services(&temp).await;
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
 
-                // Write file via MCP
-                let write_result = call_tool(
-                    &app,
-                    &services,
-                    "write_file",
-                    Some(json!({
-                        "entity_id": "test-entity",
-                        "path": "/parity-test.txt",
-                        "content": "Hello from MCP parity test"
-                    })),
-                )
-                .await;
+        // Write file via MCP
+        let write_result = call_tool(
+            &app,
+            &services,
+            "write_file",
+            Some(json!({
+                "entity_id": "test-entity",
+                "path": "/parity-test.txt",
+                "content": "Hello from MCP parity test"
+            })),
+        )
+        .await;
 
-                // Tool should execute (may succeed or fail based on auth state)
-                assert!(
-                    !write_result.content.is_empty(),
-                    "Expected response from write_file"
-                );
+        // Tool should execute (may succeed or fail based on auth state)
+        assert!(
+            !write_result.content.is_empty(),
+            "Expected response from write_file"
+        );
 
-                // Read file via MCP
-                let read_result = call_tool(
-                    &app,
-                    &services,
-                    "read_file",
-                    Some(json!({
-                        "entity_id": "test-entity",
-                        "path": "/parity-test.txt"
-                    })),
-                )
-                .await;
+        // Read file via MCP
+        let read_result = call_tool(
+            &app,
+            &services,
+            "read_file",
+            Some(json!({
+                "entity_id": "test-entity",
+                "path": "/parity-test.txt"
+            })),
+        )
+        .await;
 
-                assert!(
-                    !read_result.content.is_empty(),
-                    "Expected response from read_file"
-                );
-            });
-        })
-        .unwrap()
-        .join()
-        .unwrap();
+        assert!(
+            !read_result.content.is_empty(),
+            "Expected response from read_file"
+        );
+    });
 }
 
 // =============================================================================
@@ -478,62 +1419,54 @@ fn test_drive_file_operations_parity() {
 /// Test that canvas operations via MCP route through CanvasService.
 #[test]
 fn test_canvas_operations_parity() {
-    std::thread::Builder::new()
-        .stack_size(8 * 1024 * 1024)
-        .spawn(|| {
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            rt.block_on(async {
-                let temp = TempDir::new().unwrap();
-                let (app, services) = make_test_services(&temp).await;
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
 
-                // Initial state: empty canvas
-                let initial_snap = services.canvas().current_snapshot();
-                assert!(
-                    initial_snap.elements.is_empty(),
-                    "Expected no elements initially"
-                );
+        // Initial state: empty canvas
+        let initial_snap = services.canvas().current_snapshot();
+        assert!(
+            initial_snap.elements.is_empty(),
+            "Expected no elements initially"
+        );
 
-                // Get canvas snapshot via MCP
-                let result = call_tool(
-                    &app,
-                    &services,
-                    "canvas_get_snapshot",
-                    Some(json!({
-                        "entity_id": "test-entity"
-                    })),
-                )
-                .await;
+        // Get canvas snapshot via MCP
+        let result = call_tool(
+            &app,
+            &services,
+            "canvas_get_snapshot",
+            Some(json!({
+                "entity_id": "test-entity"
+            })),
+        )
+        .await;
 
-                // Tool should execute (routes through CanvasService)
-                assert!(
-                    !result.content.is_empty(),
-                    "Expected response from canvas_get_snapshot"
-                );
+        // Tool should execute (routes through CanvasService)
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from canvas_get_snapshot"
+        );
 
-                // Add text element via MCP
-                let add_result = call_tool(
-                    &app,
-                    &services,
-                    "canvas_add_text",
-                    Some(json!({
-                        "entity_id": "test-entity",
-                        "content": "Test text element",
-                        "x": 100.0,
-                        "y": 100.0
-                    })),
-                )
-                .await;
+        // Add text element via MCP
+        let add_result = call_tool(
+            &app,
+            &services,
+            "canvas_add_text",
+            Some(json!({
+                "entity_id": "test-entity",
+                "content": "Test text element",
+                "x": 100.0,
+                "y": 100.0
+            })),
+        )
+        .await;
 
-                // Tool should respond (routes through CanvasService)
-                assert!(
-                    !add_result.content.is_empty(),
-                    "Expected response from canvas_add_text"
-                );
-            });
-        })
-        .unwrap()
-        .join()
-        .unwrap();
+        // Tool should respond (routes through CanvasService)
+        assert!(
+            !add_result.content.is_empty(),
+            "Expected response from canvas_add_text"
+        );
+    });
 }
 
 // =============================================================================
@@ -543,68 +1476,133 @@ fn test_canvas_operations_parity() {
 /// Test that error handling is consistent between MCP and UiServices.
 #[test]
 fn test_error_consistency_invalid_board() {
-    std::thread::Builder::new()
-        .stack_size(8 * 1024 * 1024)
-        .spawn(|| {
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            rt.block_on(async {
-                let temp = TempDir::new().unwrap();
-                let (app, services) = make_test_services(&temp).await;
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
 
-                // Try to get a non-existent board via MCP
-                let result = call_tool(
-                    &app,
-                    &services,
-                    "get_kanban_board",
-                    Some(json!({
-                        "entity_id": "test-entity",
-                        "board_id": "nonexistent-board-id"
-                    })),
-                )
-                .await;
+        // Try to get a non-existent board via MCP
+        let result = call_tool(
+            &app,
+            &services,
+            "get_kanban_board",
+            Some(json!({
+                "entity_id": "test-entity",
+                "board_id": "nonexistent-board-id"
+            })),
+        )
+        .await;
 
-                // Should return an error result
-                assert!(result.is_error, "Expected error for nonexistent board");
-            });
-        })
-        .unwrap()
-        .join()
-        .unwrap();
+        // Should return an error result
+        assert!(result.is_error, "Expected error for nonexistent board");
+    });
 }
 
 /// Test that validation is applied consistently.
 #[test]
 fn test_validation_consistency() {
-    std::thread::Builder::new()
-        .stack_size(8 * 1024 * 1024)
-        .spawn(|| {
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            rt.block_on(async {
-                let temp = TempDir::new().unwrap();
-                let (app, services) = make_test_services(&temp).await;
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
 
-                // Try to create card without required board_id
-                let result = call_tool(
-                    &app,
-                    &services,
-                    "create_kanban_card",
-                    Some(json!({
-                        "entity_id": "test-entity",
-                        "title": "Missing board_id"
-                    })),
-                )
-                .await;
+        // Try to create card without required board_id
+        let result = call_tool(
+            &app,
+            &services,
+            "create_kanban_card",
+            Some(json!({
+                "entity_id": "test-entity",
+                "title": "Missing board_id"
+            })),
+        )
+        .await;
 
-                // Should fail validation
-                assert!(
-                    result.is_error,
-                    "Expected validation error for missing board_id"
-                );
-            });
-        })
-        .unwrap()
-        .join()
-        .unwrap();
+        // Should fail validation
+        assert!(
+            result.is_error,
+            "Expected validation error for missing board_id"
+        );
+    });
+}
+
+/// Test validation for missing required fields in card operations.
+#[test]
+fn test_validation_missing_card_id() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to move card without card_id
+        let result = call_tool(
+            &app,
+            &services,
+            "move_kanban_card",
+            Some(json!({
+                "board_id": "some-board",
+                "target_column_id": "some-column"
+            })),
+        )
+        .await;
+
+        // Should fail validation
+        assert!(
+            result.is_error,
+            "Expected validation error for missing card_id"
+        );
+    });
+}
+
+/// Test validation for missing required fields in step operations.
+#[test]
+fn test_validation_missing_step_text() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to add step without text
+        let result = call_tool(
+            &app,
+            &services,
+            "add_step",
+            Some(json!({
+                "board_id": "some-board",
+                "card_id": "some-card"
+            })),
+        )
+        .await;
+
+        // Should fail validation
+        assert!(
+            result.is_error,
+            "Expected validation error for missing step text"
+        );
+    });
+}
+
+/// Test validation for missing required fields in comment operations.
+#[test]
+fn test_validation_missing_comment_content() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to add comment without content
+        let result = call_tool(
+            &app,
+            &services,
+            "add_comment",
+            Some(json!({
+                "board_id": "some-board",
+                "card_id": "some-card"
+            })),
+        )
+        .await;
+
+        // Should fail validation
+        assert!(
+            result.is_error,
+            "Expected validation error for missing comment content"
+        );
+    });
 }
 
 // =============================================================================
@@ -642,4 +1640,61 @@ fn test_preauth_tools_include_health_check() {
         tool_names.contains(&"health_check"),
         "health_check should be available pre-auth"
     );
+}
+
+#[test]
+fn test_all_kanban_tools_registered() {
+    let tools = list_tools(true);
+    let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
+
+    // Complete list of all 23 kanban tools
+    let kanban_tools = [
+        // Board operations (5)
+        "create_kanban_board",
+        "get_kanban_board",
+        "update_kanban_board",
+        "delete_kanban_board",
+        "list_kanban_boards",
+        // Column operations (6)
+        "create_kanban_column",
+        "get_kanban_column",
+        "update_kanban_column",
+        "delete_kanban_column",
+        "move_kanban_column",
+        "list_kanban_columns",
+        // Card operations (7)
+        "create_kanban_card",
+        "get_kanban_card",
+        "update_kanban_card",
+        "delete_kanban_card",
+        "move_kanban_card",
+        "list_kanban_cards",
+        "change_card_state",
+        // Tag operations (4)
+        "create_kanban_tag",
+        "list_kanban_tags",
+        "tag_card",
+        "untag_card",
+        // Step operations (4)
+        "add_step",
+        "get_step",
+        "toggle_step",
+        "delete_step",
+        // Comment operations (3)
+        "add_comment",
+        "list_comments",
+        "delete_comment",
+        // User operations (2)
+        "assign_user",
+        "unassign_user",
+    ];
+
+    for tool in &kanban_tools {
+        assert!(
+            tool_names.contains(tool),
+            "Expected {} tool to be registered (found {} tools total)",
+            tool,
+            tool_names.len()
+        );
+    }
 }

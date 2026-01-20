@@ -8,7 +8,6 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use communitas_ui_api::drive::{
     DirectoryEntry, DiskInfo, DiskType, DownloadProgress, DownloadState, FileMetadata, FilePreview,
@@ -19,16 +18,9 @@ use tokio::sync::{RwLock, watch};
 use tracing::instrument;
 
 use crate::auth::{AuthController, AuthService, AuthStateSnapshot};
+use crate::util::current_timestamp_millis;
 use communitas_core::app::CommunitasApp;
 use communitas_core::command::{Command, DiskTypeArg, Event, Query, QueryResponse};
-
-/// Get current timestamp in milliseconds since Unix epoch.
-fn current_timestamp_millis() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0)
-}
 
 /// Simple checksum using a hash of bytes (mock implementation).
 fn compute_checksum(data: &[u8]) -> String {

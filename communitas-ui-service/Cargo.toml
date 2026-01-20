@@ -14,6 +14,7 @@ communitas-core = { package = "communitas-core", path = "../communitas-core" }
 communitas-kanban = { path = "../communitas-kanban" }
 communitas-ui-api = { path = "../communitas-ui-api" }
 dirs = "5.0"
+saorsa-webrtc-core = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

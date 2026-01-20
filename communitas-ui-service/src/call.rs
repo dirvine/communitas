@@ -5,28 +5,33 @@
 //! - Call state tracking via watch channels
 //! - Graceful fallback for media errors (listen-only mode)
 //! - Participant state updates
+//!
+//! ## Device Enumeration Architecture
+//!
+//! Device enumeration requires platform-specific APIs (e.g., CoreAudio on macOS,
+//! WASAPI on Windows, PulseAudio on Linux). The Rust backend cannot directly
+//! access these APIs - instead, the platform host layer (Tauri/Dioxus) must
+//! implement the [`DeviceEnumerator`] trait.
+//!
+//! When no platform enumerator is provided, a mock implementation returns
+//! placeholder devices for development and testing purposes.
+//!
+//! See `saorsa_webrtc_core` for the underlying WebRTC infrastructure.
 
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 
+use async_trait::async_trait;
 use communitas_ui_api::call::{
     CallInfo, CallSettings, CallSnapshot, CallState, DeviceType, MediaDevice, MediaError,
     Participant,
 };
 use thiserror::Error;
 use tokio::sync::{RwLock, watch};
-use tracing::instrument;
+use tracing::{debug, instrument, warn};
 
 use crate::auth::{AuthController, AuthService, AuthStateSnapshot};
+use crate::util::current_timestamp_millis;
 use communitas_core::app::CommunitasApp;
-
-/// Get current timestamp in milliseconds since Unix epoch.
-fn current_timestamp_millis() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0)
-}
 
 /// Errors returned by the call service.
 #[derive(Debug, Error)]
@@ -45,8 +50,118 @@ pub enum CallError {
     ConnectionError(String),
     #[error("device not found: {0}")]
     DeviceNotFound(String),
+    #[error("device enumeration failed: {0}")]
+    DeviceEnumerationFailed(String),
     #[error("operation timed out")]
     Timeout,
+}
+
+/// Trait for platform-specific device enumeration.
+///
+/// Media device enumeration requires platform-specific APIs that are not accessible
+/// from the Rust backend. Platform hosts (e.g., Tauri, Dioxus desktop) should
+/// implement this trait to provide real device enumeration.
+///
+/// # Example Implementation (Tauri)
+///
+/// ```ignore
+/// struct TauriDeviceEnumerator;
+///
+/// #[async_trait]
+/// impl DeviceEnumerator for TauriDeviceEnumerator {
+///     async fn enumerate_devices(&self) -> Result<Vec<MediaDevice>, CallError> {
+///         // Use Tauri's media device APIs here
+///         todo!()
+///     }
+/// }
+/// ```
+#[async_trait]
+pub trait DeviceEnumerator: Send + Sync {
+    /// Enumerate all available media devices.
+    ///
+    /// Returns a list of microphones, speakers, and cameras available on the system.
+    async fn enumerate_devices(&self) -> Result<Vec<MediaDevice>, CallError>;
+
+    /// Check if a specific device is available.
+    ///
+    /// Default implementation checks the enumerated devices list.
+    async fn is_device_available(&self, device_id: &str) -> Result<bool, CallError> {
+        let devices = self.enumerate_devices().await?;
+        Ok(devices.iter().any(|d| d.id == device_id && d.is_available))
+    }
+}
+
+/// Mock device enumerator for development and testing.
+///
+/// Returns placeholder devices when no platform-specific enumerator is available.
+/// This allows the UI to function in development mode without real hardware access.
+///
+/// **Note**: These are simulated devices and will not provide actual audio/video.
+#[derive(Debug, Default, Clone)]
+pub struct MockDeviceEnumerator;
+
+#[async_trait]
+impl DeviceEnumerator for MockDeviceEnumerator {
+    async fn enumerate_devices(&self) -> Result<Vec<MediaDevice>, CallError> {
+        debug!("Using mock device enumeration - no real devices available");
+        warn!(
+            "Device enumeration is using mock implementation. \
+             For real devices, implement DeviceEnumerator for your platform host."
+        );
+
+        Ok(vec![
+            MediaDevice {
+                id: "mock-mic-default".to_string(),
+                name: "Default Microphone (Mock)".to_string(),
+                device_type: DeviceType::Microphone,
+                is_default: true,
+                is_available: true,
+            },
+            MediaDevice {
+                id: "mock-mic-builtin".to_string(),
+                name: "Built-in Microphone (Mock)".to_string(),
+                device_type: DeviceType::Microphone,
+                is_default: false,
+                is_available: true,
+            },
+            MediaDevice {
+                id: "mock-speaker-default".to_string(),
+                name: "Default Speaker (Mock)".to_string(),
+                device_type: DeviceType::Speaker,
+                is_default: true,
+                is_available: true,
+            },
+            MediaDevice {
+                id: "mock-speaker-builtin".to_string(),
+                name: "Built-in Speakers (Mock)".to_string(),
+                device_type: DeviceType::Speaker,
+                is_default: false,
+                is_available: true,
+            },
+            MediaDevice {
+                id: "mock-camera-default".to_string(),
+                name: "Default Camera (Mock)".to_string(),
+                device_type: DeviceType::Camera,
+                is_default: true,
+                is_available: true,
+            },
+        ])
+    }
+}
+
+/// Empty device enumerator that returns no devices.
+///
+/// Use this when running in a headless environment where no media devices
+/// should be expected (e.g., CI, server-side).
+#[derive(Debug, Default, Clone)]
+pub struct NoDeviceEnumerator;
+
+#[async_trait]
+impl DeviceEnumerator for NoDeviceEnumerator {
+    async fn enumerate_devices(&self) -> Result<Vec<MediaDevice>, CallError> {
+        debug!("No device enumeration available - running headless");
+        Ok(Vec::new())
+    }
 }
 
 /// Service for real-time voice/video communication.
@@ -56,6 +171,7 @@ pub struct CallService {
     tx: watch::Sender<CallSnapshot>,
     rx: watch::Receiver<CallSnapshot>,
     state: Arc<RwLock<CallServiceState>>,
+    device_enumerator: Arc<dyn DeviceEnumerator>,
 }
 
 /// Internal state for the call service.
@@ -85,8 +201,33 @@ impl Default for CallServiceState {
 
 #[allow(unused_variables)] // Mock implementation - params used for tracing but not actual logic
 impl CallService {
-    /// Create a new call service linked to the auth controller.
+    /// Create a new call service with the default mock device enumerator.
+    ///
+    /// For production use with real devices, use [`CallService::with_device_enumerator`]
+    /// and provide a platform-specific [`DeviceEnumerator`] implementation.
     pub fn new(auth: Arc<AuthController>, app: Arc<CommunitasApp>) -> Self {
+        Self::with_device_enumerator(auth, app, Arc::new(MockDeviceEnumerator))
+    }
+
+    /// Create a new call service with a custom device enumerator.
+    ///
+    /// # Arguments
+    ///
+    /// * `auth` - Authentication controller for user identity
+    /// * `app` - Communitas application context
+    /// * `device_enumerator` - Platform-specific device enumerator implementation
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let enumerator = Arc::new(TauriDeviceEnumerator::new());
+    /// let call_service = CallService::with_device_enumerator(auth, app, enumerator);
+    /// ```
+    pub fn with_device_enumerator(
+        auth: Arc<AuthController>,
+        app: Arc<CommunitasApp>,
+        device_enumerator: Arc<dyn DeviceEnumerator>,
+    ) -> Self {
         let (tx, rx) = watch::channel(CallSnapshot::default());
         Self {
             auth,
@@ -94,7 +235,15 @@ impl CallService {
             tx,
             rx,
             state: Arc::new(RwLock::new(CallServiceState::default())),
+            device_enumerator,
         }
+    }
+
+    /// Create a new call service for headless operation (no devices).
+    ///
+    /// Use this in server-side or CI environments where no media devices are available.
+    pub fn headless(auth: Arc<AuthController>, app: Arc<CommunitasApp>) -> Self {
+        Self::with_device_enumerator(auth, app, Arc::new(NoDeviceEnumerator))
     }
 
     /// Subscribe to call state updates.
@@ -151,6 +300,10 @@ impl CallService {
     // ===== Device Management =====
 
     /// List available media devices.
+    ///
+    /// Uses the configured [`DeviceEnumerator`] to discover audio and video devices.
+    /// Returns mock devices by default; for real devices, provide a platform-specific
+    /// enumerator via [`CallService::with_device_enumerator`].
     #[instrument(skip(self), name = "ui.call.list_devices")]
     pub async fn list_devices(&self) -> Result<Vec<MediaDevice>, CallError> {
         let rx = self.auth.subscribe();
@@ -158,44 +311,8 @@ impl CallService {
             return Err(CallError::NotAuthenticated);
         }
 
-        // Mock implementation: return simulated devices
-        let devices = vec![
-            MediaDevice {
-                id: "mic-default".to_string(),
-                name: "Default Microphone".to_string(),
-                device_type: DeviceType::Microphone,
-                is_default: true,
-                is_available: true,
-            },
-            MediaDevice {
-                id: "mic-builtin".to_string(),
-                name: "Built-in Microphone".to_string(),
-                device_type: DeviceType::Microphone,
-                is_default: false,
-                is_available: true,
-            },
-            MediaDevice {
-                id: "speaker-default".to_string(),
-                name: "Default Speaker".to_string(),
-                device_type: DeviceType::Speaker,
-                is_default: true,
-                is_available: true,
-            },
-            MediaDevice {
-                id: "speaker-builtin".to_string(),
-                name: "Built-in Speakers".to_string(),
-                device_type: DeviceType::Speaker,
-                is_default: false,
-                is_available: true,
-            },
-            MediaDevice {
-                id: "camera-default".to_string(),
-                name: "FaceTime HD Camera".to_string(),
-                device_type: DeviceType::Camera,
-                is_default: true,
-                is_available: true,
-            },
-        ];
+        // Use the configured device enumerator
+        let devices = self.device_enumerator.enumerate_devices().await?;
 
         // Update available devices in state
         {
@@ -205,6 +322,14 @@ impl CallService {
         self.broadcast().await;
 
         Ok(devices)
+    }
+
+    /// Refresh the list of available devices.
+    ///
+    /// Call this when the user plugs in or unplugs a device.
+    #[instrument(skip(self), name = "ui.call.refresh_devices")]
+    pub async fn refresh_devices(&self) -> Result<Vec<MediaDevice>, CallError> {
+        self.list_devices().await
     }
 
     /// Select a microphone device.
@@ -282,6 +407,7 @@ impl CallService {
         }
 
         // Mock implementation: return a simulated audio level
+        // Real implementation would use platform APIs to capture audio
         Ok(0.35)
     }
 
@@ -299,7 +425,7 @@ impl CallService {
             return Err(CallError::DeviceNotFound(device_id.to_string()));
         }
 
-        // Mock implementation: would play test sound
+        // Mock implementation: would play test sound via platform APIs
         Ok(())
     }
 
@@ -632,6 +758,84 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn headless_enumerator_returns_no_devices() {
+        // Test the NoDeviceEnumerator trait directly without full service setup
+        let enumerator = NoDeviceEnumerator;
+        let devices = enumerator
+            .enumerate_devices()
+            .await
+            .expect("should enumerate");
+        assert!(devices.is_empty(), "headless should return no devices");
+    }
+
+    #[tokio::test]
+    async fn mock_enumerator_returns_devices() {
+        // Test the MockDeviceEnumerator trait directly without full service setup
+        let enumerator = MockDeviceEnumerator;
+        let devices = enumerator
+            .enumerate_devices()
+            .await
+            .expect("should enumerate");
+        assert!(!devices.is_empty(), "mock should return devices");
+
+        // Verify we have at least one of each type
+        assert!(
+            devices
+                .iter()
+                .any(|d| d.device_type == DeviceType::Microphone)
+        );
+        assert!(devices.iter().any(|d| d.device_type == DeviceType::Speaker));
+        assert!(devices.iter().any(|d| d.device_type == DeviceType::Camera));
+    }
+
+    #[tokio::test]
+    async fn custom_device_enumerator_trait() {
+        // Test that custom enumerators work
+        struct TestEnumerator;
+
+        #[async_trait]
+        impl DeviceEnumerator for TestEnumerator {
+            async fn enumerate_devices(&self) -> Result<Vec<MediaDevice>, CallError> {
+                Ok(vec![MediaDevice {
+                    id: "test-mic".to_string(),
+                    name: "Test Microphone".to_string(),
+                    device_type: DeviceType::Microphone,
+                    is_default: true,
+                    is_available: true,
+                }])
+            }
+        }
+
+        let enumerator = TestEnumerator;
+        let devices = enumerator
+            .enumerate_devices()
+            .await
+            .expect("should enumerate");
+        assert_eq!(devices.len(), 1);
+        assert_eq!(devices[0].id, "test-mic");
+    }
+
+    #[tokio::test]
+    async fn device_enumerator_is_available_default_impl() {
+        // Test the default is_device_available implementation
+        let enumerator = MockDeviceEnumerator;
+
+        // Check that a mock device is available
+        let available = enumerator
+            .is_device_available("mock-mic-default")
+            .await
+            .expect("should check availability");
+        assert!(available);
+
+        // Check that a non-existent device is not available
+        let not_available = enumerator
+            .is_device_available("non-existent-device")
+            .await
+            .expect("should check availability");
+        assert!(!not_available);
+    }
+
+    #[tokio::test]
     async fn join_call_requires_auth() {
         let temp = TempDir::new().expect("temp dir");
         let service = make_service(&temp).await;
@@ -756,5 +960,11 @@ mod tests {
 
         let err = CallError::MediaError("No microphone".to_string());
         assert_eq!(format!("{err}"), "media error: No microphone");
+
+        let err = CallError::DeviceEnumerationFailed("Platform error".to_string());
+        assert_eq!(
+            format!("{err}"),
+            "device enumeration failed: Platform error"
+        );
     }
 }

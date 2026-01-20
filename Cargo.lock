@@ -1290,6 +1290,7 @@ dependencies = [
  "communitas-kanban",
  "communitas-ui-api",
  "dirs 5.0.1",
+ "saorsa-webrtc-core",
  "serde",
  "serde_json",
  "tempfile",

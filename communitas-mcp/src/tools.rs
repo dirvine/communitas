@@ -1806,7 +1806,8 @@ pub async fn call_tool(
     if let Some(result) = dispatch_kanban_tools(app, name, &args).await {
         return result;
     }
-    if let Some(result) = dispatch_canvas_tools(app, name, &args).await {
+    // Canvas tools use UiServices for MCP-Dioxus parity (PLAN-31)
+    if let Some(result) = dispatch_canvas_tools(services, name, &args).await {
         return result;
     }
     // Drive/file tools use UiServices for MCP-Dioxus parity (PLAN-31)
@@ -1952,25 +1953,32 @@ async fn dispatch_kanban_tools(
 }
 
 async fn dispatch_canvas_tools(
-    app: &CommunitasApp,
+    services: &UiServices,
     name: &str,
     args: &Value,
 ) -> Option<ToolCallResult> {
     match name {
-        "canvas_get_snapshot" => Some(execute_canvas_get_snapshot(app, args.clone()).await),
-        "canvas_add_text" => Some(execute_canvas_add_text(app, args.clone()).await),
-        "canvas_add_image" => Some(execute_canvas_add_image(app, args.clone()).await),
-        "canvas_add_chart" => Some(execute_canvas_add_chart(app, args.clone()).await),
-        "canvas_remove_element" => Some(execute_canvas_remove_element(app, args.clone()).await),
-        "canvas_update_transform" => Some(execute_canvas_update_transform(app, args.clone()).await),
-        "canvas_select_element" => Some(execute_canvas_select_element(app, args.clone()).await),
-        "canvas_deselect_all" => Some(execute_canvas_deselect_all(app, args.clone()).await),
-        "canvas_set_viewport" => Some(execute_canvas_set_viewport(app, args.clone()).await),
-        "canvas_set_view" => Some(execute_canvas_set_view(app, args.clone()).await),
-        "canvas_clear" => Some(execute_canvas_clear(app, args.clone()).await),
-        "canvas_export" => Some(execute_canvas_export(app, args.clone()).await),
-        "canvas_import" => Some(execute_canvas_import(app, args.clone()).await),
-        "canvas_element_at" => Some(execute_canvas_element_at(app, args.clone()).await),
+        // Canvas tools - use CanvasService for MCP-Dioxus parity (PLAN-31)
+        "canvas_get_snapshot" => Some(execute_canvas_get_snapshot(services, args.clone()).await),
+        "canvas_add_text" => Some(execute_canvas_add_text(services, args.clone()).await),
+        "canvas_add_image" => Some(execute_canvas_add_image(services, args.clone()).await),
+        "canvas_add_chart" => Some(execute_canvas_add_chart(services, args.clone()).await),
+        "canvas_remove_element" => {
+            Some(execute_canvas_remove_element(services, args.clone()).await)
+        }
+        "canvas_update_transform" => {
+            Some(execute_canvas_update_transform(services, args.clone()).await)
+        }
+        "canvas_select_element" => {
+            Some(execute_canvas_select_element(services, args.clone()).await)
+        }
+        "canvas_deselect_all" => Some(execute_canvas_deselect_all(services, args.clone()).await),
+        "canvas_set_viewport" => Some(execute_canvas_set_viewport(services, args.clone()).await),
+        "canvas_set_view" => Some(execute_canvas_set_view(services, args.clone()).await),
+        "canvas_clear" => Some(execute_canvas_clear(services, args.clone()).await),
+        "canvas_export" => Some(execute_canvas_export(services, args.clone()).await),
+        "canvas_import" => Some(execute_canvas_import(services, args.clone()).await),
+        "canvas_element_at" => Some(execute_canvas_element_at(services, args.clone()).await),
         _ => None,
     }
 }
@@ -5163,12 +5171,13 @@ async fn execute_validate_mnemonic(args: &Value) -> ToolCallResult {
 
 // ========== Canvas Executors ==========
 
-async fn execute_canvas_get_snapshot(app: &CommunitasApp, args: Value) -> ToolCallResult {
+async fn execute_canvas_get_snapshot(services: &UiServices, args: Value) -> ToolCallResult {
     let entity_id = require_str!(args, "entity_id");
 
+    // Use app() for query operations - MCP queries persisted state
     let query = Query::GetCanvasSnapshot { entity_id };
 
-    match app.query(query).await {
+    match services.canvas().app().query(query).await {
         Ok(QueryResponse::CanvasSnapshot(snapshot)) => {
             let elements: Vec<Value> = snapshot
                 .elements
@@ -5206,7 +5215,7 @@ async fn execute_canvas_get_snapshot(app: &CommunitasApp, args: Value) -> ToolCa
     }
 }
 
-async fn execute_canvas_add_text(app: &CommunitasApp, args: Value) -> ToolCallResult {
+async fn execute_canvas_add_text(services: &UiServices, args: Value) -> ToolCallResult {
     let entity_id = require_str!(args, "entity_id");
     let content = require_str!(args, "content");
     let x = args.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
@@ -5214,38 +5223,25 @@ async fn execute_canvas_add_text(app: &CommunitasApp, args: Value) -> ToolCallRe
     let font_size = args
         .get("font_size")
         .and_then(|v| v.as_f64())
-        .map(|v| v as f32);
-    let color = opt_str(&args, "color");
+        .unwrap_or(16.0) as f32;
+    let color = opt_str(&args, "color").unwrap_or_else(|| "#000000".to_string());
 
-    let cmd = Command::CanvasAddText {
-        entity_id,
-        content,
-        x,
-        y,
-        font_size,
-        color,
-    };
-
-    match app.execute(cmd).await {
-        Ok(events) => {
-            let element_id = events.iter().find_map(|e| {
-                if let Event::CanvasTextAdded { element_id, .. } = e {
-                    Some(element_id.clone())
-                } else {
-                    None
-                }
-            });
-            json_result(&json!({
-                "success": true,
-                "message": "Text element added to canvas",
-                "element_id": element_id
-            }))
-        }
-        Err(e) => error_result(&format!("Failed to add text to canvas: {}", e.message)),
+    // Use CanvasService for MCP-Dioxus parity
+    match services
+        .canvas()
+        .add_text(Some(&entity_id), content, x, y, font_size, color)
+        .await
+    {
+        Ok(element_id) => json_result(&json!({
+            "success": true,
+            "message": "Text element added to canvas",
+            "element_id": element_id
+        })),
+        Err(e) => error_result(&format!("Failed to add text to canvas: {e}")),
     }
 }
 
-async fn execute_canvas_add_image(app: &CommunitasApp, args: Value) -> ToolCallResult {
+async fn execute_canvas_add_image(services: &UiServices, args: Value) -> ToolCallResult {
     let entity_id = require_str!(args, "entity_id");
     let src = require_str!(args, "src");
     let x = args.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
@@ -5253,88 +5249,67 @@ async fn execute_canvas_add_image(app: &CommunitasApp, args: Value) -> ToolCallR
     let width = args.get("width").and_then(|v| v.as_f64()).unwrap_or(100.0) as f32;
     let height = args.get("height").and_then(|v| v.as_f64()).unwrap_or(100.0) as f32;
 
-    let cmd = Command::CanvasAddImage {
-        entity_id,
-        src,
-        x,
-        y,
-        width,
-        height,
-    };
-
-    match app.execute(cmd).await {
-        Ok(events) => {
-            let element_id = events.iter().find_map(|e| {
-                if let Event::CanvasImageAdded { element_id, .. } = e {
-                    Some(element_id.clone())
-                } else {
-                    None
-                }
-            });
-            json_result(&json!({
-                "success": true,
-                "message": "Image element added to canvas",
-                "element_id": element_id
-            }))
-        }
-        Err(e) => error_result(&format!("Failed to add image to canvas: {}", e.message)),
+    // Use CanvasService for MCP-Dioxus parity
+    match services
+        .canvas()
+        .add_image(Some(&entity_id), src, x, y, width, height)
+        .await
+    {
+        Ok(element_id) => json_result(&json!({
+            "success": true,
+            "message": "Image element added to canvas",
+            "element_id": element_id
+        })),
+        Err(e) => error_result(&format!("Failed to add image to canvas: {e}")),
     }
 }
 
-async fn execute_canvas_add_chart(app: &CommunitasApp, args: Value) -> ToolCallResult {
+async fn execute_canvas_add_chart(services: &UiServices, args: Value) -> ToolCallResult {
     let entity_id = require_str!(args, "entity_id");
     let chart_type = require_str!(args, "chart_type");
-    let data = require_str!(args, "data");
+    let data_str = require_str!(args, "data");
     let x = args.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
     let y = args.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
     let width = args.get("width").and_then(|v| v.as_f64()).unwrap_or(300.0) as f32;
     let height = args.get("height").and_then(|v| v.as_f64()).unwrap_or(200.0) as f32;
 
-    let cmd = Command::CanvasAddChart {
-        entity_id,
-        chart_type,
-        data,
-        x,
-        y,
-        width,
-        height,
+    // Parse data string to JSON value for CanvasService
+    let data: serde_json::Value = match serde_json::from_str(&data_str) {
+        Ok(v) => v,
+        Err(e) => return error_result(&format!("Invalid chart data JSON: {e}")),
     };
 
-    match app.execute(cmd).await {
-        Ok(events) => {
-            let element_id = events.iter().find_map(|e| {
-                if let Event::CanvasChartAdded { element_id, .. } = e {
-                    Some(element_id.clone())
-                } else {
-                    None
-                }
-            });
-            json_result(&json!({
-                "success": true,
-                "message": "Chart element added to canvas",
-                "element_id": element_id
-            }))
-        }
-        Err(e) => error_result(&format!("Failed to add chart to canvas: {}", e.message)),
+    // Use CanvasService for MCP-Dioxus parity
+    match services
+        .canvas()
+        .add_chart(Some(&entity_id), chart_type, data, x, y, width, height)
+        .await
+    {
+        Ok(element_id) => json_result(&json!({
+            "success": true,
+            "message": "Chart element added to canvas",
+            "element_id": element_id
+        })),
+        Err(e) => error_result(&format!("Failed to add chart to canvas: {e}")),
     }
 }
 
-async fn execute_canvas_remove_element(app: &CommunitasApp, args: Value) -> ToolCallResult {
+async fn execute_canvas_remove_element(services: &UiServices, args: Value) -> ToolCallResult {
     let entity_id = require_str!(args, "entity_id");
     let element_id = require_str!(args, "element_id");
 
-    let cmd = Command::CanvasRemoveElement {
-        entity_id,
-        element_id,
-    };
-
-    match app.execute(cmd).await {
-        Ok(_) => success_result("Canvas element removed"),
-        Err(e) => error_result(&format!("Failed to remove canvas element: {}", e.message)),
+    // Use CanvasService for MCP-Dioxus parity
+    match services
+        .canvas()
+        .remove_element(Some(&entity_id), &element_id)
+        .await
+    {
+        Ok(()) => success_result("Canvas element removed"),
+        Err(e) => error_result(&format!("Failed to remove canvas element: {e}")),
     }
 }
 
-async fn execute_canvas_update_transform(app: &CommunitasApp, args: Value) -> ToolCallResult {
+async fn execute_canvas_update_transform(services: &UiServices, args: Value) -> ToolCallResult {
     let entity_id = require_str!(args, "entity_id");
     let element_id = require_str!(args, "element_id");
     let x = args.get("x").and_then(|v| v.as_f64()).map(|v| v as f32);
@@ -5353,6 +5328,7 @@ async fn execute_canvas_update_transform(app: &CommunitasApp, args: Value) -> To
         .and_then(|v| v.as_i64())
         .map(|v| v as i32);
 
+    // MCP API allows partial updates; use app() for direct control
     let cmd = Command::CanvasUpdateTransform {
         entity_id,
         element_id,
@@ -5364,123 +5340,115 @@ async fn execute_canvas_update_transform(app: &CommunitasApp, args: Value) -> To
         z_index,
     };
 
-    match app.execute(cmd).await {
+    match services.canvas().app().execute(cmd).await {
         Ok(_) => success_result("Canvas element transform updated"),
         Err(e) => error_result(&format!("Failed to update canvas transform: {}", e.message)),
     }
 }
 
-async fn execute_canvas_select_element(app: &CommunitasApp, args: Value) -> ToolCallResult {
+async fn execute_canvas_select_element(services: &UiServices, args: Value) -> ToolCallResult {
     let entity_id = require_str!(args, "entity_id");
     let element_id = require_str!(args, "element_id");
 
-    let cmd = Command::CanvasSelectElement {
-        entity_id,
-        element_id,
-    };
-
-    match app.execute(cmd).await {
-        Ok(_) => success_result("Canvas element selected"),
-        Err(e) => error_result(&format!("Failed to select canvas element: {}", e.message)),
+    // Use CanvasService for MCP-Dioxus parity
+    match services
+        .canvas()
+        .select_element(Some(&entity_id), &element_id)
+        .await
+    {
+        Ok(()) => success_result("Canvas element selected"),
+        Err(e) => error_result(&format!("Failed to select canvas element: {e}")),
     }
 }
 
-async fn execute_canvas_deselect_all(app: &CommunitasApp, args: Value) -> ToolCallResult {
+async fn execute_canvas_deselect_all(services: &UiServices, args: Value) -> ToolCallResult {
     let entity_id = require_str!(args, "entity_id");
 
-    let cmd = Command::CanvasDeselectAll { entity_id };
-
-    match app.execute(cmd).await {
-        Ok(_) => success_result("All canvas elements deselected"),
-        Err(e) => error_result(&format!(
-            "Failed to deselect canvas elements: {}",
-            e.message
-        )),
+    // Use CanvasService for MCP-Dioxus parity
+    match services.canvas().deselect_all(Some(&entity_id)).await {
+        Ok(()) => success_result("All canvas elements deselected"),
+        Err(e) => error_result(&format!("Failed to deselect canvas elements: {e}")),
     }
 }
 
-async fn execute_canvas_set_viewport(app: &CommunitasApp, args: Value) -> ToolCallResult {
+async fn execute_canvas_set_viewport(services: &UiServices, args: Value) -> ToolCallResult {
     let entity_id = require_str!(args, "entity_id");
     let width = args.get("width").and_then(|v| v.as_f64()).unwrap_or(800.0) as f32;
     let height = args.get("height").and_then(|v| v.as_f64()).unwrap_or(600.0) as f32;
 
-    let cmd = Command::CanvasSetViewport {
-        entity_id,
-        width,
-        height,
-    };
-
-    match app.execute(cmd).await {
-        Ok(_) => success_result("Canvas viewport updated"),
-        Err(e) => error_result(&format!("Failed to set canvas viewport: {}", e.message)),
+    // Use CanvasService for MCP-Dioxus parity
+    match services
+        .canvas()
+        .set_viewport(Some(&entity_id), width, height)
+        .await
+    {
+        Ok(()) => success_result("Canvas viewport updated"),
+        Err(e) => error_result(&format!("Failed to set canvas viewport: {e}")),
     }
 }
 
-async fn execute_canvas_set_view(app: &CommunitasApp, args: Value) -> ToolCallResult {
+async fn execute_canvas_set_view(services: &UiServices, args: Value) -> ToolCallResult {
     let entity_id = require_str!(args, "entity_id");
-    let zoom = args.get("zoom").and_then(|v| v.as_f64()).map(|v| v as f32);
-    let pan_x = args.get("pan_x").and_then(|v| v.as_f64()).map(|v| v as f32);
-    let pan_y = args.get("pan_y").and_then(|v| v.as_f64()).map(|v| v as f32);
+    let zoom = args.get("zoom").and_then(|v| v.as_f64()).unwrap_or(1.0) as f32;
+    let pan_x = args.get("pan_x").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+    let pan_y = args.get("pan_y").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
 
-    let cmd = Command::CanvasSetView {
-        entity_id,
-        zoom,
-        pan_x,
-        pan_y,
-    };
-
-    match app.execute(cmd).await {
-        Ok(_) => success_result("Canvas view updated"),
-        Err(e) => error_result(&format!("Failed to set canvas view: {}", e.message)),
+    // Use CanvasService for MCP-Dioxus parity
+    match services
+        .canvas()
+        .set_view(Some(&entity_id), zoom, pan_x, pan_y)
+        .await
+    {
+        Ok(()) => success_result("Canvas view updated"),
+        Err(e) => error_result(&format!("Failed to set canvas view: {e}")),
     }
 }
 
-async fn execute_canvas_clear(app: &CommunitasApp, args: Value) -> ToolCallResult {
+async fn execute_canvas_clear(services: &UiServices, args: Value) -> ToolCallResult {
     let entity_id = require_str!(args, "entity_id");
 
+    // CanvasService.clear() has no entity_id parameter; use app() for direct control
     let cmd = Command::CanvasClear { entity_id };
 
-    match app.execute(cmd).await {
+    match services.canvas().app().execute(cmd).await {
         Ok(_) => success_result("Canvas cleared"),
         Err(e) => error_result(&format!("Failed to clear canvas: {}", e.message)),
     }
 }
 
-async fn execute_canvas_export(app: &CommunitasApp, args: Value) -> ToolCallResult {
+async fn execute_canvas_export(services: &UiServices, args: Value) -> ToolCallResult {
     let entity_id = require_str!(args, "entity_id");
 
-    let query = Query::CanvasExport { entity_id };
-
-    match app.query(query).await {
-        Ok(QueryResponse::CanvasExportJson(json)) => json_result(&json!({
+    // Use CanvasService for MCP-Dioxus parity
+    match services.canvas().export_json(Some(&entity_id)).await {
+        Ok(json) => json_result(&json!({
             "success": true,
             "json": json
         })),
-        Ok(_) => error_result("Unexpected response type"),
-        Err(e) => error_result(&format!("Failed to export canvas: {}", e.message)),
+        Err(e) => error_result(&format!("Failed to export canvas: {e}")),
     }
 }
 
-async fn execute_canvas_import(app: &CommunitasApp, args: Value) -> ToolCallResult {
+async fn execute_canvas_import(services: &UiServices, args: Value) -> ToolCallResult {
     let entity_id = require_str!(args, "entity_id");
     let json = require_str!(args, "json");
 
-    let cmd = Command::CanvasImport { entity_id, json };
-
-    match app.execute(cmd).await {
-        Ok(_) => success_result("Canvas imported successfully"),
-        Err(e) => error_result(&format!("Failed to import canvas: {}", e.message)),
+    // Use CanvasService for MCP-Dioxus parity
+    match services.canvas().import_json(Some(&entity_id), &json).await {
+        Ok(()) => success_result("Canvas imported successfully"),
+        Err(e) => error_result(&format!("Failed to import canvas: {e}")),
     }
 }
 
-async fn execute_canvas_element_at(app: &CommunitasApp, args: Value) -> ToolCallResult {
+async fn execute_canvas_element_at(services: &UiServices, args: Value) -> ToolCallResult {
     let entity_id = require_str!(args, "entity_id");
     let x = args.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
     let y = args.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
 
+    // MCP queries persisted state with entity_id; use app() for query
     let query = Query::CanvasElementAt { entity_id, x, y };
 
-    match app.query(query).await {
+    match services.canvas().app().query(query).await {
         Ok(QueryResponse::CanvasElement(Some(element))) => json_result(&json!({
             "found": true,
             "element": {

@@ -373,7 +373,10 @@ impl CanvasService {
     }
 
     /// Queue an operation for later sync when offline.
-    fn queue_operation(&self, op: Operation) {
+    ///
+    /// This is exposed publicly for testing purposes. In normal use,
+    /// operations are queued automatically when persistence fails.
+    pub fn queue_operation(&self, op: Operation) {
         if let Ok(mut queue) = self.offline_queue.write() {
             queue.enqueue(op);
             tracing::debug!(pending = queue.len(), "queued offline operation");

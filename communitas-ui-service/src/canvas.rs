@@ -14,6 +14,7 @@ use tracing::instrument;
 
 use crate::auth::{AuthController, AuthService, AuthStateSnapshot};
 use communitas_core::app::CommunitasApp;
+use communitas_core::command::Command;
 
 /// Errors that can occur during canvas operations.
 #[derive(Debug, Error)]
@@ -37,6 +38,10 @@ pub enum CanvasError {
     /// Upstream canvas error.
     #[error("canvas error: {0}")]
     Canvas(String),
+
+    /// Command execution failed.
+    #[error("command execution failed: {0}")]
+    CommandFailed(String),
 }
 
 impl From<canvas_core::CanvasError> for CanvasError {
@@ -285,9 +290,12 @@ impl CanvasService {
     }
 
     /// Add a text element to the canvas.
+    ///
+    /// If `entity_id` is provided, the element is also persisted via CommunitasApp.
     #[instrument(skip(self), fields(content_len = content.len()))]
     pub async fn add_text(
         &self,
+        entity_id: Option<&str>,
         content: String,
         x: f32,
         y: f32,
@@ -297,9 +305,9 @@ impl CanvasService {
         self.require_auth()?;
 
         let element = Element::new(ElementKind::Text {
-            content,
+            content: content.clone(),
             font_size,
-            color,
+            color: color.clone(),
         })
         .with_transform(Transform {
             x,
@@ -318,15 +326,35 @@ impl CanvasService {
             scene.add_element(element)
         };
 
+        // Persist via CommunitasApp if entity_id provided
+        if let Some(eid) = entity_id {
+            let cmd = Command::CanvasAddText {
+                entity_id: eid.to_string(),
+                content,
+                x,
+                y,
+                font_size: Some(font_size),
+                color: Some(color),
+            };
+            self.app
+                .execute(cmd)
+                .await
+                .map_err(|e| CanvasError::CommandFailed(e.to_string()))?;
+            tracing::debug!(element_id = %id, entity_id = eid, "persisted text element via command");
+        }
+
         self.publish_snapshot(false);
         tracing::debug!(element_id = %id, "added text element");
         Ok(id.to_string())
     }
 
     /// Add an image element to the canvas.
+    ///
+    /// If `entity_id` is provided, the element is also persisted via CommunitasApp.
     #[instrument(skip(self), fields(src_len = src.len()))]
     pub async fn add_image(
         &self,
+        entity_id: Option<&str>,
         src: String,
         x: f32,
         y: f32,
@@ -345,7 +373,11 @@ impl CanvasService {
             canvas_core::ImageFormat::Png
         };
 
-        let element = Element::new(ElementKind::Image { src, format }).with_transform(Transform {
+        let element = Element::new(ElementKind::Image {
+            src: src.clone(),
+            format,
+        })
+        .with_transform(Transform {
             x,
             y,
             width,
@@ -362,15 +394,36 @@ impl CanvasService {
             scene.add_element(element)
         };
 
+        // Persist via CommunitasApp if entity_id provided
+        if let Some(eid) = entity_id {
+            let cmd = Command::CanvasAddImage {
+                entity_id: eid.to_string(),
+                src,
+                x,
+                y,
+                width,
+                height,
+            };
+            self.app
+                .execute(cmd)
+                .await
+                .map_err(|e| CanvasError::CommandFailed(e.to_string()))?;
+            tracing::debug!(element_id = %id, entity_id = eid, "persisted image element via command");
+        }
+
         self.publish_snapshot(false);
         tracing::debug!(element_id = %id, "added image element");
         Ok(id.to_string())
     }
 
     /// Add a chart element to the canvas.
+    ///
+    /// If `entity_id` is provided, the element is also persisted via CommunitasApp.
+    #[allow(clippy::too_many_arguments)]
     #[instrument(skip(self, data))]
     pub async fn add_chart(
         &self,
+        entity_id: Option<&str>,
         chart_type: String,
         data: serde_json::Value,
         x: f32,
@@ -380,15 +433,18 @@ impl CanvasService {
     ) -> Result<String, CanvasError> {
         self.require_auth()?;
 
-        let element =
-            Element::new(ElementKind::Chart { chart_type, data }).with_transform(Transform {
-                x,
-                y,
-                width,
-                height,
-                rotation: 0.0,
-                z_index: 0,
-            });
+        let element = Element::new(ElementKind::Chart {
+            chart_type: chart_type.clone(),
+            data: data.clone(),
+        })
+        .with_transform(Transform {
+            x,
+            y,
+            width,
+            height,
+            rotation: 0.0,
+            z_index: 0,
+        });
 
         let id = {
             let mut scene = self
@@ -397,6 +453,26 @@ impl CanvasService {
                 .map_err(|_| CanvasError::Canvas("failed to acquire scene lock".to_string()))?;
             scene.add_element(element)
         };
+
+        // Persist via CommunitasApp if entity_id provided
+        if let Some(eid) = entity_id {
+            let data_json = serde_json::to_string(&data)
+                .map_err(|e| CanvasError::Serialization(e.to_string()))?;
+            let cmd = Command::CanvasAddChart {
+                entity_id: eid.to_string(),
+                chart_type,
+                data: data_json,
+                x,
+                y,
+                width,
+                height,
+            };
+            self.app
+                .execute(cmd)
+                .await
+                .map_err(|e| CanvasError::CommandFailed(e.to_string()))?;
+            tracing::debug!(element_id = %id, entity_id = eid, "persisted chart element via command");
+        }
 
         self.publish_snapshot(false);
         tracing::debug!(element_id = %id, "added chart element");
@@ -755,7 +831,14 @@ mod tests {
         let canvas = make_service(&temp).await;
 
         let result = canvas
-            .add_text("Hello".to_string(), 10.0, 20.0, 16.0, "#000000".to_string())
+            .add_text(
+                None,
+                "Hello".to_string(),
+                10.0,
+                20.0,
+                16.0,
+                "#000000".to_string(),
+            )
             .await;
         assert!(matches!(result, Err(CanvasError::NotAuthenticated)));
     }
@@ -766,7 +849,14 @@ mod tests {
         let canvas = make_authenticated_service(&temp).await;
 
         let id = canvas
-            .add_text("Hello".to_string(), 10.0, 20.0, 16.0, "#000000".to_string())
+            .add_text(
+                None,
+                "Hello".to_string(),
+                10.0,
+                20.0,
+                16.0,
+                "#000000".to_string(),
+            )
             .await
             .unwrap();
 
@@ -785,7 +875,7 @@ mod tests {
         let canvas = make_authenticated_service(&temp).await;
 
         let id = canvas
-            .add_image("test.png".to_string(), 0.0, 0.0, 100.0, 100.0)
+            .add_image(None, "test.png".to_string(), 0.0, 0.0, 100.0, 100.0)
             .await
             .unwrap();
 
@@ -801,7 +891,7 @@ mod tests {
 
         let data = serde_json::json!({"values": [1, 2, 3]});
         let id = canvas
-            .add_chart("bar".to_string(), data, 0.0, 0.0, 200.0, 150.0)
+            .add_chart(None, "bar".to_string(), data, 0.0, 0.0, 200.0, 150.0)
             .await
             .unwrap();
 
@@ -816,7 +906,14 @@ mod tests {
         let canvas = make_authenticated_service(&temp).await;
 
         let id = canvas
-            .add_text("Remove me".to_string(), 0.0, 0.0, 14.0, "#fff".to_string())
+            .add_text(
+                None,
+                "Remove me".to_string(),
+                0.0,
+                0.0,
+                14.0,
+                "#fff".to_string(),
+            )
             .await
             .unwrap();
         assert_eq!(canvas.current_snapshot().elements.len(), 1);
@@ -842,7 +939,14 @@ mod tests {
         let canvas = make_authenticated_service(&temp).await;
 
         let id = canvas
-            .add_text("Move me".to_string(), 0.0, 0.0, 14.0, "#000".to_string())
+            .add_text(
+                None,
+                "Move me".to_string(),
+                0.0,
+                0.0,
+                14.0,
+                "#000".to_string(),
+            )
             .await
             .unwrap();
 
@@ -869,7 +973,7 @@ mod tests {
         let canvas = make_authenticated_service(&temp).await;
 
         let id = canvas
-            .add_text("Test".to_string(), 0.0, 0.0, 14.0, "#000".to_string())
+            .add_text(None, "Test".to_string(), 0.0, 0.0, 14.0, "#000".to_string())
             .await
             .unwrap();
 
@@ -892,7 +996,14 @@ mod tests {
         let canvas = make_authenticated_service(&temp).await;
 
         let id = canvas
-            .add_text("Select me".to_string(), 0.0, 0.0, 14.0, "#000".to_string())
+            .add_text(
+                None,
+                "Select me".to_string(),
+                0.0,
+                0.0,
+                14.0,
+                "#000".to_string(),
+            )
             .await
             .unwrap();
 
@@ -947,11 +1058,18 @@ mod tests {
         let canvas = make_authenticated_service(&temp).await;
 
         canvas
-            .add_text("One".to_string(), 0.0, 0.0, 14.0, "#000".to_string())
+            .add_text(None, "One".to_string(), 0.0, 0.0, 14.0, "#000".to_string())
             .await
             .unwrap();
         canvas
-            .add_text("Two".to_string(), 10.0, 10.0, 14.0, "#000".to_string())
+            .add_text(
+                None,
+                "Two".to_string(),
+                10.0,
+                10.0,
+                14.0,
+                "#000".to_string(),
+            )
             .await
             .unwrap();
         assert_eq!(canvas.current_snapshot().elements.len(), 2);
@@ -967,6 +1085,7 @@ mod tests {
 
         canvas
             .add_text(
+                None,
                 "Export me".to_string(),
                 50.0,
                 50.0,
@@ -995,6 +1114,7 @@ mod tests {
         // Add element via the async API
         canvas
             .add_text(
+                None,
                 "Click me".to_string(),
                 100.0,
                 100.0,
@@ -1034,7 +1154,14 @@ mod tests {
         let mut rx = canvas.subscribe();
 
         canvas
-            .add_text("Watch me".to_string(), 0.0, 0.0, 14.0, "#000".to_string())
+            .add_text(
+                None,
+                "Watch me".to_string(),
+                0.0,
+                0.0,
+                14.0,
+                "#000".to_string(),
+            )
             .await
             .unwrap();
 

@@ -583,8 +583,14 @@ impl CanvasService {
     }
 
     /// Select an element.
-    #[instrument(skip(self))]
-    pub async fn select_element(&self, element_id: &str) -> Result<(), CanvasError> {
+    ///
+    /// If `entity_id` is provided, the selection is also persisted via CommunitasApp.
+    #[instrument(skip(self, entity_id))]
+    pub async fn select_element(
+        &self,
+        entity_id: Option<&str>,
+        element_id: &str,
+    ) -> Result<(), CanvasError> {
         self.require_auth()?;
 
         let id = ElementId::parse(element_id)
@@ -598,14 +604,28 @@ impl CanvasService {
             scene.select(id)?;
         }
 
+        // Persist via CommunitasApp if entity_id provided
+        if let Some(eid) = entity_id {
+            let cmd = Command::CanvasSelectElement {
+                entity_id: eid.to_string(),
+                element_id: id.to_string(),
+            };
+            self.app
+                .execute(cmd)
+                .await
+                .map_err(|e| CanvasError::CommandFailed(e.to_string()))?;
+        }
+
         self.publish_snapshot(false);
         tracing::debug!(element_id, "selected element");
         Ok(())
     }
 
     /// Deselect all elements.
-    #[instrument(skip(self))]
-    pub async fn deselect_all(&self) -> Result<(), CanvasError> {
+    ///
+    /// If `entity_id` is provided, the deselection is also persisted via CommunitasApp.
+    #[instrument(skip(self, entity_id))]
+    pub async fn deselect_all(&self, entity_id: Option<&str>) -> Result<(), CanvasError> {
         self.require_auth()?;
 
         {
@@ -616,8 +636,94 @@ impl CanvasService {
             scene.deselect_all();
         }
 
+        // Persist via CommunitasApp if entity_id provided
+        if let Some(eid) = entity_id {
+            let cmd = Command::CanvasDeselectAll {
+                entity_id: eid.to_string(),
+            };
+            self.app
+                .execute(cmd)
+                .await
+                .map_err(|e| CanvasError::CommandFailed(e.to_string()))?;
+            tracing::debug!(entity_id = eid, "persisted deselect all via command");
+        }
+
         self.publish_snapshot(false);
         tracing::debug!("deselected all elements");
+        Ok(())
+    }
+
+    /// Toggle selection of an element (for multi-select with Shift+click).
+    ///
+    /// If the element is currently selected, it will be deselected.
+    /// If the element is not selected, it will be added to the selection
+    /// without affecting other selected elements.
+    ///
+    /// If `entity_id` is provided, the toggle is also persisted via CommunitasApp.
+    #[instrument(skip(self, entity_id))]
+    pub async fn toggle_selection(
+        &self,
+        entity_id: Option<&str>,
+        element_id: &str,
+    ) -> Result<(), CanvasError> {
+        self.require_auth()?;
+
+        let id = ElementId::parse(element_id)
+            .map_err(|e| CanvasError::ElementNotFound(e.to_string()))?;
+
+        let was_selected: bool;
+        {
+            let mut scene = self
+                .scene
+                .write()
+                .map_err(|_| CanvasError::Canvas("failed to acquire scene lock".to_string()))?;
+
+            // Check if element is currently selected
+            let is_selected = scene.selected_elements().any(|e| e.id == id);
+
+            if is_selected {
+                // Element is selected - deselect it by collecting others and re-selecting
+                let others: Vec<ElementId> = scene
+                    .selected_elements()
+                    .filter(|e| e.id != id)
+                    .map(|e| e.id)
+                    .collect();
+
+                scene.deselect_all();
+                for other_id in others {
+                    // Re-select the others (ignore errors for already-removed elements)
+                    let _ = scene.select(other_id);
+                }
+                was_selected = true;
+            } else {
+                // Element is not selected - add to selection
+                scene.select(id)?;
+                was_selected = false;
+            }
+        }
+
+        // Persist via CommunitasApp if entity_id provided
+        if let Some(eid) = entity_id {
+            // For toggle, we use CanvasSelectElement when adding selection.
+            // When removing, we currently have no single-element deselect command,
+            // so we don't persist the removal (the next full sync will reconcile).
+            if !was_selected {
+                let cmd = Command::CanvasSelectElement {
+                    entity_id: eid.to_string(),
+                    element_id: id.to_string(),
+                };
+                self.app
+                    .execute(cmd)
+                    .await
+                    .map_err(|e| CanvasError::CommandFailed(e.to_string()))?;
+                tracing::debug!(element_id = %id, entity_id = eid, "persisted toggle selection (added) via command");
+            } else {
+                tracing::debug!(element_id = %id, entity_id = eid, "toggle deselected element (local only, no single-deselect command)");
+            }
+        }
+
+        self.publish_snapshot(false);
+        tracing::debug!(element_id, was_selected, "toggled element selection");
         Ok(())
     }
 
@@ -1190,32 +1296,99 @@ mod tests {
         assert!(matches!(result, Err(CanvasError::InvalidTransform(_))));
     }
 
-    #[tokio::test]
-    async fn select_and_deselect_elements() {
-        let temp = TempDir::new().unwrap();
-        let canvas = make_authenticated_service(&temp).await;
+    // Uses a larger stack thread to handle the large async state machine
+    // from CanvasService methods with Command persistence
+    #[test]
+    fn select_and_deselect_elements() {
+        std::thread::Builder::new()
+            .stack_size(8 * 1024 * 1024)
+            .spawn(|| {
+                let rt = tokio::runtime::Runtime::new().unwrap();
+                rt.block_on(async {
+                    let temp = TempDir::new().unwrap();
+                    let canvas = make_authenticated_service(&temp).await;
 
-        let id = canvas
-            .add_text(
-                None,
-                "Select me".to_string(),
-                0.0,
-                0.0,
-                14.0,
-                "#000".to_string(),
-            )
-            .await
+                    let id = canvas
+                        .add_text(
+                            None,
+                            "Select me".to_string(),
+                            0.0,
+                            0.0,
+                            14.0,
+                            "#000".to_string(),
+                        )
+                        .await
+                        .unwrap();
+
+                    canvas.select_element(None, &id).await.unwrap();
+                    let snap = canvas.current_snapshot();
+                    assert_eq!(snap.selected_ids.len(), 1);
+                    assert!(snap.elements[0].selected);
+
+                    canvas.deselect_all(None).await.unwrap();
+                    let snap = canvas.current_snapshot();
+                    assert!(snap.selected_ids.is_empty());
+                    assert!(!snap.elements[0].selected);
+                });
+            })
+            .unwrap()
+            .join()
             .unwrap();
+    }
 
-        canvas.select_element(&id).await.unwrap();
-        let snap = canvas.current_snapshot();
-        assert_eq!(snap.selected_ids.len(), 1);
-        assert!(snap.elements[0].selected);
+    // Test toggle_selection for multi-select behavior
+    #[test]
+    fn toggle_selection_multiselect() {
+        std::thread::Builder::new()
+            .stack_size(8 * 1024 * 1024)
+            .spawn(|| {
+                let rt = tokio::runtime::Runtime::new().unwrap();
+                rt.block_on(async {
+                    let temp = TempDir::new().unwrap();
+                    let canvas = make_authenticated_service(&temp).await;
 
-        canvas.deselect_all().await.unwrap();
-        let snap = canvas.current_snapshot();
-        assert!(snap.selected_ids.is_empty());
-        assert!(!snap.elements[0].selected);
+                    // Add two elements
+                    let id1 = canvas
+                        .add_text(
+                            None,
+                            "First".to_string(),
+                            0.0,
+                            0.0,
+                            14.0,
+                            "#000".to_string(),
+                        )
+                        .await
+                        .unwrap();
+                    let id2 = canvas
+                        .add_text(
+                            None,
+                            "Second".to_string(),
+                            100.0,
+                            0.0,
+                            14.0,
+                            "#000".to_string(),
+                        )
+                        .await
+                        .unwrap();
+
+                    // Select first element
+                    canvas.select_element(None, &id1).await.unwrap();
+                    assert_eq!(canvas.current_snapshot().selected_ids.len(), 1);
+
+                    // Toggle second element (adds to selection)
+                    canvas.toggle_selection(None, &id2).await.unwrap();
+                    assert_eq!(canvas.current_snapshot().selected_ids.len(), 2);
+
+                    // Toggle first element again (removes from selection)
+                    canvas.toggle_selection(None, &id1).await.unwrap();
+                    let snap = canvas.current_snapshot();
+                    assert_eq!(snap.selected_ids.len(), 1);
+                    assert!(snap.selected_ids.contains(&id2));
+                });
+            })
+            .unwrap()
+            .join()
+            .unwrap();
     }
 
     #[tokio::test]

@@ -20,13 +20,13 @@ use communitas_ui_service::{
 use dioxus::prelude::*;
 use dioxus_logger::tracing::Level;
 use futures::StreamExt;
+use native_dialog::{MessageDialog, MessageType};
 use std::{
     borrow::Cow,
     sync::{Arc, OnceLock},
 };
 use styles::{button, input};
 use tokens::colors;
-use native_dialog::{MessageDialog, MessageType};
 use tracing::{error, info};
 
 static UI_SERVICES: OnceLock<Arc<UiServices>> = OnceLock::new();

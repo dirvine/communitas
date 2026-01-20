@@ -435,8 +435,25 @@ impl DriveService {
             return Err(DriveError::NotAuthenticated);
         }
 
-        // Mock implementation: return empty content
-        Ok(Vec::new())
+        // Query the core for file contents
+        let response = self
+            .app
+            .query(Query::ReadFile {
+                entity_id: entity_id.to_string(),
+                disk_type: disk_type_to_arg(disk_type),
+                path: path.to_string(),
+            })
+            .await
+            .map_err(|e| DriveError::QueryError(e.to_string()))?;
+
+        // Extract file contents from response
+        let QueryResponse::FileContents(data) = response else {
+            return Err(DriveError::QueryError(
+                "unexpected response type from ReadFile query".to_string(),
+            ));
+        };
+
+        Ok(data)
     }
 
     /// Write file contents.

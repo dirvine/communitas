@@ -432,12 +432,56 @@ impl MessagingService {
         thread_id: &str,
         message_id: &str,
     ) -> Result<(), MessagingError> {
-        let _ = (thread_id, message_id); // Suppress unused warnings for now
+        // Verify authentication
         if !self.is_authenticated() {
             return Err(MessagingError::NotAuthenticated);
         }
-        // TODO: Wire to core Command::DeleteMessage
-        Err(MessagingError::Internal("not yet implemented".to_string()))
+
+        // Query the entity to get its type
+        let entity_type = match self
+            .app
+            .query(Query::GetEntity {
+                entity_id: thread_id.to_string(),
+            })
+            .await
+        {
+            Ok(QueryResponse::Entity(entity)) => entity.entity_type,
+            Ok(_) => {
+                warn!(thread_id, "Unexpected response type for GetEntity");
+                EntityType::Channel
+            }
+            Err(e) => {
+                debug!(thread_id, error = %e.message, "Could not determine entity type, using Channel");
+                EntityType::Channel
+            }
+        };
+
+        // Build and execute the DeleteMessage command
+        let cmd = Command::DeleteMessage {
+            entity_id: thread_id.to_string(),
+            entity_type,
+            message_id: message_id.to_string(),
+        };
+
+        let events = self
+            .app
+            .execute(cmd)
+            .await
+            .map_err(|e| MessagingError::Internal(format!("Delete failed: {}", e.message)))?;
+
+        // Verify the MessageDeleted event was returned
+        let deleted = events.iter().any(|event| {
+            matches!(event, Event::MessageDeleted { message_id: mid, .. } if mid == message_id)
+        });
+
+        if !deleted {
+            return Err(MessagingError::Internal(
+                "No MessageDeleted event returned".to_string(),
+            ));
+        }
+
+        debug!(thread_id, message_id, "Message deleted successfully");
+        Ok(())
     }
 
     /// Mark a thread as read, clearing unread count.

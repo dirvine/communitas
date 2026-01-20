@@ -124,7 +124,6 @@ impl MessagingService {
         app: &Arc<CommunitasApp>,
         auth: &Arc<AuthController>,
     ) {
-        // Check authentication
         let is_authenticated = matches!(
             &*auth.subscribe().borrow(),
             AuthStateSnapshot::Authenticated(_)
@@ -135,20 +134,29 @@ impl MessagingService {
             return;
         }
 
-        // Query entities
-        let entities = match app.query(Query::ListEntities).await {
-            Ok(QueryResponse::EntityList(entities)) => entities,
-            Ok(_) => {
-                trace!("Unexpected response type for ListEntities in refresh");
-                return;
-            }
-            Err(e) => {
-                trace!(error = %e.message, "Failed to list entities in refresh");
-                return;
-            }
+        let Some(threads) = Self::fetch_threads(app).await else {
+            trace!("Failed to fetch threads in refresh");
+            return;
         };
 
-        // Build thread summaries
+        let _ = tx.send(MessagingSnapshot {
+            threads,
+            loading: false,
+        });
+
+        trace!("Thread list refreshed via event");
+    }
+
+    /// Fetch and build thread summaries from the core app.
+    ///
+    /// Returns `None` if the query fails, allowing callers to handle errors appropriately.
+    async fn fetch_threads(app: &Arc<CommunitasApp>) -> Option<Vec<ThreadSummary>> {
+        let entities = match app.query(Query::ListEntities).await {
+            Ok(QueryResponse::EntityList(entities)) => entities,
+            Ok(_) => return None,
+            Err(_) => return None,
+        };
+
         let mut threads = Vec::with_capacity(entities.len());
         for entity in entities {
             let default_timestamp = entity.created_at.max(0) as u64;
@@ -161,9 +169,10 @@ impl MessagingService {
             {
                 Ok(QueryResponse::Messages(messages)) => {
                     if let Some(msg) = messages.last() {
-                        let preview_text = truncate_preview(&msg.text, 100);
-                        let ts = msg.timestamp.max(0) as u64;
-                        (preview_text, ts)
+                        (
+                            truncate_preview(&msg.text, 100),
+                            msg.timestamp.max(0) as u64,
+                        )
                     } else {
                         (String::new(), default_timestamp)
                     }
@@ -171,12 +180,10 @@ impl MessagingService {
                 _ => (String::new(), default_timestamp),
             };
 
-            let entity_type = core_entity_type_to_ui(&entity.entity_type);
-
             threads.push(ThreadSummary {
                 thread_id: entity.id.clone(),
                 entity_id: Some(entity.id),
-                entity_type: Some(entity_type),
+                entity_type: Some(core_entity_type_to_ui(&entity.entity_type)),
                 contact_id: None,
                 display_name: entity.name,
                 last_message_preview: preview,
@@ -186,16 +193,9 @@ impl MessagingService {
             });
         }
 
-        // Sort by most recent message first
         threads.sort_by(|a, b| b.last_message_timestamp.cmp(&a.last_message_timestamp));
 
-        // Update watch channel
-        let _ = tx.send(MessagingSnapshot {
-            threads,
-            loading: false,
-        });
-
-        trace!("Thread list refreshed via event");
+        Some(threads)
     }
 
     /// Get a reference to the core app.
@@ -235,81 +235,10 @@ impl MessagingService {
             return Err(MessagingError::NotAuthenticated);
         }
 
-        // Set loading state
         self.set_loading(true);
 
-        // Query all entities from the core app
-        let entities = match self.app.query(Query::ListEntities).await {
-            Ok(QueryResponse::EntityList(entities)) => entities,
-            Ok(_) => {
-                warn!("Unexpected response type for ListEntities query");
-                self.set_loading(false);
-                return Ok(vec![]);
-            }
-            Err(e) => {
-                warn!(error = %e.message, "Failed to list entities");
-                self.set_loading(false);
-                return Ok(vec![]);
-            }
-        };
+        let threads = Self::fetch_threads(&self.app).await.unwrap_or_default();
 
-        debug!(
-            entity_count = entities.len(),
-            "Fetched entities for threads"
-        );
-
-        // Build thread summaries from entities
-        let mut threads = Vec::with_capacity(entities.len());
-        for entity in entities {
-            let default_timestamp = entity.created_at.max(0) as u64;
-
-            // Get the latest message for preview
-            let (preview, timestamp) = match self
-                .app
-                .query(Query::GetEntityMessages {
-                    entity_id: entity.id.clone(),
-                })
-                .await
-            {
-                Ok(QueryResponse::Messages(messages)) => {
-                    // Get the most recent message (last in the list; core returns messages chronologically)
-                    if let Some(msg) = messages.last() {
-                        let preview_text = truncate_preview(&msg.text, 100);
-                        let ts = msg.timestamp.max(0) as u64;
-                        (preview_text, ts)
-                    } else {
-                        (String::new(), default_timestamp)
-                    }
-                }
-                Ok(_) => {
-                    debug!(entity_id = %entity.id, "Unexpected response for GetEntityMessages");
-                    (String::new(), default_timestamp)
-                }
-                Err(e) => {
-                    debug!(entity_id = %entity.id, error = %e.message, "Failed to get messages for entity");
-                    (String::new(), default_timestamp)
-                }
-            };
-
-            let entity_type = core_entity_type_to_ui(&entity.entity_type);
-
-            threads.push(ThreadSummary {
-                thread_id: entity.id.clone(),
-                entity_id: Some(entity.id),
-                entity_type: Some(entity_type),
-                contact_id: None,
-                display_name: entity.name,
-                last_message_preview: preview,
-                last_message_timestamp: timestamp,
-                unread_count: 0, // TODO: Track unread counts separately
-                is_muted: false,
-            });
-        }
-
-        // Sort by most recent message first
-        threads.sort_by(|a, b| b.last_message_timestamp.cmp(&a.last_message_timestamp));
-
-        // Update watch channel
         self.set_threads(threads.clone());
 
         debug!(thread_count = threads.len(), "Returning threads");

@@ -3,6 +3,7 @@
 use std::sync::{Arc, Weak};
 
 use communitas_core::app::CommunitasApp;
+use communitas_core::command::Command;
 use communitas_kanban::{
     CardState as CoreCardState, CardUpdate as CoreCardUpdate, KanbanService as CoreKanbanService,
 };
@@ -12,7 +13,7 @@ use communitas_ui_api::{
 };
 use thiserror::Error;
 use tokio::sync::{RwLock, watch};
-use tracing::{debug, info, instrument, trace};
+use tracing::{debug, info, instrument, trace, warn};
 
 /// Direction for keyboard-based card movement.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -421,6 +422,10 @@ impl KanbanService {
     }
 
     /// Create a new board.
+    ///
+    /// Creates the board both locally via CRDT and persists via CommunitasApp command.
+    /// This ensures the board is available immediately in the local state and will be
+    /// synchronized across the network via CRDT.
     #[instrument(skip(self), name = "ui.kanban.create_board", fields(entity_id, name))]
     pub async fn create_board(
         &self,
@@ -433,17 +438,52 @@ impl KanbanService {
             return Err(KanbanError::NotAuthenticated);
         }
 
+        // Create board locally via CRDT for immediate availability
         let core = self.core.read().await;
         let board = core.create_board(entity_id, name.to_string(), None)?;
+        let board_id = board.id.clone();
+        let board_name = board.name.clone();
+        let project_id = board.project_id.clone();
+        let created_at = board.created_at;
+        drop(core);
 
-        Ok(BoardSummary {
-            id: board.id,
-            name: board.name,
-            entity_id: board.project_id,
+        // Execute command for persistence via CommunitasApp
+        // This ensures the board is stored and synced across the network
+        let command = Command::CreateKanbanBoard {
+            entity_id: entity_id.to_string(),
+            board_name: name.to_string(),
+            description: None,
+        };
+
+        if let Err(e) = self.app.execute(command).await {
+            warn!(
+                board_id = %board_id,
+                error = %e,
+                "Failed to persist board via CommunitasApp, board exists locally only"
+            );
+            // Continue - board was created locally, persistence failure is not fatal
+            // The board will be available in the local CRDT state
+        } else {
+            debug!(board_id = %board_id, "Board created and persisted via CommunitasApp");
+        }
+
+        let summary = BoardSummary {
+            id: board_id,
+            name: board_name,
+            entity_id: project_id,
             column_count: 0,
             card_count: 0,
-            last_activity: Some(board.created_at * 1000),
-        })
+            last_activity: Some(created_at * 1000),
+        };
+
+        // Update watch channel with new board
+        let mut snap = self.rx.borrow().clone();
+        snap.boards.push(summary.clone());
+        snap.loading = false;
+        let _ = self.tx.send(snap);
+
+        info!(board_id = %summary.id, "Board created successfully");
+        Ok(summary)
     }
 
     /// Create a new column in a board.

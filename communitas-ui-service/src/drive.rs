@@ -46,6 +46,15 @@ fn disk_type_from_arg(arg: DiskTypeArg) -> DiskType {
     }
 }
 
+/// Convert UI DiskType to core DiskTypeArg.
+fn disk_type_to_arg(disk_type: DiskType) -> DiskTypeArg {
+    match disk_type {
+        DiskType::Private => DiskTypeArg::Private,
+        DiskType::Public => DiskTypeArg::Public,
+        DiskType::Shared => DiskTypeArg::Shared,
+    }
+}
+
 /// Errors returned by the drive service.
 #[derive(Debug, Error)]
 pub enum DriveError {
@@ -220,34 +229,39 @@ impl DriveService {
         // Update loading state
         self.set_loading(true);
 
-        // Mock implementation: return empty directory for root
-        let entries = if path == "/" || path.is_empty() {
-            // Root directory with example folders
-            vec![
-                DirectoryEntry {
-                    name: "Documents".to_string(),
-                    path: "/Documents".to_string(),
-                    is_directory: true,
-                    size_bytes: 0,
-                    mime_type: None,
-                    modified_at: current_timestamp_millis(),
-                    created_at: current_timestamp_millis(),
-                    checksum: None,
-                },
-                DirectoryEntry {
-                    name: "Images".to_string(),
-                    path: "/Images".to_string(),
-                    is_directory: true,
-                    size_bytes: 0,
-                    mime_type: None,
-                    modified_at: current_timestamp_millis(),
-                    created_at: current_timestamp_millis(),
-                    checksum: None,
-                },
-            ]
-        } else {
-            Vec::new()
+        // Query the core for file list
+        let response = self
+            .app
+            .query(Query::ListFiles {
+                entity_id: entity_id.to_string(),
+                disk_type: disk_type_to_arg(disk_type),
+                path: path.to_string(),
+            })
+            .await
+            .map_err(|e| DriveError::QueryError(e.to_string()))?;
+
+        // Extract file list from response
+        let QueryResponse::FileList(file_list) = response else {
+            self.set_loading(false);
+            return Err(DriveError::QueryError(
+                "unexpected response type from ListFiles query".to_string(),
+            ));
         };
+
+        // Convert to DirectoryEntry
+        let entries: Vec<DirectoryEntry> = file_list
+            .into_iter()
+            .map(|info| DirectoryEntry {
+                name: info.name,
+                path: info.path,
+                is_directory: info.is_directory,
+                size_bytes: info.size_bytes,
+                mime_type: None,
+                modified_at: info.modified_at,
+                created_at: info.modified_at,
+                checksum: None,
+            })
+            .collect();
 
         // Update snapshot
         let mut snap = self.rx.borrow().clone();

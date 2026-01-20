@@ -81,6 +81,8 @@ pub struct Participant {
     pub is_video_enabled: bool,
     /// Whether the participant is currently speaking.
     pub is_speaking: bool,
+    /// Whether the participant is currently screen sharing.
+    pub is_screen_sharing: bool,
     /// Current audio level (0.0 to 1.0).
     pub audio_level: f32,
     /// Timestamp when the participant joined (ms since epoch).
@@ -90,7 +92,7 @@ pub struct Participant {
 impl Participant {
     /// Returns true if this participant has active media.
     pub fn has_active_media(&self) -> bool {
-        !self.is_muted || self.is_video_enabled
+        !self.is_muted || self.is_video_enabled || self.is_screen_sharing
     }
 }
 
@@ -236,6 +238,8 @@ pub struct CallSnapshot {
     pub settings: CallSettings,
     /// Whether in listen-only mode due to media failure.
     pub listen_only_mode: bool,
+    /// Whether the current user is screen sharing.
+    pub is_screen_sharing: bool,
 }
 
 impl CallSnapshot {
@@ -290,6 +294,7 @@ mod tests {
             is_muted: true,
             is_video_enabled: false,
             is_speaking: false,
+            is_screen_sharing: false,
             audio_level: 0.0,
             joined_at: 0,
         };
@@ -303,9 +308,15 @@ mod tests {
 
         let participant_with_video = Participant {
             is_video_enabled: true,
-            ..participant
+            ..participant.clone()
         };
         assert!(participant_with_video.has_active_media());
+
+        let participant_with_screen_share = Participant {
+            is_screen_sharing: true,
+            ..participant
+        };
+        assert!(participant_with_screen_share.has_active_media());
     }
 
     #[test]
@@ -322,6 +333,7 @@ mod tests {
                     is_muted: false,
                     is_video_enabled: false,
                     is_speaking: false,
+                    is_screen_sharing: false,
                     audio_level: 0.0,
                     joined_at: 0,
                 },
@@ -332,6 +344,7 @@ mod tests {
                     is_muted: false,
                     is_video_enabled: false,
                     is_speaking: false,
+                    is_screen_sharing: false,
                     audio_level: 0.0,
                     joined_at: 0,
                 },
@@ -390,6 +403,7 @@ mod tests {
         let mut snapshot = CallSnapshot::default();
         assert!(!snapshot.is_in_call());
         assert!(!snapshot.has_critical_errors());
+        assert!(!snapshot.is_screen_sharing);
 
         snapshot.state = CallState::InCall;
         assert!(snapshot.is_in_call());

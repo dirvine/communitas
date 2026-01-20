@@ -202,6 +202,7 @@ struct CallServiceState {
     media_errors: Vec<MediaError>,
     available_devices: Vec<MediaDevice>,
     listen_only_mode: bool,
+    is_screen_sharing: bool,
 }
 
 impl Default for CallServiceState {
@@ -214,6 +215,7 @@ impl Default for CallServiceState {
             media_errors: Vec::new(),
             available_devices: Vec::new(),
             listen_only_mode: false,
+            is_screen_sharing: false,
         }
     }
 }
@@ -311,9 +313,29 @@ impl CallService {
             available_devices: state.available_devices.clone(),
             settings: state.settings.clone(),
             listen_only_mode: state.listen_only_mode,
+            is_screen_sharing: state.is_screen_sharing,
         };
         // Ignore send error if no receivers
         let _ = self.tx.send(snapshot);
+    }
+
+    /// Update a field on the participant with the given ID in both participant lists.
+    ///
+    /// This updates the participant in `state.participants` and in
+    /// `state.current_call.participants` to keep them in sync.
+    async fn update_my_participant<F>(&self, my_id: &str, updater: F)
+    where
+        F: Fn(&mut Participant),
+    {
+        let mut state = self.state.write().await;
+        if let Some(participant) = state.participants.iter_mut().find(|p| p.id == my_id) {
+            updater(participant);
+        }
+        if let Some(ref mut call) = state.current_call
+            && let Some(p) = call.participants.iter_mut().find(|p| p.id == my_id)
+        {
+            updater(p);
+        }
     }
 
     // ===== Device Management =====
@@ -548,6 +570,7 @@ impl CallService {
             is_muted: false,
             is_video_enabled: video_enabled,
             is_speaking: false,
+            is_screen_sharing: false,
             audio_level: 0.0,
             joined_at: now,
         };
@@ -669,6 +692,7 @@ impl CallService {
             is_muted: false,
             is_video_enabled: false,
             is_speaking: false,
+            is_screen_sharing: false,
             audio_level: 0.0,
             joined_at: now,
         };
@@ -838,17 +862,8 @@ impl CallService {
 
         // Update state: is_muted is the inverse of enabled
         let new_muted = !final_enabled;
-        {
-            let mut state = self.state.write().await;
-            if let Some(participant) = state.participants.iter_mut().find(|p| p.id == my_id) {
-                participant.is_muted = new_muted;
-            }
-            if let Some(ref mut call) = state.current_call
-                && let Some(p) = call.participants.iter_mut().find(|p| p.id == my_id)
-            {
-                p.is_muted = new_muted;
-            }
-        }
+        self.update_my_participant(&my_id, |p| p.is_muted = new_muted)
+            .await;
         self.broadcast().await;
 
         debug!(call_id = %call_id, muted = %new_muted, "Audio toggled successfully");
@@ -918,21 +933,124 @@ impl CallService {
         };
 
         // Update state
-        {
-            let mut state = self.state.write().await;
-            if let Some(participant) = state.participants.iter_mut().find(|p| p.id == my_id) {
-                participant.is_video_enabled = final_enabled;
-            }
-            if let Some(ref mut call) = state.current_call
-                && let Some(p) = call.participants.iter_mut().find(|p| p.id == my_id)
-            {
-                p.is_video_enabled = final_enabled;
-            }
-        }
+        self.update_my_participant(&my_id, |p| p.is_video_enabled = final_enabled)
+            .await;
         self.broadcast().await;
 
         debug!(call_id = %call_id, video_enabled = %final_enabled, "Video toggled successfully");
         Ok(final_enabled)
+    }
+
+    /// Start screen sharing in the current call.
+    ///
+    /// This method starts screen sharing by executing `Command::StartScreenShare` through
+    /// the Communitas core. The state is updated when the `Event::ScreenShareStarted`
+    /// response is received.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CallError::NotInCall`] if the user is not currently in a call.
+    /// Returns [`CallError::CoreError`] if the core command execution fails.
+    #[instrument(skip(self), name = "ui.call.start_screen_share")]
+    pub async fn start_screen_share(&self) -> Result<(), CallError> {
+        // Extract call_id and my_id from state
+        let (call_id, my_id) = {
+            let state = self.state.read().await;
+            if !state.call_state.is_active() {
+                return Err(CallError::NotInCall);
+            }
+            let call = state.current_call.as_ref().ok_or(CallError::NotInCall)?;
+            (call.call_id.clone(), call.my_participant_id.clone())
+        };
+
+        // Build and execute the StartScreenShare command
+        let cmd = Command::StartScreenShare {
+            call_id: call_id.clone(),
+        };
+
+        let events = match self.app.execute(cmd).await {
+            Ok(events) => events,
+            Err(e) => {
+                return Err(CallError::CoreError(e.message.clone()));
+            }
+        };
+
+        // Find the ScreenShareStarted event in the response
+        let screen_share_started = events.iter().any(
+            |event| matches!(event, Event::ScreenShareStarted { call_id: id } if *id == call_id),
+        );
+
+        if !screen_share_started {
+            warn!("No ScreenShareStarted event returned from core, updating state anyway");
+        }
+
+        // Update state
+        {
+            let mut state = self.state.write().await;
+            state.is_screen_sharing = true;
+        }
+        self.update_my_participant(&my_id, |p| p.is_screen_sharing = true)
+            .await;
+        self.broadcast().await;
+
+        debug!(call_id = %call_id, "Screen share started successfully");
+        Ok(())
+    }
+
+    /// Stop screen sharing in the current call.
+    ///
+    /// This method stops screen sharing by executing `Command::StopScreenShare` through
+    /// the Communitas core. The state is updated when the `Event::ScreenShareStopped`
+    /// response is received.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CallError::NotInCall`] if the user is not currently in a call.
+    /// Returns [`CallError::CoreError`] if the core command execution fails.
+    #[instrument(skip(self), name = "ui.call.stop_screen_share")]
+    pub async fn stop_screen_share(&self) -> Result<(), CallError> {
+        // Extract call_id and my_id from state
+        let (call_id, my_id) = {
+            let state = self.state.read().await;
+            if !state.call_state.is_active() {
+                return Err(CallError::NotInCall);
+            }
+            let call = state.current_call.as_ref().ok_or(CallError::NotInCall)?;
+            (call.call_id.clone(), call.my_participant_id.clone())
+        };
+
+        // Build and execute the StopScreenShare command
+        let cmd = Command::StopScreenShare {
+            call_id: call_id.clone(),
+        };
+
+        let events = match self.app.execute(cmd).await {
+            Ok(events) => events,
+            Err(e) => {
+                return Err(CallError::CoreError(e.message.clone()));
+            }
+        };
+
+        // Find the ScreenShareStopped event in the response
+        let screen_share_stopped = events.iter().any(
+            |event| matches!(event, Event::ScreenShareStopped { call_id: id } if *id == call_id),
+        );
+
+        if !screen_share_stopped {
+            warn!("No ScreenShareStopped event returned from core, updating state anyway");
+        }
+
+        // Update state
+        {
+            let mut state = self.state.write().await;
+            state.is_screen_sharing = false;
+        }
+        self.update_my_participant(&my_id, |p| p.is_screen_sharing = false)
+            .await;
+        self.broadcast().await;
+
+        debug!(call_id = %call_id, "Screen share stopped successfully");
+        Ok(())
     }
     /// Set audio input enabled state.
     ///
@@ -941,35 +1059,23 @@ impl CallService {
     /// Returns [`CallError::NotInCall`] if the user is not currently in a call.
     #[instrument(skip(self), name = "ui.call.set_audio_input")]
     pub async fn set_audio_input_enabled(&self, enabled: bool) -> Result<(), CallError> {
-        let mut state = self.state.write().await;
-
-        if !state.call_state.is_active() {
-            return Err(CallError::NotInCall);
-        }
-
-        let my_id = state
-            .current_call
-            .as_ref()
-            .map(|c| c.my_participant_id.clone());
-
-        if let Some(my_id) = my_id
-            && let Some(participant) = state.participants.iter_mut().find(|p| p.id == my_id)
-        {
-            participant.is_muted = !enabled;
-
-            // Update call_info participants too
-            if let Some(ref mut call) = state.current_call
-                && let Some(p) = call.participants.iter_mut().find(|p| p.id == my_id)
-            {
-                p.is_muted = !enabled;
+        // Extract my_id while validating call state
+        let my_id = {
+            let state = self.state.read().await;
+            if !state.call_state.is_active() {
+                return Err(CallError::NotInCall);
             }
+            state
+                .current_call
+                .as_ref()
+                .map(|c| c.my_participant_id.clone())
+                .ok_or(CallError::NotInCall)?
+        };
 
-            drop(state);
-            self.broadcast().await;
-            return Ok(());
-        }
-
-        Err(CallError::NotInCall)
+        self.update_my_participant(&my_id, |p| p.is_muted = !enabled)
+            .await;
+        self.broadcast().await;
+        Ok(())
     }
 
     // ===== Media Error Handling =====
@@ -1207,6 +1313,26 @@ mod tests {
         let service = make_service(&temp).await;
 
         let result = service.toggle_video().await;
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), CallError::NotInCall));
+    }
+
+    #[tokio::test]
+    async fn start_screen_share_fails_when_not_in_call() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        let result = service.start_screen_share().await;
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), CallError::NotInCall));
+    }
+
+    #[tokio::test]
+    async fn stop_screen_share_fails_when_not_in_call() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        let result = service.stop_screen_share().await;
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), CallError::NotInCall));
     }

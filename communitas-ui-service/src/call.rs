@@ -32,7 +32,9 @@ use tracing::{debug, instrument, warn};
 use crate::auth::{AuthController, AuthService, AuthStateSnapshot};
 use crate::util::current_timestamp_millis;
 use communitas_core::app::CommunitasApp;
-use communitas_core::command::{Command, Event};
+use communitas_core::command::{
+    CallResponse, CallStatusResponse, Command, Event, Query, QueryResponse,
+};
 
 /// Errors returned by the call service.
 #[derive(Debug, Error)]
@@ -300,6 +302,104 @@ impl CallService {
     /// Get the current participants.
     pub fn get_participants(&self) -> Vec<Participant> {
         self.rx.borrow().participants.clone()
+    }
+
+    // ===== Call Queries =====
+
+    /// Query the current status of a call from the core.
+    ///
+    /// Unlike [`get_call_state`] which returns locally cached state, this method
+    /// queries the Communitas core for the authoritative call status including
+    /// mute, video, and screen sharing states.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CallError::NotAuthenticated`] if the user is not logged in.
+    /// Returns [`CallError::CoreError`] if the query fails or returns unexpected data.
+    #[instrument(skip(self), name = "ui.call.query_call_status")]
+    pub async fn query_call_status(&self, call_id: &str) -> Result<CallStatusResponse, CallError> {
+        let rx = self.auth.subscribe();
+        if matches!(&*rx.borrow(), AuthStateSnapshot::LoggedOut) {
+            return Err(CallError::NotAuthenticated);
+        }
+
+        let response = self
+            .app
+            .query(Query::GetCallStatus {
+                call_id: call_id.to_string(),
+            })
+            .await
+            .map_err(|e| CallError::CoreError(format!("query failed: {e}")))?;
+
+        match response {
+            QueryResponse::CallStatus(status) => Ok(status),
+            other => Err(CallError::CoreError(format!(
+                "unexpected response: {other:?}"
+            ))),
+        }
+    }
+
+    /// Query the participant IDs for a specific call from the core.
+    ///
+    /// Returns a list of participant identifiers. To get full participant details,
+    /// use the locally cached participants via [`get_participants`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CallError::NotAuthenticated`] if the user is not logged in.
+    /// Returns [`CallError::CoreError`] if the query fails or returns unexpected data.
+    #[instrument(skip(self), name = "ui.call.query_call_participants")]
+    pub async fn query_call_participants(&self, call_id: &str) -> Result<Vec<String>, CallError> {
+        let rx = self.auth.subscribe();
+        if matches!(&*rx.borrow(), AuthStateSnapshot::LoggedOut) {
+            return Err(CallError::NotAuthenticated);
+        }
+
+        let response = self
+            .app
+            .query(Query::GetCallParticipants {
+                call_id: call_id.to_string(),
+            })
+            .await
+            .map_err(|e| CallError::CoreError(format!("query failed: {e}")))?;
+
+        match response {
+            QueryResponse::CallParticipants(participants) => Ok(participants),
+            other => Err(CallError::CoreError(format!(
+                "unexpected response: {other:?}"
+            ))),
+        }
+    }
+
+    /// List all active calls from the core.
+    ///
+    /// Returns a list of calls that are currently active across all entities.
+    /// This can be used to show a "rejoin call" UI or to check if a call is
+    /// already in progress for an entity.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CallError::NotAuthenticated`] if the user is not logged in.
+    /// Returns [`CallError::CoreError`] if the query fails or returns unexpected data.
+    #[instrument(skip(self), name = "ui.call.list_active_calls")]
+    pub async fn list_active_calls(&self) -> Result<Vec<CallResponse>, CallError> {
+        let rx = self.auth.subscribe();
+        if matches!(&*rx.borrow(), AuthStateSnapshot::LoggedOut) {
+            return Err(CallError::NotAuthenticated);
+        }
+
+        let response = self
+            .app
+            .query(Query::ListActiveCalls)
+            .await
+            .map_err(|e| CallError::CoreError(format!("query failed: {e}")))?;
+
+        match response {
+            QueryResponse::CallList(calls) => Ok(calls),
+            other => Err(CallError::CoreError(format!(
+                "unexpected response: {other:?}"
+            ))),
+        }
     }
 
     /// Broadcast updated state to all subscribers.
@@ -1461,5 +1561,37 @@ mod tests {
 
         let err = CallError::CoreError("Command execution failed".to_string());
         assert_eq!(format!("{err}"), "core error: Command execution failed");
+    }
+
+    // ===== Query Tests =====
+
+    #[tokio::test]
+    async fn query_call_status_requires_auth() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        let result = service.query_call_status("call1").await;
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), CallError::NotAuthenticated));
+    }
+
+    #[tokio::test]
+    async fn query_call_participants_requires_auth() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        let result = service.query_call_participants("call1").await;
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), CallError::NotAuthenticated));
+    }
+
+    #[tokio::test]
+    async fn list_active_calls_requires_auth() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        let result = service.list_active_calls().await;
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), CallError::NotAuthenticated));
     }
 }

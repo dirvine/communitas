@@ -340,12 +340,81 @@ impl MessagingService {
         message_id: &str,
         new_text: &str,
     ) -> Result<Message, MessagingError> {
-        let _ = (thread_id, message_id, new_text); // Suppress unused warnings for now
+        // Verify authentication
         if !self.is_authenticated() {
             return Err(MessagingError::NotAuthenticated);
         }
-        // TODO: Wire to core Command::EditMessage
-        Err(MessagingError::Internal("not yet implemented".to_string()))
+
+        // Query the entity to get its type
+        let entity_type = match self
+            .app
+            .query(Query::GetEntity {
+                entity_id: thread_id.to_string(),
+            })
+            .await
+        {
+            Ok(QueryResponse::Entity(entity)) => entity.entity_type,
+            Ok(_) => {
+                warn!(thread_id, "Unexpected response type for GetEntity");
+                EntityType::Channel
+            }
+            Err(e) => {
+                debug!(thread_id, error = %e.message, "Could not determine entity type, using Channel");
+                EntityType::Channel
+            }
+        };
+
+        // Build and execute the EditMessage command
+        let cmd = Command::EditMessage {
+            entity_id: thread_id.to_string(),
+            entity_type,
+            message_id: message_id.to_string(),
+            new_text: new_text.to_string(),
+        };
+
+        let events = self
+            .app
+            .execute(cmd)
+            .await
+            .map_err(|e| MessagingError::Internal(format!("Edit failed: {}", e.message)))?;
+
+        // Verify the MessageEdited event was returned
+        let edited = events.iter().any(|event| {
+            matches!(event, Event::MessageEdited { message_id: mid, .. } if mid == message_id)
+        });
+
+        if !edited {
+            return Err(MessagingError::Internal(
+                "No MessageEdited event returned".to_string(),
+            ));
+        }
+
+        debug!(thread_id, message_id, "Message edited successfully");
+
+        // Query the updated message to return the full Message struct
+        match self
+            .app
+            .query(Query::GetMessage {
+                entity_id: thread_id.to_string(),
+                message_id: message_id.to_string(),
+            })
+            .await
+        {
+            Ok(QueryResponse::Message(msg)) => Ok(core_message_to_ui(&msg)),
+            Ok(_) => {
+                warn!(message_id, "Unexpected response type for GetMessage");
+                Err(MessagingError::Internal(
+                    "Failed to retrieve edited message".to_string(),
+                ))
+            }
+            Err(e) => {
+                warn!(message_id, error = %e.message, "Failed to retrieve edited message");
+                Err(MessagingError::Internal(format!(
+                    "Message edited but retrieval failed: {}",
+                    e.message
+                )))
+            }
+        }
     }
 
     /// Delete a message.

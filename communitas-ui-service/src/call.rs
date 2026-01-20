@@ -18,6 +18,7 @@ use tokio::sync::{RwLock, watch};
 use tracing::instrument;
 
 use crate::auth::{AuthController, AuthService, AuthStateSnapshot};
+use communitas_core::app::CommunitasApp;
 
 /// Get current timestamp in milliseconds since Unix epoch.
 fn current_timestamp_millis() -> i64 {
@@ -51,6 +52,7 @@ pub enum CallError {
 /// Service for real-time voice/video communication.
 pub struct CallService {
     auth: Arc<AuthController>,
+    app: Arc<CommunitasApp>,
     tx: watch::Sender<CallSnapshot>,
     rx: watch::Receiver<CallSnapshot>,
     state: Arc<RwLock<CallServiceState>>,
@@ -84,10 +86,11 @@ impl Default for CallServiceState {
 #[allow(unused_variables)] // Mock implementation - params used for tracing but not actual logic
 impl CallService {
     /// Create a new call service linked to the auth controller.
-    pub fn new(auth: Arc<AuthController>) -> Self {
+    pub fn new(auth: Arc<AuthController>, app: Arc<CommunitasApp>) -> Self {
         let (tx, rx) = watch::channel(CallSnapshot::default());
         Self {
             auth,
+            app,
             tx,
             rx,
             state: Arc::new(RwLock::new(CallServiceState::default())),
@@ -107,6 +110,11 @@ impl CallService {
     /// Subscribe to participant updates (returns same channel, filter in UI).
     pub fn subscribe_participants(&self) -> watch::Receiver<CallSnapshot> {
         self.subscribe()
+    }
+
+    /// Get a reference to the Communitas app.
+    pub fn app(&self) -> Arc<CommunitasApp> {
+        self.app.clone()
     }
 
     /// Get the current call snapshot without subscribing.
@@ -582,16 +590,29 @@ mod tests {
     use communitas_ui_api::MediaErrorKind;
     use tempfile::TempDir;
 
-    fn make_auth(temp: &TempDir) -> Arc<AuthController> {
+    async fn make_service(temp: &TempDir) -> CallService {
         let storage = UiStorage::from_path(temp.path()).expect("storage should init");
-        Arc::new(AuthController::new(storage).expect("auth should init"))
+        let auth = Arc::new(AuthController::new(storage).expect("auth should init"));
+        let app = Arc::new(
+            CommunitasApp::new(
+                "ocean-forest-moon-star".to_string(),
+                "TestUser".to_string(),
+                "TestDevice".to_string(),
+                temp.path()
+                    .join("app_storage")
+                    .to_string_lossy()
+                    .to_string(),
+            )
+            .await
+            .expect("app should init"),
+        );
+        CallService::new(auth, app)
     }
 
     #[tokio::test]
     async fn call_service_starts_idle() {
         let temp = TempDir::new().expect("temp dir");
-        let auth = make_auth(&temp);
-        let service = CallService::new(auth);
+        let service = make_service(&temp).await;
 
         let snap = service.current_snapshot();
         assert_eq!(snap.state, CallState::Idle);
@@ -603,8 +624,7 @@ mod tests {
     #[tokio::test]
     async fn list_devices_requires_auth() {
         let temp = TempDir::new().expect("temp dir");
-        let auth = make_auth(&temp);
-        let service = CallService::new(auth);
+        let service = make_service(&temp).await;
 
         let result = service.list_devices().await;
         assert!(result.is_err());
@@ -614,8 +634,7 @@ mod tests {
     #[tokio::test]
     async fn join_call_requires_auth() {
         let temp = TempDir::new().expect("temp dir");
-        let auth = make_auth(&temp);
-        let service = CallService::new(auth);
+        let service = make_service(&temp).await;
 
         let result = service.join_call("entity1").await;
         assert!(result.is_err());
@@ -625,8 +644,7 @@ mod tests {
     #[tokio::test]
     async fn leave_call_fails_when_not_in_call() {
         let temp = TempDir::new().expect("temp dir");
-        let auth = make_auth(&temp);
-        let service = CallService::new(auth);
+        let service = make_service(&temp).await;
 
         let result = service.leave_call().await;
         assert!(result.is_err());
@@ -636,8 +654,7 @@ mod tests {
     #[tokio::test]
     async fn toggle_mute_fails_when_not_in_call() {
         let temp = TempDir::new().expect("temp dir");
-        let auth = make_auth(&temp);
-        let service = CallService::new(auth);
+        let service = make_service(&temp).await;
 
         let result = service.toggle_mute().await;
         assert!(result.is_err());
@@ -647,8 +664,7 @@ mod tests {
     #[tokio::test]
     async fn toggle_video_fails_when_not_in_call() {
         let temp = TempDir::new().expect("temp dir");
-        let auth = make_auth(&temp);
-        let service = CallService::new(auth);
+        let service = make_service(&temp).await;
 
         let result = service.toggle_video().await;
         assert!(result.is_err());
@@ -658,8 +674,7 @@ mod tests {
     #[tokio::test]
     async fn select_device_requires_device_list() {
         let temp = TempDir::new().expect("temp dir");
-        let auth = make_auth(&temp);
-        let service = CallService::new(auth);
+        let service = make_service(&temp).await;
 
         // Device not in available list
         let result = service.select_microphone("unknown-device").await;
@@ -670,8 +685,7 @@ mod tests {
     #[tokio::test]
     async fn media_error_enables_listen_only_mode() {
         let temp = TempDir::new().expect("temp dir");
-        let auth = make_auth(&temp);
-        let service = CallService::new(auth);
+        let service = make_service(&temp).await;
 
         assert!(!service.is_listen_only());
 
@@ -689,8 +703,7 @@ mod tests {
     #[tokio::test]
     async fn retry_media_clears_error() {
         let temp = TempDir::new().expect("temp dir");
-        let auth = make_auth(&temp);
-        let service = CallService::new(auth);
+        let service = make_service(&temp).await;
 
         let error = MediaError::new(
             DeviceType::Microphone,
@@ -713,8 +726,7 @@ mod tests {
     #[tokio::test]
     async fn update_settings_broadcasts() {
         let temp = TempDir::new().expect("temp dir");
-        let auth = make_auth(&temp);
-        let service = CallService::new(auth);
+        let service = make_service(&temp).await;
 
         let mut rx = service.subscribe();
 

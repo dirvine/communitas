@@ -119,7 +119,6 @@ pub struct DriveService {
     download_counter: Arc<RwLock<u64>>,
 }
 
-#[allow(unused_variables)] // Mock implementation - params used for tracing but not actual logic
 impl DriveService {
     /// Create a new drive service linked to the auth controller.
     pub fn new(auth: Arc<AuthController>, app: Arc<CommunitasApp>) -> Self {

@@ -14,11 +14,11 @@
   },
   "progress": {
     "total_tasks": 5,
-    "completed_tasks": 0,
-    "current_task": "PLAN-32.1: Add platform detection module"
+    "completed_tasks": 1,
+    "current_task": "PLAN-32.2: Add startup dependency check"
   },
-  "status": "planning",
-  "last_review": null,
-  "last_updated": "2026-01-20T21:35:00Z",
+  "status": "awaiting_planning",
+  "last_review": "2026-01-20T22:10:00Z",
+  "last_updated": "2026-01-20T22:10:00Z",
   "notes": "Phase 5.2: WebView dependency detection and graceful error handling"
 }

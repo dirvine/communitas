@@ -479,16 +479,12 @@ impl CallService {
             }
         };
 
+        // Check if already in call and transition to connecting state
         {
-            let state = self.state.read().await;
+            let mut state = self.state.write().await;
             if state.call_state.is_active() {
                 return Err(CallError::AlreadyInCall);
             }
-        }
-
-        // Transition to connecting state
-        {
-            let mut state = self.state.write().await;
             state.call_state = CallState::Connecting;
         }
         self.broadcast().await;
@@ -499,11 +495,18 @@ impl CallService {
             video_enabled,
         };
 
-        let events = self
-            .app
-            .execute(cmd)
-            .await
-            .map_err(|e| CallError::CoreError(e.message.clone()))?;
+        let events = match self.app.execute(cmd).await {
+            Ok(events) => events,
+            Err(e) => {
+                // Reset state to Idle on failure
+                {
+                    let mut state = self.state.write().await;
+                    state.call_state = CallState::Idle;
+                }
+                self.broadcast().await;
+                return Err(CallError::CoreError(e.message.clone()));
+            }
+        };
 
         // Find the CallStarted event in the response
         let call_started = events.iter().find_map(|event| {
@@ -518,14 +521,26 @@ impl CallService {
             }
         });
 
-        let (call_id, returned_entity_id) = call_started.ok_or_else(|| {
-            CallError::CoreError("No CallStarted event returned from core".to_string())
-        })?;
+        let (call_id, returned_entity_id) = match call_started {
+            Some(result) => result,
+            None => {
+                // Reset state to Idle if no CallStarted event
+                {
+                    let mut state = self.state.write().await;
+                    state.call_state = CallState::Idle;
+                }
+                self.broadcast().await;
+                return Err(CallError::CoreError(
+                    "No CallStarted event returned from core".to_string(),
+                ));
+            }
+        };
 
         debug!(call_id = %call_id, entity_id = %returned_entity_id, "Call started successfully");
 
         // Create participant for self
-        let my_participant_id = format!("participant-{}", current_timestamp_millis());
+        let now = current_timestamp_millis();
+        let my_participant_id = format!("participant-{}", now);
         let participant = Participant {
             id: my_participant_id.clone(),
             display_name: identity_name,
@@ -534,16 +549,16 @@ impl CallService {
             is_video_enabled: video_enabled,
             is_speaking: false,
             audio_level: 0.0,
-            joined_at: current_timestamp_millis(),
+            joined_at: now,
         };
 
-        // Build call info
+        // Build call info (use entity_id reference for formatting before moving)
         let call_info = CallInfo {
             call_id,
-            entity_id: returned_entity_id.clone(),
             entity_name: format!("Call: {}", returned_entity_id),
+            entity_id: returned_entity_id,
             participants: vec![participant.clone()],
-            started_at: current_timestamp_millis(),
+            started_at: now,
             duration_seconds: 0,
             my_participant_id,
         };
@@ -1110,6 +1125,22 @@ mod tests {
         assert!(snap.settings.auto_mute_on_join);
     }
 
+    #[tokio::test]
+    async fn start_call_requires_auth() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        // State should be Idle initially
+        assert_eq!(service.get_call_state(), CallState::Idle);
+
+        let result = service.start_call("entity1", false).await;
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), CallError::NotAuthenticated));
+
+        // State should remain Idle after auth failure (no state transition)
+        assert_eq!(service.get_call_state(), CallState::Idle);
+    }
+
     #[test]
     fn call_error_display() {
         let err = CallError::NotInCall;
@@ -1123,5 +1154,8 @@ mod tests {
             format!("{err}"),
             "device enumeration failed: Platform error"
         );
+
+        let err = CallError::CoreError("Command execution failed".to_string());
+        assert_eq!(format!("{err}"), "core error: Command execution failed");
     }
 }

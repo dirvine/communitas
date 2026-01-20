@@ -92,7 +92,7 @@ impl UiServices {
         let messaging = Arc::new(MessagingService::new(auth.clone(), app.clone()));
         let presence = Arc::new(PresenceService::new(auth.clone(), directory.clone()));
         let kanban = Arc::new(KanbanService::new(auth.clone()));
-        let canvas = Arc::new(CanvasService::new(auth.clone()));
+        let canvas = Arc::new(CanvasService::new(auth.clone(), app.clone()));
         let drive = Arc::new(DriveService::new(auth.clone(), app.clone()));
         let call = Arc::new(CallService::new(auth.clone(), app.clone()));
         Ok(Self {

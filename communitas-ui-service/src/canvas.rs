@@ -13,6 +13,7 @@ use tokio::sync::watch;
 use tracing::instrument;
 
 use crate::auth::{AuthController, AuthService, AuthStateSnapshot};
+use communitas_core::app::CommunitasApp;
 
 /// Errors that can occur during canvas operations.
 #[derive(Debug, Error)]
@@ -243,24 +244,32 @@ impl Default for CanvasSnapshot {
 /// - authentication checks where required
 pub struct CanvasService {
     auth: Arc<AuthController>,
+    app: Arc<CommunitasApp>,
     scene: std::sync::RwLock<Scene>,
     tx: watch::Sender<CanvasSnapshot>,
     rx: watch::Receiver<CanvasSnapshot>,
 }
 
 impl CanvasService {
-    /// Create a new canvas service with the given auth controller.
+    /// Create a new canvas service with the given auth controller and app.
     #[must_use]
-    pub fn new(auth: Arc<AuthController>) -> Self {
+    pub fn new(auth: Arc<AuthController>, app: Arc<CommunitasApp>) -> Self {
         let scene = Scene::new(800.0, 600.0);
         let snapshot = Self::scene_to_snapshot(&scene, false);
         let (tx, rx) = watch::channel(snapshot);
         Self {
             auth,
+            app,
             scene: std::sync::RwLock::new(scene),
             tx,
             rx,
         }
+    }
+
+    /// Returns a reference to the Communitas app.
+    #[must_use]
+    pub fn app(&self) -> Arc<CommunitasApp> {
+        self.app.clone()
     }
 
     /// Subscribe to canvas state changes.
@@ -640,6 +649,7 @@ impl CanvasService {
 mod tests {
     use super::*;
     use crate::storage::UiStorage;
+    use communitas_core::app::CommunitasApp;
     use tempfile::TempDir;
 
     fn make_auth(temp: &TempDir) -> Arc<AuthController> {
@@ -652,6 +662,34 @@ mod tests {
         // Simulate login by setting demo mode
         auth.enable_demo_mode();
         auth
+    }
+
+    async fn make_app(temp: &TempDir) -> Arc<CommunitasApp> {
+        Arc::new(
+            CommunitasApp::new(
+                "ocean-forest-moon-star".to_string(),
+                "TestUser".to_string(),
+                "TestDevice".to_string(),
+                temp.path()
+                    .join("app_storage")
+                    .to_string_lossy()
+                    .to_string(),
+            )
+            .await
+            .unwrap(),
+        )
+    }
+
+    async fn make_service(temp: &TempDir) -> CanvasService {
+        let auth = make_auth(temp);
+        let app = make_app(temp).await;
+        CanvasService::new(auth, app)
+    }
+
+    async fn make_authenticated_service(temp: &TempDir) -> CanvasService {
+        let auth = make_authenticated_auth(temp);
+        let app = make_app(temp).await;
+        CanvasService::new(auth, app)
     }
 
     #[test]
@@ -677,11 +715,10 @@ mod tests {
         );
     }
 
-    #[test]
-    fn canvas_service_is_authenticated_after_demo_mode() {
+    #[tokio::test]
+    async fn canvas_service_is_authenticated_after_demo_mode() {
         let temp = TempDir::new().unwrap();
-        let auth = make_authenticated_auth(&temp);
-        let canvas = CanvasService::new(auth);
+        let canvas = make_authenticated_service(&temp).await;
 
         // Verify the canvas sees authenticated state
         assert!(
@@ -690,11 +727,10 @@ mod tests {
         );
     }
 
-    #[test]
-    fn canvas_service_starts_empty() {
+    #[tokio::test]
+    async fn canvas_service_starts_empty() {
         let temp = TempDir::new().unwrap();
-        let auth = make_auth(&temp);
-        let canvas = CanvasService::new(auth);
+        let canvas = make_service(&temp).await;
 
         let snap = canvas.current_snapshot();
         assert!(snap.elements.is_empty());
@@ -702,11 +738,10 @@ mod tests {
         assert!(!snap.loading);
     }
 
-    #[test]
-    fn canvas_service_default_viewport() {
+    #[tokio::test]
+    async fn canvas_service_default_viewport() {
         let temp = TempDir::new().unwrap();
-        let auth = make_auth(&temp);
-        let canvas = CanvasService::new(auth);
+        let canvas = make_service(&temp).await;
 
         let snap = canvas.current_snapshot();
         assert!((snap.viewport_width - 800.0).abs() < f32::EPSILON);
@@ -717,8 +752,7 @@ mod tests {
     #[tokio::test]
     async fn add_text_requires_auth() {
         let temp = TempDir::new().unwrap();
-        let auth = make_auth(&temp);
-        let canvas = CanvasService::new(auth);
+        let canvas = make_service(&temp).await;
 
         let result = canvas
             .add_text("Hello".to_string(), 10.0, 20.0, 16.0, "#000000".to_string())
@@ -729,8 +763,7 @@ mod tests {
     #[tokio::test]
     async fn add_text_with_auth_succeeds() {
         let temp = TempDir::new().unwrap();
-        let auth = make_authenticated_auth(&temp);
-        let canvas = CanvasService::new(auth);
+        let canvas = make_authenticated_service(&temp).await;
 
         let id = canvas
             .add_text("Hello".to_string(), 10.0, 20.0, 16.0, "#000000".to_string())
@@ -749,8 +782,7 @@ mod tests {
     #[tokio::test]
     async fn add_image_succeeds() {
         let temp = TempDir::new().unwrap();
-        let auth = make_authenticated_auth(&temp);
-        let canvas = CanvasService::new(auth);
+        let canvas = make_authenticated_service(&temp).await;
 
         let id = canvas
             .add_image("test.png".to_string(), 0.0, 0.0, 100.0, 100.0)
@@ -765,8 +797,7 @@ mod tests {
     #[tokio::test]
     async fn add_chart_succeeds() {
         let temp = TempDir::new().unwrap();
-        let auth = make_authenticated_auth(&temp);
-        let canvas = CanvasService::new(auth);
+        let canvas = make_authenticated_service(&temp).await;
 
         let data = serde_json::json!({"values": [1, 2, 3]});
         let id = canvas
@@ -782,8 +813,7 @@ mod tests {
     #[tokio::test]
     async fn remove_element_succeeds() {
         let temp = TempDir::new().unwrap();
-        let auth = make_authenticated_auth(&temp);
-        let canvas = CanvasService::new(auth);
+        let canvas = make_authenticated_service(&temp).await;
 
         let id = canvas
             .add_text("Remove me".to_string(), 0.0, 0.0, 14.0, "#fff".to_string())
@@ -798,8 +828,7 @@ mod tests {
     #[tokio::test]
     async fn remove_nonexistent_element_fails() {
         let temp = TempDir::new().unwrap();
-        let auth = make_authenticated_auth(&temp);
-        let canvas = CanvasService::new(auth);
+        let canvas = make_authenticated_service(&temp).await;
 
         let result = canvas
             .remove_element("00000000-0000-0000-0000-000000000000")
@@ -810,8 +839,7 @@ mod tests {
     #[tokio::test]
     async fn update_transform_succeeds() {
         let temp = TempDir::new().unwrap();
-        let auth = make_authenticated_auth(&temp);
-        let canvas = CanvasService::new(auth);
+        let canvas = make_authenticated_service(&temp).await;
 
         let id = canvas
             .add_text("Move me".to_string(), 0.0, 0.0, 14.0, "#000".to_string())
@@ -838,8 +866,7 @@ mod tests {
     #[tokio::test]
     async fn update_transform_invalid_size_fails() {
         let temp = TempDir::new().unwrap();
-        let auth = make_authenticated_auth(&temp);
-        let canvas = CanvasService::new(auth);
+        let canvas = make_authenticated_service(&temp).await;
 
         let id = canvas
             .add_text("Test".to_string(), 0.0, 0.0, 14.0, "#000".to_string())
@@ -862,8 +889,7 @@ mod tests {
     #[tokio::test]
     async fn select_and_deselect_elements() {
         let temp = TempDir::new().unwrap();
-        let auth = make_authenticated_auth(&temp);
-        let canvas = CanvasService::new(auth);
+        let canvas = make_authenticated_service(&temp).await;
 
         let id = canvas
             .add_text("Select me".to_string(), 0.0, 0.0, 14.0, "#000".to_string())
@@ -884,8 +910,7 @@ mod tests {
     #[tokio::test]
     async fn set_viewport_succeeds() {
         let temp = TempDir::new().unwrap();
-        let auth = make_auth(&temp);
-        let canvas = CanvasService::new(auth);
+        let canvas = make_service(&temp).await;
 
         canvas.set_viewport(1920.0, 1080.0).await.unwrap();
 
@@ -897,8 +922,7 @@ mod tests {
     #[tokio::test]
     async fn set_viewport_invalid_fails() {
         let temp = TempDir::new().unwrap();
-        let auth = make_auth(&temp);
-        let canvas = CanvasService::new(auth);
+        let canvas = make_service(&temp).await;
 
         let result = canvas.set_viewport(0.0, 600.0).await;
         assert!(matches!(result, Err(CanvasError::InvalidTransform(_))));
@@ -907,8 +931,7 @@ mod tests {
     #[tokio::test]
     async fn set_view_succeeds() {
         let temp = TempDir::new().unwrap();
-        let auth = make_auth(&temp);
-        let canvas = CanvasService::new(auth);
+        let canvas = make_service(&temp).await;
 
         canvas.set_view(2.0, 100.0, 50.0).await.unwrap();
 
@@ -921,8 +944,7 @@ mod tests {
     #[tokio::test]
     async fn clear_removes_all_elements() {
         let temp = TempDir::new().unwrap();
-        let auth = make_authenticated_auth(&temp);
-        let canvas = CanvasService::new(auth);
+        let canvas = make_authenticated_service(&temp).await;
 
         canvas
             .add_text("One".to_string(), 0.0, 0.0, 14.0, "#000".to_string())
@@ -941,8 +963,7 @@ mod tests {
     #[tokio::test]
     async fn export_import_json_roundtrip() {
         let temp = TempDir::new().unwrap();
-        let auth = make_authenticated_auth(&temp);
-        let canvas = CanvasService::new(auth);
+        let canvas = make_authenticated_service(&temp).await;
 
         canvas
             .add_text(
@@ -966,33 +987,35 @@ mod tests {
         assert_eq!(snap.elements.len(), 1);
     }
 
-    #[test]
-    fn element_at_finds_element() {
+    #[tokio::test]
+    async fn element_at_finds_element() {
         let temp = TempDir::new().unwrap();
-        let auth = make_auth(&temp);
-        let canvas = CanvasService::new(auth.clone());
+        let canvas = make_authenticated_service(&temp).await;
 
-        // Enable demo mode directly on auth for synchronous test
-        auth.enable_demo_mode();
+        // Add element via the async API
+        canvas
+            .add_text(
+                "Click me".to_string(),
+                100.0,
+                100.0,
+                14.0,
+                "#000".to_string(),
+            )
+            .await
+            .unwrap();
 
-        // Add element manually to avoid async in sync test
-        {
-            let mut scene = canvas.scene.write().unwrap();
-            let element = Element::new(ElementKind::Text {
-                content: "Click me".to_string(),
-                font_size: 14.0,
-                color: "#000".to_string(),
-            })
-            .with_transform(Transform {
-                x: 100.0,
-                y: 100.0,
-                width: 200.0,
-                height: 50.0,
-                rotation: 0.0,
-                z_index: 0,
-            });
-            scene.add_element(element);
-        }
+        // Update the transform to have specific dimensions
+        let snap = canvas.current_snapshot();
+        let id = &snap.elements[0].id;
+        let new_transform = TransformView {
+            x: 100.0,
+            y: 100.0,
+            width: 200.0,
+            height: 50.0,
+            rotation: 0.0,
+            z_index: 0,
+        };
+        canvas.update_transform(id, new_transform).await.unwrap();
 
         // Point inside element
         let found = canvas.element_at(150.0, 125.0);
@@ -1006,8 +1029,7 @@ mod tests {
     #[tokio::test]
     async fn subscribe_receives_updates() {
         let temp = TempDir::new().unwrap();
-        let auth = make_authenticated_auth(&temp);
-        let canvas = CanvasService::new(auth);
+        let canvas = make_authenticated_service(&temp).await;
 
         let mut rx = canvas.subscribe();
 

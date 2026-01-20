@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+use communitas_core::app::CommunitasApp;
 use communitas_kanban::{
     CardState as CoreCardState, CardUpdate as CoreCardUpdate, KanbanService as CoreKanbanService,
 };
@@ -101,6 +102,7 @@ pub struct CardUpdate {
 /// Service for kanban board and card operations.
 pub struct KanbanService {
     auth: Arc<AuthController>,
+    app: Arc<CommunitasApp>,
     core: CoreKanbanService,
     tx: watch::Sender<KanbanSnapshot>,
     rx: watch::Receiver<KanbanSnapshot>,
@@ -108,11 +110,22 @@ pub struct KanbanService {
 
 impl KanbanService {
     /// Create a new kanban service linked to the auth controller.
-    pub fn new(auth: Arc<AuthController>) -> Self {
+    pub fn new(auth: Arc<AuthController>, app: Arc<CommunitasApp>) -> Self {
         let (tx, rx) = watch::channel(KanbanSnapshot::default());
         // Initialize core service with a default peer_id; will be updated on auth
         let core = CoreKanbanService::new("anonymous");
-        Self { auth, core, tx, rx }
+        Self {
+            auth,
+            app,
+            core,
+            tx,
+            rx,
+        }
+    }
+
+    /// Get a reference to the underlying CommunitasApp.
+    pub fn app(&self) -> Arc<CommunitasApp> {
+        Arc::clone(&self.app)
     }
 
     /// Subscribe to kanban state updates.
@@ -794,16 +807,29 @@ mod tests {
     use crate::storage::UiStorage;
     use tempfile::TempDir;
 
-    fn make_service(temp: &TempDir) -> KanbanService {
+    async fn make_service(temp: &TempDir) -> KanbanService {
         let storage = UiStorage::from_path(temp.path()).unwrap();
         let auth = Arc::new(AuthController::new(storage).unwrap());
-        KanbanService::new(auth)
+        let app = Arc::new(
+            CommunitasApp::new(
+                "ocean-forest-moon-star".to_string(),
+                "TestUser".to_string(),
+                "TestDevice".to_string(),
+                temp.path()
+                    .join("app_storage")
+                    .to_string_lossy()
+                    .to_string(),
+            )
+            .await
+            .unwrap(),
+        );
+        KanbanService::new(auth, app)
     }
 
-    #[test]
-    fn kanban_service_starts_empty() {
+    #[tokio::test]
+    async fn kanban_service_starts_empty() {
         let temp = TempDir::new().unwrap();
-        let service = make_service(&temp);
+        let service = make_service(&temp).await;
         let snap = service.current_snapshot();
         assert!(snap.boards.is_empty());
         assert!(!snap.loading);
@@ -812,7 +838,7 @@ mod tests {
     #[tokio::test]
     async fn list_boards_fails_when_not_authenticated() {
         let temp = TempDir::new().unwrap();
-        let service = make_service(&temp);
+        let service = make_service(&temp).await;
         let result = service.list_boards("entity-1").await;
         assert!(result.is_err());
         match result {
@@ -824,7 +850,7 @@ mod tests {
     #[tokio::test]
     async fn get_board_fails_when_not_authenticated() {
         let temp = TempDir::new().unwrap();
-        let service = make_service(&temp);
+        let service = make_service(&temp).await;
         let result = service.get_board("board-1").await;
         assert!(result.is_err());
         match result {
@@ -836,7 +862,7 @@ mod tests {
     #[tokio::test]
     async fn create_board_fails_when_not_authenticated() {
         let temp = TempDir::new().unwrap();
-        let service = make_service(&temp);
+        let service = make_service(&temp).await;
         let result = service.create_board("entity-1", "Test Board", None).await;
         assert!(result.is_err());
         match result {
@@ -848,7 +874,7 @@ mod tests {
     #[tokio::test]
     async fn create_card_fails_when_not_authenticated() {
         let temp = TempDir::new().unwrap();
-        let service = make_service(&temp);
+        let service = make_service(&temp).await;
         let result = service.create_card("board-1", "col-1", "Task 1").await;
         assert!(result.is_err());
         match result {
@@ -860,7 +886,7 @@ mod tests {
     #[tokio::test]
     async fn move_card_fails_when_not_authenticated() {
         let temp = TempDir::new().unwrap();
-        let service = make_service(&temp);
+        let service = make_service(&temp).await;
         let result = service.move_card("board-1", "card-1", "col-2", 0).await;
         assert!(result.is_err());
         match result {
@@ -872,7 +898,7 @@ mod tests {
     #[tokio::test]
     async fn archive_card_fails_when_not_authenticated() {
         let temp = TempDir::new().unwrap();
-        let service = make_service(&temp);
+        let service = make_service(&temp).await;
         let result = service.archive_card("board-1", "card-1").await;
         assert!(result.is_err());
         match result {
@@ -884,7 +910,7 @@ mod tests {
     #[tokio::test]
     async fn add_step_fails_when_not_authenticated() {
         let temp = TempDir::new().unwrap();
-        let service = make_service(&temp);
+        let service = make_service(&temp).await;
         let result = service.add_step("board-1", "card-1", "Step 1").await;
         assert!(result.is_err());
         match result {
@@ -896,7 +922,7 @@ mod tests {
     #[tokio::test]
     async fn toggle_step_fails_when_not_authenticated() {
         let temp = TempDir::new().unwrap();
-        let service = make_service(&temp);
+        let service = make_service(&temp).await;
         let result = service.toggle_step("board-1", "card-1", "step-1").await;
         assert!(result.is_err());
         match result {
@@ -908,7 +934,7 @@ mod tests {
     #[tokio::test]
     async fn add_comment_fails_when_not_authenticated() {
         let temp = TempDir::new().unwrap();
-        let service = make_service(&temp);
+        let service = make_service(&temp).await;
         let result = service.add_comment("board-1", "card-1", "Hello").await;
         assert!(result.is_err());
         match result {
@@ -917,19 +943,19 @@ mod tests {
         }
     }
 
-    #[test]
-    fn subscribe_returns_receiver() {
+    #[tokio::test]
+    async fn subscribe_returns_receiver() {
         let temp = TempDir::new().unwrap();
-        let service = make_service(&temp);
+        let service = make_service(&temp).await;
         let rx = service.subscribe();
         let snap = rx.borrow().clone();
         assert!(snap.boards.is_empty());
     }
 
-    #[test]
-    fn set_boards_updates_subscribers() {
+    #[tokio::test]
+    async fn set_boards_updates_subscribers() {
         let temp = TempDir::new().unwrap();
-        let service = make_service(&temp);
+        let service = make_service(&temp).await;
         let rx = service.subscribe();
 
         let boards = vec![BoardSummary {
@@ -949,10 +975,10 @@ mod tests {
         assert!(!snap.loading);
     }
 
-    #[test]
-    fn set_loading_updates_subscribers() {
+    #[tokio::test]
+    async fn set_loading_updates_subscribers() {
         let temp = TempDir::new().unwrap();
-        let service = make_service(&temp);
+        let service = make_service(&temp).await;
         let rx = service.subscribe();
 
         service.set_loading(true);
@@ -1007,7 +1033,7 @@ mod tests {
     #[tokio::test]
     async fn move_card_keyboard_fails_when_not_authenticated() {
         let temp = TempDir::new().unwrap();
-        let service = make_service(&temp);
+        let service = make_service(&temp).await;
         let result = service
             .move_card_keyboard("board-1", "card-1", "col-1", 0, MoveDirection::Right)
             .await;

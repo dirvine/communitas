@@ -185,6 +185,26 @@ fn verify_device_exists(
     }
 }
 
+/// Check if a selected device is missing from the available devices.
+///
+/// Returns `Some(device_id)` if the device was selected but is no longer available,
+/// or `None` if no device was selected or the device is still available.
+fn find_missing_device(
+    selected_id: &Option<String>,
+    available_devices: &[MediaDevice],
+    device_type: DeviceType,
+) -> Option<String> {
+    let id = selected_id.as_ref()?;
+    let still_available = available_devices
+        .iter()
+        .any(|d| d.id == *id && d.device_type == device_type);
+    if still_available {
+        None
+    } else {
+        Some(id.clone())
+    }
+}
+
 /// Service for real-time voice/video communication.
 pub struct CallService {
     auth: Arc<AuthController>,
@@ -1329,53 +1349,25 @@ impl CallService {
             }
         };
 
-        // Get current selections and check for missing devices
+        // Check which selected devices are missing from the new device list
         let (missing_mic, missing_speaker, missing_camera) = {
             let state = self.state.read().await;
-
-            let mic_missing = state
-                .settings
-                .selected_microphone
-                .as_ref()
-                .map(|id| {
-                    !new_devices
-                        .iter()
-                        .any(|d| d.id == *id && d.device_type == DeviceType::Microphone)
-                })
-                .unwrap_or(false);
-
-            let speaker_missing = state
-                .settings
-                .selected_speaker
-                .as_ref()
-                .map(|id| {
-                    !new_devices
-                        .iter()
-                        .any(|d| d.id == *id && d.device_type == DeviceType::Speaker)
-                })
-                .unwrap_or(false);
-
-            let camera_missing = state
-                .settings
-                .selected_camera
-                .as_ref()
-                .map(|id| {
-                    !new_devices
-                        .iter()
-                        .any(|d| d.id == *id && d.device_type == DeviceType::Camera)
-                })
-                .unwrap_or(false);
-
             (
-                mic_missing
-                    .then(|| state.settings.selected_microphone.clone())
-                    .flatten(),
-                speaker_missing
-                    .then(|| state.settings.selected_speaker.clone())
-                    .flatten(),
-                camera_missing
-                    .then(|| state.settings.selected_camera.clone())
-                    .flatten(),
+                find_missing_device(
+                    &state.settings.selected_microphone,
+                    &new_devices,
+                    DeviceType::Microphone,
+                ),
+                find_missing_device(
+                    &state.settings.selected_speaker,
+                    &new_devices,
+                    DeviceType::Speaker,
+                ),
+                find_missing_device(
+                    &state.settings.selected_camera,
+                    &new_devices,
+                    DeviceType::Camera,
+                ),
             )
         };
 

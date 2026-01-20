@@ -260,7 +260,7 @@ fn test_tools_include_messaging_operations() {
     let tools = list_tools(true);
     let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
 
-    // Messaging tools should be registered
+    // Message CRUD tools
     assert!(
         tool_names.contains(&"send_message"),
         "Expected send_message tool"
@@ -270,9 +270,96 @@ fn test_tools_include_messaging_operations() {
         "Expected get_messages tool"
     );
     assert!(
+        tool_names.contains(&"delete_message"),
+        "Expected delete_message tool"
+    );
+    assert!(
+        tool_names.contains(&"edit_message"),
+        "Expected edit_message tool"
+    );
+
+    // Thread tools
+    assert!(
         tool_names.contains(&"list_threads"),
         "Expected list_threads tool"
     );
+    assert!(
+        tool_names.contains(&"create_thread"),
+        "Expected create_thread tool"
+    );
+    assert!(
+        tool_names.contains(&"get_thread_messages"),
+        "Expected get_thread_messages tool"
+    );
+
+    // Reaction tools
+    assert!(
+        tool_names.contains(&"add_reaction"),
+        "Expected add_reaction tool"
+    );
+    assert!(
+        tool_names.contains(&"remove_reaction"),
+        "Expected remove_reaction tool"
+    );
+    assert!(
+        tool_names.contains(&"get_reactions"),
+        "Expected get_reactions tool"
+    );
+    assert!(
+        tool_names.contains(&"get_available_reactions"),
+        "Expected get_available_reactions tool"
+    );
+
+    // Invite tools
+    assert!(
+        tool_names.contains(&"create_invite"),
+        "Expected create_invite tool"
+    );
+    assert!(
+        tool_names.contains(&"accept_invite"),
+        "Expected accept_invite tool"
+    );
+    assert!(
+        tool_names.contains(&"list_pending_invites"),
+        "Expected list_pending_invites tool"
+    );
+}
+
+#[test]
+fn test_all_messaging_tools_registered() {
+    let tools = list_tools(true);
+    let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
+
+    // Complete list of all 14 messaging tools
+    let messaging_tools = [
+        // Message CRUD (4)
+        "send_message",
+        "get_messages",
+        "delete_message",
+        "edit_message",
+        // Thread operations (3)
+        "list_threads",
+        "create_thread",
+        "get_thread_messages",
+        // Reaction operations (4)
+        "add_reaction",
+        "remove_reaction",
+        "get_reactions",
+        "get_available_reactions",
+        // Invite operations (3)
+        "create_invite",
+        "accept_invite",
+        "list_pending_invites",
+    ];
+
+    for tool in &messaging_tools {
+        assert!(
+            tool_names.contains(tool),
+            "Expected {} tool to be registered (found {} tools total)",
+            tool,
+            tool_names.len()
+        );
+    }
 }
 
 #[test]
@@ -1300,7 +1387,6 @@ fn test_unassign_user_parity() {
         );
     });
 }
-
 // =============================================================================
 // Messaging Parity Tests
 // =============================================================================
@@ -1326,6 +1412,777 @@ fn test_messaging_thread_list_parity() {
         assert!(
             !result.content.is_empty(),
             "Expected some response from list_threads"
+        );
+    });
+}
+
+/// Test send_message routes through MessagingService.
+#[test]
+fn test_send_message_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Send message via MCP
+        let result = call_tool(
+            &app,
+            &services,
+            "send_message",
+            Some(json!({
+                "entity_id": "test-thread",
+                "text": "Hello from parity test"
+            })),
+        )
+        .await;
+
+        // Tool should route through MessagingService
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from send_message"
+        );
+        let text = result.content.first().and_then(extract_text).unwrap_or("");
+        assert!(
+            !text.contains("Unknown tool"),
+            "Tool should be routed through MessagingService"
+        );
+    });
+}
+
+/// Test send_message with reply_to routes through MessagingService.
+#[test]
+fn test_send_message_with_reply_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Send message with reply_to via MCP
+        let result = call_tool(
+            &app,
+            &services,
+            "send_message",
+            Some(json!({
+                "entity_id": "test-thread",
+                "text": "This is a reply",
+                "reply_to_id": "parent-msg-123"
+            })),
+        )
+        .await;
+
+        // Tool should route through MessagingService
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from send_message with reply_to"
+        );
+    });
+}
+
+/// Test get_messages routes through MessagingService.
+#[test]
+fn test_get_messages_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Get messages via MCP
+        let result = call_tool(
+            &app,
+            &services,
+            "get_messages",
+            Some(json!({
+                "entity_id": "test-thread",
+                "limit": 50
+            })),
+        )
+        .await;
+
+        // Tool should route through MessagingService
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from get_messages"
+        );
+        let text = result.content.first().and_then(extract_text).unwrap_or("");
+        assert!(
+            !text.contains("Unknown tool"),
+            "Tool should be routed through MessagingService"
+        );
+    });
+}
+
+/// Test get_messages with pagination routes through MessagingService.
+#[test]
+fn test_get_messages_with_pagination_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Get messages with pagination via MCP
+        let result = call_tool(
+            &app,
+            &services,
+            "get_messages",
+            Some(json!({
+                "entity_id": "test-thread",
+                "limit": 25,
+                "before": 1000
+            })),
+        )
+        .await;
+
+        // Tool should route through MessagingService
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from get_messages with pagination"
+        );
+    });
+}
+
+/// Test delete_message routes through MessagingService.
+#[test]
+fn test_delete_message_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Delete non-existent message via MCP
+        let result = call_tool(
+            &app,
+            &services,
+            "delete_message",
+            Some(json!({
+                "entity_id": "test-thread",
+                "message_id": "nonexistent-msg"
+            })),
+        )
+        .await;
+
+        // Tool should route through MessagingService
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from delete_message"
+        );
+        let text = result.content.first().and_then(extract_text).unwrap_or("");
+        assert!(
+            !text.contains("Unknown tool"),
+            "Tool should be routed through MessagingService"
+        );
+    });
+}
+
+/// Test edit_message routes through MessagingService.
+#[test]
+fn test_edit_message_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Edit non-existent message via MCP
+        let result = call_tool(
+            &app,
+            &services,
+            "edit_message",
+            Some(json!({
+                "entity_id": "test-thread",
+                "message_id": "nonexistent-msg",
+                "new_text": "Updated message text"
+            })),
+        )
+        .await;
+
+        // Tool should route through MessagingService
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from edit_message"
+        );
+        let text = result.content.first().and_then(extract_text).unwrap_or("");
+        assert!(
+            !text.contains("Unknown tool"),
+            "Tool should be routed through MessagingService"
+        );
+    });
+}
+
+/// Test add_reaction routes through MessagingService.
+#[test]
+fn test_add_reaction_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Add reaction to non-existent message via MCP
+        let result = call_tool(
+            &app,
+            &services,
+            "add_reaction",
+            Some(json!({
+                "entity_id": "test-thread",
+                "message_id": "nonexistent-msg",
+                "emoji": "👍"
+            })),
+        )
+        .await;
+
+        // Tool should route through MessagingService
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from add_reaction"
+        );
+        let text = result.content.first().and_then(extract_text).unwrap_or("");
+        assert!(
+            !text.contains("Unknown tool"),
+            "Tool should be routed through MessagingService"
+        );
+    });
+}
+
+/// Test remove_reaction routes through MessagingService.
+#[test]
+fn test_remove_reaction_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Remove reaction from non-existent message via MCP
+        let result = call_tool(
+            &app,
+            &services,
+            "remove_reaction",
+            Some(json!({
+                "entity_id": "test-thread",
+                "message_id": "nonexistent-msg",
+                "emoji": "👍"
+            })),
+        )
+        .await;
+
+        // Tool should route through MessagingService
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from remove_reaction"
+        );
+        let text = result.content.first().and_then(extract_text).unwrap_or("");
+        assert!(
+            !text.contains("Unknown tool"),
+            "Tool should be routed through MessagingService"
+        );
+    });
+}
+
+/// Test get_reactions routes through app (not yet migrated to UiServices).
+#[test]
+fn test_get_reactions_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Get reactions for non-existent message via MCP
+        let result = call_tool(
+            &app,
+            &services,
+            "get_reactions",
+            Some(json!({
+                "entity_id": "test-thread",
+                "message_id": "nonexistent-msg"
+            })),
+        )
+        .await;
+
+        // Tool should respond (routes through app)
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from get_reactions"
+        );
+        let text = result.content.first().and_then(extract_text).unwrap_or("");
+        assert!(
+            !text.contains("Unknown tool"),
+            "Tool should be registered and routed"
+        );
+    });
+}
+
+/// Test get_available_reactions returns standard emoji list.
+#[test]
+fn test_get_available_reactions_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Get available reactions via MCP
+        let result = call_tool(
+            &app,
+            &services,
+            "get_available_reactions",
+            Some(json!({
+                "entity_id": "test-thread"
+            })),
+        )
+        .await;
+
+        // Tool should succeed with standard reactions
+        assert!(
+            !result.is_error,
+            "Expected success from get_available_reactions"
+        );
+
+        let parsed = parse_tool_response(&result);
+        assert!(
+            parsed["reactions"].is_array(),
+            "Expected reactions array in response"
+        );
+    });
+}
+
+/// Test create_thread routes through app (returns informational message).
+#[test]
+fn test_create_thread_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Create thread via MCP
+        let result = call_tool(
+            &app,
+            &services,
+            "create_thread",
+            Some(json!({
+                "channel_id": "test-channel",
+                "parent_message_id": "parent-msg-123"
+            })),
+        )
+        .await;
+
+        // Tool should respond with informational message
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from create_thread"
+        );
+
+        // This tool returns info about implicit thread creation
+        let parsed = parse_tool_response(&result);
+        assert!(
+            parsed["thread_id"].is_string() || parsed["info"].is_string(),
+            "Expected thread_id or info in response"
+        );
+    });
+}
+
+/// Test get_thread_messages routes through app.
+#[test]
+fn test_get_thread_messages_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Get thread messages via MCP
+        let result = call_tool(
+            &app,
+            &services,
+            "get_thread_messages",
+            Some(json!({
+                "channel_id": "test-channel",
+                "thread_id": "thread-123"
+            })),
+        )
+        .await;
+
+        // Tool should route through app
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from get_thread_messages"
+        );
+        let text = result.content.first().and_then(extract_text).unwrap_or("");
+        assert!(
+            !text.contains("Unknown tool"),
+            "Tool should be registered and routed"
+        );
+    });
+}
+
+/// Test create_invite routes through app.
+#[test]
+fn test_create_invite_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Create invite via MCP
+        let result = call_tool(
+            &app,
+            &services,
+            "create_invite",
+            Some(json!({
+                "recipient_id": "recipient-123",
+                "entity_type": "group",
+                "entity_id": "group-456",
+                "role": "member",
+                "message": "Join our group!"
+            })),
+        )
+        .await;
+
+        // Tool should route through app
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from create_invite"
+        );
+        let text = result.content.first().and_then(extract_text).unwrap_or("");
+        assert!(
+            !text.contains("Unknown tool"),
+            "Tool should be registered and routed"
+        );
+    });
+}
+
+/// Test accept_invite routes through app.
+#[test]
+fn test_accept_invite_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Accept non-existent invite via MCP
+        let result = call_tool(
+            &app,
+            &services,
+            "accept_invite",
+            Some(json!({
+                "invite_id": "nonexistent-invite"
+            })),
+        )
+        .await;
+
+        // Tool should route through app (expect error for nonexistent)
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from accept_invite"
+        );
+        let text = result.content.first().and_then(extract_text).unwrap_or("");
+        assert!(
+            !text.contains("Unknown tool"),
+            "Tool should be registered and routed"
+        );
+    });
+}
+
+/// Test list_pending_invites routes through app.
+#[test]
+fn test_list_pending_invites_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // List pending invites via MCP
+        let result = call_tool(&app, &services, "list_pending_invites", Some(json!({}))).await;
+
+        // Tool should route through app
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from list_pending_invites"
+        );
+        let text = result.content.first().and_then(extract_text).unwrap_or("");
+        assert!(
+            !text.contains("Unknown tool"),
+            "Tool should be registered and routed"
+        );
+    });
+}
+
+// =============================================================================
+// Messaging Validation Edge Case Tests
+// =============================================================================
+
+/// Test validation for missing entity_id in send_message.
+#[test]
+fn test_validation_send_message_missing_text() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to send message without text
+        let result = call_tool(
+            &app,
+            &services,
+            "send_message",
+            Some(json!({
+                "entity_id": "test-thread"
+            })),
+        )
+        .await;
+
+        // Should still process (empty text may be allowed or error)
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from send_message"
+        );
+    });
+}
+
+/// Test validation for missing message_id in delete_message.
+#[test]
+fn test_validation_delete_message_missing_id() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to delete message without message_id
+        let result = call_tool(
+            &app,
+            &services,
+            "delete_message",
+            Some(json!({
+                "entity_id": "test-thread"
+            })),
+        )
+        .await;
+
+        // Should process (empty string default or error)
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from delete_message"
+        );
+    });
+}
+
+/// Test validation for missing emoji in add_reaction.
+#[test]
+fn test_validation_add_reaction_missing_emoji() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to add reaction without emoji
+        let result = call_tool(
+            &app,
+            &services,
+            "add_reaction",
+            Some(json!({
+                "entity_id": "test-thread",
+                "message_id": "msg-123"
+            })),
+        )
+        .await;
+
+        // Should process (empty string default or error)
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from add_reaction"
+        );
+    });
+}
+
+/// Test validation for missing channel_id in create_thread.
+#[test]
+fn test_validation_create_thread_missing_channel() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to create thread without channel_id
+        let result = call_tool(
+            &app,
+            &services,
+            "create_thread",
+            Some(json!({
+                "parent_message_id": "msg-123"
+            })),
+        )
+        .await;
+
+        // Should fail validation
+        assert!(result.is_error, "Expected error for missing channel_id");
+    });
+}
+
+/// Test validation for missing parent_message_id in create_thread.
+#[test]
+fn test_validation_create_thread_missing_parent() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to create thread without parent_message_id
+        let result = call_tool(
+            &app,
+            &services,
+            "create_thread",
+            Some(json!({
+                "channel_id": "channel-123"
+            })),
+        )
+        .await;
+
+        // Should fail validation
+        assert!(
+            result.is_error,
+            "Expected error for missing parent_message_id"
+        );
+    });
+}
+
+/// Test validation for missing thread_id in get_thread_messages.
+#[test]
+fn test_validation_get_thread_messages_missing_thread() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to get thread messages without thread_id
+        let result = call_tool(
+            &app,
+            &services,
+            "get_thread_messages",
+            Some(json!({
+                "channel_id": "channel-123"
+            })),
+        )
+        .await;
+
+        // Should fail validation
+        assert!(result.is_error, "Expected error for missing thread_id");
+    });
+}
+
+/// Test validation for missing entity_type in create_invite.
+#[test]
+fn test_validation_create_invite_missing_entity_type() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to create invite without entity_type
+        let result = call_tool(
+            &app,
+            &services,
+            "create_invite",
+            Some(json!({
+                "recipient_id": "recipient-123",
+                "entity_id": "entity-456"
+            })),
+        )
+        .await;
+
+        // Should fail validation
+        assert!(result.is_error, "Expected error for missing entity_type");
+    });
+}
+
+/// Test validation for invalid entity_type in create_invite.
+#[test]
+fn test_validation_create_invite_invalid_entity_type() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to create invite with invalid entity_type
+        let result = call_tool(
+            &app,
+            &services,
+            "create_invite",
+            Some(json!({
+                "recipient_id": "recipient-123",
+                "entity_type": "invalid_type",
+                "entity_id": "entity-456"
+            })),
+        )
+        .await;
+
+        // Should fail validation
+        assert!(result.is_error, "Expected error for invalid entity_type");
+    });
+}
+
+/// Test validation for missing invite_id in accept_invite.
+#[test]
+fn test_validation_accept_invite_missing_id() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to accept invite without invite_id
+        let result = call_tool(&app, &services, "accept_invite", Some(json!({}))).await;
+
+        // Should process (empty string default or error)
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from accept_invite"
+        );
+    });
+}
+
+/// Test list_threads with filter parameter.
+#[test]
+fn test_list_threads_with_filter_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // List threads with filter via MCP
+        let result = call_tool(
+            &app,
+            &services,
+            "list_threads",
+            Some(json!({
+                "filter": "unread",
+                "limit": 10
+            })),
+        )
+        .await;
+
+        // Tool should route through MessagingService
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from list_threads with filter"
+        );
+    });
+}
+
+/// Test list_threads with entities filter.
+#[test]
+fn test_list_threads_entities_filter_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // List entity threads via MCP
+        let result = call_tool(
+            &app,
+            &services,
+            "list_threads",
+            Some(json!({
+                "filter": "entities"
+            })),
+        )
+        .await;
+
+        // Tool should route through MessagingService
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from list_threads with entities filter"
+        );
+    });
+}
+
+/// Test list_threads with contacts filter.
+#[test]
+fn test_list_threads_contacts_filter_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // List contact threads via MCP
+        let result = call_tool(
+            &app,
+            &services,
+            "list_threads",
+            Some(json!({
+                "filter": "contacts"
+            })),
+        )
+        .await;
+
+        // Tool should route through MessagingService
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from list_threads with contacts filter"
         );
     });
 }

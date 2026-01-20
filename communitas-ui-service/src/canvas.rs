@@ -728,8 +728,16 @@ impl CanvasService {
     }
 
     /// Set the viewport dimensions.
-    #[instrument(skip(self))]
-    pub async fn set_viewport(&self, width: f32, height: f32) -> Result<(), CanvasError> {
+    ///
+    /// If `entity_id` is provided, the viewport is also persisted via CommunitasApp
+    /// for session restore.
+    #[instrument(skip(self, entity_id))]
+    pub async fn set_viewport(
+        &self,
+        entity_id: Option<&str>,
+        width: f32,
+        height: f32,
+    ) -> Result<(), CanvasError> {
         if width <= 0.0 || height <= 0.0 {
             return Err(CanvasError::InvalidTransform(
                 "viewport dimensions must be positive".to_string(),
@@ -744,14 +752,42 @@ impl CanvasService {
             scene.set_viewport(width, height);
         }
 
+        // Persist via CommunitasApp if entity_id provided
+        if let Some(eid) = entity_id {
+            let cmd = Command::CanvasSetViewport {
+                entity_id: eid.to_string(),
+                width,
+                height,
+            };
+            self.app
+                .execute(cmd)
+                .await
+                .map_err(|e| CanvasError::CommandFailed(e.to_string()))?;
+            tracing::debug!(
+                entity_id = eid,
+                width,
+                height,
+                "persisted viewport via command"
+            );
+        }
+
         self.publish_snapshot(false);
         tracing::debug!(width, height, "set viewport");
         Ok(())
     }
 
     /// Set zoom and pan.
-    #[instrument(skip(self))]
-    pub async fn set_view(&self, zoom: f32, pan_x: f32, pan_y: f32) -> Result<(), CanvasError> {
+    ///
+    /// If `entity_id` is provided, the view state is also persisted via CommunitasApp
+    /// for session restore.
+    #[instrument(skip(self, entity_id))]
+    pub async fn set_view(
+        &self,
+        entity_id: Option<&str>,
+        zoom: f32,
+        pan_x: f32,
+        pan_y: f32,
+    ) -> Result<(), CanvasError> {
         if zoom <= 0.0 {
             return Err(CanvasError::InvalidTransform(
                 "zoom must be positive".to_string(),
@@ -766,6 +802,27 @@ impl CanvasService {
             scene.zoom = zoom;
             scene.pan_x = pan_x;
             scene.pan_y = pan_y;
+        }
+
+        // Persist via CommunitasApp if entity_id provided
+        if let Some(eid) = entity_id {
+            let cmd = Command::CanvasSetView {
+                entity_id: eid.to_string(),
+                zoom: Some(zoom),
+                pan_x: Some(pan_x),
+                pan_y: Some(pan_y),
+            };
+            self.app
+                .execute(cmd)
+                .await
+                .map_err(|e| CanvasError::CommandFailed(e.to_string()))?;
+            tracing::debug!(
+                entity_id = eid,
+                zoom,
+                pan_x,
+                pan_y,
+                "persisted view via command"
+            );
         }
 
         self.publish_snapshot(false);
@@ -1396,7 +1453,7 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let canvas = make_service(&temp).await;
 
-        canvas.set_viewport(1920.0, 1080.0).await.unwrap();
+        canvas.set_viewport(None, 1920.0, 1080.0).await.unwrap();
 
         let snap = canvas.current_snapshot();
         assert!((snap.viewport_width - 1920.0).abs() < f32::EPSILON);
@@ -1408,7 +1465,7 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let canvas = make_service(&temp).await;
 
-        let result = canvas.set_viewport(0.0, 600.0).await;
+        let result = canvas.set_viewport(None, 0.0, 600.0).await;
         assert!(matches!(result, Err(CanvasError::InvalidTransform(_))));
     }
 
@@ -1417,7 +1474,7 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let canvas = make_service(&temp).await;
 
-        canvas.set_view(2.0, 100.0, 50.0).await.unwrap();
+        canvas.set_view(None, 2.0, 100.0, 50.0).await.unwrap();
 
         let snap = canvas.current_snapshot();
         assert!((snap.zoom - 2.0).abs() < f32::EPSILON);

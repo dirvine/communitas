@@ -240,10 +240,6 @@ impl MessagingService {
         text: &str,
         reply_to: Option<&str>,
     ) -> Result<Message, MessagingError> {
-        if !self.is_authenticated() {
-            return Err(MessagingError::NotAuthenticated);
-        }
-
         // Get the authenticated user's display name for the author field
         let author = match &*self.auth.subscribe().borrow() {
             AuthStateSnapshot::Authenticated(session) => session.display_name.clone(),
@@ -276,7 +272,7 @@ impl MessagingService {
             entity_id: thread_id.to_string(),
             entity_type,
             text: text.to_string(),
-            author: author.clone(),
+            author,
             reply_to_id: reply_to.map(|s| s.to_string()),
             attachments: None,
         };

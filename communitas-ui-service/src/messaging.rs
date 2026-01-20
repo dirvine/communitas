@@ -307,9 +307,15 @@ impl MessagingService {
 
     /// Edit an existing message.
     ///
+    /// # Arguments
+    /// * `thread_id` - The entity ID of the thread containing the message.
+    /// * `message_id` - The ID of the message to edit.
+    /// * `new_text` - The new text content to replace the existing message.
+    ///
     /// # Errors
     /// - [`MessagingError::NotAuthenticated`] if no user is logged in.
-    /// - [`MessagingError::Internal`] if the edit fails.
+    /// - [`MessagingError::Internal`] if the edit command fails (e.g., message not found,
+    ///   permission denied, or no confirmation event received).
     #[instrument(
         skip(self, new_text),
         name = "ui.messaging.edit",
@@ -382,9 +388,14 @@ impl MessagingService {
 
     /// Delete a message.
     ///
+    /// # Arguments
+    /// * `thread_id` - The entity ID of the thread containing the message.
+    /// * `message_id` - The ID of the message to delete.
+    ///
     /// # Errors
     /// - [`MessagingError::NotAuthenticated`] if no user is logged in.
-    /// - [`MessagingError::Internal`] if the delete fails.
+    /// - [`MessagingError::Internal`] if the delete command fails (e.g., message not found,
+    ///   permission denied, or no confirmation event received).
     #[instrument(
         skip(self),
         name = "ui.messaging.delete",
@@ -661,6 +672,30 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let service = make_service(&temp).await;
         let result = service.send_message("thread1", "Hello", None).await;
+        assert!(result.is_err());
+        match result {
+            Err(MessagingError::NotAuthenticated) => {}
+            other => panic!("expected NotAuthenticated, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn edit_message_fails_when_not_authenticated() {
+        let temp = TempDir::new().unwrap();
+        let service = make_service(&temp).await;
+        let result = service.edit_message("thread1", "msg1", "new text").await;
+        assert!(result.is_err());
+        match result {
+            Err(MessagingError::NotAuthenticated) => {}
+            other => panic!("expected NotAuthenticated, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn delete_message_fails_when_not_authenticated() {
+        let temp = TempDir::new().unwrap();
+        let service = make_service(&temp).await;
+        let result = service.delete_message("thread1", "msg1").await;
         assert!(result.is_err());
         match result {
             Err(MessagingError::NotAuthenticated) => {}

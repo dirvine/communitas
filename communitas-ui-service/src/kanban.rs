@@ -373,6 +373,39 @@ impl KanbanService {
         self.rx.borrow().clone()
     }
 
+    /// Load boards for an entity, setting loading state and subscribing to events.
+    ///
+    /// This is the primary method for UI integration when an entity is selected.
+    /// It immediately sets `loading=true` in the watch channel, then fetches boards
+    /// and subscribes to CRDT events for reactive updates.
+    ///
+    /// # Example
+    /// ```ignore
+    /// // In UI code when entity is selected:
+    /// kanban_service.load_boards("entity-123").await?;
+    /// // Subscribe to snapshot updates to see loading state and boards
+    /// let mut rx = kanban_service.subscribe();
+    /// ```
+    #[instrument(skip(self), name = "ui.kanban.load_boards", fields(entity_id))]
+    pub async fn load_boards(&self, entity_id: &str) -> Result<Vec<BoardSummary>, KanbanError> {
+        if !self.is_authenticated() {
+            return Err(KanbanError::NotAuthenticated);
+        }
+
+        // Set loading state immediately so UI can show loading indicator
+        {
+            let mut snap = self.rx.borrow().clone();
+            snap.loading = true;
+            snap.boards.clear(); // Clear previous entity's boards
+            let _ = self.tx.send(snap);
+        }
+
+        debug!(entity_id = %entity_id, "Loading boards for entity");
+
+        // list_boards handles the query, fallback, snapshot update, and event subscription
+        self.list_boards(entity_id).await
+    }
+
     /// List all boards for an entity (project/group).
     ///
     /// Queries CommunitasApp for network-synced board data with local CRDT fallback.

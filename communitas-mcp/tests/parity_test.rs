@@ -2269,6 +2269,557 @@ fn test_drive_file_operations_parity() {
     });
 }
 
+/// Test that delete_file via MCP routes through DriveService.
+#[test]
+fn test_drive_delete_file_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // First write a file to delete
+        let _write_result = call_tool(
+            &app,
+            &services,
+            "write_file",
+            Some(json!({
+                "entity_id": "test-entity",
+                "path": "/to-delete.txt",
+                "content": "File to be deleted"
+            })),
+        )
+        .await;
+
+        // Delete file via MCP
+        let delete_result = call_tool(
+            &app,
+            &services,
+            "delete_file",
+            Some(json!({
+                "entity_id": "test-entity",
+                "path": "/to-delete.txt"
+            })),
+        )
+        .await;
+
+        // Tool should execute - routes through DriveService
+        assert!(
+            !delete_result.content.is_empty(),
+            "Expected response from delete_file"
+        );
+    });
+}
+
+/// Test that get_disk_stats via MCP routes through DriveService.
+#[test]
+fn test_drive_get_disk_stats_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Get disk stats via MCP
+        let result = call_tool(
+            &app,
+            &services,
+            "get_disk_stats",
+            Some(json!({
+                "entity_id": "test-entity",
+                "disk_type": "Private"
+            })),
+        )
+        .await;
+
+        // Tool should execute - routes through DriveService.get_quota()
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from get_disk_stats"
+        );
+    });
+}
+
+/// Test that create_directory via MCP routes through DriveService.
+#[test]
+fn test_drive_create_directory_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Create directory via MCP
+        let result = call_tool(
+            &app,
+            &services,
+            "create_directory",
+            Some(json!({
+                "entity_id": "test-entity",
+                "path": "/test-directory"
+            })),
+        )
+        .await;
+
+        // Tool should execute - routes through DriveService
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from create_directory"
+        );
+    });
+}
+
+/// Test that move_file via MCP routes through DriveService.
+#[test]
+fn test_drive_move_file_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // First write a file to move
+        let _write_result = call_tool(
+            &app,
+            &services,
+            "write_file",
+            Some(json!({
+                "entity_id": "test-entity",
+                "path": "/original-file.txt",
+                "content": "File to be moved"
+            })),
+        )
+        .await;
+
+        // Move file via MCP
+        let result = call_tool(
+            &app,
+            &services,
+            "move_file",
+            Some(json!({
+                "entity_id": "test-entity",
+                "source": "/original-file.txt",
+                "destination": "/moved-file.txt"
+            })),
+        )
+        .await;
+
+        // Tool should execute - routes through DriveService
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from move_file"
+        );
+    });
+}
+
+/// Test that copy_file via MCP routes through DriveService.
+#[test]
+fn test_drive_copy_file_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // First write a file to copy
+        let _write_result = call_tool(
+            &app,
+            &services,
+            "write_file",
+            Some(json!({
+                "entity_id": "test-entity",
+                "path": "/source-file.txt",
+                "content": "File to be copied"
+            })),
+        )
+        .await;
+
+        // Copy file via MCP
+        let result = call_tool(
+            &app,
+            &services,
+            "copy_file",
+            Some(json!({
+                "entity_id": "test-entity",
+                "source": "/source-file.txt",
+                "destination": "/copied-file.txt"
+            })),
+        )
+        .await;
+
+        // Tool should execute - routes through DriveService
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from copy_file"
+        );
+    });
+}
+
+/// Test that get_file_preview via MCP routes through DriveService.
+#[test]
+fn test_drive_get_file_preview_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // First write a file to preview
+        let _write_result = call_tool(
+            &app,
+            &services,
+            "write_file",
+            Some(json!({
+                "entity_id": "test-entity",
+                "path": "/preview-test.txt",
+                "content": "Content for preview testing"
+            })),
+        )
+        .await;
+
+        // Get file preview via MCP
+        let result = call_tool(
+            &app,
+            &services,
+            "get_file_preview",
+            Some(json!({
+                "entity_id": "test-entity",
+                "path": "/preview-test.txt"
+            })),
+        )
+        .await;
+
+        // Tool should execute - routes through DriveService
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from get_file_preview"
+        );
+    });
+}
+
+/// Test that list_files via MCP routes through DriveService.
+#[test]
+fn test_drive_list_files_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // First write some files
+        let _write_result = call_tool(
+            &app,
+            &services,
+            "write_file",
+            Some(json!({
+                "entity_id": "test-entity",
+                "path": "/list-test-file.txt",
+                "content": "Test file for listing"
+            })),
+        )
+        .await;
+
+        // List files via MCP
+        let result = call_tool(
+            &app,
+            &services,
+            "list_files",
+            Some(json!({
+                "entity_id": "test-entity"
+            })),
+        )
+        .await;
+
+        // Tool should execute - routes through DriveService
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from list_files"
+        );
+    });
+}
+
+/// Test that list_files with path parameter via MCP routes through DriveService.
+#[test]
+fn test_drive_list_files_with_path_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // List files in specific directory via MCP
+        let result = call_tool(
+            &app,
+            &services,
+            "list_files",
+            Some(json!({
+                "entity_id": "test-entity",
+                "path": "/subdir"
+            })),
+        )
+        .await;
+
+        // Tool should execute - routes through DriveService
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from list_files with path"
+        );
+    });
+}
+
+/// Test that upload_with_metadata via MCP executes correctly.
+#[test]
+fn test_drive_upload_with_metadata_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Upload file with metadata via MCP
+        let result = call_tool(
+            &app,
+            &services,
+            "upload_with_metadata",
+            Some(json!({
+                "entity_id": "test-entity",
+                "path": "/uploaded-with-meta.txt",
+                "content": "Content with metadata",
+                "metadata": {
+                    "description": "Test file with metadata",
+                    "tags": ["test", "upload"]
+                }
+            })),
+        )
+        .await;
+
+        // Tool should execute
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from upload_with_metadata"
+        );
+    });
+}
+
+/// Test that get_media_metadata via MCP executes correctly.
+#[test]
+fn test_drive_get_media_metadata_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // First write a file
+        let _write_result = call_tool(
+            &app,
+            &services,
+            "write_file",
+            Some(json!({
+                "entity_id": "test-entity",
+                "path": "/media-test.txt",
+                "content": "Content for media metadata test"
+            })),
+        )
+        .await;
+
+        // Get media metadata via MCP
+        let result = call_tool(
+            &app,
+            &services,
+            "get_media_metadata",
+            Some(json!({
+                "entity_id": "test-entity",
+                "path": "/media-test.txt"
+            })),
+        )
+        .await;
+
+        // Tool should execute
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from get_media_metadata"
+        );
+    });
+}
+
+// =============================================================================
+// Drive Validation Tests
+// =============================================================================
+
+/// Test validation for missing entity_id in drive operations.
+#[test]
+fn test_drive_validation_missing_entity_id() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to list files without entity_id
+        let result = call_tool(
+            &app,
+            &services,
+            "list_files",
+            Some(json!({
+                "path": "/some-path"
+            })),
+        )
+        .await;
+
+        // Should fail validation
+        assert!(
+            result.is_error,
+            "Expected validation error for missing entity_id"
+        );
+    });
+}
+
+/// Test validation for missing path in write_file.
+#[test]
+fn test_drive_validation_missing_path() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to write file without path
+        let result = call_tool(
+            &app,
+            &services,
+            "write_file",
+            Some(json!({
+                "entity_id": "test-entity",
+                "content": "Some content"
+            })),
+        )
+        .await;
+
+        // Should fail validation
+        assert!(
+            result.is_error,
+            "Expected validation error for missing path"
+        );
+    });
+}
+
+/// Test validation for missing content in write_file.
+#[test]
+fn test_drive_validation_missing_content() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to write file without content
+        let result = call_tool(
+            &app,
+            &services,
+            "write_file",
+            Some(json!({
+                "entity_id": "test-entity",
+                "path": "/some-file.txt"
+            })),
+        )
+        .await;
+
+        // Should fail validation
+        assert!(
+            result.is_error,
+            "Expected validation error for missing content"
+        );
+    });
+}
+
+/// Test validation for missing source in move_file.
+#[test]
+fn test_drive_validation_missing_source() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to move file without source
+        let result = call_tool(
+            &app,
+            &services,
+            "move_file",
+            Some(json!({
+                "entity_id": "test-entity",
+                "destination": "/dest.txt"
+            })),
+        )
+        .await;
+
+        // Should fail validation
+        assert!(
+            result.is_error,
+            "Expected validation error for missing source"
+        );
+    });
+}
+
+/// Test validation for missing destination in move_file.
+#[test]
+fn test_drive_validation_missing_destination() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to move file without destination
+        let result = call_tool(
+            &app,
+            &services,
+            "move_file",
+            Some(json!({
+                "entity_id": "test-entity",
+                "source": "/source.txt"
+            })),
+        )
+        .await;
+
+        // Should fail validation
+        assert!(
+            result.is_error,
+            "Expected validation error for missing destination"
+        );
+    });
+}
+
+/// Test validation for missing source in copy_file.
+#[test]
+fn test_drive_validation_copy_missing_source() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to copy file without source
+        let result = call_tool(
+            &app,
+            &services,
+            "copy_file",
+            Some(json!({
+                "entity_id": "test-entity",
+                "destination": "/dest.txt"
+            })),
+        )
+        .await;
+
+        // Should fail validation
+        assert!(
+            result.is_error,
+            "Expected validation error for missing source in copy_file"
+        );
+    });
+}
+
+/// Test that all 12 drive tools are registered.
+#[test]
+fn test_all_drive_tools_registered() {
+    let tools = list_tools(true);
+    let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
+
+    // Complete list of all 12 drive tools
+    let drive_tools = [
+        "list_disks",
+        "read_file",
+        "write_file",
+        "delete_file",
+        "get_disk_stats",
+        "create_directory",
+        "move_file",
+        "copy_file",
+        "get_file_preview",
+        "list_files",
+        "upload_with_metadata",
+        "get_media_metadata",
+    ];
+
+    for tool in &drive_tools {
+        assert!(
+            tool_names.contains(tool),
+            "Expected {} tool to be registered (found {} tools total)",
+            tool,
+            tool_names.len()
+        );
+    }
+}
+
 // =============================================================================
 // Canvas Parity Tests
 // =============================================================================

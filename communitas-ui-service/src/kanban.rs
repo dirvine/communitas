@@ -3,7 +3,7 @@
 use std::sync::{Arc, Weak};
 
 use communitas_core::app::CommunitasApp;
-use communitas_core::command::Command;
+use communitas_core::command::{Command, Query, QueryError, QueryResponse};
 use communitas_kanban::{
     BoardUpdate as CoreBoardUpdate, CardState as CoreCardState, CardUpdate as CoreCardUpdate,
     KanbanService as CoreKanbanService,
@@ -230,12 +230,72 @@ impl KanbanService {
     }
 
     /// List all boards for an entity (project/group).
+    ///
+    /// Queries CommunitasApp for network-synced board data with local CRDT fallback.
     #[instrument(skip(self), name = "ui.kanban.list_boards", fields(entity_id))]
     pub async fn list_boards(&self, entity_id: &str) -> Result<Vec<BoardSummary>, KanbanError> {
         if !self.is_authenticated() {
             return Err(KanbanError::NotAuthenticated);
         }
 
+        // Try CommunitasApp query first for network-synced data
+        let summaries = match self
+            .app
+            .query(Query::ListKanbanBoards {
+                entity_id: entity_id.to_string(),
+            })
+            .await
+        {
+            Ok(QueryResponse::KanbanBoardList(boards)) => {
+                debug!(
+                    entity_id = %entity_id,
+                    count = boards.len(),
+                    "Fetched boards from CommunitasApp"
+                );
+                boards
+                    .into_iter()
+                    .map(|b| BoardSummary {
+                        id: b.id,
+                        name: b.name,
+                        entity_id: b.entity_id,
+                        column_count: b.column_count as u32,
+                        card_count: 0, // Card count requires additional query
+                        last_activity: None,
+                    })
+                    .collect()
+            }
+            Ok(other) => {
+                warn!(
+                    entity_id = %entity_id,
+                    response_type = ?std::mem::discriminant(&other),
+                    "Unexpected query response, falling back to local CRDT"
+                );
+                self.list_boards_from_crdt(entity_id).await?
+            }
+            Err(e) => {
+                debug!(
+                    entity_id = %entity_id,
+                    error = %e,
+                    "CommunitasApp query failed, falling back to local CRDT"
+                );
+                self.list_boards_from_crdt(entity_id).await?
+            }
+        };
+
+        // Update snapshot
+        let mut snap = self.rx.borrow().clone();
+        snap.boards = summaries.clone();
+        snap.loading = false;
+        let _ = self.tx.send(snap);
+
+        Ok(summaries)
+    }
+
+    /// List boards from local CRDT (fallback when CommunitasApp query fails).
+    async fn list_boards_from_crdt(
+        &self,
+        entity_id: &str,
+    ) -> Result<Vec<BoardSummary>, KanbanError> {
         let core = self.core.read().await;
         let boards = core.list_boards(entity_id)?;
         let summaries: Vec<BoardSummary> = boards
@@ -265,28 +325,145 @@ impl KanbanService {
                     entity_id: b.project_id,
                     column_count,
                     card_count,
-                    last_activity: Some(b.updated_at * 1000), // Convert to ms
+                    last_activity: Some(b.updated_at * 1000),
                 }
             })
             .collect();
-        drop(core);
-
-        // Update snapshot
-        let mut snap = self.rx.borrow().clone();
-        snap.boards = summaries.clone();
-        snap.loading = false;
-        let _ = self.tx.send(snap);
 
         Ok(summaries)
     }
 
     /// Get a full board view with columns and cards.
+    ///
+    /// Tries CommunitasApp queries first for network-synced data, falls back to local CRDT.
     #[instrument(skip(self), name = "ui.kanban.get_board", fields(board_id))]
     pub async fn get_board(&self, board_id: &str) -> Result<BoardView, KanbanError> {
         if !self.is_authenticated() {
             return Err(KanbanError::NotAuthenticated);
         }
 
+        // Try to fetch board metadata from CommunitasApp for consistency verification
+        let app_board = self
+            .app
+            .query(Query::GetKanbanBoard {
+                board_id: board_id.to_string(),
+            })
+            .await;
+
+        // Try to fetch columns from CommunitasApp
+        let app_columns = self
+            .app
+            .query(Query::ListKanbanColumns {
+                board_id: board_id.to_string(),
+            })
+            .await;
+
+        // Try to fetch cards from CommunitasApp
+        let app_cards = self
+            .app
+            .query(Query::ListKanbanCards {
+                board_id: board_id.to_string(),
+                column_id: None,
+                state: None,
+                assignee_id: None,
+                tag_id: None,
+            })
+            .await;
+
+        // Check if we have complete data from CommunitasApp
+        let use_app_data = matches!(
+            (&app_board, &app_columns, &app_cards),
+            (
+                Ok(QueryResponse::KanbanBoard(_)),
+                Ok(QueryResponse::KanbanColumns(_)),
+                Ok(QueryResponse::KanbanCards(_))
+            )
+        );
+
+        if use_app_data {
+            debug!(board_id = %board_id, "Using CommunitasApp data for board view");
+            self.build_board_view_from_app(board_id, app_board, app_columns, app_cards)
+                .await
+        } else {
+            debug!(board_id = %board_id, "Falling back to local CRDT for board view");
+            self.get_board_from_crdt(board_id).await
+        }
+    }
+
+    /// Build board view from CommunitasApp query responses.
+    async fn build_board_view_from_app(
+        &self,
+        board_id: &str,
+        app_board: Result<QueryResponse, QueryError>,
+        app_columns: Result<QueryResponse, QueryError>,
+        app_cards: Result<QueryResponse, QueryError>,
+    ) -> Result<BoardView, KanbanError> {
+        let board = match app_board {
+            Ok(QueryResponse::KanbanBoard(b)) => b,
+            _ => return self.get_board_from_crdt(board_id).await,
+        };
+
+        let columns = match app_columns {
+            Ok(QueryResponse::KanbanColumns(cols)) => cols,
+            _ => return self.get_board_from_crdt(board_id).await,
+        };
+
+        let cards = match app_cards {
+            Ok(QueryResponse::KanbanCards(cards)) => cards,
+            _ => return self.get_board_from_crdt(board_id).await,
+        };
+
+        // Group cards by column
+        let mut cards_by_column: std::collections::HashMap<String, Vec<CardView>> =
+            std::collections::HashMap::new();
+        for card in cards {
+            let card_view = CardView {
+                id: card.id,
+                title: card.title,
+                description: card.description,
+                state: CardState::default(),
+                assignees: card.assignee.into_iter().collect(),
+                tags: Vec::new(),
+                due_date: None,
+                checklist_progress: None,
+                position: card.position,
+            };
+            cards_by_column
+                .entry(card.column_id)
+                .or_default()
+                .push(card_view);
+        }
+
+        // Build column views
+        let column_views: Vec<ColumnView> = columns
+            .into_iter()
+            .map(|col| {
+                let mut cards = cards_by_column.remove(&col.id).unwrap_or_default();
+                cards.sort_by_key(|c| c.position);
+                ColumnView {
+                    id: col.id,
+                    name: col.name,
+                    position: col.position,
+                    cards,
+                    wip_limit: col.wip_limit,
+                }
+            })
+            .collect();
+
+        Ok(BoardView {
+            id: board.id,
+            name: board.name,
+            entity_id: board.entity_id,
+            description: board.description,
+            columns: column_views,
+            settings: BoardSettings::default(),
+            created_at: 0,
+            updated_at: 0,
+        })
+    }
+
+    /// Get board view from local CRDT (fallback).
+    async fn get_board_from_crdt(&self, board_id: &str) -> Result<BoardView, KanbanError> {
         let core = self.core.read().await;
         let board = core.get_board(board_id)?;
         let columns = core.list_columns(board_id)?;
@@ -341,12 +518,37 @@ impl KanbanService {
     }
 
     /// Get detailed card information including steps, comments, and activity.
+    ///
+    /// Queries CommunitasApp for card verification and uses local CRDT for rich data
+    /// (comments, tags, steps) which CommunitasApp query doesn't provide.
     #[instrument(skip(self), name = "ui.kanban.get_card", fields(board_id, card_id))]
     pub async fn get_card(&self, board_id: &str, card_id: &str) -> Result<CardDetail, KanbanError> {
         if !self.is_authenticated() {
             return Err(KanbanError::NotAuthenticated);
         }
 
+        // Query CommunitasApp for card verification
+        let app_result = self
+            .app
+            .query(Query::GetKanbanCard {
+                board_id: board_id.to_string(),
+                card_id: card_id.to_string(),
+            })
+            .await;
+
+        match &app_result {
+            Ok(QueryResponse::KanbanCard(_)) => {
+                debug!(card_id = %card_id, "Card verified via CommunitasApp");
+            }
+            Ok(_) => {
+                warn!(card_id = %card_id, "Unexpected response type from CommunitasApp");
+            }
+            Err(e) => {
+                debug!(card_id = %card_id, error = %e, "CommunitasApp card query failed, using local CRDT");
+            }
+        }
+
+        // Get card from CRDT for complete data (comments, tags, steps, etc.)
         let core = self.core.read().await;
         let card = core.get_card(board_id, card_id)?;
         let tags = core.list_tags(board_id)?;

@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use communitas_core::app::CommunitasApp;
-use communitas_core::command::{Query, QueryResponse};
+use communitas_core::command::{Command, Event, Query, QueryResponse};
 use communitas_ui_api::{Message, ThreadSummary};
 use thiserror::Error;
 use tokio::sync::watch;
@@ -11,6 +11,7 @@ use tracing::{debug, instrument, warn};
 
 use crate::auth::{AuthController, AuthService, AuthStateSnapshot};
 use crate::messaging_convert::{core_entity_type_to_ui, core_message_to_ui};
+use communitas_core::legacy_crdt::EntityType;
 
 /// Errors returned by the messaging service.
 #[derive(Debug, Error)]
@@ -239,12 +240,92 @@ impl MessagingService {
         text: &str,
         reply_to: Option<&str>,
     ) -> Result<Message, MessagingError> {
-        let _ = (thread_id, text, reply_to); // Suppress unused warnings for now
         if !self.is_authenticated() {
             return Err(MessagingError::NotAuthenticated);
         }
-        // TODO: Wire to core Command::SendMessage
-        Err(MessagingError::Internal("not yet implemented".to_string()))
+
+        // Get the authenticated user's display name for the author field
+        let author = match &*self.auth.subscribe().borrow() {
+            AuthStateSnapshot::Authenticated(session) => session.display_name.clone(),
+            _ => return Err(MessagingError::NotAuthenticated),
+        };
+
+        // Query the entity to get its type
+        let entity_type = match self
+            .app
+            .query(Query::GetEntity {
+                entity_id: thread_id.to_string(),
+            })
+            .await
+        {
+            Ok(QueryResponse::Entity(entity)) => entity.entity_type,
+            Ok(_) => {
+                warn!(thread_id, "Unexpected response type for GetEntity");
+                // Default to Channel if entity type cannot be determined
+                EntityType::Channel
+            }
+            Err(e) => {
+                debug!(thread_id, error = %e.message, "Could not determine entity type, using Channel");
+                // Default to Channel for backward compatibility
+                EntityType::Channel
+            }
+        };
+
+        // Build and execute the SendMessage command
+        let cmd = Command::SendMessage {
+            entity_id: thread_id.to_string(),
+            entity_type,
+            text: text.to_string(),
+            author: author.clone(),
+            reply_to_id: reply_to.map(|s| s.to_string()),
+            attachments: None,
+        };
+
+        let events = self
+            .app
+            .execute(cmd)
+            .await
+            .map_err(|e| MessagingError::SendFailed(e.message))?;
+
+        // Extract message_id from the MessageSent event
+        let message_id = events
+            .iter()
+            .find_map(|event| match event {
+                Event::MessageSent { message_id, .. } => Some(message_id.clone()),
+                _ => None,
+            })
+            .ok_or_else(|| {
+                MessagingError::SendFailed("No MessageSent event returned".to_string())
+            })?;
+
+        debug!(thread_id, message_id = %message_id, "Message sent successfully");
+
+        // Query the newly created message to return the full Message struct
+        let message = match self
+            .app
+            .query(Query::GetMessage {
+                entity_id: thread_id.to_string(),
+                message_id: message_id.clone(),
+            })
+            .await
+        {
+            Ok(QueryResponse::Message(msg)) => core_message_to_ui(&msg),
+            Ok(_) => {
+                warn!(message_id, "Unexpected response type for GetMessage");
+                return Err(MessagingError::Internal(
+                    "Failed to retrieve sent message".to_string(),
+                ));
+            }
+            Err(e) => {
+                warn!(message_id, error = %e.message, "Failed to retrieve sent message");
+                return Err(MessagingError::Internal(format!(
+                    "Message sent but retrieval failed: {}",
+                    e.message
+                )));
+            }
+        };
+
+        Ok(message)
     }
 
     /// Edit an existing message.

@@ -4357,3 +4357,1110 @@ fn test_contact_presence_validation_consistency() {
         );
     });
 }
+
+// =============================================================================
+// Network Tool Registration Tests
+// =============================================================================
+
+#[test]
+fn test_tools_include_network_operations() {
+    let tools = list_tools(true);
+    let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
+
+    // Network lifecycle tools
+    assert!(
+        tool_names.contains(&"network_start"),
+        "Expected network_start tool"
+    );
+    assert!(
+        tool_names.contains(&"network_stop"),
+        "Expected network_stop tool"
+    );
+    assert!(
+        tool_names.contains(&"network_connect"),
+        "Expected network_connect tool"
+    );
+    assert!(
+        tool_names.contains(&"network_status"),
+        "Expected network_status tool"
+    );
+    assert!(
+        tool_names.contains(&"network_peers"),
+        "Expected network_peers tool"
+    );
+
+    // External address and connection words
+    assert!(
+        tool_names.contains(&"network_request_external_address"),
+        "Expected network_request_external_address tool"
+    );
+    assert!(
+        tool_names.contains(&"get_connection_words"),
+        "Expected get_connection_words tool"
+    );
+    assert!(
+        tool_names.contains(&"connect_by_words"),
+        "Expected connect_by_words tool"
+    );
+}
+
+#[test]
+fn test_all_network_tools_registered() {
+    let tools = list_tools(true);
+    let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
+
+    // Complete list of all 8 network tools
+    let network_tools = [
+        // Lifecycle operations (3)
+        "network_start",
+        "network_stop",
+        "network_connect",
+        // Status operations (2)
+        "network_status",
+        "network_peers",
+        // Address and connection words (3)
+        "network_request_external_address",
+        "get_connection_words",
+        "connect_by_words",
+    ];
+
+    for tool in &network_tools {
+        assert!(
+            tool_names.contains(tool),
+            "Expected {} tool to be registered (found {} tools total)",
+            tool,
+            tool_names.len()
+        );
+    }
+}
+
+// =============================================================================
+// Call Tool Registration Tests
+// =============================================================================
+
+#[test]
+fn test_all_call_tools_registered() {
+    let tools = list_tools(true);
+    let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
+
+    // Complete list of all 8 call tools
+    let call_tools = [
+        // Call lifecycle (3)
+        "start_voice_call",
+        "join_call",
+        "end_call",
+        // Media controls (3)
+        "share_screen",
+        "toggle_mute",
+        "toggle_video",
+        // Query operations (2)
+        "get_call_status",
+        "get_call_participants",
+    ];
+
+    for tool in &call_tools {
+        assert!(
+            tool_names.contains(tool),
+            "Expected {} tool to be registered (found {} tools total)",
+            tool,
+            tool_names.len()
+        );
+    }
+}
+
+// =============================================================================
+// Network Parity Tests - Functional
+// =============================================================================
+
+/// Test network_start routes through CommunitasApp.
+#[test]
+fn test_network_start_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Start networking with optional preferred port
+        let result = call_tool(
+            &app,
+            &services,
+            "network_start",
+            Some(json!({
+                "preferred_port": 0
+            })),
+        )
+        .await;
+
+        // Tool should execute (may succeed or fail based on system state)
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from network_start"
+        );
+        let text = result.content.first().and_then(extract_text).unwrap_or("");
+        assert!(
+            !text.contains("Unknown tool"),
+            "Tool should be routed through app"
+        );
+    });
+}
+
+/// Test network_start without parameters.
+#[test]
+fn test_network_start_no_params_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Start networking without specifying port
+        let result = call_tool(&app, &services, "network_start", None).await;
+
+        // Tool should execute
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from network_start without params"
+        );
+    });
+}
+
+/// Test network_stop routes through CommunitasApp.
+#[test]
+fn test_network_stop_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Stop networking
+        let result = call_tool(&app, &services, "network_stop", None).await;
+
+        // Tool should execute
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from network_stop"
+        );
+        let text = result.content.first().and_then(extract_text).unwrap_or("");
+        assert!(
+            !text.contains("Unknown tool"),
+            "Tool should be routed through app"
+        );
+    });
+}
+
+/// Test network_connect routes through CommunitasApp.
+#[test]
+fn test_network_connect_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to connect to a peer
+        let result = call_tool(
+            &app,
+            &services,
+            "network_connect",
+            Some(json!({
+                "peer_four_words": "ocean.forest.moon.star"
+            })),
+        )
+        .await;
+
+        // Tool should execute (may fail to connect but should route correctly)
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from network_connect"
+        );
+        let text = result.content.first().and_then(extract_text).unwrap_or("");
+        assert!(
+            !text.contains("Unknown tool"),
+            "Tool should be routed through app"
+        );
+    });
+}
+
+/// Test network_connect validation - missing peer_four_words.
+#[test]
+fn test_network_connect_validation() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to connect without peer_four_words
+        let result = call_tool(&app, &services, "network_connect", Some(json!({}))).await;
+
+        // Should fail validation
+        assert!(
+            result.is_error,
+            "Expected validation error for missing peer_four_words in network_connect"
+        );
+    });
+}
+
+/// Test network_status routes through CommunitasApp.
+#[test]
+fn test_network_status_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Query network status
+        let result = call_tool(&app, &services, "network_status", None).await;
+
+        // Tool should execute and return status info
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from network_status"
+        );
+
+        // Should not be an error since this is a read-only query
+        if !result.is_error {
+            let parsed = parse_tool_response(&result);
+            // Status should contain is_active field
+            assert!(
+                parsed.get("is_active").is_some(),
+                "Expected is_active in network_status response"
+            );
+        }
+    });
+}
+
+/// Test network_peers routes through CommunitasApp.
+#[test]
+fn test_network_peers_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Query connected peers
+        let result = call_tool(&app, &services, "network_peers", None).await;
+
+        // Tool should execute and return peer list
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from network_peers"
+        );
+
+        // Should return peers list (may be empty)
+        if !result.is_error {
+            let parsed = parse_tool_response(&result);
+            assert!(
+                parsed.get("peers").is_some() || parsed.get("count").is_some(),
+                "Expected peers or count in network_peers response"
+            );
+        }
+    });
+}
+
+/// Test network_request_external_address routes through CommunitasApp.
+#[test]
+fn test_network_request_external_address_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Request external address discovery
+        let result = call_tool(&app, &services, "network_request_external_address", None).await;
+
+        // Tool should execute (may fail if network not started)
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from network_request_external_address"
+        );
+        let text = result.content.first().and_then(extract_text).unwrap_or("");
+        assert!(
+            !text.contains("Unknown tool"),
+            "Tool should be routed through app"
+        );
+    });
+}
+
+/// Test get_connection_words routes through CommunitasApp.
+#[test]
+fn test_get_connection_words_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Get connection words (may fail if no external address)
+        let result = call_tool(&app, &services, "get_connection_words", None).await;
+
+        // Tool should execute
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from get_connection_words"
+        );
+        let text = result.content.first().and_then(extract_text).unwrap_or("");
+        assert!(
+            !text.contains("Unknown tool"),
+            "Tool should be routed through app"
+        );
+    });
+}
+
+/// Test connect_by_words routes through CommunitasApp.
+#[test]
+fn test_connect_by_words_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to connect using words
+        let result = call_tool(
+            &app,
+            &services,
+            "connect_by_words",
+            Some(json!({
+                "words": "ocean-forest-moon-star"
+            })),
+        )
+        .await;
+
+        // Tool should execute (may fail to connect but should route correctly)
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from connect_by_words"
+        );
+        let text = result.content.first().and_then(extract_text).unwrap_or("");
+        assert!(
+            !text.contains("Unknown tool"),
+            "Tool should be routed through app"
+        );
+    });
+}
+
+/// Test connect_by_words validation - missing words.
+#[test]
+fn test_connect_by_words_validation() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to connect without words
+        let result = call_tool(&app, &services, "connect_by_words", Some(json!({}))).await;
+
+        // Should fail validation
+        assert!(
+            result.is_error,
+            "Expected validation error for missing words in connect_by_words"
+        );
+    });
+}
+
+// =============================================================================
+// Network Lifecycle Integration Tests
+// =============================================================================
+
+/// Test network start-status-stop lifecycle.
+#[test]
+fn test_network_lifecycle_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // 1. Start network
+        let start_result = call_tool(&app, &services, "network_start", None).await;
+        assert!(
+            !start_result.content.is_empty(),
+            "Expected response from network_start"
+        );
+
+        // 2. Check status
+        let status_result = call_tool(&app, &services, "network_status", None).await;
+        assert!(
+            !status_result.content.is_empty(),
+            "Expected response from network_status"
+        );
+
+        // 3. List peers
+        let peers_result = call_tool(&app, &services, "network_peers", None).await;
+        assert!(
+            !peers_result.content.is_empty(),
+            "Expected response from network_peers"
+        );
+
+        // 4. Stop network
+        let stop_result = call_tool(&app, &services, "network_stop", None).await;
+        assert!(
+            !stop_result.content.is_empty(),
+            "Expected response from network_stop"
+        );
+    });
+}
+
+// =============================================================================
+// Call Parity Tests - Functional
+// =============================================================================
+
+/// Test start_voice_call routes through UiServices.
+#[test]
+fn test_start_voice_call_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Start a voice call
+        let result = call_tool(
+            &app,
+            &services,
+            "start_voice_call",
+            Some(json!({
+                "entity_id": "test-entity-id",
+                "video_enabled": false
+            })),
+        )
+        .await;
+
+        // Tool should execute
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from start_voice_call"
+        );
+        let text = result.content.first().and_then(extract_text).unwrap_or("");
+        assert!(
+            !text.contains("Unknown tool"),
+            "Tool should be routed through UiServices"
+        );
+    });
+}
+
+/// Test start_voice_call with video enabled.
+#[test]
+fn test_start_voice_call_with_video_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Start a video call
+        let result = call_tool(
+            &app,
+            &services,
+            "start_voice_call",
+            Some(json!({
+                "entity_id": "test-entity-id",
+                "video_enabled": true
+            })),
+        )
+        .await;
+
+        // Tool should execute
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from start_voice_call with video"
+        );
+    });
+}
+
+/// Test start_voice_call validation - missing entity_id.
+#[test]
+fn test_start_voice_call_validation() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to start call without entity_id
+        let result = call_tool(
+            &app,
+            &services,
+            "start_voice_call",
+            Some(json!({
+                "video_enabled": false
+            })),
+        )
+        .await;
+
+        // Should fail validation
+        assert!(
+            result.is_error,
+            "Expected validation error for missing entity_id in start_voice_call"
+        );
+    });
+}
+
+/// Test join_call routes through UiServices.
+#[test]
+fn test_join_call_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to join a call
+        let result = call_tool(
+            &app,
+            &services,
+            "join_call",
+            Some(json!({
+                "call_id": "test-call-id"
+            })),
+        )
+        .await;
+
+        // Tool should execute (may fail if call doesn't exist)
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from join_call"
+        );
+        let text = result.content.first().and_then(extract_text).unwrap_or("");
+        assert!(
+            !text.contains("Unknown tool"),
+            "Tool should be routed through UiServices"
+        );
+    });
+}
+
+/// Test join_call validation - missing call_id.
+#[test]
+fn test_join_call_validation() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to join without call_id
+        let result = call_tool(&app, &services, "join_call", Some(json!({}))).await;
+
+        // Should fail validation
+        assert!(
+            result.is_error,
+            "Expected validation error for missing call_id in join_call"
+        );
+    });
+}
+
+/// Test end_call routes through UiServices.
+#[test]
+fn test_end_call_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to end a call
+        let result = call_tool(
+            &app,
+            &services,
+            "end_call",
+            Some(json!({
+                "call_id": "test-call-id"
+            })),
+        )
+        .await;
+
+        // Tool should execute (may fail if call doesn't exist)
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from end_call"
+        );
+        let text = result.content.first().and_then(extract_text).unwrap_or("");
+        assert!(
+            !text.contains("Unknown tool"),
+            "Tool should be routed through UiServices"
+        );
+    });
+}
+
+/// Test end_call validation - missing call_id.
+#[test]
+fn test_end_call_validation() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to end without call_id
+        let result = call_tool(&app, &services, "end_call", Some(json!({}))).await;
+
+        // Should fail validation
+        assert!(
+            result.is_error,
+            "Expected validation error for missing call_id in end_call"
+        );
+    });
+}
+
+/// Test share_screen routes through UiServices.
+#[test]
+fn test_share_screen_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to share screen
+        let result = call_tool(
+            &app,
+            &services,
+            "share_screen",
+            Some(json!({
+                "call_id": "test-call-id",
+                "enabled": true
+            })),
+        )
+        .await;
+
+        // Tool should execute (may fail if call doesn't exist)
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from share_screen"
+        );
+        let text = result.content.first().and_then(extract_text).unwrap_or("");
+        assert!(
+            !text.contains("Unknown tool"),
+            "Tool should be routed through UiServices"
+        );
+    });
+}
+
+/// Test share_screen stop.
+#[test]
+fn test_share_screen_stop_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to stop screen share
+        let result = call_tool(
+            &app,
+            &services,
+            "share_screen",
+            Some(json!({
+                "call_id": "test-call-id",
+                "enabled": false
+            })),
+        )
+        .await;
+
+        // Tool should execute
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from share_screen (stop)"
+        );
+    });
+}
+
+/// Test share_screen validation - missing call_id.
+#[test]
+fn test_share_screen_validation() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to share screen without call_id
+        let result = call_tool(
+            &app,
+            &services,
+            "share_screen",
+            Some(json!({
+                "enabled": true
+            })),
+        )
+        .await;
+
+        // Should fail validation
+        assert!(
+            result.is_error,
+            "Expected validation error for missing call_id in share_screen"
+        );
+    });
+}
+
+/// Test toggle_mute routes through UiServices.
+#[test]
+fn test_toggle_mute_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to mute
+        let result = call_tool(
+            &app,
+            &services,
+            "toggle_mute",
+            Some(json!({
+                "call_id": "test-call-id",
+                "muted": true
+            })),
+        )
+        .await;
+
+        // Tool should execute (may fail if call doesn't exist)
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from toggle_mute"
+        );
+        let text = result.content.first().and_then(extract_text).unwrap_or("");
+        assert!(
+            !text.contains("Unknown tool"),
+            "Tool should be routed through UiServices"
+        );
+    });
+}
+
+/// Test toggle_mute unmute.
+#[test]
+fn test_toggle_mute_unmute_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to unmute
+        let result = call_tool(
+            &app,
+            &services,
+            "toggle_mute",
+            Some(json!({
+                "call_id": "test-call-id",
+                "muted": false
+            })),
+        )
+        .await;
+
+        // Tool should execute
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from toggle_mute (unmute)"
+        );
+    });
+}
+
+/// Test toggle_mute validation - missing call_id.
+#[test]
+fn test_toggle_mute_validation() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to toggle mute without call_id
+        let result = call_tool(
+            &app,
+            &services,
+            "toggle_mute",
+            Some(json!({
+                "muted": true
+            })),
+        )
+        .await;
+
+        // Should fail validation
+        assert!(
+            result.is_error,
+            "Expected validation error for missing call_id in toggle_mute"
+        );
+    });
+}
+
+/// Test toggle_video routes through UiServices.
+#[test]
+fn test_toggle_video_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to enable video
+        let result = call_tool(
+            &app,
+            &services,
+            "toggle_video",
+            Some(json!({
+                "call_id": "test-call-id",
+                "enabled": true
+            })),
+        )
+        .await;
+
+        // Tool should execute (may fail if call doesn't exist)
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from toggle_video"
+        );
+        let text = result.content.first().and_then(extract_text).unwrap_or("");
+        assert!(
+            !text.contains("Unknown tool"),
+            "Tool should be routed through UiServices"
+        );
+    });
+}
+
+/// Test toggle_video disable.
+#[test]
+fn test_toggle_video_disable_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to disable video
+        let result = call_tool(
+            &app,
+            &services,
+            "toggle_video",
+            Some(json!({
+                "call_id": "test-call-id",
+                "enabled": false
+            })),
+        )
+        .await;
+
+        // Tool should execute
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from toggle_video (disable)"
+        );
+    });
+}
+
+/// Test toggle_video validation - missing call_id.
+#[test]
+fn test_toggle_video_validation() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to toggle video without call_id
+        let result = call_tool(
+            &app,
+            &services,
+            "toggle_video",
+            Some(json!({
+                "enabled": true
+            })),
+        )
+        .await;
+
+        // Should fail validation
+        assert!(
+            result.is_error,
+            "Expected validation error for missing call_id in toggle_video"
+        );
+    });
+}
+
+/// Test get_call_status routes through UiServices.
+#[test]
+fn test_get_call_status_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to get call status
+        let result = call_tool(
+            &app,
+            &services,
+            "get_call_status",
+            Some(json!({
+                "call_id": "test-call-id"
+            })),
+        )
+        .await;
+
+        // Tool should execute (may fail if call doesn't exist)
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from get_call_status"
+        );
+        let text = result.content.first().and_then(extract_text).unwrap_or("");
+        assert!(
+            !text.contains("Unknown tool"),
+            "Tool should be routed through UiServices"
+        );
+    });
+}
+
+/// Test get_call_status validation - missing call_id.
+#[test]
+fn test_get_call_status_validation() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to get status without call_id
+        let result = call_tool(&app, &services, "get_call_status", Some(json!({}))).await;
+
+        // Should fail validation
+        assert!(
+            result.is_error,
+            "Expected validation error for missing call_id in get_call_status"
+        );
+    });
+}
+
+/// Test get_call_participants routes through UiServices.
+#[test]
+fn test_get_call_participants_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to get call participants
+        let result = call_tool(
+            &app,
+            &services,
+            "get_call_participants",
+            Some(json!({
+                "call_id": "test-call-id"
+            })),
+        )
+        .await;
+
+        // Tool should execute (may fail if call doesn't exist)
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from get_call_participants"
+        );
+        let text = result.content.first().and_then(extract_text).unwrap_or("");
+        assert!(
+            !text.contains("Unknown tool"),
+            "Tool should be routed through UiServices"
+        );
+    });
+}
+
+/// Test get_call_participants validation - missing call_id.
+#[test]
+fn test_get_call_participants_validation() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to get participants without call_id
+        let result = call_tool(&app, &services, "get_call_participants", Some(json!({}))).await;
+
+        // Should fail validation
+        assert!(
+            result.is_error,
+            "Expected validation error for missing call_id in get_call_participants"
+        );
+    });
+}
+
+// =============================================================================
+// Call Lifecycle Integration Tests
+// =============================================================================
+
+/// Test call media control parity.
+#[test]
+fn test_call_media_controls_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        let call_id = "media-test-call";
+
+        // All media control tools should route correctly even for non-existent call
+        // This tests that the tools are properly registered and routed
+
+        // Toggle mute
+        let mute_result = call_tool(
+            &app,
+            &services,
+            "toggle_mute",
+            Some(json!({
+                "call_id": call_id,
+                "muted": true
+            })),
+        )
+        .await;
+        assert!(
+            !mute_result.content.is_empty(),
+            "Expected response from toggle_mute"
+        );
+
+        // Toggle video
+        let video_result = call_tool(
+            &app,
+            &services,
+            "toggle_video",
+            Some(json!({
+                "call_id": call_id,
+                "enabled": false
+            })),
+        )
+        .await;
+        assert!(
+            !video_result.content.is_empty(),
+            "Expected response from toggle_video"
+        );
+
+        // Share screen
+        let screen_result = call_tool(
+            &app,
+            &services,
+            "share_screen",
+            Some(json!({
+                "call_id": call_id,
+                "enabled": true
+            })),
+        )
+        .await;
+        assert!(
+            !screen_result.content.is_empty(),
+            "Expected response from share_screen"
+        );
+    });
+}
+
+/// Test call query operations parity.
+#[test]
+fn test_call_query_operations_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        let call_id = "query-test-call";
+
+        // Both query tools should route correctly
+        let status_result = call_tool(
+            &app,
+            &services,
+            "get_call_status",
+            Some(json!({
+                "call_id": call_id
+            })),
+        )
+        .await;
+        assert!(
+            !status_result.content.is_empty(),
+            "Expected response from get_call_status"
+        );
+
+        let participants_result = call_tool(
+            &app,
+            &services,
+            "get_call_participants",
+            Some(json!({
+                "call_id": call_id
+            })),
+        )
+        .await;
+        assert!(
+            !participants_result.content.is_empty(),
+            "Expected response from get_call_participants"
+        );
+    });
+}
+
+// =============================================================================
+// Network-Call Integration Tests
+// =============================================================================
+
+/// Test that network and call tools can coexist.
+#[test]
+fn test_network_call_tools_coexist() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Network status should work
+        let network_result = call_tool(&app, &services, "network_status", None).await;
+        assert!(
+            !network_result.content.is_empty(),
+            "Expected response from network_status"
+        );
+
+        // Call status should also work (different service)
+        let call_result = call_tool(
+            &app,
+            &services,
+            "get_call_status",
+            Some(json!({
+                "call_id": "test-call"
+            })),
+        )
+        .await;
+        assert!(
+            !call_result.content.is_empty(),
+            "Expected response from get_call_status"
+        );
+    });
+}

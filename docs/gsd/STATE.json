@@ -14,11 +14,11 @@
   },
   "progress": {
     "total_tasks": 10,
-    "completed_tasks": 4,
-    "current_task": "PLAN-34.5: Add Contact/Presence Parity Tests"
+    "completed_tasks": 5,
+    "current_task": "PLAN-34.6: Add Network/Call Parity Tests"
   },
   "status": "awaiting_planning",
-  "last_review": "2026-01-21T01:40:00Z",
-  "last_updated": "2026-01-21T01:40:00Z",
-  "notes": "Phase 5.4: MCP Validation Suite. Tasks 1-4 complete. 119 parity tests now covering kanban (23), messaging (14), drive (12), and canvas (21) tools."
+  "last_review": "2026-01-21T02:00:00Z",
+  "last_updated": "2026-01-21T02:00:00Z",
+  "notes": "Phase 5.4: MCP Validation Suite. Tasks 1-5 complete. 144 parity tests now covering kanban (23), messaging (14), drive (12), canvas (21), contact (16), and presence (13) tools."
 }

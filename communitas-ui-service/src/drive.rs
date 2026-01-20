@@ -287,6 +287,37 @@ impl DriveService {
             return Err(DriveError::NotAuthenticated);
         }
 
+        // Build and execute the CreateDirectory command
+        let cmd = Command::CreateDirectory {
+            entity_id: entity_id.to_string(),
+            disk_type: disk_type_to_arg(disk_type),
+            path: path.to_string(),
+        };
+
+        let events = self
+            .app
+            .execute(cmd)
+            .await
+            .map_err(|e| DriveError::StorageError(e.message))?;
+
+        // Verify creation by finding the DirectoryCreated event
+        let created = events.iter().any(|event| {
+            matches!(
+                event,
+                Event::DirectoryCreated {
+                    entity_id: eid,
+                    path: p,
+                    ..
+                } if eid == entity_id && p == path
+            )
+        });
+
+        if !created {
+            return Err(DriveError::StorageError(
+                "create command succeeded but DirectoryCreated event not found".to_string(),
+            ));
+        }
+
         // Extract directory name from path
         let name = path
             .split('/')
@@ -296,7 +327,7 @@ impl DriveService {
 
         let now = current_timestamp_millis();
 
-        Ok(DirectoryEntry {
+        let entry = DirectoryEntry {
             name,
             path: path.to_string(),
             is_directory: true,
@@ -305,7 +336,14 @@ impl DriveService {
             modified_at: now,
             created_at: now,
             checksum: None,
-        })
+        };
+
+        // Update watch channel - add new directory to current_directory
+        let mut snap = self.rx.borrow().clone();
+        snap.current_directory.push(entry.clone());
+        let _ = self.tx.send(snap);
+
+        Ok(entry)
     }
 
     /// Delete a file or directory.

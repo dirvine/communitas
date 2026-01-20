@@ -1819,7 +1819,8 @@ pub async fn call_tool(
     if let Some(result) = dispatch_network_tools(app, name, &args).await {
         return result;
     }
-    if let Some(result) = dispatch_social_tools(app, name, &args).await {
+    // Call/social tools use UiServices for MCP-Dioxus parity (PLAN-31)
+    if let Some(result) = dispatch_social_tools(services, name, &args).await {
         return result;
     }
     if let Some(result) = dispatch_recovery_tools(name, &args).await {
@@ -2050,24 +2051,28 @@ async fn dispatch_network_tools(
 }
 
 async fn dispatch_social_tools(
-    app: &CommunitasApp,
+    services: &UiServices,
     name: &str,
     args: &Value,
 ) -> Option<ToolCallResult> {
+    // Get app reference for presence tools (not yet migrated to UiServices)
+    let app = services.call().app();
     match name {
-        // Presence
-        "set_presence" => Some(execute_set_presence(app, args.clone()).await),
-        "get_presence" => Some(execute_get_presence(app, args.clone()).await),
-        "subscribe_to_presence" => Some(execute_subscribe_to_presence(app, args.clone()).await),
-        // WebRTC calls
-        "start_voice_call" => Some(execute_start_voice_call(app, args.clone()).await),
-        "join_call" => Some(execute_join_call(app, args.clone()).await),
-        "end_call" => Some(execute_end_call(app, args.clone()).await),
-        "share_screen" => Some(execute_share_screen(app, args.clone()).await),
-        "toggle_mute" => Some(execute_toggle_mute(app, args.clone()).await),
-        "toggle_video" => Some(execute_toggle_video(app, args.clone()).await),
-        "get_call_status" => Some(execute_get_call_status(app, args.clone()).await),
-        "get_call_participants" => Some(execute_get_call_participants(app, args.clone()).await),
+        // Presence (still use app directly - migrate in future)
+        "set_presence" => Some(execute_set_presence(&app, args.clone()).await),
+        "get_presence" => Some(execute_get_presence(&app, args.clone()).await),
+        "subscribe_to_presence" => Some(execute_subscribe_to_presence(&app, args.clone()).await),
+        // WebRTC calls - use CallService for MCP-Dioxus parity
+        "start_voice_call" => Some(execute_start_voice_call(services, args.clone()).await),
+        "join_call" => Some(execute_join_call(services, args.clone()).await),
+        "end_call" => Some(execute_end_call(services, args.clone()).await),
+        "share_screen" => Some(execute_share_screen(services, args.clone()).await),
+        "toggle_mute" => Some(execute_toggle_mute(services, args.clone()).await),
+        "toggle_video" => Some(execute_toggle_video(services, args.clone()).await),
+        "get_call_status" => Some(execute_get_call_status(services, args.clone()).await),
+        "get_call_participants" => {
+            Some(execute_get_call_participants(services, args.clone()).await)
+        }
         _ => None,
     }
 }
@@ -3145,59 +3150,42 @@ async fn execute_subscribe_to_presence(app: &CommunitasApp, args: Value) -> Tool
     }
 }
 
-async fn execute_start_voice_call(app: &CommunitasApp, args: Value) -> ToolCallResult {
+async fn execute_start_voice_call(services: &UiServices, args: Value) -> ToolCallResult {
     let entity_id = require_str!(args, "entity_id");
     let video_enabled = bool_or(&args, "video_enabled", false);
 
-    let cmd = Command::StartCall {
-        entity_id: entity_id.clone(),
-        video_enabled,
-    };
-
-    match app.execute(cmd).await {
-        Ok(events) => {
-            if let Some((call_id, entity_id)) = events.iter().find_map(|e| match e {
-                Event::CallStarted { call_id, entity_id } => {
-                    Some((call_id.clone(), entity_id.clone()))
-                }
-                _ => None,
-            }) {
-                json_result(&json!({
-                    "success": true,
-                    "call_id": call_id,
-                    "entity_id": entity_id
-                }))
-            } else {
-                success_result("Call started")
-            }
-        }
-        Err(e) => error_result(&format!("Failed to start call: {}", e.message)),
-    }
-}
-
-async fn execute_join_call(app: &CommunitasApp, args: Value) -> ToolCallResult {
-    let call_id = require_str!(args, "call_id");
-    let cmd = Command::JoinCall {
-        call_id: call_id.clone(),
-    };
-
-    match app.execute(cmd).await {
-        Ok(_) => json_result(&json!({
+    match services.call().start_call(&entity_id, video_enabled).await {
+        Ok(call_info) => json_result(&json!({
             "success": true,
-            "call_id": call_id
+            "call_id": call_info.call_id,
+            "entity_id": call_info.entity_id
         })),
-        Err(e) => error_result(&format!("Failed to join call: {}", e.message)),
+        Err(e) => error_result(&format!("Failed to start call: {e}")),
     }
 }
 
-async fn execute_end_call(app: &CommunitasApp, args: Value) -> ToolCallResult {
+async fn execute_join_call(services: &UiServices, args: Value) -> ToolCallResult {
     let call_id = require_str!(args, "call_id");
 
+    match services.call().join_call(&call_id).await {
+        Ok(call_info) => json_result(&json!({
+            "success": true,
+            "call_id": call_info.call_id,
+            "entity_id": call_info.entity_id
+        })),
+        Err(e) => error_result(&format!("Failed to join call: {e}")),
+    }
+}
+
+async fn execute_end_call(services: &UiServices, args: Value) -> ToolCallResult {
+    let call_id = require_str!(args, "call_id");
+
+    // MCP API takes explicit call_id; use app() for direct control
     let cmd = Command::LeaveCall {
         call_id: call_id.clone(),
     };
 
-    match app.execute(cmd).await {
+    match services.call().app().execute(cmd).await {
         Ok(_) => json_result(&json!({
             "success": true,
             "call_id": call_id
@@ -3278,10 +3266,11 @@ async fn execute_get_media_metadata(app: &CommunitasApp, args: Value) -> ToolCal
     }
 }
 
-async fn execute_share_screen(app: &CommunitasApp, args: Value) -> ToolCallResult {
+async fn execute_share_screen(services: &UiServices, args: Value) -> ToolCallResult {
     let call_id = require_str!(args, "call_id");
     let enabled = bool_or(&args, "enabled", true);
 
+    // MCP API takes explicit call_id and enabled flag; use app() for direct control
     let cmd = if enabled {
         Command::StartScreenShare {
             call_id: call_id.clone(),
@@ -3292,7 +3281,7 @@ async fn execute_share_screen(app: &CommunitasApp, args: Value) -> ToolCallResul
         }
     };
 
-    match app.execute(cmd).await {
+    match services.call().app().execute(cmd).await {
         Ok(_) => json_result(&json!({
             "success": true,
             "call_id": call_id,
@@ -5645,16 +5634,17 @@ async fn execute_get_file_preview(services: &UiServices, args: Value) -> ToolCal
 // Call MCP Executor Functions
 // ============================================================================
 
-async fn execute_toggle_mute(app: &CommunitasApp, args: Value) -> ToolCallResult {
+async fn execute_toggle_mute(services: &UiServices, args: Value) -> ToolCallResult {
     let call_id = require_str!(args, "call_id");
     let muted = bool_or(&args, "muted", true);
 
+    // MCP API takes explicit muted value; use app() for direct control
     let cmd = Command::ToggleAudio {
         call_id: call_id.clone(),
         enabled: !muted, // enabled=true means unmuted, so invert
     };
 
-    match app.execute(cmd).await {
+    match services.call().app().execute(cmd).await {
         Ok(_) => json_result(&json!({
             "call_id": call_id,
             "muted": muted
@@ -5663,16 +5653,17 @@ async fn execute_toggle_mute(app: &CommunitasApp, args: Value) -> ToolCallResult
     }
 }
 
-async fn execute_toggle_video(app: &CommunitasApp, args: Value) -> ToolCallResult {
+async fn execute_toggle_video(services: &UiServices, args: Value) -> ToolCallResult {
     let call_id = require_str!(args, "call_id");
     let enabled = bool_or(&args, "enabled", true);
 
+    // MCP API takes explicit enabled value; use app() for direct control
     let cmd = Command::ToggleVideo {
         call_id: call_id.clone(),
         enabled,
     };
 
-    match app.execute(cmd).await {
+    match services.call().app().execute(cmd).await {
         Ok(_) => json_result(&json!({
             "call_id": call_id,
             "video_enabled": enabled
@@ -5681,13 +5672,11 @@ async fn execute_toggle_video(app: &CommunitasApp, args: Value) -> ToolCallResul
     }
 }
 
-async fn execute_get_call_status(app: &CommunitasApp, args: Value) -> ToolCallResult {
+async fn execute_get_call_status(services: &UiServices, args: Value) -> ToolCallResult {
     let call_id = require_str!(args, "call_id");
 
-    let query = Query::GetCallStatus { call_id };
-
-    match app.query(query).await {
-        Ok(QueryResponse::CallStatus(status)) => json_result(&json!({
+    match services.call().query_call_status(&call_id).await {
+        Ok(status) => json_result(&json!({
             "call_id": status.call_id,
             "entity_id": status.entity_id,
             "participant_count": status.participant_count,
@@ -5696,21 +5685,17 @@ async fn execute_get_call_status(app: &CommunitasApp, args: Value) -> ToolCallRe
             "is_video_enabled": status.is_video_enabled,
             "is_screen_sharing": status.is_screen_sharing
         })),
-        Ok(_) => error_result("Unexpected response type"),
-        Err(e) => error_result(&format!("Failed to get call status: {}", e.message)),
+        Err(e) => error_result(&format!("Failed to get call status: {e}")),
     }
 }
 
-async fn execute_get_call_participants(app: &CommunitasApp, args: Value) -> ToolCallResult {
+async fn execute_get_call_participants(services: &UiServices, args: Value) -> ToolCallResult {
     let call_id = require_str!(args, "call_id");
 
-    let query = Query::GetCallParticipants { call_id };
-
-    match app.query(query).await {
-        Ok(QueryResponse::CallParticipants(participants)) => json_result(&json!({
+    match services.call().query_call_participants(&call_id).await {
+        Ok(participants) => json_result(&json!({
             "participants": participants
         })),
-        Ok(_) => error_result("Unexpected response type"),
-        Err(e) => error_result(&format!("Failed to get call participants: {}", e.message)),
+        Err(e) => error_result(&format!("Failed to get call participants: {e}")),
     }
 }

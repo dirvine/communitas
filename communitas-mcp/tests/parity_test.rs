@@ -3718,3 +3718,642 @@ fn test_all_kanban_tools_registered() {
         );
     }
 }
+
+// =============================================================================
+// Contact Tool Registration Tests
+// =============================================================================
+
+#[test]
+fn test_tools_include_contact_operations() {
+    let tools = list_tools(true);
+    let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
+
+    // Contact CRUD tools
+    assert!(
+        tool_names.contains(&"create_contact"),
+        "Expected create_contact tool"
+    );
+    assert!(
+        tool_names.contains(&"update_contact"),
+        "Expected update_contact tool"
+    );
+    assert!(
+        tool_names.contains(&"delete_contact"),
+        "Expected delete_contact tool"
+    );
+    assert!(
+        tool_names.contains(&"get_contact"),
+        "Expected get_contact tool"
+    );
+    assert!(
+        tool_names.contains(&"list_contacts"),
+        "Expected list_contacts tool"
+    );
+
+    // Contact linking and favourites
+    assert!(
+        tool_names.contains(&"link_contact"),
+        "Expected link_contact tool"
+    );
+    assert!(
+        tool_names.contains(&"set_favourite_contact"),
+        "Expected set_favourite_contact tool"
+    );
+    assert!(
+        tool_names.contains(&"remove_favourite_contact"),
+        "Expected remove_favourite_contact tool"
+    );
+    assert!(
+        tool_names.contains(&"list_favourite_contacts"),
+        "Expected list_favourite_contacts tool"
+    );
+
+    // Contact presence and search
+    assert!(
+        tool_names.contains(&"get_contact_presence"),
+        "Expected get_contact_presence tool"
+    );
+    assert!(
+        tool_names.contains(&"search_contacts"),
+        "Expected search_contacts tool"
+    );
+    assert!(
+        tool_names.contains(&"set_my_presence"),
+        "Expected set_my_presence tool"
+    );
+}
+
+#[test]
+fn test_all_contact_tools_registered() {
+    let tools = list_tools(true);
+    let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
+
+    // Complete list of all 12 contact tools
+    let contact_tools = [
+        // CRUD operations (5)
+        "create_contact",
+        "update_contact",
+        "delete_contact",
+        "get_contact",
+        "list_contacts",
+        // Linking and favourites (4)
+        "link_contact",
+        "set_favourite_contact",
+        "remove_favourite_contact",
+        "list_favourite_contacts",
+        // Presence and search (3)
+        "get_contact_presence",
+        "search_contacts",
+        "set_my_presence",
+    ];
+
+    for tool in &contact_tools {
+        assert!(
+            tool_names.contains(tool),
+            "Expected {} tool to be registered (found {} tools total)",
+            tool,
+            tool_names.len()
+        );
+    }
+}
+
+// =============================================================================
+// Presence Tool Registration Tests
+// =============================================================================
+
+#[test]
+fn test_tools_include_presence_operations() {
+    let tools = list_tools(true);
+    let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
+
+    // Core presence tools
+    assert!(
+        tool_names.contains(&"set_presence"),
+        "Expected set_presence tool"
+    );
+    assert!(
+        tool_names.contains(&"get_presence"),
+        "Expected get_presence tool"
+    );
+    assert!(
+        tool_names.contains(&"subscribe_to_presence"),
+        "Expected subscribe_to_presence tool"
+    );
+
+    // Peer presence tools (ADR-014)
+    assert!(
+        tool_names.contains(&"announce_presence"),
+        "Expected announce_presence tool"
+    );
+    assert!(
+        tool_names.contains(&"query_presence"),
+        "Expected query_presence tool"
+    );
+    assert!(
+        tool_names.contains(&"get_our_presence"),
+        "Expected get_our_presence tool"
+    );
+    assert!(
+        tool_names.contains(&"get_cached_presence"),
+        "Expected get_cached_presence tool"
+    );
+}
+
+#[test]
+fn test_all_presence_tools_registered() {
+    let tools = list_tools(true);
+    let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
+
+    // Complete list of all 7 presence tools
+    let presence_tools = [
+        // Core presence (3)
+        "set_presence",
+        "get_presence",
+        "subscribe_to_presence",
+        // Peer presence - ADR-014 (4)
+        "announce_presence",
+        "query_presence",
+        "get_our_presence",
+        "get_cached_presence",
+    ];
+
+    for tool in &presence_tools {
+        assert!(
+            tool_names.contains(tool),
+            "Expected {} tool to be registered (found {} tools total)",
+            tool,
+            tool_names.len()
+        );
+    }
+}
+
+// =============================================================================
+// Contact Parity Tests - Functional
+// =============================================================================
+
+/// Test create_contact routes through UiServices.
+#[test]
+fn test_contact_create_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        let result = call_tool(
+            &app,
+            &services,
+            "create_contact",
+            Some(json!({
+                "display_name": "Test Contact",
+                "four_words": "ocean.forest.moon.star"
+            })),
+        )
+        .await;
+
+        // Tool should execute (may succeed or fail based on app state)
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from create_contact"
+        );
+    });
+}
+
+/// Test update_contact validation.
+#[test]
+fn test_contact_update_validation() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to update without contact_id
+        let result = call_tool(
+            &app,
+            &services,
+            "update_contact",
+            Some(json!({
+                "display_name": "Updated Name"
+            })),
+        )
+        .await;
+
+        // Should fail validation - contact_id is required
+        assert!(
+            result.is_error,
+            "Expected validation error for missing contact_id in update_contact"
+        );
+    });
+}
+
+/// Test delete_contact validation.
+#[test]
+fn test_contact_delete_validation() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to delete without contact_id
+        let result = call_tool(&app, &services, "delete_contact", Some(json!({}))).await;
+
+        // Should fail validation - contact_id is required
+        assert!(
+            result.is_error,
+            "Expected validation error for missing contact_id in delete_contact"
+        );
+    });
+}
+
+/// Test get_contact validation.
+#[test]
+fn test_contact_get_validation() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to get without contact_id
+        let result = call_tool(&app, &services, "get_contact", Some(json!({}))).await;
+
+        // Should fail validation - contact_id is required
+        assert!(
+            result.is_error,
+            "Expected validation error for missing contact_id in get_contact"
+        );
+    });
+}
+
+/// Test list_contacts routes through UiServices.
+#[test]
+fn test_contact_list_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        let result = call_tool(
+            &app,
+            &services,
+            "list_contacts",
+            Some(json!({
+                "include_presence": false,
+                "filter": "all"
+            })),
+        )
+        .await;
+
+        // Should return a response (possibly empty list)
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from list_contacts"
+        );
+    });
+}
+
+/// Test link_contact validation.
+#[test]
+fn test_contact_link_validation() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to link without required fields
+        let result = call_tool(
+            &app,
+            &services,
+            "link_contact",
+            Some(json!({
+                "contact_id": "some-id"
+            })),
+        )
+        .await;
+
+        // Should fail validation - four_words is required
+        assert!(
+            result.is_error,
+            "Expected validation error for missing four_words in link_contact"
+        );
+    });
+}
+
+/// Test set_favourite_contact validation.
+#[test]
+fn test_contact_set_favourite_validation() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to set favourite without four_words
+        let result = call_tool(&app, &services, "set_favourite_contact", Some(json!({}))).await;
+
+        // Should fail validation - four_words is required
+        assert!(
+            result.is_error,
+            "Expected validation error for missing four_words in set_favourite_contact"
+        );
+    });
+}
+
+/// Test remove_favourite_contact validation.
+#[test]
+fn test_contact_remove_favourite_validation() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to remove favourite without four_words
+        let result = call_tool(&app, &services, "remove_favourite_contact", Some(json!({}))).await;
+
+        // Should fail validation - four_words is required
+        assert!(
+            result.is_error,
+            "Expected validation error for missing four_words in remove_favourite_contact"
+        );
+    });
+}
+
+/// Test list_favourite_contacts routes through UiServices.
+#[test]
+fn test_contact_list_favourites_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        let result = call_tool(&app, &services, "list_favourite_contacts", None).await;
+
+        // Should return a response (possibly empty list)
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from list_favourite_contacts"
+        );
+    });
+}
+
+/// Test get_contact_presence validation.
+#[test]
+fn test_contact_get_presence_validation() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to get presence without contact_id
+        let result = call_tool(&app, &services, "get_contact_presence", Some(json!({}))).await;
+
+        // Should fail validation - contact_id is required
+        assert!(
+            result.is_error,
+            "Expected validation error for missing contact_id in get_contact_presence"
+        );
+    });
+}
+
+/// Test search_contacts routes through UiServices.
+#[test]
+fn test_contact_search_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        let result = call_tool(
+            &app,
+            &services,
+            "search_contacts",
+            Some(json!({
+                "query": "test"
+            })),
+        )
+        .await;
+
+        // Should return a response (possibly empty results)
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from search_contacts"
+        );
+    });
+}
+
+// =============================================================================
+// Presence Parity Tests - Functional
+// =============================================================================
+
+/// Test set_presence routes through UiServices.
+#[test]
+fn test_presence_set_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        let result = call_tool(
+            &app,
+            &services,
+            "set_presence",
+            Some(json!({
+                "status": "online"
+            })),
+        )
+        .await;
+
+        // Tool should execute
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from set_presence"
+        );
+    });
+}
+
+/// Test set_my_presence routes through UiServices.
+#[test]
+fn test_presence_set_my_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        let result = call_tool(
+            &app,
+            &services,
+            "set_my_presence",
+            Some(json!({
+                "status": "online"
+            })),
+        )
+        .await;
+
+        // Tool should execute
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from set_my_presence"
+        );
+    });
+}
+
+/// Test get_presence validation.
+#[test]
+fn test_presence_get_validation() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to get presence without user_ids
+        let result = call_tool(&app, &services, "get_presence", Some(json!({}))).await;
+
+        // Should fail validation - user_ids is required
+        assert!(
+            result.is_error,
+            "Expected validation error for missing user_ids in get_presence"
+        );
+    });
+}
+
+/// Test subscribe_to_presence validation.
+#[test]
+fn test_presence_subscribe_validation() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to subscribe without entity_ids
+        let result = call_tool(&app, &services, "subscribe_to_presence", Some(json!({}))).await;
+
+        // Should fail validation - entity_ids is required
+        assert!(
+            result.is_error,
+            "Expected validation error for missing entity_ids in subscribe_to_presence"
+        );
+    });
+}
+
+/// Test announce_presence routes through UiServices.
+#[test]
+fn test_presence_announce_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        let result = call_tool(&app, &services, "announce_presence", None).await;
+
+        // Tool should execute
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from announce_presence"
+        );
+    });
+}
+
+/// Test query_presence validation.
+#[test]
+fn test_presence_query_validation() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to query presence without public_key
+        let result = call_tool(&app, &services, "query_presence", Some(json!({}))).await;
+
+        // Should fail validation - public_key is required
+        assert!(
+            result.is_error,
+            "Expected validation error for missing public_key in query_presence"
+        );
+    });
+}
+
+/// Test get_our_presence routes through UiServices.
+#[test]
+fn test_presence_get_our_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        let result = call_tool(&app, &services, "get_our_presence", None).await;
+
+        // Tool should execute
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from get_our_presence"
+        );
+    });
+}
+
+/// Test get_cached_presence validation.
+#[test]
+fn test_presence_get_cached_validation() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Try to get cached presence without public_key
+        let result = call_tool(&app, &services, "get_cached_presence", Some(json!({}))).await;
+
+        // Should fail validation - public_key is required
+        assert!(
+            result.is_error,
+            "Expected validation error for missing public_key in get_cached_presence"
+        );
+    });
+}
+
+// =============================================================================
+// Contact-Presence Integration Tests
+// =============================================================================
+
+/// Test that contact and presence tools can be combined.
+#[test]
+fn test_contact_presence_integration() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // First set our presence
+        let set_result = call_tool(
+            &app,
+            &services,
+            "set_presence",
+            Some(json!({
+                "status": "online"
+            })),
+        )
+        .await;
+
+        assert!(
+            !set_result.content.is_empty(),
+            "Expected response from set_presence"
+        );
+
+        // Then list contacts with presence info
+        let list_result = call_tool(
+            &app,
+            &services,
+            "list_contacts",
+            Some(json!({
+                "include_presence": true,
+                "filter": "all"
+            })),
+        )
+        .await;
+
+        assert!(
+            !list_result.content.is_empty(),
+            "Expected response from list_contacts with presence"
+        );
+    });
+}
+
+/// Test validation consistency across contact and presence tools.
+#[test]
+fn test_contact_presence_validation_consistency() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Both should fail validation when missing required fields
+        let contact_result = call_tool(&app, &services, "get_contact", Some(json!({}))).await;
+
+        let presence_result =
+            call_tool(&app, &services, "get_cached_presence", Some(json!({}))).await;
+
+        // Both should be errors
+        assert!(
+            contact_result.is_error,
+            "Expected validation error for get_contact"
+        );
+        assert!(
+            presence_result.is_error,
+            "Expected validation error for get_cached_presence"
+        );
+    });
+}

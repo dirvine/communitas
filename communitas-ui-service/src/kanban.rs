@@ -5,7 +5,8 @@ use std::sync::{Arc, Weak};
 use communitas_core::app::CommunitasApp;
 use communitas_core::command::Command;
 use communitas_kanban::{
-    CardState as CoreCardState, CardUpdate as CoreCardUpdate, KanbanService as CoreKanbanService,
+    BoardUpdate as CoreBoardUpdate, CardState as CoreCardState, CardUpdate as CoreCardUpdate,
+    KanbanService as CoreKanbanService,
 };
 use communitas_ui_api::{
     BoardSettings, BoardSummary, BoardView, CardDetail, CardState, CardView, ChecklistProgress,
@@ -487,6 +488,8 @@ impl KanbanService {
     }
 
     /// Create a new column in a board.
+    ///
+    /// Creates the column both locally via CRDT and persists via CommunitasApp command.
     #[instrument(
         skip(self),
         name = "ui.kanban.create_column",
@@ -502,19 +505,44 @@ impl KanbanService {
             return Err(KanbanError::NotAuthenticated);
         }
 
+        // Create column locally via CRDT for immediate availability
         let core = self.core.read().await;
         let col = core.add_column(board_id, name.to_string(), Some(position))?;
+        let column_id = col.id.clone();
+        let column_name = col.name.clone();
+        let column_position = col.position;
+        let wip_limit = col.wip_limit;
+        drop(core);
+
+        // Execute command for persistence via CommunitasApp
+        let command = Command::CreateKanbanColumn {
+            board_id: board_id.to_string(),
+            column_name: name.to_string(),
+            position: Some(position),
+        };
+
+        if let Err(e) = self.app.execute(command).await {
+            warn!(
+                column_id = %column_id,
+                error = %e,
+                "Failed to persist column via CommunitasApp, column exists locally only"
+            );
+        } else {
+            debug!(column_id = %column_id, "Column created and persisted via CommunitasApp");
+        }
 
         Ok(ColumnView {
-            id: col.id,
-            name: col.name,
-            position: col.position,
+            id: column_id,
+            name: column_name,
+            position: column_position,
             cards: Vec::new(),
-            wip_limit: col.wip_limit,
+            wip_limit,
         })
     }
 
     /// Create a new card in a column.
+    ///
+    /// Creates the card both locally via CRDT and persists via CommunitasApp command.
     #[instrument(
         skip(self),
         name = "ui.kanban.create_card",
@@ -530,27 +558,57 @@ impl KanbanService {
             return Err(KanbanError::NotAuthenticated);
         }
 
+        // Create card locally via CRDT for immediate availability
         let core = self.core.read().await;
         let card = core.create_card(board_id, column_id, title.to_string(), None)?;
+        let card_id = card.id.clone();
+        let card_title = card.title.clone();
+        let card_description = card.description.clone();
+        let card_state = card.state;
+        let card_assignees = card.assignee_ids.clone();
+        let card_due_date = card.due_date;
+        let card_position = card.position;
+        drop(core);
+
+        // Execute command for persistence via CommunitasApp
+        let command = Command::CreateKanbanCard {
+            board_id: board_id.to_string(),
+            column_id: column_id.to_string(),
+            title: title.to_string(),
+            description: None,
+            assignee: None,
+        };
+
+        if let Err(e) = self.app.execute(command).await {
+            warn!(
+                card_id = %card_id,
+                error = %e,
+                "Failed to persist card via CommunitasApp, card exists locally only"
+            );
+        } else {
+            debug!(card_id = %card_id, "Card created and persisted via CommunitasApp");
+        }
 
         Ok(CardView {
-            id: card.id,
-            title: card.title,
-            description: if card.description.is_empty() {
+            id: card_id,
+            title: card_title,
+            description: if card_description.is_empty() {
                 None
             } else {
-                Some(card.description)
+                Some(card_description)
             },
-            state: self.core_state_to_ui(card.state),
-            assignees: card.assignee_ids,
+            state: self.core_state_to_ui(card_state),
+            assignees: card_assignees,
             tags: Vec::new(),
-            due_date: card.due_date.map(|d| d * 1000),
+            due_date: card_due_date.map(|d| d * 1000),
             checklist_progress: None,
-            position: card.position,
+            position: card_position,
         })
     }
 
     /// Move a card to a different column or position.
+    ///
+    /// Moves the card both locally via CRDT and persists via CommunitasApp command.
     #[instrument(
         skip(self),
         name = "ui.kanban.move_card",
@@ -567,8 +625,30 @@ impl KanbanService {
             return Err(KanbanError::NotAuthenticated);
         }
 
+        // Move card locally via CRDT for immediate availability
         let core = self.core.read().await;
         core.move_card(board_id, card_id, target_column, position)?;
+        drop(core);
+
+        // Execute command for persistence via CommunitasApp
+        let command = Command::MoveKanbanCard {
+            board_id: board_id.to_string(),
+            card_id: card_id.to_string(),
+            target_column_id: target_column.to_string(),
+            position: Some(position),
+        };
+
+        if let Err(e) = self.app.execute(command).await {
+            warn!(
+                card_id = %card_id,
+                target_column = %target_column,
+                error = %e,
+                "Failed to persist card move via CommunitasApp, move exists locally only"
+            );
+        } else {
+            debug!(card_id = %card_id, target_column = %target_column, "Card move persisted via CommunitasApp");
+        }
+
         Ok(())
     }
 
@@ -683,12 +763,33 @@ impl KanbanService {
             }
         };
 
-        // Perform the move
+        // Perform the move locally via CRDT
         core.move_card(board_id, card_id, &target_column_id, new_position)?;
+        let card_title = card.title.clone();
+        drop(core);
+
+        // Execute command for persistence via CommunitasApp
+        let command = Command::MoveKanbanCard {
+            board_id: board_id.to_string(),
+            card_id: card_id.to_string(),
+            target_column_id: target_column_id.clone(),
+            position: Some(new_position),
+        };
+
+        if let Err(e) = self.app.execute(command).await {
+            warn!(
+                card_id = %card_id,
+                target_column = %target_column_id,
+                error = %e,
+                "Failed to persist keyboard card move via CommunitasApp, move exists locally only"
+            );
+        } else {
+            debug!(card_id = %card_id, target_column = %target_column_id, "Keyboard card move persisted via CommunitasApp");
+        }
 
         Ok(CardMoveResult {
             card_id: card_id.to_string(),
-            card_title: card.title,
+            card_title,
             target_column_id,
             target_column_name,
             new_position,
@@ -696,6 +797,8 @@ impl KanbanService {
     }
 
     /// Update a card's properties.
+    ///
+    /// Updates the card both locally via CRDT and persists via CommunitasApp command.
     #[instrument(
         skip(self, updates),
         name = "ui.kanban.update_card",
@@ -711,9 +814,14 @@ impl KanbanService {
             return Err(KanbanError::NotAuthenticated);
         }
 
+        // Capture updates for CommunitasApp command before consuming
+        let cmd_title = updates.title.clone();
+        let cmd_description = updates.description.clone();
+        let cmd_assignee = updates.assignees.as_ref().and_then(|a| a.first().cloned());
+
         let core = self.core.read().await;
 
-        // Apply basic updates
+        // Apply basic updates locally via CRDT
         let core_update = CoreCardUpdate {
             title: updates.title,
             description: updates.description,
@@ -751,6 +859,25 @@ impl KanbanService {
         let tags = core.list_tags(board_id)?;
         drop(core);
 
+        // Execute command for persistence via CommunitasApp
+        let command = Command::UpdateKanbanCard {
+            board_id: board_id.to_string(),
+            card_id: card_id.to_string(),
+            title: cmd_title,
+            description: cmd_description,
+            assignee: cmd_assignee,
+        };
+
+        if let Err(e) = self.app.execute(command).await {
+            warn!(
+                card_id = %card_id,
+                error = %e,
+                "Failed to persist card update via CommunitasApp, update exists locally only"
+            );
+        } else {
+            debug!(card_id = %card_id, "Card update persisted via CommunitasApp");
+        }
+
         let tag_lookup: std::collections::HashMap<String, TagView> = tags
             .into_iter()
             .map(|t| {
@@ -769,14 +896,117 @@ impl KanbanService {
     }
 
     /// Archive a card.
+    ///
+    /// Archives the card both locally via CRDT and persists via CommunitasApp command.
     #[instrument(skip(self), name = "ui.kanban.archive_card", fields(board_id, card_id))]
     pub async fn archive_card(&self, board_id: &str, card_id: &str) -> Result<(), KanbanError> {
         if !self.is_authenticated() {
             return Err(KanbanError::NotAuthenticated);
         }
 
+        // Archive card locally via CRDT
         let core = self.core.read().await;
         core.change_card_state(board_id, card_id, CoreCardState::Archived)?;
+        drop(core);
+
+        // Execute delete command for persistence via CommunitasApp
+        // (Archive is treated as delete for network persistence purposes)
+        let command = Command::DeleteKanbanCard {
+            board_id: board_id.to_string(),
+            card_id: card_id.to_string(),
+        };
+
+        if let Err(e) = self.app.execute(command).await {
+            warn!(
+                card_id = %card_id,
+                error = %e,
+                "Failed to persist card archive via CommunitasApp, archive exists locally only"
+            );
+        } else {
+            debug!(card_id = %card_id, "Card archive persisted via CommunitasApp");
+        }
+
+        Ok(())
+    }
+
+    /// Update a board's properties.
+    ///
+    /// Updates the board both locally via CRDT and persists via CommunitasApp command.
+    #[instrument(skip(self), name = "ui.kanban.update_board", fields(board_id))]
+    pub async fn update_board(
+        &self,
+        board_id: &str,
+        name: Option<String>,
+        description: Option<Option<String>>,
+    ) -> Result<(), KanbanError> {
+        if !self.is_authenticated() {
+            return Err(KanbanError::NotAuthenticated);
+        }
+
+        // Update board locally via CRDT
+        let core = self.core.read().await;
+        let board_update = CoreBoardUpdate {
+            name: name.clone(),
+            description: description.clone(),
+            settings: None,
+        };
+        core.update_board(board_id, board_update)?;
+        drop(core);
+
+        // Execute command for persistence via CommunitasApp
+        let command = Command::UpdateKanbanBoard {
+            board_id: board_id.to_string(),
+            name,
+            description,
+        };
+
+        if let Err(e) = self.app.execute(command).await {
+            warn!(
+                board_id = %board_id,
+                error = %e,
+                "Failed to persist board update via CommunitasApp, update exists locally only"
+            );
+        } else {
+            debug!(board_id = %board_id, "Board update persisted via CommunitasApp");
+        }
+
+        Ok(())
+    }
+
+    /// Delete a board.
+    ///
+    /// Deletes the board both locally via CRDT and persists via CommunitasApp command.
+    #[instrument(skip(self), name = "ui.kanban.delete_board", fields(board_id))]
+    pub async fn delete_board(&self, board_id: &str) -> Result<(), KanbanError> {
+        if !self.is_authenticated() {
+            return Err(KanbanError::NotAuthenticated);
+        }
+
+        // Delete board locally via CRDT
+        let core = self.core.read().await;
+        core.delete_board(board_id)?;
+        drop(core);
+
+        // Execute command for persistence via CommunitasApp
+        let command = Command::DeleteKanbanBoard {
+            board_id: board_id.to_string(),
+        };
+
+        if let Err(e) = self.app.execute(command).await {
+            warn!(
+                board_id = %board_id,
+                error = %e,
+                "Failed to persist board deletion via CommunitasApp, deletion exists locally only"
+            );
+        } else {
+            debug!(board_id = %board_id, "Board deletion persisted via CommunitasApp");
+        }
+
+        // Update watch channel to remove the deleted board
+        let mut snap = self.rx.borrow().clone();
+        snap.boards.retain(|b| b.id != board_id);
+        let _ = self.tx.send(snap);
+
         Ok(())
     }
 

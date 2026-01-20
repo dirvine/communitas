@@ -320,7 +320,44 @@ impl DriveService {
             return Err(DriveError::NotAuthenticated);
         }
 
-        // Mock implementation: always succeeds
+        // Build and execute the DeleteFile command
+        let cmd = Command::DeleteFile {
+            entity_id: entity_id.to_string(),
+            disk_type: disk_type_to_arg(disk_type),
+            path: path.to_string(),
+        };
+
+        let events = self
+            .app
+            .execute(cmd)
+            .await
+            .map_err(|e| DriveError::StorageError(e.message))?;
+
+        // Verify deletion by finding the FileDeleted event
+        let deleted = events.iter().any(|event| {
+            matches!(
+                event,
+                Event::FileDeleted {
+                    entity_id: eid,
+                    path: p,
+                    ..
+                } if eid == entity_id && p == path
+            )
+        });
+
+        if !deleted {
+            return Err(DriveError::StorageError(
+                "delete command succeeded but FileDeleted event not found".to_string(),
+            ));
+        }
+
+        // Update watch channel - remove deleted file from current_directory
+        {
+            let mut snap = self.rx.borrow().clone();
+            snap.current_directory.retain(|e| e.path != path);
+            let _ = self.tx.send(snap);
+        }
+
         Ok(())
     }
 
@@ -484,26 +521,21 @@ impl DriveService {
             .map_err(|e| DriveError::StorageError(e.message))?;
 
         // Find the FileWritten event to get the confirmed size
-        let file_written = events.iter().find_map(|event| {
-            if let Event::FileWritten {
-                entity_id: eid,
-                disk_type: dt,
-                path: p,
-                size_bytes,
-            } = event
-            {
-                if eid == entity_id && p == path {
-                    Some((*dt, *size_bytes))
+        let size_bytes = events
+            .iter()
+            .find_map(|event| {
+                if let Event::FileWritten {
+                    entity_id: eid,
+                    path: p,
+                    size_bytes,
+                    ..
+                } = event
+                {
+                    (eid == entity_id && p == path).then_some(*size_bytes)
                 } else {
                     None
                 }
-            } else {
-                None
-            }
-        });
-
-        let size_bytes = file_written
-            .map(|(_, size)| size)
+            })
             .unwrap_or(content.len() as u64);
 
         // Extract file name from path

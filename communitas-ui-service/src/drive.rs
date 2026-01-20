@@ -19,6 +19,7 @@ use tokio::sync::{RwLock, watch};
 use tracing::instrument;
 
 use crate::auth::{AuthController, AuthService, AuthStateSnapshot};
+use communitas_core::app::CommunitasApp;
 
 /// Get current timestamp in milliseconds since Unix epoch.
 fn current_timestamp_millis() -> i64 {
@@ -80,6 +81,7 @@ pub struct DriveSnapshot {
 /// Service for virtual disk, directory, and file operations.
 pub struct DriveService {
     auth: Arc<AuthController>,
+    app: Arc<CommunitasApp>,
     tx: watch::Sender<DriveSnapshot>,
     rx: watch::Receiver<DriveSnapshot>,
     active_uploads: Arc<RwLock<HashMap<String, UploadProgress>>>,
@@ -91,10 +93,11 @@ pub struct DriveService {
 #[allow(unused_variables)] // Mock implementation - params used for tracing but not actual logic
 impl DriveService {
     /// Create a new drive service linked to the auth controller.
-    pub fn new(auth: Arc<AuthController>) -> Self {
+    pub fn new(auth: Arc<AuthController>, app: Arc<CommunitasApp>) -> Self {
         let (tx, rx) = watch::channel(DriveSnapshot::default());
         Self {
             auth,
+            app,
             tx,
             rx,
             active_uploads: Arc::new(RwLock::new(HashMap::new())),
@@ -112,6 +115,11 @@ impl DriveService {
     /// Get the current drive snapshot without subscribing.
     pub fn current_snapshot(&self) -> DriveSnapshot {
         self.rx.borrow().clone()
+    }
+
+    /// Access the underlying Communitas application.
+    pub fn app(&self) -> Arc<CommunitasApp> {
+        self.app.clone()
     }
 
     // ===== Disk Operations =====
@@ -761,24 +769,38 @@ mod tests {
     use super::*;
     use crate::auth::AuthController;
     use crate::storage::UiStorage;
+    use communitas_core::app::CommunitasApp;
     use tempfile::TempDir;
 
-    fn make_service(temp: &TempDir) -> DriveService {
+    async fn make_service(temp: &TempDir) -> DriveService {
         let storage = UiStorage::from_path(temp.path()).unwrap();
         let auth = Arc::new(AuthController::new(storage).unwrap());
-        DriveService::new(auth)
+        let app = Arc::new(
+            CommunitasApp::new(
+                "ocean-forest-moon-star".to_string(),
+                "TestUser".to_string(),
+                "TestDevice".to_string(),
+                temp.path()
+                    .join("app_storage")
+                    .to_string_lossy()
+                    .to_string(),
+            )
+            .await
+            .unwrap(),
+        );
+        DriveService::new(auth, app)
     }
 
-    #[test]
-    fn drive_service_constructs() {
+    #[tokio::test]
+    async fn drive_service_constructs() {
         let temp = TempDir::new().unwrap();
-        let _service = make_service(&temp);
+        let _service = make_service(&temp).await;
     }
 
-    #[test]
-    fn snapshot_starts_empty() {
+    #[tokio::test]
+    async fn snapshot_starts_empty() {
         let temp = TempDir::new().unwrap();
-        let service = make_service(&temp);
+        let service = make_service(&temp).await;
         let snap = service.current_snapshot();
         assert!(snap.uploads.is_empty());
         assert!(snap.downloads.is_empty());
@@ -789,7 +811,7 @@ mod tests {
     #[tokio::test]
     async fn list_disks_requires_auth() {
         let temp = TempDir::new().unwrap();
-        let service = make_service(&temp);
+        let service = make_service(&temp).await;
         let result = service.list_disks("entity-1").await;
         assert!(matches!(result, Err(DriveError::NotAuthenticated)));
     }
@@ -797,7 +819,7 @@ mod tests {
     #[tokio::test]
     async fn list_directory_requires_auth() {
         let temp = TempDir::new().unwrap();
-        let service = make_service(&temp);
+        let service = make_service(&temp).await;
         let result = service
             .list_directory("entity-1", DiskType::Private, "/")
             .await;
@@ -807,7 +829,7 @@ mod tests {
     #[tokio::test]
     async fn create_directory_requires_auth() {
         let temp = TempDir::new().unwrap();
-        let service = make_service(&temp);
+        let service = make_service(&temp).await;
         let result = service
             .create_directory("entity-1", DiskType::Private, "/test")
             .await;
@@ -817,7 +839,7 @@ mod tests {
     #[tokio::test]
     async fn delete_path_requires_auth() {
         let temp = TempDir::new().unwrap();
-        let service = make_service(&temp);
+        let service = make_service(&temp).await;
         let result = service
             .delete_path("entity-1", DiskType::Private, "/test")
             .await;
@@ -827,7 +849,7 @@ mod tests {
     #[tokio::test]
     async fn move_path_requires_auth() {
         let temp = TempDir::new().unwrap();
-        let service = make_service(&temp);
+        let service = make_service(&temp).await;
         let result = service
             .move_path("entity-1", DiskType::Private, "/from", "/to")
             .await;
@@ -837,7 +859,7 @@ mod tests {
     #[tokio::test]
     async fn copy_path_requires_auth() {
         let temp = TempDir::new().unwrap();
-        let service = make_service(&temp);
+        let service = make_service(&temp).await;
         let result = service
             .copy_path("entity-1", DiskType::Private, "/from", "/to")
             .await;
@@ -847,7 +869,7 @@ mod tests {
     #[tokio::test]
     async fn read_file_requires_auth() {
         let temp = TempDir::new().unwrap();
-        let service = make_service(&temp);
+        let service = make_service(&temp).await;
         let result = service
             .read_file("entity-1", DiskType::Private, "/test.txt")
             .await;
@@ -857,7 +879,7 @@ mod tests {
     #[tokio::test]
     async fn write_file_requires_auth() {
         let temp = TempDir::new().unwrap();
-        let service = make_service(&temp);
+        let service = make_service(&temp).await;
         let result = service
             .write_file("entity-1", DiskType::Private, "/test.txt", b"content")
             .await;
@@ -867,7 +889,7 @@ mod tests {
     #[tokio::test]
     async fn get_file_preview_requires_auth() {
         let temp = TempDir::new().unwrap();
-        let service = make_service(&temp);
+        let service = make_service(&temp).await;
         let result = service
             .get_file_preview("entity-1", DiskType::Private, "/test.txt")
             .await;
@@ -877,7 +899,7 @@ mod tests {
     #[tokio::test]
     async fn get_quota_requires_auth() {
         let temp = TempDir::new().unwrap();
-        let service = make_service(&temp);
+        let service = make_service(&temp).await;
         let result = service.get_quota("entity-1", DiskType::Private).await;
         assert!(matches!(result, Err(DriveError::NotAuthenticated)));
     }
@@ -885,7 +907,7 @@ mod tests {
     #[tokio::test]
     async fn start_upload_requires_auth() {
         let temp = TempDir::new().unwrap();
-        let service = make_service(&temp);
+        let service = make_service(&temp).await;
         let result = service
             .start_upload("entity-1", DiskType::Private, "/test.txt", vec![1, 2, 3])
             .await;
@@ -895,7 +917,7 @@ mod tests {
     #[tokio::test]
     async fn start_download_requires_auth() {
         let temp = TempDir::new().unwrap();
-        let service = make_service(&temp);
+        let service = make_service(&temp).await;
         let result = service
             .start_download("entity-1", DiskType::Private, "/test.txt", "/tmp/test.txt")
             .await;
@@ -905,7 +927,7 @@ mod tests {
     #[tokio::test]
     async fn cancel_upload_not_found() {
         let temp = TempDir::new().unwrap();
-        let service = make_service(&temp);
+        let service = make_service(&temp).await;
         let result = service.cancel_upload("nonexistent").await;
         assert!(matches!(result, Err(DriveError::UploadNotFound(_))));
     }
@@ -913,7 +935,7 @@ mod tests {
     #[tokio::test]
     async fn cancel_download_not_found() {
         let temp = TempDir::new().unwrap();
-        let service = make_service(&temp);
+        let service = make_service(&temp).await;
         let result = service.cancel_download("nonexistent").await;
         assert!(matches!(result, Err(DriveError::DownloadNotFound(_))));
     }
@@ -921,7 +943,7 @@ mod tests {
     #[tokio::test]
     async fn get_upload_progress_returns_none_for_unknown() {
         let temp = TempDir::new().unwrap();
-        let service = make_service(&temp);
+        let service = make_service(&temp).await;
         let result = service.get_upload_progress("unknown").await;
         assert!(result.is_none());
     }
@@ -929,22 +951,22 @@ mod tests {
     #[tokio::test]
     async fn get_download_progress_returns_none_for_unknown() {
         let temp = TempDir::new().unwrap();
-        let service = make_service(&temp);
+        let service = make_service(&temp).await;
         let result = service.get_download_progress("unknown").await;
         assert!(result.is_none());
     }
 
-    #[test]
-    fn subscribe_returns_receiver() {
+    #[tokio::test]
+    async fn subscribe_returns_receiver() {
         let temp = TempDir::new().unwrap();
-        let service = make_service(&temp);
+        let service = make_service(&temp).await;
         let _rx = service.subscribe();
     }
 
-    #[test]
-    fn subscribe_uploads_returns_receiver() {
+    #[tokio::test]
+    async fn subscribe_uploads_returns_receiver() {
         let temp = TempDir::new().unwrap();
-        let service = make_service(&temp);
+        let service = make_service(&temp).await;
         let _rx = service.subscribe_uploads();
     }
 

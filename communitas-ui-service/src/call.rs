@@ -776,82 +776,164 @@ impl CallService {
 
     /// Toggle mute state and return the new muted state.
     ///
+    /// This method toggles the local audio mute state by executing `Command::ToggleAudio`
+    /// through the Communitas core. The state is updated when the `Event::AudioToggled`
+    /// response is received.
+    ///
     /// # Errors
     ///
     /// Returns [`CallError::NotInCall`] if the user is not currently in a call.
+    /// Returns [`CallError::CoreError`] if the core command execution fails.
     #[instrument(skip(self), name = "ui.call.toggle_mute")]
     pub async fn toggle_mute(&self) -> Result<bool, CallError> {
-        let mut state = self.state.write().await;
+        // Extract call_id and participant info from state
+        let (call_id, my_id, current_is_muted) = {
+            let state = self.state.read().await;
+            if !state.call_state.is_active() {
+                return Err(CallError::NotInCall);
+            }
+            let call = state.current_call.as_ref().ok_or(CallError::NotInCall)?;
+            let my_id = call.my_participant_id.clone();
+            let is_muted = state
+                .participants
+                .iter()
+                .find(|p| p.id == my_id)
+                .map(|p| p.is_muted)
+                .unwrap_or(false);
+            (call.call_id.clone(), my_id, is_muted)
+        };
 
-        if !state.call_state.is_active() {
-            return Err(CallError::NotInCall);
-        }
+        // Calculate new enabled state: if muted, enable audio; if not muted, disable audio
+        let new_enabled = current_is_muted;
 
-        let my_id = state
-            .current_call
-            .as_ref()
-            .map(|c| c.my_participant_id.clone());
+        // Build and execute the ToggleAudio command
+        let cmd = Command::ToggleAudio {
+            call_id: call_id.clone(),
+            enabled: new_enabled,
+        };
 
-        if let Some(my_id) = my_id
-            && let Some(participant) = state.participants.iter_mut().find(|p| p.id == my_id)
+        let events = match self.app.execute(cmd).await {
+            Ok(events) => events,
+            Err(e) => {
+                return Err(CallError::CoreError(e.message.clone()));
+            }
+        };
+
+        // Find the AudioToggled event in the response
+        let toggled_enabled = events.iter().find_map(|event| match event {
+            Event::AudioToggled {
+                call_id: id,
+                enabled,
+            } if *id == call_id => Some(*enabled),
+            _ => None,
+        });
+
+        let final_enabled = match toggled_enabled {
+            Some(enabled) => enabled,
+            None => {
+                warn!("No AudioToggled event returned from core, using expected state");
+                new_enabled
+            }
+        };
+
+        // Update state: is_muted is the inverse of enabled
+        let new_muted = !final_enabled;
         {
-            participant.is_muted = !participant.is_muted;
-            let new_muted = participant.is_muted;
-
-            // Update call_info participants too
+            let mut state = self.state.write().await;
+            if let Some(participant) = state.participants.iter_mut().find(|p| p.id == my_id) {
+                participant.is_muted = new_muted;
+            }
             if let Some(ref mut call) = state.current_call
                 && let Some(p) = call.participants.iter_mut().find(|p| p.id == my_id)
             {
                 p.is_muted = new_muted;
             }
-
-            drop(state);
-            self.broadcast().await;
-            return Ok(new_muted);
         }
+        self.broadcast().await;
 
-        Err(CallError::NotInCall)
+        debug!(call_id = %call_id, muted = %new_muted, "Audio toggled successfully");
+        Ok(new_muted)
     }
 
     /// Toggle video state and return the new enabled state.
     ///
+    /// This method toggles the local video state by executing `Command::ToggleVideo`
+    /// through the Communitas core. The state is updated when the `Event::VideoToggled`
+    /// response is received.
+    ///
     /// # Errors
     ///
     /// Returns [`CallError::NotInCall`] if the user is not currently in a call.
+    /// Returns [`CallError::CoreError`] if the core command execution fails.
     #[instrument(skip(self), name = "ui.call.toggle_video")]
     pub async fn toggle_video(&self) -> Result<bool, CallError> {
-        let mut state = self.state.write().await;
+        // Extract call_id and participant info from state
+        let (call_id, my_id, current_video_enabled) = {
+            let state = self.state.read().await;
+            if !state.call_state.is_active() {
+                return Err(CallError::NotInCall);
+            }
+            let call = state.current_call.as_ref().ok_or(CallError::NotInCall)?;
+            let my_id = call.my_participant_id.clone();
+            let is_video_enabled = state
+                .participants
+                .iter()
+                .find(|p| p.id == my_id)
+                .map(|p| p.is_video_enabled)
+                .unwrap_or(false);
+            (call.call_id.clone(), my_id, is_video_enabled)
+        };
 
-        if !state.call_state.is_active() {
-            return Err(CallError::NotInCall);
-        }
+        // Calculate new enabled state: toggle current state
+        let new_enabled = !current_video_enabled;
 
-        let my_id = state
-            .current_call
-            .as_ref()
-            .map(|c| c.my_participant_id.clone());
+        // Build and execute the ToggleVideo command
+        let cmd = Command::ToggleVideo {
+            call_id: call_id.clone(),
+            enabled: new_enabled,
+        };
 
-        if let Some(my_id) = my_id
-            && let Some(participant) = state.participants.iter_mut().find(|p| p.id == my_id)
+        let events = match self.app.execute(cmd).await {
+            Ok(events) => events,
+            Err(e) => {
+                return Err(CallError::CoreError(e.message.clone()));
+            }
+        };
+
+        // Find the VideoToggled event in the response
+        let toggled_enabled = events.iter().find_map(|event| match event {
+            Event::VideoToggled {
+                call_id: id,
+                enabled,
+            } if *id == call_id => Some(*enabled),
+            _ => None,
+        });
+
+        let final_enabled = match toggled_enabled {
+            Some(enabled) => enabled,
+            None => {
+                warn!("No VideoToggled event returned from core, using expected state");
+                new_enabled
+            }
+        };
+
+        // Update state
         {
-            participant.is_video_enabled = !participant.is_video_enabled;
-            let new_video = participant.is_video_enabled;
-
-            // Update call_info participants too
+            let mut state = self.state.write().await;
+            if let Some(participant) = state.participants.iter_mut().find(|p| p.id == my_id) {
+                participant.is_video_enabled = final_enabled;
+            }
             if let Some(ref mut call) = state.current_call
                 && let Some(p) = call.participants.iter_mut().find(|p| p.id == my_id)
             {
-                p.is_video_enabled = new_video;
+                p.is_video_enabled = final_enabled;
             }
-
-            drop(state);
-            self.broadcast().await;
-            return Ok(new_video);
         }
+        self.broadcast().await;
 
-        Err(CallError::NotInCall)
+        debug!(call_id = %call_id, video_enabled = %final_enabled, "Video toggled successfully");
+        Ok(final_enabled)
     }
-
     /// Set audio input enabled state.
     ///
     /// # Errors

@@ -1,0 +1,142 @@
+name: Performance Benchmarks
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'communitas-core/**'
+      - 'communitas-ui-service/**'
+      - 'communitas-ui-api/**'
+      - 'communitas-kanban/**'
+      - 'communitas-bench/**'
+      - '.github/workflows/benchmark.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'communitas-core/**'
+      - 'communitas-ui-service/**'
+      - 'communitas-ui-api/**'
+      - 'communitas-kanban/**'
+      - 'communitas-bench/**'
+      - '.github/workflows/benchmark.yml'
+
+permissions:
+  contents: write
+  deployments: write
+  pull-requests: write
+
+concurrency:
+  group: benchmark-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  benchmark:
+    name: Performance Regression Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libssl-dev \
+            pkg-config \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libsoup-3.0-dev
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev \
+            || sudo apt-get install -y libwebkit2gtk-4.0-dev libjavascriptcoregtk-4.0-dev
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@1.88.0
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: . -> target
+          cache-on-failure: false
+          shared-key: benchmark
+
+      - name: Run benchmarks
+        run: |
+          cargo bench --bench core_flows -- --noplot --save-baseline pr 2>&1 | tee benchmark_output.txt
+
+      - name: Extract benchmark results
+        id: bench
+        run: |
+          # Parse criterion output to JSON for github-action-benchmark
+          python3 << 'EOF' > benchmark_results.json
+          import re
+          import json
+          import sys
+
+          results = []
+          with open('benchmark_output.txt', 'r') as f:
+              content = f.read()
+
+          # Pattern to match benchmark results
+          # Example: "messaging/list_threads  time:   [15.656 µs 16.067 µs 16.493 µs]"
+          pattern = r'(\S+)\s+time:\s+\[([0-9.]+)\s*(ns|µs|ms|s)\s+([0-9.]+)\s*(ns|µs|ms|s)\s+([0-9.]+)\s*(ns|µs|ms|s)\]'
+
+          for match in re.finditer(pattern, content):
+              name = match.group(1)
+              median = float(match.group(4))
+              unit = match.group(5)
+
+              # Convert to nanoseconds for consistency
+              multiplier = {'ns': 1, 'µs': 1000, 'ms': 1000000, 's': 1000000000}
+              value_ns = median * multiplier[unit]
+
+              results.append({
+                  'name': name,
+                  'unit': 'ns',
+                  'value': value_ns
+              })
+
+          print(json.dumps(results, indent=2))
+          EOF
+
+      - name: Store benchmark result (main branch)
+        if: github.ref == 'refs/heads/main'
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          name: Communitas Benchmarks
+          tool: 'customSmallerIsBetter'
+          output-file-path: benchmark_results.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: true
+          alert-threshold: '105%'
+          comment-on-alert: true
+          fail-on-alert: false
+          benchmark-data-dir-path: docs/performance/data
+
+      - name: Compare with baseline (PRs)
+        if: github.event_name == 'pull_request'
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          name: Communitas Benchmarks
+          tool: 'customSmallerIsBetter'
+          output-file-path: benchmark_results.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: false
+          alert-threshold: '105%'
+          comment-on-alert: true
+          fail-on-alert: true
+          comment-always: true
+          benchmark-data-dir-path: docs/performance/data
+
+      - name: Upload benchmark artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results-${{ github.sha }}
+          path: |
+            benchmark_output.txt
+            benchmark_results.json
+          retention-days: 30

@@ -9,6 +9,7 @@ members = [
     "communitas-mcp",       # MCP server for AI agent control (HTTP/HTTPS + stdio)
     "communitas-ui-api",    # Shared view models for GUI stacks
     "tests/distributed/orchestrator", "communitas-ui-service",  # Distributed test orchestrator
+    "communitas-bench",      # Criterion benchmarks
 ]
 
 [workspace.package]

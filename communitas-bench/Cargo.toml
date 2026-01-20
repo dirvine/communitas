@@ -1,0 +1,17 @@
+[package]
+name = "communitas-bench"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+tokio = { version = "1.0", features = ["rt-multi-thread", "macros"] }
+
+[dependencies]
+communitas-core = { path = "../communitas-core" }
+communitas-ui-service = { path = "../communitas-ui-service" }
+
+[[bench]]
+name = "core_flows"
+harness = false

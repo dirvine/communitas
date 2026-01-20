@@ -17,8 +17,8 @@ _Last updated: 2026-01-20_
 | Phase | Description | Status |
 |-------|-------------|--------|
 | **5.1** | Packaging & Installers | ☐ Pending |
-| **5.2** | WebView Provisioning | ☐ Pending |
-| **5.3** | Performance QA | ☐ Pending |
+| **5.2** | WebView Provisioning | ✅ Complete |
+| **5.3** | Performance QA | 🔄 In Progress |
 | **5.4** | MCP Validation Suite | ☐ Pending |
 
 ---

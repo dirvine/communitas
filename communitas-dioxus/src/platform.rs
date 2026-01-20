@@ -7,6 +7,9 @@
 //! - **Linux**: Requires WebKitGTK (libwebkit2gtk)
 //! - **Windows**: Requires WebView2 (Microsoft Edge runtime)
 
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+use tracing::debug;
+
 /// Checks whether the WebView runtime required by Dioxus/Wry is available.
 ///
 /// # Returns
@@ -58,22 +61,23 @@ fn check_webview_available_impl() -> Result<(), String> {
     }
 
     // Try pkg-config as a fallback
-    if let Ok(output) = std::process::Command::new("pkg-config")
+    debug!("WebKitGTK not found via file paths, trying pkg-config");
+    match std::process::Command::new("pkg-config")
         .args(["--exists", "webkit2gtk-4.1"])
         .output()
     {
-        if output.status.success() {
-            return Ok(());
-        }
+        Ok(output) if output.status.success() => return Ok(()),
+        Ok(_) => debug!("pkg-config: webkit2gtk-4.1 not found"),
+        Err(e) => debug!("pkg-config not available: {e}"),
     }
 
-    if let Ok(output) = std::process::Command::new("pkg-config")
+    match std::process::Command::new("pkg-config")
         .args(["--exists", "webkit2gtk-4.0"])
         .output()
     {
-        if output.status.success() {
-            return Ok(());
-        }
+        Ok(output) if output.status.success() => return Ok(()),
+        Ok(_) => debug!("pkg-config: webkit2gtk-4.0 not found"),
+        Err(e) => debug!("pkg-config fallback failed: {e}"),
     }
 
     Err(
@@ -107,15 +111,24 @@ fn check_webview_available_impl() -> Result<(), String> {
         let path = Path::new(base_path);
         if path.exists() && path.is_dir() {
             // Check if there's at least one version directory
-            if let Ok(entries) = std::fs::read_dir(path) {
-                for entry in entries.flatten() {
-                    if entry.path().is_dir() {
-                        let msedgewebview2_path = entry.path().join("msedgewebview2.exe");
-                        if msedgewebview2_path.exists() {
-                            return Ok(());
+            match std::fs::read_dir(path) {
+                Ok(entries) => {
+                    for entry_result in entries {
+                        match entry_result {
+                            Ok(entry) => {
+                                if entry.path().is_dir() {
+                                    let msedgewebview2_path =
+                                        entry.path().join("msedgewebview2.exe");
+                                    if msedgewebview2_path.exists() {
+                                        return Ok(());
+                                    }
+                                }
+                            }
+                            Err(e) => debug!("Error reading directory entry in {}: {e}", base_path),
                         }
                     }
                 }
+                Err(e) => debug!("Failed to read WebView2 directory {}: {e}", base_path),
             }
         }
     }

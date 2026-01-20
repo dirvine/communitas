@@ -42,16 +42,17 @@ fn main() {
     if let Err(err) = dioxus_logger::init(Level::INFO) {
         eprintln!("failed to init logger: {err}");
     }
+    // Check WebView availability BEFORE expensive service initialization
+    if let Err(err) = platform::check_webview_available() {
+        eprintln!("WebView not available: {err}");
+        std::process::exit(1);
+    }
     let services = UiServices::bootstrap().unwrap_or_else(|err| {
         eprintln!("failed to initialize UI services: {err}");
         std::process::exit(1);
     });
     if UI_SERVICES.set(Arc::new(services)).is_err() {
         eprintln!("UI services already initialized");
-        std::process::exit(1);
-    }
-    if let Err(err) = platform::check_webview_available() {
-        eprintln!("WebView not available: {err}");
         std::process::exit(1);
     }
     info!("starting Communitas Dioxus prototype");

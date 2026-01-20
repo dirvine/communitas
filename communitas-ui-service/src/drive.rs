@@ -20,7 +20,7 @@ use tracing::instrument;
 
 use crate::auth::{AuthController, AuthService, AuthStateSnapshot};
 use communitas_core::app::CommunitasApp;
-use communitas_core::command::{DiskTypeArg, Query, QueryResponse};
+use communitas_core::command::{Command, DiskTypeArg, Event, Query, QueryResponse};
 
 /// Get current timestamp in milliseconds since Unix epoch.
 fn current_timestamp_millis() -> i64 {
@@ -469,6 +469,44 @@ impl DriveService {
             return Err(DriveError::NotAuthenticated);
         }
 
+        // Build and execute the WriteFile command
+        let cmd = Command::WriteFile {
+            entity_id: entity_id.to_string(),
+            disk_type: disk_type_to_arg(disk_type),
+            path: path.to_string(),
+            data: content.to_vec(),
+        };
+
+        let events = self
+            .app
+            .execute(cmd)
+            .await
+            .map_err(|e| DriveError::StorageError(e.message))?;
+
+        // Find the FileWritten event to get the confirmed size
+        let file_written = events.iter().find_map(|event| {
+            if let Event::FileWritten {
+                entity_id: eid,
+                disk_type: dt,
+                path: p,
+                size_bytes,
+            } = event
+            {
+                if eid == entity_id && p == path {
+                    Some((*dt, *size_bytes))
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        });
+
+        let size_bytes = file_written
+            .map(|(_, size)| size)
+            .unwrap_or(content.len() as u64);
+
+        // Extract file name from path
         let name = path
             .split('/')
             .rfind(|s| !s.is_empty())
@@ -478,16 +516,39 @@ impl DriveService {
         let now = current_timestamp_millis();
         let checksum = compute_checksum(content);
 
-        Ok(DirectoryEntry {
+        let entry = DirectoryEntry {
             name,
             path: path.to_string(),
             is_directory: false,
-            size_bytes: content.len() as u64,
+            size_bytes,
             mime_type: Some("application/octet-stream".to_string()),
             modified_at: now,
             created_at: now,
             checksum: Some(checksum),
-        })
+        };
+
+        // Update watch channel with new file if we're viewing the parent directory
+        {
+            let mut snap = self.rx.borrow().clone();
+            // Check if the new file should be added to current directory view
+            let parent_path = path.rsplit_once('/').map(|(p, _)| p).unwrap_or("");
+            let current_paths: Vec<_> = snap
+                .current_directory
+                .iter()
+                .map(|e| e.path.rsplit_once('/').map(|(p, _)| p).unwrap_or(""))
+                .collect();
+
+            // If any current entry has the same parent, we're likely viewing that directory
+            if current_paths.contains(&parent_path) || snap.current_directory.is_empty() {
+                // Remove existing entry with same path if it exists (update case)
+                snap.current_directory.retain(|e| e.path != path);
+                // Add the new entry
+                snap.current_directory.push(entry.clone());
+                let _ = self.tx.send(snap);
+            }
+        }
+
+        Ok(entry)
     }
 
     // ===== Upload Operations =====

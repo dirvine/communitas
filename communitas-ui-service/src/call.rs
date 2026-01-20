@@ -785,6 +785,7 @@ impl CallService {
             state.participants.clear();
             state.media_errors.clear();
             state.listen_only_mode = false;
+            state.is_screen_sharing = false;
         }
         self.broadcast().await;
 
@@ -984,13 +985,19 @@ impl CallService {
             warn!("No ScreenShareStarted event returned from core, updating state anyway");
         }
 
-        // Update state
+        // Update state in single lock acquisition
         {
             let mut state = self.state.write().await;
             state.is_screen_sharing = true;
+            if let Some(participant) = state.participants.iter_mut().find(|p| p.id == my_id) {
+                participant.is_screen_sharing = true;
+            }
+            if let Some(ref mut call) = state.current_call
+                && let Some(p) = call.participants.iter_mut().find(|p| p.id == my_id)
+            {
+                p.is_screen_sharing = true;
+            }
         }
-        self.update_my_participant(&my_id, |p| p.is_screen_sharing = true)
-            .await;
         self.broadcast().await;
 
         debug!(call_id = %call_id, "Screen share started successfully");
@@ -1040,18 +1047,25 @@ impl CallService {
             warn!("No ScreenShareStopped event returned from core, updating state anyway");
         }
 
-        // Update state
+        // Update state in single lock acquisition
         {
             let mut state = self.state.write().await;
             state.is_screen_sharing = false;
+            if let Some(participant) = state.participants.iter_mut().find(|p| p.id == my_id) {
+                participant.is_screen_sharing = false;
+            }
+            if let Some(ref mut call) = state.current_call
+                && let Some(p) = call.participants.iter_mut().find(|p| p.id == my_id)
+            {
+                p.is_screen_sharing = false;
+            }
         }
-        self.update_my_participant(&my_id, |p| p.is_screen_sharing = false)
-            .await;
         self.broadcast().await;
 
         debug!(call_id = %call_id, "Screen share stopped successfully");
         Ok(())
     }
+
     /// Set audio input enabled state.
     ///
     /// # Errors

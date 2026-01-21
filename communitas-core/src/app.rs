@@ -55,8 +55,8 @@ use crate::command::{
     CallResponse, CallStatusResponse, CanvasSnapshotResponse, ChunkReadResponse,
     ChunkedWriteProgressResponse, ContactResponse, DiskInfoResponse, DiskStatsResponse,
     EntityResponse, FileInfoResponse, FileMetadataResponse, FilePreviewResponse, InviteResponse,
-    MemberResponse, MessageResponse, PresenceResponse, ReactionResponse, SyncStateResponse,
-    WebsiteResponse,
+    MemberResponse, MessageResponse, PresenceResponse, ReactionResponse, ResumableTransferResponse,
+    ResumeCapabilityResponse, ResumeVerificationResponse, SyncStateResponse, WebsiteResponse,
 };
 use crate::command::{
     Command, CommandError, CommandResult, DiskTypeArg, Event, Query, QueryError, QueryResponse,
@@ -1559,6 +1559,86 @@ impl CommunitasApp {
                     entity_id,
                     disk_type,
                     path,
+                };
+                self.broadcast_event(event.clone());
+                Ok(vec![event])
+            }
+
+            Command::ResumeChunkedWrite {
+                entity_id,
+                disk_type,
+                path,
+                verify_hashes,
+            } => {
+                let ctx = self.context.read().await;
+                let disk_type_internal = disk_type_from_arg(disk_type);
+
+                let result = ctx
+                    .disk_service
+                    .resume_chunked_write(&entity_id, disk_type_internal, &path, verify_hashes)
+                    .await
+                    .map_err(|e| CommandError {
+                        command_type: command_type.clone(),
+                        message: format!("{}", e),
+                        code: "RESUME_CHUNKED_WRITE_FAILED".to_string(),
+                    })?;
+
+                if !result.can_resume {
+                    return Err(CommandError {
+                        command_type: command_type.clone(),
+                        message: result
+                            .failure_reason
+                            .unwrap_or_else(|| "Cannot resume transfer".to_string()),
+                        code: "RESUME_NOT_POSSIBLE".to_string(),
+                    });
+                }
+
+                let state = result.transfer_state.as_ref();
+                let bytes_written = state.map(|s| s.bytes_written()).unwrap_or(0);
+                let total_size = state.map(|s| s.total_size()).unwrap_or(0);
+                let chunks_completed = state.map(|s| s.chunks_completed()).unwrap_or(0);
+                let total_chunks = state.map(|s| s.total_chunks()).unwrap_or(0);
+
+                let event = Event::ChunkedWriteResumed {
+                    entity_id,
+                    disk_type,
+                    path,
+                    bytes_written,
+                    total_size,
+                    chunks_completed,
+                    total_chunks,
+                };
+                self.broadcast_event(event.clone());
+                Ok(vec![event])
+            }
+
+            Command::VerifyChunks {
+                entity_id,
+                disk_type,
+                path,
+            } => {
+                let ctx = self.context.read().await;
+                let disk_type_internal = disk_type_from_arg(disk_type);
+
+                let results = ctx
+                    .disk_service
+                    .verify_written_chunks(&entity_id, disk_type_internal, &path)
+                    .await
+                    .map_err(|e| CommandError {
+                        command_type: command_type.clone(),
+                        message: format!("{}", e),
+                        code: "VERIFY_CHUNKS_FAILED".to_string(),
+                    })?;
+
+                let verified_count = results.len() as u64;
+                let all_valid = results.iter().all(|r| r.is_valid);
+
+                let event = Event::ChunksVerified {
+                    entity_id,
+                    disk_type,
+                    path,
+                    verified_count,
+                    all_valid,
                 };
                 self.broadcast_event(event.clone());
                 Ok(vec![event])
@@ -3410,6 +3490,121 @@ impl CommunitasApp {
                         }))
                     }
                 }
+            }
+
+            Query::GetResumeVerification {
+                entity_id,
+                disk_type,
+                path,
+                verify_hashes,
+            } => {
+                let ctx = self.context.read().await;
+                let disk_type_internal = disk_type_from_arg(disk_type);
+
+                let result = ctx
+                    .disk_service
+                    .verify_resume(&entity_id, disk_type_internal, &path, verify_hashes)
+                    .await
+                    .map_err(|e| QueryError {
+                        query_type: query_type.clone(),
+                        message: format!("{}", e),
+                        code: "VERIFY_RESUME_FAILED".to_string(),
+                    })?;
+
+                let total_size = result
+                    .transfer_state
+                    .as_ref()
+                    .map(|s| s.total_size())
+                    .unwrap_or(0);
+
+                Ok(QueryResponse::ResumeVerification(ResumeVerificationResponse {
+                    entity_id,
+                    disk_type,
+                    path,
+                    can_resume: result.can_resume,
+                    verified_chunks: result.verified_chunks,
+                    total_chunks: result.total_chunks,
+                    verified_bytes: result.verified_bytes,
+                    total_size,
+                    failure_reason: result.failure_reason,
+                    file_modified: result.file_modified,
+                    verified_hash: result.verified_hash,
+                }))
+            }
+
+            Query::GetResumeCapability {
+                entity_id,
+                disk_type,
+                path,
+            } => {
+                let ctx = self.context.read().await;
+                let disk_type_internal = disk_type_from_arg(disk_type);
+
+                let capability = ctx
+                    .disk_service
+                    .get_resume_capability(&entity_id, disk_type_internal, &path)
+                    .await;
+
+                let response = match capability {
+                    crate::disk_service::ResumeCapability::Full => ResumeCapabilityResponse::Full,
+                    crate::disk_service::ResumeCapability::Partial => {
+                        ResumeCapabilityResponse::Partial
+                    }
+                    crate::disk_service::ResumeCapability::None => ResumeCapabilityResponse::None,
+                };
+
+                Ok(QueryResponse::ResumeCapability(response))
+            }
+
+            Query::ListResumableTransfers => {
+                let ctx = self.context.read().await;
+                let transfers = ctx.disk_service.list_active_transfers().await;
+
+                let mut responses = Vec::new();
+                for transfer in transfers {
+                    let capability = ctx
+                        .disk_service
+                        .get_resume_capability(
+                            transfer.entity_id(),
+                            transfer.disk_type(),
+                            transfer.path(),
+                        )
+                        .await;
+
+                    let resume_capability = match capability {
+                        crate::disk_service::ResumeCapability::Full => {
+                            ResumeCapabilityResponse::Full
+                        }
+                        crate::disk_service::ResumeCapability::Partial => {
+                            ResumeCapabilityResponse::Partial
+                        }
+                        crate::disk_service::ResumeCapability::None => {
+                            ResumeCapabilityResponse::None
+                        }
+                    };
+
+                    let disk_type = match transfer.disk_type() {
+                        crate::disk_service::DiskType::Private => DiskTypeArg::Private,
+                        crate::disk_service::DiskType::Public => DiskTypeArg::Public,
+                        crate::disk_service::DiskType::Shared => DiskTypeArg::Shared,
+                    };
+
+                    responses.push(ResumableTransferResponse {
+                        transfer_id: transfer.transfer_id().to_string(),
+                        entity_id: transfer.entity_id().to_string(),
+                        disk_type,
+                        path: transfer.path().to_string(),
+                        bytes_written: transfer.bytes_written(),
+                        total_size: transfer.total_size(),
+                        chunks_completed: transfer.chunks_completed(),
+                        total_chunks: transfer.total_chunks(),
+                        started_at: transfer.started_at(),
+                        last_updated: transfer.last_updated(),
+                        resume_capability,
+                    });
+                }
+
+                Ok(QueryResponse::ResumableTransfers(responses))
             }
 
             // ================================================================

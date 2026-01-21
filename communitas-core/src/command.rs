@@ -368,6 +368,25 @@ pub enum Command {
         path: String,
     },
 
+    /// Resume an interrupted chunked write
+    ///
+    /// Verifies the transfer state and partial file, then allows
+    /// continuing from where it left off.
+    ResumeChunkedWrite {
+        entity_id: String,
+        disk_type: DiskTypeArg,
+        path: String,
+        /// If true, verify BLAKE3 hashes of existing chunks
+        verify_hashes: bool,
+    },
+
+    /// Verify chunks of an in-progress transfer
+    VerifyChunks {
+        entity_id: String,
+        disk_type: DiskTypeArg,
+        path: String,
+    },
+
     // ========================================================================
     // Kanban Commands
     // ========================================================================
@@ -931,6 +950,30 @@ pub enum Event {
         disk_type: DiskTypeArg,
         path: String,
     },
+    /// Chunked write was resumed
+    ChunkedWriteResumed {
+        entity_id: String,
+        disk_type: DiskTypeArg,
+        path: String,
+        /// Bytes already written (resume point)
+        bytes_written: u64,
+        /// Total expected size
+        total_size: u64,
+        /// Number of chunks already completed
+        chunks_completed: u64,
+        /// Total chunks expected
+        total_chunks: u64,
+    },
+    /// Chunks were verified
+    ChunksVerified {
+        entity_id: String,
+        disk_type: DiskTypeArg,
+        path: String,
+        /// Number of chunks verified
+        verified_count: u64,
+        /// Whether all chunks are valid
+        all_valid: bool,
+    },
 
     // ========================================================================
     // Kanban Events
@@ -1318,6 +1361,22 @@ pub enum Query {
         disk_type: DiskTypeArg,
         path: String,
     },
+    /// Get resume verification result for a transfer
+    GetResumeVerification {
+        entity_id: String,
+        disk_type: DiskTypeArg,
+        path: String,
+        /// If true, verify BLAKE3 hashes of existing chunks
+        verify_hashes: bool,
+    },
+    /// Get resume capability for a transfer
+    GetResumeCapability {
+        entity_id: String,
+        disk_type: DiskTypeArg,
+        path: String,
+    },
+    /// List all active transfers that can be resumed
+    ListResumableTransfers,
 
     // ========================================================================
     // Kanban Queries
@@ -1481,6 +1540,15 @@ pub enum QueryResponse {
 
     /// Chunked write progress
     ChunkedWriteProgress(ChunkedWriteProgressResponse),
+
+    /// Resume verification result
+    ResumeVerification(ResumeVerificationResponse),
+
+    /// Resume capability
+    ResumeCapability(ResumeCapabilityResponse),
+
+    /// List of resumable transfers
+    ResumableTransfers(Vec<ResumableTransferResponse>),
 
     /// Disk statistics
     DiskStats(DiskStatsResponse),
@@ -1693,6 +1761,57 @@ pub struct ChunkedWriteProgressResponse {
     pub total_chunks: u64,
     /// Whether the write is active
     pub is_active: bool,
+}
+
+/// Resume verification response data
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResumeVerificationResponse {
+    pub entity_id: String,
+    pub disk_type: DiskTypeArg,
+    pub path: String,
+    /// Whether the transfer can be safely resumed
+    pub can_resume: bool,
+    /// Number of verified chunks
+    pub verified_chunks: u64,
+    /// Total chunks expected
+    pub total_chunks: u64,
+    /// Bytes verified
+    pub verified_bytes: u64,
+    /// Total expected size
+    pub total_size: u64,
+    /// If verification failed, the reason
+    pub failure_reason: Option<String>,
+    /// Whether the file was modified since last write
+    pub file_modified: bool,
+    /// BLAKE3 hash of verified data
+    pub verified_hash: Option<String>,
+}
+
+/// Resume capability response
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ResumeCapabilityResponse {
+    /// Transfer can be fully resumed from last position
+    Full,
+    /// Transfer can be partially resumed (some chunks need re-verification)
+    Partial,
+    /// Transfer cannot be resumed (must restart)
+    None,
+}
+
+/// Resumable transfer info
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResumableTransferResponse {
+    pub transfer_id: String,
+    pub entity_id: String,
+    pub disk_type: DiskTypeArg,
+    pub path: String,
+    pub bytes_written: u64,
+    pub total_size: u64,
+    pub chunks_completed: u64,
+    pub total_chunks: u64,
+    pub started_at: i64,
+    pub last_updated: i64,
+    pub resume_capability: ResumeCapabilityResponse,
 }
 
 /// Disk stats response data

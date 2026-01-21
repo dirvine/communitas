@@ -17,7 +17,7 @@ use communitas_ui_api::drive::{
     QuotaInfo, UploadProgress, UploadState,
 };
 use thiserror::Error;
-use tokio::io::AsyncReadExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::{RwLock, watch};
 use tracing::{debug, instrument};
 
@@ -1679,6 +1679,535 @@ impl DriveService {
         downloads.get(download_id).cloned()
     }
 
+    /// Start a streaming download operation.
+    ///
+    /// This method downloads the file in chunks to maintain bounded memory usage.
+    /// Data is written to a temp file and renamed on successful completion.
+    ///
+    /// Supports:
+    /// - Progress updates per chunk
+    /// - BLAKE3 verification of final file
+    /// - Cancel support with cleanup
+    #[instrument(skip(self), name = "ui.drive.start_streaming_download", fields(entity_id, ?disk_type, path, destination))]
+    pub async fn start_streaming_download(
+        &self,
+        entity_id: &str,
+        disk_type: DiskType,
+        path: &str,
+        destination: &str,
+    ) -> Result<String, DriveError> {
+        if !self.is_authenticated() {
+            return Err(DriveError::NotAuthenticated);
+        }
+
+        let disk_type_arg = disk_type_to_arg(disk_type);
+
+        // Get file metadata to know total size
+        let metadata_response = self
+            .app
+            .query(Query::GetFileMetadata {
+                entity_id: entity_id.to_string(),
+                disk_type: disk_type_arg,
+                path: path.to_string(),
+            })
+            .await
+            .map_err(|e| DriveError::QueryError(e.to_string()))?;
+
+        let QueryResponse::FileMetadata(metadata) = metadata_response else {
+            return Err(DriveError::QueryError(
+                "unexpected response type from GetFileMetadata query".to_string(),
+            ));
+        };
+
+        let total_bytes = metadata.size_bytes;
+        let expected_hash = metadata.content_hash.clone();
+        let chunk_count = metadata.chunk_count;
+
+        // Generate download ID
+        let download_id = {
+            let mut counter = self.download_counter.write().await;
+            *counter += 1;
+            format!("download-{}", *counter)
+        };
+
+        let file_name = extract_name_from_path(path, "file");
+
+        let progress = DownloadProgress {
+            id: download_id.clone(),
+            file_name,
+            destination_path: destination.to_string(),
+            bytes_downloaded: 0,
+            total_bytes,
+            state: DownloadState::Pending,
+            checksum_verified: false,
+        };
+
+        // Store in active downloads
+        {
+            let mut downloads = self.active_downloads.write().await;
+            downloads.insert(download_id.clone(), progress.clone());
+        }
+        self.update_download_snapshot().await;
+
+        // Clone values for the spawned task
+        let download_id_clone = download_id.clone();
+        let downloads = self.active_downloads.clone();
+        let tx = self.tx.clone();
+        let rx = self.rx.clone();
+        let app = self.app.clone();
+        let entity_id_owned = entity_id.to_string();
+        let path_owned = path.to_string();
+        let destination_owned = destination.to_string();
+
+        tokio::spawn(async move {
+            // Mark as downloading
+            {
+                let mut map = downloads.write().await;
+                if let Some(p) = map.get_mut(&download_id_clone) {
+                    p.state = DownloadState::Downloading;
+                }
+            }
+            Self::broadcast_snapshot(&tx, &rx, None, Some(&downloads)).await;
+
+            // Helper to check cancellation
+            let is_cancelled = || async {
+                let map = downloads.read().await;
+                map.get(&download_id_clone)
+                    .is_some_and(|p| matches!(p.state, DownloadState::Cancelled))
+            };
+
+            if is_cancelled().await {
+                return;
+            }
+
+            // Create temp file for atomic write
+            let temp_path = format!("{}.download.tmp", destination_owned);
+
+            // Open temp file for writing
+            let file_result = tokio::fs::File::create(&temp_path).await;
+            let mut file = match file_result {
+                Ok(f) => f,
+                Err(e) => {
+                    tracing::error!("Failed to create temp file: {:?}", e);
+                    let mut map = downloads.write().await;
+                    if let Some(p) = map.get_mut(&download_id_clone) {
+                        p.state = DownloadState::Failed(format!("Failed to create temp file: {}", e));
+                    }
+                    Self::broadcast_snapshot(&tx, &rx, None, Some(&downloads)).await;
+                    return;
+                }
+            };
+
+            // Download chunks
+            let mut bytes_downloaded: u64 = 0;
+            let mut hasher = blake3::Hasher::new();
+
+            for chunk_index in 0..chunk_count {
+                if is_cancelled().await {
+                    // Cleanup temp file
+                    let _ = tokio::fs::remove_file(&temp_path).await;
+                    return;
+                }
+
+                let offset = chunk_index * DEFAULT_CHUNK_SIZE;
+                let read_result = app
+                    .query(Query::ReadChunk {
+                        entity_id: entity_id_owned.clone(),
+                        disk_type: disk_type_arg,
+                        path: path_owned.clone(),
+                        offset,
+                        chunk_size: Some(DEFAULT_CHUNK_SIZE),
+                    })
+                    .await;
+
+                match read_result {
+                    Ok(QueryResponse::ChunkRead(chunk_data)) => {
+                        // Write chunk to temp file
+                        if let Err(e) = file.write_all(&chunk_data.data).await {
+                            tracing::error!("Failed to write chunk to temp file: {:?}", e);
+                            let _ = tokio::fs::remove_file(&temp_path).await;
+                            let mut map = downloads.write().await;
+                            if let Some(p) = map.get_mut(&download_id_clone) {
+                                p.state = DownloadState::Failed(format!("File write error: {}", e));
+                            }
+                            Self::broadcast_snapshot(&tx, &rx, None, Some(&downloads)).await;
+                            return;
+                        }
+
+                        // Update hash
+                        hasher.update(&chunk_data.data);
+
+                        bytes_downloaded += chunk_data.size;
+
+                        // Update progress
+                        {
+                            let mut map = downloads.write().await;
+                            if let Some(p) = map.get_mut(&download_id_clone) {
+                                p.bytes_downloaded = bytes_downloaded;
+                            }
+                        }
+                        Self::broadcast_snapshot(&tx, &rx, None, Some(&downloads)).await;
+
+                        debug!(
+                            "Downloaded chunk {}/{}, progress: {}/{}",
+                            chunk_index + 1,
+                            chunk_count,
+                            bytes_downloaded,
+                            total_bytes
+                        );
+                    }
+                    Ok(_) => {
+                        tracing::error!("Unexpected response type from ReadChunk");
+                        let _ = tokio::fs::remove_file(&temp_path).await;
+                        let mut map = downloads.write().await;
+                        if let Some(p) = map.get_mut(&download_id_clone) {
+                            p.state = DownloadState::Failed("unexpected response type".to_string());
+                        }
+                        Self::broadcast_snapshot(&tx, &rx, None, Some(&downloads)).await;
+                        return;
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to read chunk {}: {:?}", chunk_index, e);
+                        // Don't cleanup - leave partial download for potential resume
+                        let mut map = downloads.write().await;
+                        if let Some(p) = map.get_mut(&download_id_clone) {
+                            p.state = DownloadState::Failed(format!(
+                                "Chunk read failed at index {}: {}",
+                                chunk_index, e
+                            ));
+                        }
+                        Self::broadcast_snapshot(&tx, &rx, None, Some(&downloads)).await;
+                        return;
+                    }
+                }
+            }
+
+            if is_cancelled().await {
+                let _ = tokio::fs::remove_file(&temp_path).await;
+                return;
+            }
+
+            // Flush file
+            if let Err(e) = file.flush().await {
+                tracing::error!("Failed to flush temp file: {:?}", e);
+                let _ = tokio::fs::remove_file(&temp_path).await;
+                let mut map = downloads.write().await;
+                if let Some(p) = map.get_mut(&download_id_clone) {
+                    p.state = DownloadState::Failed(format!("File flush error: {}", e));
+                }
+                Self::broadcast_snapshot(&tx, &rx, None, Some(&downloads)).await;
+                return;
+            }
+            drop(file);
+
+            // Verify hash
+            {
+                let mut map = downloads.write().await;
+                if let Some(p) = map.get_mut(&download_id_clone) {
+                    p.state = DownloadState::Verifying;
+                }
+            }
+            Self::broadcast_snapshot(&tx, &rx, None, Some(&downloads)).await;
+
+            let final_hash = hasher.finalize().to_string();
+            let checksum_verified = final_hash == expected_hash;
+
+            if !checksum_verified {
+                tracing::warn!(
+                    "Hash mismatch: expected {}, got {}",
+                    expected_hash,
+                    final_hash
+                );
+            }
+
+            // Rename temp file to destination (atomic)
+            if let Err(e) = tokio::fs::rename(&temp_path, &destination_owned).await {
+                tracing::error!("Failed to rename temp file: {:?}", e);
+                let _ = tokio::fs::remove_file(&temp_path).await;
+                let mut map = downloads.write().await;
+                if let Some(p) = map.get_mut(&download_id_clone) {
+                    p.state = DownloadState::Failed(format!("Failed to rename temp file: {}", e));
+                }
+                Self::broadcast_snapshot(&tx, &rx, None, Some(&downloads)).await;
+                return;
+            }
+
+            // Mark as complete
+            {
+                let mut map = downloads.write().await;
+                if let Some(p) = map.get_mut(&download_id_clone) {
+                    p.state = DownloadState::Complete;
+                    p.checksum_verified = checksum_verified;
+                }
+            }
+            Self::broadcast_snapshot(&tx, &rx, None, Some(&downloads)).await;
+        });
+
+        Ok(download_id)
+    }
+
+    /// Resume an interrupted streaming download.
+    ///
+    /// This checks for an existing temp file and resumes from where it left off.
+    /// Returns an error if no partial download exists or the file has changed.
+    #[instrument(skip(self), name = "ui.drive.resume_download", fields(entity_id, ?disk_type, path, destination))]
+    pub async fn resume_download(
+        &self,
+        entity_id: &str,
+        disk_type: DiskType,
+        path: &str,
+        destination: &str,
+    ) -> Result<String, DriveError> {
+        if !self.is_authenticated() {
+            return Err(DriveError::NotAuthenticated);
+        }
+
+        let disk_type_arg = disk_type_to_arg(disk_type);
+        let temp_path = format!("{}.download.tmp", destination);
+
+        // Check if temp file exists
+        let temp_metadata = tokio::fs::metadata(&temp_path).await.map_err(|_| {
+            DriveError::TransferNotResumable("No partial download found".to_string())
+        })?;
+        let bytes_downloaded = temp_metadata.len();
+
+        // Get file metadata to know total size and verify it hasn't changed
+        let metadata_response = self
+            .app
+            .query(Query::GetFileMetadata {
+                entity_id: entity_id.to_string(),
+                disk_type: disk_type_arg,
+                path: path.to_string(),
+            })
+            .await
+            .map_err(|e| DriveError::QueryError(e.to_string()))?;
+
+        let QueryResponse::FileMetadata(metadata) = metadata_response else {
+            return Err(DriveError::QueryError(
+                "unexpected response type from GetFileMetadata query".to_string(),
+            ));
+        };
+
+        let total_bytes = metadata.size_bytes;
+        let expected_hash = metadata.content_hash.clone();
+        let chunk_count = metadata.chunk_count;
+
+        // Calculate which chunk to resume from
+        let chunks_completed = bytes_downloaded / DEFAULT_CHUNK_SIZE;
+
+        if chunks_completed >= chunk_count {
+            // Already complete, just verify and rename
+            return Err(DriveError::TransferNotResumable(
+                "Download already complete, verify and rename manually".to_string(),
+            ));
+        }
+
+        // Generate download ID
+        let download_id = {
+            let mut counter = self.download_counter.write().await;
+            *counter += 1;
+            format!("download-{}", *counter)
+        };
+
+        let file_name = extract_name_from_path(path, "file");
+
+        let progress = DownloadProgress {
+            id: download_id.clone(),
+            file_name,
+            destination_path: destination.to_string(),
+            bytes_downloaded,
+            total_bytes,
+            state: DownloadState::Downloading,
+            checksum_verified: false,
+        };
+
+        // Store in active downloads
+        {
+            let mut downloads = self.active_downloads.write().await;
+            downloads.insert(download_id.clone(), progress.clone());
+        }
+        self.update_download_snapshot().await;
+
+        // Clone values for the spawned task
+        let download_id_clone = download_id.clone();
+        let downloads = self.active_downloads.clone();
+        let tx = self.tx.clone();
+        let rx = self.rx.clone();
+        let app = self.app.clone();
+        let entity_id_owned = entity_id.to_string();
+        let path_owned = path.to_string();
+        let destination_owned = destination.to_string();
+
+        tokio::spawn(async move {
+            // Helper to check cancellation
+            let is_cancelled = || async {
+                let map = downloads.read().await;
+                map.get(&download_id_clone)
+                    .is_some_and(|p| matches!(p.state, DownloadState::Cancelled))
+            };
+
+            // Open temp file for appending
+            let file_result = tokio::fs::OpenOptions::new()
+                .append(true)
+                .open(&temp_path)
+                .await;
+            let mut file = match file_result {
+                Ok(f) => f,
+                Err(e) => {
+                    tracing::error!("Failed to open temp file for resume: {:?}", e);
+                    let mut map = downloads.write().await;
+                    if let Some(p) = map.get_mut(&download_id_clone) {
+                        p.state = DownloadState::Failed(format!("Failed to open temp file: {}", e));
+                    }
+                    Self::broadcast_snapshot(&tx, &rx, None, Some(&downloads)).await;
+                    return;
+                }
+            };
+
+            // We need to re-hash the existing data for verification
+            // Read the temp file to compute hash of already-downloaded data
+            let existing_data = match tokio::fs::read(&temp_path).await {
+                Ok(data) => data,
+                Err(e) => {
+                    tracing::error!("Failed to read temp file for hash: {:?}", e);
+                    let mut map = downloads.write().await;
+                    if let Some(p) = map.get_mut(&download_id_clone) {
+                        p.state = DownloadState::Failed(format!("Failed to read temp file: {}", e));
+                    }
+                    Self::broadcast_snapshot(&tx, &rx, None, Some(&downloads)).await;
+                    return;
+                }
+            };
+
+            let mut hasher = blake3::Hasher::new();
+            hasher.update(&existing_data);
+            let mut bytes_downloaded = existing_data.len() as u64;
+
+            // Continue downloading remaining chunks
+            for chunk_index in chunks_completed..chunk_count {
+                if is_cancelled().await {
+                    return;
+                }
+
+                let offset = chunk_index * DEFAULT_CHUNK_SIZE;
+                let read_result = app
+                    .query(Query::ReadChunk {
+                        entity_id: entity_id_owned.clone(),
+                        disk_type: disk_type_arg,
+                        path: path_owned.clone(),
+                        offset,
+                        chunk_size: Some(DEFAULT_CHUNK_SIZE),
+                    })
+                    .await;
+
+                match read_result {
+                    Ok(QueryResponse::ChunkRead(chunk_data)) => {
+                        if let Err(e) = file.write_all(&chunk_data.data).await {
+                            tracing::error!("Failed to write chunk to temp file: {:?}", e);
+                            let mut map = downloads.write().await;
+                            if let Some(p) = map.get_mut(&download_id_clone) {
+                                p.state = DownloadState::Failed(format!("File write error: {}", e));
+                            }
+                            Self::broadcast_snapshot(&tx, &rx, None, Some(&downloads)).await;
+                            return;
+                        }
+
+                        hasher.update(&chunk_data.data);
+                        bytes_downloaded += chunk_data.size;
+
+                        {
+                            let mut map = downloads.write().await;
+                            if let Some(p) = map.get_mut(&download_id_clone) {
+                                p.bytes_downloaded = bytes_downloaded;
+                            }
+                        }
+                        Self::broadcast_snapshot(&tx, &rx, None, Some(&downloads)).await;
+
+                        debug!(
+                            "Resumed download chunk {}/{}, progress: {}/{}",
+                            chunk_index + 1,
+                            chunk_count,
+                            bytes_downloaded,
+                            total_bytes
+                        );
+                    }
+                    Ok(_) => {
+                        tracing::error!("Unexpected response type from ReadChunk");
+                        let mut map = downloads.write().await;
+                        if let Some(p) = map.get_mut(&download_id_clone) {
+                            p.state = DownloadState::Failed("unexpected response type".to_string());
+                        }
+                        Self::broadcast_snapshot(&tx, &rx, None, Some(&downloads)).await;
+                        return;
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to read chunk {}: {:?}", chunk_index, e);
+                        let mut map = downloads.write().await;
+                        if let Some(p) = map.get_mut(&download_id_clone) {
+                            p.state = DownloadState::Failed(format!(
+                                "Chunk read failed at index {}: {}",
+                                chunk_index, e
+                            ));
+                        }
+                        Self::broadcast_snapshot(&tx, &rx, None, Some(&downloads)).await;
+                        return;
+                    }
+                }
+            }
+
+            if is_cancelled().await {
+                return;
+            }
+
+            // Flush file
+            if let Err(e) = file.flush().await {
+                tracing::error!("Failed to flush temp file: {:?}", e);
+                let mut map = downloads.write().await;
+                if let Some(p) = map.get_mut(&download_id_clone) {
+                    p.state = DownloadState::Failed(format!("File flush error: {}", e));
+                }
+                Self::broadcast_snapshot(&tx, &rx, None, Some(&downloads)).await;
+                return;
+            }
+            drop(file);
+
+            // Verify hash
+            {
+                let mut map = downloads.write().await;
+                if let Some(p) = map.get_mut(&download_id_clone) {
+                    p.state = DownloadState::Verifying;
+                }
+            }
+            Self::broadcast_snapshot(&tx, &rx, None, Some(&downloads)).await;
+
+            let final_hash = hasher.finalize().to_string();
+            let checksum_verified = final_hash == expected_hash;
+
+            // Rename temp file to destination
+            if let Err(e) = tokio::fs::rename(&temp_path, &destination_owned).await {
+                tracing::error!("Failed to rename temp file: {:?}", e);
+                let mut map = downloads.write().await;
+                if let Some(p) = map.get_mut(&download_id_clone) {
+                    p.state = DownloadState::Failed(format!("Failed to rename temp file: {}", e));
+                }
+                Self::broadcast_snapshot(&tx, &rx, None, Some(&downloads)).await;
+                return;
+            }
+
+            // Mark as complete
+            {
+                let mut map = downloads.write().await;
+                if let Some(p) = map.get_mut(&download_id_clone) {
+                    p.state = DownloadState::Complete;
+                    p.checksum_verified = checksum_verified;
+                }
+            }
+            Self::broadcast_snapshot(&tx, &rx, None, Some(&downloads)).await;
+        });
+
+        Ok(download_id)
+    }
+
     // ===== Helper Methods =====
 
     fn is_authenticated(&self) -> bool {
@@ -1968,5 +2497,47 @@ mod tests {
         assert_ne!(DiskType::Private, DiskType::Public);
         assert_ne!(DiskType::Public, DiskType::Shared);
         assert_ne!(DiskType::Private, DiskType::Shared);
+    }
+
+    #[tokio::test]
+    async fn start_streaming_download_requires_auth() {
+        let temp = TempDir::new().unwrap();
+        let service = make_service(&temp).await;
+        let result = service
+            .start_streaming_download("entity-1", DiskType::Private, "/test.txt", "/tmp/test.txt")
+            .await;
+        assert!(matches!(result, Err(DriveError::NotAuthenticated)));
+    }
+
+    #[tokio::test]
+    async fn resume_download_requires_auth() {
+        let temp = TempDir::new().unwrap();
+        let service = make_service(&temp).await;
+        let result = service
+            .resume_download("entity-1", DiskType::Private, "/test.txt", "/tmp/test.txt")
+            .await;
+        assert!(matches!(result, Err(DriveError::NotAuthenticated)));
+    }
+
+    #[tokio::test]
+    async fn start_streaming_upload_requires_auth() {
+        let temp = TempDir::new().unwrap();
+        let service = make_service(&temp).await;
+        let source = temp.path().join("test.txt");
+        tokio::fs::write(&source, b"test content").await.unwrap();
+        let result = service
+            .start_streaming_upload("entity-1", DiskType::Private, "/dest.txt", &source)
+            .await;
+        assert!(matches!(result, Err(DriveError::NotAuthenticated)));
+    }
+
+    #[tokio::test]
+    async fn resume_upload_requires_auth() {
+        let temp = TempDir::new().unwrap();
+        let service = make_service(&temp).await;
+        let result = service
+            .resume_upload("entity-1", DiskType::Private, "/test.txt", vec![1, 2, 3])
+            .await;
+        assert!(matches!(result, Err(DriveError::NotAuthenticated)));
     }
 }

@@ -1,6 +1,6 @@
 # Communitas Roadmap
 
-_Last updated: 2026-01-20_
+_Last updated: 2026-01-21_
 
 ## Current Milestone: M5 Stabilization
 
@@ -19,7 +19,7 @@ _Last updated: 2026-01-20_
 | **5.1** | Packaging & Installers | ☐ Pending |
 | **5.2** | WebView Provisioning | ✅ Complete |
 | **5.3** | Performance QA | ✅ Complete |
-| **5.4** | MCP Validation Suite | ☐ Pending |
+| **5.4** | MCP Validation Suite | ✅ Complete |
 
 ---
 

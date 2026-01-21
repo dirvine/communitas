@@ -649,6 +649,108 @@ mod audit_service {
         assert!(result.is_ok(), "Cleanup should succeed on fresh log");
         assert_eq!(result.unwrap(), 0, "No old logs to clean up");
     }
+
+    /// Test audit event logging and retrieval integration.
+    ///
+    /// This test verifies that audit events logged through AuditService
+    /// can be read back correctly, ensuring end-to-end encryption/decryption
+    /// works properly.
+    #[tokio::test]
+    async fn test_audit_event_log_and_read_integration() {
+        use communitas_core::security::AuditEvent;
+
+        let temp = TempDir::new().unwrap();
+        let audit = AuditService::new(temp.path().join("audit_logs"));
+
+        // Create and log a login event
+        let login_event = AuditEvent::new(
+            AuditEventType::Login,
+            true,
+            "ocean-forest-moon-star",
+            "test-device-fingerprint",
+        );
+        let login_id = login_event.id.clone();
+
+        audit.log_event(login_event).await.unwrap();
+
+        // Create and log a failed login event
+        let failed_event = AuditEvent::new(
+            AuditEventType::FailedLogin,
+            false,
+            "alpha-beta-gamma-delta",
+            "unknown-device",
+        );
+        let failed_id = failed_event.id.clone();
+
+        audit.log_event(failed_event).await.unwrap();
+
+        // Read back recent events
+        let events = audit.read_recent(10, None).await.unwrap();
+
+        // Should have 2 events
+        assert_eq!(events.len(), 2, "Should have logged 2 events");
+
+        // Events are returned newest first
+        assert_eq!(events[0].id, failed_id, "Most recent event should be first");
+        assert_eq!(events[1].id, login_id, "Older event should be second");
+
+        // Verify event contents were preserved
+        assert_eq!(events[0].event_type, AuditEventType::FailedLogin);
+        assert!(!events[0].success);
+        assert_eq!(events[0].identity_redacted, "alpha-beta-••••");
+
+        assert_eq!(events[1].event_type, AuditEventType::Login);
+        assert!(events[1].success);
+        assert_eq!(events[1].identity_redacted, "ocean-forest-••••");
+
+        // Test filtering by event type
+        let failed_only = audit
+            .read_recent(10, Some(vec![AuditEventType::FailedLogin]))
+            .await
+            .unwrap();
+        assert_eq!(
+            failed_only.len(),
+            1,
+            "Filter should return only failed logins"
+        );
+        assert_eq!(failed_only[0].event_type, AuditEventType::FailedLogin);
+    }
+
+    /// Test audit event with metadata is preserved.
+    #[tokio::test]
+    async fn test_audit_event_with_metadata_preserved() {
+        use communitas_core::security::AuditEvent;
+
+        let temp = TempDir::new().unwrap();
+        let audit = AuditService::new(temp.path().join("audit_logs"));
+
+        // Create event with metadata
+        let metadata = serde_json::json!({
+            "ip_address": "192.168.1.100",
+            "user_agent": "Communitas/1.0",
+            "location": "Test Lab"
+        });
+
+        let event = AuditEvent::with_metadata(
+            AuditEventType::DeviceChange,
+            true,
+            "test-words-one-two",
+            "new-device-fp",
+            metadata.clone(),
+        );
+
+        audit.log_event(event).await.unwrap();
+
+        // Read back and verify metadata
+        let events = audit.read_recent(1, None).await.unwrap();
+        assert_eq!(events.len(), 1);
+        assert!(events[0].metadata.is_some(), "Metadata should be preserved");
+
+        let retrieved_metadata = events[0].metadata.as_ref().unwrap();
+        assert_eq!(retrieved_metadata["ip_address"], "192.168.1.100");
+        assert_eq!(retrieved_metadata["user_agent"], "Communitas/1.0");
+        assert_eq!(retrieved_metadata["location"], "Test Lab");
+    }
 }
 
 // =============================================================================

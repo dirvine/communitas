@@ -144,7 +144,7 @@ impl EnhancedSecureStorage {
     pub fn new(user_id: String) -> Self {
         Self {
             storage_manager: SecureStorageManager::new(user_id),
-            input_validator: InputValidator::new(),
+            input_validator: InputValidator::default(),
             rate_limiter: Arc::new(RateLimiter::with_limit(20, Duration::from_secs(60))), // 20 operations per minute
         }
     }

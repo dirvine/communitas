@@ -108,7 +108,7 @@ impl LinkingService {
         Self {
             entity_service,
             contact_store,
-            validator: InputValidator::new(),
+            validator: InputValidator::default(),
         }
     }
 

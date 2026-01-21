@@ -645,4 +645,69 @@ mod tests {
         let result = AuditLog::new(temp_dir.path().to_path_buf(), key).await;
         assert!(result.is_err());
     }
+
+    #[tokio::test]
+    async fn test_decryption_with_wrong_key_fails() {
+        let temp_dir = TempDir::new().unwrap();
+
+        // Create log with first key and write an event
+        let key1 = Zeroizing::new(vec![0u8; 32]);
+        let log1 = AuditLog::new(temp_dir.path().to_path_buf(), key1)
+            .await
+            .unwrap();
+
+        let event = AuditEvent::new(
+            AuditEventType::Login,
+            true,
+            "ocean-forest-moon-star",
+            "device123",
+        );
+        log1.log(event).await.unwrap();
+
+        // Create log with different key pointing to same directory
+        let key2 = Zeroizing::new(vec![1u8; 32]); // Different key
+        let log2 = AuditLog::new(temp_dir.path().to_path_buf(), key2)
+            .await
+            .unwrap();
+
+        // Attempt to read events - should return empty due to decryption failures
+        // The read_recent method logs warnings for failed decryptions and continues
+        let events = log2.read_recent(10, None).await.unwrap();
+
+        // Should be empty because decryption with wrong key fails
+        assert!(
+            events.is_empty(),
+            "Events should be empty when using wrong key"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_decrypt_line_with_wrong_key_returns_error() {
+        let temp_dir = TempDir::new().unwrap();
+
+        // Create log and encrypt a line
+        let key1 = Zeroizing::new(vec![0u8; 32]);
+        let log1 = AuditLog::new(temp_dir.path().to_path_buf(), key1)
+            .await
+            .unwrap();
+
+        let encrypted = log1.encrypt_line("secret message").await.unwrap();
+
+        // Create log with different key
+        let key2 = Zeroizing::new(vec![1u8; 32]);
+        let log2 = AuditLog::new(temp_dir.path().to_path_buf(), key2)
+            .await
+            .unwrap();
+
+        // Decryption should fail with wrong key
+        let result = log2.decrypt_line(&encrypted);
+        assert!(result.is_err(), "Decryption should fail with wrong key");
+
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("Decryption failed"),
+            "Error should indicate decryption failure: {}",
+            err_msg
+        );
+    }
 }

@@ -22,6 +22,8 @@ pub enum ValidationError {
     MaliciousContent,
     #[error("Invalid format")]
     InvalidFormat,
+    #[error("Validator configuration error: {0}")]
+    Configuration(String),
 }
 
 /// Maximum allowed input sizes to prevent DoS attacks
@@ -46,24 +48,48 @@ pub struct InputValidator {
 }
 
 impl Default for InputValidator {
+    /// Creates a default InputValidator with all regex patterns compiled.
+    ///
+    /// # Panics
+    /// Panics if the hardcoded regex patterns fail to compile. This should never
+    /// happen as the patterns are constant strings that are tested. If this panics,
+    /// it indicates a programmer error that should be caught during development.
+    #[allow(clippy::expect_used)] // Infallible: constant regex patterns tested at compile time
     fn default() -> Self {
-        Self::new()
+        Self::new().expect("InputValidator regex patterns are invalid - this is a bug")
     }
 }
 
 impl InputValidator {
-    /// Create a new input validator with compiled regex patterns
-    pub fn new() -> Self {
-        Self {
-            four_words_pattern: Regex::new(r"^[a-z]+-[a-z]+-[a-z]+-[a-z]+$").ok(),
-            username_pattern: Regex::new(r"^[a-zA-Z0-9_-]{3,64}$").ok(),
-            sql_injection_pattern: Regex::new(
-                r"(?i)\b(select|insert|update|delete|drop|create|alter|exec|union)\b",
-            )
-            .ok(),
-            script_injection_pattern: Regex::new(r"(?i)(<script|javascript:|vbscript:|on\w+\s*=)")
-                .ok(),
-        }
+    /// Create a new input validator with compiled regex patterns.
+    ///
+    /// # Errors
+    /// Returns `ValidationError::Configuration` if any regex pattern fails to compile.
+    /// This should never happen with the hardcoded patterns, but is handled for safety.
+    pub fn new() -> Result<Self, ValidationError> {
+        Ok(Self {
+            four_words_pattern: Some(
+                Regex::new(r"^[a-z]+-[a-z]+-[a-z]+-[a-z]+$").map_err(|e| {
+                    ValidationError::Configuration(format!("four_words_pattern: {e}"))
+                })?,
+            ),
+            username_pattern: Some(
+                Regex::new(r"^[a-zA-Z0-9_-]{3,64}$").map_err(|e| {
+                    ValidationError::Configuration(format!("username_pattern: {e}"))
+                })?,
+            ),
+            sql_injection_pattern: Some(
+                Regex::new(r"(?i)\b(select|insert|update|delete|drop|create|alter|exec|union)\b")
+                    .map_err(|e| {
+                    ValidationError::Configuration(format!("sql_injection_pattern: {e}"))
+                })?,
+            ),
+            script_injection_pattern: Some(
+                Regex::new(r"(?i)(<script|javascript:|vbscript:|on\w+\s*=)").map_err(|e| {
+                    ValidationError::Configuration(format!("script_injection_pattern: {e}"))
+                })?,
+            ),
+        })
     }
 
     /// Validate and sanitize a four-word network identity using dictionary validation
@@ -495,11 +521,6 @@ pub struct ValidatedPath {
     pub path: String,
 }
 
-// Regex constants for validator derive macro
-lazy_static::lazy_static! {
-    static ref USERNAME_REGEX: Option<Regex> = Regex::new(r"^[a-zA-Z0-9_-]{3,64}$").ok();
-}
-
 /// Result type for validation operations
 pub type ValidationResult<T> = Result<T, ValidationError>;
 
@@ -535,7 +556,7 @@ mod tests {
 
     #[test]
     fn test_four_words_validation() {
-        let validator = InputValidator::new();
+        let validator = InputValidator::new().unwrap();
 
         // Valid four-words addresses
         assert!(
@@ -567,7 +588,7 @@ mod tests {
 
     #[test]
     fn test_username_validation() {
-        let validator = InputValidator::new();
+        let validator = InputValidator::new().unwrap();
 
         // Valid usernames
         assert!(validator.validate_username("user123").is_ok());
@@ -583,7 +604,7 @@ mod tests {
 
     #[test]
     fn test_path_validation() {
-        let validator = InputValidator::new();
+        let validator = InputValidator::new().unwrap();
 
         // Valid paths
         assert!(validator.validate_file_path("documents/test.md").is_ok());
@@ -602,7 +623,7 @@ mod tests {
 
     #[test]
     fn test_malicious_content_detection() {
-        let validator = InputValidator::new();
+        let validator = InputValidator::new().unwrap();
 
         // SQL injection attempts
         assert!(
@@ -638,7 +659,7 @@ mod tests {
 
     #[test]
     fn test_message_length_limits() {
-        let validator = InputValidator::new();
+        let validator = InputValidator::new().unwrap();
 
         let long_message = "a".repeat(MAX_MESSAGE_LENGTH + 1);
         assert!(validator.validate_message_content(&long_message).is_err());
@@ -649,7 +670,7 @@ mod tests {
 
     #[test]
     fn test_json_validation() {
-        let validator = InputValidator::new();
+        let validator = InputValidator::new().unwrap();
 
         // Valid JSON
         let valid_json = r#"{"name": "test", "value": 123}"#;
@@ -674,7 +695,7 @@ mod tests {
 
     #[test]
     fn test_sanitize_string() {
-        let validator = InputValidator::new();
+        let validator = InputValidator::new().unwrap();
 
         // Normal string
         let result = validator.sanitize_string("Hello World", 100);
@@ -704,7 +725,7 @@ mod tests {
 
     #[test]
     fn test_title_validation() {
-        let validator = InputValidator::new();
+        let validator = InputValidator::new().unwrap();
 
         // Valid title
         let result = validator.validate_title("My Project Title");
@@ -726,7 +747,7 @@ mod tests {
 
     #[test]
     fn test_description_validation() {
-        let validator = InputValidator::new();
+        let validator = InputValidator::new().unwrap();
 
         // Valid description
         let result = validator.validate_description("This is a project description");
@@ -749,7 +770,7 @@ mod tests {
 
     #[test]
     fn test_content_validation() {
-        let validator = InputValidator::new();
+        let validator = InputValidator::new().unwrap();
 
         // Valid content
         let result = validator.validate_content("This is valid content");
@@ -772,7 +793,7 @@ mod tests {
 
     #[test]
     fn test_tags_validation() {
-        let validator = InputValidator::new();
+        let validator = InputValidator::new().unwrap();
 
         // Valid tags
         let tags = vec![
@@ -805,7 +826,7 @@ mod tests {
 
     #[test]
     fn test_file_name_validation() {
-        let validator = InputValidator::new();
+        let validator = InputValidator::new().unwrap();
 
         // Valid file names
         assert!(validator.validate_file_name("document.pdf").is_ok());
@@ -831,7 +852,7 @@ mod tests {
 
     #[test]
     fn test_content_type_validation() {
-        let validator = InputValidator::new();
+        let validator = InputValidator::new().unwrap();
 
         // Valid content types
         assert!(validator.validate_content_type("application/pdf").is_ok());
@@ -855,7 +876,7 @@ mod tests {
 
     #[test]
     fn test_uuid_validation() {
-        let validator = InputValidator::new();
+        let validator = InputValidator::new().unwrap();
 
         // Valid UUID
         let valid_uuid = "550e8400-e29b-41d4-a716-446655440000";

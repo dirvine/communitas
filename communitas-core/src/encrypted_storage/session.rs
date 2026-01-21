@@ -2,9 +2,19 @@
 //!
 //! Handles authenticated sessions with automatic expiration,
 //! allowing seamless switching between multiple accounts.
+//!
+//! Session data is encrypted at rest using ChaCha20-Poly1305 with a
+//! device-derived key for security.
 
+use anyhow::{Context, Result};
+use chacha20poly1305::{
+    ChaCha20Poly1305, Key, Nonce,
+    aead::{Aead, AeadCore, KeyInit},
+};
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use tracing::{debug, info, warn};
+use zeroize::Zeroizing;
 
 /// Represents an authenticated session
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -204,18 +214,65 @@ impl SessionManager {
 }
 
 /// Session storage for persistence across app restarts
+///
+/// Sessions are encrypted at rest using ChaCha20-Poly1305 with a
+/// device-derived encryption key.
 pub struct SessionStorage {
+    /// Path to encrypted session file
     storage_path: std::path::PathBuf,
+
+    /// Path to legacy plaintext file (for migration)
+    legacy_path: std::path::PathBuf,
+
+    /// Encryption key (32 bytes, derived from device fingerprint + vault key)
+    encryption_key: Zeroizing<Vec<u8>>,
 }
 
 impl SessionStorage {
-    pub fn new(base_path: &std::path::Path) -> Self {
+    /// Create session storage with encryption
+    ///
+    /// # Arguments
+    /// * `base_path` - Directory to store sessions
+    /// * `encryption_key` - 32-byte key derived from device fingerprint
+    ///
+    /// # Errors
+    /// Returns error if encryption key is invalid length
+    pub fn new(base_path: &std::path::Path, encryption_key: Zeroizing<Vec<u8>>) -> Result<Self> {
+        if encryption_key.len() != 32 {
+            return Err(anyhow::anyhow!(
+                "Invalid encryption key length: expected 32, got {}",
+                encryption_key.len()
+            ));
+        }
+
         let storage_path = base_path.join("sessions.enc");
-        Self { storage_path }
+        let legacy_path = base_path.join("sessions.json");
+
+        Ok(Self {
+            storage_path,
+            legacy_path,
+            encryption_key,
+        })
+    }
+
+    /// Create session storage without encryption (for testing/development only)
+    ///
+    /// Uses a zeroed key which provides no real security.
+    /// DO NOT use in production.
+    #[cfg(test)]
+    pub fn new_unencrypted(base_path: &std::path::Path) -> Self {
+        Self {
+            storage_path: base_path.join("sessions.enc"),
+            legacy_path: base_path.join("sessions.json"),
+            encryption_key: Zeroizing::new(vec![0u8; 32]),
+        }
     }
 
     /// Save sessions to encrypted storage
-    pub async fn save_sessions(&self, sessions: &[Session]) -> anyhow::Result<()> {
+    ///
+    /// Sessions are serialized to JSON, then encrypted with ChaCha20-Poly1305.
+    /// A new random nonce is generated for each save operation.
+    pub async fn save_sessions(&self, sessions: &[Session]) -> Result<()> {
         // Filter out expired sessions
         let active_sessions: Vec<_> = sessions
             .iter()
@@ -223,35 +280,157 @@ impl SessionStorage {
             .cloned()
             .collect();
 
-        let json = serde_json::to_vec(&active_sessions)?;
+        // Serialize to JSON
+        let json = serde_json::to_vec(&active_sessions).context("Failed to serialize sessions")?;
 
-        // In production, this should be encrypted with a device key
-        tokio::fs::write(&self.storage_path, json).await?;
+        // Encrypt with ChaCha20-Poly1305
+        let encrypted = self.encrypt(&json)?;
 
+        // Ensure parent directory exists
+        if let Some(parent) = self.storage_path.parent() {
+            tokio::fs::create_dir_all(parent)
+                .await
+                .context("Failed to create session storage directory")?;
+        }
+
+        // Write encrypted data
+        tokio::fs::write(&self.storage_path, encrypted)
+            .await
+            .context("Failed to write encrypted sessions")?;
+
+        debug!(
+            "Saved {} sessions to encrypted storage",
+            active_sessions.len()
+        );
         Ok(())
     }
 
     /// Load sessions from encrypted storage
-    pub async fn load_sessions(&self) -> anyhow::Result<Vec<Session>> {
+    ///
+    /// Handles migration from legacy plaintext sessions.json if present.
+    pub async fn load_sessions(&self) -> Result<Vec<Session>> {
+        // First, check for and migrate legacy plaintext sessions
+        if self.legacy_path.exists() && !self.storage_path.exists() {
+            info!("Migrating plaintext sessions to encrypted storage");
+            if let Err(e) = self.migrate_legacy_sessions().await {
+                warn!("Failed to migrate legacy sessions: {}. Starting fresh.", e);
+            }
+        }
+
+        // Load encrypted sessions
         if !self.storage_path.exists() {
             return Ok(Vec::new());
         }
 
-        let data = tokio::fs::read(&self.storage_path).await?;
+        let encrypted_data = tokio::fs::read(&self.storage_path)
+            .await
+            .context("Failed to read encrypted sessions")?;
 
-        // In production, decrypt with device key
-        let sessions: Vec<Session> = serde_json::from_slice(&data)?;
+        // Decrypt
+        let json = self
+            .decrypt(&encrypted_data)
+            .context("Failed to decrypt sessions")?;
+
+        // Deserialize
+        let sessions: Vec<Session> =
+            serde_json::from_slice(&json).context("Failed to parse session data")?;
 
         // Filter out expired sessions
-        Ok(sessions.into_iter().filter(|s| !s.is_expired()).collect())
+        let active: Vec<_> = sessions.into_iter().filter(|s| !s.is_expired()).collect();
+
+        debug!(
+            "Loaded {} active sessions from encrypted storage",
+            active.len()
+        );
+        Ok(active)
     }
 
     /// Clear all stored sessions
-    pub async fn clear(&self) -> anyhow::Result<()> {
+    pub async fn clear(&self) -> Result<()> {
+        // Remove encrypted file
         if self.storage_path.exists() {
-            tokio::fs::remove_file(&self.storage_path).await?;
+            tokio::fs::remove_file(&self.storage_path)
+                .await
+                .context("Failed to remove encrypted sessions")?;
         }
+
+        // Also remove any legacy file
+        if self.legacy_path.exists() {
+            tokio::fs::remove_file(&self.legacy_path)
+                .await
+                .context("Failed to remove legacy sessions")?;
+        }
+
+        info!("Cleared all stored sessions");
         Ok(())
+    }
+
+    /// Migrate legacy plaintext sessions to encrypted storage
+    async fn migrate_legacy_sessions(&self) -> Result<()> {
+        // Read plaintext file
+        let data = tokio::fs::read(&self.legacy_path)
+            .await
+            .context("Failed to read legacy sessions")?;
+
+        // Parse sessions
+        let sessions: Vec<Session> =
+            serde_json::from_slice(&data).context("Failed to parse legacy sessions")?;
+
+        // Save using encryption
+        self.save_sessions(&sessions).await?;
+
+        // Remove legacy file after successful migration
+        tokio::fs::remove_file(&self.legacy_path)
+            .await
+            .context("Failed to remove legacy session file after migration")?;
+
+        info!(
+            "Successfully migrated {} sessions from plaintext to encrypted storage",
+            sessions.len()
+        );
+        Ok(())
+    }
+
+    /// Encrypt data with ChaCha20-Poly1305
+    ///
+    /// Output format: nonce (12 bytes) || ciphertext
+    fn encrypt(&self, plaintext: &[u8]) -> Result<Vec<u8>> {
+        let key = Key::from_slice(&self.encryption_key);
+        let cipher = ChaCha20Poly1305::new(key);
+
+        // Generate random nonce
+        let nonce = ChaCha20Poly1305::generate_nonce(&mut rand::thread_rng());
+
+        // Encrypt
+        let ciphertext = cipher
+            .encrypt(&nonce, plaintext)
+            .map_err(|e| anyhow::anyhow!("Session encryption failed: {:?}", e))?;
+
+        // Prepend nonce to ciphertext
+        let mut result = nonce.to_vec();
+        result.extend(ciphertext);
+
+        Ok(result)
+    }
+
+    /// Decrypt data with ChaCha20-Poly1305
+    ///
+    /// Input format: nonce (12 bytes) || ciphertext
+    fn decrypt(&self, encrypted: &[u8]) -> Result<Vec<u8>> {
+        if encrypted.len() < 12 {
+            return Err(anyhow::anyhow!("Encrypted data too short: missing nonce"));
+        }
+
+        let (nonce_bytes, ciphertext) = encrypted.split_at(12);
+        let nonce = Nonce::from_slice(nonce_bytes);
+
+        let key = Key::from_slice(&self.encryption_key);
+        let cipher = ChaCha20Poly1305::new(key);
+
+        // Decrypt
+        cipher
+            .decrypt(nonce, ciphertext)
+            .map_err(|e| anyhow::anyhow!("Session decryption failed: {:?}", e))
     }
 }
 
@@ -334,7 +513,7 @@ mod tests {
         use tempfile::TempDir;
 
         let temp_dir = TempDir::new().unwrap();
-        let storage = SessionStorage::new(temp_dir.path());
+        let storage = SessionStorage::new_unencrypted(temp_dir.path());
 
         let sessions = vec![
             Session::new("user1".to_string(), "User 1".to_string(), 300),
@@ -352,5 +531,111 @@ mod tests {
         storage.clear().await.unwrap();
         let after_clear = storage.load_sessions().await.unwrap();
         assert_eq!(after_clear.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_session_storage_encryption() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let key = Zeroizing::new(vec![42u8; 32]); // Test key
+        let storage = SessionStorage::new(temp_dir.path(), key).unwrap();
+
+        let sessions = vec![Session::new(
+            "secure-user".to_string(),
+            "Secure User".to_string(),
+            300,
+        )];
+
+        // Save sessions
+        storage.save_sessions(&sessions).await.unwrap();
+
+        // Verify file is encrypted (not readable as plain JSON)
+        let raw_data = std::fs::read(temp_dir.path().join("sessions.enc")).unwrap();
+        let parse_result: Result<Vec<Session>, _> = serde_json::from_slice(&raw_data);
+        assert!(
+            parse_result.is_err(),
+            "Encrypted data should not be valid JSON"
+        );
+
+        // Load sessions (should decrypt successfully)
+        let loaded = storage.load_sessions().await.unwrap();
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].four_words, "secure-user");
+    }
+
+    #[tokio::test]
+    async fn test_session_storage_invalid_key_length() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let short_key = Zeroizing::new(vec![0u8; 16]); // Too short
+
+        let result = SessionStorage::new(temp_dir.path(), short_key);
+        assert!(result.is_err());
+
+        let err_msg = result.err().map(|e| e.to_string()).unwrap_or_default();
+        assert!(
+            err_msg.contains("Invalid encryption key length"),
+            "Error: {}",
+            err_msg
+        );
+    }
+
+    #[tokio::test]
+    async fn test_session_storage_migration() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+
+        // Create a legacy plaintext sessions.json
+        let legacy_sessions = vec![Session::new(
+            "legacy-user".to_string(),
+            "Legacy User".to_string(),
+            300,
+        )];
+        let legacy_json = serde_json::to_vec(&legacy_sessions).unwrap();
+        std::fs::write(temp_dir.path().join("sessions.json"), legacy_json).unwrap();
+
+        // Create encrypted storage and load (should trigger migration)
+        let key = Zeroizing::new(vec![1u8; 32]);
+        let storage = SessionStorage::new(temp_dir.path(), key).unwrap();
+
+        let loaded = storage.load_sessions().await.unwrap();
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].four_words, "legacy-user");
+
+        // Verify legacy file was removed
+        assert!(!temp_dir.path().join("sessions.json").exists());
+
+        // Verify encrypted file was created
+        assert!(temp_dir.path().join("sessions.enc").exists());
+    }
+
+    #[tokio::test]
+    async fn test_session_storage_wrong_key_fails() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+
+        // Save with one key
+        let key1 = Zeroizing::new(vec![1u8; 32]);
+        let storage1 = SessionStorage::new(temp_dir.path(), key1).unwrap();
+        storage1
+            .save_sessions(&[Session::new(
+                "test-user".to_string(),
+                "Test".to_string(),
+                300,
+            )])
+            .await
+            .unwrap();
+
+        // Try to load with different key
+        let key2 = Zeroizing::new(vec![2u8; 32]);
+        let storage2 = SessionStorage::new(temp_dir.path(), key2).unwrap();
+        let result = storage2.load_sessions().await;
+
+        // Should fail decryption
+        assert!(result.is_err());
     }
 }

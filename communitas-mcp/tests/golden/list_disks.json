@@ -1,0 +1,21 @@
+{
+  "_description": "Golden data for list_disks response structure",
+  "structure": {
+    "content": [
+      {
+        "type": "string",
+        "text": "string"
+      }
+    ],
+    "isError": "boolean"
+  },
+  "response_structure": {
+    "disks": "array"
+  },
+  "disk_item_structure": {
+    "disk_id": "string|optional",
+    "name": "string|optional",
+    "disk_type": "string|optional",
+    "entity_id": "string|optional"
+  }
+}

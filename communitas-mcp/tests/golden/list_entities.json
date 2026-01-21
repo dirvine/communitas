@@ -1,0 +1,21 @@
+{
+  "_description": "Golden data for list_entities response structure",
+  "structure": {
+    "content": [
+      {
+        "type": "string",
+        "text": "string"
+      }
+    ],
+    "isError": "boolean"
+  },
+  "response_structure": {
+    "entities": "array"
+  },
+  "entity_item_structure": {
+    "entity_id": "string|optional",
+    "name": "string|optional",
+    "entity_type": "string|optional",
+    "description": "string|optional"
+  }
+}

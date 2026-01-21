@@ -1,0 +1,22 @@
+{
+  "_description": "Golden data for list_threads response structure",
+  "structure": {
+    "content": [
+      {
+        "type": "string",
+        "text": "string"
+      }
+    ],
+    "isError": "boolean"
+  },
+  "response_structure": {
+    "threads": "array"
+  },
+  "thread_item_structure": {
+    "thread_id": "string",
+    "name": "string|optional",
+    "entity_id": "string|optional",
+    "created_at": "string|optional",
+    "message_count": "number|optional"
+  }
+}

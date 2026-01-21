@@ -1,0 +1,17 @@
+{
+  "_description": "Golden data for create_kanban_board response structure",
+  "structure": {
+    "content": [
+      {
+        "type": "string",
+        "text": "string"
+      }
+    ],
+    "isError": "boolean"
+  },
+  "response_structure": {
+    "board_id": "string",
+    "name": "string",
+    "created_at": "string|optional"
+  }
+}

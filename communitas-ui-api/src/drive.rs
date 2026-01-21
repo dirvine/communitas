@@ -586,6 +586,326 @@ pub struct ShareLinkStats {
     pub unique_accessors: u64,
 }
 
+// === Offline Staging Types ===
+
+/// State of a staged upload in the offline queue.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum StagedUploadState {
+    /// Queued and waiting for network connectivity.
+    Pending,
+    /// Upload in progress (network restored).
+    Uploading,
+    /// Upload paused due to conflict.
+    Conflicted,
+    /// Upload completed successfully.
+    Completed,
+    /// Upload failed after retries exhausted.
+    Failed,
+}
+
+impl StagedUploadState {
+    /// Returns true if the staged upload is in a terminal state.
+    pub fn is_terminal(&self) -> bool {
+        matches!(self, Self::Completed | Self::Failed)
+    }
+
+    /// Returns true if the staged upload requires user action.
+    pub fn requires_action(&self) -> bool {
+        matches!(self, Self::Conflicted | Self::Failed)
+    }
+
+    /// Returns a human-readable label for the state.
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Pending => "Pending",
+            Self::Uploading => "Uploading",
+            Self::Conflicted => "Conflict",
+            Self::Completed => "Completed",
+            Self::Failed => "Failed",
+        }
+    }
+}
+
+/// A file staged for upload while offline.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StagedUpload {
+    /// Unique identifier for this staged upload.
+    pub id: String,
+    /// Entity ID that owns the destination disk.
+    pub entity_id: String,
+    /// Destination disk type.
+    pub disk_type: DiskType,
+    /// Destination path within the disk.
+    pub destination_path: String,
+    /// Local file path (source).
+    pub local_path: String,
+    /// File name for display.
+    pub file_name: String,
+    /// File size in bytes.
+    pub size_bytes: u64,
+    /// MIME type of the file.
+    pub mime_type: Option<String>,
+    /// BLAKE3 checksum of the local file (at staging time).
+    pub local_checksum: String,
+    /// Current state of the staged upload.
+    pub state: StagedUploadState,
+    /// Number of upload retry attempts.
+    pub retry_count: u32,
+    /// Maximum retry attempts before marking as failed.
+    pub max_retries: u32,
+    /// Error message if state is Failed.
+    pub error: Option<String>,
+    /// Unix timestamp (ms) when the file was staged.
+    pub staged_at: i64,
+    /// Unix timestamp (ms) of last state update.
+    pub updated_at: i64,
+    /// Associated conflict (if state is Conflicted).
+    pub conflict: Option<StagingConflict>,
+}
+
+impl StagedUpload {
+    /// Returns true if the upload can be retried.
+    pub fn can_retry(&self) -> bool {
+        matches!(self.state, StagedUploadState::Failed) && self.retry_count < self.max_retries
+    }
+
+    /// Returns remaining retry attempts.
+    pub fn retries_remaining(&self) -> u32 {
+        self.max_retries.saturating_sub(self.retry_count)
+    }
+
+    /// Returns the age of this staged upload in milliseconds.
+    /// Returns 0 if `now_ms` is before `staged_at`.
+    pub fn age_ms(&self, now_ms: i64) -> i64 {
+        (now_ms - self.staged_at).max(0)
+    }
+}
+
+/// Type of conflict detected during staging sync.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum ConflictType {
+    /// File already exists at destination with different content.
+    FileExists,
+    /// Local file was modified after staging.
+    LocalModified,
+    /// Destination file was modified since staging.
+    RemoteModified,
+    /// Both local and remote were modified.
+    BothModified,
+    /// Destination path is now occupied by a directory.
+    PathTypeChanged,
+    /// Insufficient quota for the upload.
+    QuotaExceeded,
+}
+
+impl ConflictType {
+    /// Returns a human-readable description of the conflict.
+    pub fn description(&self) -> &'static str {
+        match self {
+            Self::FileExists => "A file with this name already exists",
+            Self::LocalModified => "The local file was modified after staging",
+            Self::RemoteModified => "The destination file was modified",
+            Self::BothModified => "Both local and remote files were modified",
+            Self::PathTypeChanged => "The destination path is now a directory",
+            Self::QuotaExceeded => "Insufficient storage quota",
+        }
+    }
+}
+
+/// Conflict detected during staging sync.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StagingConflict {
+    /// Type of conflict.
+    pub conflict_type: ConflictType,
+    /// Staged file checksum (at staging time).
+    pub staged_checksum: String,
+    /// Current local file checksum (if different).
+    pub local_checksum: Option<String>,
+    /// Remote file checksum (if exists).
+    pub remote_checksum: Option<String>,
+    /// Remote file size (if exists).
+    pub remote_size_bytes: Option<u64>,
+    /// Unix timestamp (ms) when conflict was detected.
+    pub detected_at: i64,
+}
+
+impl StagingConflict {
+    /// Returns true if the conflict can be auto-resolved.
+    pub fn can_auto_resolve(&self) -> bool {
+        // Only quota conflicts require external action
+        !matches!(self.conflict_type, ConflictType::QuotaExceeded)
+    }
+}
+
+/// Resolution action for a staging conflict.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum ConflictResolution {
+    /// Keep the local version (overwrite remote).
+    KeepLocal,
+    /// Keep the remote version (discard staged).
+    KeepRemote,
+    /// Keep both (rename staged file).
+    KeepBoth,
+    /// Skip this file (remove from staging).
+    Skip,
+    /// Retry the upload (for transient errors).
+    Retry,
+}
+
+impl ConflictResolution {
+    /// Returns a human-readable label for the resolution.
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::KeepLocal => "Upload my version",
+            Self::KeepRemote => "Keep existing",
+            Self::KeepBoth => "Keep both",
+            Self::Skip => "Skip",
+            Self::Retry => "Retry",
+        }
+    }
+
+    /// Returns a description of what this resolution does.
+    pub fn description(&self) -> &'static str {
+        match self {
+            Self::KeepLocal => "Replace the remote file with your local version",
+            Self::KeepRemote => "Discard your local changes and keep the remote version",
+            Self::KeepBoth => "Upload with a new name to keep both versions",
+            Self::Skip => "Remove this file from the upload queue",
+            Self::Retry => "Try uploading again",
+        }
+    }
+}
+
+/// Status summary of the offline staging queue.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StagingQueueStatus {
+    /// Total number of files in the staging queue.
+    pub total_files: u32,
+    /// Number of files pending upload.
+    pub pending_files: u32,
+    /// Number of files currently uploading.
+    pub uploading_files: u32,
+    /// Number of files with conflicts.
+    pub conflicted_files: u32,
+    /// Number of files that failed.
+    pub failed_files: u32,
+    /// Number of files completed.
+    pub completed_files: u32,
+    /// Total bytes pending upload.
+    pub total_bytes: u64,
+    /// Bytes uploaded so far.
+    pub bytes_uploaded: u64,
+    /// Whether the queue is currently syncing.
+    pub is_syncing: bool,
+    /// Whether network is available.
+    pub network_available: bool,
+    /// Unix timestamp (ms) of last sync attempt.
+    pub last_sync_at: Option<i64>,
+    /// Error from last sync attempt (if failed).
+    pub last_sync_error: Option<String>,
+}
+
+impl StagingQueueStatus {
+    /// Returns true if there are files requiring user action.
+    pub fn has_action_required(&self) -> bool {
+        self.conflicted_files > 0 || self.failed_files > 0
+    }
+
+    /// Returns true if the queue is empty (all terminal states).
+    pub fn is_empty(&self) -> bool {
+        self.pending_files == 0 && self.uploading_files == 0 && self.conflicted_files == 0
+    }
+
+    /// Returns true if all uploads completed successfully.
+    pub fn all_completed(&self) -> bool {
+        self.completed_files == self.total_files && self.total_files > 0
+    }
+
+    /// Returns upload progress as a percentage (0-100).
+    pub fn percent_complete(&self) -> u32 {
+        if self.total_bytes == 0 {
+            if self.total_files == 0 {
+                100
+            } else {
+                0
+            }
+        } else {
+            ((self.bytes_uploaded as f64 / self.total_bytes as f64) * 100.0) as u32
+        }
+    }
+
+    /// Returns the number of actionable items (pending + uploading).
+    pub fn active_count(&self) -> u32 {
+        self.pending_files + self.uploading_files
+    }
+}
+
+/// Event emitted when staging queue state changes.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum StagingEvent {
+    /// A file was added to the staging queue.
+    FileStaged {
+        /// ID of the staged upload.
+        upload_id: String,
+        /// File name.
+        file_name: String,
+    },
+    /// Upload started for a staged file.
+    UploadStarted {
+        /// ID of the staged upload.
+        upload_id: String,
+    },
+    /// Upload progress update.
+    UploadProgress {
+        /// ID of the staged upload.
+        upload_id: String,
+        /// Bytes uploaded so far.
+        bytes_uploaded: u64,
+        /// Total bytes.
+        total_bytes: u64,
+    },
+    /// Upload completed successfully.
+    UploadCompleted {
+        /// ID of the staged upload.
+        upload_id: String,
+        /// Final destination path.
+        destination_path: String,
+    },
+    /// Conflict detected during upload.
+    ConflictDetected {
+        /// ID of the staged upload.
+        upload_id: String,
+        /// Type of conflict.
+        conflict_type: ConflictType,
+    },
+    /// Upload failed.
+    UploadFailed {
+        /// ID of the staged upload.
+        upload_id: String,
+        /// Error message.
+        error: String,
+    },
+    /// Staging queue cleared.
+    QueueCleared {
+        /// Number of files removed.
+        files_removed: u32,
+    },
+    /// Network connectivity changed.
+    NetworkStatusChanged {
+        /// Whether network is now available.
+        available: bool,
+    },
+    /// Sync started.
+    SyncStarted,
+    /// Sync completed.
+    SyncCompleted {
+        /// Number of files uploaded.
+        files_uploaded: u32,
+        /// Number of files failed.
+        files_failed: u32,
+    },
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1091,5 +1411,354 @@ mod tests {
         assert_eq!(stats.failed_password_attempts, 5);
         assert_eq!(stats.last_accessed_at, Some(1234567890));
         assert_eq!(stats.unique_accessors, 45);
+    }
+
+    // === Staging Queue Tests ===
+
+    #[test]
+    fn staged_upload_state_is_terminal() {
+        assert!(!StagedUploadState::Pending.is_terminal());
+        assert!(!StagedUploadState::Uploading.is_terminal());
+        assert!(!StagedUploadState::Conflicted.is_terminal());
+        assert!(StagedUploadState::Completed.is_terminal());
+        assert!(StagedUploadState::Failed.is_terminal());
+    }
+
+    #[test]
+    fn staged_upload_state_requires_action() {
+        assert!(!StagedUploadState::Pending.requires_action());
+        assert!(!StagedUploadState::Uploading.requires_action());
+        assert!(StagedUploadState::Conflicted.requires_action());
+        assert!(!StagedUploadState::Completed.requires_action());
+        assert!(StagedUploadState::Failed.requires_action());
+    }
+
+    #[test]
+    fn staged_upload_state_labels() {
+        assert_eq!(StagedUploadState::Pending.label(), "Pending");
+        assert_eq!(StagedUploadState::Uploading.label(), "Uploading");
+        assert_eq!(StagedUploadState::Conflicted.label(), "Conflict");
+        assert_eq!(StagedUploadState::Completed.label(), "Completed");
+        assert_eq!(StagedUploadState::Failed.label(), "Failed");
+    }
+
+    fn make_staged_upload(state: StagedUploadState, retry_count: u32) -> StagedUpload {
+        StagedUpload {
+            id: "staged-1".to_string(),
+            entity_id: "entity-1".to_string(),
+            disk_type: DiskType::Private,
+            destination_path: "/docs/report.pdf".to_string(),
+            local_path: "/tmp/report.pdf".to_string(),
+            file_name: "report.pdf".to_string(),
+            size_bytes: 1024 * 1024,
+            mime_type: Some("application/pdf".to_string()),
+            local_checksum: "abc123".to_string(),
+            state,
+            retry_count,
+            max_retries: 3,
+            error: None,
+            staged_at: 1000,
+            updated_at: 2000,
+            conflict: None,
+        }
+    }
+
+    #[test]
+    fn staged_upload_can_retry() {
+        let pending = make_staged_upload(StagedUploadState::Pending, 0);
+        assert!(!pending.can_retry()); // Not failed
+
+        let failed_can_retry = make_staged_upload(StagedUploadState::Failed, 1);
+        assert!(failed_can_retry.can_retry()); // Failed but retries remaining
+
+        let failed_maxed = make_staged_upload(StagedUploadState::Failed, 3);
+        assert!(!failed_maxed.can_retry()); // Retries exhausted
+    }
+
+    #[test]
+    fn staged_upload_retries_remaining() {
+        let zero_retries = make_staged_upload(StagedUploadState::Pending, 0);
+        assert_eq!(zero_retries.retries_remaining(), 3);
+
+        let one_retry = make_staged_upload(StagedUploadState::Failed, 1);
+        assert_eq!(one_retry.retries_remaining(), 2);
+
+        let maxed_retries = make_staged_upload(StagedUploadState::Failed, 3);
+        assert_eq!(maxed_retries.retries_remaining(), 0);
+
+        let over_retries = make_staged_upload(StagedUploadState::Failed, 5);
+        assert_eq!(over_retries.retries_remaining(), 0);
+    }
+
+    #[test]
+    fn staged_upload_age() {
+        let upload = make_staged_upload(StagedUploadState::Pending, 0);
+        assert_eq!(upload.age_ms(5000), 4000);
+        assert_eq!(upload.age_ms(1000), 0);
+        assert_eq!(upload.age_ms(500), 0); // saturating_sub
+    }
+
+    #[test]
+    fn conflict_type_descriptions() {
+        assert!(ConflictType::FileExists.description().contains("exists"));
+        assert!(ConflictType::LocalModified.description().contains("local"));
+        assert!(ConflictType::RemoteModified.description().contains("destination"));
+        assert!(ConflictType::BothModified.description().contains("Both"));
+        assert!(ConflictType::PathTypeChanged.description().contains("directory"));
+        assert!(ConflictType::QuotaExceeded.description().contains("quota"));
+    }
+
+    #[test]
+    fn staging_conflict_can_auto_resolve() {
+        let file_exists = StagingConflict {
+            conflict_type: ConflictType::FileExists,
+            staged_checksum: "abc".to_string(),
+            local_checksum: None,
+            remote_checksum: Some("def".to_string()),
+            remote_size_bytes: Some(1024),
+            detected_at: 1000,
+        };
+        assert!(file_exists.can_auto_resolve());
+
+        let quota_exceeded = StagingConflict {
+            conflict_type: ConflictType::QuotaExceeded,
+            staged_checksum: "abc".to_string(),
+            local_checksum: None,
+            remote_checksum: None,
+            remote_size_bytes: None,
+            detected_at: 1000,
+        };
+        assert!(!quota_exceeded.can_auto_resolve());
+    }
+
+    #[test]
+    fn conflict_resolution_labels() {
+        assert_eq!(ConflictResolution::KeepLocal.label(), "Upload my version");
+        assert_eq!(ConflictResolution::KeepRemote.label(), "Keep existing");
+        assert_eq!(ConflictResolution::KeepBoth.label(), "Keep both");
+        assert_eq!(ConflictResolution::Skip.label(), "Skip");
+        assert_eq!(ConflictResolution::Retry.label(), "Retry");
+    }
+
+    #[test]
+    fn conflict_resolution_descriptions() {
+        assert!(ConflictResolution::KeepLocal.description().contains("Replace"));
+        assert!(ConflictResolution::KeepRemote.description().contains("Discard"));
+        assert!(ConflictResolution::KeepBoth.description().contains("both"));
+        assert!(ConflictResolution::Skip.description().contains("Remove"));
+        assert!(ConflictResolution::Retry.description().contains("again"));
+    }
+
+    #[test]
+    fn staging_queue_status_has_action_required() {
+        let no_action = StagingQueueStatus {
+            total_files: 5,
+            pending_files: 3,
+            uploading_files: 2,
+            conflicted_files: 0,
+            failed_files: 0,
+            completed_files: 0,
+            total_bytes: 1000,
+            bytes_uploaded: 500,
+            is_syncing: true,
+            network_available: true,
+            last_sync_at: Some(1000),
+            last_sync_error: None,
+        };
+        assert!(!no_action.has_action_required());
+
+        let has_conflict = StagingQueueStatus {
+            conflicted_files: 1,
+            ..no_action.clone()
+        };
+        assert!(has_conflict.has_action_required());
+
+        let has_failed = StagingQueueStatus {
+            failed_files: 2,
+            ..no_action
+        };
+        assert!(has_failed.has_action_required());
+    }
+
+    #[test]
+    fn staging_queue_status_is_empty() {
+        let empty = StagingQueueStatus {
+            total_files: 5,
+            pending_files: 0,
+            uploading_files: 0,
+            conflicted_files: 0,
+            failed_files: 0,
+            completed_files: 5,
+            total_bytes: 1000,
+            bytes_uploaded: 1000,
+            is_syncing: false,
+            network_available: true,
+            last_sync_at: Some(1000),
+            last_sync_error: None,
+        };
+        assert!(empty.is_empty());
+
+        let has_pending = StagingQueueStatus {
+            pending_files: 2,
+            completed_files: 3,
+            ..empty.clone()
+        };
+        assert!(!has_pending.is_empty());
+
+        let has_uploading = StagingQueueStatus {
+            uploading_files: 1,
+            completed_files: 4,
+            ..empty.clone()
+        };
+        assert!(!has_uploading.is_empty());
+
+        let has_conflicted = StagingQueueStatus {
+            conflicted_files: 1,
+            completed_files: 4,
+            ..empty
+        };
+        assert!(!has_conflicted.is_empty());
+    }
+
+    #[test]
+    fn staging_queue_status_all_completed() {
+        let all_done = StagingQueueStatus {
+            total_files: 5,
+            pending_files: 0,
+            uploading_files: 0,
+            conflicted_files: 0,
+            failed_files: 0,
+            completed_files: 5,
+            total_bytes: 1000,
+            bytes_uploaded: 1000,
+            is_syncing: false,
+            network_available: true,
+            last_sync_at: Some(1000),
+            last_sync_error: None,
+        };
+        assert!(all_done.all_completed());
+
+        let partial = StagingQueueStatus {
+            completed_files: 3,
+            ..all_done.clone()
+        };
+        assert!(!partial.all_completed());
+
+        let empty_queue = StagingQueueStatus {
+            total_files: 0,
+            completed_files: 0,
+            ..all_done
+        };
+        assert!(!empty_queue.all_completed());
+    }
+
+    #[test]
+    fn staging_queue_status_percent_complete() {
+        let half_done = StagingQueueStatus {
+            total_files: 4,
+            pending_files: 2,
+            uploading_files: 0,
+            conflicted_files: 0,
+            failed_files: 0,
+            completed_files: 2,
+            total_bytes: 1000,
+            bytes_uploaded: 500,
+            is_syncing: false,
+            network_available: true,
+            last_sync_at: None,
+            last_sync_error: None,
+        };
+        assert_eq!(half_done.percent_complete(), 50);
+
+        let zero_bytes = StagingQueueStatus {
+            total_bytes: 0,
+            bytes_uploaded: 0,
+            ..half_done.clone()
+        };
+        assert_eq!(zero_bytes.percent_complete(), 0); // has files but zero bytes
+
+        let empty_queue = StagingQueueStatus {
+            total_files: 0,
+            total_bytes: 0,
+            bytes_uploaded: 0,
+            pending_files: 0,
+            completed_files: 0,
+            ..half_done
+        };
+        assert_eq!(empty_queue.percent_complete(), 100); // empty = complete
+    }
+
+    #[test]
+    fn staging_queue_status_active_count() {
+        let status = StagingQueueStatus {
+            total_files: 10,
+            pending_files: 5,
+            uploading_files: 2,
+            conflicted_files: 1,
+            failed_files: 1,
+            completed_files: 1,
+            total_bytes: 5000,
+            bytes_uploaded: 500,
+            is_syncing: true,
+            network_available: true,
+            last_sync_at: Some(1000),
+            last_sync_error: None,
+        };
+        assert_eq!(status.active_count(), 7); // pending + uploading
+    }
+
+    #[test]
+    fn staging_event_variants() {
+        // Test that all event variants can be constructed
+        let staged = StagingEvent::FileStaged {
+            upload_id: "u1".to_string(),
+            file_name: "file.txt".to_string(),
+        };
+        assert!(matches!(staged, StagingEvent::FileStaged { .. }));
+
+        let started = StagingEvent::UploadStarted {
+            upload_id: "u1".to_string(),
+        };
+        assert!(matches!(started, StagingEvent::UploadStarted { .. }));
+
+        let progress = StagingEvent::UploadProgress {
+            upload_id: "u1".to_string(),
+            bytes_uploaded: 500,
+            total_bytes: 1000,
+        };
+        assert!(matches!(progress, StagingEvent::UploadProgress { .. }));
+
+        let completed = StagingEvent::UploadCompleted {
+            upload_id: "u1".to_string(),
+            destination_path: "/docs/file.txt".to_string(),
+        };
+        assert!(matches!(completed, StagingEvent::UploadCompleted { .. }));
+
+        let conflict = StagingEvent::ConflictDetected {
+            upload_id: "u1".to_string(),
+            conflict_type: ConflictType::FileExists,
+        };
+        assert!(matches!(conflict, StagingEvent::ConflictDetected { .. }));
+
+        let failed = StagingEvent::UploadFailed {
+            upload_id: "u1".to_string(),
+            error: "network error".to_string(),
+        };
+        assert!(matches!(failed, StagingEvent::UploadFailed { .. }));
+
+        let cleared = StagingEvent::QueueCleared { files_removed: 5 };
+        assert!(matches!(cleared, StagingEvent::QueueCleared { .. }));
+
+        let network = StagingEvent::NetworkStatusChanged { available: true };
+        assert!(matches!(network, StagingEvent::NetworkStatusChanged { .. }));
+
+        let sync_start = StagingEvent::SyncStarted;
+        assert!(matches!(sync_start, StagingEvent::SyncStarted));
+
+        let sync_done = StagingEvent::SyncCompleted {
+            files_uploaded: 10,
+            files_failed: 2,
+        };
+        assert!(matches!(sync_done, StagingEvent::SyncCompleted { .. }));
     }
 }

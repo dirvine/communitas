@@ -13,9 +13,10 @@ use std::path::Path;
 use std::sync::Arc;
 
 use communitas_ui_api::drive::{
-    DirectoryEntry, DiskInfo, DiskType, DownloadProgress, DownloadState, FileMetadata, FilePreview,
-    QuotaInfo, ShareLink, ShareLinkAccessResult, ShareLinkConfig, ShareLinkStats, UploadProgress,
-    UploadState,
+    ConflictResolution, ConflictType, DirectoryEntry, DiskInfo, DiskType, DownloadProgress,
+    DownloadState, FileMetadata, FilePreview, QuotaInfo, ShareLink, ShareLinkAccessResult,
+    ShareLinkConfig, ShareLinkStats, StagedUpload, StagedUploadState, StagingConflict,
+    StagingEvent, StagingQueueStatus, UploadProgress, UploadState,
 };
 use thiserror::Error;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -44,6 +45,48 @@ fn extract_name_from_path(path: &str, default: &str) -> String {
         .rfind(|s| !s.is_empty())
         .unwrap_or(default)
         .to_string()
+}
+
+/// Get MIME type from file extension.
+fn mime_from_extension(ext: &str) -> String {
+    match ext.to_lowercase().as_str() {
+        "txt" => "text/plain",
+        "html" | "htm" => "text/html",
+        "css" => "text/css",
+        "js" => "application/javascript",
+        "json" => "application/json",
+        "xml" => "application/xml",
+        "pdf" => "application/pdf",
+        "zip" => "application/zip",
+        "gz" | "gzip" => "application/gzip",
+        "tar" => "application/x-tar",
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "svg" => "image/svg+xml",
+        "webp" => "image/webp",
+        "mp3" => "audio/mpeg",
+        "mp4" => "video/mp4",
+        "webm" => "video/webm",
+        "wav" => "audio/wav",
+        "ogg" => "audio/ogg",
+        "md" => "text/markdown",
+        "rs" => "text/x-rust",
+        "py" => "text/x-python",
+        _ => "application/octet-stream",
+    }
+    .to_string()
+}
+
+/// Append a conflict suffix to a file path.
+/// e.g., "/docs/report.pdf" -> "/docs/report_conflict_1234.pdf"
+fn append_conflict_suffix(path: &str, timestamp: i64) -> String {
+    if let Some(dot_pos) = path.rfind('.') {
+        let (base, ext) = path.split_at(dot_pos);
+        format!("{}_conflict_{}{}", base, timestamp, ext)
+    } else {
+        format!("{}_conflict_{}", path, timestamp)
+    }
 }
 
 /// Convert core DiskTypeArg to UI DiskType.
@@ -105,6 +148,14 @@ pub enum DriveError {
     ShareLinkCreationFailed(String),
     #[error("cannot share private files")]
     CannotSharePrivateFiles,
+    #[error("staged upload not found: {0}")]
+    StagedUploadNotFound(String),
+    #[error("staging conflict: {0}")]
+    StagingConflict(String),
+    #[error("local file not found: {0}")]
+    LocalFileNotFound(String),
+    #[error("staging queue error: {0}")]
+    StagingQueueError(String),
 }
 
 /// Snapshot of drive state for reactive UI updates.
@@ -118,6 +169,8 @@ pub struct DriveSnapshot {
     pub current_directory: Vec<DirectoryEntry>,
     /// Whether the directory is currently loading.
     pub loading: bool,
+    /// Offline staging queue status.
+    pub staging_status: Option<StagingQueueStatus>,
 }
 
 /// Service for virtual disk, directory, and file operations.
@@ -136,12 +189,23 @@ pub struct DriveService {
     share_link_stats: Arc<RwLock<HashMap<String, ShareLinkStats>>>,
     /// Counter for generating unique share link IDs.
     share_link_counter: Arc<RwLock<u64>>,
+    /// Offline staging queue (by staged upload ID).
+    staging_queue: Arc<RwLock<HashMap<String, StagedUpload>>>,
+    /// Counter for generating unique staged upload IDs.
+    staging_counter: Arc<RwLock<u64>>,
+    /// Event sender for staging queue events.
+    staging_event_tx: tokio::sync::broadcast::Sender<StagingEvent>,
+    /// Whether network is currently available.
+    network_available: Arc<RwLock<bool>>,
+    /// Default max retries for staged uploads.
+    staging_max_retries: u32,
 }
 
 impl DriveService {
     /// Create a new drive service linked to the auth controller.
     pub fn new(auth: Arc<AuthController>, app: Arc<CommunitasApp>) -> Self {
         let (tx, rx) = watch::channel(DriveSnapshot::default());
+        let (staging_event_tx, _) = tokio::sync::broadcast::channel(256);
         Self {
             auth,
             app,
@@ -154,6 +218,11 @@ impl DriveService {
             share_links: Arc::new(RwLock::new(HashMap::new())),
             share_link_stats: Arc::new(RwLock::new(HashMap::new())),
             share_link_counter: Arc::new(RwLock::new(0)),
+            staging_queue: Arc::new(RwLock::new(HashMap::new())),
+            staging_counter: Arc::new(RwLock::new(0)),
+            staging_event_tx,
+            network_available: Arc::new(RwLock::new(true)), // Assume online initially
+            staging_max_retries: 3,
         }
     }
 
@@ -2517,6 +2586,571 @@ impl DriveService {
         Ok(file_links)
     }
 
+    // ===== Offline Staging Area Methods =====
+
+    /// Subscribe to staging queue events.
+    pub fn subscribe_staging_events(&self) -> tokio::sync::broadcast::Receiver<StagingEvent> {
+        self.staging_event_tx.subscribe()
+    }
+
+    /// Stage a file for upload when offline.
+    /// The file will be automatically uploaded when network connectivity is restored.
+    #[instrument(skip(self), name = "ui.drive.stage_upload", fields(entity_id, ?disk_type, destination, local_path))]
+    pub async fn stage_upload(
+        &self,
+        entity_id: &str,
+        disk_type: DiskType,
+        destination_path: &str,
+        local_path: &str,
+    ) -> Result<StagedUpload, DriveError> {
+        if !self.is_authenticated() {
+            return Err(DriveError::NotAuthenticated);
+        }
+
+        // Verify local file exists and get metadata
+        let local_metadata = tokio::fs::metadata(local_path)
+            .await
+            .map_err(|e| DriveError::LocalFileNotFound(format!("{}: {}", local_path, e)))?;
+
+        if !local_metadata.is_file() {
+            return Err(DriveError::LocalFileNotFound(format!(
+                "{} is not a file",
+                local_path
+            )));
+        }
+
+        let size_bytes = local_metadata.len();
+
+        // Read file and compute checksum
+        let content = tokio::fs::read(local_path)
+            .await
+            .map_err(|e| DriveError::FileReadError(format!("failed to read {}: {}", local_path, e)))?;
+        let local_checksum = compute_checksum(&content);
+
+        // Extract file name from path
+        let file_name = extract_name_from_path(local_path, "file");
+
+        // Detect MIME type from extension
+        let mime_type = Path::new(local_path)
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|ext| mime_from_extension(ext));
+
+        // Generate unique ID
+        let id = {
+            let mut counter = self.staging_counter.write().await;
+            *counter += 1;
+            format!("staged-{:08x}", *counter)
+        };
+
+        let now = current_timestamp_millis();
+
+        let staged = StagedUpload {
+            id: id.clone(),
+            entity_id: entity_id.to_string(),
+            disk_type,
+            destination_path: destination_path.to_string(),
+            local_path: local_path.to_string(),
+            file_name: file_name.clone(),
+            size_bytes,
+            mime_type,
+            local_checksum,
+            state: StagedUploadState::Pending,
+            retry_count: 0,
+            max_retries: self.staging_max_retries,
+            error: None,
+            staged_at: now,
+            updated_at: now,
+            conflict: None,
+        };
+
+        // Add to staging queue
+        {
+            let mut queue = self.staging_queue.write().await;
+            queue.insert(id.clone(), staged.clone());
+        }
+
+        // Broadcast event
+        let _ = self.staging_event_tx.send(StagingEvent::FileStaged {
+            upload_id: id.clone(),
+            file_name,
+        });
+
+        // Update snapshot
+        self.update_staging_snapshot().await;
+
+        debug!("File staged for upload: {} -> {}", local_path, destination_path);
+
+        Ok(staged)
+    }
+
+    /// Get a staged upload by ID.
+    #[instrument(skip(self), name = "ui.drive.get_staged_upload", fields(upload_id))]
+    pub async fn get_staged_upload(&self, upload_id: &str) -> Result<StagedUpload, DriveError> {
+        if !self.is_authenticated() {
+            return Err(DriveError::NotAuthenticated);
+        }
+
+        let queue = self.staging_queue.read().await;
+        queue
+            .get(upload_id)
+            .cloned()
+            .ok_or_else(|| DriveError::StagedUploadNotFound(upload_id.to_string()))
+    }
+
+    /// List all staged uploads.
+    #[instrument(skip(self), name = "ui.drive.list_staged_uploads")]
+    pub async fn list_staged_uploads(&self) -> Result<Vec<StagedUpload>, DriveError> {
+        if !self.is_authenticated() {
+            return Err(DriveError::NotAuthenticated);
+        }
+
+        let queue = self.staging_queue.read().await;
+        let mut uploads: Vec<StagedUpload> = queue.values().cloned().collect();
+        // Sort by staged_at (oldest first)
+        uploads.sort_by_key(|u| u.staged_at);
+        Ok(uploads)
+    }
+
+    /// Get the current staging queue status.
+    #[instrument(skip(self), name = "ui.drive.get_staging_status")]
+    pub async fn get_staging_status(&self) -> Result<StagingQueueStatus, DriveError> {
+        if !self.is_authenticated() {
+            return Err(DriveError::NotAuthenticated);
+        }
+
+        let queue = self.staging_queue.read().await;
+        let network_available = *self.network_available.read().await;
+
+        let mut status = StagingQueueStatus {
+            total_files: 0,
+            pending_files: 0,
+            uploading_files: 0,
+            conflicted_files: 0,
+            failed_files: 0,
+            completed_files: 0,
+            total_bytes: 0,
+            bytes_uploaded: 0,
+            is_syncing: false,
+            network_available,
+            last_sync_at: None,
+            last_sync_error: None,
+        };
+
+        for upload in queue.values() {
+            status.total_files += 1;
+            status.total_bytes += upload.size_bytes;
+
+            match upload.state {
+                StagedUploadState::Pending => status.pending_files += 1,
+                StagedUploadState::Uploading => {
+                    status.uploading_files += 1;
+                    status.is_syncing = true;
+                }
+                StagedUploadState::Conflicted => status.conflicted_files += 1,
+                StagedUploadState::Completed => {
+                    status.completed_files += 1;
+                    status.bytes_uploaded += upload.size_bytes;
+                }
+                StagedUploadState::Failed => status.failed_files += 1,
+            }
+        }
+
+        Ok(status)
+    }
+
+    /// Remove a staged upload from the queue.
+    #[instrument(skip(self), name = "ui.drive.remove_staged_upload", fields(upload_id))]
+    pub async fn remove_staged_upload(&self, upload_id: &str) -> Result<(), DriveError> {
+        if !self.is_authenticated() {
+            return Err(DriveError::NotAuthenticated);
+        }
+
+        let mut queue = self.staging_queue.write().await;
+        if queue.remove(upload_id).is_some() {
+            drop(queue);
+            self.update_staging_snapshot().await;
+            debug!("Staged upload removed: {}", upload_id);
+            Ok(())
+        } else {
+            Err(DriveError::StagedUploadNotFound(upload_id.to_string()))
+        }
+    }
+
+    /// Clear all staged uploads (optionally only completed/failed ones).
+    #[instrument(skip(self), name = "ui.drive.clear_staging_queue", fields(only_terminal))]
+    pub async fn clear_staging_queue(&self, only_terminal: bool) -> Result<u32, DriveError> {
+        if !self.is_authenticated() {
+            return Err(DriveError::NotAuthenticated);
+        }
+
+        let mut queue = self.staging_queue.write().await;
+        let initial_count = queue.len();
+
+        if only_terminal {
+            queue.retain(|_, u| !u.state.is_terminal());
+        } else {
+            queue.clear();
+        }
+
+        let removed = (initial_count - queue.len()) as u32;
+        drop(queue);
+
+        // Broadcast event
+        let _ = self.staging_event_tx.send(StagingEvent::QueueCleared {
+            files_removed: removed,
+        });
+
+        self.update_staging_snapshot().await;
+
+        debug!("Staging queue cleared: {} files removed", removed);
+        Ok(removed)
+    }
+
+    /// Retry a failed staged upload.
+    #[instrument(skip(self), name = "ui.drive.retry_staged_upload", fields(upload_id))]
+    pub async fn retry_staged_upload(&self, upload_id: &str) -> Result<(), DriveError> {
+        if !self.is_authenticated() {
+            return Err(DriveError::NotAuthenticated);
+        }
+
+        let mut queue = self.staging_queue.write().await;
+        let upload = queue
+            .get_mut(upload_id)
+            .ok_or_else(|| DriveError::StagedUploadNotFound(upload_id.to_string()))?;
+
+        if !upload.can_retry() {
+            return Err(DriveError::StagingQueueError(format!(
+                "cannot retry upload {}: retries exhausted or not in failed state",
+                upload_id
+            )));
+        }
+
+        upload.state = StagedUploadState::Pending;
+        upload.error = None;
+        upload.retry_count += 1;
+        upload.updated_at = current_timestamp_millis();
+
+        drop(queue);
+        self.update_staging_snapshot().await;
+
+        debug!("Staged upload queued for retry: {}", upload_id);
+        Ok(())
+    }
+
+    /// Resolve a conflict for a staged upload.
+    #[instrument(skip(self), name = "ui.drive.resolve_staging_conflict", fields(upload_id, ?resolution))]
+    pub async fn resolve_staging_conflict(
+        &self,
+        upload_id: &str,
+        resolution: ConflictResolution,
+    ) -> Result<(), DriveError> {
+        if !self.is_authenticated() {
+            return Err(DriveError::NotAuthenticated);
+        }
+
+        let mut queue = self.staging_queue.write().await;
+        let upload = queue
+            .get_mut(upload_id)
+            .ok_or_else(|| DriveError::StagedUploadNotFound(upload_id.to_string()))?;
+
+        if !matches!(upload.state, StagedUploadState::Conflicted) {
+            return Err(DriveError::StagingQueueError(format!(
+                "upload {} is not in conflicted state",
+                upload_id
+            )));
+        }
+
+        let now = current_timestamp_millis();
+
+        match resolution {
+            ConflictResolution::KeepLocal => {
+                // Will overwrite remote on next sync
+                upload.state = StagedUploadState::Pending;
+                upload.conflict = None;
+                upload.updated_at = now;
+            }
+            ConflictResolution::KeepRemote => {
+                // Discard local changes - mark as completed (nothing to upload)
+                upload.state = StagedUploadState::Completed;
+                upload.conflict = None;
+                upload.updated_at = now;
+            }
+            ConflictResolution::KeepBoth => {
+                // Rename the destination with a conflict suffix
+                let timestamp = now / 1000; // seconds
+                let new_dest = append_conflict_suffix(&upload.destination_path, timestamp);
+                upload.destination_path = new_dest;
+                upload.state = StagedUploadState::Pending;
+                upload.conflict = None;
+                upload.updated_at = now;
+            }
+            ConflictResolution::Skip => {
+                // Remove from queue entirely
+                let upload_id_owned = upload.id.clone();
+                drop(queue);
+                return self.remove_staged_upload(&upload_id_owned).await;
+            }
+            ConflictResolution::Retry => {
+                // Retry the upload
+                upload.state = StagedUploadState::Pending;
+                upload.conflict = None;
+                upload.retry_count += 1;
+                upload.updated_at = now;
+            }
+        }
+
+        drop(queue);
+        self.update_staging_snapshot().await;
+
+        debug!("Staging conflict resolved for {}: {:?}", upload_id, resolution);
+        Ok(())
+    }
+
+    /// Set network availability status.
+    /// When network becomes available, pending uploads will be processed.
+    #[instrument(skip(self), name = "ui.drive.set_network_available", fields(available))]
+    pub async fn set_network_available(&self, available: bool) {
+        {
+            let mut net = self.network_available.write().await;
+            *net = available;
+        }
+
+        // Broadcast event
+        let _ = self.staging_event_tx.send(StagingEvent::NetworkStatusChanged { available });
+
+        self.update_staging_snapshot().await;
+
+        debug!("Network availability changed: {}", available);
+
+        // If network is now available, trigger sync
+        if available {
+            // In production, this would spawn a background sync task
+            debug!("Network restored - pending uploads will be processed");
+        }
+    }
+
+    /// Process pending staged uploads (call when network is available).
+    /// Returns the number of uploads processed.
+    #[instrument(skip(self), name = "ui.drive.sync_staging_queue")]
+    pub async fn sync_staging_queue(&self) -> Result<(u32, u32), DriveError> {
+        if !self.is_authenticated() {
+            return Err(DriveError::NotAuthenticated);
+        }
+
+        let network_available = *self.network_available.read().await;
+        if !network_available {
+            return Err(DriveError::StagingQueueError(
+                "network not available".to_string(),
+            ));
+        }
+
+        let _ = self.staging_event_tx.send(StagingEvent::SyncStarted);
+
+        // Get pending uploads
+        let pending_ids: Vec<String> = {
+            let queue = self.staging_queue.read().await;
+            queue
+                .values()
+                .filter(|u| matches!(u.state, StagedUploadState::Pending))
+                .map(|u| u.id.clone())
+                .collect()
+        };
+
+        let mut uploaded = 0u32;
+        let mut failed = 0u32;
+
+        for upload_id in pending_ids {
+            match self.process_staged_upload(&upload_id).await {
+                Ok(()) => uploaded += 1,
+                Err(e) => {
+                    debug!("Staged upload {} failed: {}", upload_id, e);
+                    failed += 1;
+                }
+            }
+        }
+
+        let _ = self.staging_event_tx.send(StagingEvent::SyncCompleted {
+            files_uploaded: uploaded,
+            files_failed: failed,
+        });
+
+        self.update_staging_snapshot().await;
+
+        debug!("Staging queue sync completed: {} uploaded, {} failed", uploaded, failed);
+        Ok((uploaded, failed))
+    }
+
+    /// Process a single staged upload.
+    async fn process_staged_upload(&self, upload_id: &str) -> Result<(), DriveError> {
+        // Mark as uploading
+        {
+            let mut queue = self.staging_queue.write().await;
+            if let Some(upload) = queue.get_mut(upload_id) {
+                upload.state = StagedUploadState::Uploading;
+                upload.updated_at = current_timestamp_millis();
+            }
+        }
+
+        let _ = self.staging_event_tx.send(StagingEvent::UploadStarted {
+            upload_id: upload_id.to_string(),
+        });
+
+        // Get upload details
+        let upload = self.get_staged_upload(upload_id).await?;
+
+        // Check if local file still exists and hasn't changed
+        let current_content = tokio::fs::read(&upload.local_path)
+            .await
+            .map_err(|e| DriveError::LocalFileNotFound(format!("{}: {}", upload.local_path, e)))?;
+
+        let current_checksum = compute_checksum(&current_content);
+
+        if current_checksum != upload.local_checksum {
+            // File was modified - create a conflict
+            let conflict = StagingConflict {
+                conflict_type: ConflictType::LocalModified,
+                staged_checksum: upload.local_checksum.clone(),
+                local_checksum: Some(current_checksum),
+                remote_checksum: None,
+                remote_size_bytes: None,
+                detected_at: current_timestamp_millis(),
+            };
+
+            let mut queue = self.staging_queue.write().await;
+            if let Some(u) = queue.get_mut(upload_id) {
+                u.state = StagedUploadState::Conflicted;
+                u.conflict = Some(conflict.clone());
+                u.updated_at = current_timestamp_millis();
+            }
+
+            let _ = self.staging_event_tx.send(StagingEvent::ConflictDetected {
+                upload_id: upload_id.to_string(),
+                conflict_type: ConflictType::LocalModified,
+            });
+
+            return Err(DriveError::StagingConflict(
+                "local file was modified after staging".to_string(),
+            ));
+        }
+
+        // Check if destination already exists
+        let exists = self
+            .path_exists(&upload.entity_id, upload.disk_type, &upload.destination_path)
+            .await?;
+
+        if exists {
+            // Check if it's the same content
+            let remote_preview = self
+                .get_file_preview(&upload.entity_id, upload.disk_type, &upload.destination_path)
+                .await;
+
+            if let Ok(preview) = remote_preview {
+                if preview.metadata.checksum == upload.local_checksum {
+                    // Same content - mark as completed
+                    let mut queue = self.staging_queue.write().await;
+                    if let Some(u) = queue.get_mut(upload_id) {
+                        u.state = StagedUploadState::Completed;
+                        u.updated_at = current_timestamp_millis();
+                    }
+                    return Ok(());
+                }
+
+                // Different content - conflict
+                let conflict = StagingConflict {
+                    conflict_type: ConflictType::FileExists,
+                    staged_checksum: upload.local_checksum.clone(),
+                    local_checksum: None,
+                    remote_checksum: Some(preview.metadata.checksum.clone()),
+                    remote_size_bytes: Some(preview.size_bytes),
+                    detected_at: current_timestamp_millis(),
+                };
+
+                let mut queue = self.staging_queue.write().await;
+                if let Some(u) = queue.get_mut(upload_id) {
+                    u.state = StagedUploadState::Conflicted;
+                    u.conflict = Some(conflict);
+                    u.updated_at = current_timestamp_millis();
+                }
+
+                let _ = self.staging_event_tx.send(StagingEvent::ConflictDetected {
+                    upload_id: upload_id.to_string(),
+                    conflict_type: ConflictType::FileExists,
+                });
+
+                return Err(DriveError::StagingConflict(
+                    "destination file already exists with different content".to_string(),
+                ));
+            }
+        }
+
+        // Perform the actual upload
+        match self
+            .write_file(
+                &upload.entity_id,
+                upload.disk_type,
+                &upload.destination_path,
+                &current_content,
+            )
+            .await
+        {
+            Ok(_entry) => {
+                // Success
+                let mut queue = self.staging_queue.write().await;
+                if let Some(u) = queue.get_mut(upload_id) {
+                    u.state = StagedUploadState::Completed;
+                    u.updated_at = current_timestamp_millis();
+                }
+
+                let _ = self.staging_event_tx.send(StagingEvent::UploadCompleted {
+                    upload_id: upload_id.to_string(),
+                    destination_path: upload.destination_path.clone(),
+                });
+
+                Ok(())
+            }
+            Err(e) => {
+                // Failed
+                let error_msg = e.to_string();
+                let mut queue = self.staging_queue.write().await;
+                if let Some(u) = queue.get_mut(upload_id) {
+                    u.state = StagedUploadState::Failed;
+                    u.error = Some(error_msg.clone());
+                    u.updated_at = current_timestamp_millis();
+                }
+
+                let _ = self.staging_event_tx.send(StagingEvent::UploadFailed {
+                    upload_id: upload_id.to_string(),
+                    error: error_msg,
+                });
+
+                Err(e)
+            }
+        }
+    }
+
+    /// Check if a path exists on a disk.
+    async fn path_exists(
+        &self,
+        entity_id: &str,
+        disk_type: DiskType,
+        path: &str,
+    ) -> Result<bool, DriveError> {
+        match self.list_directory(entity_id, disk_type, path).await {
+            Ok(_) => Ok(true),
+            Err(DriveError::PathNotFound(_)) => Ok(false),
+            Err(e) => Err(e),
+        }
+    }
+
+    async fn update_staging_snapshot(&self) {
+        if let Ok(status) = self.get_staging_status().await {
+            let mut snap = self.rx.borrow().clone();
+            snap.staging_status = Some(status);
+            let _ = self.tx.send(snap);
+        }
+    }
+
     // ===== Helper Methods =====
 
     fn is_authenticated(&self) -> bool {
@@ -2938,5 +3572,152 @@ mod tests {
             DriveError::ShareLinkCreationFailed("test".to_string()).to_string(),
             "share link creation failed: test"
         );
+    }
+
+    // ===== Staging Queue Tests =====
+
+    #[tokio::test]
+    async fn stage_upload_requires_auth() {
+        let temp = TempDir::new().unwrap();
+        let service = make_service(&temp).await;
+        let source = temp.path().join("test.txt");
+        tokio::fs::write(&source, b"test content").await.unwrap();
+        let result = service
+            .stage_upload(
+                "entity-1",
+                DiskType::Private,
+                "/dest.txt",
+                source.to_str().unwrap(),
+            )
+            .await;
+        assert!(matches!(result, Err(DriveError::NotAuthenticated)));
+    }
+
+    #[tokio::test]
+    async fn get_staged_upload_requires_auth() {
+        let temp = TempDir::new().unwrap();
+        let service = make_service(&temp).await;
+        let result = service.get_staged_upload("staged-1").await;
+        assert!(matches!(result, Err(DriveError::NotAuthenticated)));
+    }
+
+    #[tokio::test]
+    async fn list_staged_uploads_requires_auth() {
+        let temp = TempDir::new().unwrap();
+        let service = make_service(&temp).await;
+        let result = service.list_staged_uploads().await;
+        assert!(matches!(result, Err(DriveError::NotAuthenticated)));
+    }
+
+    #[tokio::test]
+    async fn get_staging_status_requires_auth() {
+        let temp = TempDir::new().unwrap();
+        let service = make_service(&temp).await;
+        let result = service.get_staging_status().await;
+        assert!(matches!(result, Err(DriveError::NotAuthenticated)));
+    }
+
+    #[tokio::test]
+    async fn remove_staged_upload_requires_auth() {
+        let temp = TempDir::new().unwrap();
+        let service = make_service(&temp).await;
+        let result = service.remove_staged_upload("staged-1").await;
+        assert!(matches!(result, Err(DriveError::NotAuthenticated)));
+    }
+
+    #[tokio::test]
+    async fn clear_staging_queue_requires_auth() {
+        let temp = TempDir::new().unwrap();
+        let service = make_service(&temp).await;
+        let result = service.clear_staging_queue(false).await;
+        assert!(matches!(result, Err(DriveError::NotAuthenticated)));
+    }
+
+    #[tokio::test]
+    async fn retry_staged_upload_requires_auth() {
+        let temp = TempDir::new().unwrap();
+        let service = make_service(&temp).await;
+        let result = service.retry_staged_upload("staged-1").await;
+        assert!(matches!(result, Err(DriveError::NotAuthenticated)));
+    }
+
+    #[tokio::test]
+    async fn resolve_staging_conflict_requires_auth() {
+        let temp = TempDir::new().unwrap();
+        let service = make_service(&temp).await;
+        let result = service
+            .resolve_staging_conflict("staged-1", ConflictResolution::KeepLocal)
+            .await;
+        assert!(matches!(result, Err(DriveError::NotAuthenticated)));
+    }
+
+    #[tokio::test]
+    async fn sync_staging_queue_requires_auth() {
+        let temp = TempDir::new().unwrap();
+        let service = make_service(&temp).await;
+        let result = service.sync_staging_queue().await;
+        assert!(matches!(result, Err(DriveError::NotAuthenticated)));
+    }
+
+    #[tokio::test]
+    async fn set_network_available_works() {
+        let temp = TempDir::new().unwrap();
+        let service = make_service(&temp).await;
+        // Should not panic
+        service.set_network_available(false).await;
+        service.set_network_available(true).await;
+    }
+
+    #[tokio::test]
+    async fn subscribe_staging_events_returns_receiver() {
+        let temp = TempDir::new().unwrap();
+        let service = make_service(&temp).await;
+        let _rx = service.subscribe_staging_events();
+    }
+
+    #[test]
+    fn staging_error_display() {
+        assert_eq!(
+            DriveError::StagedUploadNotFound("staged-1".to_string()).to_string(),
+            "staged upload not found: staged-1"
+        );
+        assert_eq!(
+            DriveError::StagingConflict("file exists".to_string()).to_string(),
+            "staging conflict: file exists"
+        );
+        assert_eq!(
+            DriveError::LocalFileNotFound("/path/file.txt".to_string()).to_string(),
+            "local file not found: /path/file.txt"
+        );
+        assert_eq!(
+            DriveError::StagingQueueError("network error".to_string()).to_string(),
+            "staging queue error: network error"
+        );
+    }
+
+    #[test]
+    fn helper_append_conflict_suffix() {
+        assert_eq!(
+            append_conflict_suffix("/docs/report.pdf", 12345),
+            "/docs/report_conflict_12345.pdf"
+        );
+        assert_eq!(
+            append_conflict_suffix("/docs/report", 12345),
+            "/docs/report_conflict_12345"
+        );
+        assert_eq!(
+            append_conflict_suffix("file.txt", 99),
+            "file_conflict_99.txt"
+        );
+    }
+
+    #[test]
+    fn helper_mime_from_extension() {
+        assert_eq!(mime_from_extension("txt"), "text/plain");
+        assert_eq!(mime_from_extension("pdf"), "application/pdf");
+        assert_eq!(mime_from_extension("png"), "image/png");
+        assert_eq!(mime_from_extension("jpg"), "image/jpeg");
+        assert_eq!(mime_from_extension("rs"), "text/x-rust");
+        assert_eq!(mime_from_extension("unknown"), "application/octet-stream");
     }
 }

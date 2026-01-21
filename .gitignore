@@ -120,6 +120,7 @@ updater-keys.json
 test-results/
 src-tauri.old/
 *.png
+!communitas-dioxus/assets/icon.png
 *.jpg
 test_*.py
 test_auth_flow_results.json

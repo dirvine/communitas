@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4F46E5;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#7C3AED;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="nodeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#F0ABFC;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#C4B5FD;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background rounded square -->
+  <rect x="32" y="32" width="960" height="960" rx="180" ry="180" fill="url(#bgGrad)"/>
+
+  <!-- Connection lines (network mesh) -->
+  <g stroke="#A78BFA" stroke-width="8" stroke-linecap="round" opacity="0.6">
+    <!-- Center to outer connections -->
+    <line x1="512" y1="512" x2="280" y2="320"/>
+    <line x1="512" y1="512" x2="744" y2="320"/>
+    <line x1="512" y1="512" x2="280" y2="704"/>
+    <line x1="512" y1="512" x2="744" y2="704"/>
+
+    <!-- Outer node connections -->
+    <line x1="280" y1="320" x2="744" y2="320"/>
+    <line x1="744" y1="320" x2="744" y2="704"/>
+    <line x1="744" y1="704" x2="280" y2="704"/>
+    <line x1="280" y1="704" x2="280" y2="320"/>
+
+    <!-- Diagonal connections -->
+    <line x1="280" y1="320" x2="744" y2="704"/>
+    <line x1="744" y1="320" x2="280" y2="704"/>
+  </g>
+
+  <!-- Network nodes -->
+  <!-- Center node (larger) -->
+  <circle cx="512" cy="512" r="80" fill="url(#nodeGrad)" stroke="#FFFFFF" stroke-width="12"/>
+
+  <!-- Corner nodes -->
+  <circle cx="280" cy="320" r="56" fill="url(#nodeGrad)" stroke="#FFFFFF" stroke-width="8"/>
+  <circle cx="744" cy="320" r="56" fill="url(#nodeGrad)" stroke="#FFFFFF" stroke-width="8"/>
+  <circle cx="280" cy="704" r="56" fill="url(#nodeGrad)" stroke="#FFFFFF" stroke-width="8"/>
+  <circle cx="744" cy="704" r="56" fill="url(#nodeGrad)" stroke="#FFFFFF" stroke-width="8"/>
+
+  <!-- Inner detail on center node -->
+  <circle cx="512" cy="512" r="40" fill="#4F46E5" opacity="0.8"/>
+  <circle cx="512" cy="512" r="20" fill="#FFFFFF"/>
+</svg>

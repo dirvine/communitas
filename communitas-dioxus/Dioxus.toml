@@ -1,7 +1,7 @@
 [application]
 
 # App (Project) Name
-name = "communitas-dioxus"
+name = "Communitas"
 
 # Dioxus App Default Platform
 # web, desktop, fullstack
@@ -12,6 +12,52 @@ out_dir = "dist"
 
 # assets file folder
 asset_dir = "assets"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Bundle Configuration (for dx bundle)
+# ─────────────────────────────────────────────────────────────────────────────
+
+[bundle]
+# Unique app identifier (reverse domain notation)
+identifier = "com.maidsafe.communitas"
+
+# Publisher/organization name
+publisher = "MaidSafe"
+
+# App icons - PNG for cross-platform, icns for macOS
+icon = ["assets/icon.png", "assets/icon.icns"]
+
+# Application category (macOS App Store category)
+category = "public.app-category.social-networking"
+
+# Short description (shown in installers)
+short_description = "Decentralized collaboration platform"
+
+# Full description
+long_description = """
+Communitas is a local-first, post-quantum ready collaboration platform that combines
+messaging, file sharing, video calls, and project management into one decentralized
+application. No servers, no surveillance, no central authority.
+"""
+
+# Copyright notice
+copyright = "Copyright 2024-2026 MaidSafe. All rights reserved."
+
+[bundle.macos]
+# Minimum macOS version (Big Sur+ for best WebView2 support)
+minimum_system_version = "11.0"
+
+# Enable hardened runtime (required for notarization)
+hardened_runtime = true
+
+# Entitlements file for sandbox permissions
+entitlements = "entitlements.plist"
+
+# Additional frameworks to link (if needed)
+# frameworks = []
+
+# Exception domains for App Transport Security (if needed)
+# exception_domain = "localhost"
 
 [web.app]
 

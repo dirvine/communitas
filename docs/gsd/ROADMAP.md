@@ -16,23 +16,31 @@ _Last updated: 2026-01-21_
 
 | Phase | Description | Status |
 |-------|-------------|--------|
-| **5.1** | Packaging & Installers | ☐ Pending |
+| **5.1** | Packaging & Installers | ✅ Complete |
 | **5.2** | WebView Provisioning | ✅ Complete |
 | **5.3** | Performance QA | ✅ Complete |
 | **5.4** | MCP Validation Suite | ✅ Complete |
 
 ---
 
-## Phase 5.1: Packaging & Installers
+## Phase 5.1: Packaging & Installers ✅
 
 **Goal**: Produce signed, distributable installers for macOS.
 
-**Tasks**:
-1. Configure dx bundle for macOS DMG
-2. Set up code signing with Developer ID
-3. Implement notarization workflow
-4. Add installer smoke tests in CI
-5. Document bundle process
+**Completed**:
+1. ✅ Created macOS app icon (SVG → PNG → ICNS)
+2. ✅ Configured Dioxus.toml bundle settings
+3. ✅ Created entitlements.plist for hardened runtime
+4. ✅ Created release-desktop.yml workflow (build, sign, notarize, DMG)
+5. ✅ Added smoke-test-dmg.sh for verification
+6. ✅ Documented bundle process in docs/deployment/
+
+**Artifacts**:
+- `.github/workflows/release-desktop.yml` - Full CI/CD pipeline
+- `communitas-dioxus/entitlements.plist` - macOS sandbox permissions
+- `scripts/generate-icon.sh` - Icon generation from SVG
+- `scripts/tests/smoke-test-dmg.sh` - DMG verification
+- `docs/deployment/macos-desktop-bundle.md` - Complete documentation
 
 ---
 

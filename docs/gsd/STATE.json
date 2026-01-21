@@ -7,18 +7,18 @@
     "name": "M5 Stabilization"
   },
   "phase": {
-    "number": "5.4",
-    "name": "MCP Validation Suite",
-    "plans": ["PLAN-34"],
+    "number": "5.1",
+    "name": "Packaging & Installers",
+    "plans": ["PLAN-35"],
     "status": "complete"
   },
   "progress": {
-    "total_tasks": 10,
-    "completed_tasks": 10,
+    "total_tasks": 6,
+    "completed_tasks": 6,
     "current_task": null
   },
-  "status": "complete",
+  "status": "awaiting_planning",
   "last_review": "2026-01-21T04:10:00Z",
-  "last_updated": "2026-01-21T04:30:00Z",
-  "notes": "Phase 5.4: MCP Validation Suite COMPLETE. 211 parity tests + 11 golden tests + 4 E2E workflow tests. Commits: 526aaa0 (golden), bc253f5 (e2e), a58d5b6 (docs)."
+  "last_updated": "2026-01-21T06:00:00Z",
+  "notes": "Phase 5.1 complete. macOS desktop bundling with signing, notarization, DMG creation, smoke tests, and documentation."
 }

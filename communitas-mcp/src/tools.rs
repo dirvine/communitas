@@ -186,6 +186,55 @@ pub fn list_tools(authenticated: bool) -> Vec<Tool> {
             description: "End current session".to_string(),
             input_schema: json!({ "type": "object", "properties": {} }),
         },
+        // Audit log tools (security monitoring)
+        Tool {
+            name: "get_audit_log".to_string(),
+            description: "Get recent security audit events. Events include login attempts, logouts, identity switches, and device changes. Sensitive fields are automatically redacted.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of events to return (default: 50, max: 100)",
+                        "default": 50
+                    },
+                    "event_types": {
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "enum": ["login", "logout", "failed_login", "identity_switch", "device_change", "recovery", "passkey_register", "passkey_auth", "session_refresh", "session_expired"]
+                        },
+                        "description": "Filter by specific event types (optional, returns all types if not specified)"
+                    }
+                }
+            }),
+        },
+        Tool {
+            name: "export_audit_log".to_string(),
+            description: "Export security audit events within a date range. Useful for compliance reporting and security reviews.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "start_date": {
+                        "type": "string",
+                        "description": "Start date in ISO 8601 format (e.g., '2026-01-01T00:00:00Z')"
+                    },
+                    "end_date": {
+                        "type": "string",
+                        "description": "End date in ISO 8601 format (e.g., '2026-01-31T23:59:59Z')"
+                    },
+                    "event_types": {
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "enum": ["login", "logout", "failed_login", "identity_switch", "device_change", "recovery", "passkey_register", "passkey_auth", "session_refresh", "session_expired"]
+                        },
+                        "description": "Filter by specific event types (optional, returns all types if not specified)"
+                    }
+                },
+                "required": ["start_date", "end_date"]
+            }),
+        },
         // Entity tools
         Tool {
             name: "create_entity".to_string(),
@@ -1826,6 +1875,10 @@ pub async fn call_tool(
         return result;
     }
     if let Some(result) = dispatch_recovery_tools(name, &args).await {
+        return result;
+    }
+    // Audit log tools use UiServices for MCP-Dioxus parity
+    if let Some(result) = dispatch_audit_tools(services, name, &args).await {
         return result;
     }
     if let Some(result) = dispatch_misc_tools(app, name, &args).await {
@@ -5629,5 +5682,152 @@ async fn execute_get_call_participants(services: &UiServices, args: Value) -> To
             "participants": participants
         })),
         Err(e) => error_result(&format!("Failed to get call participants: {e}")),
+    }
+}
+
+// ============================================================================
+// Audit Log Tools - Security event monitoring
+// ============================================================================
+
+/// Dispatcher for audit log tools.
+/// These tools require authentication to view security events.
+async fn dispatch_audit_tools(services: &UiServices, name: &str, args: &Value) -> Option<ToolCallResult> {
+    match name {
+        "get_audit_log" => Some(execute_get_audit_log(services, args.clone()).await),
+        "export_audit_log" => Some(execute_export_audit_log(services, args.clone()).await),
+        _ => None,
+    }
+}
+
+/// Get recent security audit events.
+///
+/// Returns the most recent audit events, with optional filtering by event type.
+/// Events have sensitive information automatically redacted (e.g., "ocean-forest-••••").
+async fn execute_get_audit_log(services: &UiServices, args: Value) -> ToolCallResult {
+    use communitas_ui_service::audit::parse_event_types;
+
+    // Parse limit (default 50, max 100)
+    let limit = args
+        .get("limit")
+        .and_then(|v| v.as_u64())
+        .map(|v| v.min(100) as usize)
+        .unwrap_or(50);
+
+    // Parse optional event type filter
+    let event_types = if let Some(types) = args.get("event_types").and_then(|v| v.as_array()) {
+        let type_strings: Vec<String> = types
+            .iter()
+            .filter_map(|v| v.as_str().map(String::from))
+            .collect();
+
+        if type_strings.is_empty() {
+            None
+        } else {
+            match parse_event_types(&type_strings) {
+                Ok(types) => Some(types),
+                Err(e) => return error_result(&format!("Invalid event type: {e}")),
+            }
+        }
+    } else {
+        None
+    };
+
+    // Read events from audit service
+    match services.audit().read_recent(limit, event_types).await {
+        Ok(events) => {
+            let event_list: Vec<Value> = events
+                .into_iter()
+                .map(|event| {
+                    let mut obj = json!({
+                        "id": event.id,
+                        "timestamp": event.timestamp.to_rfc3339(),
+                        "event_type": format!("{}", event.event_type),
+                        "identity_redacted": event.identity_redacted,
+                        "device_fingerprint": event.device_fingerprint,
+                        "success": event.success
+                    });
+                    if let Some(ref meta) = event.metadata {
+                        obj["metadata"] = meta.clone();
+                    }
+                    obj
+                })
+                .collect();
+
+            json_result(&json!({
+                "events": event_list,
+                "count": event_list.len(),
+                "limit": limit
+            }))
+        }
+        Err(e) => error_result(&format!("Failed to read audit log: {e}")),
+    }
+}
+
+/// Export audit events within a date range.
+///
+/// Returns all events within the specified ISO 8601 date range for compliance
+/// reporting and security reviews.
+async fn execute_export_audit_log(services: &UiServices, args: Value) -> ToolCallResult {
+    use communitas_ui_service::audit::parse_event_types;
+
+    // Require start and end dates
+    let start_date = match args.get("start_date").and_then(|v| v.as_str()) {
+        Some(s) => s,
+        None => return error_result("Missing required parameter: start_date"),
+    };
+
+    let end_date = match args.get("end_date").and_then(|v| v.as_str()) {
+        Some(s) => s,
+        None => return error_result("Missing required parameter: end_date"),
+    };
+
+    // Parse optional event type filter
+    let event_types = if let Some(types) = args.get("event_types").and_then(|v| v.as_array()) {
+        let type_strings: Vec<String> = types
+            .iter()
+            .filter_map(|v| v.as_str().map(String::from))
+            .collect();
+
+        if type_strings.is_empty() {
+            None
+        } else {
+            match parse_event_types(&type_strings) {
+                Ok(types) => Some(types),
+                Err(e) => return error_result(&format!("Invalid event type: {e}")),
+            }
+        }
+    } else {
+        None
+    };
+
+    // Export events from audit service
+    match services.audit().export_range(start_date, end_date, event_types).await {
+        Ok(events) => {
+            let event_list: Vec<Value> = events
+                .into_iter()
+                .map(|event| {
+                    let mut obj = json!({
+                        "id": event.id,
+                        "timestamp": event.timestamp.to_rfc3339(),
+                        "event_type": format!("{}", event.event_type),
+                        "identity_redacted": event.identity_redacted,
+                        "device_fingerprint": event.device_fingerprint,
+                        "success": event.success
+                    });
+                    if let Some(ref meta) = event.metadata {
+                        obj["metadata"] = meta.clone();
+                    }
+                    obj
+                })
+                .collect();
+
+            json_result(&json!({
+                "events": event_list,
+                "count": event_list.len(),
+                "start_date": start_date,
+                "end_date": end_date
+            }))
+        }
+        Err(e) => error_result(&format!("Failed to export audit log: {e}")),
     }
 }

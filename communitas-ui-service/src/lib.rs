@@ -1,5 +1,6 @@
 //! Shared Rust service layer consumed by all Communitas UI surfaces (Dioxus + MCP).
 
+pub mod audit;
 pub mod auth;
 pub mod call;
 pub mod canvas;
@@ -16,6 +17,7 @@ pub mod util;
 
 use std::sync::Arc;
 
+use audit::AuditService;
 use auth::AuthController;
 use call::CallService;
 use canvas::CanvasService;
@@ -43,6 +45,7 @@ pub struct UiServices {
     canvas: Arc<CanvasService>,
     drive: Arc<DriveService>,
     call: Arc<CallService>,
+    audit: Arc<AuditService>,
 }
 
 impl UiServices {
@@ -96,6 +99,7 @@ impl UiServices {
         let canvas = Arc::new(CanvasService::new(auth.clone(), app.clone()));
         let drive = Arc::new(DriveService::new(auth.clone(), app.clone()));
         let call = Arc::new(CallService::new(auth.clone(), app.clone()));
+        let audit = Arc::new(AuditService::new(storage.root().join("audit_logs")));
         Ok(Self {
             storage,
             auth,
@@ -107,6 +111,7 @@ impl UiServices {
             canvas,
             drive,
             call,
+            audit,
         })
     }
 
@@ -158,6 +163,11 @@ impl UiServices {
     /// Real-time voice/video call service.
     pub fn call(&self) -> Arc<CallService> {
         self.call.clone()
+    }
+
+    /// Security audit log service.
+    pub fn audit(&self) -> Arc<AuditService> {
+        self.audit.clone()
     }
 }
 
@@ -217,6 +227,7 @@ mod tests {
         let _ = services.canvas();
         let _ = services.drive();
         let _ = services.call();
+        let _ = services.audit();
     }
 
     #[tokio::test]
@@ -381,6 +392,7 @@ mod tests {
         assert!(Arc::ptr_eq(&services1.kanban(), &services2.kanban()));
         assert!(Arc::ptr_eq(&services1.canvas(), &services2.canvas()));
         assert!(Arc::ptr_eq(&services1.drive(), &services2.drive()));
+        assert!(Arc::ptr_eq(&services1.audit(), &services2.audit()));
     }
 
     #[tokio::test]

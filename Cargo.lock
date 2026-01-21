@@ -1348,10 +1348,12 @@ version = "0.1.60"
 dependencies = [
  "async-trait",
  "canvas-core",
+ "chrono",
  "communitas-core",
  "communitas-kanban",
  "communitas-ui-api",
  "dirs 5.0.1",
+ "hex",
  "saorsa-webrtc-core",
  "serde",
  "serde_json",
@@ -1360,6 +1362,7 @@ dependencies = [
  "tokio",
  "tracing",
  "whoami",
+ "zeroize",
 ]
 
 [[package]]

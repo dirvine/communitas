@@ -29,6 +29,8 @@ pub struct ThreadSummary {
     pub typing_users: Vec<String>,
     /// Whether this thread is pinned to the top of the list.
     pub is_pinned: bool,
+    /// Presence status for DM threads (None for entity threads).
+    pub contact_presence: Option<PresenceStatus>,
 }
 
 /// A message in a conversation thread.
@@ -126,6 +128,7 @@ mod tests {
             is_dm: false,
             typing_users: vec![],
             is_pinned: false,
+            contact_presence: None,
         };
         let t2 = t1.clone();
         assert_eq!(t1, t2);
@@ -146,10 +149,12 @@ mod tests {
             is_dm: true,
             typing_users: vec![],
             is_pinned: false,
+            contact_presence: Some(PresenceStatus::Online),
         };
         assert!(dm.is_dm);
         assert!(dm.contact_id.is_some());
         assert!(dm.entity_id.is_none());
+        assert_eq!(dm.contact_presence, Some(PresenceStatus::Online));
     }
 
     #[test]

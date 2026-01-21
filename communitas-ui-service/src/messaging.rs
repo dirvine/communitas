@@ -7,6 +7,8 @@ use std::time::{Duration, Instant};
 use communitas_core::app::CommunitasApp;
 use communitas_core::command::{Command, Event, Query, QueryResponse, Subscription};
 use communitas_ui_api::{Message, SearchResult, ThreadSummary};
+
+use crate::presence::PresenceSnapshot;
 use serde::{Deserialize, Serialize};
 use std::sync::RwLock;
 use thiserror::Error;
@@ -178,6 +180,8 @@ pub struct MessagingService {
     typing_state: Arc<RwLock<TypingState>>,
     /// Persistent pinned threads (shared between service and event loop).
     pinned_threads: Arc<RwLock<PinnedThreads>>,
+    /// Presence state receiver for DM thread contact presence.
+    presence_rx: watch::Receiver<PresenceSnapshot>,
 }
 
 impl MessagingService {
@@ -191,10 +195,12 @@ impl MessagingService {
     /// * `auth` - Shared authentication controller for checking login state
     /// * `app` - Shared reference to the core application
     /// * `storage` - UI storage for persisting unread counts
+    /// * `presence_rx` - Receiver for presence state updates (for DM thread contact presence)
     pub fn new(
         auth: Arc<AuthController>,
         app: Arc<CommunitasApp>,
         storage: Arc<UiStorage>,
+        presence_rx: watch::Receiver<PresenceSnapshot>,
     ) -> Self {
         let (tx, rx) = watch::channel(MessagingSnapshot::default());
 
@@ -234,6 +240,7 @@ impl MessagingService {
         let active_clone = active_thread.clone();
         let typing_clone = typing_state.clone();
         let pinned_clone = pinned_threads.clone();
+        let presence_clone = presence_rx.clone();
 
         // Spawn background task to process events
         tokio::spawn(async move {
@@ -247,6 +254,7 @@ impl MessagingService {
                 active_clone,
                 typing_clone,
                 pinned_clone,
+                presence_clone,
             )
             .await;
         });
@@ -261,6 +269,7 @@ impl MessagingService {
             active_thread,
             typing_state,
             pinned_threads,
+            presence_rx,
         }
     }
 
@@ -281,6 +290,7 @@ impl MessagingService {
         active_thread: Arc<RwLock<Option<String>>>,
         typing_state: Arc<RwLock<TypingState>>,
         pinned_threads: Arc<RwLock<PinnedThreads>>,
+        presence_rx: watch::Receiver<PresenceSnapshot>,
     ) {
         loop {
             match event_rx.recv().await {
@@ -342,6 +352,7 @@ impl MessagingService {
                             &unread_counts,
                             &typing_state,
                             &pinned_threads,
+                            &presence_rx,
                         )
                         .await;
                     }
@@ -359,6 +370,7 @@ impl MessagingService {
                         &unread_counts,
                         &typing_state,
                         &pinned_threads,
+                        &presence_rx,
                     )
                     .await;
                 }
@@ -374,6 +386,7 @@ impl MessagingService {
     /// Internal helper to refresh threads and update the watch channel.
     ///
     /// Used by both the event loop and explicit refresh calls.
+    #[allow(clippy::too_many_arguments)]
     async fn refresh_threads_internal(
         tx: &watch::Sender<MessagingSnapshot>,
         app: &Arc<CommunitasApp>,
@@ -381,6 +394,7 @@ impl MessagingService {
         unread_counts: &Arc<RwLock<UnreadCounts>>,
         typing_state: &Arc<RwLock<TypingState>>,
         pinned_threads: &Arc<RwLock<PinnedThreads>>,
+        presence_rx: &watch::Receiver<PresenceSnapshot>,
     ) {
         let is_authenticated = matches!(
             &*auth.subscribe().borrow(),
@@ -410,7 +424,10 @@ impl MessagingService {
             .map(|guard| (*guard).clone())
             .unwrap_or_default();
 
-        let Some(threads) = Self::fetch_threads(app, &counts, &typing, &pinned).await else {
+        let presence = presence_rx.borrow().clone();
+
+        let Some(threads) = Self::fetch_threads(app, &counts, &typing, &pinned, &presence).await
+        else {
             trace!("Failed to fetch threads in refresh");
             return;
         };
@@ -432,6 +449,7 @@ impl MessagingService {
         unread_counts: &UnreadCounts,
         typing_state: &TypingState,
         pinned_threads: &PinnedThreads,
+        presence_snapshot: &PresenceSnapshot,
     ) -> Option<Vec<ThreadSummary>> {
         let entities = match app.query(Query::ListEntities).await {
             Ok(QueryResponse::EntityList(entities)) => entities,
@@ -476,6 +494,7 @@ impl MessagingService {
                 is_dm: false,
                 typing_users: typing_state.get_typing_users(&thread_id),
                 is_pinned: pinned_threads.is_pinned(&thread_id),
+                contact_presence: None,
             });
         }
 
@@ -513,6 +532,8 @@ impl MessagingService {
                 };
 
                 let thread_id = format!("dm:{contact_id}");
+                // Look up presence status for this contact
+                let contact_presence = presence_snapshot.statuses.get(&contact_id).copied();
                 threads.push(ThreadSummary {
                     thread_id: thread_id.clone(),
                     entity_id: None,
@@ -526,6 +547,7 @@ impl MessagingService {
                     is_dm: true,
                     typing_users: typing_state.get_typing_users(&thread_id),
                     is_pinned: pinned_threads.is_pinned(&thread_id),
+                    contact_presence,
                 });
             }
         }
@@ -568,6 +590,7 @@ impl MessagingService {
             &self.unread_counts,
             &self.typing_state,
             &self.pinned_threads,
+            &self.presence_rx,
         )
         .await;
     }
@@ -609,7 +632,9 @@ impl MessagingService {
             .map(|guard| (*guard).clone())
             .unwrap_or_default();
 
-        let threads = Self::fetch_threads(&self.app, &counts, &typing, &pinned)
+        let presence = self.presence_rx.borrow().clone();
+
+        let threads = Self::fetch_threads(&self.app, &counts, &typing, &pinned, &presence)
             .await
             .unwrap_or_default();
 
@@ -1421,7 +1446,9 @@ mod tests {
             .await
             .unwrap(),
         );
-        MessagingService::new(auth, app, storage)
+        // Create a dummy presence receiver for tests
+        let (_presence_tx, presence_rx) = watch::channel(PresenceSnapshot::default());
+        MessagingService::new(auth, app, storage, presence_rx)
     }
 
     #[tokio::test]
@@ -1521,6 +1548,7 @@ mod tests {
             is_dm: false,
             typing_users: vec![],
             is_pinned: false,
+            contact_presence: None,
         }];
 
         service.set_threads(threads);
@@ -1753,6 +1781,7 @@ mod tests {
                 is_dm: false,
                 typing_users: vec![],
                 is_pinned: false,
+                contact_presence: None,
             },
             ThreadSummary {
                 thread_id: "entity-2".to_string(),
@@ -1767,6 +1796,7 @@ mod tests {
                 is_dm: false,
                 typing_users: vec![],
                 is_pinned: false,
+                contact_presence: None,
             },
         ];
 

@@ -94,12 +94,14 @@ impl UiServices {
         let navigation = Arc::new(NavigationStore::new(storage.clone())?);
         let directory = Arc::new(DirectoryService::new(auth.clone()));
         let storage_arc = Arc::new(storage.clone());
+        // Create presence first so messaging can use it for DM thread presence
+        let presence = Arc::new(PresenceService::new(auth.clone(), directory.clone()));
         let messaging = Arc::new(MessagingService::new(
             auth.clone(),
             app.clone(),
             storage_arc,
+            presence.subscribe(),
         ));
-        let presence = Arc::new(PresenceService::new(auth.clone(), directory.clone()));
         let kanban = Arc::new(KanbanService::new(auth.clone(), app.clone()));
         let canvas = Arc::new(CanvasService::new(auth.clone(), app.clone()));
         let drive = Arc::new(DriveService::new(auth.clone(), app.clone()));

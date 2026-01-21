@@ -52,8 +52,9 @@
 //! ```
 
 use crate::command::{
-    CallResponse, CallStatusResponse, CanvasSnapshotResponse, ContactResponse, DiskInfoResponse,
-    DiskStatsResponse, EntityResponse, FileInfoResponse, FilePreviewResponse, InviteResponse,
+    CallResponse, CallStatusResponse, CanvasSnapshotResponse, ChunkReadResponse,
+    ChunkedWriteProgressResponse, ContactResponse, DiskInfoResponse, DiskStatsResponse,
+    EntityResponse, FileInfoResponse, FileMetadataResponse, FilePreviewResponse, InviteResponse,
     MemberResponse, MessageResponse, PresenceResponse, ReactionResponse, SyncStateResponse,
     WebsiteResponse,
 };
@@ -1436,6 +1437,128 @@ impl CommunitasApp {
                     disk_type,
                     source_path,
                     dest_path,
+                };
+                self.broadcast_event(event.clone());
+                Ok(vec![event])
+            }
+
+            // ================================================================
+            // Chunked Transfer Commands
+            // ================================================================
+            Command::StartChunkedWrite {
+                entity_id,
+                disk_type,
+                path,
+                total_size,
+                chunk_size,
+            } => {
+                let ctx = self.context.read().await;
+                let disk_type_internal = disk_type_from_arg(disk_type);
+
+                let chunk_info = ctx
+                    .disk_service
+                    .start_chunked_write(&entity_id, disk_type_internal, &path, total_size, chunk_size)
+                    .await
+                    .map_err(|e| CommandError {
+                        command_type: command_type.clone(),
+                        message: format!("{}", e),
+                        code: "START_CHUNKED_WRITE_FAILED".to_string(),
+                    })?;
+
+                let event = Event::ChunkedWriteStarted {
+                    entity_id,
+                    disk_type,
+                    path,
+                    total_size,
+                    total_chunks: chunk_info.total_chunks,
+                };
+                self.broadcast_event(event.clone());
+                Ok(vec![event])
+            }
+
+            Command::WriteChunk {
+                entity_id,
+                disk_type,
+                path,
+                offset,
+                data,
+            } => {
+                let ctx = self.context.read().await;
+                let disk_type_internal = disk_type_from_arg(disk_type);
+
+                let result = ctx
+                    .disk_service
+                    .write_chunk(&entity_id, disk_type_internal, &path, offset, &data)
+                    .await
+                    .map_err(|e| CommandError {
+                        command_type: command_type.clone(),
+                        message: format!("{}", e),
+                        code: "WRITE_CHUNK_FAILED".to_string(),
+                    })?;
+
+                let event = Event::ChunkWritten {
+                    entity_id,
+                    disk_type,
+                    path,
+                    chunk_index: result.info.chunk_index,
+                    offset,
+                    size: result.info.size,
+                    chunk_hash: result.info.chunk_hash,
+                };
+                self.broadcast_event(event.clone());
+                Ok(vec![event])
+            }
+
+            Command::FinishChunkedWrite {
+                entity_id,
+                disk_type,
+                path,
+            } => {
+                let ctx = self.context.read().await;
+                let disk_type_internal = disk_type_from_arg(disk_type);
+
+                let file_info = ctx
+                    .disk_service
+                    .finish_chunked_write(&entity_id, disk_type_internal, &path)
+                    .await
+                    .map_err(|e| CommandError {
+                        command_type: command_type.clone(),
+                        message: format!("{}", e),
+                        code: "FINISH_CHUNKED_WRITE_FAILED".to_string(),
+                    })?;
+
+                let event = Event::ChunkedWriteCompleted {
+                    entity_id,
+                    disk_type,
+                    path,
+                    total_size: file_info.size_bytes,
+                    content_hash: file_info.content_hash,
+                };
+                self.broadcast_event(event.clone());
+                Ok(vec![event])
+            }
+
+            Command::AbortChunkedWrite {
+                entity_id,
+                disk_type,
+                path,
+            } => {
+                let ctx = self.context.read().await;
+                let disk_type_internal = disk_type_from_arg(disk_type);
+
+                ctx.disk_service
+                    .abort_chunked_write(&entity_id, disk_type_internal, &path)
+                    .await
+                    .map_err(|e| CommandError {
+                        command_type: command_type.clone(),
+                        message: format!("{}", e),
+                        code: "ABORT_CHUNKED_WRITE_FAILED".to_string(),
+                    })?;
+
+                let event = Event::ChunkedWriteAborted {
+                    entity_id,
+                    disk_type,
+                    path,
                 };
                 self.broadcast_event(event.clone());
                 Ok(vec![event])
@@ -3164,6 +3287,129 @@ impl CommunitasApp {
                     created_at: now,
                     modified_at: now,
                 }))
+            }
+
+            // ================================================================
+            // Chunked Transfer Queries
+            // ================================================================
+            Query::ReadChunk {
+                entity_id,
+                disk_type,
+                path,
+                offset,
+                chunk_size,
+            } => {
+                let ctx = self.context.read().await;
+                let disk_type_internal = disk_type_from_arg(disk_type);
+
+                let result = ctx
+                    .disk_service
+                    .read_chunk(&entity_id, disk_type_internal, &path, offset, chunk_size)
+                    .await
+                    .map_err(|e| QueryError {
+                        query_type: query_type.clone(),
+                        message: format!("{}", e),
+                        code: "READ_CHUNK_FAILED".to_string(),
+                    })?;
+
+                Ok(QueryResponse::ChunkRead(ChunkReadResponse {
+                    data: result.data,
+                    offset: result.info.offset,
+                    size: result.info.size,
+                    chunk_hash: result.info.chunk_hash,
+                    total_size: result.info.total_size,
+                    total_chunks: result.info.total_chunks,
+                    chunk_index: result.info.chunk_index,
+                    is_last: result.is_last,
+                }))
+            }
+
+            Query::GetFileMetadata {
+                entity_id,
+                disk_type,
+                path,
+            } => {
+                let ctx = self.context.read().await;
+                let disk_type_internal = disk_type_from_arg(disk_type);
+
+                let file_info = ctx
+                    .disk_service
+                    .get_file_info(&entity_id, disk_type_internal, &path)
+                    .await
+                    .map_err(|e| QueryError {
+                        query_type: query_type.clone(),
+                        message: format!("{}", e),
+                        code: "GET_FILE_METADATA_FAILED".to_string(),
+                    })?;
+
+                use crate::disk_service::{DEFAULT_CHUNK_SIZE, EntityDiskService};
+                let chunk_count = EntityDiskService::calculate_chunk_count(file_info.size_bytes, Some(DEFAULT_CHUNK_SIZE));
+
+                Ok(QueryResponse::FileMetadata(FileMetadataResponse {
+                    path: file_info.path,
+                    name: file_info.name,
+                    is_directory: file_info.is_directory,
+                    size_bytes: file_info.size_bytes,
+                    modified_at: file_info.modified_at,
+                    content_hash: file_info.content_hash,
+                    chunk_count,
+                }))
+            }
+
+            Query::GetChunkedWriteProgress {
+                entity_id,
+                disk_type,
+                path,
+            } => {
+                let ctx = self.context.read().await;
+                let disk_type_internal = disk_type_from_arg(disk_type);
+
+                let progress = ctx
+                    .disk_service
+                    .get_chunked_write_progress(&entity_id, disk_type_internal, &path)
+                    .await;
+
+                use crate::disk_service::DEFAULT_CHUNK_SIZE;
+                match progress {
+                    Some((bytes_written, total_size)) => {
+                        let progress_percent = if total_size > 0 {
+                            (bytes_written as f32 / total_size as f32) * 100.0
+                        } else {
+                            0.0
+                        };
+                        let total_chunks = if total_size == 0 {
+                            0
+                        } else {
+                            total_size.div_ceil(DEFAULT_CHUNK_SIZE)
+                        };
+                        let chunks_completed = bytes_written / DEFAULT_CHUNK_SIZE;
+
+                        Ok(QueryResponse::ChunkedWriteProgress(ChunkedWriteProgressResponse {
+                            entity_id,
+                            disk_type,
+                            path,
+                            bytes_written,
+                            total_size,
+                            progress_percent,
+                            chunks_completed,
+                            total_chunks,
+                            is_active: true,
+                        }))
+                    }
+                    None => {
+                        Ok(QueryResponse::ChunkedWriteProgress(ChunkedWriteProgressResponse {
+                            entity_id,
+                            disk_type,
+                            path,
+                            bytes_written: 0,
+                            total_size: 0,
+                            progress_percent: 0.0,
+                            chunks_completed: 0,
+                            total_chunks: 0,
+                            is_active: false,
+                        }))
+                    }
+                }
             }
 
             // ================================================================

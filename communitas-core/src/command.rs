@@ -330,6 +330,45 @@ pub enum Command {
     },
 
     // ========================================================================
+    // Chunked Transfer Commands (Streaming I/O)
+    // ========================================================================
+    /// Start a chunked write session for streaming a large file
+    StartChunkedWrite {
+        entity_id: String,
+        disk_type: DiskTypeArg,
+        path: String,
+        /// Total expected file size in bytes
+        total_size: u64,
+        /// Optional chunk size (defaults to 1MB)
+        chunk_size: Option<u64>,
+    },
+
+    /// Write a chunk of data to an in-progress chunked write
+    WriteChunk {
+        entity_id: String,
+        disk_type: DiskTypeArg,
+        path: String,
+        /// Byte offset to write at (must match expected position)
+        offset: u64,
+        /// The chunk data
+        data: Vec<u8>,
+    },
+
+    /// Complete a chunked write operation
+    FinishChunkedWrite {
+        entity_id: String,
+        disk_type: DiskTypeArg,
+        path: String,
+    },
+
+    /// Abort an in-progress chunked write
+    AbortChunkedWrite {
+        entity_id: String,
+        disk_type: DiskTypeArg,
+        path: String,
+    },
+
+    // ========================================================================
     // Kanban Commands
     // ========================================================================
     /// Create a new Kanban board
@@ -855,6 +894,45 @@ pub enum Event {
     },
 
     // ========================================================================
+    // Chunked Transfer Events
+    // ========================================================================
+    /// Chunked write session started
+    ChunkedWriteStarted {
+        entity_id: String,
+        disk_type: DiskTypeArg,
+        path: String,
+        total_size: u64,
+        total_chunks: u64,
+    },
+
+    /// A chunk was written
+    ChunkWritten {
+        entity_id: String,
+        disk_type: DiskTypeArg,
+        path: String,
+        chunk_index: u64,
+        offset: u64,
+        size: u64,
+        chunk_hash: String,
+    },
+
+    /// Chunked write completed
+    ChunkedWriteCompleted {
+        entity_id: String,
+        disk_type: DiskTypeArg,
+        path: String,
+        total_size: u64,
+        content_hash: String,
+    },
+
+    /// Chunked write was aborted
+    ChunkedWriteAborted {
+        entity_id: String,
+        disk_type: DiskTypeArg,
+        path: String,
+    },
+
+    // ========================================================================
     // Kanban Events
     // ========================================================================
     /// Kanban board was created
@@ -1214,6 +1292,34 @@ pub enum Query {
     },
 
     // ========================================================================
+    // Chunked Transfer Queries
+    // ========================================================================
+    /// Read a chunk of a file for streaming transfers
+    ReadChunk {
+        entity_id: String,
+        disk_type: DiskTypeArg,
+        path: String,
+        /// Byte offset to start reading from
+        offset: u64,
+        /// Number of bytes to read (defaults to 1MB)
+        chunk_size: Option<u64>,
+    },
+
+    /// Get file metadata without reading contents (for chunked transfers)
+    GetFileMetadata {
+        entity_id: String,
+        disk_type: DiskTypeArg,
+        path: String,
+    },
+
+    /// Get the progress of an active chunked write
+    GetChunkedWriteProgress {
+        entity_id: String,
+        disk_type: DiskTypeArg,
+        path: String,
+    },
+
+    // ========================================================================
     // Kanban Queries
     // ========================================================================
     /// Get a Kanban board
@@ -1366,6 +1472,15 @@ pub enum QueryResponse {
 
     /// File preview (thumbnail/excerpt)
     FilePreview(FilePreviewResponse),
+
+    /// Chunk read result
+    ChunkRead(ChunkReadResponse),
+
+    /// File metadata (without contents)
+    FileMetadata(FileMetadataResponse),
+
+    /// Chunked write progress
+    ChunkedWriteProgress(ChunkedWriteProgressResponse),
 
     /// Disk statistics
     DiskStats(DiskStatsResponse),
@@ -1524,6 +1639,60 @@ pub struct FileInfoResponse {
     pub is_directory: bool,
     pub size_bytes: u64,
     pub modified_at: i64,
+}
+
+/// Chunk read response data
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChunkReadResponse {
+    /// The chunk data
+    pub data: Vec<u8>,
+    /// Byte offset from start of file
+    pub offset: u64,
+    /// Size of this chunk
+    pub size: u64,
+    /// BLAKE3 hash of this chunk
+    pub chunk_hash: String,
+    /// Total file size
+    pub total_size: u64,
+    /// Total number of chunks
+    pub total_chunks: u64,
+    /// This chunk's index (0-based)
+    pub chunk_index: u64,
+    /// Whether this is the last chunk
+    pub is_last: bool,
+}
+
+/// File metadata response (without content)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FileMetadataResponse {
+    pub path: String,
+    pub name: String,
+    pub is_directory: bool,
+    pub size_bytes: u64,
+    pub modified_at: i64,
+    pub content_hash: String,
+    /// Number of chunks at default chunk size (1MB)
+    pub chunk_count: u64,
+}
+
+/// Chunked write progress response
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChunkedWriteProgressResponse {
+    pub entity_id: String,
+    pub disk_type: DiskTypeArg,
+    pub path: String,
+    /// Bytes written so far
+    pub bytes_written: u64,
+    /// Total expected size
+    pub total_size: u64,
+    /// Progress as percentage (0-100)
+    pub progress_percent: f32,
+    /// Chunks completed
+    pub chunks_completed: u64,
+    /// Total chunks expected
+    pub total_chunks: u64,
+    /// Whether the write is active
+    pub is_active: bool,
 }
 
 /// Disk stats response data

@@ -7,11 +7,13 @@
 //! - Download with checksum verification
 //! - Quota meter with usage warnings
 //! - Native file picker dialogs
+//! - Permission dialogs for security-sensitive operations
 
 mod browser;
 pub(crate) mod download_manager;
 pub(crate) mod file_list;
 pub(crate) mod file_picker;
+pub(crate) mod permission_dialog;
 pub(crate) mod preview_panel;
 pub(crate) mod quota_meter;
 pub(crate) mod tree_view;
@@ -25,4 +27,12 @@ pub use browser::DriveBrowser;
 pub use file_picker::{
     open_file_picker, open_save_picker, show_confirm_dialog, show_error_dialog, show_info_dialog,
     DropZone, FileFilter, FilePickerButton, PickerConfig, PickerResult,
+};
+
+// Permission dialog exports for security-sensitive operations
+#[allow(unused_imports)]
+pub use permission_dialog::{
+    is_dangerous_extension, DangerousFileDialog, DangerousFileDialogProps, DangerousFileType,
+    FileAccessDialog, FileAccessDialogProps, NetworkShareDialog, NetworkShareDialogProps,
+    PermissionResult, PermissionType, QuotaWarningDialog, QuotaWarningDialogProps,
 };

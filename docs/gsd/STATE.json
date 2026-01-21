@@ -3,22 +3,22 @@
   "project": "communitas",
   "active": true,
   "milestone": {
-    "number": 5,
-    "name": "M5 Stabilization"
+    "number": 6,
+    "name": "M6 Beta-Ready (Apple Desktop)"
   },
   "phase": {
-    "number": "5.1",
-    "name": "Packaging & Installers",
-    "plans": ["PLAN-35"],
-    "status": "complete"
+    "number": "6.1",
+    "name": "Auth Hardening",
+    "plans": ["PLAN-36"],
+    "status": "executing"
   },
   "progress": {
-    "total_tasks": 6,
-    "completed_tasks": 6,
-    "current_task": null
+    "total_tasks": 11,
+    "completed_tasks": 1,
+    "current_task": 2
   },
   "status": "awaiting_planning",
-  "last_review": "2026-01-21T04:10:00Z",
-  "last_updated": "2026-01-21T06:00:00Z",
-  "notes": "Phase 5.1 complete. macOS desktop bundling with signing, notarization, DMG creation, smoke tests, and documentation."
+  "last_review": "2026-01-21T11:00:00Z",
+  "last_updated": "2026-01-21T11:00:00Z",
+  "notes": "Task 1 complete: Persistent Audit Log Infrastructure with encryption, rotation, and tests."
 }

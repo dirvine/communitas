@@ -1457,7 +1457,13 @@ impl CommunitasApp {
 
                 let chunk_info = ctx
                     .disk_service
-                    .start_chunked_write(&entity_id, disk_type_internal, &path, total_size, chunk_size)
+                    .start_chunked_write(
+                        &entity_id,
+                        disk_type_internal,
+                        &path,
+                        total_size,
+                        chunk_size,
+                    )
                     .await
                     .map_err(|e| CommandError {
                         command_type: command_type.clone(),
@@ -3423,7 +3429,10 @@ impl CommunitasApp {
                     })?;
 
                 use crate::disk_service::{DEFAULT_CHUNK_SIZE, EntityDiskService};
-                let chunk_count = EntityDiskService::calculate_chunk_count(file_info.size_bytes, Some(DEFAULT_CHUNK_SIZE));
+                let chunk_count = EntityDiskService::calculate_chunk_count(
+                    file_info.size_bytes,
+                    Some(DEFAULT_CHUNK_SIZE),
+                );
 
                 Ok(QueryResponse::FileMetadata(FileMetadataResponse {
                     path: file_info.path,
@@ -3464,20 +3473,22 @@ impl CommunitasApp {
                         };
                         let chunks_completed = bytes_written / DEFAULT_CHUNK_SIZE;
 
-                        Ok(QueryResponse::ChunkedWriteProgress(ChunkedWriteProgressResponse {
-                            entity_id,
-                            disk_type,
-                            path,
-                            bytes_written,
-                            total_size,
-                            progress_percent,
-                            chunks_completed,
-                            total_chunks,
-                            is_active: true,
-                        }))
+                        Ok(QueryResponse::ChunkedWriteProgress(
+                            ChunkedWriteProgressResponse {
+                                entity_id,
+                                disk_type,
+                                path,
+                                bytes_written,
+                                total_size,
+                                progress_percent,
+                                chunks_completed,
+                                total_chunks,
+                                is_active: true,
+                            },
+                        ))
                     }
-                    None => {
-                        Ok(QueryResponse::ChunkedWriteProgress(ChunkedWriteProgressResponse {
+                    None => Ok(QueryResponse::ChunkedWriteProgress(
+                        ChunkedWriteProgressResponse {
                             entity_id,
                             disk_type,
                             path,
@@ -3487,8 +3498,8 @@ impl CommunitasApp {
                             chunks_completed: 0,
                             total_chunks: 0,
                             is_active: false,
-                        }))
-                    }
+                        },
+                    )),
                 }
             }
 
@@ -3517,19 +3528,21 @@ impl CommunitasApp {
                     .map(|s| s.total_size())
                     .unwrap_or(0);
 
-                Ok(QueryResponse::ResumeVerification(ResumeVerificationResponse {
-                    entity_id,
-                    disk_type,
-                    path,
-                    can_resume: result.can_resume,
-                    verified_chunks: result.verified_chunks,
-                    total_chunks: result.total_chunks,
-                    verified_bytes: result.verified_bytes,
-                    total_size,
-                    failure_reason: result.failure_reason,
-                    file_modified: result.file_modified,
-                    verified_hash: result.verified_hash,
-                }))
+                Ok(QueryResponse::ResumeVerification(
+                    ResumeVerificationResponse {
+                        entity_id,
+                        disk_type,
+                        path,
+                        can_resume: result.can_resume,
+                        verified_chunks: result.verified_chunks,
+                        total_chunks: result.total_chunks,
+                        verified_bytes: result.verified_bytes,
+                        total_size,
+                        failure_reason: result.failure_reason,
+                        file_modified: result.file_modified,
+                        verified_hash: result.verified_hash,
+                    },
+                ))
             }
 
             Query::GetResumeCapability {

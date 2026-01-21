@@ -1122,6 +1122,7 @@ dependencies = [
 name = "communitas-bench"
 version = "0.1.0"
 dependencies = [
+ "blake3",
  "communitas-core",
  "communitas-ui-api",
  "communitas-ui-service",

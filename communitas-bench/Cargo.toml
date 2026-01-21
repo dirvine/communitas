@@ -8,6 +8,7 @@ publish = false
 communitas-core = { path = "../communitas-core" }
 communitas-ui-service = { path = "../communitas-ui-service" }
 communitas-ui-api = { path = "../communitas-ui-api" }
+blake3 = "1.6"
 criterion = { version = "0.5", features = ["html_reports", "async_tokio"] }
 tempfile = "3"
 tokio = { version = "1.0", features = ["rt-multi-thread", "macros"] }

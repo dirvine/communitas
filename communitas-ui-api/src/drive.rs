@@ -464,7 +464,8 @@ impl ShareLink {
 
     /// Returns true if the link has reached max accesses.
     pub fn is_access_limit_reached(&self) -> bool {
-        self.max_accesses.is_some_and(|max| self.access_count >= max)
+        self.max_accesses
+            .is_some_and(|max| self.access_count >= max)
     }
 
     /// Returns true if the link is currently usable.
@@ -474,7 +475,8 @@ impl ShareLink {
 
     /// Returns remaining accesses (None if unlimited).
     pub fn remaining_accesses(&self) -> Option<u64> {
-        self.max_accesses.map(|max| max.saturating_sub(self.access_count))
+        self.max_accesses
+            .map(|max| max.saturating_sub(self.access_count))
     }
 }
 
@@ -824,11 +826,7 @@ impl StagingQueueStatus {
     /// Returns upload progress as a percentage (0-100).
     pub fn percent_complete(&self) -> u32 {
         if self.total_bytes == 0 {
-            if self.total_files == 0 {
-                100
-            } else {
-                0
-            }
+            if self.total_files == 0 { 100 } else { 0 }
         } else {
             ((self.bytes_uploaded as f64 / self.total_bytes as f64) * 100.0) as u32
         }
@@ -1363,37 +1361,51 @@ mod tests {
     #[test]
     fn share_link_access_result_errors() {
         assert!(!ShareLinkAccessResult::PasswordRequired.is_granted());
-        assert!(ShareLinkAccessResult::PasswordRequired.error_message().is_some());
+        assert!(
+            ShareLinkAccessResult::PasswordRequired
+                .error_message()
+                .is_some()
+        );
 
         assert!(!ShareLinkAccessResult::IncorrectPassword.is_granted());
-        assert!(ShareLinkAccessResult::IncorrectPassword
-            .error_message()
-            .unwrap()
-            .contains("Incorrect"));
+        assert!(
+            ShareLinkAccessResult::IncorrectPassword
+                .error_message()
+                .unwrap()
+                .contains("Incorrect")
+        );
 
         assert!(!ShareLinkAccessResult::Expired.is_granted());
-        assert!(ShareLinkAccessResult::Expired
-            .error_message()
-            .unwrap()
-            .contains("expired"));
+        assert!(
+            ShareLinkAccessResult::Expired
+                .error_message()
+                .unwrap()
+                .contains("expired")
+        );
 
         assert!(!ShareLinkAccessResult::AccessLimitReached.is_granted());
-        assert!(ShareLinkAccessResult::AccessLimitReached
-            .error_message()
-            .unwrap()
-            .contains("limit"));
+        assert!(
+            ShareLinkAccessResult::AccessLimitReached
+                .error_message()
+                .unwrap()
+                .contains("limit")
+        );
 
         assert!(!ShareLinkAccessResult::Revoked.is_granted());
-        assert!(ShareLinkAccessResult::Revoked
-            .error_message()
-            .unwrap()
-            .contains("revoked"));
+        assert!(
+            ShareLinkAccessResult::Revoked
+                .error_message()
+                .unwrap()
+                .contains("revoked")
+        );
 
         assert!(!ShareLinkAccessResult::NotFound.is_granted());
-        assert!(ShareLinkAccessResult::NotFound
-            .error_message()
-            .unwrap()
-            .contains("not found"));
+        assert!(
+            ShareLinkAccessResult::NotFound
+                .error_message()
+                .unwrap()
+                .contains("not found")
+        );
     }
 
     #[test]
@@ -1502,9 +1514,17 @@ mod tests {
     fn conflict_type_descriptions() {
         assert!(ConflictType::FileExists.description().contains("exists"));
         assert!(ConflictType::LocalModified.description().contains("local"));
-        assert!(ConflictType::RemoteModified.description().contains("destination"));
+        assert!(
+            ConflictType::RemoteModified
+                .description()
+                .contains("destination")
+        );
         assert!(ConflictType::BothModified.description().contains("Both"));
-        assert!(ConflictType::PathTypeChanged.description().contains("directory"));
+        assert!(
+            ConflictType::PathTypeChanged
+                .description()
+                .contains("directory")
+        );
         assert!(ConflictType::QuotaExceeded.description().contains("quota"));
     }
 
@@ -1542,8 +1562,16 @@ mod tests {
 
     #[test]
     fn conflict_resolution_descriptions() {
-        assert!(ConflictResolution::KeepLocal.description().contains("Replace"));
-        assert!(ConflictResolution::KeepRemote.description().contains("Discard"));
+        assert!(
+            ConflictResolution::KeepLocal
+                .description()
+                .contains("Replace")
+        );
+        assert!(
+            ConflictResolution::KeepRemote
+                .description()
+                .contains("Discard")
+        );
         assert!(ConflictResolution::KeepBoth.description().contains("both"));
         assert!(ConflictResolution::Skip.description().contains("Remove"));
         assert!(ConflictResolution::Retry.description().contains("again"));

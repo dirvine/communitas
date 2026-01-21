@@ -330,7 +330,9 @@ pub fn open_file_picker(config: &PickerConfig) -> PickerResult {
 /// Open a save file dialog.
 #[allow(dead_code)]
 pub fn open_save_picker(title: &str, default_name: &str, filters: &[FileFilter]) -> PickerResult {
-    let start_dir = get_last_directory().or_else(dirs::download_dir).or_else(dirs::home_dir);
+    let start_dir = get_last_directory()
+        .or_else(dirs::download_dir)
+        .or_else(dirs::home_dir);
 
     debug!(
         target: "ui.drive.picker",

@@ -992,7 +992,10 @@ async fn test_offline_staging_queue_inner() {
 
     assert!(!staged.id.is_empty());
     assert_eq!(staged.destination_path, "/staged.txt");
-    assert_eq!(staged.state, communitas_ui_api::drive::StagedUploadState::Pending);
+    assert_eq!(
+        staged.state,
+        communitas_ui_api::drive::StagedUploadState::Pending
+    );
 
     // Get staging status
     let status = drive
@@ -1062,7 +1065,12 @@ async fn test_staging_conflict_resolution_inner() {
     // First write a file (this creates a "remote" version)
     let remote_content = b"Remote content";
     drive
-        .write_file(&entity_id, DiskType::Private, "/conflict.txt", remote_content)
+        .write_file(
+            &entity_id,
+            DiskType::Private,
+            "/conflict.txt",
+            remote_content,
+        )
         .await
         .expect("Failed to write remote file");
 
@@ -1095,7 +1103,10 @@ async fn test_staging_conflict_resolution_inner() {
             // Conflict was resolved - verify staged upload is no longer conflicted
             if let Ok(updated) = drive.get_staged_upload(&staged.id).await {
                 assert!(
-                    !matches!(updated.state, communitas_ui_api::drive::StagedUploadState::Conflicted),
+                    !matches!(
+                        updated.state,
+                        communitas_ui_api::drive::StagedUploadState::Conflicted
+                    ),
                     "Staged upload should no longer be conflicted after resolution"
                 );
             }

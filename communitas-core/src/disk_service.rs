@@ -369,7 +369,10 @@ impl EntityDiskService {
             bail!("Entity ID cannot contain path separators: {}", entity_id);
         }
         if entity_id.contains("..") {
-            bail!("Entity ID cannot contain path traversal sequences: {}", entity_id);
+            bail!(
+                "Entity ID cannot contain path traversal sequences: {}",
+                entity_id
+            );
         }
         if entity_id.contains('\0') {
             bail!("Entity ID cannot contain null bytes");
@@ -401,7 +404,10 @@ impl EntityDiskService {
             }
             // Reject components containing ".." anywhere (e.g., "foo..bar")
             if component.contains("..") {
-                bail!("Path component contains invalid sequence '..': {}", component);
+                bail!(
+                    "Path component contains invalid sequence '..': {}",
+                    component
+                );
             }
             // Reject null bytes
             if component.contains('\0') {
@@ -416,7 +422,8 @@ impl EntityDiskService {
     /// Get the filesystem path for an entity's disk directory
     fn get_entity_disk_path(&self, entity_id: &str, disk_type: DiskType) -> Result<PathBuf> {
         Self::validate_entity_id(entity_id)?;
-        Ok(self.root
+        Ok(self
+            .root
             .join("entities")
             .join(entity_id)
             .join(disk_type.as_dir_name()))
@@ -432,8 +439,12 @@ impl EntityDiskService {
         // For new files, rely on sanitize_path() validation which already rejects
         // "..", ".", and other traversal attempts
         if full_path.exists() {
-            let canonical_disk = disk_path.canonicalize().unwrap_or_else(|_| disk_path.clone());
-            let canonical_full = full_path.canonicalize().unwrap_or_else(|_| full_path.clone());
+            let canonical_disk = disk_path
+                .canonicalize()
+                .unwrap_or_else(|_| disk_path.clone());
+            let canonical_full = full_path
+                .canonicalize()
+                .unwrap_or_else(|_| full_path.clone());
 
             if !canonical_full.starts_with(&canonical_disk) {
                 bail!(
@@ -615,11 +626,7 @@ impl EntityDiskService {
 
         let total_size = metadata.len();
         if offset >= total_size {
-            bail!(
-                "Offset {} exceeds file size {}",
-                offset,
-                total_size
-            );
+            bail!("Offset {} exceeds file size {}", offset, total_size);
         }
 
         // Calculate chunk boundaries
@@ -790,9 +797,14 @@ impl EntityDiskService {
         // Get and update write state
         let (chunk_size, total_size, bytes_written) = {
             let writes = self.chunked_writes.read().await;
-            let state = writes
-                .get(&key)
-                .ok_or_else(|| anyhow::anyhow!("No active chunked write for {}:{}{}", entity_id, disk_type, path))?;
+            let state = writes.get(&key).ok_or_else(|| {
+                anyhow::anyhow!(
+                    "No active chunked write for {}:{}{}",
+                    entity_id,
+                    disk_type,
+                    path
+                )
+            })?;
 
             // Verify offset matches expected position
             if offset != state.bytes_written {
@@ -900,9 +912,14 @@ impl EntityDiskService {
         // Remove and get write state
         let state = {
             let mut writes = self.chunked_writes.write().await;
-            writes
-                .remove(&key)
-                .ok_or_else(|| anyhow::anyhow!("No active chunked write for {}:{}{}", entity_id, disk_type, path))?
+            writes.remove(&key).ok_or_else(|| {
+                anyhow::anyhow!(
+                    "No active chunked write for {}:{}{}",
+                    entity_id,
+                    disk_type,
+                    path
+                )
+            })?
         };
 
         // Verify all data was written
@@ -990,7 +1007,11 @@ impl EntityDiskService {
             match tokio::fs::remove_file(&file_path).await {
                 Ok(()) => {}
                 Err(e) => {
-                    warn!("Failed to delete partial file {}: {}", file_path.display(), e);
+                    warn!(
+                        "Failed to delete partial file {}: {}",
+                        file_path.display(),
+                        e
+                    );
                 }
             }
         }
@@ -998,7 +1019,10 @@ impl EntityDiskService {
         // Persist transfer states (removal)
         self.save_transfer_states().await?;
 
-        debug!("Aborted chunked write for {}:{}{}", entity_id, disk_type, path);
+        debug!(
+            "Aborted chunked write for {}:{}{}",
+            entity_id, disk_type, path
+        );
 
         Ok(())
     }
@@ -1150,10 +1174,7 @@ impl EntityDiskService {
             .verify_written_chunks(entity_id, disk_type, path)
             .await?;
 
-        let verified_chunks = verification
-            .iter()
-            .filter(|v| v.is_valid)
-            .count() as u64;
+        let verified_chunks = verification.iter().filter(|v| v.is_valid).count() as u64;
 
         let verified_bytes = verification
             .iter()
@@ -1207,10 +1228,9 @@ impl EntityDiskService {
         // Get transfer state
         let state = {
             let writes = self.chunked_writes.read().await;
-            writes
-                .get(&key)
-                .cloned()
-                .ok_or_else(|| anyhow::anyhow!("No active transfer for {}:{}{}", entity_id, disk_type, path))?
+            writes.get(&key).cloned().ok_or_else(|| {
+                anyhow::anyhow!("No active transfer for {}:{}{}", entity_id, disk_type, path)
+            })?
         };
 
         let file_path = self.get_file_path(entity_id, disk_type, path)?;
@@ -1289,10 +1309,7 @@ impl EntityDiskService {
 
         debug!(
             "Resumed chunked write for {}:{}{} at offset {}",
-            entity_id,
-            disk_type,
-            path,
-            verification.verified_bytes
+            entity_id, disk_type, path, verification.verified_bytes
         );
 
         Ok(verification)
@@ -1740,8 +1757,7 @@ impl EntityDiskService {
 
         let data = {
             let states = self.chunked_writes.read().await;
-            serde_json::to_string_pretty(&*states)
-                .context("Failed to serialize transfer states")?
+            serde_json::to_string_pretty(&*states).context("Failed to serialize transfer states")?
         };
 
         // Write to temp file first
@@ -2435,7 +2451,11 @@ mod tests {
         );
 
         // File should not exist
-        assert!(!service.file_exists(entity_id, DiskType::Private, path).await);
+        assert!(
+            !service
+                .file_exists(entity_id, DiskType::Private, path)
+                .await
+        );
     }
 
     #[tokio::test]
@@ -2497,7 +2517,10 @@ mod tests {
 
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert!(err.to_string().contains("Write would exceed declared file size"));
+        assert!(
+            err.to_string()
+                .contains("Write would exceed declared file size")
+        );
 
         // Cleanup
         service
@@ -2521,10 +2544,7 @@ mod tests {
         );
 
         // Smaller than chunk size
-        assert_eq!(
-            EntityDiskService::calculate_chunk_count(500, Some(1000)),
-            1
-        );
+        assert_eq!(EntityDiskService::calculate_chunk_count(500, Some(1000)), 1);
 
         // Empty file
         assert_eq!(EntityDiskService::calculate_chunk_count(0, Some(1000)), 0);
@@ -2754,10 +2774,12 @@ mod tests {
         assert!(result.transfer_state.is_none());
         assert_eq!(result.verified_chunks, 0);
         assert_eq!(result.total_chunks, 0);
-        assert!(result
-            .failure_reason
-            .unwrap()
-            .contains("No active transfer"));
+        assert!(
+            result
+                .failure_reason
+                .unwrap()
+                .contains("No active transfer")
+        );
     }
 
     #[tokio::test]
@@ -2795,10 +2817,12 @@ mod tests {
 
         assert!(!result.can_resume);
         assert!(result.transfer_state.is_some());
-        assert!(result
-            .failure_reason
-            .unwrap()
-            .contains("Partial file not found"));
+        assert!(
+            result
+                .failure_reason
+                .unwrap()
+                .contains("Partial file not found")
+        );
 
         // Cleanup
         service

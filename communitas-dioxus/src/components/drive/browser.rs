@@ -8,7 +8,7 @@ use std::sync::Arc;
 use tracing::{info, warn};
 
 use super::file_list::FileList;
-use super::file_picker::{open_file_picker, PickerConfig, PickerResult};
+use super::file_picker::{PickerConfig, PickerResult, open_file_picker};
 use super::preview_panel::PreviewPanel;
 use super::quota_meter::QuotaMeter;
 use super::tree_view::TreeView;

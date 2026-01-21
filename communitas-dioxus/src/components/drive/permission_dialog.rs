@@ -42,9 +42,15 @@ pub enum PermissionType {
     /// Network access for sharing files externally.
     NetworkShare { share_url: String },
     /// Storage operation that exceeds quota.
-    StorageQuota { required_bytes: u64, available_bytes: u64 },
+    StorageQuota {
+        required_bytes: u64,
+        available_bytes: u64,
+    },
     /// Dangerous file type (executable, script).
-    DangerousFile { file_name: String, file_type: DangerousFileType },
+    DangerousFile {
+        file_name: String,
+        file_type: DangerousFileType,
+    },
 }
 
 /// Categories of dangerous file types.
@@ -684,15 +690,24 @@ mod tests {
     fn dangerous_file_type_description() {
         assert!(!DangerousFileType::Executable.description().is_empty());
         assert!(!DangerousFileType::Script.description().is_empty());
-        assert!(!DangerousFileType::ArchiveWithExecutables.description().is_empty());
+        assert!(
+            !DangerousFileType::ArchiveWithExecutables
+                .description()
+                .is_empty()
+        );
         assert!(!DangerousFileType::SystemFile.description().is_empty());
         assert!(!DangerousFileType::Unknown.description().is_empty());
     }
 
     #[test]
     fn dangerous_file_type_warning_levels() {
-        assert!(DangerousFileType::Executable.warning_level() > DangerousFileType::Script.warning_level());
-        assert!(DangerousFileType::Script.warning_level() >= DangerousFileType::Unknown.warning_level());
+        assert!(
+            DangerousFileType::Executable.warning_level()
+                > DangerousFileType::Script.warning_level()
+        );
+        assert!(
+            DangerousFileType::Script.warning_level() >= DangerousFileType::Unknown.warning_level()
+        );
     }
 
     #[test]

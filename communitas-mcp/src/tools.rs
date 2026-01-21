@@ -2456,20 +2456,14 @@ async fn dispatch_file_tools(
         "create_share_link" => Some(execute_create_share_link(services, args.clone()).await),
         "revoke_share_link" => Some(execute_revoke_share_link(services, args.clone()).await),
         "list_share_links" => Some(execute_list_share_links(services, args.clone()).await),
-        "get_file_share_links" => {
-            Some(execute_get_file_share_links(services, args.clone()).await)
-        }
+        "get_file_share_links" => Some(execute_get_file_share_links(services, args.clone()).await),
         // Offline staging operations
         "stage_upload" => Some(execute_stage_upload(services, args.clone()).await),
         "get_staged_upload" => Some(execute_get_staged_upload(services, args.clone()).await),
         "list_staged_uploads" => Some(execute_list_staged_uploads(services).await),
         "get_staging_status" => Some(execute_get_staging_status(services).await),
-        "remove_staged_upload" => {
-            Some(execute_remove_staged_upload(services, args.clone()).await)
-        }
-        "retry_staged_upload" => {
-            Some(execute_retry_staged_upload(services, args.clone()).await)
-        }
+        "remove_staged_upload" => Some(execute_remove_staged_upload(services, args.clone()).await),
+        "retry_staged_upload" => Some(execute_retry_staged_upload(services, args.clone()).await),
         "resolve_staging_conflict" => {
             Some(execute_resolve_staging_conflict(services, args.clone()).await)
         }
@@ -6367,7 +6361,9 @@ async fn execute_resume_upload(services: &UiServices, args: Value) -> ToolCallRe
     let content = match tokio::fs::read(&local_path).await {
         Ok(data) => {
             if data.len() > 100 * 1024 * 1024 {
-                return error_result("File too large for resume_upload (max 100MB). Use start_streaming_upload instead.");
+                return error_result(
+                    "File too large for resume_upload (max 100MB). Use start_streaming_upload instead.",
+                );
             }
             data
         }
@@ -6736,10 +6732,7 @@ async fn execute_retry_staged_upload(services: &UiServices, args: Value) -> Tool
     let upload_id = require_str!(args, "upload_id");
 
     match services.drive().retry_staged_upload(&upload_id).await {
-        Ok(()) => success_result(&format!(
-            "Staged upload {} queued for retry",
-            upload_id
-        )),
+        Ok(()) => success_result(&format!("Staged upload {} queued for retry", upload_id)),
         Err(e) => error_result(&format!("Failed to retry staged upload: {}", e)),
     }
 }
@@ -6760,7 +6753,7 @@ async fn execute_resolve_staging_conflict(services: &UiServices, args: Value) ->
             return error_result(&format!(
                 "Invalid resolution: {}. Use: keep_local, keep_remote, keep_both, skip, retry",
                 resolution_str
-            ))
+            ));
         }
     };
 

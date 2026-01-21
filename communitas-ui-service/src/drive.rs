@@ -1876,7 +1876,8 @@ impl DriveService {
                     tracing::error!("Failed to create temp file: {:?}", e);
                     let mut map = downloads.write().await;
                     if let Some(p) = map.get_mut(&download_id_clone) {
-                        p.state = DownloadState::Failed(format!("Failed to create temp file: {}", e));
+                        p.state =
+                            DownloadState::Failed(format!("Failed to create temp file: {}", e));
                     }
                     Self::broadcast_snapshot(&tx, &rx, None, Some(&downloads)).await;
                     return;
@@ -2331,7 +2332,11 @@ impl DriveService {
             "communitas://share/{}/{}{}",
             entity_id,
             link_id,
-            if config.password.is_some() { "?protected=1" } else { "" }
+            if config.password.is_some() {
+                "?protected=1"
+            } else {
+                ""
+            }
         );
 
         let now = current_timestamp_millis();
@@ -2414,7 +2419,11 @@ impl DriveService {
     /// Access a share link.
     ///
     /// Returns file metadata if access is granted, or an appropriate error status.
-    #[instrument(skip(self, password), name = "ui.drive.access_share_link", fields(link_id))]
+    #[instrument(
+        skip(self, password),
+        name = "ui.drive.access_share_link",
+        fields(link_id)
+    )]
     pub async fn access_share_link(
         &self,
         link_id: &str,
@@ -2516,10 +2525,7 @@ impl DriveService {
 
     /// Get usage statistics for a share link.
     #[instrument(skip(self), name = "ui.drive.get_share_link_stats", fields(link_id))]
-    pub async fn get_share_link_stats(
-        &self,
-        link_id: &str,
-    ) -> Result<ShareLinkStats, DriveError> {
+    pub async fn get_share_link_stats(&self, link_id: &str) -> Result<ShareLinkStats, DriveError> {
         if !self.is_authenticated() {
             return Err(DriveError::NotAuthenticated);
         }
@@ -2577,9 +2583,7 @@ impl DriveService {
         let links = self.share_links.read().await;
         let file_links: Vec<ShareLink> = links
             .values()
-            .filter(|l| {
-                l.entity_id == entity_id && l.disk_type == disk_type && l.file_path == path
-            })
+            .filter(|l| l.entity_id == entity_id && l.disk_type == disk_type && l.file_path == path)
             .cloned()
             .collect();
 
@@ -2622,9 +2626,9 @@ impl DriveService {
         let size_bytes = local_metadata.len();
 
         // Read file and compute checksum
-        let content = tokio::fs::read(local_path)
-            .await
-            .map_err(|e| DriveError::FileReadError(format!("failed to read {}: {}", local_path, e)))?;
+        let content = tokio::fs::read(local_path).await.map_err(|e| {
+            DriveError::FileReadError(format!("failed to read {}: {}", local_path, e))
+        })?;
         let local_checksum = compute_checksum(&content);
 
         // Extract file name from path
@@ -2634,7 +2638,7 @@ impl DriveService {
         let mime_type = Path::new(local_path)
             .extension()
             .and_then(|e| e.to_str())
-            .map(|ext| mime_from_extension(ext));
+            .map(mime_from_extension);
 
         // Generate unique ID
         let id = {
@@ -2679,7 +2683,10 @@ impl DriveService {
         // Update snapshot
         self.update_staging_snapshot().await;
 
-        debug!("File staged for upload: {} -> {}", local_path, destination_path);
+        debug!(
+            "File staged for upload: {} -> {}",
+            local_path, destination_path
+        );
 
         Ok(staged)
     }
@@ -2778,7 +2785,11 @@ impl DriveService {
     }
 
     /// Clear all staged uploads (optionally only completed/failed ones).
-    #[instrument(skip(self), name = "ui.drive.clear_staging_queue", fields(only_terminal))]
+    #[instrument(
+        skip(self),
+        name = "ui.drive.clear_staging_queue",
+        fields(only_terminal)
+    )]
     pub async fn clear_staging_queue(&self, only_terminal: bool) -> Result<u32, DriveError> {
         if !self.is_authenticated() {
             return Err(DriveError::NotAuthenticated);
@@ -2903,7 +2914,10 @@ impl DriveService {
         drop(queue);
         self.update_staging_snapshot().await;
 
-        debug!("Staging conflict resolved for {}: {:?}", upload_id, resolution);
+        debug!(
+            "Staging conflict resolved for {}: {:?}",
+            upload_id, resolution
+        );
         Ok(())
     }
 
@@ -2917,7 +2931,9 @@ impl DriveService {
         }
 
         // Broadcast event
-        let _ = self.staging_event_tx.send(StagingEvent::NetworkStatusChanged { available });
+        let _ = self
+            .staging_event_tx
+            .send(StagingEvent::NetworkStatusChanged { available });
 
         self.update_staging_snapshot().await;
 
@@ -2977,7 +2993,10 @@ impl DriveService {
 
         self.update_staging_snapshot().await;
 
-        debug!("Staging queue sync completed: {} uploaded, {} failed", uploaded, failed);
+        debug!(
+            "Staging queue sync completed: {} uploaded, {} failed",
+            uploaded, failed
+        );
         Ok((uploaded, failed))
     }
 
@@ -3036,13 +3055,21 @@ impl DriveService {
 
         // Check if destination already exists
         let exists = self
-            .path_exists(&upload.entity_id, upload.disk_type, &upload.destination_path)
+            .path_exists(
+                &upload.entity_id,
+                upload.disk_type,
+                &upload.destination_path,
+            )
             .await?;
 
         if exists {
             // Check if it's the same content
             let remote_preview = self
-                .get_file_preview(&upload.entity_id, upload.disk_type, &upload.destination_path)
+                .get_file_preview(
+                    &upload.entity_id,
+                    upload.disk_type,
+                    &upload.destination_path,
+                )
                 .await;
 
             if let Ok(preview) = remote_preview {

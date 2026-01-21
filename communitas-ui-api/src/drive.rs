@@ -427,6 +427,165 @@ impl QuotaInfo {
     }
 }
 
+/// Share link for a file with optional expiry and password protection.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ShareLink {
+    /// Unique share link ID.
+    pub id: String,
+    /// Entity ID that owns the file.
+    pub entity_id: String,
+    /// Disk type containing the file.
+    pub disk_type: DiskType,
+    /// Path to the shared file.
+    pub file_path: String,
+    /// File name for display.
+    pub file_name: String,
+    /// Shareable URL.
+    pub url: String,
+    /// Unix timestamp (ms) when link was created.
+    pub created_at: i64,
+    /// Unix timestamp (ms) when link expires (None = never).
+    pub expires_at: Option<i64>,
+    /// Whether the link is password protected.
+    pub password_protected: bool,
+    /// Number of times the link has been accessed.
+    pub access_count: u64,
+    /// Maximum number of accesses allowed (None = unlimited).
+    pub max_accesses: Option<u64>,
+    /// Whether the link is currently active.
+    pub active: bool,
+}
+
+impl ShareLink {
+    /// Returns true if the link has expired.
+    pub fn is_expired(&self, now_ms: i64) -> bool {
+        self.expires_at.is_some_and(|exp| now_ms >= exp)
+    }
+
+    /// Returns true if the link has reached max accesses.
+    pub fn is_access_limit_reached(&self) -> bool {
+        self.max_accesses.is_some_and(|max| self.access_count >= max)
+    }
+
+    /// Returns true if the link is currently usable.
+    pub fn is_usable(&self, now_ms: i64) -> bool {
+        self.active && !self.is_expired(now_ms) && !self.is_access_limit_reached()
+    }
+
+    /// Returns remaining accesses (None if unlimited).
+    pub fn remaining_accesses(&self) -> Option<u64> {
+        self.max_accesses.map(|max| max.saturating_sub(self.access_count))
+    }
+}
+
+/// Configuration for creating a share link.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ShareLinkConfig {
+    /// Optional expiry duration in milliseconds from creation.
+    pub expires_in_ms: Option<i64>,
+    /// Optional password for the link.
+    pub password: Option<String>,
+    /// Maximum number of accesses (None = unlimited).
+    pub max_accesses: Option<u64>,
+}
+
+impl ShareLinkConfig {
+    /// Create a config that expires in a given number of hours.
+    pub fn expires_in_hours(hours: u32) -> Self {
+        Self {
+            expires_in_ms: Some(hours as i64 * 60 * 60 * 1000),
+            password: None,
+            max_accesses: None,
+        }
+    }
+
+    /// Create a config that expires in a given number of days.
+    pub fn expires_in_days(days: u32) -> Self {
+        Self {
+            expires_in_ms: Some(days as i64 * 24 * 60 * 60 * 1000),
+            password: None,
+            max_accesses: None,
+        }
+    }
+
+    /// Add password protection.
+    pub fn with_password(mut self, password: impl Into<String>) -> Self {
+        self.password = Some(password.into());
+        self
+    }
+
+    /// Limit number of accesses.
+    pub fn with_max_accesses(mut self, max: u64) -> Self {
+        self.max_accesses = Some(max);
+        self
+    }
+}
+
+/// Result of a share link access attempt.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ShareLinkAccessResult {
+    /// Access granted, contains file metadata for download.
+    Granted {
+        /// File path on the disk.
+        file_path: String,
+        /// File name.
+        file_name: String,
+        /// File size in bytes.
+        size_bytes: u64,
+        /// MIME type.
+        mime_type: Option<String>,
+        /// BLAKE3 checksum.
+        checksum: String,
+    },
+    /// Password required to access the link.
+    PasswordRequired,
+    /// Incorrect password provided.
+    IncorrectPassword,
+    /// Link has expired.
+    Expired,
+    /// Access limit reached.
+    AccessLimitReached,
+    /// Link has been revoked.
+    Revoked,
+    /// Link not found.
+    NotFound,
+}
+
+impl ShareLinkAccessResult {
+    /// Returns true if access was granted.
+    pub fn is_granted(&self) -> bool {
+        matches!(self, Self::Granted { .. })
+    }
+
+    /// Returns a user-friendly error message (None if granted).
+    pub fn error_message(&self) -> Option<&'static str> {
+        match self {
+            Self::Granted { .. } => None,
+            Self::PasswordRequired => Some("This link requires a password"),
+            Self::IncorrectPassword => Some("Incorrect password"),
+            Self::Expired => Some("This link has expired"),
+            Self::AccessLimitReached => Some("This link has reached its access limit"),
+            Self::Revoked => Some("This link has been revoked"),
+            Self::NotFound => Some("Link not found"),
+        }
+    }
+}
+
+/// Usage statistics for a share link.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ShareLinkStats {
+    /// Total number of accesses.
+    pub total_accesses: u64,
+    /// Number of successful downloads.
+    pub successful_downloads: u64,
+    /// Number of failed password attempts.
+    pub failed_password_attempts: u64,
+    /// Unix timestamp (ms) of last access.
+    pub last_accessed_at: Option<i64>,
+    /// Unique IP addresses that accessed (hashed for privacy).
+    pub unique_accessors: u64,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -685,5 +844,252 @@ mod tests {
         let cancelled = TransferError::Cancelled;
         assert!(cancelled.message().contains("cancelled"));
         assert!(!cancelled.is_recoverable());
+    }
+
+    // === Share Link Tests ===
+
+    #[test]
+    fn share_link_is_expired() {
+        let link = ShareLink {
+            id: "link-1".to_string(),
+            entity_id: "entity-1".to_string(),
+            disk_type: DiskType::Public,
+            file_path: "/public/doc.pdf".to_string(),
+            file_name: "doc.pdf".to_string(),
+            url: "https://example.com/s/abc123".to_string(),
+            created_at: 1000,
+            expires_at: Some(2000),
+            password_protected: false,
+            access_count: 0,
+            max_accesses: None,
+            active: true,
+        };
+
+        assert!(!link.is_expired(1500)); // Before expiry
+        assert!(link.is_expired(2000)); // At expiry
+        assert!(link.is_expired(3000)); // After expiry
+    }
+
+    #[test]
+    fn share_link_no_expiry() {
+        let link = ShareLink {
+            id: "link-2".to_string(),
+            entity_id: "entity-1".to_string(),
+            disk_type: DiskType::Public,
+            file_path: "/public/forever.txt".to_string(),
+            file_name: "forever.txt".to_string(),
+            url: "https://example.com/s/xyz".to_string(),
+            created_at: 1000,
+            expires_at: None,
+            password_protected: false,
+            access_count: 0,
+            max_accesses: None,
+            active: true,
+        };
+
+        assert!(!link.is_expired(1_000_000_000)); // Never expires
+    }
+
+    #[test]
+    fn share_link_access_limit() {
+        let link = ShareLink {
+            id: "link-3".to_string(),
+            entity_id: "entity-1".to_string(),
+            disk_type: DiskType::Public,
+            file_path: "/public/limited.pdf".to_string(),
+            file_name: "limited.pdf".to_string(),
+            url: "https://example.com/s/lim".to_string(),
+            created_at: 1000,
+            expires_at: None,
+            password_protected: false,
+            access_count: 5,
+            max_accesses: Some(5),
+            active: true,
+        };
+
+        assert!(link.is_access_limit_reached());
+        assert_eq!(link.remaining_accesses(), Some(0));
+    }
+
+    #[test]
+    fn share_link_has_accesses_remaining() {
+        let link = ShareLink {
+            id: "link-4".to_string(),
+            entity_id: "entity-1".to_string(),
+            disk_type: DiskType::Public,
+            file_path: "/public/file.pdf".to_string(),
+            file_name: "file.pdf".to_string(),
+            url: "https://example.com/s/abc".to_string(),
+            created_at: 1000,
+            expires_at: None,
+            password_protected: false,
+            access_count: 3,
+            max_accesses: Some(10),
+            active: true,
+        };
+
+        assert!(!link.is_access_limit_reached());
+        assert_eq!(link.remaining_accesses(), Some(7));
+    }
+
+    #[test]
+    fn share_link_unlimited_accesses() {
+        let link = ShareLink {
+            id: "link-5".to_string(),
+            entity_id: "entity-1".to_string(),
+            disk_type: DiskType::Public,
+            file_path: "/public/unlimited.txt".to_string(),
+            file_name: "unlimited.txt".to_string(),
+            url: "https://example.com/s/unl".to_string(),
+            created_at: 1000,
+            expires_at: None,
+            password_protected: false,
+            access_count: 1000,
+            max_accesses: None,
+            active: true,
+        };
+
+        assert!(!link.is_access_limit_reached());
+        assert_eq!(link.remaining_accesses(), None);
+    }
+
+    #[test]
+    fn share_link_is_usable() {
+        let active_link = ShareLink {
+            id: "link-6".to_string(),
+            entity_id: "entity-1".to_string(),
+            disk_type: DiskType::Public,
+            file_path: "/public/active.pdf".to_string(),
+            file_name: "active.pdf".to_string(),
+            url: "https://example.com/s/act".to_string(),
+            created_at: 1000,
+            expires_at: Some(5000),
+            password_protected: true,
+            access_count: 2,
+            max_accesses: Some(10),
+            active: true,
+        };
+
+        assert!(active_link.is_usable(3000)); // Within expiry, under limit, active
+
+        let inactive_link = ShareLink {
+            active: false,
+            ..active_link.clone()
+        };
+        assert!(!inactive_link.is_usable(3000)); // Inactive
+
+        let expired_link = ShareLink {
+            expires_at: Some(2000),
+            ..active_link.clone()
+        };
+        assert!(!expired_link.is_usable(3000)); // Expired
+
+        let maxed_link = ShareLink {
+            access_count: 10,
+            ..active_link
+        };
+        assert!(!maxed_link.is_usable(3000)); // Limit reached
+    }
+
+    #[test]
+    fn share_link_config_default() {
+        let config = ShareLinkConfig::default();
+        assert_eq!(config.expires_in_ms, None);
+        assert_eq!(config.password, None);
+        assert_eq!(config.max_accesses, None);
+    }
+
+    #[test]
+    fn share_link_config_expires_in_hours() {
+        let config = ShareLinkConfig::expires_in_hours(24);
+        assert_eq!(config.expires_in_ms, Some(24 * 60 * 60 * 1000));
+        assert_eq!(config.password, None);
+        assert_eq!(config.max_accesses, None);
+    }
+
+    #[test]
+    fn share_link_config_expires_in_days() {
+        let config = ShareLinkConfig::expires_in_days(7);
+        assert_eq!(config.expires_in_ms, Some(7 * 24 * 60 * 60 * 1000));
+        assert_eq!(config.password, None);
+        assert_eq!(config.max_accesses, None);
+    }
+
+    #[test]
+    fn share_link_config_builder_chain() {
+        let config = ShareLinkConfig::expires_in_days(30)
+            .with_password("secret123")
+            .with_max_accesses(100);
+
+        assert_eq!(config.expires_in_ms, Some(30 * 24 * 60 * 60 * 1000));
+        assert_eq!(config.password, Some("secret123".to_string()));
+        assert_eq!(config.max_accesses, Some(100));
+    }
+
+    #[test]
+    fn share_link_access_result_granted() {
+        let granted = ShareLinkAccessResult::Granted {
+            file_path: "/public/doc.pdf".to_string(),
+            file_name: "doc.pdf".to_string(),
+            size_bytes: 1024 * 1024,
+            mime_type: Some("application/pdf".to_string()),
+            checksum: "abc123".to_string(),
+        };
+
+        assert!(granted.is_granted());
+        assert_eq!(granted.error_message(), None);
+    }
+
+    #[test]
+    fn share_link_access_result_errors() {
+        assert!(!ShareLinkAccessResult::PasswordRequired.is_granted());
+        assert!(ShareLinkAccessResult::PasswordRequired.error_message().is_some());
+
+        assert!(!ShareLinkAccessResult::IncorrectPassword.is_granted());
+        assert!(ShareLinkAccessResult::IncorrectPassword
+            .error_message()
+            .unwrap()
+            .contains("Incorrect"));
+
+        assert!(!ShareLinkAccessResult::Expired.is_granted());
+        assert!(ShareLinkAccessResult::Expired
+            .error_message()
+            .unwrap()
+            .contains("expired"));
+
+        assert!(!ShareLinkAccessResult::AccessLimitReached.is_granted());
+        assert!(ShareLinkAccessResult::AccessLimitReached
+            .error_message()
+            .unwrap()
+            .contains("limit"));
+
+        assert!(!ShareLinkAccessResult::Revoked.is_granted());
+        assert!(ShareLinkAccessResult::Revoked
+            .error_message()
+            .unwrap()
+            .contains("revoked"));
+
+        assert!(!ShareLinkAccessResult::NotFound.is_granted());
+        assert!(ShareLinkAccessResult::NotFound
+            .error_message()
+            .unwrap()
+            .contains("not found"));
+    }
+
+    #[test]
+    fn share_link_stats_construction() {
+        let stats = ShareLinkStats {
+            total_accesses: 150,
+            successful_downloads: 120,
+            failed_password_attempts: 5,
+            last_accessed_at: Some(1234567890),
+            unique_accessors: 45,
+        };
+
+        assert_eq!(stats.total_accesses, 150);
+        assert_eq!(stats.successful_downloads, 120);
+        assert_eq!(stats.failed_password_attempts, 5);
+        assert_eq!(stats.last_accessed_at, Some(1234567890));
+        assert_eq!(stats.unique_accessors, 45);
     }
 }

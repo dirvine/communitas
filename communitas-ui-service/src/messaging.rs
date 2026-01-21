@@ -6,8 +6,8 @@ use std::sync::Arc;
 use communitas_core::app::CommunitasApp;
 use communitas_core::command::{Command, Event, Query, QueryResponse, Subscription};
 use communitas_ui_api::{Message, ThreadSummary};
-use std::sync::RwLock;
 use serde::{Deserialize, Serialize};
+use std::sync::RwLock;
 use thiserror::Error;
 use tokio::sync::{broadcast, watch};
 use tracing::{debug, instrument, trace, warn};
@@ -88,7 +88,11 @@ impl MessagingService {
     /// * `auth` - Shared authentication controller for checking login state
     /// * `app` - Shared reference to the core application
     /// * `storage` - UI storage for persisting unread counts
-    pub fn new(auth: Arc<AuthController>, app: Arc<CommunitasApp>, storage: Arc<UiStorage>) -> Self {
+    pub fn new(
+        auth: Arc<AuthController>,
+        app: Arc<CommunitasApp>,
+        storage: Arc<UiStorage>,
+    ) -> Self {
         let (tx, rx) = watch::channel(MessagingSnapshot::default());
 
         // Load persisted unread counts
@@ -158,10 +162,7 @@ impl MessagingService {
                 Ok(event) => {
                     // Handle unread count increment for received messages
                     if let Event::MessageReceived { entity_id, .. } = &event {
-                        let active = active_thread
-                            .read()
-                            .ok()
-                            .and_then(|guard| (*guard).clone());
+                        let active = active_thread.read().ok().and_then(|guard| (*guard).clone());
                         let is_active = active.as_ref().is_some_and(|t| t == entity_id);
 
                         if !is_active {
@@ -689,16 +690,19 @@ impl MessagingService {
 
     /// Mark a thread as read, clearing unread count.
     ///
-    /// This updates both the in-memory state and persists to disk.
+    /// This updates both the in-memory state, persists to disk, and broadcasts
+    /// a `ThreadMarkedRead` event via the core command system.
     ///
     /// # Errors
     /// - [`MessagingError::NotAuthenticated`] if no user is logged in.
     /// - [`MessagingError::ThreadNotFound`] if the thread does not exist.
     #[instrument(skip(self), name = "ui.messaging.mark_read", fields(thread_id))]
     pub async fn mark_thread_read(&self, thread_id: &str) -> Result<(), MessagingError> {
-        if !self.is_authenticated() {
-            return Err(MessagingError::NotAuthenticated);
-        }
+        // Get current user's identity for the command
+        let identity = match &*self.auth.subscribe().borrow() {
+            AuthStateSnapshot::Authenticated { session, .. } => session.four_words.clone(),
+            _ => return Err(MessagingError::NotAuthenticated),
+        };
 
         // Update local thread state
         let mut snap = self.rx.borrow().clone();
@@ -715,11 +719,19 @@ impl MessagingService {
             // Persist to disk (best effort)
             if let Ok(counts) = self.unread_counts.read() {
                 let counts_snapshot = (*counts).clone();
-                if let Err(e) =
-                    JsonFile::save(&self.storage.unread_counts_file(), &counts_snapshot)
+                if let Err(e) = JsonFile::save(&self.storage.unread_counts_file(), &counts_snapshot)
                 {
                     warn!(error = %e, "Failed to persist unread counts after mark_read");
                 }
+            }
+
+            // Execute core command to broadcast the event
+            let cmd = Command::MarkThreadRead {
+                thread_id: thread_id.to_string(),
+                identity,
+            };
+            if let Err(e) = self.app.execute(cmd).await {
+                warn!(error = %e.message, "Failed to execute MarkThreadRead command");
             }
 
             debug!(thread_id, "Thread marked as read");

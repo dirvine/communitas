@@ -250,6 +250,14 @@ pub enum Command {
         emoji: String,
     },
 
+    /// Mark a thread as read (resets unread count)
+    MarkThreadRead {
+        /// Thread identifier (entity_id or dm:contact_id)
+        thread_id: String,
+        /// Identity of the user marking the thread read
+        identity: String,
+    },
+
     // ========================================================================
     // Invite Commands
     // ========================================================================
@@ -758,6 +766,9 @@ pub enum Event {
         emoji: String,
         reactor_id: String,
     },
+
+    /// Thread was marked as read
+    ThreadMarkedRead { thread_id: String, identity: String },
 
     // ========================================================================
     // Invite Events

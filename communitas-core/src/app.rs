@@ -969,6 +969,20 @@ impl CommunitasApp {
                 Ok(vec![event])
             }
 
+            Command::MarkThreadRead {
+                thread_id,
+                identity,
+            } => {
+                // The actual unread count management is handled by the UI service.
+                // This command broadcasts the event so other subscribers can react.
+                let event = Event::ThreadMarkedRead {
+                    thread_id,
+                    identity,
+                };
+                self.broadcast_event(event.clone());
+                Ok(vec![event])
+            }
+
             // ================================================================
             // Invite Commands
             // ================================================================

@@ -23,6 +23,8 @@ pub struct SessionInfo {
     pub display_name: String,
     /// Hex-encoded ML-DSA-87 public key (the user's cryptographic identity)
     pub pubkey_hex: String,
+    /// Session expiration timestamp (Unix seconds)
+    pub expires_at: u64,
 }
 
 impl From<Session> for SessionInfo {
@@ -33,6 +35,7 @@ impl From<Session> for SessionInfo {
             display_name: session.display_name,
             // Use pubkey_hex from session if available, otherwise empty
             pubkey_hex: session.pubkey_hex.unwrap_or_default(),
+            expires_at: session.expires_at,
         }
     }
 }
@@ -141,7 +144,43 @@ impl AuthService {
             four_words: s.four_words.clone(),
             display_name: s.display_name.clone(),
             pubkey_hex: s.pubkey_hex.clone().unwrap_or_default(),
+            expires_at: s.expires_at,
         })
+    }
+
+    /// Get time remaining until session expiration
+    pub fn session_time_remaining(&self) -> Option<std::time::Duration> {
+        self.active_session.as_ref().map(|s| s.time_remaining())
+    }
+
+    /// Check if session is expiring soon (less than given seconds remaining)
+    pub fn session_expires_soon(&self, threshold_secs: u64) -> bool {
+        self.active_session
+            .as_ref()
+            .map(|s| s.time_remaining().as_secs() < threshold_secs)
+            .unwrap_or(false)
+    }
+
+    /// Refresh the current session, extending its expiration
+    ///
+    /// Returns the updated session info if successful.
+    pub async fn refresh_session(&mut self) -> Result<SessionInfo> {
+        let session = self
+            .active_session
+            .as_mut()
+            .ok_or_else(|| anyhow!("No active session to refresh"))?;
+
+        // Extend session by default duration (8 hours)
+        const DEFAULT_SESSION_EXTENSION_SECS: u64 = 8 * 60 * 60;
+        session.extend(DEFAULT_SESSION_EXTENSION_SECS);
+
+        tracing::info!(
+            "AuthService: Session refreshed for {}, new expiry: {}",
+            session.four_words,
+            session.expires_at
+        );
+
+        Ok(SessionInfo::from(session.clone()))
     }
 
     /// Check if user is currently logged in

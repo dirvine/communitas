@@ -126,7 +126,7 @@ impl MessagingService {
     ) {
         let is_authenticated = matches!(
             &*auth.subscribe().borrow(),
-            AuthStateSnapshot::Authenticated(_)
+            AuthStateSnapshot::Authenticated { .. }
         );
 
         if !is_authenticated {
@@ -324,7 +324,7 @@ impl MessagingService {
     ) -> Result<Message, MessagingError> {
         // Get the authenticated user's display name for the author field
         let author = match &*self.auth.subscribe().borrow() {
-            AuthStateSnapshot::Authenticated(session) => session.display_name.clone(),
+            AuthStateSnapshot::Authenticated { session, .. } => session.display_name.clone(),
             _ => return Err(MessagingError::NotAuthenticated),
         };
 
@@ -699,7 +699,7 @@ impl MessagingService {
     fn is_authenticated(&self) -> bool {
         matches!(
             &*self.auth.subscribe().borrow(),
-            AuthStateSnapshot::Authenticated(_)
+            AuthStateSnapshot::Authenticated { .. }
         )
     }
 

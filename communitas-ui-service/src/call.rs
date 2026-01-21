@@ -619,7 +619,7 @@ impl CallService {
             AuthStateSnapshot::LoggedOut | AuthStateSnapshot::Authenticating => {
                 return Err(CallError::NotAuthenticated);
             }
-            AuthStateSnapshot::Authenticated(session) => {
+            AuthStateSnapshot::Authenticated { session, .. } => {
                 (session.display_name.clone(), session.four_words.clone())
             }
         };
@@ -743,7 +743,7 @@ impl CallService {
             AuthStateSnapshot::LoggedOut | AuthStateSnapshot::Authenticating => {
                 return Err(CallError::NotAuthenticated);
             }
-            AuthStateSnapshot::Authenticated(session) => {
+            AuthStateSnapshot::Authenticated { session, .. } => {
                 (session.display_name.clone(), session.four_words.clone())
             }
         };

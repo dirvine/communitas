@@ -193,7 +193,7 @@ impl KanbanService {
         };
 
         match state {
-            AuthStateSnapshot::Authenticated(session) => {
+            AuthStateSnapshot::Authenticated { session, .. } => {
                 let peer_id = &session.four_words;
                 info!(peer_id = %peer_id, "Reinitializing CoreKanbanService with authenticated peer_id");
 
@@ -300,7 +300,7 @@ impl KanbanService {
     ) {
         let is_authenticated = matches!(
             &*auth.subscribe().borrow(),
-            AuthStateSnapshot::Authenticated(_)
+            AuthStateSnapshot::Authenticated { .. }
         );
 
         if !is_authenticated {
@@ -1504,7 +1504,7 @@ impl KanbanService {
     fn is_authenticated(&self) -> bool {
         matches!(
             &*self.auth.subscribe().borrow(),
-            AuthStateSnapshot::Authenticated(_)
+            AuthStateSnapshot::Authenticated { .. }
         )
     }
 

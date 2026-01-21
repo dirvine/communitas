@@ -212,6 +212,13 @@ impl CommunitasApi {
         auth.logout().await.map_err(|e| e.to_string())
     }
 
+    /// Refresh the current session, extending its expiration
+    pub async fn auth_refresh_session(&self) -> Result<UiSessionInfo, String> {
+        let mut auth = self.auth.write().await;
+        let session_info = auth.refresh_session().await.map_err(|e| e.to_string())?;
+        Ok(UiSessionInfo::from(session_info))
+    }
+
     pub async fn auth_vault_exists(&self, four_words: String) -> Result<bool, String> {
         let auth = self.auth.read().await;
         auth.vault_exists(&four_words)
@@ -1388,6 +1395,8 @@ pub struct UiSessionInfo {
     pub display_name: String,
     /// Hex-encoded ML-DSA-87 public key (the user's cryptographic identity)
     pub pubkey_hex: String,
+    /// Session expiration timestamp (Unix seconds)
+    pub expires_at: u64,
 }
 
 impl From<crate::SessionInfo> for UiSessionInfo {
@@ -1397,6 +1406,7 @@ impl From<crate::SessionInfo> for UiSessionInfo {
             four_words: value.four_words,
             display_name: value.display_name,
             pubkey_hex: value.pubkey_hex,
+            expires_at: value.expires_at,
         }
     }
 }

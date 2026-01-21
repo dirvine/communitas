@@ -1264,7 +1264,7 @@ impl CanvasService {
     fn is_authenticated(&self) -> bool {
         matches!(
             &*self.auth.subscribe().borrow(),
-            AuthStateSnapshot::Authenticated(_)
+            AuthStateSnapshot::Authenticated { .. }
         )
     }
 
@@ -1360,7 +1360,7 @@ mod tests {
         // Now should be authenticated
         let rx2 = auth.subscribe();
         assert!(
-            matches!(&*rx2.borrow(), AuthStateSnapshot::Authenticated(_)),
+            matches!(&*rx2.borrow(), AuthStateSnapshot::Authenticated { .. }),
             "should be authenticated after enable_demo_mode"
         );
     }

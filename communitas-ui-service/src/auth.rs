@@ -12,8 +12,15 @@ use crate::storage::{StorageError, UiStorage};
 pub enum AuthStateSnapshot {
     LoggedOut,
     Authenticating,
-    Authenticated(AuthSession),
+    /// Authenticated with session and whether it expires soon (< 5 minutes)
+    Authenticated {
+        session: AuthSession,
+        expires_soon: bool,
+    },
 }
+
+/// Warning threshold for session expiration (5 minutes)
+pub const SESSION_EXPIRY_WARNING_SECS: u64 = 5 * 60;
 
 /// Information about the active identity/session.
 #[derive(Debug, Clone)]
@@ -22,6 +29,8 @@ pub struct AuthSession {
     pub four_words: String,
     pub display_name: String,
     pub device_name: String,
+    /// Session expiration timestamp (Unix seconds)
+    pub expires_at: u64,
 }
 
 impl From<(UiSessionInfo, String)> for AuthSession {
@@ -31,7 +40,28 @@ impl From<(UiSessionInfo, String)> for AuthSession {
             four_words: info.four_words,
             display_name: info.display_name,
             device_name,
+            expires_at: info.expires_at,
         }
+    }
+}
+
+impl AuthSession {
+    /// Check if session is expiring soon (within threshold)
+    pub fn expires_soon(&self) -> bool {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        self.expires_at.saturating_sub(now) < SESSION_EXPIRY_WARNING_SECS
+    }
+
+    /// Get time remaining until expiration
+    pub fn time_remaining(&self) -> std::time::Duration {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        std::time::Duration::from_secs(self.expires_at.saturating_sub(now))
     }
 }
 
@@ -73,6 +103,15 @@ pub trait AuthService: Send + Sync {
     async fn logout(&self) -> Result<(), AuthError>;
     fn current_session(&self) -> Option<AuthSession>;
     fn subscribe(&self) -> watch::Receiver<AuthStateSnapshot>;
+
+    /// Get the session expiration timestamp (Unix seconds)
+    fn session_expires_at(&self) -> Option<u64>;
+
+    /// Check if the session is expiring soon (within warning threshold)
+    fn session_expires_soon(&self) -> bool;
+
+    /// Refresh the current session, extending its expiration
+    async fn refresh_session(&self) -> Result<AuthSession, AuthError>;
 }
 
 struct AuthInner {
@@ -185,13 +224,22 @@ impl AuthController {
     /// Enable demo mode for testing and development. Sets an authenticated state with a demo session.
     /// This is useful for unit tests and demo scenarios that need to bypass real authentication.
     pub fn enable_demo_mode(&self) {
+        // Demo session expires in 8 hours
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
         let demo_session = AuthSession {
             pubkey_hex: "demo_pubkey_hex_1234567890".to_string(),
             four_words: "demo-test-user-mode".to_string(),
             display_name: "Demo User".to_string(),
             device_name: "Test Device".to_string(),
+            expires_at: now + 8 * 60 * 60, // 8 hours
         };
-        self.set_state(AuthStateSnapshot::Authenticated(demo_session));
+        self.set_state(AuthStateSnapshot::Authenticated {
+            session: demo_session,
+            expires_soon: false,
+        });
     }
 }
 
@@ -248,8 +296,12 @@ impl AuthService for AuthController {
         Self::start_network(&api).await;
 
         let session = AuthSession::from((session_info, self.device_name.clone()));
+        let expires_soon = session.expires_soon();
         self.set_session(api, session.clone()).await;
-        self.set_state(AuthStateSnapshot::Authenticated(session.clone()));
+        self.set_state(AuthStateSnapshot::Authenticated {
+            session: session.clone(),
+            expires_soon,
+        });
         info!(target = "ui.auth", "login complete");
         Ok(session)
     }
@@ -293,8 +345,12 @@ impl AuthService for AuthController {
         Self::start_network(&api).await;
 
         let session = AuthSession::from((session_info, self.device_name.clone()));
+        let expires_soon = session.expires_soon();
         self.set_session(api, session.clone()).await;
-        self.set_state(AuthStateSnapshot::Authenticated(session.clone()));
+        self.set_state(AuthStateSnapshot::Authenticated {
+            session: session.clone(),
+            expires_soon,
+        });
         info!(target = "ui.auth", "identity created");
         Ok(session)
     }
@@ -352,8 +408,12 @@ impl AuthService for AuthController {
         Self::start_network(&api).await;
 
         let session = AuthSession::from((session_info, self.device_name.clone()));
+        let expires_soon = session.expires_soon();
         self.set_session(api, session.clone()).await;
-        self.set_state(AuthStateSnapshot::Authenticated(session.clone()));
+        self.set_state(AuthStateSnapshot::Authenticated {
+            session: session.clone(),
+            expires_soon,
+        });
         info!(target = "ui.auth", "identity recovered");
         Ok(session)
     }
@@ -382,6 +442,56 @@ impl AuthService for AuthController {
 
     fn subscribe(&self) -> watch::Receiver<AuthStateSnapshot> {
         self.state_tx.subscribe()
+    }
+
+    fn session_expires_at(&self) -> Option<u64> {
+        self.inner
+            .blocking_read()
+            .session
+            .as_ref()
+            .map(|s| s.expires_at)
+    }
+
+    fn session_expires_soon(&self) -> bool {
+        self.inner
+            .blocking_read()
+            .session
+            .as_ref()
+            .map(|s| s.expires_soon())
+            .unwrap_or(false)
+    }
+
+    #[instrument(name = "ui.auth.refresh", skip(self))]
+    async fn refresh_session(&self) -> Result<AuthSession, AuthError> {
+        let mut inner = self.inner.write().await;
+
+        // Get the API to refresh at the core level
+        let api = inner
+            .api
+            .as_ref()
+            .ok_or(AuthError::State("no active session to refresh"))?;
+
+        // Refresh the session at the core level
+        let session_info = api.auth_refresh_session().await.map_err(AuthError::Core)?;
+
+        // Update local session
+        let session = AuthSession::from((session_info, self.device_name.clone()));
+        let expires_soon = session.expires_soon();
+        inner.session = Some(session.clone());
+        drop(inner);
+
+        // Broadcast updated state
+        self.set_state(AuthStateSnapshot::Authenticated {
+            session: session.clone(),
+            expires_soon,
+        });
+
+        info!(
+            target = "ui.auth",
+            "session refreshed, expires_at: {}", session.expires_at
+        );
+
+        Ok(session)
     }
 }
 
@@ -534,11 +644,18 @@ mod tests {
     fn auth_session_from_ui_session_info() {
         use communitas_core::ui_core::UiSessionInfo;
 
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let expires_at = now + 8 * 60 * 60; // 8 hours from now
+
         let info = UiSessionInfo {
             session_id: "test-session-id".to_string(),
             pubkey_hex: "abcd1234".to_string(),
             four_words: "alpha-beta-gamma-delta".to_string(),
             display_name: "Alice".to_string(),
+            expires_at,
         };
 
         let session = AuthSession::from((info, "DeviceName".to_string()));
@@ -546,5 +663,32 @@ mod tests {
         assert_eq!(session.four_words, "alpha-beta-gamma-delta");
         assert_eq!(session.display_name, "Alice");
         assert_eq!(session.device_name, "DeviceName");
+        assert_eq!(session.expires_at, expires_at);
+        assert!(!session.expires_soon()); // Should not expire soon
+    }
+
+    #[test]
+    fn auth_session_expires_soon_detection() {
+        use communitas_core::ui_core::UiSessionInfo;
+
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        // Session expiring in 2 minutes (within the 5 minute threshold)
+        let expires_soon_time = now + 2 * 60;
+
+        let info = UiSessionInfo {
+            session_id: "test-session-id".to_string(),
+            pubkey_hex: "abcd1234".to_string(),
+            four_words: "alpha-beta-gamma-delta".to_string(),
+            display_name: "Alice".to_string(),
+            expires_at: expires_soon_time,
+        };
+
+        let session = AuthSession::from((info, "DeviceName".to_string()));
+        assert!(session.expires_soon()); // Should expire soon
+        assert!(session.time_remaining().as_secs() <= 2 * 60);
     }
 }

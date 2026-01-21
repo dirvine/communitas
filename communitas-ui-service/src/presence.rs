@@ -146,7 +146,7 @@ impl PresenceService {
     fn is_authenticated(&self) -> bool {
         matches!(
             &*self.auth.subscribe().borrow(),
-            AuthStateSnapshot::Authenticated(_)
+            AuthStateSnapshot::Authenticated { .. }
         )
     }
 }

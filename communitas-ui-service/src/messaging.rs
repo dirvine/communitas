@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use communitas_core::app::CommunitasApp;
 use communitas_core::command::{Command, Event, Query, QueryResponse, Subscription};
@@ -64,6 +65,65 @@ impl UnreadCounts {
     }
 }
 
+/// Typing indicator state with auto-expire tracking.
+///
+/// Tracks which users are typing in each thread, with timestamps for auto-expiration.
+/// Typing indicators expire after 3 seconds of inactivity.
+#[derive(Debug, Clone, Default)]
+pub struct TypingState {
+    /// Map from thread_id to (peer_id -> last_typing_time).
+    state: HashMap<String, HashMap<String, Instant>>,
+}
+
+/// Duration after which typing indicators expire.
+const TYPING_EXPIRE_DURATION: Duration = Duration::from_secs(3);
+
+impl TypingState {
+    /// Update typing state for a peer in a thread.
+    ///
+    /// If `is_typing` is true, records the current time. If false, removes the entry.
+    pub fn update(&mut self, thread_id: &str, peer_id: &str, is_typing: bool) {
+        if is_typing {
+            self.state
+                .entry(thread_id.to_string())
+                .or_default()
+                .insert(peer_id.to_string(), Instant::now());
+        } else if let Some(thread_typing) = self.state.get_mut(thread_id) {
+            thread_typing.remove(peer_id);
+            if thread_typing.is_empty() {
+                self.state.remove(thread_id);
+            }
+        }
+    }
+
+    /// Get the list of currently typing users for a thread (excluding expired).
+    pub fn get_typing_users(&self, thread_id: &str) -> Vec<String> {
+        let now = Instant::now();
+        self.state
+            .get(thread_id)
+            .map(|thread_typing| {
+                thread_typing
+                    .iter()
+                    .filter(|(_, timestamp)| {
+                        now.duration_since(**timestamp) < TYPING_EXPIRE_DURATION
+                    })
+                    .map(|(peer_id, _)| peer_id.clone())
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// Remove all expired typing indicators.
+    pub fn cleanup_expired(&mut self) {
+        let now = Instant::now();
+        self.state.retain(|_, thread_typing| {
+            thread_typing
+                .retain(|_, timestamp| now.duration_since(*timestamp) < TYPING_EXPIRE_DURATION);
+            !thread_typing.is_empty()
+        });
+    }
+}
+
 /// Service for thread listing, message retrieval, and message sending.
 pub struct MessagingService {
     auth: Arc<AuthController>,
@@ -75,6 +135,8 @@ pub struct MessagingService {
     unread_counts: Arc<RwLock<UnreadCounts>>,
     /// Currently active thread (messages in this thread don't increment unread).
     active_thread: Arc<RwLock<Option<String>>>,
+    /// Typing indicator state (shared between service and event loop).
+    typing_state: Arc<RwLock<TypingState>>,
 }
 
 impl MessagingService {
@@ -106,6 +168,7 @@ impl MessagingService {
         };
         let unread_counts = Arc::new(RwLock::new(unread_counts));
         let active_thread = Arc::new(RwLock::new(None));
+        let typing_state = Arc::new(RwLock::new(TypingState::default()));
 
         // Subscribe to message events for reactive updates
         let event_rx = app.subscribe(Subscription::MessageEvents);
@@ -117,6 +180,7 @@ impl MessagingService {
         let storage_clone = storage.clone();
         let unread_clone = unread_counts.clone();
         let active_clone = active_thread.clone();
+        let typing_clone = typing_state.clone();
 
         // Spawn background task to process events
         tokio::spawn(async move {
@@ -128,6 +192,7 @@ impl MessagingService {
                 storage_clone,
                 unread_clone,
                 active_clone,
+                typing_clone,
             )
             .await;
         });
@@ -140,6 +205,7 @@ impl MessagingService {
             rx,
             unread_counts,
             active_thread,
+            typing_state,
         }
     }
 
@@ -148,6 +214,8 @@ impl MessagingService {
     /// This runs continuously, refreshing the thread list whenever a relevant event occurs.
     /// For MessageReceived events, it also increments the unread count if the message
     /// is not in the currently active thread.
+    /// For TypingIndicatorReceived events, it updates the typing state for the thread.
+    #[allow(clippy::too_many_arguments)]
     async fn event_loop(
         mut event_rx: broadcast::Receiver<Event>,
         tx: watch::Sender<MessagingSnapshot>,
@@ -156,6 +224,7 @@ impl MessagingService {
         storage: Arc<UiStorage>,
         unread_counts: Arc<RwLock<UnreadCounts>>,
         active_thread: Arc<RwLock<Option<String>>>,
+        typing_state: Arc<RwLock<TypingState>>,
     ) {
         loop {
             match event_rx.recv().await {
@@ -182,6 +251,21 @@ impl MessagingService {
                         }
                     }
 
+                    // Handle typing indicator updates
+                    if let Event::TypingIndicatorReceived {
+                        thread_id,
+                        peer_id,
+                        is_typing,
+                    } = &event
+                    {
+                        if let Ok(mut state) = typing_state.write() {
+                            state.update(thread_id, peer_id, *is_typing);
+                            // Cleanup expired indicators while we have the lock
+                            state.cleanup_expired();
+                        }
+                        trace!(thread_id, peer_id, is_typing, "Typing indicator updated");
+                    }
+
                     let should_refresh = matches!(
                         event,
                         Event::MessageSent { .. }
@@ -190,11 +274,19 @@ impl MessagingService {
                             | Event::MessageEdited { .. }
                             | Event::ReactionAdded { .. }
                             | Event::ReactionRemoved { .. }
+                            | Event::TypingIndicatorReceived { .. }
                     );
 
                     if should_refresh {
                         trace!(?event, "Message event received, refreshing threads");
-                        Self::refresh_threads_internal(&tx, &app, &auth, &unread_counts).await;
+                        Self::refresh_threads_internal(
+                            &tx,
+                            &app,
+                            &auth,
+                            &unread_counts,
+                            &typing_state,
+                        )
+                        .await;
                     }
                 }
                 Err(broadcast::error::RecvError::Lagged(n)) => {
@@ -203,7 +295,8 @@ impl MessagingService {
                         missed_events = n,
                         "Event receiver lagged, refreshing threads"
                     );
-                    Self::refresh_threads_internal(&tx, &app, &auth, &unread_counts).await;
+                    Self::refresh_threads_internal(&tx, &app, &auth, &unread_counts, &typing_state)
+                        .await;
                 }
                 Err(broadcast::error::RecvError::Closed) => {
                     // Channel closed, stop the loop
@@ -222,6 +315,7 @@ impl MessagingService {
         app: &Arc<CommunitasApp>,
         auth: &Arc<AuthController>,
         unread_counts: &Arc<RwLock<UnreadCounts>>,
+        typing_state: &Arc<RwLock<TypingState>>,
     ) {
         let is_authenticated = matches!(
             &*auth.subscribe().borrow(),
@@ -238,7 +332,14 @@ impl MessagingService {
             .ok()
             .map(|guard| (*guard).clone())
             .unwrap_or_default();
-        let Some(threads) = Self::fetch_threads(app, &counts).await else {
+
+        let typing = typing_state
+            .read()
+            .ok()
+            .map(|guard| (*guard).clone())
+            .unwrap_or_default();
+
+        let Some(threads) = Self::fetch_threads(app, &counts, &typing).await else {
             trace!("Failed to fetch threads in refresh");
             return;
         };
@@ -257,6 +358,7 @@ impl MessagingService {
     async fn fetch_threads(
         app: &Arc<CommunitasApp>,
         unread_counts: &UnreadCounts,
+        typing_state: &TypingState,
     ) -> Option<Vec<ThreadSummary>> {
         let entities = match app.query(Query::ListEntities).await {
             Ok(QueryResponse::EntityList(entities)) => entities,
@@ -299,6 +401,7 @@ impl MessagingService {
                 unread_count: unread_counts.get(&thread_id),
                 is_muted: false,
                 is_dm: false,
+                typing_users: typing_state.get_typing_users(&thread_id),
             });
         }
 
@@ -347,6 +450,7 @@ impl MessagingService {
                     unread_count: unread_counts.get(&thread_id),
                     is_muted: false,
                     is_dm: true,
+                    typing_users: typing_state.get_typing_users(&thread_id),
                 });
             }
         }
@@ -377,7 +481,14 @@ impl MessagingService {
     /// when message events are received. Use this for explicit user-triggered
     /// refreshes or to ensure the latest data after authentication changes.
     pub async fn refresh_threads(&self) {
-        Self::refresh_threads_internal(&self.tx, &self.app, &self.auth, &self.unread_counts).await;
+        Self::refresh_threads_internal(
+            &self.tx,
+            &self.app,
+            &self.auth,
+            &self.unread_counts,
+            &self.typing_state,
+        )
+        .await;
     }
 
     /// List all conversation threads for the current user.
@@ -401,7 +512,15 @@ impl MessagingService {
             .ok()
             .map(|guard| (*guard).clone())
             .unwrap_or_default();
-        let threads = Self::fetch_threads(&self.app, &counts)
+
+        let typing = self
+            .typing_state
+            .read()
+            .ok()
+            .map(|guard| (*guard).clone())
+            .unwrap_or_default();
+
+        let threads = Self::fetch_threads(&self.app, &counts, &typing)
             .await
             .unwrap_or_default();
 
@@ -759,6 +878,42 @@ impl MessagingService {
             .and_then(|guard| (*guard).clone())
     }
 
+    /// Send a typing indicator for the specified thread.
+    ///
+    /// This broadcasts a typing indicator event to other participants
+    /// in the thread. Typing indicators automatically expire after 3 seconds
+    /// on the receiving end.
+    ///
+    /// # Arguments
+    /// * `thread_id` - The thread where the user is typing
+    /// * `is_typing` - Whether the user is currently typing
+    ///
+    /// # Errors
+    /// - [`MessagingError::NotAuthenticated`] if no user is logged in.
+    /// - [`MessagingError::Internal`] if the command execution fails.
+    #[instrument(skip(self), name = "ui.messaging.typing", fields(thread_id, is_typing))]
+    pub async fn send_typing_indicator(
+        &self,
+        thread_id: &str,
+        is_typing: bool,
+    ) -> Result<(), MessagingError> {
+        if !self.is_authenticated() {
+            return Err(MessagingError::NotAuthenticated);
+        }
+
+        let cmd = Command::SendTypingIndicator {
+            thread_id: thread_id.to_string(),
+            is_typing,
+        };
+
+        self.app.execute(cmd).await.map_err(|e| {
+            MessagingError::Internal(format!("Send typing indicator failed: {}", e.message))
+        })?;
+
+        debug!(thread_id, is_typing, "Typing indicator sent");
+        Ok(())
+    }
+
     /// Get unread count for a specific thread.
     ///
     /// # Errors
@@ -1090,6 +1245,7 @@ mod tests {
             unread_count: 3,
             is_muted: false,
             is_dm: false,
+            typing_users: vec![],
         }];
 
         service.set_threads(threads);
@@ -1320,6 +1476,7 @@ mod tests {
                 unread_count: 5,
                 is_muted: false,
                 is_dm: false,
+                typing_users: vec![],
             },
             ThreadSummary {
                 thread_id: "entity-2".to_string(),
@@ -1332,6 +1489,7 @@ mod tests {
                 unread_count: 0,
                 is_muted: true,
                 is_dm: false,
+                typing_users: vec![],
             },
         ];
 

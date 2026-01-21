@@ -462,6 +462,8 @@ mod tests {
             last_message_timestamp: 0,
             unread_count: 0,
             is_muted: false,
+            is_dm: false,
+            typing_users: vec![],
         };
         assert_eq!(thread_type_icon(&thread), "#");
     }
@@ -478,6 +480,8 @@ mod tests {
             last_message_timestamp: 0,
             unread_count: 0,
             is_muted: false,
+            is_dm: true,
+            typing_users: vec![],
         };
         assert_eq!(thread_type_icon(&thread), "👤");
     }
@@ -494,6 +498,8 @@ mod tests {
                 last_message_timestamp: 1000,
                 unread_count: 5,
                 is_muted: false,
+                is_dm: false,
+                typing_users: vec![],
             },
             ThreadSummary {
                 thread_id: "t2".to_string(),
@@ -505,6 +511,8 @@ mod tests {
                 last_message_timestamp: 2000,
                 unread_count: 0,
                 is_muted: false,
+                is_dm: false,
+                typing_users: vec![],
             },
             ThreadSummary {
                 thread_id: "t3".to_string(),
@@ -516,6 +524,8 @@ mod tests {
                 last_message_timestamp: 3000,
                 unread_count: 2,
                 is_muted: false,
+                is_dm: true,
+                typing_users: vec![],
             },
         ]
     }

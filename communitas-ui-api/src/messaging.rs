@@ -25,6 +25,8 @@ pub struct ThreadSummary {
     pub is_muted: bool,
     /// Whether this is a direct message thread (1:1 conversation).
     pub is_dm: bool,
+    /// Users currently typing in this thread.
+    pub typing_users: Vec<String>,
 }
 
 /// A message in a conversation thread.
@@ -105,6 +107,7 @@ mod tests {
             unread_count: 5,
             is_muted: false,
             is_dm: false,
+            typing_users: vec![],
         };
         let t2 = t1.clone();
         assert_eq!(t1, t2);
@@ -123,6 +126,7 @@ mod tests {
             unread_count: 1,
             is_muted: false,
             is_dm: true,
+            typing_users: vec![],
         };
         assert!(dm.is_dm);
         assert!(dm.contact_id.is_some());

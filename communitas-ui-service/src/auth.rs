@@ -10,7 +10,7 @@ use tracing::{info, instrument, warn};
 use crate::storage::{StorageError, UiStorage};
 
 /// Snapshot of authentication/session state.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum AuthStateSnapshot {
     LoggedOut,
     Authenticating,
@@ -25,7 +25,7 @@ pub enum AuthStateSnapshot {
 pub const SESSION_EXPIRY_WARNING_SECS: u64 = 5 * 60;
 
 /// Information about the active identity/session.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct AuthSession {
     pub pubkey_hex: String,
     pub four_words: String,
@@ -68,7 +68,7 @@ impl AuthSession {
 }
 
 /// Recent identity for quick switch UI
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RecentIdentity {
     pub four_words: String,
     pub display_name: String,

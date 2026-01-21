@@ -4,6 +4,7 @@ pub mod call;
 pub mod canvas;
 mod composer;
 pub mod drive;
+mod identity_switcher;
 pub mod kanban;
 mod message_list;
 mod presence_badge;
@@ -20,6 +21,7 @@ pub use canvas::{
 };
 pub use composer::MessageComposer;
 pub use drive::DriveBrowser;
+pub use identity_switcher::IdentitySwitcher;
 // Re-export main kanban components for external use
 // Note: BoardListPage and BoardView are used in main.rs routes
 pub use message_list::MessageList;

@@ -168,6 +168,7 @@ mod tests {
             is_muted: false,
             is_video_enabled: false,
             is_speaking: false,
+            is_screen_sharing: false,
             audio_level: 0.0,
             joined_at: 0,
         }

@@ -93,7 +93,12 @@ impl UiServices {
         let auth = Arc::new(AuthController::new(storage.clone())?);
         let navigation = Arc::new(NavigationStore::new(storage.clone())?);
         let directory = Arc::new(DirectoryService::new(auth.clone()));
-        let messaging = Arc::new(MessagingService::new(auth.clone(), app.clone()));
+        let storage_arc = Arc::new(storage.clone());
+        let messaging = Arc::new(MessagingService::new(
+            auth.clone(),
+            app.clone(),
+            storage_arc,
+        ));
         let presence = Arc::new(PresenceService::new(auth.clone(), directory.clone()));
         let kanban = Arc::new(KanbanService::new(auth.clone(), app.clone()));
         let canvas = Arc::new(CanvasService::new(auth.clone(), app.clone()));

@@ -1,13 +1,18 @@
 //! Messaging service for thread and message operations with reactive subscriptions.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use communitas_core::app::CommunitasApp;
 use communitas_core::command::{Command, Event, Query, QueryResponse, Subscription};
 use communitas_ui_api::{Message, ThreadSummary};
+use std::sync::RwLock;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::sync::{broadcast, watch};
 use tracing::{debug, instrument, trace, warn};
+
+use crate::storage::{JsonFile, UiStorage};
 
 use crate::auth::{AuthController, AuthService, AuthStateSnapshot};
 use crate::messaging_convert::{core_entity_type_to_ui, core_message_to_ui};
@@ -35,12 +40,41 @@ pub struct MessagingSnapshot {
     pub loading: bool,
 }
 
+/// Persisted unread message counts per thread.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct UnreadCounts {
+    /// Map from thread_id to unread count.
+    pub counts: HashMap<String, u32>,
+}
+
+impl UnreadCounts {
+    /// Increment the unread count for a thread.
+    pub fn increment(&mut self, thread_id: &str) {
+        *self.counts.entry(thread_id.to_string()).or_insert(0) += 1;
+    }
+
+    /// Reset the unread count for a thread to zero.
+    pub fn reset(&mut self, thread_id: &str) {
+        self.counts.insert(thread_id.to_string(), 0);
+    }
+
+    /// Get the unread count for a thread.
+    pub fn get(&self, thread_id: &str) -> u32 {
+        self.counts.get(thread_id).copied().unwrap_or(0)
+    }
+}
+
 /// Service for thread listing, message retrieval, and message sending.
 pub struct MessagingService {
     auth: Arc<AuthController>,
     app: Arc<CommunitasApp>,
+    storage: Arc<UiStorage>,
     tx: watch::Sender<MessagingSnapshot>,
     rx: watch::Receiver<MessagingSnapshot>,
+    /// Persistent unread counts (shared between service and event loop).
+    unread_counts: Arc<RwLock<UnreadCounts>>,
+    /// Currently active thread (messages in this thread don't increment unread).
+    active_thread: Arc<RwLock<Option<String>>>,
 }
 
 impl MessagingService {
@@ -53,8 +87,21 @@ impl MessagingService {
     /// # Arguments
     /// * `auth` - Shared authentication controller for checking login state
     /// * `app` - Shared reference to the core application
-    pub fn new(auth: Arc<AuthController>, app: Arc<CommunitasApp>) -> Self {
+    /// * `storage` - UI storage for persisting unread counts
+    pub fn new(auth: Arc<AuthController>, app: Arc<CommunitasApp>, storage: Arc<UiStorage>) -> Self {
         let (tx, rx) = watch::channel(MessagingSnapshot::default());
+
+        // Load persisted unread counts
+        let unread_counts = match JsonFile::load(&storage.unread_counts_file()) {
+            Ok(Some(counts)) => counts,
+            Ok(None) => UnreadCounts::default(),
+            Err(e) => {
+                warn!(error = %e, "Failed to load unread counts, using defaults");
+                UnreadCounts::default()
+            }
+        };
+        let unread_counts = Arc::new(RwLock::new(unread_counts));
+        let active_thread = Arc::new(RwLock::new(None));
 
         // Subscribe to message events for reactive updates
         let event_rx = app.subscribe(Subscription::MessageEvents);
@@ -63,27 +110,77 @@ impl MessagingService {
         let tx_clone = tx.clone();
         let app_clone = app.clone();
         let auth_clone = auth.clone();
+        let storage_clone = storage.clone();
+        let unread_clone = unread_counts.clone();
+        let active_clone = active_thread.clone();
 
         // Spawn background task to process events
         tokio::spawn(async move {
-            Self::event_loop(event_rx, tx_clone, app_clone, auth_clone).await;
+            Self::event_loop(
+                event_rx,
+                tx_clone,
+                app_clone,
+                auth_clone,
+                storage_clone,
+                unread_clone,
+                active_clone,
+            )
+            .await;
         });
 
-        Self { auth, app, tx, rx }
+        Self {
+            auth,
+            app,
+            storage,
+            tx,
+            rx,
+            unread_counts,
+            active_thread,
+        }
     }
 
     /// Background event loop that processes message events and updates the watch channel.
     ///
     /// This runs continuously, refreshing the thread list whenever a relevant event occurs.
+    /// For MessageReceived events, it also increments the unread count if the message
+    /// is not in the currently active thread.
     async fn event_loop(
         mut event_rx: broadcast::Receiver<Event>,
         tx: watch::Sender<MessagingSnapshot>,
         app: Arc<CommunitasApp>,
         auth: Arc<AuthController>,
+        storage: Arc<UiStorage>,
+        unread_counts: Arc<RwLock<UnreadCounts>>,
+        active_thread: Arc<RwLock<Option<String>>>,
     ) {
         loop {
             match event_rx.recv().await {
                 Ok(event) => {
+                    // Handle unread count increment for received messages
+                    if let Event::MessageReceived { entity_id, .. } = &event {
+                        let active = active_thread
+                            .read()
+                            .ok()
+                            .and_then(|guard| (*guard).clone());
+                        let is_active = active.as_ref().is_some_and(|t| t == entity_id);
+
+                        if !is_active {
+                            // Increment unread count for non-active thread
+                            if let Ok(mut counts) = unread_counts.write() {
+                                counts.increment(entity_id);
+                            }
+                            // Persist to disk (best effort)
+                            if let Ok(counts) = unread_counts.read() {
+                                let counts_snapshot = (*counts).clone();
+                                if let Err(e) =
+                                    JsonFile::save(&storage.unread_counts_file(), &counts_snapshot)
+                                {
+                                    warn!(error = %e, "Failed to persist unread counts");
+                                }
+                            }
+                        }
+                    }
+
                     let should_refresh = matches!(
                         event,
                         Event::MessageSent { .. }
@@ -96,7 +193,7 @@ impl MessagingService {
 
                     if should_refresh {
                         trace!(?event, "Message event received, refreshing threads");
-                        Self::refresh_threads_internal(&tx, &app, &auth).await;
+                        Self::refresh_threads_internal(&tx, &app, &auth, &unread_counts).await;
                     }
                 }
                 Err(broadcast::error::RecvError::Lagged(n)) => {
@@ -105,7 +202,7 @@ impl MessagingService {
                         missed_events = n,
                         "Event receiver lagged, refreshing threads"
                     );
-                    Self::refresh_threads_internal(&tx, &app, &auth).await;
+                    Self::refresh_threads_internal(&tx, &app, &auth, &unread_counts).await;
                 }
                 Err(broadcast::error::RecvError::Closed) => {
                     // Channel closed, stop the loop
@@ -123,6 +220,7 @@ impl MessagingService {
         tx: &watch::Sender<MessagingSnapshot>,
         app: &Arc<CommunitasApp>,
         auth: &Arc<AuthController>,
+        unread_counts: &Arc<RwLock<UnreadCounts>>,
     ) {
         let is_authenticated = matches!(
             &*auth.subscribe().borrow(),
@@ -134,7 +232,12 @@ impl MessagingService {
             return;
         }
 
-        let Some(threads) = Self::fetch_threads(app).await else {
+        let counts = unread_counts
+            .read()
+            .ok()
+            .map(|guard| (*guard).clone())
+            .unwrap_or_default();
+        let Some(threads) = Self::fetch_threads(app, &counts).await else {
             trace!("Failed to fetch threads in refresh");
             return;
         };
@@ -150,7 +253,10 @@ impl MessagingService {
     /// Fetch and build thread summaries from the core app.
     ///
     /// Returns `None` if the query fails, allowing callers to handle errors appropriately.
-    async fn fetch_threads(app: &Arc<CommunitasApp>) -> Option<Vec<ThreadSummary>> {
+    async fn fetch_threads(
+        app: &Arc<CommunitasApp>,
+        unread_counts: &UnreadCounts,
+    ) -> Option<Vec<ThreadSummary>> {
         let entities = match app.query(Query::ListEntities).await {
             Ok(QueryResponse::EntityList(entities)) => entities,
             Ok(_) => return None,
@@ -180,15 +286,16 @@ impl MessagingService {
                 _ => (String::new(), default_timestamp),
             };
 
+            let thread_id = entity.id.clone();
             threads.push(ThreadSummary {
-                thread_id: entity.id.clone(),
+                thread_id: thread_id.clone(),
                 entity_id: Some(entity.id),
                 entity_type: Some(core_entity_type_to_ui(&entity.entity_type)),
                 contact_id: None,
                 display_name: entity.name,
                 last_message_preview: preview,
                 last_message_timestamp: timestamp,
-                unread_count: 0,
+                unread_count: unread_counts.get(&thread_id),
                 is_muted: false,
                 is_dm: false,
             });
@@ -227,15 +334,16 @@ impl MessagingService {
                     }
                 };
 
+                let thread_id = format!("dm:{contact_id}");
                 threads.push(ThreadSummary {
-                    thread_id: format!("dm:{contact_id}"),
+                    thread_id: thread_id.clone(),
                     entity_id: None,
                     entity_type: None,
                     contact_id: Some(contact_id),
                     display_name: contact.display_name,
                     last_message_preview: preview,
                     last_message_timestamp: timestamp,
-                    unread_count: 0,
+                    unread_count: unread_counts.get(&thread_id),
                     is_muted: false,
                     is_dm: true,
                 });
@@ -268,7 +376,7 @@ impl MessagingService {
     /// when message events are received. Use this for explicit user-triggered
     /// refreshes or to ensure the latest data after authentication changes.
     pub async fn refresh_threads(&self) {
-        Self::refresh_threads_internal(&self.tx, &self.app, &self.auth).await;
+        Self::refresh_threads_internal(&self.tx, &self.app, &self.auth, &self.unread_counts).await;
     }
 
     /// List all conversation threads for the current user.
@@ -286,7 +394,15 @@ impl MessagingService {
 
         self.set_loading(true);
 
-        let threads = Self::fetch_threads(&self.app).await.unwrap_or_default();
+        let counts = self
+            .unread_counts
+            .read()
+            .ok()
+            .map(|guard| (*guard).clone())
+            .unwrap_or_default();
+        let threads = Self::fetch_threads(&self.app, &counts)
+            .await
+            .unwrap_or_default();
 
         self.set_threads(threads.clone());
 
@@ -573,6 +689,8 @@ impl MessagingService {
 
     /// Mark a thread as read, clearing unread count.
     ///
+    /// This updates both the in-memory state and persists to disk.
+    ///
     /// # Errors
     /// - [`MessagingError::NotAuthenticated`] if no user is logged in.
     /// - [`MessagingError::ThreadNotFound`] if the thread does not exist.
@@ -588,11 +706,45 @@ impl MessagingService {
             thread.unread_count = 0;
             // Send cannot fail: self.rx guarantees at least one receiver exists
             let _ = self.tx.send(snap);
-            // TODO: Wire to core Command::MarkThreadRead
+
+            // Reset persisted unread count
+            if let Ok(mut counts) = self.unread_counts.write() {
+                counts.reset(thread_id);
+            }
+
+            // Persist to disk (best effort)
+            if let Ok(counts) = self.unread_counts.read() {
+                let counts_snapshot = (*counts).clone();
+                if let Err(e) =
+                    JsonFile::save(&self.storage.unread_counts_file(), &counts_snapshot)
+                {
+                    warn!(error = %e, "Failed to persist unread counts after mark_read");
+                }
+            }
+
+            debug!(thread_id, "Thread marked as read");
             Ok(())
         } else {
             Err(MessagingError::ThreadNotFound(thread_id.to_string()))
         }
+    }
+
+    /// Set the currently active thread.
+    ///
+    /// Messages received in the active thread will not increment unread counts.
+    /// Call with `None` when leaving a thread view.
+    pub fn set_active_thread(&self, thread_id: Option<String>) {
+        if let Ok(mut guard) = self.active_thread.write() {
+            *guard = thread_id;
+        }
+    }
+
+    /// Get the currently active thread ID, if any.
+    pub fn get_active_thread(&self) -> Option<String> {
+        self.active_thread
+            .read()
+            .ok()
+            .and_then(|guard| (*guard).clone())
     }
 
     /// Get unread count for a specific thread.
@@ -813,8 +965,8 @@ mod tests {
     use tempfile::TempDir;
 
     async fn make_service(temp: &TempDir) -> MessagingService {
-        let storage = UiStorage::from_path(temp.path()).unwrap();
-        let auth = Arc::new(AuthController::new(storage).unwrap());
+        let storage = Arc::new(UiStorage::from_path(temp.path()).unwrap());
+        let auth = Arc::new(AuthController::new((*storage).clone()).unwrap());
         let app = Arc::new(
             CommunitasApp::new(
                 "ocean-forest-moon-star".to_string(),
@@ -828,7 +980,7 @@ mod tests {
             .await
             .unwrap(),
         );
-        MessagingService::new(auth, app)
+        MessagingService::new(auth, app, storage)
     }
 
     #[tokio::test]

@@ -51,6 +51,11 @@ impl UiStorage {
     pub fn navigation_state_file(&self) -> PathBuf {
         self.root.join("ui_navigation_state.json")
     }
+
+    /// Disk location for unread message counts persistence.
+    pub fn unread_counts_file(&self) -> PathBuf {
+        self.root.join("unread_counts.json")
+    }
 }
 
 /// Shared storage error type.

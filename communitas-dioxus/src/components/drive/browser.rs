@@ -3,10 +3,12 @@
 use communitas_ui_api::{DirectoryEntry, DiskType, QuotaInfo};
 use communitas_ui_service::UiServices;
 use dioxus::prelude::*;
+use std::path::PathBuf;
 use std::sync::Arc;
-use tracing::info;
+use tracing::{info, warn};
 
 use super::file_list::FileList;
+use super::file_picker::{open_file_picker, PickerConfig, PickerResult};
 use super::preview_panel::PreviewPanel;
 use super::quota_meter::QuotaMeter;
 use super::tree_view::TreeView;
@@ -185,6 +187,98 @@ pub fn DriveBrowser(props: DriveBrowserProps) -> Element {
 
     let entity_id_for_tree = props.entity_id.clone();
     let entity_id_for_upload = props.entity_id.clone();
+    let entity_id_for_picker = props.entity_id.clone();
+
+    // Handle file upload via picker
+    let drive_for_upload = services.drive();
+    let handle_upload_files = move |files: Vec<PathBuf>| {
+        if files.is_empty() {
+            return;
+        }
+
+        let drive = drive_for_upload.clone();
+        let entity_id = entity_id_for_picker.clone();
+        let disk = current_disk();
+        let dest_path = current_path();
+
+        info!(
+            target: "ui.drive",
+            event = "upload_started",
+            count = files.len(),
+            disk = ?disk,
+            path = %dest_path
+        );
+
+        show_uploads.set(true);
+
+        spawn(async move {
+            for file_path in files {
+                let file_name = file_path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("unknown")
+                    .to_string();
+
+                let dest = if dest_path == "/" {
+                    format!("/{file_name}")
+                } else {
+                    format!("{dest_path}/{file_name}")
+                };
+
+                info!(
+                    target: "ui.drive",
+                    event = "upload_file",
+                    source = ?file_path,
+                    dest = %dest
+                );
+
+                match drive
+                    .start_streaming_upload(&entity_id, disk, &dest, &file_path)
+                    .await
+                {
+                    Ok(_) => {
+                        info!(
+                            target: "ui.drive",
+                            event = "upload_queued",
+                            file = %file_name
+                        );
+                    }
+                    Err(e) => {
+                        warn!(
+                            target: "ui.drive",
+                            event = "upload_failed",
+                            file = %file_name,
+                            error = %e
+                        );
+                    }
+                }
+            }
+        });
+    };
+
+    // Open file picker for uploads
+    let open_upload_picker = move |_| {
+        let mut on_select = handle_upload_files.clone();
+        spawn(async move {
+            let config = PickerConfig::multiple_files().with_title("Select Files to Upload");
+
+            let result = tokio::task::spawn_blocking(move || open_file_picker(&config))
+                .await
+                .unwrap_or_else(|e| PickerResult::Error(e.to_string()));
+
+            match result {
+                PickerResult::Selected(files) => {
+                    on_select(files);
+                }
+                PickerResult::Cancelled => {
+                    info!(target: "ui.drive", event = "upload_picker_cancelled");
+                }
+                PickerResult::Error(err) => {
+                    warn!(target: "ui.drive", event = "upload_picker_error", error = %err);
+                }
+            }
+        });
+    };
 
     rsx! {
         div {
@@ -214,13 +308,14 @@ pub fn DriveBrowser(props: DriveBrowserProps) -> Element {
                 view_mode: view_mode(),
                 on_disk_change: change_disk,
                 on_view_change: move |mode| view_mode.set(mode),
-                on_upload: move |_| show_uploads.set(true),
+                on_upload: open_upload_picker,
                 on_new_folder: move |_| {
                     info!(target = "ui.drive", event = "new_folder_clicked");
                     // TODO: Show new folder dialog
                 },
                 on_tree_toggle: move |_| tree_collapsed.set(!tree_collapsed()),
                 tree_collapsed: tree_collapsed(),
+                on_show_uploads: move |_| show_uploads.set(true),
             }
             // Breadcrumb
             Breadcrumb {
@@ -355,6 +450,7 @@ struct DriveToolbarProps {
     on_new_folder: EventHandler<()>,
     on_tree_toggle: EventHandler<()>,
     tree_collapsed: bool,
+    on_show_uploads: EventHandler<()>,
 }
 
 #[component]
@@ -441,11 +537,19 @@ fn DriveToolbar(props: DriveToolbarProps) -> Element {
                     onclick: move |_| props.on_new_folder.call(()),
                     "New Folder"
                 }
-                // Upload button
+                // View uploads button
+                button {
+                    class: "px-3 py-1.5 rounded-lg text-sm text-slate-300 border border-slate-700 hover:border-slate-600 transition",
+                    title: "View active uploads",
+                    onclick: move |_| props.on_show_uploads.call(()),
+                    "Uploads"
+                }
+                // Upload button (opens file picker)
                 button {
                     class: "px-4 py-1.5 rounded-lg text-sm font-semibold bg-emerald-500 text-slate-900 hover:bg-emerald-400 transition",
+                    title: "Select files to upload",
                     onclick: move |_| props.on_upload.call(()),
-                    "Upload"
+                    "Upload Files"
                 }
             }
         }

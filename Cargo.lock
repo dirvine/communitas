@@ -1219,10 +1219,12 @@ dependencies = [
  "dioxus-history",
  "dioxus-logger 0.5.1",
  "dioxus-ssr",
+ "dirs 5.0.1",
  "futures",
  "native-dialog",
  "tempfile",
  "tokio",
+ "tokio-test",
  "tracing",
 ]
 
@@ -1347,6 +1349,7 @@ name = "communitas-ui-service"
 version = "0.1.60"
 dependencies = [
  "async-trait",
+ "blake3",
  "canvas-core",
  "chrono",
  "communitas-core",

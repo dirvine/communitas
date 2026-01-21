@@ -6,10 +6,12 @@
 //! - Upload with progress and drag-drop
 //! - Download with checksum verification
 //! - Quota meter with usage warnings
+//! - Native file picker dialogs
 
 mod browser;
 pub(crate) mod download_manager;
 pub(crate) mod file_list;
+pub(crate) mod file_picker;
 pub(crate) mod preview_panel;
 pub(crate) mod quota_meter;
 pub(crate) mod tree_view;
@@ -17,3 +19,10 @@ pub(crate) mod upload_progress;
 
 // Public exports for use in routes
 pub use browser::DriveBrowser;
+
+// File picker exports for external use (download dialogs, etc.)
+#[allow(unused_imports)]
+pub use file_picker::{
+    open_file_picker, open_save_picker, show_confirm_dialog, show_error_dialog, show_info_dialog,
+    DropZone, FileFilter, FilePickerButton, PickerConfig, PickerResult,
+};

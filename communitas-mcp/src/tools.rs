@@ -427,6 +427,123 @@ pub fn list_tools(authenticated: bool) -> Vec<Tool> {
                 "required": ["thread_id"]
             }),
         },
+        // Phase 6.2 messaging tools (PLAN-37)
+        Tool {
+            name: "mark_thread_read".to_string(),
+            description: "Mark all messages in a thread as read, resetting the unread count to zero.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "thread_id": {"type": "string", "description": "Thread ID to mark as read"}
+                },
+                "required": ["thread_id"]
+            }),
+        },
+        Tool {
+            name: "search_messages".to_string(),
+            description: "Search for messages across all threads containing the given query text.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Search query text"},
+                    "thread_id": {"type": "string", "description": "Optional: limit search to a specific thread"},
+                    "limit": {"type": "integer", "description": "Maximum results to return (default: 20, max: 100)"}
+                },
+                "required": ["query"]
+            }),
+        },
+        Tool {
+            name: "pin_thread".to_string(),
+            description: "Pin a thread to the top of the thread list for quick access.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "thread_id": {"type": "string", "description": "Thread ID to pin"}
+                },
+                "required": ["thread_id"]
+            }),
+        },
+        Tool {
+            name: "unpin_thread".to_string(),
+            description: "Unpin a previously pinned thread.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "thread_id": {"type": "string", "description": "Thread ID to unpin"}
+                },
+                "required": ["thread_id"]
+            }),
+        },
+        Tool {
+            name: "get_pinned_threads".to_string(),
+            description: "Get the list of pinned thread IDs.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {}
+            }),
+        },
+        Tool {
+            name: "send_typing_indicator".to_string(),
+            description: "Send a typing indicator to a thread, letting other participants know you are typing.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "thread_id": {"type": "string", "description": "Thread ID where you are typing"}
+                },
+                "required": ["thread_id"]
+            }),
+        },
+        Tool {
+            name: "get_typing_users".to_string(),
+            description: "Get the list of users currently typing in a thread.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "thread_id": {"type": "string", "description": "Thread ID to check"}
+                },
+                "required": ["thread_id"]
+            }),
+        },
+        Tool {
+            name: "get_pending_messages".to_string(),
+            description: "Get messages queued for sending (offline queue).".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {}
+            }),
+        },
+        Tool {
+            name: "queue_offline_message".to_string(),
+            description: "Queue a message for sending when network is available (offline queue).".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "thread_id": {"type": "string", "description": "Thread ID to send to"},
+                    "text": {"type": "string", "description": "Message text"},
+                    "reply_to_id": {"type": "string", "description": "Message ID to reply to (optional)"}
+                },
+                "required": ["thread_id", "text"]
+            }),
+        },
+        Tool {
+            name: "retry_pending_messages".to_string(),
+            description: "Retry sending all pending messages in the offline queue.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {}
+            }),
+        },
+        Tool {
+            name: "cancel_pending_message".to_string(),
+            description: "Cancel a pending message from the offline queue.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "pending_id": {"type": "string", "description": "Pending message ID to cancel"}
+                },
+                "required": ["pending_id"]
+            }),
+        },
         // Kanban tools
         Tool {
             name: "create_kanban_board".to_string(),
@@ -1019,6 +1136,254 @@ pub fn list_tools(authenticated: bool) -> Vec<Tool> {
                     "path": {"type": "string", "description": "File path"}
                 },
                 "required": ["entity_id", "disk_type", "path"]
+            }),
+        },
+        // Streaming transfer tools
+        Tool {
+            name: "start_streaming_upload".to_string(),
+            description: "Start a chunked streaming upload with progress tracking and resume support".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string", "description": "Entity ID"},
+                    "disk_type": {"type": "string", "enum": ["private", "public", "shared"], "description": "Disk type"},
+                    "path": {"type": "string", "description": "Destination path on disk"},
+                    "local_path": {"type": "string", "description": "Local file path to upload"}
+                },
+                "required": ["entity_id", "disk_type", "path", "local_path"]
+            }),
+        },
+        Tool {
+            name: "start_streaming_download".to_string(),
+            description: "Start a chunked streaming download with progress tracking and resume support".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string", "description": "Entity ID"},
+                    "disk_type": {"type": "string", "enum": ["private", "public", "shared"], "description": "Disk type"},
+                    "path": {"type": "string", "description": "File path on disk"},
+                    "local_path": {"type": "string", "description": "Local destination path"}
+                },
+                "required": ["entity_id", "disk_type", "path", "local_path"]
+            }),
+        },
+        Tool {
+            name: "resume_upload".to_string(),
+            description: "Resume an interrupted upload from where it left off. Provide the same entity, disk, path, and local_path as the original upload.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string", "description": "Entity ID"},
+                    "disk_type": {"type": "string", "enum": ["private", "public", "shared"], "description": "Disk type"},
+                    "path": {"type": "string", "description": "Destination path on disk"},
+                    "local_path": {"type": "string", "description": "Local file path to upload"}
+                },
+                "required": ["entity_id", "disk_type", "path", "local_path"]
+            }),
+        },
+        Tool {
+            name: "resume_download".to_string(),
+            description: "Resume an interrupted download from where it left off. Provide the same entity, disk, path, and local_path as the original download.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string", "description": "Entity ID"},
+                    "disk_type": {"type": "string", "enum": ["private", "public", "shared"], "description": "Disk type"},
+                    "path": {"type": "string", "description": "File path on disk"},
+                    "local_path": {"type": "string", "description": "Local destination path"}
+                },
+                "required": ["entity_id", "disk_type", "path", "local_path"]
+            }),
+        },
+        Tool {
+            name: "get_upload_progress".to_string(),
+            description: "Get progress information for an active upload".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "upload_id": {"type": "string", "description": "Upload ID"}
+                },
+                "required": ["upload_id"]
+            }),
+        },
+        Tool {
+            name: "get_download_progress".to_string(),
+            description: "Get progress information for an active download".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "download_id": {"type": "string", "description": "Download ID"}
+                },
+                "required": ["download_id"]
+            }),
+        },
+        Tool {
+            name: "cancel_upload".to_string(),
+            description: "Cancel an active upload".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "upload_id": {"type": "string", "description": "Upload ID to cancel"}
+                },
+                "required": ["upload_id"]
+            }),
+        },
+        Tool {
+            name: "cancel_download".to_string(),
+            description: "Cancel an active download".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "download_id": {"type": "string", "description": "Download ID to cancel"}
+                },
+                "required": ["download_id"]
+            }),
+        },
+        // Share link tools
+        Tool {
+            name: "create_share_link".to_string(),
+            description: "Create a shareable link for a file with optional expiry and password".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string", "description": "Entity ID"},
+                    "disk_type": {"type": "string", "enum": ["private", "public", "shared"], "description": "Disk type"},
+                    "path": {"type": "string", "description": "File path"},
+                    "expires_in_hours": {"type": "integer", "description": "Optional: hours until link expires"},
+                    "password": {"type": "string", "description": "Optional: password to access the link"},
+                    "max_downloads": {"type": "integer", "description": "Optional: maximum number of downloads"}
+                },
+                "required": ["entity_id", "disk_type", "path"]
+            }),
+        },
+        Tool {
+            name: "revoke_share_link".to_string(),
+            description: "Revoke a share link by its ID".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "link_id": {"type": "string", "description": "Share link ID to revoke"}
+                },
+                "required": ["link_id"]
+            }),
+        },
+        Tool {
+            name: "list_share_links".to_string(),
+            description: "List all share links for an entity".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string", "description": "Entity ID"}
+                },
+                "required": ["entity_id"]
+            }),
+        },
+        Tool {
+            name: "get_file_share_links".to_string(),
+            description: "Get all share links for a specific file".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string", "description": "Entity ID"},
+                    "disk_type": {"type": "string", "enum": ["private", "public", "shared"], "description": "Disk type"},
+                    "path": {"type": "string", "description": "File path"}
+                },
+                "required": ["entity_id", "disk_type", "path"]
+            }),
+        },
+        // Offline staging tools
+        Tool {
+            name: "stage_upload".to_string(),
+            description: "Stage a file for upload when offline. File will be uploaded when network is available.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string", "description": "Entity ID"},
+                    "disk_type": {"type": "string", "enum": ["private", "public", "shared"], "description": "Disk type"},
+                    "destination_path": {"type": "string", "description": "Destination path on disk"},
+                    "local_path": {"type": "string", "description": "Local file path to stage"}
+                },
+                "required": ["entity_id", "disk_type", "destination_path", "local_path"]
+            }),
+        },
+        Tool {
+            name: "get_staged_upload".to_string(),
+            description: "Get details of a staged upload by ID".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "upload_id": {"type": "string", "description": "Staged upload ID"}
+                },
+                "required": ["upload_id"]
+            }),
+        },
+        Tool {
+            name: "list_staged_uploads".to_string(),
+            description: "List all staged uploads in the offline queue".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {}
+            }),
+        },
+        Tool {
+            name: "get_staging_status".to_string(),
+            description: "Get the current status of the offline staging queue".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {}
+            }),
+        },
+        Tool {
+            name: "remove_staged_upload".to_string(),
+            description: "Remove a file from the staging queue".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "upload_id": {"type": "string", "description": "Staged upload ID to remove"}
+                },
+                "required": ["upload_id"]
+            }),
+        },
+        Tool {
+            name: "retry_staged_upload".to_string(),
+            description: "Retry a failed staged upload".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "upload_id": {"type": "string", "description": "Staged upload ID to retry"}
+                },
+                "required": ["upload_id"]
+            }),
+        },
+        Tool {
+            name: "resolve_staging_conflict".to_string(),
+            description: "Resolve a conflict for a staged upload".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "upload_id": {"type": "string", "description": "Staged upload ID with conflict"},
+                    "resolution": {"type": "string", "enum": ["keep_local", "keep_remote", "keep_both", "skip", "retry"], "description": "How to resolve the conflict"}
+                },
+                "required": ["upload_id", "resolution"]
+            }),
+        },
+        Tool {
+            name: "sync_staging_queue".to_string(),
+            description: "Sync all pending staged uploads. Returns counts of uploaded and failed files.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {}
+            }),
+        },
+        Tool {
+            name: "set_network_available".to_string(),
+            description: "Set network availability status for the staging queue".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "available": {"type": "boolean", "description": "Whether network is available"}
+                },
+                "required": ["available"]
             }),
         },
         // Query tools (read operations)
@@ -1954,6 +2319,24 @@ async fn dispatch_message_tools(
         // Thread listing - migrated to use UiServices (PLAN-31)
         "list_threads" => Some(execute_list_threads(services, args.clone()).await),
         "list_messages" => Some(execute_list_messages(app, args.clone()).await),
+        // Phase 6.2 messaging tools (PLAN-37)
+        "mark_thread_read" => Some(execute_mark_thread_read(services, args.clone()).await),
+        "search_messages" => Some(execute_search_messages(services, args.clone()).await),
+        "pin_thread" => Some(execute_pin_thread(services, args.clone()).await),
+        "unpin_thread" => Some(execute_unpin_thread(services, args.clone()).await),
+        "get_pinned_threads" => Some(execute_get_pinned_threads(services).await),
+        "send_typing_indicator" => {
+            Some(execute_send_typing_indicator(services, args.clone()).await)
+        }
+        "get_typing_users" => Some(execute_get_typing_users(services, args.clone()).await),
+        "get_pending_messages" => Some(execute_get_pending_messages(services).await),
+        "queue_offline_message" => {
+            Some(execute_queue_offline_message(services, args.clone()).await)
+        }
+        "retry_pending_messages" => Some(execute_retry_pending_messages(services).await),
+        "cancel_pending_message" => {
+            Some(execute_cancel_pending_message(services, args.clone()).await)
+        }
         _ => None,
     }
 }
@@ -2054,6 +2437,46 @@ async fn dispatch_file_tools(
         "copy_file" => Some(execute_copy_file(services, args.clone()).await),
         "list_disks" => Some(execute_list_disks(services, args.clone()).await),
         "get_file_preview" => Some(execute_get_file_preview(services, args.clone()).await),
+        // Streaming transfer operations
+        "start_streaming_upload" => {
+            Some(execute_start_streaming_upload(services, args.clone()).await)
+        }
+        "start_streaming_download" => {
+            Some(execute_start_streaming_download(services, args.clone()).await)
+        }
+        "resume_upload" => Some(execute_resume_upload(services, args.clone()).await),
+        "resume_download" => Some(execute_resume_download(services, args.clone()).await),
+        "get_upload_progress" => Some(execute_get_upload_progress(services, args.clone()).await),
+        "get_download_progress" => {
+            Some(execute_get_download_progress(services, args.clone()).await)
+        }
+        "cancel_upload" => Some(execute_cancel_upload(services, args.clone()).await),
+        "cancel_download" => Some(execute_cancel_download(services, args.clone()).await),
+        // Share link operations
+        "create_share_link" => Some(execute_create_share_link(services, args.clone()).await),
+        "revoke_share_link" => Some(execute_revoke_share_link(services, args.clone()).await),
+        "list_share_links" => Some(execute_list_share_links(services, args.clone()).await),
+        "get_file_share_links" => {
+            Some(execute_get_file_share_links(services, args.clone()).await)
+        }
+        // Offline staging operations
+        "stage_upload" => Some(execute_stage_upload(services, args.clone()).await),
+        "get_staged_upload" => Some(execute_get_staged_upload(services, args.clone()).await),
+        "list_staged_uploads" => Some(execute_list_staged_uploads(services).await),
+        "get_staging_status" => Some(execute_get_staging_status(services).await),
+        "remove_staged_upload" => {
+            Some(execute_remove_staged_upload(services, args.clone()).await)
+        }
+        "retry_staged_upload" => {
+            Some(execute_retry_staged_upload(services, args.clone()).await)
+        }
+        "resolve_staging_conflict" => {
+            Some(execute_resolve_staging_conflict(services, args.clone()).await)
+        }
+        "sync_staging_queue" => Some(execute_sync_staging_queue(services).await),
+        "set_network_available" => {
+            Some(execute_set_network_available(services, args.clone()).await)
+        }
         // Media operations - still use app directly for now (no service equivalent yet)
         "upload_with_metadata" => {
             Some(execute_upload_with_metadata(services.drive().app().as_ref(), args.clone()).await)
@@ -3011,6 +3434,246 @@ async fn execute_list_messages(app: &CommunitasApp, args: Value) -> ToolCallResu
         }
         Ok(_) => error_result("Unexpected response type"),
         Err(e) => error_result(&format!("Failed to get messages: {}", e.message)),
+    }
+}
+
+// Phase 6.2 messaging tools (PLAN-37)
+
+/// Mark all messages in a thread as read.
+#[tracing::instrument(skip(services), name = "mcp.tools.mark_thread_read")]
+async fn execute_mark_thread_read(services: &UiServices, args: Value) -> ToolCallResult {
+    let thread_id = match args["thread_id"].as_str() {
+        Some(id) => id,
+        None => return error_result("thread_id is required"),
+    };
+
+    match services.messaging().mark_thread_read(thread_id).await {
+        Ok(_) => json_result(&json!({
+            "success": true,
+            "thread_id": thread_id
+        })),
+        Err(e) => error_result(&format!("Failed to mark thread as read: {}", e)),
+    }
+}
+
+/// Search for messages across threads.
+#[tracing::instrument(skip(services), name = "mcp.tools.search_messages")]
+async fn execute_search_messages(services: &UiServices, args: Value) -> ToolCallResult {
+    let query = match args["query"].as_str() {
+        Some(q) => q,
+        None => return error_result("query is required"),
+    };
+    let thread_id = args["thread_id"].as_str();
+    let limit = args["limit"].as_u64().unwrap_or(20).min(100) as usize;
+
+    match services
+        .messaging()
+        .search_messages(query, thread_id, limit)
+        .await
+    {
+        Ok(results) => {
+            let limited_results: Vec<Value> = results
+                .iter()
+                .take(limit)
+                .map(|r| {
+                    json!({
+                        "message": {
+                            "id": r.message.id,
+                            "thread_id": r.message.thread_id,
+                            "sender_id": r.message.sender_id,
+                            "sender_name": r.message.sender_name,
+                            "text": r.message.text,
+                            "timestamp": r.message.timestamp,
+                            "edited": r.message.edited
+                        },
+                        "thread_id": r.thread_id,
+                        "thread_name": r.thread_name,
+                        "match_count": r.match_count,
+                        "match_excerpt": r.match_excerpt
+                    })
+                })
+                .collect();
+
+            json_result(&json!({
+                "results": limited_results,
+                "total_count": limited_results.len()
+            }))
+        }
+        Err(e) => error_result(&format!("Search failed: {}", e)),
+    }
+}
+
+/// Pin a thread to the top of the list.
+#[tracing::instrument(skip(services), name = "mcp.tools.pin_thread")]
+async fn execute_pin_thread(services: &UiServices, args: Value) -> ToolCallResult {
+    let thread_id = match args["thread_id"].as_str() {
+        Some(id) => id,
+        None => return error_result("thread_id is required"),
+    };
+
+    match services.messaging().pin_thread(thread_id).await {
+        Ok(_) => json_result(&json!({
+            "success": true,
+            "thread_id": thread_id,
+            "pinned": true
+        })),
+        Err(e) => error_result(&format!("Failed to pin thread: {}", e)),
+    }
+}
+
+/// Unpin a thread.
+#[tracing::instrument(skip(services), name = "mcp.tools.unpin_thread")]
+async fn execute_unpin_thread(services: &UiServices, args: Value) -> ToolCallResult {
+    let thread_id = match args["thread_id"].as_str() {
+        Some(id) => id,
+        None => return error_result("thread_id is required"),
+    };
+
+    match services.messaging().unpin_thread(thread_id).await {
+        Ok(_) => json_result(&json!({
+            "success": true,
+            "thread_id": thread_id,
+            "pinned": false
+        })),
+        Err(e) => error_result(&format!("Failed to unpin thread: {}", e)),
+    }
+}
+
+/// Get the list of pinned thread IDs.
+#[tracing::instrument(skip(services), name = "mcp.tools.get_pinned_threads")]
+async fn execute_get_pinned_threads(services: &UiServices) -> ToolCallResult {
+    let pinned = services.messaging().get_pinned_threads();
+    json_result(&json!({
+        "pinned_threads": pinned
+    }))
+}
+
+/// Send a typing indicator to a thread.
+#[tracing::instrument(skip(services), name = "mcp.tools.send_typing_indicator")]
+async fn execute_send_typing_indicator(services: &UiServices, args: Value) -> ToolCallResult {
+    let thread_id = match args["thread_id"].as_str() {
+        Some(id) => id,
+        None => return error_result("thread_id is required"),
+    };
+
+    // Send typing indicator (is_typing = true)
+    match services
+        .messaging()
+        .send_typing_indicator(thread_id, true)
+        .await
+    {
+        Ok(_) => json_result(&json!({
+            "success": true,
+            "thread_id": thread_id
+        })),
+        Err(e) => error_result(&format!("Failed to send typing indicator: {}", e)),
+    }
+}
+
+/// Get the list of users currently typing in a thread.
+#[tracing::instrument(skip(services), name = "mcp.tools.get_typing_users")]
+async fn execute_get_typing_users(services: &UiServices, args: Value) -> ToolCallResult {
+    let thread_id = match args["thread_id"].as_str() {
+        Some(id) => id,
+        None => return error_result("thread_id is required"),
+    };
+
+    let typing_users = services.messaging().get_typing_users(thread_id);
+    json_result(&json!({
+        "thread_id": thread_id,
+        "typing_users": typing_users
+    }))
+}
+
+/// Get messages queued for sending (offline queue).
+#[tracing::instrument(skip(services), name = "mcp.tools.get_pending_messages")]
+async fn execute_get_pending_messages(services: &UiServices) -> ToolCallResult {
+    let pending = services.messaging().get_pending_messages();
+    let list: Vec<Value> = pending
+        .iter()
+        .map(|m| {
+            let status_str = if m.status.is_sending() {
+                "sending"
+            } else if m.status.is_pending() {
+                "pending"
+            } else {
+                "failed"
+            };
+            json!({
+                "id": m.id,
+                "thread_id": m.thread_id,
+                "text": m.text,
+                "reply_to_id": m.reply_to_id,
+                "queued_at": m.queued_at,
+                "retry_count": m.retry_count,
+                "status": status_str,
+                "last_error": m.last_error
+            })
+        })
+        .collect();
+
+    json_result(&json!({
+        "pending_messages": list,
+        "count": list.len()
+    }))
+}
+
+/// Queue a message for sending when network is available.
+#[tracing::instrument(skip(services), name = "mcp.tools.queue_offline_message")]
+async fn execute_queue_offline_message(services: &UiServices, args: Value) -> ToolCallResult {
+    let thread_id = match args["thread_id"].as_str() {
+        Some(id) => id,
+        None => return error_result("thread_id is required"),
+    };
+    let text = match args["text"].as_str() {
+        Some(t) => t,
+        None => return error_result("text is required"),
+    };
+    let reply_to_id = args["reply_to_id"].as_str();
+
+    let pending_id = services
+        .messaging()
+        .queue_message(thread_id, text, reply_to_id);
+    json_result(&json!({
+        "success": true,
+        "pending_id": pending_id,
+        "thread_id": thread_id
+    }))
+}
+
+/// Retry sending all pending messages.
+#[tracing::instrument(skip(services), name = "mcp.tools.retry_pending_messages")]
+async fn execute_retry_pending_messages(services: &UiServices) -> ToolCallResult {
+    let results = services.messaging().retry_all_pending().await;
+    let (succeeded, failed): (Vec<_>, Vec<_>) =
+        results.into_iter().partition(|(_, result)| result.is_ok());
+
+    json_result(&json!({
+        "succeeded": succeeded.len(),
+        "failed": failed.len(),
+        "details": {
+            "succeeded_ids": succeeded.iter().map(|(id, _)| id.clone()).collect::<Vec<_>>(),
+            "failed_ids": failed.iter().map(|(id, _)| id.clone()).collect::<Vec<_>>()
+        }
+    }))
+}
+
+/// Cancel a pending message from the offline queue.
+#[tracing::instrument(skip(services), name = "mcp.tools.cancel_pending_message")]
+async fn execute_cancel_pending_message(services: &UiServices, args: Value) -> ToolCallResult {
+    let pending_id = match args["pending_id"].as_str() {
+        Some(id) => id,
+        None => return error_result("pending_id is required"),
+    };
+
+    let removed = services.messaging().remove_pending_message(pending_id);
+    if removed {
+        json_result(&json!({
+            "success": true,
+            "pending_id": pending_id
+        }))
+    } else {
+        error_result(&format!("Pending message not found: {}", pending_id))
     }
 }
 
@@ -5613,6 +6276,527 @@ async fn execute_get_file_preview(services: &UiServices, args: Value) -> ToolCal
         }
         Err(e) => error_result(&format!("Failed to get file preview: {}", e)),
     }
+}
+
+// ============================================================================
+// Streaming Transfer MCP Executor Functions
+// ============================================================================
+
+async fn execute_start_streaming_upload(services: &UiServices, args: Value) -> ToolCallResult {
+    use std::path::Path;
+
+    let entity_id = require_str!(args, "entity_id");
+    let disk_type = require_ui_disk_type!(args);
+    let path = require_str!(args, "path");
+    let local_path = require_str!(args, "local_path");
+
+    match services
+        .drive()
+        .start_streaming_upload(&entity_id, disk_type, &path, Path::new(&local_path))
+        .await
+    {
+        Ok(upload_id) => {
+            // Get progress to return more details
+            if let Some(progress) = services.drive().get_upload_progress(&upload_id).await {
+                json_result(&json!({
+                    "upload_id": upload_id,
+                    "entity_id": entity_id,
+                    "disk_type": format!("{:?}", disk_type).to_lowercase(),
+                    "path": path,
+                    "total_bytes": progress.total_bytes,
+                    "bytes_uploaded": progress.bytes_uploaded,
+                    "state": format!("{:?}", progress.state).to_lowercase(),
+                    "percent_complete": progress.percent_complete(),
+                    "message": "Streaming upload started. Use get_upload_progress to track progress."
+                }))
+            } else {
+                json_result(&json!({
+                    "upload_id": upload_id,
+                    "message": "Streaming upload started. Use get_upload_progress to track progress."
+                }))
+            }
+        }
+        Err(e) => error_result(&format!("Failed to start streaming upload: {}", e)),
+    }
+}
+
+async fn execute_start_streaming_download(services: &UiServices, args: Value) -> ToolCallResult {
+    let entity_id = require_str!(args, "entity_id");
+    let disk_type = require_ui_disk_type!(args);
+    let path = require_str!(args, "path");
+    let local_path = require_str!(args, "local_path");
+
+    match services
+        .drive()
+        .start_streaming_download(&entity_id, disk_type, &path, &local_path)
+        .await
+    {
+        Ok(download_id) => {
+            // Get progress to return more details
+            if let Some(progress) = services.drive().get_download_progress(&download_id).await {
+                json_result(&json!({
+                    "download_id": download_id,
+                    "entity_id": entity_id,
+                    "disk_type": format!("{:?}", disk_type).to_lowercase(),
+                    "path": path,
+                    "local_path": local_path,
+                    "total_bytes": progress.total_bytes,
+                    "bytes_downloaded": progress.bytes_downloaded,
+                    "state": format!("{:?}", progress.state).to_lowercase(),
+                    "percent_complete": progress.percent_complete(),
+                    "message": "Streaming download started. Use get_download_progress to track progress."
+                }))
+            } else {
+                json_result(&json!({
+                    "download_id": download_id,
+                    "message": "Streaming download started. Use get_download_progress to track progress."
+                }))
+            }
+        }
+        Err(e) => error_result(&format!("Failed to start streaming download: {}", e)),
+    }
+}
+
+async fn execute_resume_upload(services: &UiServices, args: Value) -> ToolCallResult {
+    let entity_id = require_str!(args, "entity_id");
+    let disk_type = require_ui_disk_type!(args);
+    let path = require_str!(args, "path");
+    let local_path = require_str!(args, "local_path");
+
+    // Read file content - limit to 100MB for MCP calls
+    let content = match tokio::fs::read(&local_path).await {
+        Ok(data) => {
+            if data.len() > 100 * 1024 * 1024 {
+                return error_result("File too large for resume_upload (max 100MB). Use start_streaming_upload instead.");
+            }
+            data
+        }
+        Err(e) => return error_result(&format!("Failed to read local file: {}", e)),
+    };
+
+    match services
+        .drive()
+        .resume_upload(&entity_id, disk_type, &path, content)
+        .await
+    {
+        Ok(upload_id) => {
+            if let Some(progress) = services.drive().get_upload_progress(&upload_id).await {
+                json_result(&json!({
+                    "upload_id": upload_id,
+                    "state": format!("{:?}", progress.state).to_lowercase(),
+                    "bytes_uploaded": progress.bytes_uploaded,
+                    "total_bytes": progress.total_bytes,
+                    "message": "Upload resumed. Use get_upload_progress to track progress."
+                }))
+            } else {
+                json_result(&json!({
+                    "upload_id": upload_id,
+                    "message": "Upload resumed. Use get_upload_progress to track progress."
+                }))
+            }
+        }
+        Err(e) => error_result(&format!("Failed to resume upload: {}", e)),
+    }
+}
+
+async fn execute_resume_download(services: &UiServices, args: Value) -> ToolCallResult {
+    let entity_id = require_str!(args, "entity_id");
+    let disk_type = require_ui_disk_type!(args);
+    let path = require_str!(args, "path");
+    let local_path = require_str!(args, "local_path");
+
+    match services
+        .drive()
+        .resume_download(&entity_id, disk_type, &path, &local_path)
+        .await
+    {
+        Ok(download_id) => {
+            if let Some(progress) = services.drive().get_download_progress(&download_id).await {
+                json_result(&json!({
+                    "download_id": download_id,
+                    "state": format!("{:?}", progress.state).to_lowercase(),
+                    "bytes_downloaded": progress.bytes_downloaded,
+                    "total_bytes": progress.total_bytes,
+                    "message": "Download resumed. Use get_download_progress to track progress."
+                }))
+            } else {
+                json_result(&json!({
+                    "download_id": download_id,
+                    "message": "Download resumed. Use get_download_progress to track progress."
+                }))
+            }
+        }
+        Err(e) => error_result(&format!("Failed to resume download: {}", e)),
+    }
+}
+
+async fn execute_get_upload_progress(services: &UiServices, args: Value) -> ToolCallResult {
+    let upload_id = require_str!(args, "upload_id");
+
+    match services.drive().get_upload_progress(&upload_id).await {
+        Some(progress) => json_result(&json!({
+            "upload_id": progress.id,
+            "file_name": progress.file_name,
+            "file_path": progress.file_path,
+            "state": format!("{:?}", progress.state).to_lowercase(),
+            "bytes_uploaded": progress.bytes_uploaded,
+            "total_bytes": progress.total_bytes,
+            "percent_complete": progress.percent_complete(),
+            "checksum_verified": progress.checksum_verified
+        })),
+        None => error_result(&format!("Upload not found: {}", upload_id)),
+    }
+}
+
+async fn execute_get_download_progress(services: &UiServices, args: Value) -> ToolCallResult {
+    let download_id = require_str!(args, "download_id");
+
+    match services.drive().get_download_progress(&download_id).await {
+        Some(progress) => json_result(&json!({
+            "download_id": progress.id,
+            "file_name": progress.file_name,
+            "destination_path": progress.destination_path,
+            "state": format!("{:?}", progress.state).to_lowercase(),
+            "bytes_downloaded": progress.bytes_downloaded,
+            "total_bytes": progress.total_bytes,
+            "percent_complete": progress.percent_complete(),
+            "checksum_verified": progress.checksum_verified
+        })),
+        None => error_result(&format!("Download not found: {}", download_id)),
+    }
+}
+
+async fn execute_cancel_upload(services: &UiServices, args: Value) -> ToolCallResult {
+    let upload_id = require_str!(args, "upload_id");
+
+    match services.drive().cancel_upload(&upload_id).await {
+        Ok(()) => success_result(&format!("Upload {} cancelled", upload_id)),
+        Err(e) => error_result(&format!("Failed to cancel upload: {}", e)),
+    }
+}
+
+async fn execute_cancel_download(services: &UiServices, args: Value) -> ToolCallResult {
+    let download_id = require_str!(args, "download_id");
+
+    match services.drive().cancel_download(&download_id).await {
+        Ok(()) => success_result(&format!("Download {} cancelled", download_id)),
+        Err(e) => error_result(&format!("Failed to cancel download: {}", e)),
+    }
+}
+
+// ============================================================================
+// Share Link MCP Executor Functions
+// ============================================================================
+
+async fn execute_create_share_link(services: &UiServices, args: Value) -> ToolCallResult {
+    use communitas_ui_api::drive::ShareLinkConfig;
+
+    let entity_id = require_str!(args, "entity_id");
+    let disk_type = require_ui_disk_type!(args);
+    let path = require_str!(args, "path");
+
+    // Build config
+    let mut config = ShareLinkConfig::default();
+
+    if let Some(hours) = args["expires_in_hours"].as_u64() {
+        config = ShareLinkConfig::expires_in_hours(hours as u32);
+    }
+
+    if let Some(password) = args["password"].as_str() {
+        config = config.with_password(password);
+    }
+
+    if let Some(max_accesses) = args["max_downloads"].as_u64() {
+        config = config.with_max_accesses(max_accesses);
+    }
+
+    match services
+        .drive()
+        .create_share_link(&entity_id, disk_type, &path, config)
+        .await
+    {
+        Ok(link) => json_result(&json!({
+            "link_id": link.id,
+            "url": link.url,
+            "entity_id": link.entity_id,
+            "disk_type": format!("{:?}", link.disk_type).to_lowercase(),
+            "path": link.file_path,
+            "file_name": link.file_name,
+            "created_at": link.created_at,
+            "expires_at": link.expires_at,
+            "password_protected": link.password_protected,
+            "max_accesses": link.max_accesses,
+            "access_count": link.access_count,
+            "active": link.active
+        })),
+        Err(e) => error_result(&format!("Failed to create share link: {}", e)),
+    }
+}
+
+async fn execute_revoke_share_link(services: &UiServices, args: Value) -> ToolCallResult {
+    let link_id = require_str!(args, "link_id");
+
+    match services.drive().revoke_share_link(&link_id).await {
+        Ok(()) => success_result(&format!("Share link {} revoked", link_id)),
+        Err(e) => error_result(&format!("Failed to revoke share link: {}", e)),
+    }
+}
+
+async fn execute_list_share_links(services: &UiServices, args: Value) -> ToolCallResult {
+    let entity_id = require_str!(args, "entity_id");
+
+    match services.drive().list_share_links(&entity_id).await {
+        Ok(links) => {
+            let link_data: Vec<_> = links
+                .iter()
+                .map(|link| {
+                    json!({
+                        "link_id": link.id,
+                        "url": link.url,
+                        "path": link.file_path,
+                        "file_name": link.file_name,
+                        "created_at": link.created_at,
+                        "expires_at": link.expires_at,
+                        "password_protected": link.password_protected,
+                        "access_count": link.access_count,
+                        "active": link.active
+                    })
+                })
+                .collect();
+            json_result(&json!({
+                "entity_id": entity_id,
+                "links": link_data,
+                "count": links.len()
+            }))
+        }
+        Err(e) => error_result(&format!("Failed to list share links: {}", e)),
+    }
+}
+
+async fn execute_get_file_share_links(services: &UiServices, args: Value) -> ToolCallResult {
+    let entity_id = require_str!(args, "entity_id");
+    let disk_type = require_ui_disk_type!(args);
+    let path = require_str!(args, "path");
+
+    match services
+        .drive()
+        .list_file_share_links(&entity_id, disk_type, &path)
+        .await
+    {
+        Ok(links) => {
+            let link_data: Vec<serde_json::Value> = links
+                .iter()
+                .map(|link| {
+                    json!({
+                        "link_id": link.id,
+                        "url": link.url,
+                        "created_at": link.created_at,
+                        "expires_at": link.expires_at,
+                        "password_protected": link.password_protected,
+                        "access_count": link.access_count,
+                        "active": link.active
+                    })
+                })
+                .collect();
+            json_result(&json!({
+                "path": path,
+                "links": link_data,
+                "count": links.len()
+            }))
+        }
+        Err(e) => error_result(&format!("Failed to get file share links: {}", e)),
+    }
+}
+
+// ============================================================================
+// Offline Staging MCP Executor Functions
+// ============================================================================
+
+async fn execute_stage_upload(services: &UiServices, args: Value) -> ToolCallResult {
+    let entity_id = require_str!(args, "entity_id");
+    let disk_type = require_ui_disk_type!(args);
+    let destination_path = require_str!(args, "destination_path");
+    let local_path = require_str!(args, "local_path");
+
+    match services
+        .drive()
+        .stage_upload(&entity_id, disk_type, &destination_path, &local_path)
+        .await
+    {
+        Ok(staged) => json_result(&json!({
+            "upload_id": staged.id,
+            "entity_id": staged.entity_id,
+            "disk_type": format!("{:?}", staged.disk_type).to_lowercase(),
+            "destination_path": staged.destination_path,
+            "local_path": staged.local_path,
+            "file_name": staged.file_name,
+            "size_bytes": staged.size_bytes,
+            "mime_type": staged.mime_type,
+            "local_checksum": staged.local_checksum,
+            "state": format!("{:?}", staged.state).to_lowercase(),
+            "staged_at": staged.staged_at,
+            "message": "File staged for upload. Will sync when network is available."
+        })),
+        Err(e) => error_result(&format!("Failed to stage upload: {}", e)),
+    }
+}
+
+async fn execute_get_staged_upload(services: &UiServices, args: Value) -> ToolCallResult {
+    let upload_id = require_str!(args, "upload_id");
+
+    match services.drive().get_staged_upload(&upload_id).await {
+        Ok(staged) => json_result(&json!({
+            "upload_id": staged.id,
+            "entity_id": staged.entity_id,
+            "disk_type": format!("{:?}", staged.disk_type).to_lowercase(),
+            "destination_path": staged.destination_path,
+            "local_path": staged.local_path,
+            "file_name": staged.file_name,
+            "size_bytes": staged.size_bytes,
+            "mime_type": staged.mime_type,
+            "local_checksum": staged.local_checksum,
+            "state": format!("{:?}", staged.state).to_lowercase(),
+            "retry_count": staged.retry_count,
+            "max_retries": staged.max_retries,
+            "error": staged.error,
+            "staged_at": staged.staged_at,
+            "updated_at": staged.updated_at,
+            "conflict": staged.conflict.as_ref().map(|c| json!({
+                "conflict_type": format!("{:?}", c.conflict_type).to_lowercase(),
+                "staged_checksum": c.staged_checksum,
+                "local_checksum": c.local_checksum,
+                "remote_checksum": c.remote_checksum,
+                "remote_size_bytes": c.remote_size_bytes,
+                "detected_at": c.detected_at
+            }))
+        })),
+        Err(e) => error_result(&format!("Failed to get staged upload: {}", e)),
+    }
+}
+
+async fn execute_list_staged_uploads(services: &UiServices) -> ToolCallResult {
+    match services.drive().list_staged_uploads().await {
+        Ok(uploads) => {
+            let upload_data: Vec<_> = uploads
+                .iter()
+                .map(|u| {
+                    json!({
+                        "upload_id": u.id,
+                        "file_name": u.file_name,
+                        "size_bytes": u.size_bytes,
+                        "state": format!("{:?}", u.state).to_lowercase(),
+                        "destination_path": u.destination_path,
+                        "staged_at": u.staged_at,
+                        "has_conflict": u.conflict.is_some(),
+                        "retry_count": u.retry_count
+                    })
+                })
+                .collect();
+            json_result(&json!({
+                "uploads": upload_data,
+                "count": uploads.len()
+            }))
+        }
+        Err(e) => error_result(&format!("Failed to list staged uploads: {}", e)),
+    }
+}
+
+async fn execute_get_staging_status(services: &UiServices) -> ToolCallResult {
+    match services.drive().get_staging_status().await {
+        Ok(status) => json_result(&json!({
+            "total_files": status.total_files,
+            "pending_files": status.pending_files,
+            "uploading_files": status.uploading_files,
+            "conflicted_files": status.conflicted_files,
+            "failed_files": status.failed_files,
+            "completed_files": status.completed_files,
+            "total_bytes": status.total_bytes,
+            "bytes_uploaded": status.bytes_uploaded,
+            "is_syncing": status.is_syncing,
+            "network_available": status.network_available,
+            "last_sync_at": status.last_sync_at,
+            "last_sync_error": status.last_sync_error,
+            "percent_complete": status.percent_complete(),
+            "has_action_required": status.has_action_required()
+        })),
+        Err(e) => error_result(&format!("Failed to get staging status: {}", e)),
+    }
+}
+
+async fn execute_remove_staged_upload(services: &UiServices, args: Value) -> ToolCallResult {
+    let upload_id = require_str!(args, "upload_id");
+
+    match services.drive().remove_staged_upload(&upload_id).await {
+        Ok(()) => success_result(&format!("Staged upload {} removed", upload_id)),
+        Err(e) => error_result(&format!("Failed to remove staged upload: {}", e)),
+    }
+}
+
+async fn execute_retry_staged_upload(services: &UiServices, args: Value) -> ToolCallResult {
+    let upload_id = require_str!(args, "upload_id");
+
+    match services.drive().retry_staged_upload(&upload_id).await {
+        Ok(()) => success_result(&format!(
+            "Staged upload {} queued for retry",
+            upload_id
+        )),
+        Err(e) => error_result(&format!("Failed to retry staged upload: {}", e)),
+    }
+}
+
+async fn execute_resolve_staging_conflict(services: &UiServices, args: Value) -> ToolCallResult {
+    use communitas_ui_api::drive::ConflictResolution;
+
+    let upload_id = require_str!(args, "upload_id");
+    let resolution_str = require_str!(args, "resolution");
+
+    let resolution = match resolution_str.to_lowercase().as_str() {
+        "keep_local" => ConflictResolution::KeepLocal,
+        "keep_remote" => ConflictResolution::KeepRemote,
+        "keep_both" => ConflictResolution::KeepBoth,
+        "skip" => ConflictResolution::Skip,
+        "retry" => ConflictResolution::Retry,
+        _ => {
+            return error_result(&format!(
+                "Invalid resolution: {}. Use: keep_local, keep_remote, keep_both, skip, retry",
+                resolution_str
+            ))
+        }
+    };
+
+    match services
+        .drive()
+        .resolve_staging_conflict(&upload_id, resolution)
+        .await
+    {
+        Ok(()) => success_result(&format!(
+            "Conflict resolved for {} with {:?}",
+            upload_id, resolution
+        )),
+        Err(e) => error_result(&format!("Failed to resolve staging conflict: {}", e)),
+    }
+}
+
+async fn execute_sync_staging_queue(services: &UiServices) -> ToolCallResult {
+    match services.drive().sync_staging_queue().await {
+        Ok((uploaded, failed)) => json_result(&json!({
+            "files_uploaded": uploaded,
+            "files_failed": failed,
+            "success": failed == 0,
+            "message": format!("Sync complete: {} uploaded, {} failed", uploaded, failed)
+        })),
+        Err(e) => error_result(&format!("Failed to sync staging queue: {}", e)),
+    }
+}
+
+async fn execute_set_network_available(services: &UiServices, args: Value) -> ToolCallResult {
+    let available = match args["available"].as_bool() {
+        Some(v) => v,
+        None => return error_result("available (boolean) is required"),
+    };
+
+    services.drive().set_network_available(available).await;
+    success_result(&format!("Network availability set to {}", available))
 }
 
 // ============================================================================

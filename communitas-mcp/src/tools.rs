@@ -5691,7 +5691,11 @@ async fn execute_get_call_participants(services: &UiServices, args: Value) -> To
 
 /// Dispatcher for audit log tools.
 /// These tools require authentication to view security events.
-async fn dispatch_audit_tools(services: &UiServices, name: &str, args: &Value) -> Option<ToolCallResult> {
+async fn dispatch_audit_tools(
+    services: &UiServices,
+    name: &str,
+    args: &Value,
+) -> Option<ToolCallResult> {
     match name {
         "get_audit_log" => Some(execute_get_audit_log(services, args.clone()).await),
         "export_audit_log" => Some(execute_export_audit_log(services, args.clone()).await),
@@ -5801,7 +5805,11 @@ async fn execute_export_audit_log(services: &UiServices, args: Value) -> ToolCal
     };
 
     // Export events from audit service
-    match services.audit().export_range(start_date, end_date, event_types).await {
+    match services
+        .audit()
+        .export_range(start_date, end_date, event_types)
+        .await
+    {
         Ok(events) => {
             let event_list: Vec<Value> = events
                 .into_iter()

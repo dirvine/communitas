@@ -90,6 +90,21 @@ pub struct ContactWithPresence {
     pub last_seen: Option<u64>,
 }
 
+/// Search result containing a matching message with context.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SearchResult {
+    /// The matching message.
+    pub message: Message,
+    /// Thread ID where the message was found.
+    pub thread_id: String,
+    /// Display name of the thread for context.
+    pub thread_name: String,
+    /// Number of matches in this message.
+    pub match_count: usize,
+    /// Excerpt around the match for preview.
+    pub match_excerpt: String,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

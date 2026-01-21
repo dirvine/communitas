@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 use communitas_core::app::CommunitasApp;
 use communitas_core::command::{Command, Event, Query, QueryResponse, Subscription};
-use communitas_ui_api::{Message, ThreadSummary};
+use communitas_ui_api::{Message, SearchResult, ThreadSummary};
 use serde::{Deserialize, Serialize};
 use std::sync::RwLock;
 use thiserror::Error;
@@ -16,7 +16,9 @@ use tracing::{debug, instrument, trace, warn};
 use crate::storage::{JsonFile, UiStorage};
 
 use crate::auth::{AuthController, AuthService, AuthStateSnapshot};
-use crate::messaging_convert::{core_entity_type_to_ui, core_message_to_ui};
+use crate::messaging_convert::{
+    core_entity_type_to_ui, core_message_to_ui, core_search_result_to_ui,
+};
 use communitas_core::legacy_crdt::EntityType;
 
 /// Errors returned by the messaging service.
@@ -592,6 +594,68 @@ impl MessagingService {
         );
 
         Ok(ui_messages)
+    }
+
+    /// Search messages across all threads or within a specific thread.
+    ///
+    /// Returns messages matching the query with context about where they were found.
+    /// Results are sorted by match relevance (match count) and recency.
+    ///
+    /// # Arguments
+    /// * `query` - The search string to match against message content.
+    /// * `thread_id` - Optional thread ID to limit search scope. If None, searches all threads.
+    /// * `limit` - Maximum number of results to return.
+    ///
+    /// # Errors
+    /// - [`MessagingError::NotAuthenticated`] if no user is logged in.
+    /// - [`MessagingError::Internal`] if the search query fails.
+    #[instrument(
+        skip(self),
+        name = "ui.messaging.search",
+        fields(query, thread_id, limit)
+    )]
+    pub async fn search_messages(
+        &self,
+        query: &str,
+        thread_id: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<SearchResult>, MessagingError> {
+        if !self.is_authenticated() {
+            return Err(MessagingError::NotAuthenticated);
+        }
+
+        // Execute search query
+        let results = match self
+            .app
+            .query(Query::SearchMessages {
+                query: query.to_string(),
+                thread_id: thread_id.map(|s| s.to_string()),
+                limit,
+            })
+            .await
+        {
+            Ok(QueryResponse::SearchResults(results)) => results,
+            Ok(_) => {
+                warn!(query, "Unexpected response type for SearchMessages");
+                return Err(MessagingError::Internal(
+                    "Unexpected search response".to_string(),
+                ));
+            }
+            Err(e) => {
+                debug!(query, error = %e.message, "Search query failed");
+                return Err(MessagingError::Internal(format!(
+                    "Search failed: {}",
+                    e.message
+                )));
+            }
+        };
+
+        // Convert to UI types
+        let ui_results: Vec<SearchResult> = results.iter().map(core_search_result_to_ui).collect();
+
+        debug!(query, result_count = ui_results.len(), "Search completed");
+
+        Ok(ui_results)
     }
 
     /// Send a message to a thread.

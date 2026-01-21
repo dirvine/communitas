@@ -8,9 +8,11 @@
 //! source and target types are defined in external crates. Use the explicit
 //! conversion functions instead.
 
-use communitas_core::command::{MessageResponse, ReactionResponse};
+use communitas_core::command::{
+    MessageResponse, ReactionResponse, SearchResult as CoreSearchResult,
+};
 use communitas_core::legacy_crdt::EntityType;
-use communitas_ui_api::{Message, MessageReaction, UnifiedEntityType};
+use communitas_ui_api::{Message, MessageReaction, SearchResult, UnifiedEntityType};
 
 /// Convert a core `MessageResponse` to a UI `Message`.
 ///
@@ -51,6 +53,18 @@ pub fn core_entity_type_to_ui(et: &EntityType) -> UnifiedEntityType {
         EntityType::Project => UnifiedEntityType::Project,
         EntityType::Channel => UnifiedEntityType::Channel,
         EntityType::Organisation => UnifiedEntityType::Organization,
+    }
+}
+
+/// Convert a core `SearchResult` to a UI `SearchResult`.
+#[must_use]
+pub fn core_search_result_to_ui(result: &CoreSearchResult) -> SearchResult {
+    SearchResult {
+        message: core_message_to_ui(&result.message),
+        thread_id: result.thread_id.clone(),
+        thread_name: result.thread_name.clone(),
+        match_count: result.match_count,
+        match_excerpt: result.match_excerpt.clone(),
     }
 }
 

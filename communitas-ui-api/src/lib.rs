@@ -23,7 +23,9 @@ pub use kanban::{
     ActivityEntry, AttachmentView, BoardSettings, BoardSummary, BoardView, CardDetail, CardState,
     CardView, ChecklistProgress, ColumnView, CommentView, StepView, TagView,
 };
-pub use messaging::{ContactWithPresence, Message, MessageReaction, PresenceStatus, ThreadSummary};
+pub use messaging::{
+    ContactWithPresence, Message, MessageReaction, PresenceStatus, SearchResult, ThreadSummary,
+};
 
 /// Small helper used by the Dioxus prototype to display generated identity words.
 #[derive(Debug, Clone, PartialEq, Eq)]

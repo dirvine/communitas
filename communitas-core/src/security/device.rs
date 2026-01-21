@@ -233,7 +233,16 @@ impl DeviceManager {
 
         // Load known devices from storage if path provided
         let known_devices = if let Some(ref path) = storage_path {
-            Self::load_known_devices(path).await.unwrap_or_default()
+            match Self::load_known_devices(path).await {
+                Ok(devices) => devices,
+                Err(e) => {
+                    warn!(
+                        "Failed to load known devices from {:?}: {}. Starting fresh.",
+                        path, e
+                    );
+                    KnownDevices::new()
+                }
+            }
         } else {
             KnownDevices::new()
         };

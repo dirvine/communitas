@@ -269,8 +269,13 @@ impl AuditLog {
     }
 
     /// Get current log file path, rotating if size exceeded
+    ///
+    /// Uses a single write lock for the entire check-and-rotate operation
+    /// to prevent race conditions between concurrent callers.
     async fn get_or_rotate_log(&self) -> Result<PathBuf> {
-        let current = self.current_log.read().await.clone();
+        // Use write lock for entire operation to prevent TOCTOU race
+        let mut current_lock = self.current_log.write().await;
+        let current = current_lock.clone();
 
         // Check if rotation needed
         let metadata = fs::metadata(&current);
@@ -281,7 +286,6 @@ impl AuditLog {
 
         if needs_rotation {
             let new_log = Self::create_new_log_file(&self.log_dir)?;
-            let mut current_lock = self.current_log.write().await;
             *current_lock = new_log.clone();
             return Ok(new_log);
         }
@@ -504,7 +508,10 @@ impl AuditLog {
                             events.push(event);
                         }
                     }
-                    Err(_) => continue,
+                    Err(e) => {
+                        warn!("Failed to decrypt audit line during export: {}", e);
+                        continue;
+                    }
                 }
             }
         }

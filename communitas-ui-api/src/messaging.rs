@@ -23,6 +23,8 @@ pub struct ThreadSummary {
     pub unread_count: u32,
     /// Whether notifications are muted for this thread.
     pub is_muted: bool,
+    /// Whether this is a direct message thread (1:1 conversation).
+    pub is_dm: bool,
 }
 
 /// A message in a conversation thread.
@@ -102,9 +104,29 @@ mod tests {
             last_message_timestamp: 1234567890,
             unread_count: 5,
             is_muted: false,
+            is_dm: false,
         };
         let t2 = t1.clone();
         assert_eq!(t1, t2);
+    }
+
+    #[test]
+    fn thread_summary_dm_thread() {
+        let dm = ThreadSummary {
+            thread_id: "dm:alice-bob-cat-dog".to_string(),
+            entity_id: None,
+            entity_type: None,
+            contact_id: Some("alice-bob-cat-dog".to_string()),
+            display_name: "Alice".to_string(),
+            last_message_preview: "Hey!".to_string(),
+            last_message_timestamp: 1234567890,
+            unread_count: 1,
+            is_muted: false,
+            is_dm: true,
+        };
+        assert!(dm.is_dm);
+        assert!(dm.contact_id.is_some());
+        assert!(dm.entity_id.is_none());
     }
 
     #[test]

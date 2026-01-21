@@ -190,7 +190,56 @@ impl MessagingService {
                 last_message_timestamp: timestamp,
                 unread_count: 0,
                 is_muted: false,
+                is_dm: false,
             });
+        }
+
+        // Also fetch DM threads from contacts
+        if let Ok(QueryResponse::ContactList(contacts)) = app.query(Query::ListContacts).await {
+            for contact in contacts {
+                // Use the contact's four_words as the contact_id for DMs
+                let contact_id = contact
+                    .four_words
+                    .clone()
+                    .unwrap_or_else(|| contact.id.clone());
+
+                // Query DM messages with this contact to get preview and timestamp
+                let (preview, timestamp) = match app
+                    .query(Query::GetDirectMessages {
+                        other_peer_id: contact_id.clone(),
+                    })
+                    .await
+                {
+                    Ok(QueryResponse::Messages(messages)) => {
+                        if let Some(msg) = messages.last() {
+                            (
+                                truncate_preview(&msg.text, 100),
+                                msg.timestamp.max(0) as u64,
+                            )
+                        } else {
+                            // No DM history with this contact - skip
+                            continue;
+                        }
+                    }
+                    _ => {
+                        // No DMs or query failed - skip
+                        continue;
+                    }
+                };
+
+                threads.push(ThreadSummary {
+                    thread_id: format!("dm:{contact_id}"),
+                    entity_id: None,
+                    entity_type: None,
+                    contact_id: Some(contact_id),
+                    display_name: contact.display_name,
+                    last_message_preview: preview,
+                    last_message_timestamp: timestamp,
+                    unread_count: 0,
+                    is_muted: false,
+                    is_dm: true,
+                });
+            }
         }
 
         threads.sort_by(|a, b| b.last_message_timestamp.cmp(&a.last_message_timestamp));
@@ -876,6 +925,7 @@ mod tests {
             last_message_timestamp: 1234567890,
             unread_count: 3,
             is_muted: false,
+            is_dm: false,
         }];
 
         service.set_threads(threads);
@@ -1105,6 +1155,7 @@ mod tests {
                 last_message_timestamp: 2000,
                 unread_count: 5,
                 is_muted: false,
+                is_dm: false,
             },
             ThreadSummary {
                 thread_id: "entity-2".to_string(),
@@ -1116,6 +1167,7 @@ mod tests {
                 last_message_timestamp: 3000,
                 unread_count: 0,
                 is_muted: true,
+                is_dm: false,
             },
         ];
 

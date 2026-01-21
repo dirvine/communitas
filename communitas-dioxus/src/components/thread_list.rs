@@ -517,6 +517,8 @@ mod tests {
             is_muted: false,
             is_dm: false,
             typing_users: vec![],
+            is_pinned: false,
+            contact_presence: None,
         };
         assert_eq!(thread_type_icon(&thread), "#");
     }
@@ -535,6 +537,8 @@ mod tests {
             is_muted: false,
             is_dm: true,
             typing_users: vec![],
+            is_pinned: false,
+            contact_presence: None,
         };
         assert_eq!(thread_type_icon(&thread), "👤");
     }
@@ -586,6 +590,8 @@ mod tests {
                 is_muted: false,
                 is_dm: false,
                 typing_users: vec![],
+                is_pinned: false,
+                contact_presence: None,
             },
             ThreadSummary {
                 thread_id: "t2".to_string(),
@@ -599,6 +605,8 @@ mod tests {
                 is_muted: false,
                 is_dm: false,
                 typing_users: vec![],
+                is_pinned: false,
+                contact_presence: None,
             },
             ThreadSummary {
                 thread_id: "t3".to_string(),
@@ -612,6 +620,8 @@ mod tests {
                 is_muted: false,
                 is_dm: true,
                 typing_users: vec![],
+                is_pinned: false,
+                contact_presence: None,
             },
         ]
     }

@@ -2,11 +2,12 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use communitas_core::app::CommunitasApp;
 use communitas_core::command::{Command, Event, Query, QueryResponse, Subscription};
-use communitas_ui_api::{Message, SearchResult, ThreadSummary};
+use communitas_ui_api::{Message, MessageSendStatus, PendingMessage, SearchResult, ThreadSummary};
 
 use crate::presence::PresenceSnapshot;
 use serde::{Deserialize, Serialize};
@@ -43,6 +44,8 @@ pub struct MessagingSnapshot {
     pub threads: Vec<ThreadSummary>,
     /// Whether threads are currently being loaded.
     pub loading: bool,
+    /// Messages pending send (offline queue).
+    pub pending_messages: Vec<PendingMessage>,
 }
 
 /// Persisted unread message counts per thread.
@@ -165,6 +168,16 @@ impl TypingState {
     }
 }
 
+/// Persisted pending messages (offline queue).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct PendingMessageQueue {
+    /// Messages waiting to be sent.
+    pub messages: Vec<PendingMessage>,
+}
+
+/// Maximum retry attempts for pending messages.
+pub const MAX_PENDING_RETRIES: u32 = 5;
+
 /// Service for thread listing, message retrieval, and message sending.
 pub struct MessagingService {
     auth: Arc<AuthController>,
@@ -182,6 +195,8 @@ pub struct MessagingService {
     pinned_threads: Arc<RwLock<PinnedThreads>>,
     /// Presence state receiver for DM thread contact presence.
     presence_rx: watch::Receiver<PresenceSnapshot>,
+    /// Pending messages (offline send queue).
+    pending_messages: Arc<RwLock<PendingMessageQueue>>,
 }
 
 impl MessagingService {
@@ -228,6 +243,17 @@ impl MessagingService {
         };
         let pinned_threads = Arc::new(RwLock::new(pinned_threads));
 
+        // Load persisted pending messages
+        let pending_messages = match JsonFile::load(&storage.pending_messages_file()) {
+            Ok(Some(queue)) => queue,
+            Ok(None) => PendingMessageQueue::default(),
+            Err(e) => {
+                warn!(error = %e, "Failed to load pending messages, using defaults");
+                PendingMessageQueue::default()
+            }
+        };
+        let pending_messages = Arc::new(RwLock::new(pending_messages));
+
         // Subscribe to message events for reactive updates
         let event_rx = app.subscribe(Subscription::MessageEvents);
 
@@ -241,6 +267,7 @@ impl MessagingService {
         let typing_clone = typing_state.clone();
         let pinned_clone = pinned_threads.clone();
         let presence_clone = presence_rx.clone();
+        let pending_clone = pending_messages.clone();
 
         // Spawn background task to process events
         tokio::spawn(async move {
@@ -255,6 +282,7 @@ impl MessagingService {
                 typing_clone,
                 pinned_clone,
                 presence_clone,
+                pending_clone,
             )
             .await;
         });
@@ -270,6 +298,7 @@ impl MessagingService {
             typing_state,
             pinned_threads,
             presence_rx,
+            pending_messages,
         }
     }
 
@@ -291,6 +320,7 @@ impl MessagingService {
         typing_state: Arc<RwLock<TypingState>>,
         pinned_threads: Arc<RwLock<PinnedThreads>>,
         presence_rx: watch::Receiver<PresenceSnapshot>,
+        pending_messages: Arc<RwLock<PendingMessageQueue>>,
     ) {
         loop {
             match event_rx.recv().await {
@@ -353,6 +383,7 @@ impl MessagingService {
                             &typing_state,
                             &pinned_threads,
                             &presence_rx,
+                            &pending_messages,
                         )
                         .await;
                     }
@@ -371,6 +402,7 @@ impl MessagingService {
                         &typing_state,
                         &pinned_threads,
                         &presence_rx,
+                        &pending_messages,
                     )
                     .await;
                 }
@@ -395,6 +427,7 @@ impl MessagingService {
         typing_state: &Arc<RwLock<TypingState>>,
         pinned_threads: &Arc<RwLock<PinnedThreads>>,
         presence_rx: &watch::Receiver<PresenceSnapshot>,
+        pending_messages: &Arc<RwLock<PendingMessageQueue>>,
     ) {
         let is_authenticated = matches!(
             &*auth.subscribe().borrow(),
@@ -426,6 +459,12 @@ impl MessagingService {
 
         let presence = presence_rx.borrow().clone();
 
+        let pending = pending_messages
+            .read()
+            .ok()
+            .map(|guard| guard.messages.clone())
+            .unwrap_or_default();
+
         let Some(threads) = Self::fetch_threads(app, &counts, &typing, &pinned, &presence).await
         else {
             trace!("Failed to fetch threads in refresh");
@@ -435,6 +474,7 @@ impl MessagingService {
         let _ = tx.send(MessagingSnapshot {
             threads,
             loading: false,
+            pending_messages: pending,
         });
 
         trace!("Thread list refreshed via event");
@@ -591,6 +631,7 @@ impl MessagingService {
             &self.typing_state,
             &self.pinned_threads,
             &self.presence_rx,
+            &self.pending_messages,
         )
         .await;
     }
@@ -1175,6 +1216,299 @@ impl MessagingService {
             .ok()
             .map(|pinned| pinned.thread_ids.clone())
             .unwrap_or_default()
+    }
+
+    // ==================== Typing Indicator Methods ====================
+
+    /// Get the list of users currently typing in a thread.
+    ///
+    /// Returns display names of users who have sent typing indicators within
+    /// the last TYPING_EXPIRE_DURATION (typically a few seconds).
+    pub fn get_typing_users(&self, thread_id: &str) -> Vec<String> {
+        self.typing_state
+            .read()
+            .ok()
+            .map(|state| state.get_typing_users(thread_id))
+            .unwrap_or_default()
+    }
+
+    // ==================== Offline Send Queue Methods ====================
+
+    /// Get the list of pending messages awaiting send.
+    pub fn get_pending_messages(&self) -> Vec<PendingMessage> {
+        self.pending_messages
+            .read()
+            .ok()
+            .map(|queue| queue.messages.clone())
+            .unwrap_or_default()
+    }
+
+    /// Queue a message for sending (used when offline or send fails).
+    ///
+    /// The message will be retried automatically when connectivity is restored.
+    /// Messages are persisted to disk for durability across app restarts.
+    ///
+    /// # Arguments
+    /// * `thread_id` - Target thread ID
+    /// * `text` - Message content
+    /// * `reply_to_id` - Optional ID of message being replied to
+    ///
+    /// # Returns
+    /// The ID of the queued pending message.
+    #[instrument(skip(self, text), name = "ui.messaging.queue", fields(thread_id))]
+    pub fn queue_message(&self, thread_id: &str, text: &str, reply_to_id: Option<&str>) -> String {
+        // Use atomic counter to ensure unique IDs even when called rapidly
+        static PENDING_COUNTER: AtomicU64 = AtomicU64::new(0);
+        let counter = PENDING_COUNTER.fetch_add(1, Ordering::Relaxed);
+
+        let id = format!(
+            "pending-{}-{}-{}",
+            thread_id,
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis())
+                .unwrap_or(0),
+            counter
+        );
+
+        let pending = PendingMessage {
+            id: id.clone(),
+            thread_id: thread_id.to_string(),
+            text: text.to_string(),
+            reply_to_id: reply_to_id.map(|s| s.to_string()),
+            queued_at: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or(0),
+            retry_count: 0,
+            status: MessageSendStatus::Pending,
+            last_error: None,
+        };
+
+        if let Ok(mut queue) = self.pending_messages.write() {
+            queue.messages.push(pending);
+
+            // Persist to disk
+            if let Err(e) = JsonFile::save(&self.storage.pending_messages_file(), &*queue) {
+                warn!(error = %e, "Failed to persist pending messages");
+            }
+        }
+
+        // Refresh to update snapshot
+        self.broadcast_pending_update();
+
+        debug!(id = %id, thread_id, "Message queued for sending");
+        id
+    }
+
+    /// Remove a pending message from the queue (after successful send or manual cancel).
+    ///
+    /// # Arguments
+    /// * `pending_id` - The ID of the pending message to remove
+    ///
+    /// # Returns
+    /// `true` if the message was removed, `false` if not found.
+    #[instrument(skip(self), name = "ui.messaging.remove_pending", fields(pending_id))]
+    pub fn remove_pending_message(&self, pending_id: &str) -> bool {
+        let removed = if let Ok(mut queue) = self.pending_messages.write() {
+            let initial_len = queue.messages.len();
+            queue.messages.retain(|m| m.id != pending_id);
+            let removed = queue.messages.len() < initial_len;
+
+            if removed {
+                // Persist to disk
+                if let Err(e) = JsonFile::save(&self.storage.pending_messages_file(), &*queue) {
+                    warn!(error = %e, "Failed to persist pending messages");
+                }
+            }
+
+            removed
+        } else {
+            false
+        };
+
+        if removed {
+            self.broadcast_pending_update();
+            debug!(pending_id, "Pending message removed");
+        }
+
+        removed
+    }
+
+    /// Mark a pending message as failed with an error message.
+    ///
+    /// This is called after exhausting retry attempts.
+    ///
+    /// # Arguments
+    /// * `pending_id` - The ID of the pending message
+    /// * `error` - The error message describing the failure
+    #[instrument(skip(self), name = "ui.messaging.mark_failed", fields(pending_id))]
+    pub fn mark_pending_failed(&self, pending_id: &str, error: &str) {
+        if let Ok(mut queue) = self.pending_messages.write()
+            && let Some(msg) = queue.messages.iter_mut().find(|m| m.id == pending_id)
+        {
+            msg.status = MessageSendStatus::Failed(error.to_string());
+            msg.last_error = Some(error.to_string());
+
+            // Persist to disk
+            if let Err(e) = JsonFile::save(&self.storage.pending_messages_file(), &*queue) {
+                warn!(error = %e, "Failed to persist pending messages");
+            }
+        }
+
+        self.broadcast_pending_update();
+        debug!(pending_id, error, "Pending message marked as failed");
+    }
+
+    /// Retry sending a pending message.
+    ///
+    /// This increments the retry count and attempts to send again.
+    /// If max retries are exceeded, the message is marked as failed.
+    ///
+    /// # Arguments
+    /// * `pending_id` - The ID of the pending message to retry
+    ///
+    /// # Errors
+    /// - [`MessagingError::NotAuthenticated`] if no user is logged in.
+    /// - [`MessagingError::Internal`] if the message is not found or send fails.
+    #[instrument(skip(self), name = "ui.messaging.retry_pending", fields(pending_id))]
+    pub async fn retry_pending_message(&self, pending_id: &str) -> Result<Message, MessagingError> {
+        // Get the pending message details
+        let pending = {
+            let queue = self.pending_messages.read().map_err(|_| {
+                MessagingError::Internal("Failed to acquire pending messages lock".to_string())
+            })?;
+            queue
+                .messages
+                .iter()
+                .find(|m| m.id == pending_id)
+                .cloned()
+                .ok_or_else(|| {
+                    MessagingError::Internal(format!("Pending message not found: {pending_id}"))
+                })?
+        };
+
+        // Check retry count
+        if pending.retry_count >= MAX_PENDING_RETRIES {
+            self.mark_pending_failed(
+                pending_id,
+                &format!("Max retries ({MAX_PENDING_RETRIES}) exceeded"),
+            );
+            return Err(MessagingError::SendFailed(format!(
+                "Max retries ({MAX_PENDING_RETRIES}) exceeded"
+            )));
+        }
+
+        // Update retry count and status
+        if let Ok(mut queue) = self.pending_messages.write()
+            && let Some(msg) = queue.messages.iter_mut().find(|m| m.id == pending_id)
+        {
+            msg.retry_count += 1;
+            msg.status = MessageSendStatus::Sending;
+
+            if let Err(e) = JsonFile::save(&self.storage.pending_messages_file(), &*queue) {
+                warn!(error = %e, "Failed to persist pending messages");
+            }
+        }
+
+        self.broadcast_pending_update();
+
+        // Attempt to send
+        match self
+            .send_message(
+                &pending.thread_id,
+                &pending.text,
+                pending.reply_to_id.as_deref(),
+            )
+            .await
+        {
+            Ok(message) => {
+                // Success - remove from queue
+                self.remove_pending_message(pending_id);
+                debug!(pending_id, message_id = %message.id, "Pending message sent successfully");
+                Ok(message)
+            }
+            Err(e) => {
+                // Failed - update status back to pending or failed
+                let retry_count = {
+                    self.pending_messages
+                        .read()
+                        .ok()
+                        .and_then(|q| {
+                            q.messages
+                                .iter()
+                                .find(|m| m.id == pending_id)
+                                .map(|m| m.retry_count)
+                        })
+                        .unwrap_or(0)
+                };
+
+                if retry_count >= MAX_PENDING_RETRIES {
+                    self.mark_pending_failed(pending_id, &e.to_string());
+                } else {
+                    // Revert to pending status
+                    if let Ok(mut queue) = self.pending_messages.write()
+                        && let Some(msg) = queue.messages.iter_mut().find(|m| m.id == pending_id)
+                    {
+                        msg.status = MessageSendStatus::Pending;
+                        msg.last_error = Some(e.to_string());
+
+                        if let Err(e) =
+                            JsonFile::save(&self.storage.pending_messages_file(), &*queue)
+                        {
+                            warn!(error = %e, "Failed to persist pending messages");
+                        }
+                    }
+                    self.broadcast_pending_update();
+                }
+
+                debug!(pending_id, error = %e, "Pending message retry failed");
+                Err(e)
+            }
+        }
+    }
+
+    /// Retry all pending messages that haven't exceeded max retries.
+    ///
+    /// This is typically called when connectivity is restored.
+    ///
+    /// # Returns
+    /// A list of (pending_id, result) pairs indicating success or failure for each retry.
+    #[instrument(skip(self), name = "ui.messaging.retry_all_pending")]
+    pub async fn retry_all_pending(&self) -> Vec<(String, Result<Message, MessagingError>)> {
+        let pending_ids: Vec<String> = self
+            .get_pending_messages()
+            .into_iter()
+            .filter(|m| !m.status.is_failed() && m.retry_count < MAX_PENDING_RETRIES)
+            .map(|m| m.id)
+            .collect();
+
+        let mut results = Vec::with_capacity(pending_ids.len());
+
+        for pending_id in pending_ids {
+            let result = self.retry_pending_message(&pending_id).await;
+            results.push((pending_id, result));
+        }
+
+        debug!(
+            retried_count = results.len(),
+            "Retried all pending messages"
+        );
+        results
+    }
+
+    /// Internal helper to broadcast pending message updates to subscribers.
+    fn broadcast_pending_update(&self) {
+        let pending = self
+            .pending_messages
+            .read()
+            .ok()
+            .map(|queue| queue.messages.clone())
+            .unwrap_or_default();
+
+        let mut snap = self.rx.borrow().clone();
+        snap.pending_messages = pending;
+        let _ = self.tx.send(snap);
     }
 
     /// Send a typing indicator for the specified thread.
@@ -1911,5 +2245,142 @@ mod tests {
         let snap = service.current_snapshot();
         assert!(snap.threads.is_empty());
         assert!(!snap.loading);
+    }
+
+    // ==================== Pending Message Queue Tests ====================
+
+    #[tokio::test]
+    async fn pending_messages_starts_empty() {
+        let temp = TempDir::new().unwrap();
+        let service = make_service(&temp).await;
+
+        let pending = service.get_pending_messages();
+        assert!(pending.is_empty());
+
+        let snap = service.current_snapshot();
+        assert!(snap.pending_messages.is_empty());
+    }
+
+    #[tokio::test]
+    async fn queue_message_adds_to_pending() {
+        let temp = TempDir::new().unwrap();
+        let service = make_service(&temp).await;
+
+        let id = service.queue_message("thread-1", "Hello world", None);
+
+        assert!(!id.is_empty());
+        assert!(id.starts_with("pending-thread-1-"));
+
+        let pending = service.get_pending_messages();
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].id, id);
+        assert_eq!(pending[0].thread_id, "thread-1");
+        assert_eq!(pending[0].text, "Hello world");
+        assert!(pending[0].reply_to_id.is_none());
+        assert_eq!(pending[0].retry_count, 0);
+        assert!(pending[0].status.is_pending());
+
+        // Should be reflected in snapshot
+        let snap = service.current_snapshot();
+        assert_eq!(snap.pending_messages.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn queue_message_with_reply_to() {
+        let temp = TempDir::new().unwrap();
+        let service = make_service(&temp).await;
+
+        let _id = service.queue_message("thread-1", "Reply text", Some("msg-123"));
+
+        let pending = service.get_pending_messages();
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].reply_to_id, Some("msg-123".to_string()));
+    }
+
+    #[tokio::test]
+    async fn remove_pending_message_removes_from_queue() {
+        let temp = TempDir::new().unwrap();
+        let service = make_service(&temp).await;
+
+        let id = service.queue_message("thread-1", "Hello", None);
+        assert_eq!(service.get_pending_messages().len(), 1);
+
+        let removed = service.remove_pending_message(&id);
+        assert!(removed);
+
+        let pending = service.get_pending_messages();
+        assert!(pending.is_empty());
+
+        // Should be reflected in snapshot
+        let snap = service.current_snapshot();
+        assert!(snap.pending_messages.is_empty());
+    }
+
+    #[tokio::test]
+    async fn remove_pending_message_nonexistent_returns_false() {
+        let temp = TempDir::new().unwrap();
+        let service = make_service(&temp).await;
+
+        let removed = service.remove_pending_message("nonexistent-id");
+        assert!(!removed);
+    }
+
+    #[tokio::test]
+    async fn mark_pending_failed_updates_status() {
+        let temp = TempDir::new().unwrap();
+        let service = make_service(&temp).await;
+
+        let id = service.queue_message("thread-1", "Hello", None);
+        service.mark_pending_failed(&id, "Network error");
+
+        let pending = service.get_pending_messages();
+        assert_eq!(pending.len(), 1);
+        assert!(pending[0].status.is_failed());
+        assert_eq!(pending[0].last_error, Some("Network error".to_string()));
+    }
+
+    #[tokio::test]
+    async fn pending_messages_persist_across_service_instances() {
+        let temp = TempDir::new().unwrap();
+
+        // Create first service and queue a message
+        let id = {
+            let service = make_service(&temp).await;
+            let id = service.queue_message("thread-1", "Persisted message", None);
+
+            // Verify it's in the queue
+            assert_eq!(service.get_pending_messages().len(), 1);
+            id
+        };
+
+        // Create a new service instance pointing to the same storage
+        {
+            let service = make_service(&temp).await;
+
+            // The message should still be there
+            let pending = service.get_pending_messages();
+            assert_eq!(pending.len(), 1);
+            assert_eq!(pending[0].id, id);
+            assert_eq!(pending[0].text, "Persisted message");
+        }
+    }
+
+    #[tokio::test]
+    async fn multiple_pending_messages_queue_and_remove() {
+        let temp = TempDir::new().unwrap();
+        let service = make_service(&temp).await;
+
+        let id1 = service.queue_message("thread-1", "Message 1", None);
+        let id2 = service.queue_message("thread-1", "Message 2", None);
+        let id3 = service.queue_message("thread-2", "Message 3", None);
+
+        assert_eq!(service.get_pending_messages().len(), 3);
+
+        // Remove middle message
+        service.remove_pending_message(&id2);
+        let pending = service.get_pending_messages();
+        assert_eq!(pending.len(), 2);
+        assert_eq!(pending[0].id, id1);
+        assert_eq!(pending[1].id, id3);
     }
 }

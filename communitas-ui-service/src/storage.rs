@@ -61,6 +61,11 @@ impl UiStorage {
     pub fn pinned_threads_file(&self) -> PathBuf {
         self.root.join("pinned_threads.json")
     }
+
+    /// Disk location for pending message queue persistence.
+    pub fn pending_messages_file(&self) -> PathBuf {
+        self.root.join("pending_messages.json")
+    }
 }
 
 /// Shared storage error type.

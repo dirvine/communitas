@@ -109,6 +109,55 @@ pub struct SearchResult {
     pub match_excerpt: String,
 }
 
+/// Status of a message being sent.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum MessageSendStatus {
+    /// Message is being sent right now.
+    Sending,
+    /// Message send failed, waiting for retry.
+    Pending,
+    /// Message failed after max retries.
+    Failed(String),
+}
+
+impl MessageSendStatus {
+    /// Whether the message is still attempting to send.
+    pub fn is_sending(&self) -> bool {
+        matches!(self, Self::Sending)
+    }
+
+    /// Whether the message is pending retry.
+    pub fn is_pending(&self) -> bool {
+        matches!(self, Self::Pending)
+    }
+
+    /// Whether the message has permanently failed.
+    pub fn is_failed(&self) -> bool {
+        matches!(self, Self::Failed(_))
+    }
+}
+
+/// A message queued for sending (offline queue).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct PendingMessage {
+    /// Unique identifier for this pending message.
+    pub id: String,
+    /// Target thread ID.
+    pub thread_id: String,
+    /// Message text content.
+    pub text: String,
+    /// Optional reply-to message ID.
+    pub reply_to_id: Option<String>,
+    /// When the message was queued (Unix milliseconds).
+    pub queued_at: u64,
+    /// Number of retry attempts so far.
+    pub retry_count: u32,
+    /// Current send status.
+    pub status: MessageSendStatus,
+    /// Last error message if failed.
+    pub last_error: Option<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -198,5 +247,39 @@ mod tests {
         };
         assert_eq!(cwp.contact.id, "alice");
         assert_eq!(cwp.presence, PresenceStatus::Online);
+    }
+
+    #[test]
+    fn message_send_status_predicates() {
+        assert!(MessageSendStatus::Sending.is_sending());
+        assert!(!MessageSendStatus::Sending.is_pending());
+        assert!(!MessageSendStatus::Sending.is_failed());
+
+        assert!(!MessageSendStatus::Pending.is_sending());
+        assert!(MessageSendStatus::Pending.is_pending());
+        assert!(!MessageSendStatus::Pending.is_failed());
+
+        let failed = MessageSendStatus::Failed("Network error".to_string());
+        assert!(!failed.is_sending());
+        assert!(!failed.is_pending());
+        assert!(failed.is_failed());
+    }
+
+    #[test]
+    fn pending_message_construction() {
+        let pending = PendingMessage {
+            id: "pending-1".to_string(),
+            thread_id: "thread-1".to_string(),
+            text: "Hello offline".to_string(),
+            reply_to_id: None,
+            queued_at: 1234567890,
+            retry_count: 0,
+            status: MessageSendStatus::Pending,
+            last_error: None,
+        };
+        assert_eq!(pending.id, "pending-1");
+        assert_eq!(pending.thread_id, "thread-1");
+        assert!(pending.status.is_pending());
+        assert_eq!(pending.retry_count, 0);
     }
 }

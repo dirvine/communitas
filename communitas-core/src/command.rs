@@ -258,6 +258,14 @@ pub enum Command {
         identity: String,
     },
 
+    /// Send a typing indicator to a thread
+    SendTypingIndicator {
+        /// Thread identifier (entity_id or dm:contact_id)
+        thread_id: String,
+        /// Whether the user is currently typing
+        is_typing: bool,
+    },
+
     // ========================================================================
     // Invite Commands
     // ========================================================================
@@ -769,6 +777,16 @@ pub enum Event {
 
     /// Thread was marked as read
     ThreadMarkedRead { thread_id: String, identity: String },
+
+    /// Typing indicator received from a peer
+    TypingIndicatorReceived {
+        /// Thread where the peer is typing
+        thread_id: String,
+        /// Four words identity of the peer who is typing
+        peer_id: String,
+        /// Whether the peer is currently typing
+        is_typing: bool,
+    },
 
     // ========================================================================
     // Invite Events

@@ -983,6 +983,24 @@ impl CommunitasApp {
                 Ok(vec![event])
             }
 
+            Command::SendTypingIndicator {
+                thread_id,
+                is_typing,
+            } => {
+                let ctx = self.context.read().await;
+                let peer_id = ctx.four_words.clone();
+
+                // Broadcast typing indicator event locally for other subscribers
+                // In a full implementation, this would also be gossiped to peers
+                let event = Event::TypingIndicatorReceived {
+                    thread_id,
+                    peer_id,
+                    is_typing,
+                };
+                self.broadcast_event(event.clone());
+                Ok(vec![event])
+            }
+
             // ================================================================
             // Invite Commands
             // ================================================================

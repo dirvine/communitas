@@ -1148,6 +1148,20 @@ pub enum Query {
     /// Get direct messages with a peer
     GetDirectMessages { other_peer_id: String },
 
+    /// Search messages by text content.
+    ///
+    /// If `thread_id` is provided, searches only within that thread (entity_id or dm:contact_id).
+    /// If `thread_id` is None, searches all threads globally.
+    /// Results are sorted by relevance (match count) then recency.
+    SearchMessages {
+        /// Search query string (case-insensitive substring match)
+        query: String,
+        /// Optional thread ID to scope search (entity_id or dm:contact_id)
+        thread_id: Option<String>,
+        /// Maximum number of results to return (default 50)
+        limit: usize,
+    },
+
     /// Get entity sync state
     GetEntitySyncState {
         entity_id: String,
@@ -1332,6 +1346,9 @@ pub enum QueryResponse {
     /// Messages
     Messages(Vec<MessageResponse>),
 
+    /// Search results
+    SearchResults(Vec<SearchResult>),
+
     /// Sync state
     SyncState(SyncStateResponse),
 
@@ -1458,6 +1475,21 @@ pub struct ReactionResponse {
     pub count: u32,
     pub user_reacted: bool,
     pub peer_ids: Vec<String>,
+}
+
+/// Search result with message and match context.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchResult {
+    /// The matching message
+    pub message: MessageResponse,
+    /// Thread ID (entity_id or dm:contact_id)
+    pub thread_id: String,
+    /// Display name of the thread for context
+    pub thread_name: String,
+    /// Number of matches in this message
+    pub match_count: usize,
+    /// Excerpt of text around the match (for highlighting)
+    pub match_excerpt: String,
 }
 
 /// Sync state response data

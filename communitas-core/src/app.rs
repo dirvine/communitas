@@ -206,6 +206,192 @@ impl CommunitasApp {
             })
     }
 
+    /// Search messages by text content.
+    ///
+    /// Performs case-insensitive substring matching across message text.
+    /// If thread_id is provided, searches only that thread.
+    /// If thread_id is None, searches all entity messages and DMs.
+    /// Results are sorted by match count (desc) then timestamp (desc).
+    async fn search_messages(
+        ctx: &CoreContext,
+        query: &str,
+        thread_id: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<crate::command::SearchResult>, String> {
+        use crate::command::SearchResult;
+
+        let query_lower = query.to_lowercase();
+        let mut results: Vec<SearchResult> = Vec::new();
+
+        // Helper to search within a list of messages
+        let search_in_messages = |messages: Vec<crate::crdt::CRDTMessage>,
+                                  thread_id: &str,
+                                  thread_name: &str,
+                                  query_lower: &str,
+                                  query: &str|
+         -> Vec<SearchResult> {
+            messages
+                .into_iter()
+                .filter_map(|msg| {
+                    let text_lower = msg.content.text.to_lowercase();
+                    let match_count = text_lower.matches(query_lower).count();
+                    if match_count > 0 {
+                        // Create excerpt around first match
+                        let excerpt = Self::create_match_excerpt(&msg.content.text, query);
+                        Some(SearchResult {
+                            message: map_message_response(msg),
+                            thread_id: thread_id.to_string(),
+                            thread_name: thread_name.to_string(),
+                            match_count,
+                            match_excerpt: excerpt,
+                        })
+                    } else {
+                        None
+                    }
+                })
+                .collect()
+        };
+
+        if let Some(tid) = thread_id {
+            // Scoped search - search only within specified thread
+            if tid.starts_with("dm:") {
+                // DM thread
+                let contact_id = tid.strip_prefix("dm:").unwrap_or(tid);
+                if let Ok(sync_response) = ctx
+                    .message_service
+                    .get_direct_messages(contact_id.to_string())
+                    .await
+                {
+                    // Get contact name for thread_name from gossip contact store
+                    let thread_name = if let Some(gossip) = ctx.gossip.as_ref() {
+                        gossip
+                            .contact_store
+                            .get(contact_id)
+                            .await
+                            .and_then(|c| c.display_name)
+                            .unwrap_or_else(|| contact_id.to_string())
+                    } else {
+                        contact_id.to_string()
+                    };
+                    results.extend(search_in_messages(
+                        sync_response.messages,
+                        tid,
+                        &thread_name,
+                        &query_lower,
+                        query,
+                    ));
+                }
+            } else {
+                // Entity thread
+                if let Ok(sync_response) = ctx
+                    .message_service
+                    .get_entity_messages(tid.to_string())
+                    .await
+                {
+                    // Get entity name for thread_name
+                    let thread_name = ctx
+                        .entity_service
+                        .get_entity(tid)
+                        .await
+                        .map(|e| e.name.clone())
+                        .unwrap_or_else(|_| tid.to_string());
+                    results.extend(search_in_messages(
+                        sync_response.messages,
+                        tid,
+                        &thread_name,
+                        &query_lower,
+                        query,
+                    ));
+                }
+            }
+        } else {
+            // Global search - search all entities and DMs
+
+            // Search entities
+            if let Ok(entities) = ctx.entity_service.list_entities().await {
+                for entity in entities {
+                    if let Ok(sync_response) = ctx
+                        .message_service
+                        .get_entity_messages(entity.id.clone())
+                        .await
+                    {
+                        results.extend(search_in_messages(
+                            sync_response.messages,
+                            &entity.id,
+                            &entity.name,
+                            &query_lower,
+                            query,
+                        ));
+                    }
+                }
+            }
+
+            // Search DMs - only if gossip is available
+            if let Some(gossip) = ctx.gossip.as_ref() {
+                for contact in gossip.contact_store.all().await {
+                    let contact_id = contact.four_words.clone().unwrap_or(contact.id.clone());
+                    if let Ok(sync_response) = ctx
+                        .message_service
+                        .get_direct_messages(contact_id.clone())
+                        .await
+                    {
+                        let thread_id = format!("dm:{}", contact_id);
+                        let display_name =
+                            contact.display_name.unwrap_or_else(|| contact_id.clone());
+                        results.extend(search_in_messages(
+                            sync_response.messages,
+                            &thread_id,
+                            &display_name,
+                            &query_lower,
+                            query,
+                        ));
+                    }
+                }
+            }
+        }
+
+        // Sort by match count (desc), then timestamp (desc)
+        results.sort_by(|a, b| {
+            b.match_count
+                .cmp(&a.match_count)
+                .then_with(|| b.message.timestamp.cmp(&a.message.timestamp))
+        });
+
+        // Limit results
+        results.truncate(limit.min(50));
+
+        Ok(results)
+    }
+
+    /// Create an excerpt around the first match in the text.
+    fn create_match_excerpt(text: &str, query: &str) -> String {
+        let text_lower = text.to_lowercase();
+        let query_lower = query.to_lowercase();
+
+        if let Some(pos) = text_lower.find(&query_lower) {
+            // Get context around the match (30 chars before, match, 30 chars after)
+            let start = pos.saturating_sub(30);
+            let end = (pos + query.len() + 30).min(text.len());
+
+            let mut excerpt = String::new();
+            if start > 0 {
+                excerpt.push_str("...");
+            }
+            excerpt.push_str(&text[start..end]);
+            if end < text.len() {
+                excerpt.push_str("...");
+            }
+            excerpt
+        } else {
+            // Fallback: just truncate the text
+            if text.len() > 100 {
+                format!("{}...", &text[..100])
+            } else {
+                text.to_string()
+            }
+        }
+    }
+
     /// Execute a command and return resulting events
     ///
     /// All mutations to application state MUST go through this method.
@@ -2687,6 +2873,24 @@ impl CommunitasApp {
                     .collect();
 
                 Ok(QueryResponse::Messages(responses))
+            }
+
+            Query::SearchMessages {
+                query,
+                thread_id,
+                limit,
+            } => {
+                let ctx = self.context.read().await;
+                let results: Vec<crate::command::SearchResult> =
+                    Self::search_messages(&ctx, &query, thread_id.as_deref(), limit)
+                        .await
+                        .map_err(|e| QueryError {
+                            query_type: query_type.clone(),
+                            message: e,
+                            code: "SEARCH_FAILED".to_string(),
+                        })?;
+
+                Ok(QueryResponse::SearchResults(results))
             }
 
             Query::GetEntitySyncState {

@@ -18,8 +18,8 @@ _Last updated: 2026-01-21_
 
 | Phase | Description | Status |
 |-------|-------------|--------|
-| **6.1** | Auth Hardening | Pending |
-| **6.2** | Messaging & Contacts | Pending |
+| **6.1** | Auth Hardening | Complete |
+| **6.2** | Messaging & Contacts | In Progress |
 | **6.3** | Drive & Attachments | Pending |
 | **6.4** | Calls & Presence | Pending |
 | **6.5** | Canvas Integration | Pending |

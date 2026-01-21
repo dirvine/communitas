@@ -17,7 +17,7 @@
     "completed_tasks": 2,
     "current_task": 3
   },
-  "status": "reviewing",
+  "status": "awaiting_planning",
   "last_review": "2026-01-21T11:00:00Z",
   "last_updated": "2026-01-21T12:30:00Z",
   "notes": "Task 2 complete: Device Fingerprinting with Blake3 hash, known devices tracking, persistence."

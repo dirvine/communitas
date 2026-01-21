@@ -27,3 +27,6 @@ pub use identity_switcher::IdentitySwitcher;
 pub use message_list::MessageList;
 pub use presence_badge::{PresenceBadge, PresenceDot};
 pub use thread_list::ThreadListSidebar;
+// Re-export TypingIndicator for external use (can be used in other message views)
+#[allow(unused_imports)]
+pub use thread_list::TypingIndicator;

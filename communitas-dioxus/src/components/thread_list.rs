@@ -209,13 +209,17 @@ fn ThreadListItem(props: ThreadListItemProps) -> Element {
                     }
                     div {
                         class: "flex items-center justify-between gap-2 mt-0.5",
-                        p {
-                            class: "text-sm truncate",
-                            style: format!(
-                                "color: {};",
-                                if thread.unread_count > 0 { colors::TEXT_SECONDARY } else { colors::TEXT_MUTED }
-                            ),
-                            "{thread.last_message_preview}"
+                        if !thread.typing_users.is_empty() {
+                            TypingIndicator { typing_users: thread.typing_users.clone() }
+                        } else {
+                            p {
+                                class: "text-sm truncate",
+                                style: format!(
+                                    "color: {};",
+                                    if thread.unread_count > 0 { colors::TEXT_SECONDARY } else { colors::TEXT_MUTED }
+                                ),
+                                "{thread.last_message_preview}"
+                            }
                         }
                         if thread.unread_count > 0 {
                             UnreadBadge { count: thread.unread_count }
@@ -247,6 +251,55 @@ fn UnreadBadge(props: UnreadBadgeProps) -> Element {
             style: format!("background-color: {}; color: {};", colors::PRIMARY, colors::TEXT_INVERSE),
             aria_label: format!("{} unread messages", props.count),
             "{display}"
+        }
+    }
+}
+
+/// Typing indicator showing who is typing in a thread.
+#[derive(Props, Clone, PartialEq)]
+pub struct TypingIndicatorProps {
+    /// List of user names/IDs currently typing.
+    pub typing_users: Vec<String>,
+}
+
+/// Format the typing indicator text.
+fn format_typing_text(users: &[String]) -> String {
+    match users.len() {
+        0 => String::new(),
+        1 => format!("{} is typing", users[0]),
+        2 => format!("{} and {} are typing", users[0], users[1]),
+        _ => format!("{} and {} others are typing", users[0], users.len() - 1),
+    }
+}
+
+/// Typing indicator component with animated dots.
+#[component]
+pub fn TypingIndicator(props: TypingIndicatorProps) -> Element {
+    let text = format_typing_text(&props.typing_users);
+
+    rsx! {
+        if !props.typing_users.is_empty() {
+            span {
+                class: "typing-indicator flex items-center gap-1 text-sm italic",
+                style: format!("color: {};", colors::TEXT_MUTED),
+                aria_live: "polite",
+                aria_label: "{text}",
+                // Animated dots
+                span {
+                    class: "typing-dots flex gap-0.5",
+                    for i in 0..3 {
+                        span {
+                            class: "typing-dot w-1.5 h-1.5 rounded-full animate-bounce",
+                            style: format!(
+                                "background-color: {}; animation-delay: {}ms;",
+                                colors::PRIMARY,
+                                i * 150
+                            ),
+                        }
+                    }
+                }
+                span { class: "ml-1", "{text}" }
+            }
         }
     }
 }
@@ -484,6 +537,39 @@ mod tests {
             typing_users: vec![],
         };
         assert_eq!(thread_type_icon(&thread), "👤");
+    }
+
+    #[test]
+    fn format_typing_text_empty() {
+        assert_eq!(format_typing_text(&[]), "");
+    }
+
+    #[test]
+    fn format_typing_text_single_user() {
+        assert_eq!(
+            format_typing_text(&["Alice".to_string()]),
+            "Alice is typing"
+        );
+    }
+
+    #[test]
+    fn format_typing_text_two_users() {
+        assert_eq!(
+            format_typing_text(&["Alice".to_string(), "Bob".to_string()]),
+            "Alice and Bob are typing"
+        );
+    }
+
+    #[test]
+    fn format_typing_text_many_users() {
+        assert_eq!(
+            format_typing_text(&[
+                "Alice".to_string(),
+                "Bob".to_string(),
+                "Charlie".to_string()
+            ]),
+            "Alice and 2 others are typing"
+        );
     }
 
     fn sample_threads() -> Vec<ThreadSummary> {

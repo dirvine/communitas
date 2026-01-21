@@ -1,5 +1,7 @@
 use async_trait::async_trait;
-use communitas_core::ui_core::{CommunitasApi, UiSessionInfo, recover_identity_from_mnemonic};
+use communitas_core::ui_core::{
+    CommunitasApi, UiRecentIdentity, UiSessionInfo, recover_identity_from_mnemonic,
+};
 use std::env;
 use thiserror::Error;
 use tokio::sync::{RwLock, watch};
@@ -65,6 +67,26 @@ impl AuthSession {
     }
 }
 
+/// Recent identity for quick switch UI
+#[derive(Debug, Clone)]
+pub struct RecentIdentity {
+    pub four_words: String,
+    pub display_name: String,
+    pub last_used: u64,
+    pub has_passkey: bool,
+}
+
+impl From<UiRecentIdentity> for RecentIdentity {
+    fn from(ui: UiRecentIdentity) -> Self {
+        Self {
+            four_words: ui.four_words,
+            display_name: ui.display_name,
+            last_used: ui.last_used,
+            has_passkey: ui.has_passkey,
+        }
+    }
+}
+
 /// Errors returned by the authentication service.
 #[derive(Debug, Error)]
 pub enum AuthError {
@@ -112,6 +134,31 @@ pub trait AuthService: Send + Sync {
 
     /// Refresh the current session, extending its expiration
     async fn refresh_session(&self) -> Result<AuthSession, AuthError>;
+
+    // =====================
+    // Multi-Identity Quick Switch
+    // =====================
+
+    /// Get list of recent identities for quick switch UI
+    async fn list_recent_identities(&self) -> Result<Vec<RecentIdentity>, AuthError>;
+
+    /// Switch to another identity using passkey/biometric authentication
+    async fn switch_identity(&self, four_words: &str) -> Result<AuthSession, AuthError>;
+
+    /// Attempt auto-login using the most recent identity with passkey
+    async fn try_auto_login(&self) -> Result<Option<AuthSession>, AuthError>;
+
+    /// Check if an identity has a passkey registered for biometric auth
+    async fn has_passkey(&self, four_words: &str) -> Result<bool, AuthError>;
+
+    /// Register a passkey for the current session (enables biometric auth)
+    async fn register_passkey(&self) -> Result<(), AuthError>;
+
+    /// Delete passkey for an identity (disables biometric auth)
+    async fn delete_passkey(&self, four_words: &str) -> Result<(), AuthError>;
+
+    /// Remove a recent identity from the list (does not delete the vault)
+    async fn remove_recent_identity(&self, four_words: &str) -> Result<(), AuthError>;
 }
 
 struct AuthInner {
@@ -493,6 +540,174 @@ impl AuthService for AuthController {
 
         Ok(session)
     }
+
+    // =====================
+    // Multi-Identity Quick Switch
+    // =====================
+
+    #[instrument(name = "ui.auth.list_recent_identities", skip(self))]
+    async fn list_recent_identities(&self) -> Result<Vec<RecentIdentity>, AuthError> {
+        let inner = self.inner.read().await;
+        let api = inner
+            .api
+            .as_ref()
+            .ok_or(AuthError::State("no active session"))?;
+
+        let recent = api
+            .auth_get_recent_identities()
+            .await
+            .map_err(AuthError::Core)?;
+
+        Ok(recent.into_iter().map(RecentIdentity::from).collect())
+    }
+
+    #[instrument(name = "ui.auth.switch_identity", skip(self), fields(identity = %redact_identity(four_words)))]
+    async fn switch_identity(&self, four_words: &str) -> Result<AuthSession, AuthError> {
+        self.fail_if_requested()?;
+        let four_words = self.ensure_four_words(four_words)?;
+
+        self.set_state(AuthStateSnapshot::Authenticating);
+
+        let mut inner = self.inner.write().await;
+        let api = inner
+            .api
+            .as_ref()
+            .ok_or(AuthError::State("no active session"))?;
+
+        let session_info = api
+            .auth_switch_identity(four_words.to_string())
+            .await
+            .map_err(AuthError::Core)?;
+
+        let session = AuthSession::from((session_info, self.device_name.clone()));
+        let expires_soon = session.expires_soon();
+        inner.session = Some(session.clone());
+        drop(inner);
+
+        self.set_state(AuthStateSnapshot::Authenticated {
+            session: session.clone(),
+            expires_soon,
+        });
+
+        info!(target = "ui.auth", "switched identity");
+        Ok(session)
+    }
+
+    #[instrument(name = "ui.auth.try_auto_login", skip(self))]
+    async fn try_auto_login(&self) -> Result<Option<AuthSession>, AuthError> {
+        self.fail_if_requested()?;
+
+        // Need to create a temporary API instance to check for auto-login
+        // since we're not logged in yet
+        let api = CommunitasApi::create(
+            "temp-auto-login".to_string(),
+            "Auto Login Check".to_string(),
+            self.device_name.clone(),
+            self.storage_path()?,
+        )
+        .await
+        .map_err(AuthError::Core)?;
+
+        let result = api.auth_try_auto_login().await.map_err(AuthError::Core)?;
+
+        match result {
+            Some(session_info) => {
+                self.set_state(AuthStateSnapshot::Authenticating);
+
+                // Re-create API with actual identity
+                let real_api = CommunitasApi::create(
+                    session_info.four_words.clone(),
+                    session_info.display_name.clone(),
+                    self.device_name.clone(),
+                    self.storage_path()?,
+                )
+                .await
+                .map_err(AuthError::Core)?;
+
+                Self::start_network(&real_api).await;
+
+                let session = AuthSession::from((session_info, self.device_name.clone()));
+                let expires_soon = session.expires_soon();
+                self.set_session(real_api, session.clone()).await;
+                self.set_state(AuthStateSnapshot::Authenticated {
+                    session: session.clone(),
+                    expires_soon,
+                });
+
+                info!(target = "ui.auth", "auto-login successful");
+                Ok(Some(session))
+            }
+            None => {
+                info!(target = "ui.auth", "no identity available for auto-login");
+                Ok(None)
+            }
+        }
+    }
+
+    #[instrument(name = "ui.auth.has_passkey", skip(self), fields(identity = %redact_identity(four_words)))]
+    async fn has_passkey(&self, four_words: &str) -> Result<bool, AuthError> {
+        let four_words = self.ensure_four_words(four_words)?;
+
+        let inner = self.inner.read().await;
+        let api = inner
+            .api
+            .as_ref()
+            .ok_or(AuthError::State("no active session"))?;
+
+        api.auth_has_passkey(four_words.to_string())
+            .await
+            .map_err(AuthError::Core)
+    }
+
+    #[instrument(name = "ui.auth.register_passkey", skip(self))]
+    async fn register_passkey(&self) -> Result<(), AuthError> {
+        let inner = self.inner.read().await;
+        let api = inner
+            .api
+            .as_ref()
+            .ok_or(AuthError::State("no active session"))?;
+
+        api.auth_register_passkey().await.map_err(AuthError::Core)?;
+
+        info!(target = "ui.auth", "passkey registered");
+        Ok(())
+    }
+
+    #[instrument(name = "ui.auth.delete_passkey", skip(self), fields(identity = %redact_identity(four_words)))]
+    async fn delete_passkey(&self, four_words: &str) -> Result<(), AuthError> {
+        let four_words = self.ensure_four_words(four_words)?;
+
+        let inner = self.inner.read().await;
+        let api = inner
+            .api
+            .as_ref()
+            .ok_or(AuthError::State("no active session"))?;
+
+        api.auth_delete_passkey(four_words.to_string())
+            .await
+            .map_err(AuthError::Core)?;
+
+        info!(target = "ui.auth", "passkey deleted");
+        Ok(())
+    }
+
+    #[instrument(name = "ui.auth.remove_recent_identity", skip(self), fields(identity = %redact_identity(four_words)))]
+    async fn remove_recent_identity(&self, four_words: &str) -> Result<(), AuthError> {
+        let four_words = self.ensure_four_words(four_words)?;
+
+        let inner = self.inner.read().await;
+        let api = inner
+            .api
+            .as_ref()
+            .ok_or(AuthError::State("no active session"))?;
+
+        api.auth_remove_recent_identity(four_words.to_string())
+            .await
+            .map_err(AuthError::Core)?;
+
+        info!(target = "ui.auth", "removed recent identity");
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -690,5 +905,137 @@ mod tests {
         let session = AuthSession::from((info, "DeviceName".to_string()));
         assert!(session.expires_soon()); // Should expire soon
         assert!(session.time_remaining().as_secs() <= 2 * 60);
+    }
+
+    #[test]
+    fn recent_identity_from_ui_recent_identity() {
+        let ui_recent = UiRecentIdentity {
+            four_words: "alpha-beta-gamma-delta".to_string(),
+            display_name: "Alice".to_string(),
+            last_used: 1700000000,
+            has_passkey: true,
+        };
+
+        let recent = RecentIdentity::from(ui_recent);
+        assert_eq!(recent.four_words, "alpha-beta-gamma-delta");
+        assert_eq!(recent.display_name, "Alice");
+        assert_eq!(recent.last_used, 1700000000);
+        assert!(recent.has_passkey);
+    }
+
+    #[tokio::test]
+    async fn list_recent_identities_requires_session() {
+        let temp = TempDir::new().unwrap();
+        let controller = make_controller(&temp);
+
+        let result = controller.list_recent_identities().await;
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(err, AuthError::State(_)));
+    }
+
+    #[tokio::test]
+    async fn switch_identity_requires_session() {
+        let temp = TempDir::new().unwrap();
+        let controller = make_controller(&temp);
+
+        let result = controller.switch_identity("alpha-beta-gamma-delta").await;
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(err, AuthError::State(_)));
+    }
+
+    #[tokio::test]
+    async fn switch_identity_validates_input() {
+        let temp = TempDir::new().unwrap();
+        let controller = make_controller(&temp);
+
+        // Empty four_words should fail with InvalidInput before checking session
+        let result = controller.switch_identity("").await;
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(err, AuthError::InvalidInput(_)));
+    }
+
+    #[tokio::test]
+    async fn has_passkey_requires_session() {
+        let temp = TempDir::new().unwrap();
+        let controller = make_controller(&temp);
+
+        let result = controller.has_passkey("alpha-beta-gamma-delta").await;
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(err, AuthError::State(_)));
+    }
+
+    #[tokio::test]
+    async fn has_passkey_validates_input() {
+        let temp = TempDir::new().unwrap();
+        let controller = make_controller(&temp);
+
+        // Empty four_words should fail with InvalidInput before checking session
+        let result = controller.has_passkey("").await;
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(err, AuthError::InvalidInput(_)));
+    }
+
+    #[tokio::test]
+    async fn register_passkey_requires_session() {
+        let temp = TempDir::new().unwrap();
+        let controller = make_controller(&temp);
+
+        let result = controller.register_passkey().await;
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(err, AuthError::State(_)));
+    }
+
+    #[tokio::test]
+    async fn delete_passkey_requires_session() {
+        let temp = TempDir::new().unwrap();
+        let controller = make_controller(&temp);
+
+        let result = controller.delete_passkey("alpha-beta-gamma-delta").await;
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(err, AuthError::State(_)));
+    }
+
+    #[tokio::test]
+    async fn delete_passkey_validates_input() {
+        let temp = TempDir::new().unwrap();
+        let controller = make_controller(&temp);
+
+        // Empty four_words should fail with InvalidInput before checking session
+        let result = controller.delete_passkey("").await;
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(err, AuthError::InvalidInput(_)));
+    }
+
+    #[tokio::test]
+    async fn remove_recent_identity_requires_session() {
+        let temp = TempDir::new().unwrap();
+        let controller = make_controller(&temp);
+
+        let result = controller
+            .remove_recent_identity("alpha-beta-gamma-delta")
+            .await;
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(err, AuthError::State(_)));
+    }
+
+    #[tokio::test]
+    async fn remove_recent_identity_validates_input() {
+        let temp = TempDir::new().unwrap();
+        let controller = make_controller(&temp);
+
+        // Empty four_words should fail with InvalidInput before checking session
+        let result = controller.remove_recent_identity("").await;
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(err, AuthError::InvalidInput(_)));
     }
 }

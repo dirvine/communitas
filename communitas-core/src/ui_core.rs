@@ -227,6 +227,80 @@ impl CommunitasApi {
     }
 
     // =====================
+    // Multi-Identity Quick Switch
+    // =====================
+
+    /// Get list of recent identities for quick switch UI
+    pub async fn auth_get_recent_identities(&self) -> Result<Vec<UiRecentIdentity>, String> {
+        let auth = self.auth.read().await;
+        let recent = auth
+            .get_recent_identities()
+            .await
+            .map_err(|e| e.to_string())?;
+        Ok(recent.into_iter().map(UiRecentIdentity::from).collect())
+    }
+
+    /// Switch to another identity using passkey/biometric authentication
+    ///
+    /// This will logout the current session and login to the new identity.
+    /// Requires that the target identity has a passkey registered.
+    pub async fn auth_switch_identity(&self, four_words: String) -> Result<UiSessionInfo, String> {
+        let mut auth = self.auth.write().await;
+        let session_info = auth
+            .switch_identity(&four_words)
+            .await
+            .map_err(|e| e.to_string())?;
+        Ok(UiSessionInfo::from(session_info))
+    }
+
+    /// Attempt auto-login using the most recent identity with passkey
+    ///
+    /// Returns the session info if successful, None if no auto-login available.
+    pub async fn auth_try_auto_login(&self) -> Result<Option<UiSessionInfo>, String> {
+        let mut auth = self.auth.write().await;
+        let result = auth.try_auto_login().await.map_err(|e| e.to_string())?;
+        Ok(result.map(UiSessionInfo::from))
+    }
+
+    /// Check if an identity has a passkey registered for biometric auth
+    pub async fn auth_has_passkey(&self, four_words: String) -> Result<bool, String> {
+        let auth = self.auth.read().await;
+        auth.passkey_has_passkey(&four_words)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Register a passkey for the current session (enables biometric auth)
+    ///
+    /// This stores credentials in the platform keyring for secure biometric authentication.
+    pub async fn auth_register_passkey(&self) -> Result<(), String> {
+        let mut auth = self.auth.write().await;
+        let session = auth
+            .get_current_session()
+            .ok_or_else(|| "No active session".to_string())?;
+        auth.passkey_register(&session.four_words, &session.display_name)
+            .await
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    /// Delete passkey for an identity (disables biometric auth)
+    pub async fn auth_delete_passkey(&self, four_words: String) -> Result<(), String> {
+        let mut auth = self.auth.write().await;
+        auth.passkey_delete(&four_words)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Remove a recent identity from the list (does not delete the vault)
+    pub async fn auth_remove_recent_identity(&self, four_words: String) -> Result<(), String> {
+        let mut auth = self.auth.write().await;
+        auth.remove_recent_identity(&four_words)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    // =====================
     // Profile
     // =====================
 
@@ -1428,6 +1502,26 @@ pub struct UiVaultInfo {
     pub created_at: u64,
     pub last_accessed: u64,
     pub size_bytes: u64,
+}
+
+/// Recent identity information for quick switch
+#[derive(Debug, Clone)]
+pub struct UiRecentIdentity {
+    pub four_words: String,
+    pub display_name: String,
+    pub last_used: u64,
+    pub has_passkey: bool,
+}
+
+impl From<crate::encrypted_storage::RecentIdentity> for UiRecentIdentity {
+    fn from(value: crate::encrypted_storage::RecentIdentity) -> Self {
+        Self {
+            four_words: value.four_words,
+            display_name: value.display_name,
+            last_used: value.last_used,
+            has_passkey: value.has_passkey,
+        }
+    }
 }
 
 /// Identity recovery preview/result

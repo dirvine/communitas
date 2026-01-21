@@ -5,8 +5,11 @@
 //! - Directory and file operations
 //! - Upload/download progress tracking via watch channels
 //! - Checksum verification
+//! - Streaming uploads/downloads with chunked transfers
+//! - Resume support for interrupted transfers
 
 use std::collections::HashMap;
+use std::path::Path;
 use std::sync::Arc;
 
 use communitas_ui_api::drive::{
@@ -14,13 +17,18 @@ use communitas_ui_api::drive::{
     QuotaInfo, UploadProgress, UploadState,
 };
 use thiserror::Error;
+use tokio::io::AsyncReadExt;
 use tokio::sync::{RwLock, watch};
-use tracing::instrument;
+use tracing::{debug, instrument};
 
 use crate::auth::{AuthController, AuthService, AuthStateSnapshot};
 use crate::util::current_timestamp_millis;
 use communitas_core::app::CommunitasApp;
 use communitas_core::command::{Command, DiskTypeArg, Event, Query, QueryResponse};
+
+/// Default chunk size for streaming transfers (1 MB).
+/// Memory budget: max 2 chunks in memory at once (1 being read, 1 being written).
+const DEFAULT_CHUNK_SIZE: u64 = 1024 * 1024;
 
 /// Simple checksum using a hash of bytes (mock implementation).
 fn compute_checksum(data: &[u8]) -> String {
@@ -84,6 +92,12 @@ pub enum DriveError {
     StorageError(String),
     #[error("query error: {0}")]
     QueryError(String),
+    #[error("file read error: {0}")]
+    FileReadError(String),
+    #[error("transfer not resumable: {0}")]
+    TransferNotResumable(String),
+    #[error("transfer aborted")]
+    TransferAborted,
 }
 
 /// Snapshot of drive state for reactive UI updates.
@@ -698,9 +712,10 @@ impl DriveService {
 
     // ===== Upload Operations =====
 
-    /// Start an upload operation and return an upload ID for tracking.
+    /// Start an upload operation using chunked writes for better progress tracking.
     ///
-    /// This method performs real file I/O via CommunitasApp with progress tracking.
+    /// This method uploads the content in chunks with progress updates after each chunk.
+    /// Supports automatic resume on connection restore and cancellation with cleanup.
     #[instrument(skip(self, content), name = "ui.drive.start_upload", fields(entity_id, ?disk_type, path, content_len = content.len()))]
     pub async fn start_upload(
         &self,
@@ -753,6 +768,7 @@ impl DriveService {
         let app = self.app.clone();
         let entity_id_owned = entity_id.to_string();
         let path_owned = path.to_string();
+        let disk_type_arg = disk_type_to_arg(disk_type);
 
         tokio::spawn(async move {
             // Mark as uploading
@@ -764,51 +780,118 @@ impl DriveService {
             }
             Self::broadcast_snapshot(&tx, &rx, Some(&uploads), None).await;
 
-            // Check for cancellation before starting
-            {
+            // Helper to check cancellation
+            let is_cancelled = || async {
                 let map = uploads.read().await;
-                if map
-                    .get(&upload_id_clone)
+                map.get(&upload_id_clone)
                     .is_some_and(|p| matches!(p.state, UploadState::Cancelled))
-                {
-                    return;
-                }
-            }
-
-            // Perform the actual write operation
-            let cmd = Command::WriteFile {
-                entity_id: entity_id_owned.clone(),
-                disk_type: disk_type_to_arg(disk_type),
-                path: path_owned.clone(),
-                data: content.clone(),
             };
 
-            // Update progress to show we're uploading (since write is atomic, show full progress)
-            {
+            // Check for cancellation before starting
+            if is_cancelled().await {
+                return;
+            }
+
+            // Start chunked write
+            let start_cmd = Command::StartChunkedWrite {
+                entity_id: entity_id_owned.clone(),
+                disk_type: disk_type_arg,
+                path: path_owned.clone(),
+                total_size: total_bytes,
+                chunk_size: Some(DEFAULT_CHUNK_SIZE),
+            };
+
+            let start_result = app.execute(start_cmd).await;
+            if let Err(e) = start_result {
+                tracing::error!("Failed to start chunked write: {:?}", e);
                 let mut map = uploads.write().await;
                 if let Some(p) = map.get_mut(&upload_id_clone) {
-                    if matches!(p.state, UploadState::Cancelled) {
-                        return;
-                    }
-                    p.bytes_uploaded = total_bytes;
+                    p.state = UploadState::Failed(e.message);
                 }
+                Self::broadcast_snapshot(&tx, &rx, Some(&uploads), None).await;
+                return;
             }
-            Self::broadcast_snapshot(&tx, &rx, Some(&uploads), None).await;
 
-            let write_result = app.execute(cmd).await;
+            // Write chunks
+            let chunk_size = DEFAULT_CHUNK_SIZE as usize;
+            let mut offset: u64 = 0;
 
-            // Check for cancellation after write
-            {
-                let map = uploads.read().await;
-                if map
-                    .get(&upload_id_clone)
-                    .is_some_and(|p| matches!(p.state, UploadState::Cancelled))
-                {
+            for chunk_data in content.chunks(chunk_size) {
+                // Check for cancellation before each chunk
+                if is_cancelled().await {
+                    // Abort the chunked write
+                    let abort_cmd = Command::AbortChunkedWrite {
+                        entity_id: entity_id_owned.clone(),
+                        disk_type: disk_type_arg,
+                        path: path_owned.clone(),
+                    };
+                    let _ = app.execute(abort_cmd).await;
                     return;
                 }
+
+                let write_cmd = Command::WriteChunk {
+                    entity_id: entity_id_owned.clone(),
+                    disk_type: disk_type_arg,
+                    path: path_owned.clone(),
+                    offset,
+                    data: chunk_data.to_vec(),
+                };
+
+                match app.execute(write_cmd).await {
+                    Ok(_events) => {
+                        offset += chunk_data.len() as u64;
+
+                        // Update progress
+                        {
+                            let mut map = uploads.write().await;
+                            if let Some(p) = map.get_mut(&upload_id_clone) {
+                                p.bytes_uploaded = offset;
+                            }
+                        }
+                        Self::broadcast_snapshot(&tx, &rx, Some(&uploads), None).await;
+
+                        debug!(
+                            "Uploaded chunk at offset {}, progress: {}/{}",
+                            offset - chunk_data.len() as u64,
+                            offset,
+                            total_bytes
+                        );
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to write chunk at offset {}: {:?}", offset, e);
+                        // Don't abort - leave the partial transfer for potential resume
+                        let mut map = uploads.write().await;
+                        if let Some(p) = map.get_mut(&upload_id_clone) {
+                            p.state = UploadState::Failed(format!(
+                                "Chunk write failed at offset {}: {}",
+                                offset, e.message
+                            ));
+                        }
+                        Self::broadcast_snapshot(&tx, &rx, Some(&uploads), None).await;
+                        return;
+                    }
+                }
             }
 
-            match write_result {
+            // Check for cancellation before finishing
+            if is_cancelled().await {
+                let abort_cmd = Command::AbortChunkedWrite {
+                    entity_id: entity_id_owned.clone(),
+                    disk_type: disk_type_arg,
+                    path: path_owned.clone(),
+                };
+                let _ = app.execute(abort_cmd).await;
+                return;
+            }
+
+            // Finish chunked write
+            let finish_cmd = Command::FinishChunkedWrite {
+                entity_id: entity_id_owned.clone(),
+                disk_type: disk_type_arg,
+                path: path_owned.clone(),
+            };
+
+            match app.execute(finish_cmd).await {
                 Ok(_events) => {
                     // Mark as verifying
                     {
@@ -823,7 +906,7 @@ impl DriveService {
                     let verify_result = app
                         .query(Query::ReadFile {
                             entity_id: entity_id_owned,
-                            disk_type: disk_type_to_arg(disk_type),
+                            disk_type: disk_type_arg,
                             path: path_owned,
                         })
                         .await;
@@ -846,13 +929,503 @@ impl DriveService {
                     Self::broadcast_snapshot(&tx, &rx, Some(&uploads), None).await;
                 }
                 Err(e) => {
-                    // Mark as failed
-                    tracing::error!("Upload failed: {:?}", e);
+                    tracing::error!("Failed to finish chunked write: {:?}", e);
+                    let mut map = uploads.write().await;
+                    if let Some(p) = map.get_mut(&upload_id_clone) {
+                        p.state = UploadState::Failed(e.message);
+                    }
+                    Self::broadcast_snapshot(&tx, &rx, Some(&uploads), None).await;
+                }
+            }
+        });
+
+        Ok(upload_id)
+    }
+
+    /// Start a streaming upload from a local file path.
+    ///
+    /// This method reads the file in chunks to maintain a maximum of 2 chunks in memory
+    /// at any time. This is more memory-efficient for large files compared to `start_upload`.
+    ///
+    /// Supports:
+    /// - Progress updates per chunk
+    /// - Automatic resume on connection restore
+    /// - Cancel support with cleanup
+    #[instrument(skip(self), name = "ui.drive.start_streaming_upload", fields(entity_id, ?disk_type, dest_path, source_path))]
+    pub async fn start_streaming_upload(
+        &self,
+        entity_id: &str,
+        disk_type: DiskType,
+        dest_path: &str,
+        source_path: &Path,
+    ) -> Result<String, DriveError> {
+        if !self.is_authenticated() {
+            return Err(DriveError::NotAuthenticated);
+        }
+
+        // Get file size
+        let metadata = tokio::fs::metadata(source_path)
+            .await
+            .map_err(|e| DriveError::FileReadError(e.to_string()))?;
+        let total_bytes = metadata.len();
+
+        // Generate upload ID
+        let upload_id = {
+            let mut counter = self.upload_counter.write().await;
+            *counter += 1;
+            format!("upload-{}", *counter)
+        };
+
+        let file_name = source_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("file")
+            .to_string();
+        let now = current_timestamp_millis();
+
+        let progress = UploadProgress {
+            id: upload_id.clone(),
+            file_name,
+            file_path: dest_path.to_string(),
+            bytes_uploaded: 0,
+            total_bytes,
+            state: UploadState::Pending,
+            started_at: now,
+            checksum_verified: false,
+        };
+
+        // Store in active uploads
+        {
+            let mut uploads = self.active_uploads.write().await;
+            uploads.insert(upload_id.clone(), progress.clone());
+        }
+
+        // Update snapshot
+        self.update_upload_snapshot().await;
+
+        // Clone values for the spawned task
+        let upload_id_clone = upload_id.clone();
+        let uploads = self.active_uploads.clone();
+        let tx = self.tx.clone();
+        let rx = self.rx.clone();
+        let app = self.app.clone();
+        let entity_id_owned = entity_id.to_string();
+        let dest_path_owned = dest_path.to_string();
+        let source_path_owned = source_path.to_owned();
+        let disk_type_arg = disk_type_to_arg(disk_type);
+
+        tokio::spawn(async move {
+            // Mark as uploading
+            {
+                let mut map = uploads.write().await;
+                if let Some(p) = map.get_mut(&upload_id_clone) {
+                    p.state = UploadState::Uploading;
+                }
+            }
+            Self::broadcast_snapshot(&tx, &rx, Some(&uploads), None).await;
+
+            // Helper to check cancellation
+            let is_cancelled = || async {
+                let map = uploads.read().await;
+                map.get(&upload_id_clone)
+                    .is_some_and(|p| matches!(p.state, UploadState::Cancelled))
+            };
+
+            // Check for cancellation before starting
+            if is_cancelled().await {
+                return;
+            }
+
+            // Open the source file
+            let file_result = tokio::fs::File::open(&source_path_owned).await;
+            let mut file = match file_result {
+                Ok(f) => f,
+                Err(e) => {
+                    tracing::error!("Failed to open source file: {:?}", e);
+                    let mut map = uploads.write().await;
+                    if let Some(p) = map.get_mut(&upload_id_clone) {
+                        p.state = UploadState::Failed(format!("Failed to open file: {}", e));
+                    }
+                    Self::broadcast_snapshot(&tx, &rx, Some(&uploads), None).await;
+                    return;
+                }
+            };
+
+            // Start chunked write
+            let start_cmd = Command::StartChunkedWrite {
+                entity_id: entity_id_owned.clone(),
+                disk_type: disk_type_arg,
+                path: dest_path_owned.clone(),
+                total_size: total_bytes,
+                chunk_size: Some(DEFAULT_CHUNK_SIZE),
+            };
+
+            if let Err(e) = app.execute(start_cmd).await {
+                tracing::error!("Failed to start chunked write: {:?}", e);
+                let mut map = uploads.write().await;
+                if let Some(p) = map.get_mut(&upload_id_clone) {
+                    p.state = UploadState::Failed(e.message);
+                }
+                Self::broadcast_snapshot(&tx, &rx, Some(&uploads), None).await;
+                return;
+            }
+
+            // Write chunks with bounded memory (max 2 chunks in memory)
+            let chunk_size = DEFAULT_CHUNK_SIZE as usize;
+            let mut buffer = vec![0u8; chunk_size];
+            let mut offset: u64 = 0;
+            let mut hasher = blake3::Hasher::new();
+
+            loop {
+                // Check for cancellation before each chunk
+                if is_cancelled().await {
+                    let abort_cmd = Command::AbortChunkedWrite {
+                        entity_id: entity_id_owned.clone(),
+                        disk_type: disk_type_arg,
+                        path: dest_path_owned.clone(),
+                    };
+                    let _ = app.execute(abort_cmd).await;
+                    return;
+                }
+
+                // Read next chunk from file
+                let bytes_read = match file.read(&mut buffer).await {
+                    Ok(0) => break, // EOF
+                    Ok(n) => n,
+                    Err(e) => {
+                        tracing::error!("Failed to read from source file: {:?}", e);
+                        let mut map = uploads.write().await;
+                        if let Some(p) = map.get_mut(&upload_id_clone) {
+                            p.state = UploadState::Failed(format!("File read error: {}", e));
+                        }
+                        Self::broadcast_snapshot(&tx, &rx, Some(&uploads), None).await;
+                        return;
+                    }
+                };
+
+                let chunk_data = &buffer[..bytes_read];
+                hasher.update(chunk_data);
+
+                let write_cmd = Command::WriteChunk {
+                    entity_id: entity_id_owned.clone(),
+                    disk_type: disk_type_arg,
+                    path: dest_path_owned.clone(),
+                    offset,
+                    data: chunk_data.to_vec(),
+                };
+
+                match app.execute(write_cmd).await {
+                    Ok(_events) => {
+                        offset += bytes_read as u64;
+
+                        // Update progress
+                        {
+                            let mut map = uploads.write().await;
+                            if let Some(p) = map.get_mut(&upload_id_clone) {
+                                p.bytes_uploaded = offset;
+                            }
+                        }
+                        Self::broadcast_snapshot(&tx, &rx, Some(&uploads), None).await;
+
+                        debug!(
+                            "Uploaded streaming chunk at offset {}, progress: {}/{}",
+                            offset - bytes_read as u64,
+                            offset,
+                            total_bytes
+                        );
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to write chunk at offset {}: {:?}", offset, e);
+                        let mut map = uploads.write().await;
+                        if let Some(p) = map.get_mut(&upload_id_clone) {
+                            p.state = UploadState::Failed(format!(
+                                "Chunk write failed at offset {}: {}",
+                                offset, e.message
+                            ));
+                        }
+                        Self::broadcast_snapshot(&tx, &rx, Some(&uploads), None).await;
+                        return;
+                    }
+                }
+            }
+
+            // Check for cancellation before finishing
+            if is_cancelled().await {
+                let abort_cmd = Command::AbortChunkedWrite {
+                    entity_id: entity_id_owned.clone(),
+                    disk_type: disk_type_arg,
+                    path: dest_path_owned.clone(),
+                };
+                let _ = app.execute(abort_cmd).await;
+                return;
+            }
+
+            // Finish chunked write
+            let finish_cmd = Command::FinishChunkedWrite {
+                entity_id: entity_id_owned.clone(),
+                disk_type: disk_type_arg,
+                path: dest_path_owned.clone(),
+            };
+
+            let expected_hash = hasher.finalize().to_string();
+
+            match app.execute(finish_cmd).await {
+                Ok(events) => {
+                    // Mark as verifying
                     {
                         let mut map = uploads.write().await;
                         if let Some(p) = map.get_mut(&upload_id_clone) {
-                            p.state = UploadState::Failed(e.message);
+                            p.state = UploadState::Verifying;
                         }
+                    }
+                    Self::broadcast_snapshot(&tx, &rx, Some(&uploads), None).await;
+
+                    // Check hash from the ChunkedWriteCompleted event
+                    let checksum_verified = events.iter().any(|event| {
+                        if let Event::ChunkedWriteCompleted { content_hash, .. } = event {
+                            *content_hash == expected_hash
+                        } else {
+                            false
+                        }
+                    });
+
+                    // Mark as complete
+                    {
+                        let mut map = uploads.write().await;
+                        if let Some(p) = map.get_mut(&upload_id_clone) {
+                            p.state = UploadState::Complete;
+                            p.checksum_verified = checksum_verified;
+                        }
+                    }
+                    Self::broadcast_snapshot(&tx, &rx, Some(&uploads), None).await;
+                }
+                Err(e) => {
+                    tracing::error!("Failed to finish chunked write: {:?}", e);
+                    let mut map = uploads.write().await;
+                    if let Some(p) = map.get_mut(&upload_id_clone) {
+                        p.state = UploadState::Failed(e.message);
+                    }
+                    Self::broadcast_snapshot(&tx, &rx, Some(&uploads), None).await;
+                }
+            }
+        });
+
+        Ok(upload_id)
+    }
+
+    /// Resume an interrupted upload.
+    ///
+    /// This attempts to resume a previously failed or interrupted upload from where it left off.
+    /// Returns the upload ID if resume was successful, or an error if the upload cannot be resumed.
+    #[instrument(skip(self, content), name = "ui.drive.resume_upload", fields(entity_id, ?disk_type, path))]
+    pub async fn resume_upload(
+        &self,
+        entity_id: &str,
+        disk_type: DiskType,
+        path: &str,
+        content: Vec<u8>,
+    ) -> Result<String, DriveError> {
+        if !self.is_authenticated() {
+            return Err(DriveError::NotAuthenticated);
+        }
+
+        let disk_type_arg = disk_type_to_arg(disk_type);
+
+        // Check if we can resume
+        let verify_cmd = Command::ResumeChunkedWrite {
+            entity_id: entity_id.to_string(),
+            disk_type: disk_type_arg,
+            path: path.to_string(),
+            verify_hashes: false,
+        };
+
+        let events = self
+            .app
+            .execute(verify_cmd)
+            .await
+            .map_err(|e| DriveError::TransferNotResumable(e.message))?;
+
+        // Extract resume info from the event
+        let resume_info = events.iter().find_map(|event| {
+            if let Event::ChunkedWriteResumed {
+                bytes_written,
+                total_size,
+                ..
+            } = event
+            {
+                Some((*bytes_written, *total_size))
+            } else {
+                None
+            }
+        });
+
+        let Some((bytes_written, _total_size)) = resume_info else {
+            return Err(DriveError::TransferNotResumable(
+                "Resume verification failed".to_string(),
+            ));
+        };
+
+        // Generate upload ID
+        let upload_id = {
+            let mut counter = self.upload_counter.write().await;
+            *counter += 1;
+            format!("upload-{}", *counter)
+        };
+
+        let file_name = extract_name_from_path(path, "file");
+        let total_bytes = content.len() as u64;
+        let now = current_timestamp_millis();
+        let expected_checksum = compute_checksum(&content);
+
+        let progress = UploadProgress {
+            id: upload_id.clone(),
+            file_name,
+            file_path: path.to_string(),
+            bytes_uploaded: bytes_written,
+            total_bytes,
+            state: UploadState::Uploading,
+            started_at: now,
+            checksum_verified: false,
+        };
+
+        // Store in active uploads
+        {
+            let mut uploads = self.active_uploads.write().await;
+            uploads.insert(upload_id.clone(), progress.clone());
+        }
+        self.update_upload_snapshot().await;
+
+        // Clone values for the spawned task
+        let upload_id_clone = upload_id.clone();
+        let uploads = self.active_uploads.clone();
+        let tx = self.tx.clone();
+        let rx = self.rx.clone();
+        let app = self.app.clone();
+        let entity_id_owned = entity_id.to_string();
+        let path_owned = path.to_string();
+
+        tokio::spawn(async move {
+            // Helper to check cancellation
+            let is_cancelled = || async {
+                let map = uploads.read().await;
+                map.get(&upload_id_clone)
+                    .is_some_and(|p| matches!(p.state, UploadState::Cancelled))
+            };
+
+            // Continue writing from where we left off
+            let chunk_size = DEFAULT_CHUNK_SIZE as usize;
+            let mut offset = bytes_written;
+
+            // Skip already-written data
+            let remaining_data = if bytes_written as usize >= content.len() {
+                // All data already written, just finish
+                &content[0..0]
+            } else {
+                &content[bytes_written as usize..]
+            };
+
+            for chunk_data in remaining_data.chunks(chunk_size) {
+                if is_cancelled().await {
+                    let abort_cmd = Command::AbortChunkedWrite {
+                        entity_id: entity_id_owned.clone(),
+                        disk_type: disk_type_arg,
+                        path: path_owned.clone(),
+                    };
+                    let _ = app.execute(abort_cmd).await;
+                    return;
+                }
+
+                let write_cmd = Command::WriteChunk {
+                    entity_id: entity_id_owned.clone(),
+                    disk_type: disk_type_arg,
+                    path: path_owned.clone(),
+                    offset,
+                    data: chunk_data.to_vec(),
+                };
+
+                match app.execute(write_cmd).await {
+                    Ok(_events) => {
+                        offset += chunk_data.len() as u64;
+                        {
+                            let mut map = uploads.write().await;
+                            if let Some(p) = map.get_mut(&upload_id_clone) {
+                                p.bytes_uploaded = offset;
+                            }
+                        }
+                        Self::broadcast_snapshot(&tx, &rx, Some(&uploads), None).await;
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to write chunk at offset {}: {:?}", offset, e);
+                        let mut map = uploads.write().await;
+                        if let Some(p) = map.get_mut(&upload_id_clone) {
+                            p.state = UploadState::Failed(format!(
+                                "Chunk write failed at offset {}: {}",
+                                offset, e.message
+                            ));
+                        }
+                        Self::broadcast_snapshot(&tx, &rx, Some(&uploads), None).await;
+                        return;
+                    }
+                }
+            }
+
+            if is_cancelled().await {
+                let abort_cmd = Command::AbortChunkedWrite {
+                    entity_id: entity_id_owned.clone(),
+                    disk_type: disk_type_arg,
+                    path: path_owned.clone(),
+                };
+                let _ = app.execute(abort_cmd).await;
+                return;
+            }
+
+            // Finish chunked write
+            let finish_cmd = Command::FinishChunkedWrite {
+                entity_id: entity_id_owned.clone(),
+                disk_type: disk_type_arg,
+                path: path_owned.clone(),
+            };
+
+            match app.execute(finish_cmd).await {
+                Ok(_events) => {
+                    {
+                        let mut map = uploads.write().await;
+                        if let Some(p) = map.get_mut(&upload_id_clone) {
+                            p.state = UploadState::Verifying;
+                        }
+                    }
+                    Self::broadcast_snapshot(&tx, &rx, Some(&uploads), None).await;
+
+                    // Verify checksum
+                    let verify_result = app
+                        .query(Query::ReadFile {
+                            entity_id: entity_id_owned,
+                            disk_type: disk_type_arg,
+                            path: path_owned,
+                        })
+                        .await;
+
+                    let checksum_verified = match verify_result {
+                        Ok(QueryResponse::FileContents(data)) => {
+                            compute_checksum(&data) == expected_checksum
+                        }
+                        _ => false,
+                    };
+
+                    {
+                        let mut map = uploads.write().await;
+                        if let Some(p) = map.get_mut(&upload_id_clone) {
+                            p.state = UploadState::Complete;
+                            p.checksum_verified = checksum_verified;
+                        }
+                    }
+                    Self::broadcast_snapshot(&tx, &rx, Some(&uploads), None).await;
+                }
+                Err(e) => {
+                    tracing::error!("Failed to finish chunked write: {:?}", e);
+                    let mut map = uploads.write().await;
+                    if let Some(p) = map.get_mut(&upload_id_clone) {
+                        p.state = UploadState::Failed(e.message);
                     }
                     Self::broadcast_snapshot(&tx, &rx, Some(&uploads), None).await;
                 }

@@ -9,6 +9,7 @@ homepage.workspace = true
 
 [dependencies]
 async-trait = { workspace = true }
+blake3 = { workspace = true }
 canvas-core = { workspace = true }
 chrono = { workspace = true }
 communitas-core = { package = "communitas-core", path = "../communitas-core" }

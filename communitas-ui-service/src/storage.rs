@@ -56,6 +56,11 @@ impl UiStorage {
     pub fn unread_counts_file(&self) -> PathBuf {
         self.root.join("unread_counts.json")
     }
+
+    /// Disk location for pinned threads persistence.
+    pub fn pinned_threads_file(&self) -> PathBuf {
+        self.root.join("pinned_threads.json")
+    }
 }
 
 /// Shared storage error type.

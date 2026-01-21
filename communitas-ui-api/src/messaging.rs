@@ -27,6 +27,8 @@ pub struct ThreadSummary {
     pub is_dm: bool,
     /// Users currently typing in this thread.
     pub typing_users: Vec<String>,
+    /// Whether this thread is pinned to the top of the list.
+    pub is_pinned: bool,
 }
 
 /// A message in a conversation thread.
@@ -123,6 +125,7 @@ mod tests {
             is_muted: false,
             is_dm: false,
             typing_users: vec![],
+            is_pinned: false,
         };
         let t2 = t1.clone();
         assert_eq!(t1, t2);
@@ -142,6 +145,7 @@ mod tests {
             is_muted: false,
             is_dm: true,
             typing_users: vec![],
+            is_pinned: false,
         };
         assert!(dm.is_dm);
         assert!(dm.contact_id.is_some());

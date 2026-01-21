@@ -26,6 +26,10 @@ pub struct AppConfig {
     /// List of recently used identities (for quick access)
     pub recent_identities: Vec<RecentIdentity>,
 
+    /// Thread IDs that are pinned to the top of the thread list (max 5)
+    #[serde(default)]
+    pub pinned_threads: Vec<String>,
+
     /// UI preferences
     pub ui_preferences: UiPreferences,
 
@@ -65,6 +69,7 @@ impl Default for AppConfig {
             keyring_enabled: true,
             biometric_enabled: true,
             recent_identities: Vec::new(),
+            pinned_threads: Vec::new(),
             ui_preferences: UiPreferences::default(),
             version: 1,
         }
@@ -219,6 +224,57 @@ impl AppConfigManager {
         }
 
         self.save().await
+    }
+
+    /// Maximum number of pinned threads allowed
+    pub const MAX_PINNED_THREADS: usize = 5;
+
+    /// Pin a thread to the top of the thread list.
+    ///
+    /// Returns `Ok(true)` if the thread was pinned, `Ok(false)` if it was already pinned.
+    /// Returns an error if the maximum number of pinned threads would be exceeded.
+    pub async fn pin_thread(&mut self, thread_id: &str) -> Result<bool> {
+        // Check if already pinned
+        if self.config.pinned_threads.contains(&thread_id.to_string()) {
+            return Ok(false);
+        }
+
+        // Check if we're at the limit
+        if self.config.pinned_threads.len() >= Self::MAX_PINNED_THREADS {
+            anyhow::bail!(
+                "Maximum number of pinned threads ({}) reached",
+                Self::MAX_PINNED_THREADS
+            );
+        }
+
+        self.config.pinned_threads.push(thread_id.to_string());
+        self.save().await?;
+        Ok(true)
+    }
+
+    /// Unpin a thread from the top of the thread list.
+    ///
+    /// Returns `Ok(true)` if the thread was unpinned, `Ok(false)` if it wasn't pinned.
+    pub async fn unpin_thread(&mut self, thread_id: &str) -> Result<bool> {
+        let initial_len = self.config.pinned_threads.len();
+        self.config.pinned_threads.retain(|id| id != thread_id);
+
+        if self.config.pinned_threads.len() < initial_len {
+            self.save().await?;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+
+    /// Check if a thread is pinned.
+    pub fn is_thread_pinned(&self, thread_id: &str) -> bool {
+        self.config.pinned_threads.contains(&thread_id.to_string())
+    }
+
+    /// Get the list of pinned thread IDs.
+    pub fn get_pinned_threads(&self) -> &[String] {
+        &self.config.pinned_threads
     }
 
     /// Save configuration to disk
@@ -376,5 +432,93 @@ mod tests {
 
         assert_eq!(manager.get_config().recent_identities.len(), 0);
         assert!(manager.get_config().last_identity.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_pin_thread() {
+        let temp_dir = TempDir::new().unwrap();
+        let mut manager = AppConfigManager::new(temp_dir.path().to_path_buf())
+            .await
+            .unwrap();
+
+        // Initially no pinned threads
+        assert!(manager.get_pinned_threads().is_empty());
+
+        // Pin a thread
+        let result = manager.pin_thread("thread-1").await.unwrap();
+        assert!(result); // Was pinned
+        assert!(manager.is_thread_pinned("thread-1"));
+        assert_eq!(manager.get_pinned_threads().len(), 1);
+
+        // Pin same thread again - should return false
+        let result = manager.pin_thread("thread-1").await.unwrap();
+        assert!(!result); // Already pinned
+        assert_eq!(manager.get_pinned_threads().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_unpin_thread() {
+        let temp_dir = TempDir::new().unwrap();
+        let mut manager = AppConfigManager::new(temp_dir.path().to_path_buf())
+            .await
+            .unwrap();
+
+        // Pin a thread
+        manager.pin_thread("thread-1").await.unwrap();
+        assert!(manager.is_thread_pinned("thread-1"));
+
+        // Unpin it
+        let result = manager.unpin_thread("thread-1").await.unwrap();
+        assert!(result); // Was unpinned
+        assert!(!manager.is_thread_pinned("thread-1"));
+
+        // Unpin again - should return false
+        let result = manager.unpin_thread("thread-1").await.unwrap();
+        assert!(!result); // Wasn't pinned
+    }
+
+    #[tokio::test]
+    async fn test_pin_thread_limit() {
+        let temp_dir = TempDir::new().unwrap();
+        let mut manager = AppConfigManager::new(temp_dir.path().to_path_buf())
+            .await
+            .unwrap();
+
+        // Pin up to the limit
+        for i in 0..AppConfigManager::MAX_PINNED_THREADS {
+            manager.pin_thread(&format!("thread-{}", i)).await.unwrap();
+        }
+
+        assert_eq!(
+            manager.get_pinned_threads().len(),
+            AppConfigManager::MAX_PINNED_THREADS
+        );
+
+        // Try to pin one more - should fail
+        let result = manager.pin_thread("thread-overflow").await;
+        assert!(result.is_err());
+        assert_eq!(
+            manager.get_pinned_threads().len(),
+            AppConfigManager::MAX_PINNED_THREADS
+        );
+    }
+
+    #[tokio::test]
+    async fn test_pinned_threads_persistence() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_dir = temp_dir.path().to_path_buf();
+
+        // Create and pin threads
+        {
+            let mut manager = AppConfigManager::new(config_dir.clone()).await.unwrap();
+            manager.pin_thread("thread-a").await.unwrap();
+            manager.pin_thread("thread-b").await.unwrap();
+        }
+
+        // Load in new manager and verify persistence
+        let manager = AppConfigManager::new(config_dir).await.unwrap();
+        assert!(manager.is_thread_pinned("thread-a"));
+        assert!(manager.is_thread_pinned("thread-b"));
+        assert_eq!(manager.get_pinned_threads().len(), 2);
     }
 }

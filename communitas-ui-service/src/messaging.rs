@@ -67,6 +67,43 @@ impl UnreadCounts {
     }
 }
 
+/// Maximum number of pinned threads allowed.
+pub const MAX_PINNED_THREADS: usize = 5;
+
+/// Persisted list of pinned thread IDs.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct PinnedThreads {
+    /// Ordered list of pinned thread IDs (most recently pinned last).
+    pub thread_ids: Vec<String>,
+}
+
+impl PinnedThreads {
+    /// Check if a thread is pinned.
+    pub fn is_pinned(&self, thread_id: &str) -> bool {
+        self.thread_ids.contains(&thread_id.to_string())
+    }
+
+    /// Pin a thread. Returns true if newly pinned, false if already pinned.
+    /// Returns an error message if the limit would be exceeded.
+    pub fn pin(&mut self, thread_id: &str) -> Result<bool, &'static str> {
+        if self.is_pinned(thread_id) {
+            return Ok(false);
+        }
+        if self.thread_ids.len() >= MAX_PINNED_THREADS {
+            return Err("Maximum number of pinned threads reached");
+        }
+        self.thread_ids.push(thread_id.to_string());
+        Ok(true)
+    }
+
+    /// Unpin a thread. Returns true if unpinned, false if wasn't pinned.
+    pub fn unpin(&mut self, thread_id: &str) -> bool {
+        let initial_len = self.thread_ids.len();
+        self.thread_ids.retain(|id| id != thread_id);
+        self.thread_ids.len() < initial_len
+    }
+}
+
 /// Typing indicator state with auto-expire tracking.
 ///
 /// Tracks which users are typing in each thread, with timestamps for auto-expiration.
@@ -139,6 +176,8 @@ pub struct MessagingService {
     active_thread: Arc<RwLock<Option<String>>>,
     /// Typing indicator state (shared between service and event loop).
     typing_state: Arc<RwLock<TypingState>>,
+    /// Persistent pinned threads (shared between service and event loop).
+    pinned_threads: Arc<RwLock<PinnedThreads>>,
 }
 
 impl MessagingService {
@@ -172,6 +211,17 @@ impl MessagingService {
         let active_thread = Arc::new(RwLock::new(None));
         let typing_state = Arc::new(RwLock::new(TypingState::default()));
 
+        // Load persisted pinned threads
+        let pinned_threads = match JsonFile::load(&storage.pinned_threads_file()) {
+            Ok(Some(pinned)) => pinned,
+            Ok(None) => PinnedThreads::default(),
+            Err(e) => {
+                warn!(error = %e, "Failed to load pinned threads, using defaults");
+                PinnedThreads::default()
+            }
+        };
+        let pinned_threads = Arc::new(RwLock::new(pinned_threads));
+
         // Subscribe to message events for reactive updates
         let event_rx = app.subscribe(Subscription::MessageEvents);
 
@@ -183,6 +233,7 @@ impl MessagingService {
         let unread_clone = unread_counts.clone();
         let active_clone = active_thread.clone();
         let typing_clone = typing_state.clone();
+        let pinned_clone = pinned_threads.clone();
 
         // Spawn background task to process events
         tokio::spawn(async move {
@@ -195,6 +246,7 @@ impl MessagingService {
                 unread_clone,
                 active_clone,
                 typing_clone,
+                pinned_clone,
             )
             .await;
         });
@@ -208,6 +260,7 @@ impl MessagingService {
             unread_counts,
             active_thread,
             typing_state,
+            pinned_threads,
         }
     }
 
@@ -227,6 +280,7 @@ impl MessagingService {
         unread_counts: Arc<RwLock<UnreadCounts>>,
         active_thread: Arc<RwLock<Option<String>>>,
         typing_state: Arc<RwLock<TypingState>>,
+        pinned_threads: Arc<RwLock<PinnedThreads>>,
     ) {
         loop {
             match event_rx.recv().await {
@@ -287,6 +341,7 @@ impl MessagingService {
                             &auth,
                             &unread_counts,
                             &typing_state,
+                            &pinned_threads,
                         )
                         .await;
                     }
@@ -297,8 +352,15 @@ impl MessagingService {
                         missed_events = n,
                         "Event receiver lagged, refreshing threads"
                     );
-                    Self::refresh_threads_internal(&tx, &app, &auth, &unread_counts, &typing_state)
-                        .await;
+                    Self::refresh_threads_internal(
+                        &tx,
+                        &app,
+                        &auth,
+                        &unread_counts,
+                        &typing_state,
+                        &pinned_threads,
+                    )
+                    .await;
                 }
                 Err(broadcast::error::RecvError::Closed) => {
                     // Channel closed, stop the loop
@@ -318,6 +380,7 @@ impl MessagingService {
         auth: &Arc<AuthController>,
         unread_counts: &Arc<RwLock<UnreadCounts>>,
         typing_state: &Arc<RwLock<TypingState>>,
+        pinned_threads: &Arc<RwLock<PinnedThreads>>,
     ) {
         let is_authenticated = matches!(
             &*auth.subscribe().borrow(),
@@ -341,7 +404,13 @@ impl MessagingService {
             .map(|guard| (*guard).clone())
             .unwrap_or_default();
 
-        let Some(threads) = Self::fetch_threads(app, &counts, &typing).await else {
+        let pinned = pinned_threads
+            .read()
+            .ok()
+            .map(|guard| (*guard).clone())
+            .unwrap_or_default();
+
+        let Some(threads) = Self::fetch_threads(app, &counts, &typing, &pinned).await else {
             trace!("Failed to fetch threads in refresh");
             return;
         };
@@ -357,10 +426,12 @@ impl MessagingService {
     /// Fetch and build thread summaries from the core app.
     ///
     /// Returns `None` if the query fails, allowing callers to handle errors appropriately.
+    /// Threads are sorted with pinned threads first, then by last message timestamp.
     async fn fetch_threads(
         app: &Arc<CommunitasApp>,
         unread_counts: &UnreadCounts,
         typing_state: &TypingState,
+        pinned_threads: &PinnedThreads,
     ) -> Option<Vec<ThreadSummary>> {
         let entities = match app.query(Query::ListEntities).await {
             Ok(QueryResponse::EntityList(entities)) => entities,
@@ -404,6 +475,7 @@ impl MessagingService {
                 is_muted: false,
                 is_dm: false,
                 typing_users: typing_state.get_typing_users(&thread_id),
+                is_pinned: pinned_threads.is_pinned(&thread_id),
             });
         }
 
@@ -453,11 +525,17 @@ impl MessagingService {
                     is_muted: false,
                     is_dm: true,
                     typing_users: typing_state.get_typing_users(&thread_id),
+                    is_pinned: pinned_threads.is_pinned(&thread_id),
                 });
             }
         }
 
-        threads.sort_by(|a, b| b.last_message_timestamp.cmp(&a.last_message_timestamp));
+        // Sort: pinned threads first, then by last message timestamp (newest first)
+        threads.sort_by(|a, b| match (a.is_pinned, b.is_pinned) {
+            (true, false) => std::cmp::Ordering::Less,
+            (false, true) => std::cmp::Ordering::Greater,
+            _ => b.last_message_timestamp.cmp(&a.last_message_timestamp),
+        });
 
         Some(threads)
     }
@@ -489,6 +567,7 @@ impl MessagingService {
             &self.auth,
             &self.unread_counts,
             &self.typing_state,
+            &self.pinned_threads,
         )
         .await;
     }
@@ -497,6 +576,7 @@ impl MessagingService {
     ///
     /// Each thread corresponds to an entity (channel, group, project, etc.) that
     /// the user has joined. The thread includes a preview of the latest message.
+    /// Pinned threads appear first in the list.
     ///
     /// # Errors
     /// Returns [`MessagingError::NotAuthenticated`] if no user is logged in.
@@ -522,7 +602,14 @@ impl MessagingService {
             .map(|guard| (*guard).clone())
             .unwrap_or_default();
 
-        let threads = Self::fetch_threads(&self.app, &counts, &typing)
+        let pinned = self
+            .pinned_threads
+            .read()
+            .ok()
+            .map(|guard| (*guard).clone())
+            .unwrap_or_default();
+
+        let threads = Self::fetch_threads(&self.app, &counts, &typing, &pinned)
             .await
             .unwrap_or_default();
 
@@ -942,6 +1029,129 @@ impl MessagingService {
             .and_then(|guard| (*guard).clone())
     }
 
+    /// Pin a thread to the top of the thread list.
+    ///
+    /// Pinned threads appear at the top of the thread list, sorted by most
+    /// recently pinned. A maximum of 5 threads can be pinned at once.
+    ///
+    /// # Arguments
+    /// * `thread_id` - The ID of the thread to pin.
+    ///
+    /// # Returns
+    /// - `Ok(true)` if the thread was newly pinned.
+    /// - `Ok(false)` if the thread was already pinned.
+    ///
+    /// # Errors
+    /// - [`MessagingError::NotAuthenticated`] if no user is logged in.
+    /// - [`MessagingError::Internal`] if the maximum number of pinned threads
+    ///   would be exceeded or if persistence fails.
+    #[instrument(skip(self), name = "ui.messaging.pin_thread", fields(thread_id))]
+    pub async fn pin_thread(&self, thread_id: &str) -> Result<bool, MessagingError> {
+        if !self.is_authenticated() {
+            return Err(MessagingError::NotAuthenticated);
+        }
+
+        // Update in-memory state
+        let was_pinned = {
+            let mut pinned = self.pinned_threads.write().map_err(|_| {
+                MessagingError::Internal("Failed to acquire pinned threads lock".to_string())
+            })?;
+            match pinned.pin(thread_id) {
+                Ok(newly_pinned) => newly_pinned,
+                Err(e) => return Err(MessagingError::Internal(e.to_string())),
+            }
+        };
+
+        if was_pinned {
+            // Persist to disk
+            if let Ok(pinned) = self.pinned_threads.read() {
+                let pinned_snapshot = (*pinned).clone();
+                if let Err(e) =
+                    JsonFile::save(&self.storage.pinned_threads_file(), &pinned_snapshot)
+                {
+                    warn!(error = %e, "Failed to persist pinned threads");
+                }
+            }
+
+            // Refresh thread list to reflect new pin state
+            self.refresh_threads().await;
+
+            debug!(thread_id, "Thread pinned successfully");
+        }
+
+        Ok(was_pinned)
+    }
+
+    /// Unpin a thread from the top of the thread list.
+    ///
+    /// # Arguments
+    /// * `thread_id` - The ID of the thread to unpin.
+    ///
+    /// # Returns
+    /// - `Ok(true)` if the thread was unpinned.
+    /// - `Ok(false)` if the thread wasn't pinned.
+    ///
+    /// # Errors
+    /// - [`MessagingError::NotAuthenticated`] if no user is logged in.
+    /// - [`MessagingError::Internal`] if persistence fails.
+    #[instrument(skip(self), name = "ui.messaging.unpin_thread", fields(thread_id))]
+    pub async fn unpin_thread(&self, thread_id: &str) -> Result<bool, MessagingError> {
+        if !self.is_authenticated() {
+            return Err(MessagingError::NotAuthenticated);
+        }
+
+        // Update in-memory state
+        let was_unpinned = {
+            let mut pinned = self.pinned_threads.write().map_err(|_| {
+                MessagingError::Internal("Failed to acquire pinned threads lock".to_string())
+            })?;
+            pinned.unpin(thread_id)
+        };
+
+        if was_unpinned {
+            // Persist to disk
+            if let Ok(pinned) = self.pinned_threads.read() {
+                let pinned_snapshot = (*pinned).clone();
+                if let Err(e) =
+                    JsonFile::save(&self.storage.pinned_threads_file(), &pinned_snapshot)
+                {
+                    warn!(error = %e, "Failed to persist pinned threads");
+                }
+            }
+
+            // Refresh thread list to reflect new pin state
+            self.refresh_threads().await;
+
+            debug!(thread_id, "Thread unpinned successfully");
+        }
+
+        Ok(was_unpinned)
+    }
+
+    /// Check if a thread is pinned.
+    ///
+    /// # Arguments
+    /// * `thread_id` - The ID of the thread to check.
+    ///
+    /// # Returns
+    /// `true` if the thread is pinned, `false` otherwise.
+    pub fn is_thread_pinned(&self, thread_id: &str) -> bool {
+        self.pinned_threads
+            .read()
+            .ok()
+            .map(|pinned| pinned.is_pinned(thread_id))
+            .unwrap_or(false)
+    }
+
+    /// Get the list of pinned thread IDs.
+    pub fn get_pinned_threads(&self) -> Vec<String> {
+        self.pinned_threads
+            .read()
+            .ok()
+            .map(|pinned| pinned.thread_ids.clone())
+            .unwrap_or_default()
+    }
+
     /// Send a typing indicator for the specified thread.
     ///
     /// This broadcasts a typing indicator event to other participants
@@ -1310,6 +1520,7 @@ mod tests {
             is_muted: false,
             is_dm: false,
             typing_users: vec![],
+            is_pinned: false,
         }];
 
         service.set_threads(threads);
@@ -1541,6 +1752,7 @@ mod tests {
                 is_muted: false,
                 is_dm: false,
                 typing_users: vec![],
+                is_pinned: false,
             },
             ThreadSummary {
                 thread_id: "entity-2".to_string(),
@@ -1554,6 +1766,7 @@ mod tests {
                 is_muted: true,
                 is_dm: false,
                 typing_users: vec![],
+                is_pinned: false,
             },
         ];
 

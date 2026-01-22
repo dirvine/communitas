@@ -397,6 +397,293 @@ impl PeerListResponse {
     }
 }
 
+// ============================================================================
+// Canvas Gossip Message Types
+// ============================================================================
+
+/// Canvas operation type
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CanvasOperationType {
+    /// Add a new element to the canvas
+    Add,
+    /// Update an existing element
+    Update,
+    /// Remove an element from the canvas
+    Remove,
+}
+
+/// Canvas element operation for real-time synchronization
+///
+/// Represents a single operation on a canvas element (add, update, or remove).
+/// Operations include vector clock metadata for CRDT conflict resolution.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CanvasOperation {
+    /// Unique identifier for this operation
+    pub operation_id: String,
+
+    /// Canvas entity ID this operation belongs to
+    pub canvas_id: String,
+
+    /// Element ID being operated on
+    pub element_id: String,
+
+    /// Type of operation (add, update, remove)
+    pub operation_type: CanvasOperationType,
+
+    /// Element data (JSON-serialized for flexibility)
+    /// None for remove operations
+    pub element_data: Option<serde_json::Value>,
+
+    /// Vector clock at time of operation
+    pub vector_clock: VectorClock,
+
+    /// Lamport timestamp for total ordering
+    pub lamport_clock: u64,
+
+    /// Peer ID that originated this operation
+    pub origin_peer: String,
+
+    /// Unix timestamp (milliseconds)
+    pub timestamp_ms: u64,
+}
+
+impl CanvasOperation {
+    /// Create a new add operation
+    pub fn add(
+        canvas_id: String,
+        element_id: String,
+        element_data: serde_json::Value,
+        vector_clock: VectorClock,
+        lamport_clock: u64,
+        origin_peer: String,
+    ) -> Self {
+        Self {
+            operation_id: format!("{}-{}-add", canvas_id, element_id),
+            canvas_id,
+            element_id,
+            operation_type: CanvasOperationType::Add,
+            element_data: Some(element_data),
+            vector_clock,
+            lamport_clock,
+            origin_peer,
+            timestamp_ms: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or(0),
+        }
+    }
+
+    /// Create a new update operation
+    pub fn update(
+        canvas_id: String,
+        element_id: String,
+        element_data: serde_json::Value,
+        vector_clock: VectorClock,
+        lamport_clock: u64,
+        origin_peer: String,
+    ) -> Self {
+        Self {
+            operation_id: format!("{}-{}-update-{}", canvas_id, element_id, lamport_clock),
+            canvas_id,
+            element_id,
+            operation_type: CanvasOperationType::Update,
+            element_data: Some(element_data),
+            vector_clock,
+            lamport_clock,
+            origin_peer,
+            timestamp_ms: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or(0),
+        }
+    }
+
+    /// Create a new remove operation
+    pub fn remove(
+        canvas_id: String,
+        element_id: String,
+        vector_clock: VectorClock,
+        lamport_clock: u64,
+        origin_peer: String,
+    ) -> Self {
+        Self {
+            operation_id: format!("{}-{}-remove", canvas_id, element_id),
+            canvas_id,
+            element_id,
+            operation_type: CanvasOperationType::Remove,
+            element_data: None,
+            vector_clock,
+            lamport_clock,
+            origin_peer,
+            timestamp_ms: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or(0),
+        }
+    }
+}
+
+/// Canvas cursor position update for collaborative awareness
+///
+/// Sent periodically to show where other users are working on the canvas.
+/// These are ephemeral and not persisted.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CanvasCursorUpdate {
+    /// Canvas entity ID
+    pub canvas_id: String,
+
+    /// Peer ID of the cursor owner
+    pub peer_id: String,
+
+    /// Display name of the user (for rendering)
+    pub display_name: String,
+
+    /// X coordinate on canvas
+    pub x: f64,
+
+    /// Y coordinate on canvas
+    pub y: f64,
+
+    /// Optional element ID if cursor is over an element
+    pub hovered_element_id: Option<String>,
+
+    /// Optional selection state (element IDs currently selected)
+    pub selected_elements: Vec<String>,
+
+    /// Unix timestamp (milliseconds) - for expiring stale cursors
+    pub timestamp_ms: u64,
+}
+
+impl CanvasCursorUpdate {
+    /// Create a new cursor update
+    pub fn new(canvas_id: String, peer_id: String, display_name: String, x: f64, y: f64) -> Self {
+        Self {
+            canvas_id,
+            peer_id,
+            display_name,
+            x,
+            y,
+            hovered_element_id: None,
+            selected_elements: Vec::new(),
+            timestamp_ms: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or(0),
+        }
+    }
+
+    /// Set hovered element
+    pub fn with_hovered_element(mut self, element_id: String) -> Self {
+        self.hovered_element_id = Some(element_id);
+        self
+    }
+
+    /// Set selected elements
+    pub fn with_selection(mut self, elements: Vec<String>) -> Self {
+        self.selected_elements = elements;
+        self
+    }
+}
+
+/// Request for full canvas state
+///
+/// Sent when a peer joins a canvas session and needs the current state.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CanvasStateRequest {
+    /// Canvas entity ID to request
+    pub canvas_id: String,
+
+    /// Requesting peer ID
+    pub requester_peer_id: String,
+
+    /// Optional: request only elements modified after this vector clock
+    /// If None, request full state
+    pub since_vector_clock: Option<VectorClock>,
+}
+
+impl CanvasStateRequest {
+    /// Create a request for full canvas state
+    pub fn full(canvas_id: String, requester_peer_id: String) -> Self {
+        Self {
+            canvas_id,
+            requester_peer_id,
+            since_vector_clock: None,
+        }
+    }
+
+    /// Create a request for incremental state since a vector clock
+    pub fn incremental(canvas_id: String, requester_peer_id: String, since: VectorClock) -> Self {
+        Self {
+            canvas_id,
+            requester_peer_id,
+            since_vector_clock: Some(since),
+        }
+    }
+}
+
+/// Response with canvas state snapshot
+///
+/// Contains all elements and the current vector clock for the canvas.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CanvasStateResponse {
+    /// Canvas entity ID
+    pub canvas_id: String,
+
+    /// Responding peer ID
+    pub responder_peer_id: String,
+
+    /// All canvas elements (JSON-serialized)
+    pub elements: Vec<serde_json::Value>,
+
+    /// Current vector clock for the canvas
+    pub vector_clock: VectorClock,
+
+    /// Whether this is a partial (incremental) or full response
+    pub is_incremental: bool,
+
+    /// Total element count (for progress indication)
+    pub total_element_count: usize,
+}
+
+impl CanvasStateResponse {
+    /// Create a full state response
+    pub fn full(
+        canvas_id: String,
+        responder_peer_id: String,
+        elements: Vec<serde_json::Value>,
+        vector_clock: VectorClock,
+    ) -> Self {
+        let total = elements.len();
+        Self {
+            canvas_id,
+            responder_peer_id,
+            elements,
+            vector_clock,
+            is_incremental: false,
+            total_element_count: total,
+        }
+    }
+
+    /// Create an incremental state response
+    pub fn incremental(
+        canvas_id: String,
+        responder_peer_id: String,
+        elements: Vec<serde_json::Value>,
+        vector_clock: VectorClock,
+        total_element_count: usize,
+    ) -> Self {
+        Self {
+            canvas_id,
+            responder_peer_id,
+            elements,
+            vector_clock,
+            is_incremental: true,
+            total_element_count,
+        }
+    }
+}
+
 /// Gossip message type wrapper
 ///
 /// Wraps different message types sent over the gossip network:
@@ -423,6 +710,18 @@ pub enum GossipMessageType {
 
     /// Response with list of healthy peers sorted by quality score
     PeerListResponse(PeerListResponse),
+
+    /// Canvas element operation (add, update, remove)
+    CanvasOperation(CanvasOperation),
+
+    /// Canvas cursor position update for collaborative awareness
+    CanvasCursorUpdate(CanvasCursorUpdate),
+
+    /// Request for canvas state (when joining a canvas session)
+    CanvasStateRequest(CanvasStateRequest),
+
+    /// Response with canvas state snapshot
+    CanvasStateResponse(CanvasStateResponse),
 }
 
 /// Sort messages in causal order
@@ -512,5 +811,224 @@ mod tests {
         message_clock.increment("alice");
 
         assert!(!local.has_dependencies(&message_clock));
+    }
+
+    // ========================================================================
+    // Canvas Gossip Message Tests
+    // ========================================================================
+
+    #[test]
+    fn test_canvas_operation_add_serialization() {
+        let mut clock = VectorClock::new();
+        clock.increment("peer-1");
+
+        let op = CanvasOperation::add(
+            "canvas-123".to_string(),
+            "element-456".to_string(),
+            serde_json::json!({"type": "rectangle", "x": 100, "y": 200}),
+            clock,
+            1,
+            "peer-1".to_string(),
+        );
+
+        let json = serde_json::to_string(&op).unwrap();
+        let deserialized: CanvasOperation = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.canvas_id, "canvas-123");
+        assert_eq!(deserialized.element_id, "element-456");
+        assert_eq!(deserialized.operation_type, CanvasOperationType::Add);
+        assert!(deserialized.element_data.is_some());
+    }
+
+    #[test]
+    fn test_canvas_operation_remove_serialization() {
+        let clock = VectorClock::new();
+
+        let op = CanvasOperation::remove(
+            "canvas-123".to_string(),
+            "element-456".to_string(),
+            clock,
+            5,
+            "peer-2".to_string(),
+        );
+
+        let json = serde_json::to_string(&op).unwrap();
+        let deserialized: CanvasOperation = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.operation_type, CanvasOperationType::Remove);
+        assert!(deserialized.element_data.is_none());
+    }
+
+    #[test]
+    fn test_canvas_cursor_update_serialization() {
+        let cursor = CanvasCursorUpdate::new(
+            "canvas-123".to_string(),
+            "peer-1".to_string(),
+            "Alice".to_string(),
+            150.5,
+            200.75,
+        )
+        .with_hovered_element("elem-1".to_string())
+        .with_selection(vec!["elem-2".to_string(), "elem-3".to_string()]);
+
+        let json = serde_json::to_string(&cursor).unwrap();
+        let deserialized: CanvasCursorUpdate = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.canvas_id, "canvas-123");
+        assert_eq!(deserialized.peer_id, "peer-1");
+        assert_eq!(deserialized.display_name, "Alice");
+        assert!((deserialized.x - 150.5).abs() < f64::EPSILON);
+        assert!((deserialized.y - 200.75).abs() < f64::EPSILON);
+        assert_eq!(deserialized.hovered_element_id, Some("elem-1".to_string()));
+        assert_eq!(deserialized.selected_elements.len(), 2);
+    }
+
+    #[test]
+    fn test_canvas_state_request_serialization() {
+        let request = CanvasStateRequest::full("canvas-123".to_string(), "peer-1".to_string());
+
+        let json = serde_json::to_string(&request).unwrap();
+        let deserialized: CanvasStateRequest = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.canvas_id, "canvas-123");
+        assert_eq!(deserialized.requester_peer_id, "peer-1");
+        assert!(deserialized.since_vector_clock.is_none());
+
+        // Test incremental request
+        let mut clock = VectorClock::new();
+        clock.increment("peer-1");
+        let incremental =
+            CanvasStateRequest::incremental("canvas-456".to_string(), "peer-2".to_string(), clock);
+
+        let json = serde_json::to_string(&incremental).unwrap();
+        let deserialized: CanvasStateRequest = serde_json::from_str(&json).unwrap();
+
+        assert!(deserialized.since_vector_clock.is_some());
+    }
+
+    #[test]
+    fn test_canvas_state_response_serialization() {
+        let mut clock = VectorClock::new();
+        clock.increment("peer-1");
+        clock.increment("peer-2");
+
+        let elements = vec![
+            serde_json::json!({"id": "elem-1", "type": "rectangle"}),
+            serde_json::json!({"id": "elem-2", "type": "circle"}),
+        ];
+
+        let response = CanvasStateResponse::full(
+            "canvas-123".to_string(),
+            "peer-1".to_string(),
+            elements,
+            clock,
+        );
+
+        let json = serde_json::to_string(&response).unwrap();
+        let deserialized: CanvasStateResponse = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.canvas_id, "canvas-123");
+        assert_eq!(deserialized.responder_peer_id, "peer-1");
+        assert_eq!(deserialized.elements.len(), 2);
+        assert_eq!(deserialized.total_element_count, 2);
+        assert!(!deserialized.is_incremental);
+    }
+
+    #[test]
+    fn test_gossip_message_canvas_operation_roundtrip() {
+        let mut clock = VectorClock::new();
+        clock.increment("peer-1");
+
+        let op = CanvasOperation::update(
+            "canvas-123".to_string(),
+            "element-456".to_string(),
+            serde_json::json!({"x": 300, "y": 400}),
+            clock,
+            10,
+            "peer-1".to_string(),
+        );
+
+        let msg = GossipMessageType::CanvasOperation(op);
+        let json = serde_json::to_string(&msg).unwrap();
+
+        // Verify the tag is correct
+        assert!(json.contains("\"type\":\"canvas_operation\""));
+
+        let deserialized: GossipMessageType = serde_json::from_str(&json).unwrap();
+        match deserialized {
+            GossipMessageType::CanvasOperation(op) => {
+                assert_eq!(op.canvas_id, "canvas-123");
+                assert_eq!(op.operation_type, CanvasOperationType::Update);
+            }
+            _ => panic!("Expected CanvasOperation variant"),
+        }
+    }
+
+    #[test]
+    fn test_gossip_message_canvas_cursor_roundtrip() {
+        let cursor = CanvasCursorUpdate::new(
+            "canvas-123".to_string(),
+            "peer-1".to_string(),
+            "Bob".to_string(),
+            50.0,
+            75.0,
+        );
+
+        let msg = GossipMessageType::CanvasCursorUpdate(cursor);
+        let json = serde_json::to_string(&msg).unwrap();
+
+        assert!(json.contains("\"type\":\"canvas_cursor_update\""));
+
+        let deserialized: GossipMessageType = serde_json::from_str(&json).unwrap();
+        match deserialized {
+            GossipMessageType::CanvasCursorUpdate(c) => {
+                assert_eq!(c.display_name, "Bob");
+            }
+            _ => panic!("Expected CanvasCursorUpdate variant"),
+        }
+    }
+
+    #[test]
+    fn test_gossip_message_canvas_state_request_roundtrip() {
+        let request = CanvasStateRequest::full("canvas-789".to_string(), "peer-3".to_string());
+
+        let msg = GossipMessageType::CanvasStateRequest(request);
+        let json = serde_json::to_string(&msg).unwrap();
+
+        assert!(json.contains("\"type\":\"canvas_state_request\""));
+
+        let deserialized: GossipMessageType = serde_json::from_str(&json).unwrap();
+        match deserialized {
+            GossipMessageType::CanvasStateRequest(r) => {
+                assert_eq!(r.canvas_id, "canvas-789");
+            }
+            _ => panic!("Expected CanvasStateRequest variant"),
+        }
+    }
+
+    #[test]
+    fn test_gossip_message_canvas_state_response_roundtrip() {
+        let clock = VectorClock::new();
+        let response = CanvasStateResponse::incremental(
+            "canvas-123".to_string(),
+            "peer-1".to_string(),
+            vec![serde_json::json!({"id": "new-elem"})],
+            clock,
+            100,
+        );
+
+        let msg = GossipMessageType::CanvasStateResponse(response);
+        let json = serde_json::to_string(&msg).unwrap();
+
+        assert!(json.contains("\"type\":\"canvas_state_response\""));
+
+        let deserialized: GossipMessageType = serde_json::from_str(&json).unwrap();
+        match deserialized {
+            GossipMessageType::CanvasStateResponse(r) => {
+                assert!(r.is_incremental);
+                assert_eq!(r.total_element_count, 100);
+            }
+            _ => panic!("Expected CanvasStateResponse variant"),
+        }
     }
 }

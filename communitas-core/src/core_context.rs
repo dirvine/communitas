@@ -31,7 +31,7 @@ use saorsa_pqc::ml_dsa_87::{PrivateKey, PublicKey, try_keygen_with_rng};
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 /// Centralized context for the Communitas application
 ///
@@ -489,8 +489,8 @@ impl CoreContext {
         let gossip_clone = gossip.clone();
 
         // Create handler that processes incoming entity messages
-        let handler: crate::gossip::EntityMessageHandler =
-            Arc::new(move |entity_id, sender_peer_id, message_bytes| {
+        let handler: crate::gossip::EntityMessageHandler = Arc::new(
+            move |entity_id, sender_peer_id, message_bytes| {
                 // Try to parse as GossipMessageType first (new format)
                 // Fall back to CRDTMessage for backwards compatibility
                 let gossip_msg: Result<crate::crdt::GossipMessageType, _> =
@@ -545,6 +545,41 @@ impl CoreContext {
                         );
                         Self::handle_peer_list_response(gossip_clone, response);
                     }
+                    Ok(crate::crdt::GossipMessageType::CanvasOperation(operation)) => {
+                        info!(
+                            "Received canvas operation for canvas {} element {} from peer {:?}",
+                            operation.canvas_id, operation.element_id, sender_peer_id
+                        );
+                        // TODO: Handle canvas operation via canvas service
+                        // For now, suppress unused variable warnings
+                        let _ = (&message_service, &gossip_clone);
+                    }
+                    Ok(crate::crdt::GossipMessageType::CanvasCursorUpdate(cursor)) => {
+                        debug!(
+                            "Received cursor update for canvas {} from peer {} at ({}, {})",
+                            cursor.canvas_id, cursor.peer_id, cursor.x, cursor.y
+                        );
+                        // Cursor updates are ephemeral and handled by UI layer
+                        let _ = (&message_service, &gossip_clone);
+                    }
+                    Ok(crate::crdt::GossipMessageType::CanvasStateRequest(request)) => {
+                        info!(
+                            "Received canvas state request for canvas {} from peer {:?}",
+                            request.canvas_id, sender_peer_id
+                        );
+                        // TODO: Handle canvas state request via canvas service
+                        let _ = (&message_service, &gossip_clone);
+                    }
+                    Ok(crate::crdt::GossipMessageType::CanvasStateResponse(response)) => {
+                        info!(
+                            "Received canvas state response for canvas {} with {} elements from peer {:?}",
+                            response.canvas_id,
+                            response.elements.len(),
+                            sender_peer_id
+                        );
+                        // TODO: Handle canvas state response via canvas service
+                        let _ = (&message_service, &gossip_clone);
+                    }
                     Err(_) => {
                         // Try legacy CRDTMessage format for backwards compatibility
                         match serde_json::from_slice::<crate::crdt::CRDTMessage>(&message_bytes) {
@@ -568,7 +603,8 @@ impl CoreContext {
                         }
                     }
                 }
-            });
+            },
+        );
 
         // Register the handler with the gossip context
         gossip.set_entity_message_handler(handler).await;

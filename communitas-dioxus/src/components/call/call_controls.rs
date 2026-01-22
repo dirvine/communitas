@@ -86,9 +86,10 @@ pub fn CallControls(props: CallControlsProps) -> Element {
     let call_for_screen = call_service.clone();
     let on_screen_share_click = move |_| {
         let call = call_for_screen.clone();
-        let currently_sharing = is_screen_sharing;
         spawn(async move {
-            if currently_sharing {
+            // Read fresh state from service to avoid TOCTOU race condition
+            let snapshot = call.current_snapshot();
+            if snapshot.is_screen_sharing {
                 let _ = call.stop_screen_share().await;
             } else {
                 let _ = call.start_screen_share().await;

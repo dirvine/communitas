@@ -260,7 +260,7 @@ pub fn CallView(props: CallViewProps) -> Element {
 }
 
 /// Format duration in MM:SS or HH:MM:SS format.
-#[allow(dead_code)] // Used by components, but they aren't wired into routes yet
+#[allow(dead_code)] // Used by CallView components which aren't wired into routes yet
 fn format_duration(seconds: u64) -> String {
     let hours = seconds / 3600;
     let minutes = (seconds % 3600) / 60;

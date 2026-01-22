@@ -1045,6 +1045,50 @@ pub enum Event {
     /// Screen sharing stopped
     ScreenShareStopped { call_id: String },
 
+    /// Remote participant joined the call
+    ParticipantJoined {
+        call_id: String,
+        participant_id: String,
+        display_name: String,
+        four_words: Option<String>,
+    },
+
+    /// Remote participant left the call
+    ParticipantLeft {
+        call_id: String,
+        participant_id: String,
+    },
+
+    /// Remote participant's mute state changed
+    ParticipantMuteChanged {
+        call_id: String,
+        participant_id: String,
+        is_muted: bool,
+    },
+
+    /// Remote participant's video state changed
+    ParticipantVideoChanged {
+        call_id: String,
+        participant_id: String,
+        is_video_enabled: bool,
+    },
+
+    /// Remote participant's screen share state changed
+    ParticipantScreenShareChanged {
+        call_id: String,
+        participant_id: String,
+        is_screen_sharing: bool,
+    },
+
+    /// Call is attempting to reconnect after connection loss
+    CallReconnecting { call_id: String },
+
+    /// Call reconnection succeeded
+    CallReconnected { call_id: String },
+
+    /// Call ended (for all participants)
+    CallEnded { call_id: String, reason: String },
+
     // ========================================================================
     // Contact Events
     // ========================================================================

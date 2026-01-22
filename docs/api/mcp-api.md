@@ -271,16 +271,125 @@ Route through `CanvasService` for MCP-UI parity.
 
 Route through `CallService` for MCP-UI parity.
 
+#### Call Management
+
 | Tool | Description |
 |------|-------------|
-| `start_voice_call` | Start a call |
-| `join_call` | Join an active call |
-| `end_call` | End/leave a call |
-| `toggle_mute` | Mute/unmute audio |
-| `toggle_video` | Enable/disable video |
-| `share_screen` | Start/stop screen sharing |
-| `get_call_status` | Get call status |
-| `get_call_participants` | List call participants |
+| `start_voice_call` | Start a voice or video call for an entity |
+| `join_call` | Join an active call by ID |
+| `end_call` | End or leave a call |
+
+#### Media Controls
+
+| Tool | Description |
+|------|-------------|
+| `toggle_mute` | Toggle audio mute state in a call |
+| `toggle_video` | Toggle video state in a call |
+| `share_screen` | Start or stop screen sharing in a call |
+| `list_media_devices` | List available microphones, speakers, and cameras |
+
+#### Call Status
+
+| Tool | Description |
+|------|-------------|
+| `get_call_status` | Get current call status including mute/video state |
+| `get_call_participants` | Get list of participants in a call |
+| `get_call_quality` | Get quality metrics for the current call |
+
+#### Call History
+
+| Tool | Description |
+|------|-------------|
+| `get_call_history` | Get call history with optional filtering |
+| `get_missed_calls` | Get missed call notifications |
+| `acknowledge_missed_call` | Acknowledge a missed call notification |
+
+#### Call Recording
+
+| Tool | Description |
+|------|-------------|
+| `get_call_recording` | Get recording status and info for the current call |
+| `start_call_recording` | Start recording the current call |
+| `stop_call_recording` | Stop recording the current call |
+
+#### Example: Start Voice Call
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "tools/call",
+  "params": {
+    "name": "start_voice_call",
+    "arguments": {
+      "entity_id": "group-abc123",
+      "video_enabled": false
+    }
+  },
+  "id": 1
+}
+```
+
+#### Example: Get Call History
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "tools/call",
+  "params": {
+    "name": "get_call_history",
+    "arguments": {
+      "limit": 10,
+      "call_type": "group"
+    }
+  },
+  "id": 2
+}
+
+// Response
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "content": [{
+      "type": "text",
+      "text": "{\"entries\": [{\"id\": \"call-123\", \"call_type\": \"group\", \"outcome\": \"completed\", \"participants\": [...], \"started_at\": 1706000000, \"duration_secs\": 1800}]}"
+    }]
+  },
+  "id": 2
+}
+```
+
+#### Example: Get Call Quality Metrics
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "tools/call",
+  "params": {
+    "name": "get_call_quality",
+    "arguments": {}
+  },
+  "id": 3
+}
+
+// Response
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "content": [{
+      "type": "text",
+      "text": "{\"rtt_ms\": 45, \"jitter_ms\": 3, \"packet_loss_percent\": 0.1, \"bitrate_kbps\": 2500, \"connection_quality\": \"excellent\"}"
+    }]
+  },
+  "id": 3
+}
+```
+
+#### Call Tool Limitations
+
+Note that MCP call tools can manage call state but cannot access actual media streams:
+- Media capture/playback requires platform integration
+- Screen sharing source selection happens via platform host
+- Recording requires local file system access
 
 ### Entity Management
 

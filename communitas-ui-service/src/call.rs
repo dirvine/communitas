@@ -25,17 +25,18 @@ use communitas_ui_api::call::{
     CallHistory, CallHistoryEntry, CallInfo, CallOutcome, CallSettings, CallSnapshot, CallState,
     CallType, ConnectionQuality, DeviceType, HistoryParticipant, MediaDevice, MediaError,
     MediaErrorKind, MissedCallNotification, MissedCallsSnapshot, Participant, ParticipantQuality,
-    ParticipantRole, QualityMetrics, RecordingInfo, RecordingState,
+    ParticipantRole, QualityMetrics, RecordingInfo, RecordingState, ScreenShareInfo,
+    ScreenShareSource,
 };
 use thiserror::Error;
-use tokio::sync::{RwLock, watch};
-use tracing::{debug, error, instrument, warn};
+use tokio::sync::{broadcast, RwLock, watch};
+use tracing::{debug, error, instrument, trace, warn};
 
 use crate::auth::{AuthController, AuthService, AuthStateSnapshot};
 use crate::util::current_timestamp_millis;
 use communitas_core::app::CommunitasApp;
 use communitas_core::command::{
-    CallResponse, CallStatusResponse, Command, Event, Query, QueryResponse,
+    CallResponse, CallStatusResponse, Command, Event, Query, QueryResponse, Subscription,
 };
 
 /// Errors returned by the call service.
@@ -73,6 +74,8 @@ pub enum CallError {
     NotRecording,
     #[error("recording already active")]
     AlreadyRecording,
+    #[error("screen share error: {0}")]
+    ScreenShareError(String),
 }
 
 /// Trait for platform-specific device enumeration.
@@ -183,6 +186,77 @@ impl DeviceEnumerator for NoDeviceEnumerator {
     }
 }
 
+// =============================================================================
+// Screen Source Enumeration
+// =============================================================================
+
+/// Trait for platform-specific screen source enumeration.
+///
+/// Screen capture requires platform-specific APIs to enumerate available monitors
+/// and windows. Platform hosts (e.g., Tauri, Dioxus desktop) should implement
+/// this trait to provide real screen source enumeration.
+///
+/// # Example Implementation (Tauri)
+///
+/// ```ignore
+/// struct TauriScreenSourceEnumerator;
+///
+/// #[async_trait]
+/// impl ScreenSourceEnumerator for TauriScreenSourceEnumerator {
+///     async fn enumerate_sources(&self) -> Result<Vec<ScreenShareSource>, CallError> {
+///         // Use platform screen capture APIs
+///         todo!()
+///     }
+/// }
+/// ```
+#[async_trait]
+pub trait ScreenSourceEnumerator: Send + Sync {
+    /// Enumerate all available screen share sources (monitors and windows).
+    ///
+    /// Returns a list of monitors and application windows that can be shared.
+    async fn enumerate_sources(&self) -> Result<Vec<ScreenShareSource>, CallError>;
+
+    /// Refresh thumbnails for all sources.
+    ///
+    /// Called periodically to update the picker preview images.
+    /// Default implementation calls `enumerate_sources` which should include thumbnails.
+    async fn refresh_thumbnails(&self) -> Result<Vec<ScreenShareSource>, CallError> {
+        self.enumerate_sources().await
+    }
+}
+
+/// Mock screen source enumerator for development and testing.
+///
+/// Returns placeholder sources when no platform-specific enumerator is available.
+#[derive(Debug, Default, Clone)]
+pub struct MockScreenSourceEnumerator;
+
+#[async_trait]
+impl ScreenSourceEnumerator for MockScreenSourceEnumerator {
+    async fn enumerate_sources(&self) -> Result<Vec<ScreenShareSource>, CallError> {
+        debug!("Using mock screen source enumeration");
+        Ok(vec![
+            ScreenShareSource::monitor("mock-monitor-1", "Built-in Display (Mock)", true),
+            ScreenShareSource::monitor("mock-monitor-2", "External Display (Mock)", false),
+            ScreenShareSource::window("mock-window-1", "Document.txt - TextEdit", "TextEdit"),
+            ScreenShareSource::window("mock-window-2", "Terminal", "Terminal"),
+            ScreenShareSource::window("mock-window-3", "Safari", "Safari"),
+        ])
+    }
+}
+
+/// No-op screen source enumerator for headless environments.
+#[derive(Debug, Default, Clone)]
+pub struct NoScreenSourceEnumerator;
+
+#[async_trait]
+impl ScreenSourceEnumerator for NoScreenSourceEnumerator {
+    async fn enumerate_sources(&self) -> Result<Vec<ScreenShareSource>, CallError> {
+        debug!("No screen source enumeration available - running headless");
+        Ok(Vec::new())
+    }
+}
+
 /// Verify that a device with the given ID and type exists in the available devices list.
 fn verify_device_exists(
     available_devices: &[MediaDevice],
@@ -227,6 +301,7 @@ pub struct CallService {
     rx: watch::Receiver<CallSnapshot>,
     state: Arc<RwLock<CallServiceState>>,
     device_enumerator: Arc<dyn DeviceEnumerator>,
+    screen_source_enumerator: Arc<dyn ScreenSourceEnumerator>,
     /// Call history with persistence
     history: Arc<RwLock<CallHistory>>,
     /// Watch channel for history updates
@@ -247,6 +322,8 @@ struct CallServiceState {
     available_devices: Vec<MediaDevice>,
     listen_only_mode: bool,
     is_screen_sharing: bool,
+    screen_share_info: Option<ScreenShareInfo>,
+    available_screen_sources: Vec<ScreenShareSource>,
     quality_metrics: QualityMetrics,
     participant_quality: Vec<ParticipantQuality>,
     is_recording: bool,
@@ -264,6 +341,8 @@ impl Default for CallServiceState {
             available_devices: Vec::new(),
             listen_only_mode: false,
             is_screen_sharing: false,
+            screen_share_info: None,
+            available_screen_sources: Vec::new(),
             quality_metrics: QualityMetrics::default(),
             participant_quality: Vec::new(),
             is_recording: false,
@@ -277,15 +356,24 @@ const DEFAULT_HISTORY_MAX_ENTRIES: usize = 500;
 
 #[allow(unused_variables)] // Mock implementation - params used for tracing but not actual logic
 impl CallService {
-    /// Create a new call service with the default mock device enumerator.
+    /// Create a new call service with the default mock device and screen source enumerators.
     ///
     /// For production use with real devices, use [`CallService::with_device_enumerator`]
     /// and provide a platform-specific [`DeviceEnumerator`] implementation.
     pub fn new(auth: Arc<AuthController>, app: Arc<CommunitasApp>) -> Self {
-        Self::with_device_enumerator(auth, app, Arc::new(MockDeviceEnumerator), None)
+        Self::with_enumerators(
+            auth,
+            app,
+            Arc::new(MockDeviceEnumerator),
+            Arc::new(MockScreenSourceEnumerator),
+            None,
+        )
     }
 
     /// Create a new call service with a custom device enumerator.
+    ///
+    /// Uses a mock screen source enumerator by default. For production use with
+    /// real screen capture, use [`CallService::with_enumerators`].
     ///
     /// # Arguments
     ///
@@ -306,6 +394,42 @@ impl CallService {
         device_enumerator: Arc<dyn DeviceEnumerator>,
         storage_path: Option<std::path::PathBuf>,
     ) -> Self {
+        Self::with_enumerators(
+            auth,
+            app,
+            device_enumerator,
+            Arc::new(MockScreenSourceEnumerator),
+            storage_path,
+        )
+    }
+
+    /// Create a new call service with custom device and screen source enumerators.
+    ///
+    /// This is the most flexible constructor for production use with platform-specific
+    /// device enumeration and screen capture capabilities.
+    ///
+    /// # Arguments
+    ///
+    /// * `auth` - Authentication controller for user identity
+    /// * `app` - Communitas application context
+    /// * `device_enumerator` - Platform-specific device enumerator implementation
+    /// * `screen_source_enumerator` - Platform-specific screen source enumerator
+    /// * `storage_path` - Optional path to persist call history
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let device_enum = Arc::new(TauriDeviceEnumerator::new());
+    /// let screen_enum = Arc::new(TauriScreenSourceEnumerator::new());
+    /// let call_service = CallService::with_enumerators(auth, app, device_enum, screen_enum, Some(path));
+    /// ```
+    pub fn with_enumerators(
+        auth: Arc<AuthController>,
+        app: Arc<CommunitasApp>,
+        device_enumerator: Arc<dyn DeviceEnumerator>,
+        screen_source_enumerator: Arc<dyn ScreenSourceEnumerator>,
+        storage_path: Option<std::path::PathBuf>,
+    ) -> Self {
         let (tx, rx) = watch::channel(CallSnapshot::default());
 
         // Load history from storage if path provided
@@ -324,14 +448,43 @@ impl CallService {
         let missed_snapshot = Self::build_missed_calls_snapshot(&history);
         let (missed_calls_tx, _missed_rx) = watch::channel(missed_snapshot);
 
+        let state = Arc::new(RwLock::new(CallServiceState::default()));
+        let history_arc = Arc::new(RwLock::new(history));
+
+        // Subscribe to call events for reactive updates
+        let event_rx = app.subscribe(Subscription::CallEvents);
+
+        // Clone what we need for the background task
+        let tx_clone = tx.clone();
+        let state_clone = state.clone();
+        let history_clone = history_arc.clone();
+        let history_tx_clone = history_tx.clone();
+        let missed_calls_tx_clone = missed_calls_tx.clone();
+        let storage_path_clone = storage_path.clone();
+
+        // Spawn background task to process call events
+        tokio::spawn(async move {
+            Self::event_loop(
+                event_rx,
+                tx_clone,
+                state_clone,
+                history_clone,
+                history_tx_clone,
+                missed_calls_tx_clone,
+                storage_path_clone,
+            )
+            .await;
+        });
+
         Self {
             auth,
             app,
             tx,
             rx,
-            state: Arc::new(RwLock::new(CallServiceState::default())),
+            state,
             device_enumerator,
-            history: Arc::new(RwLock::new(history)),
+            screen_source_enumerator,
+            history: history_arc,
             history_tx,
             missed_calls_tx,
             storage_path,
@@ -554,6 +707,8 @@ impl CallService {
             settings: state.settings.clone(),
             listen_only_mode: state.listen_only_mode,
             is_screen_sharing: state.is_screen_sharing,
+            screen_share_info: state.screen_share_info.clone(),
+            available_screen_sources: state.available_screen_sources.clone(),
             quality_metrics: state.quality_metrics.clone(),
             participant_quality: state.participant_quality.clone(),
             is_recording: state.is_recording,
@@ -1984,6 +2139,7 @@ impl CallService {
         {
             let mut state = self.state.write().await;
             state.is_screen_sharing = false;
+            state.screen_share_info = None;
             if let Some(participant) = state.participants.iter_mut().find(|p| p.id == my_id) {
                 participant.is_screen_sharing = false;
             }
@@ -1997,6 +2153,177 @@ impl CallService {
 
         debug!(call_id = %call_id, "Screen share stopped successfully");
         Ok(())
+    }
+
+    /// Enumerate available screen share sources (monitors and windows).
+    ///
+    /// This method uses the configured [`ScreenSourceEnumerator`] to discover
+    /// available monitors and application windows that can be shared. Results
+    /// are cached in the service state and returned.
+    ///
+    /// For production use, provide a platform-specific enumerator that uses
+    /// native APIs to capture real screen/window information with thumbnails.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CallError::ScreenShareError`] if enumeration fails.
+    #[instrument(skip(self), name = "ui.call.enumerate_screen_sources")]
+    pub async fn enumerate_screen_sources(&self) -> Result<Vec<ScreenShareSource>, CallError> {
+        let sources = self.screen_source_enumerator.enumerate_sources().await?;
+
+        // Cache sources in state for UI access
+        {
+            let mut state = self.state.write().await;
+            state.available_screen_sources = sources.clone();
+        }
+        self.broadcast().await;
+
+        debug!(count = sources.len(), "Enumerated screen share sources");
+        Ok(sources)
+    }
+
+    /// Refresh screen share source thumbnails.
+    ///
+    /// This updates the cached thumbnails for previously enumerated sources.
+    /// Useful when the picker dialog remains open and sources may have changed.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CallError::ScreenShareError`] if refresh fails.
+    #[instrument(skip(self), name = "ui.call.refresh_screen_sources")]
+    pub async fn refresh_screen_sources(&self) -> Result<Vec<ScreenShareSource>, CallError> {
+        let sources = self
+            .screen_source_enumerator
+            .refresh_thumbnails()
+            .await?;
+
+        // Update cached sources
+        {
+            let mut state = self.state.write().await;
+            state.available_screen_sources = sources.clone();
+        }
+        self.broadcast().await;
+
+        debug!(count = sources.len(), "Refreshed screen share source thumbnails");
+        Ok(sources)
+    }
+
+    /// Start screen sharing with a specific source.
+    ///
+    /// This method starts screen sharing for the specified monitor or window.
+    /// Use [`enumerate_screen_sources`](Self::enumerate_screen_sources) first to
+    /// get available sources with their IDs.
+    ///
+    /// # Arguments
+    ///
+    /// * `source_id` - The ID of the screen source to share
+    /// * `share_audio` - Whether to share system audio (if supported)
+    /// * `allow_control` - Whether to allow remote control (if supported)
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CallError::NotInCall`] if the user is not currently in a call.
+    /// Returns [`CallError::ScreenShareError`] if the source is not found.
+    /// Returns [`CallError::CoreError`] if the core command execution fails.
+    #[instrument(skip(self), name = "ui.call.start_screen_share_with_source", fields(source_id))]
+    pub async fn start_screen_share_with_source(
+        &self,
+        source_id: &str,
+        share_audio: bool,
+        allow_control: bool,
+    ) -> Result<(), CallError> {
+        // Find the source in cached sources
+        let source = {
+            let state = self.state.read().await;
+            state
+                .available_screen_sources
+                .iter()
+                .find(|s| s.id == source_id)
+                .cloned()
+        };
+
+        let source = source.ok_or_else(|| {
+            CallError::ScreenShareError(format!("Screen source not found: {}", source_id))
+        })?;
+
+        // Extract call_id and my_id from state
+        let (call_id, my_id) = {
+            let state = self.state.read().await;
+            if !state.call_state.is_active() {
+                return Err(CallError::NotInCall);
+            }
+            let call = state.current_call.as_ref().ok_or(CallError::NotInCall)?;
+            (call.call_id.clone(), call.my_participant_id.clone())
+        };
+
+        // Build and execute the StartScreenShare command
+        // Note: The core Command may need to be extended to accept source_id
+        // For now, we use the basic StartScreenShare command
+        let cmd = Command::StartScreenShare {
+            call_id: call_id.clone(),
+        };
+
+        let events = match self.app.execute(cmd).await {
+            Ok(events) => events,
+            Err(e) => {
+                return Err(CallError::CoreError(e.message.clone()));
+            }
+        };
+
+        // Find the ScreenShareStarted event in the response
+        let screen_share_started = events.iter().any(
+            |event| matches!(event, Event::ScreenShareStarted { call_id: id } if *id == call_id),
+        );
+
+        if !screen_share_started {
+            warn!("No ScreenShareStarted event returned from core, updating state anyway");
+        }
+
+        // Get current timestamp
+        let started_at = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
+
+        // Update state with screen share info
+        {
+            let mut state = self.state.write().await;
+            state.is_screen_sharing = true;
+            state.screen_share_info = Some(ScreenShareInfo {
+                source: source.clone(),
+                started_at,
+                allow_control,
+                share_audio,
+            });
+            if let Some(participant) = state.participants.iter_mut().find(|p| p.id == my_id) {
+                participant.is_screen_sharing = true;
+            }
+            if let Some(ref mut call) = state.current_call
+                && let Some(p) = call.participants.iter_mut().find(|p| p.id == my_id)
+            {
+                p.is_screen_sharing = true;
+            }
+        }
+        self.broadcast().await;
+
+        debug!(
+            call_id = %call_id,
+            source_id = %source_id,
+            source_name = %source.name,
+            "Screen share started with specific source"
+        );
+        Ok(())
+    }
+
+    /// Get the current screen share info if actively sharing.
+    pub fn current_screen_share_info(&self) -> Option<ScreenShareInfo> {
+        // Use blocking_read since this is a sync method
+        self.rx.borrow().screen_share_info.clone()
+    }
+
+    /// Get cached available screen sources.
+    pub fn available_screen_sources(&self) -> Vec<ScreenShareSource> {
+        self.rx.borrow().available_screen_sources.clone()
     }
 
     /// Set audio input enabled state.
@@ -2535,12 +2862,395 @@ impl CallService {
         }
         None
     }
+
+    // =========================================================================
+    // Background Event Loop
+    // =========================================================================
+
+    /// Background event loop that processes call events and updates the watch channel.
+    ///
+    /// This runs continuously, processing remote participant events and reconnection
+    /// state changes. It handles events like:
+    /// - Remote participants joining/leaving
+    /// - Remote participant mute/video/screen share changes
+    /// - Connection state changes (reconnecting, reconnected, disconnected)
+    #[allow(clippy::too_many_arguments)]
+    async fn event_loop(
+        mut event_rx: broadcast::Receiver<Event>,
+        tx: watch::Sender<CallSnapshot>,
+        state: Arc<RwLock<CallServiceState>>,
+        history: Arc<RwLock<CallHistory>>,
+        history_tx: watch::Sender<CallHistory>,
+        missed_calls_tx: watch::Sender<MissedCallsSnapshot>,
+        storage_path: Option<std::path::PathBuf>,
+    ) {
+        loop {
+            match event_rx.recv().await {
+                Ok(event) => {
+                    let should_broadcast = Self::handle_call_event(
+                        &event,
+                        &state,
+                        &history,
+                        &history_tx,
+                        &missed_calls_tx,
+                        &storage_path,
+                    )
+                    .await;
+
+                    if should_broadcast {
+                        // Broadcast updated state
+                        let current_state = state.read().await;
+                        let snapshot = CallSnapshot {
+                            state: current_state.call_state,
+                            call_info: current_state.current_call.clone(),
+                            participants: current_state.participants.clone(),
+                            media_errors: current_state.media_errors.clone(),
+                            available_devices: current_state.available_devices.clone(),
+                            settings: current_state.settings.clone(),
+                            listen_only_mode: current_state.listen_only_mode,
+                            is_screen_sharing: current_state.is_screen_sharing,
+                            screen_share_info: current_state.screen_share_info.clone(),
+                            available_screen_sources: current_state.available_screen_sources.clone(),
+                            quality_metrics: current_state.quality_metrics.clone(),
+                            participant_quality: current_state.participant_quality.clone(),
+                            is_recording: current_state.is_recording,
+                            recording_info: current_state.recording_info.clone(),
+                        };
+                        let _ = tx.send(snapshot);
+                    }
+                }
+                Err(broadcast::error::RecvError::Lagged(n)) => {
+                    // We missed some events - this is expected under high load
+                    debug!(
+                        missed_events = n,
+                        "Call event receiver lagged, some events were missed"
+                    );
+                }
+                Err(broadcast::error::RecvError::Closed) => {
+                    // Channel closed, stop the loop
+                    debug!("Call event channel closed, stopping event loop");
+                    break;
+                }
+            }
+        }
+    }
+
+    /// Handle a single call event and return whether the state should be broadcast.
+    async fn handle_call_event(
+        event: &Event,
+        state: &Arc<RwLock<CallServiceState>>,
+        history: &Arc<RwLock<CallHistory>>,
+        history_tx: &watch::Sender<CallHistory>,
+        missed_calls_tx: &watch::Sender<MissedCallsSnapshot>,
+        storage_path: &Option<std::path::PathBuf>,
+    ) -> bool {
+        match event {
+            // Handle remote participant joining
+            Event::ParticipantJoined {
+                call_id,
+                participant_id,
+                display_name,
+                four_words,
+            } => {
+                trace!(
+                    call_id = %call_id,
+                    participant_id = %participant_id,
+                    display_name = %display_name,
+                    "Remote participant joined"
+                );
+
+                let mut state_guard = state.write().await;
+
+                // Only process if we're in the same call
+                if let Some(ref mut call) = state_guard.current_call
+                    && call.call_id == *call_id
+                {
+                    // Check if participant already exists
+                    let exists = call.participants.iter().any(|p| p.id == *participant_id);
+                    if !exists {
+                        let new_participant = Participant {
+                            id: participant_id.clone(),
+                            display_name: display_name.clone(),
+                            four_words: four_words.clone().unwrap_or_default(),
+                            role: ParticipantRole::Participant,
+                            is_muted: false,
+                            is_muted_by_host: false,
+                            is_video_enabled: false,
+                            is_speaking: false,
+                            is_screen_sharing: false,
+                            hand_raised: false,
+                            audio_level: 0.0,
+                            joined_at: current_timestamp_millis(),
+                        };
+                        call.participants.push(new_participant.clone());
+                        state_guard.participants.push(new_participant);
+                        return true;
+                    }
+                }
+                false
+            }
+
+            // Handle remote participant leaving
+            Event::ParticipantLeft {
+                call_id,
+                participant_id,
+            } => {
+                trace!(
+                    call_id = %call_id,
+                    participant_id = %participant_id,
+                    "Remote participant left"
+                );
+
+                let mut state_guard = state.write().await;
+
+                if let Some(ref mut call) = state_guard.current_call
+                    && call.call_id == *call_id
+                {
+                    call.participants.retain(|p| p.id != *participant_id);
+                    state_guard.participants.retain(|p| p.id != *participant_id);
+                    // Also clean up participant quality
+                    state_guard
+                        .participant_quality
+                        .retain(|q| q.participant_id != *participant_id);
+                    return true;
+                }
+                false
+            }
+
+            // Handle remote participant mute change
+            Event::ParticipantMuteChanged {
+                call_id,
+                participant_id,
+                is_muted,
+            } => {
+                trace!(
+                    call_id = %call_id,
+                    participant_id = %participant_id,
+                    is_muted = %is_muted,
+                    "Remote participant mute changed"
+                );
+
+                let mut state_guard = state.write().await;
+
+                if let Some(ref mut call) = state_guard.current_call
+                    && call.call_id == *call_id
+                {
+                    if let Some(p) = call.participants.iter_mut().find(|p| p.id == *participant_id)
+                    {
+                        p.is_muted = *is_muted;
+                    }
+                    if let Some(p) = state_guard
+                        .participants
+                        .iter_mut()
+                        .find(|p| p.id == *participant_id)
+                    {
+                        p.is_muted = *is_muted;
+                    }
+                    return true;
+                }
+                false
+            }
+
+            // Handle remote participant video change
+            Event::ParticipantVideoChanged {
+                call_id,
+                participant_id,
+                is_video_enabled,
+            } => {
+                trace!(
+                    call_id = %call_id,
+                    participant_id = %participant_id,
+                    is_video_enabled = %is_video_enabled,
+                    "Remote participant video changed"
+                );
+
+                let mut state_guard = state.write().await;
+
+                if let Some(ref mut call) = state_guard.current_call
+                    && call.call_id == *call_id
+                {
+                    if let Some(p) = call.participants.iter_mut().find(|p| p.id == *participant_id)
+                    {
+                        p.is_video_enabled = *is_video_enabled;
+                    }
+                    if let Some(p) = state_guard
+                        .participants
+                        .iter_mut()
+                        .find(|p| p.id == *participant_id)
+                    {
+                        p.is_video_enabled = *is_video_enabled;
+                    }
+                    return true;
+                }
+                false
+            }
+
+            // Handle remote participant screen share change
+            Event::ParticipantScreenShareChanged {
+                call_id,
+                participant_id,
+                is_screen_sharing,
+            } => {
+                trace!(
+                    call_id = %call_id,
+                    participant_id = %participant_id,
+                    is_screen_sharing = %is_screen_sharing,
+                    "Remote participant screen share changed"
+                );
+
+                let mut state_guard = state.write().await;
+
+                if let Some(ref mut call) = state_guard.current_call
+                    && call.call_id == *call_id
+                {
+                    if let Some(p) = call.participants.iter_mut().find(|p| p.id == *participant_id)
+                    {
+                        p.is_screen_sharing = *is_screen_sharing;
+                    }
+                    if let Some(p) = state_guard
+                        .participants
+                        .iter_mut()
+                        .find(|p| p.id == *participant_id)
+                    {
+                        p.is_screen_sharing = *is_screen_sharing;
+                    }
+                    return true;
+                }
+                false
+            }
+
+            // Handle call reconnecting state
+            Event::CallReconnecting { call_id } => {
+                trace!(call_id = %call_id, "Call is reconnecting");
+
+                let mut state_guard = state.write().await;
+
+                if let Some(ref call) = state_guard.current_call
+                    && call.call_id == *call_id
+                {
+                    state_guard.call_state = CallState::Reconnecting;
+                    return true;
+                }
+                false
+            }
+
+            // Handle call reconnected state.
+            //
+            // After successful reconnection, the core will re-emit ParticipantJoined events
+            // for all current participants to rebuild the UI state. We clear stale participant
+            // state (except local user) to ensure the rebuild starts fresh.
+            Event::CallReconnected { call_id } => {
+                debug!(call_id = %call_id, "Call reconnected successfully, preparing for state resync");
+
+                let mut state_guard = state.write().await;
+
+                if let Some(ref call) = state_guard.current_call
+                    && call.call_id == *call_id
+                    && state_guard.call_state == CallState::Reconnecting
+                {
+                    // Clear remote participant state to allow clean rebuild from events.
+                    // Keep local participant info intact.
+                    let local_participant_id = call.my_participant_id.clone();
+                    state_guard.participants.retain(|p| p.id == local_participant_id);
+
+                    // Clear any stale media errors
+                    state_guard.media_errors.clear();
+
+                    state_guard.call_state = CallState::InCall;
+                    debug!(
+                        "Reconnection complete, awaiting participant events. Local participant: {}",
+                        local_participant_id
+                    );
+                    return true;
+                }
+                false
+            }
+
+            // Handle call ended (remote disconnect or call terminated)
+            Event::CallEnded { call_id, reason } => {
+                trace!(call_id = %call_id, reason = %reason, "Call ended");
+
+                let mut state_guard = state.write().await;
+
+                if let Some(ref call) = state_guard.current_call
+                    && call.call_id == *call_id
+                {
+                    // Update history entry with outcome
+                    {
+                        let mut hist = history.write().await;
+                        hist.update(call_id, |entry| {
+                            entry.finalize(CallOutcome::Completed);
+                        });
+                        // Broadcast history update
+                        let _ = history_tx.send(hist.clone());
+                        let missed_snapshot = Self::build_missed_calls_snapshot(&hist);
+                        let _ = missed_calls_tx.send(missed_snapshot);
+                        // Persist history
+                        if let Some(path) = storage_path
+                            && let Err(e) = Self::save_history_to_file(path, &hist)
+                        {
+                            error!("Failed to save call history: {}", e);
+                        }
+                    }
+
+                    // Clean up call state
+                    state_guard.call_state = CallState::Disconnected;
+                    state_guard.current_call = None;
+                    state_guard.participants.clear();
+                    state_guard.media_errors.clear();
+                    state_guard.listen_only_mode = false;
+                    state_guard.is_screen_sharing = false;
+                    state_guard.quality_metrics = QualityMetrics::default();
+                    state_guard.participant_quality.clear();
+                    state_guard.is_recording = false;
+                    state_guard.recording_info = None;
+
+                    return true;
+                }
+                false
+            }
+
+            // Other call events that we process for logging but don't change UI state
+            Event::CallStarted { call_id, entity_id } => {
+                trace!(call_id = %call_id, entity_id = %entity_id, "Call started event received");
+                false
+            }
+            Event::CallJoined { call_id } => {
+                trace!(call_id = %call_id, "Call joined event received");
+                false
+            }
+            Event::CallLeft { call_id } => {
+                trace!(call_id = %call_id, "Call left event received");
+                false
+            }
+            Event::VideoToggled { call_id, enabled } => {
+                trace!(call_id = %call_id, enabled = %enabled, "Video toggled event received");
+                false
+            }
+            Event::AudioToggled { call_id, enabled } => {
+                trace!(call_id = %call_id, enabled = %enabled, "Audio toggled event received");
+                false
+            }
+            Event::ScreenShareStarted { call_id } => {
+                trace!(call_id = %call_id, "Screen share started event received");
+                false
+            }
+            Event::ScreenShareStopped { call_id } => {
+                trace!(call_id = %call_id, "Screen share stopped event received");
+                false
+            }
+
+            // Non-call events - ignore
+            _ => false,
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::storage::UiStorage;
+    use communitas_ui_api::call::ScreenShareSourceType;
     use communitas_ui_api::MediaErrorKind;
     use tempfile::TempDir;
 
@@ -2727,6 +3437,110 @@ mod tests {
         let result = service.stop_screen_share().await;
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), CallError::NotInCall));
+    }
+
+    #[tokio::test]
+    async fn enumerate_screen_sources_returns_mock_sources() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        // Enumerate should work even when not in a call
+        let sources = service.enumerate_screen_sources().await.unwrap();
+
+        // MockScreenSourceEnumerator returns 5 sources
+        assert_eq!(sources.len(), 5);
+
+        // Check that we have monitors and windows
+        let monitors: Vec<_> = sources
+            .iter()
+            .filter(|s| s.source_type == ScreenShareSourceType::Monitor)
+            .collect();
+        let windows: Vec<_> = sources
+            .iter()
+            .filter(|s| s.source_type == ScreenShareSourceType::Window)
+            .collect();
+
+        assert_eq!(monitors.len(), 2); // Built-in Display and External Display
+        assert_eq!(windows.len(), 3); // TextEdit, Terminal, Safari
+
+        // Check that sources are cached in state
+        let cached = service.available_screen_sources();
+        assert_eq!(cached.len(), 5);
+    }
+
+    #[tokio::test]
+    async fn refresh_screen_sources_updates_cache() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        // First enumerate
+        let sources1 = service.enumerate_screen_sources().await.unwrap();
+        assert_eq!(sources1.len(), 5);
+
+        // Refresh should return same mock sources
+        let sources2 = service.refresh_screen_sources().await.unwrap();
+        assert_eq!(sources2.len(), 5);
+
+        // Cache should be updated
+        let cached = service.available_screen_sources();
+        assert_eq!(cached.len(), 5);
+    }
+
+    #[tokio::test]
+    async fn start_screen_share_with_source_requires_valid_source() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        // Without enumerating first, source cache is empty
+        let result = service
+            .start_screen_share_with_source("unknown-source", false, false)
+            .await;
+
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), CallError::ScreenShareError(_)));
+    }
+
+    #[tokio::test]
+    async fn start_screen_share_with_source_requires_call() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        // Enumerate sources first to populate cache
+        service.enumerate_screen_sources().await.unwrap();
+
+        // Now try to start with a valid source but no active call
+        let result = service
+            .start_screen_share_with_source("mock-monitor-1", false, false)
+            .await;
+
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), CallError::NotInCall));
+    }
+
+    #[tokio::test]
+    async fn screen_share_info_starts_empty() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        let info = service.current_screen_share_info();
+        assert!(info.is_none());
+    }
+
+    #[tokio::test]
+    async fn available_screen_sources_starts_empty() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        let sources = service.available_screen_sources();
+        assert!(sources.is_empty());
+    }
+
+    #[tokio::test]
+    async fn screen_source_types_have_labels() {
+        assert_eq!(ScreenShareSourceType::Monitor.label(), "Entire Screen");
+        assert_eq!(ScreenShareSourceType::Window.label(), "Application Window");
+        assert_eq!(ScreenShareSourceType::Monitor.icon(), "display");
+        assert_eq!(ScreenShareSourceType::Window.icon(), "window");
     }
 
     #[tokio::test]
@@ -3998,5 +4812,253 @@ mod tests {
 
         let bob_calls: Vec<_> = snap.for_caller("bob");
         assert_eq!(bob_calls.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn reconnection_clears_remote_participants() {
+        // Create the state components needed for handle_call_event
+        let state = Arc::new(RwLock::new(CallServiceState::default()));
+        let history = Arc::new(RwLock::new(CallHistory::default()));
+        let (history_tx, _history_rx) = watch::channel(CallHistory::default());
+        let (missed_calls_tx, _missed_calls_rx) = watch::channel(MissedCallsSnapshot::default());
+        let storage_path: Option<std::path::PathBuf> = None;
+
+        // Set up a call in Reconnecting state with both local and remote participants
+        let call_id = "test-call-123".to_string();
+        let local_participant_id = "local-user".to_string();
+
+        {
+            let mut state_guard = state.write().await;
+            state_guard.call_state = CallState::Reconnecting;
+            state_guard.current_call = Some(CallInfo {
+                call_id: call_id.clone(),
+                entity_id: "entity-1".to_string(),
+                entity_name: "Test Call".to_string(),
+                call_type: CallType::Direct,
+                participants: vec![],
+                started_at: 1000,
+                duration_seconds: 60,
+                my_participant_id: local_participant_id.clone(),
+                host_id: local_participant_id.clone(),
+                max_participants: 10,
+                is_locked: false,
+                mute_on_entry: false,
+            });
+            // Add local participant
+            state_guard.participants.push(Participant {
+                id: local_participant_id.clone(),
+                display_name: "Local User".to_string(),
+                four_words: "ocean-forest-moon-star".to_string(),
+                role: ParticipantRole::Host,
+                is_muted: false,
+                is_muted_by_host: false,
+                is_video_enabled: true,
+                is_speaking: false,
+                is_screen_sharing: false,
+                hand_raised: false,
+                audio_level: 0.0,
+                joined_at: 1000,
+            });
+            // Add remote participants
+            state_guard.participants.push(Participant {
+                id: "remote-1".to_string(),
+                display_name: "Remote User 1".to_string(),
+                four_words: "happy-river-cloud-tree".to_string(),
+                role: ParticipantRole::Participant,
+                is_muted: false,
+                is_muted_by_host: false,
+                is_video_enabled: false,
+                is_speaking: false,
+                is_screen_sharing: false,
+                hand_raised: false,
+                audio_level: 0.0,
+                joined_at: 1001,
+            });
+            state_guard.participants.push(Participant {
+                id: "remote-2".to_string(),
+                display_name: "Remote User 2".to_string(),
+                four_words: "sunny-meadow-lake-bird".to_string(),
+                role: ParticipantRole::Participant,
+                is_muted: true,
+                is_muted_by_host: false,
+                is_video_enabled: true,
+                is_speaking: false,
+                is_screen_sharing: false,
+                hand_raised: false,
+                audio_level: 0.0,
+                joined_at: 1002,
+            });
+        }
+
+        // Verify initial state: 3 participants, Reconnecting state
+        {
+            let state_guard = state.read().await;
+            assert_eq!(state_guard.call_state, CallState::Reconnecting);
+            assert_eq!(state_guard.participants.len(), 3);
+        }
+
+        // Send CallReconnected event
+        let event = Event::CallReconnected {
+            call_id: call_id.clone(),
+        };
+        let changed = CallService::handle_call_event(
+            &event,
+            &state,
+            &history,
+            &history_tx,
+            &missed_calls_tx,
+            &storage_path,
+        )
+        .await;
+
+        // Verify: state changed, remote participants cleared, local remains
+        assert!(changed, "event should indicate state changed");
+
+        let state_guard = state.read().await;
+        assert_eq!(
+            state_guard.call_state,
+            CallState::InCall,
+            "state should transition to InCall"
+        );
+        assert_eq!(
+            state_guard.participants.len(),
+            1,
+            "only local participant should remain"
+        );
+        assert_eq!(
+            state_guard.participants[0].id, local_participant_id,
+            "remaining participant should be local user"
+        );
+    }
+
+    #[tokio::test]
+    async fn participant_joined_adds_to_list() {
+        // Test that ParticipantJoined events properly add participants
+        let state = Arc::new(RwLock::new(CallServiceState::default()));
+        let history = Arc::new(RwLock::new(CallHistory::default()));
+        let (history_tx, _history_rx) = watch::channel(CallHistory::default());
+        let (missed_calls_tx, _missed_calls_rx) = watch::channel(MissedCallsSnapshot::default());
+        let storage_path: Option<std::path::PathBuf> = None;
+
+        let call_id = "test-call-456".to_string();
+
+        // Set up an active call
+        {
+            let mut state_guard = state.write().await;
+            state_guard.call_state = CallState::InCall;
+            state_guard.current_call = Some(CallInfo {
+                call_id: call_id.clone(),
+                entity_id: "entity-1".to_string(),
+                entity_name: "Test Call".to_string(),
+                call_type: CallType::Group,
+                participants: vec![],
+                started_at: 1000,
+                duration_seconds: 60,
+                my_participant_id: "local-user".to_string(),
+                host_id: "local-user".to_string(),
+                max_participants: 10,
+                is_locked: false,
+                mute_on_entry: false,
+            });
+        }
+
+        // Send ParticipantJoined event
+        let event = Event::ParticipantJoined {
+            call_id: call_id.clone(),
+            participant_id: "new-participant".to_string(),
+            display_name: "New User".to_string(),
+            four_words: Some("test-four-word-code".to_string()),
+        };
+        let changed = CallService::handle_call_event(
+            &event,
+            &state,
+            &history,
+            &history_tx,
+            &missed_calls_tx,
+            &storage_path,
+        )
+        .await;
+
+        assert!(changed, "event should indicate state changed");
+
+        let state_guard = state.read().await;
+        assert_eq!(state_guard.participants.len(), 1);
+        assert_eq!(state_guard.participants[0].id, "new-participant");
+        assert_eq!(state_guard.participants[0].display_name, "New User");
+    }
+
+    #[tokio::test]
+    async fn participant_left_removes_from_list() {
+        // Test that ParticipantLeft events properly remove participants
+        let state = Arc::new(RwLock::new(CallServiceState::default()));
+        let history = Arc::new(RwLock::new(CallHistory::default()));
+        let (history_tx, _history_rx) = watch::channel(CallHistory::default());
+        let (missed_calls_tx, _missed_calls_rx) = watch::channel(MissedCallsSnapshot::default());
+        let storage_path: Option<std::path::PathBuf> = None;
+
+        let call_id = "test-call-789".to_string();
+
+        // Set up an active call with a participant
+        {
+            let mut state_guard = state.write().await;
+            state_guard.call_state = CallState::InCall;
+            state_guard.current_call = Some(CallInfo {
+                call_id: call_id.clone(),
+                entity_id: "entity-1".to_string(),
+                entity_name: "Test Call".to_string(),
+                call_type: CallType::Group,
+                participants: vec![],
+                started_at: 1000,
+                duration_seconds: 60,
+                my_participant_id: "local-user".to_string(),
+                host_id: "local-user".to_string(),
+                max_participants: 10,
+                is_locked: false,
+                mute_on_entry: false,
+            });
+            state_guard.participants.push(Participant {
+                id: "participant-to-remove".to_string(),
+                display_name: "Leaving User".to_string(),
+                four_words: "test-words".to_string(),
+                role: ParticipantRole::Participant,
+                is_muted: false,
+                is_muted_by_host: false,
+                is_video_enabled: true,
+                is_speaking: false,
+                is_screen_sharing: false,
+                hand_raised: false,
+                audio_level: 0.0,
+                joined_at: 1000,
+            });
+        }
+
+        // Verify participant exists
+        {
+            let state_guard = state.read().await;
+            assert_eq!(state_guard.participants.len(), 1);
+        }
+
+        // Send ParticipantLeft event
+        let event = Event::ParticipantLeft {
+            call_id: call_id.clone(),
+            participant_id: "participant-to-remove".to_string(),
+        };
+        let changed = CallService::handle_call_event(
+            &event,
+            &state,
+            &history,
+            &history_tx,
+            &missed_calls_tx,
+            &storage_path,
+        )
+        .await;
+
+        assert!(changed, "event should indicate state changed");
+
+        let state_guard = state.read().await;
+        assert!(
+            state_guard.participants.is_empty(),
+            "participant should be removed"
+        );
     }
 }

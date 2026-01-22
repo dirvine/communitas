@@ -19,7 +19,7 @@ use std::sync::Arc;
 
 use audit::AuditService;
 use auth::AuthController;
-use call::{CallService, DeviceEnumerator};
+use call::{CallService, DeviceEnumerator, ScreenSourceEnumerator};
 use canvas::CanvasService;
 use communitas_core::app::CommunitasApp;
 use communitas_core::generate_id_words;
@@ -178,6 +178,64 @@ impl UiServices {
         })
     }
 
+    /// Create services with custom device and screen source enumerators.
+    ///
+    /// This is the most flexible constructor for production use with platform-specific
+    /// device and screen capture enumeration.
+    ///
+    /// # Arguments
+    ///
+    /// * `storage` - The storage configuration
+    /// * `app` - The Communitas core application instance
+    /// * `device_enumerator` - Platform-specific device enumerator implementation
+    /// * `screen_source_enumerator` - Platform-specific screen source enumerator
+    ///
+    /// # Errors
+    /// Returns [`UiServiceInitError`] if the auth controller or navigation store
+    /// cannot be initialized from the provided storage.
+    pub fn new_with_enumerators(
+        storage: UiStorage,
+        app: Arc<CommunitasApp>,
+        device_enumerator: Arc<dyn DeviceEnumerator>,
+        screen_source_enumerator: Arc<dyn ScreenSourceEnumerator>,
+    ) -> Result<Self, UiServiceInitError> {
+        let auth = Arc::new(AuthController::new(storage.clone())?);
+        let navigation = Arc::new(NavigationStore::new(storage.clone())?);
+        let directory = Arc::new(DirectoryService::new(auth.clone()));
+        let storage_arc = Arc::new(storage.clone());
+        let presence = Arc::new(PresenceService::new(auth.clone(), directory.clone()));
+        let messaging = Arc::new(MessagingService::new(
+            auth.clone(),
+            app.clone(),
+            storage_arc,
+            presence.subscribe(),
+        ));
+        let kanban = Arc::new(KanbanService::new(auth.clone(), app.clone()));
+        let canvas = Arc::new(CanvasService::new(auth.clone(), app.clone()));
+        let drive = Arc::new(DriveService::new(auth.clone(), app.clone()));
+        let call = Arc::new(CallService::with_enumerators(
+            auth.clone(),
+            app.clone(),
+            device_enumerator,
+            screen_source_enumerator,
+            Some(storage.call_history_file()),
+        ));
+        let audit = Arc::new(AuditService::new(storage.root().join("audit_logs")));
+        Ok(Self {
+            storage,
+            auth,
+            navigation,
+            directory,
+            messaging,
+            presence,
+            kanban,
+            canvas,
+            drive,
+            call,
+            audit,
+        })
+    }
+
     /// Bootstrap with a custom device enumerator.
     ///
     /// This is the recommended way to initialize UiServices when you have
@@ -211,6 +269,41 @@ impl UiServices {
             .map_err(|e| UiServiceInitError::AppInit(e.to_string()))?;
 
         Self::new_with_device_enumerator(storage, Arc::new(app), device_enumerator)
+    }
+
+    /// Bootstrap with custom device and screen source enumerators.
+    ///
+    /// This is the most flexible bootstrap for production use with platform-specific
+    /// device and screen capture enumeration.
+    ///
+    /// # Errors
+    /// Returns an error if storage discovery fails or the app cannot be initialized.
+    pub fn bootstrap_with_enumerators(
+        device_enumerator: Arc<dyn DeviceEnumerator>,
+        screen_source_enumerator: Arc<dyn ScreenSourceEnumerator>,
+    ) -> Result<Self, UiServiceInitError> {
+        let storage = UiStorage::discover()?;
+        let storage_path = storage.root_string()?;
+
+        let id_words =
+            generate_id_words().map_err(|e| UiServiceInitError::AppInit(e.to_string()))?;
+
+        let rt = tokio::runtime::Runtime::new()
+            .map_err(|e| UiServiceInitError::AppInit(format!("failed to create runtime: {e}")))?;
+
+        let app = rt
+            .block_on(async {
+                CommunitasApp::new(
+                    id_words,
+                    "Bootstrap User".to_string(),
+                    "Desktop".to_string(),
+                    storage_path,
+                )
+                .await
+            })
+            .map_err(|e| UiServiceInitError::AppInit(e.to_string()))?;
+
+        Self::new_with_enumerators(storage, Arc::new(app), device_enumerator, screen_source_enumerator)
     }
 
     /// Access the storage configuration.

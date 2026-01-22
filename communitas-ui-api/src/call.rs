@@ -158,6 +158,121 @@ impl RecordingState {
     }
 }
 
+/// Type of screen share source.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ScreenShareSourceType {
+    /// Entire monitor/display.
+    Monitor,
+    /// Single application window.
+    Window,
+}
+
+impl ScreenShareSourceType {
+    /// Returns a human-readable label for the source type.
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Monitor => "Entire Screen",
+            Self::Window => "Application Window",
+        }
+    }
+
+    /// Returns an icon name for UI display.
+    pub fn icon(&self) -> &'static str {
+        match self {
+            Self::Monitor => "display",
+            Self::Window => "window",
+        }
+    }
+}
+
+/// A screen share source (monitor or window) that can be shared.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ScreenShareSource {
+    /// Unique identifier for this source.
+    pub id: String,
+    /// Display name (e.g., "Built-in Display" or "Firefox").
+    pub name: String,
+    /// Type of source.
+    pub source_type: ScreenShareSourceType,
+    /// Optional application name (for windows).
+    pub app_name: Option<String>,
+    /// Whether this is the primary display (for monitors).
+    pub is_primary: bool,
+    /// Base64-encoded PNG thumbnail data.
+    pub thumbnail: Option<String>,
+    /// Thumbnail width in pixels.
+    pub thumbnail_width: Option<u32>,
+    /// Thumbnail height in pixels.
+    pub thumbnail_height: Option<u32>,
+}
+
+impl ScreenShareSource {
+    /// Create a new monitor source.
+    pub fn monitor(id: impl Into<String>, name: impl Into<String>, is_primary: bool) -> Self {
+        Self {
+            id: id.into(),
+            name: name.into(),
+            source_type: ScreenShareSourceType::Monitor,
+            app_name: None,
+            is_primary,
+            thumbnail: None,
+            thumbnail_width: None,
+            thumbnail_height: None,
+        }
+    }
+
+    /// Create a new window source.
+    pub fn window(
+        id: impl Into<String>,
+        name: impl Into<String>,
+        app_name: impl Into<String>,
+    ) -> Self {
+        Self {
+            id: id.into(),
+            name: name.into(),
+            source_type: ScreenShareSourceType::Window,
+            app_name: Some(app_name.into()),
+            is_primary: false,
+            thumbnail: None,
+            thumbnail_width: None,
+            thumbnail_height: None,
+        }
+    }
+
+    /// Add thumbnail data to this source.
+    pub fn with_thumbnail(mut self, data: String, width: u32, height: u32) -> Self {
+        self.thumbnail = Some(data);
+        self.thumbnail_width = Some(width);
+        self.thumbnail_height = Some(height);
+        self
+    }
+}
+
+/// Information about the active screen share session.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ScreenShareInfo {
+    /// The source being shared.
+    pub source: ScreenShareSource,
+    /// When the screen share started (ms since epoch).
+    pub started_at: u64,
+    /// Whether viewers have control (for remote assistance).
+    pub allow_control: bool,
+    /// Whether audio from the source is being shared.
+    pub share_audio: bool,
+}
+
+impl ScreenShareInfo {
+    /// Create new screen share info.
+    pub fn new(source: ScreenShareSource, started_at: u64) -> Self {
+        Self {
+            source,
+            started_at,
+            allow_control: false,
+            share_audio: false,
+        }
+    }
+}
+
 /// Information about an ongoing or completed recording.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RecordingInfo {
@@ -669,6 +784,10 @@ pub struct CallSnapshot {
     pub listen_only_mode: bool,
     /// Whether the current user is screen sharing.
     pub is_screen_sharing: bool,
+    /// Information about the active screen share (if sharing).
+    pub screen_share_info: Option<ScreenShareInfo>,
+    /// Available screen share sources (monitors and windows).
+    pub available_screen_sources: Vec<ScreenShareSource>,
     /// Overall connection quality metrics.
     pub quality_metrics: QualityMetrics,
     /// Per-participant quality metrics.

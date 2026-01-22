@@ -2,6 +2,91 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Type of call (determines participant limits and features).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum CallType {
+    /// Direct one-on-one call.
+    #[default]
+    Direct,
+    /// Group call with multiple participants.
+    Group,
+    /// Channel-wide call (like Discord voice channel).
+    Channel,
+}
+
+impl CallType {
+    /// Returns a human-readable label for the call type.
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Direct => "Call",
+            Self::Group => "Group Call",
+            Self::Channel => "Voice Channel",
+        }
+    }
+
+    /// Returns the default maximum participants for this call type.
+    pub fn default_max_participants(&self) -> u32 {
+        match self {
+            Self::Direct => 2,
+            Self::Group => 25,
+            Self::Channel => 100,
+        }
+    }
+
+    /// Returns true if this call type supports host controls.
+    pub fn has_host_controls(&self) -> bool {
+        !matches!(self, Self::Direct)
+    }
+}
+
+/// Role of a participant in a call.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum ParticipantRole {
+    /// Regular participant.
+    #[default]
+    Participant,
+    /// Co-host with limited admin capabilities.
+    CoHost,
+    /// Full host with all controls.
+    Host,
+}
+
+impl ParticipantRole {
+    /// Returns a human-readable label for the role.
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Participant => "Participant",
+            Self::CoHost => "Co-Host",
+            Self::Host => "Host",
+        }
+    }
+
+    /// Returns true if this role can mute other participants.
+    pub fn can_mute_others(&self) -> bool {
+        matches!(self, Self::CoHost | Self::Host)
+    }
+
+    /// Returns true if this role can remove participants.
+    pub fn can_remove_participants(&self) -> bool {
+        matches!(self, Self::CoHost | Self::Host)
+    }
+
+    /// Returns true if this role can promote others.
+    pub fn can_promote(&self) -> bool {
+        matches!(self, Self::Host)
+    }
+
+    /// Returns true if this role can end the call for everyone.
+    pub fn can_end_call(&self) -> bool {
+        matches!(self, Self::Host)
+    }
+
+    /// Returns true if this role can start/stop recording.
+    pub fn can_manage_recording(&self) -> bool {
+        matches!(self, Self::CoHost | Self::Host)
+    }
+}
+
 /// State of the current call.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum CallState {
@@ -184,14 +269,20 @@ pub struct Participant {
     pub display_name: String,
     /// Four-word identity.
     pub four_words: String,
+    /// Participant's role in the call.
+    pub role: ParticipantRole,
     /// Whether the participant's microphone is muted.
     pub is_muted: bool,
+    /// Whether the participant was muted by the host (not self-muted).
+    pub is_muted_by_host: bool,
     /// Whether the participant's camera is enabled.
     pub is_video_enabled: bool,
     /// Whether the participant is currently speaking.
     pub is_speaking: bool,
     /// Whether the participant is currently screen sharing.
     pub is_screen_sharing: bool,
+    /// Whether the participant has raised their hand.
+    pub hand_raised: bool,
     /// Current audio level (0.0 to 1.0).
     pub audio_level: f32,
     /// Timestamp when the participant joined (ms since epoch).
@@ -202,6 +293,22 @@ impl Participant {
     /// Returns true if this participant has active media.
     pub fn has_active_media(&self) -> bool {
         !self.is_muted || self.is_video_enabled || self.is_screen_sharing
+    }
+
+    /// Returns true if this participant is the host.
+    pub fn is_host(&self) -> bool {
+        matches!(self.role, ParticipantRole::Host)
+    }
+
+    /// Returns true if this participant has elevated privileges (host or co-host).
+    pub fn has_elevated_role(&self) -> bool {
+        matches!(self.role, ParticipantRole::Host | ParticipantRole::CoHost)
+    }
+
+    /// Returns true if this participant can unmute themselves.
+    /// Participants muted by host may not be able to unmute without permission.
+    pub fn can_self_unmute(&self) -> bool {
+        !self.is_muted_by_host || self.has_elevated_role()
     }
 }
 
@@ -214,6 +321,8 @@ pub struct CallInfo {
     pub entity_id: String,
     /// Entity name for display.
     pub entity_name: String,
+    /// Type of call (direct, group, channel).
+    pub call_type: CallType,
     /// Current participants in the call.
     pub participants: Vec<Participant>,
     /// Timestamp when the call started (ms since epoch).
@@ -222,6 +331,14 @@ pub struct CallInfo {
     pub duration_seconds: u64,
     /// Participant ID of the current user.
     pub my_participant_id: String,
+    /// Participant ID of the call host.
+    pub host_id: String,
+    /// Maximum number of participants allowed.
+    pub max_participants: u32,
+    /// Whether new participants can join.
+    pub is_locked: bool,
+    /// Whether all participants are muted by default when joining.
+    pub mute_on_entry: bool,
 }
 
 impl CallInfo {
@@ -243,6 +360,53 @@ impl CallInfo {
             .iter()
             .filter(|p| p.id != self.my_participant_id)
             .collect()
+    }
+
+    /// Returns the host participant.
+    pub fn host(&self) -> Option<&Participant> {
+        self.participants.iter().find(|p| p.id == self.host_id)
+    }
+
+    /// Returns true if the current user is the host.
+    pub fn am_i_host(&self) -> bool {
+        self.my_participant_id == self.host_id
+    }
+
+    /// Returns true if the current user has elevated privileges.
+    pub fn am_i_elevated(&self) -> bool {
+        self.my_participant()
+            .map(|p| p.has_elevated_role())
+            .unwrap_or(false)
+    }
+
+    /// Returns the current user's role.
+    pub fn my_role(&self) -> ParticipantRole {
+        self.my_participant()
+            .map(|p| p.role)
+            .unwrap_or(ParticipantRole::Participant)
+    }
+
+    /// Returns true if this is a group call (not direct).
+    pub fn is_group_call(&self) -> bool {
+        !matches!(self.call_type, CallType::Direct)
+    }
+
+    /// Returns true if more participants can join.
+    pub fn can_accept_more_participants(&self) -> bool {
+        !self.is_locked && (self.participants.len() as u32) < self.max_participants
+    }
+
+    /// Returns participants with elevated roles (hosts and co-hosts).
+    pub fn elevated_participants(&self) -> Vec<&Participant> {
+        self.participants
+            .iter()
+            .filter(|p| p.has_elevated_role())
+            .collect()
+    }
+
+    /// Returns participants with raised hands, sorted by raise time (oldest first).
+    pub fn participants_with_raised_hands(&self) -> Vec<&Participant> {
+        self.participants.iter().filter(|p| p.hand_raised).collect()
     }
 }
 
@@ -602,10 +766,13 @@ mod tests {
             id: "p1".to_string(),
             display_name: "Alice".to_string(),
             four_words: "ocean-forest-moon-star".to_string(),
+            role: ParticipantRole::Participant,
             is_muted: true,
+            is_muted_by_host: false,
             is_video_enabled: false,
             is_speaking: false,
             is_screen_sharing: false,
+            hand_raised: false,
             audio_level: 0.0,
             joined_at: 0,
         };
@@ -636,15 +803,19 @@ mod tests {
             call_id: "call1".to_string(),
             entity_id: "ent1".to_string(),
             entity_name: "Team Chat".to_string(),
+            call_type: CallType::Group,
             participants: vec![
                 Participant {
                     id: "me".to_string(),
                     display_name: "Me".to_string(),
                     four_words: "a-b-c-d".to_string(),
+                    role: ParticipantRole::Host,
                     is_muted: false,
+                    is_muted_by_host: false,
                     is_video_enabled: false,
                     is_speaking: false,
                     is_screen_sharing: false,
+                    hand_raised: false,
                     audio_level: 0.0,
                     joined_at: 0,
                 },
@@ -652,10 +823,13 @@ mod tests {
                     id: "other".to_string(),
                     display_name: "Other".to_string(),
                     four_words: "e-f-g-h".to_string(),
+                    role: ParticipantRole::Participant,
                     is_muted: false,
+                    is_muted_by_host: false,
                     is_video_enabled: false,
                     is_speaking: false,
                     is_screen_sharing: false,
+                    hand_raised: false,
                     audio_level: 0.0,
                     joined_at: 0,
                 },
@@ -663,6 +837,10 @@ mod tests {
             started_at: 0,
             duration_seconds: 0,
             my_participant_id: "me".to_string(),
+            host_id: "me".to_string(),
+            max_participants: 25,
+            is_locked: false,
+            mute_on_entry: false,
         };
 
         assert_eq!(call.participant_count(), 2);
@@ -975,5 +1153,219 @@ mod tests {
         snapshot.recording_info.as_mut().unwrap().state = RecordingState::Paused;
         assert_eq!(snapshot.recording_state(), RecordingState::Paused);
         assert!(snapshot.is_recording_active());
+    }
+
+    #[test]
+    fn call_type_labels_and_limits() {
+        assert_eq!(CallType::Direct.label(), "Call");
+        assert_eq!(CallType::Group.label(), "Group Call");
+        assert_eq!(CallType::Channel.label(), "Voice Channel");
+
+        assert_eq!(CallType::Direct.default_max_participants(), 2);
+        assert_eq!(CallType::Group.default_max_participants(), 25);
+        assert_eq!(CallType::Channel.default_max_participants(), 100);
+
+        assert!(!CallType::Direct.has_host_controls());
+        assert!(CallType::Group.has_host_controls());
+        assert!(CallType::Channel.has_host_controls());
+    }
+
+    #[test]
+    fn participant_role_permissions() {
+        // Participant has no elevated permissions
+        let participant = ParticipantRole::Participant;
+        assert!(!participant.can_mute_others());
+        assert!(!participant.can_remove_participants());
+        assert!(!participant.can_promote());
+        assert!(!participant.can_end_call());
+        assert!(!participant.can_manage_recording());
+
+        // CoHost can mute, remove, and manage recording
+        let cohost = ParticipantRole::CoHost;
+        assert!(cohost.can_mute_others());
+        assert!(cohost.can_remove_participants());
+        assert!(!cohost.can_promote());
+        assert!(!cohost.can_end_call());
+        assert!(cohost.can_manage_recording());
+
+        // Host can do everything
+        let host = ParticipantRole::Host;
+        assert!(host.can_mute_others());
+        assert!(host.can_remove_participants());
+        assert!(host.can_promote());
+        assert!(host.can_end_call());
+        assert!(host.can_manage_recording());
+    }
+
+    #[test]
+    fn participant_role_labels() {
+        assert_eq!(ParticipantRole::Participant.label(), "Participant");
+        assert_eq!(ParticipantRole::CoHost.label(), "Co-Host");
+        assert_eq!(ParticipantRole::Host.label(), "Host");
+    }
+
+    #[test]
+    fn participant_role_helpers() {
+        let mut p = Participant {
+            id: "p1".to_string(),
+            display_name: "Alice".to_string(),
+            four_words: "a-b-c-d".to_string(),
+            role: ParticipantRole::Participant,
+            is_muted: true,
+            is_muted_by_host: false,
+            is_video_enabled: false,
+            is_speaking: false,
+            is_screen_sharing: false,
+            hand_raised: false,
+            audio_level: 0.0,
+            joined_at: 0,
+        };
+
+        assert!(!p.is_host());
+        assert!(!p.has_elevated_role());
+        assert!(p.can_self_unmute()); // Not muted by host
+
+        p.is_muted_by_host = true;
+        assert!(!p.can_self_unmute()); // Muted by host
+
+        p.role = ParticipantRole::CoHost;
+        assert!(!p.is_host());
+        assert!(p.has_elevated_role());
+        assert!(p.can_self_unmute()); // Elevated role can always unmute
+
+        p.role = ParticipantRole::Host;
+        assert!(p.is_host());
+        assert!(p.has_elevated_role());
+    }
+
+    #[test]
+    fn call_info_group_helpers() {
+        let call = CallInfo {
+            call_id: "call1".to_string(),
+            entity_id: "ent1".to_string(),
+            entity_name: "Team Chat".to_string(),
+            call_type: CallType::Group,
+            participants: vec![
+                Participant {
+                    id: "host".to_string(),
+                    display_name: "Host".to_string(),
+                    four_words: "a-b-c-d".to_string(),
+                    role: ParticipantRole::Host,
+                    is_muted: false,
+                    is_muted_by_host: false,
+                    is_video_enabled: false,
+                    is_speaking: false,
+                    is_screen_sharing: false,
+                    hand_raised: false,
+                    audio_level: 0.0,
+                    joined_at: 0,
+                },
+                Participant {
+                    id: "cohost".to_string(),
+                    display_name: "CoHost".to_string(),
+                    four_words: "e-f-g-h".to_string(),
+                    role: ParticipantRole::CoHost,
+                    is_muted: false,
+                    is_muted_by_host: false,
+                    is_video_enabled: false,
+                    is_speaking: false,
+                    is_screen_sharing: false,
+                    hand_raised: true,
+                    audio_level: 0.0,
+                    joined_at: 0,
+                },
+                Participant {
+                    id: "participant".to_string(),
+                    display_name: "Participant".to_string(),
+                    four_words: "i-j-k-l".to_string(),
+                    role: ParticipantRole::Participant,
+                    is_muted: false,
+                    is_muted_by_host: false,
+                    is_video_enabled: false,
+                    is_speaking: false,
+                    is_screen_sharing: false,
+                    hand_raised: true,
+                    audio_level: 0.0,
+                    joined_at: 0,
+                },
+            ],
+            started_at: 0,
+            duration_seconds: 0,
+            my_participant_id: "host".to_string(),
+            host_id: "host".to_string(),
+            max_participants: 25,
+            is_locked: false,
+            mute_on_entry: false,
+        };
+
+        assert!(call.is_group_call());
+        assert!(call.am_i_host());
+        assert!(call.am_i_elevated());
+        assert_eq!(call.my_role(), ParticipantRole::Host);
+
+        assert!(call.host().is_some());
+        assert_eq!(call.host().unwrap().id, "host");
+
+        assert!(call.can_accept_more_participants());
+        assert_eq!(call.elevated_participants().len(), 2);
+        assert_eq!(call.participants_with_raised_hands().len(), 2);
+    }
+
+    #[test]
+    fn call_info_locked_and_full() {
+        let call = CallInfo {
+            call_id: "call1".to_string(),
+            entity_id: "ent1".to_string(),
+            entity_name: "Full Call".to_string(),
+            call_type: CallType::Direct,
+            participants: vec![
+                Participant {
+                    id: "p1".to_string(),
+                    display_name: "P1".to_string(),
+                    four_words: "a-b-c-d".to_string(),
+                    role: ParticipantRole::Host,
+                    is_muted: false,
+                    is_muted_by_host: false,
+                    is_video_enabled: false,
+                    is_speaking: false,
+                    is_screen_sharing: false,
+                    hand_raised: false,
+                    audio_level: 0.0,
+                    joined_at: 0,
+                },
+                Participant {
+                    id: "p2".to_string(),
+                    display_name: "P2".to_string(),
+                    four_words: "e-f-g-h".to_string(),
+                    role: ParticipantRole::Participant,
+                    is_muted: false,
+                    is_muted_by_host: false,
+                    is_video_enabled: false,
+                    is_speaking: false,
+                    is_screen_sharing: false,
+                    hand_raised: false,
+                    audio_level: 0.0,
+                    joined_at: 0,
+                },
+            ],
+            started_at: 0,
+            duration_seconds: 0,
+            my_participant_id: "p1".to_string(),
+            host_id: "p1".to_string(),
+            max_participants: 2,
+            is_locked: false,
+            mute_on_entry: false,
+        };
+
+        // Call is full
+        assert!(!call.can_accept_more_participants());
+
+        // Test locked call
+        let locked_call = CallInfo {
+            is_locked: true,
+            max_participants: 25,
+            ..call
+        };
+        assert!(!locked_call.can_accept_more_participants());
     }
 }

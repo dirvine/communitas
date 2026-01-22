@@ -22,9 +22,9 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use communitas_ui_api::call::{
-    CallInfo, CallSettings, CallSnapshot, CallState, ConnectionQuality, DeviceType, MediaDevice,
-    MediaError, MediaErrorKind, Participant, ParticipantQuality, QualityMetrics, RecordingInfo,
-    RecordingState,
+    CallInfo, CallSettings, CallSnapshot, CallState, CallType, ConnectionQuality, DeviceType,
+    MediaDevice, MediaError, MediaErrorKind, Participant, ParticipantQuality, ParticipantRole,
+    QualityMetrics, RecordingInfo, RecordingState,
 };
 use thiserror::Error;
 use tokio::sync::{RwLock, watch};
@@ -60,6 +60,18 @@ pub enum CallError {
     Timeout,
     #[error("core error: {0}")]
     CoreError(String),
+    #[error("permission denied: {0}")]
+    PermissionDenied(String),
+    #[error("participant not found: {0}")]
+    ParticipantNotFound(String),
+    #[error("call is full")]
+    CallFull,
+    #[error("call is locked")]
+    CallLocked,
+    #[error("not recording")]
+    NotRecording,
+    #[error("recording already active")]
+    AlreadyRecording,
 }
 
 /// Trait for platform-specific device enumeration.
@@ -696,17 +708,20 @@ impl CallService {
 
         debug!(call_id = %call_id, entity_id = %returned_entity_id, "Call started successfully");
 
-        // Create participant for self
+        // Create participant for self (as host since we're starting the call)
         let now = current_timestamp_millis();
         let my_participant_id = format!("participant-{}", now);
         let participant = Participant {
             id: my_participant_id.clone(),
             display_name: identity_name,
             four_words,
+            role: ParticipantRole::Host,
             is_muted: false,
+            is_muted_by_host: false,
             is_video_enabled: video_enabled,
             is_speaking: false,
             is_screen_sharing: false,
+            hand_raised: false,
             audio_level: 0.0,
             joined_at: now,
         };
@@ -716,10 +731,15 @@ impl CallService {
             call_id,
             entity_name: format!("Call: {}", returned_entity_id),
             entity_id: returned_entity_id,
+            call_type: CallType::Direct, // Default to direct call; can be changed for group calls
             participants: vec![participant.clone()],
             started_at: now,
             duration_seconds: 0,
-            my_participant_id,
+            my_participant_id: my_participant_id.clone(),
+            host_id: my_participant_id, // Starter is the host
+            max_participants: CallType::Direct.default_max_participants(),
+            is_locked: false,
+            mute_on_entry: false,
         };
 
         // Update state to InCall
@@ -818,30 +838,38 @@ impl CallService {
 
         debug!(call_id = %joined_call_id, "Joined call successfully");
 
-        // Create participant for self
+        // Create participant for self (as regular participant since we're joining)
         let now = current_timestamp_millis();
         let my_participant_id = format!("participant-{}", now);
         let participant = Participant {
             id: my_participant_id.clone(),
             display_name: identity_name,
             four_words,
+            role: ParticipantRole::Participant,
             is_muted: false,
+            is_muted_by_host: false,
             is_video_enabled: false,
             is_speaking: false,
             is_screen_sharing: false,
+            hand_raised: false,
             audio_level: 0.0,
             joined_at: now,
         };
 
-        // Build call info
+        // Build call info (host_id will be updated when we receive full call state)
         let call_info = CallInfo {
             call_id: joined_call_id,
             entity_id: String::new(), // Will be populated by actual call metadata
             entity_name: String::new(),
+            call_type: CallType::Direct, // Will be updated by actual call metadata
             participants: vec![participant.clone()],
             started_at: now,
             duration_seconds: 0,
-            my_participant_id,
+            my_participant_id: my_participant_id.clone(),
+            host_id: String::new(), // Will be populated by actual call metadata
+            max_participants: CallType::Direct.default_max_participants(),
+            is_locked: false,
+            mute_on_entry: false,
         };
 
         // Update state to InCall
@@ -928,6 +956,433 @@ impl CallService {
         debug!("Left call successfully");
         Ok(())
     }
+
+    // ===== Group Call Methods =====
+
+    /// Start a group call in an entity (channel, group, etc.).
+    ///
+    /// Similar to `start_call` but explicitly sets the call type to Group
+    /// and configures group-specific settings.
+    ///
+    /// # Arguments
+    ///
+    /// * `entity_id` - The entity (channel, group, etc.) to start the call in.
+    /// * `max_participants` - Maximum number of participants allowed (defaults to 25).
+    /// * `mute_on_entry` - Whether new participants should be muted when joining.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CallError::NotAuthenticated`] if the user is not logged in.
+    /// Returns [`CallError::AlreadyInCall`] if the user is already in an active call.
+    #[instrument(
+        skip(self),
+        name = "ui.call.start_group_call",
+        fields(entity_id, max_participants)
+    )]
+    pub async fn start_group_call(
+        &self,
+        entity_id: &str,
+        max_participants: Option<u32>,
+        mute_on_entry: bool,
+    ) -> Result<CallInfo, CallError> {
+        // Start a regular call first
+        let mut call_info = self.start_call(entity_id, false).await?;
+
+        // Update to group call settings
+        let max = max_participants.unwrap_or(CallType::Group.default_max_participants());
+        {
+            let mut state = self.state.write().await;
+            if let Some(ref mut call) = state.current_call {
+                call.call_type = CallType::Group;
+                call.max_participants = max;
+                call.mute_on_entry = mute_on_entry;
+            }
+            call_info.call_type = CallType::Group;
+            call_info.max_participants = max;
+            call_info.mute_on_entry = mute_on_entry;
+        }
+        self.broadcast().await;
+
+        Ok(call_info)
+    }
+
+    /// Mute another participant (host/co-host only).
+    ///
+    /// # Arguments
+    ///
+    /// * `participant_id` - The ID of the participant to mute.
+    /// * `mute` - Whether to mute (true) or unmute (false).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CallError::NotInCall`] if not in a call.
+    /// Returns [`CallError::PermissionDenied`] if the caller lacks permission.
+    /// Returns [`CallError::ParticipantNotFound`] if the participant is not in the call.
+    #[instrument(
+        skip(self),
+        name = "ui.call.mute_participant",
+        fields(participant_id, mute)
+    )]
+    pub async fn mute_participant(
+        &self,
+        participant_id: &str,
+        mute: bool,
+    ) -> Result<(), CallError> {
+        // Check permissions and find participant
+        let (call_id, my_role) = {
+            let state = self.state.read().await;
+            if !state.call_state.is_active() {
+                return Err(CallError::NotInCall);
+            }
+            let call = state.current_call.as_ref().ok_or(CallError::NotInCall)?;
+
+            // Check if we have permission
+            let my_role = call.my_role();
+            if !my_role.can_mute_others() {
+                return Err(CallError::PermissionDenied(
+                    "Only hosts and co-hosts can mute others".to_string(),
+                ));
+            }
+
+            // Check if participant exists
+            if !call.participants.iter().any(|p| p.id == participant_id) {
+                return Err(CallError::ParticipantNotFound(participant_id.to_string()));
+            }
+
+            (call.call_id.clone(), my_role)
+        };
+
+        debug!(
+            call_id = %call_id,
+            participant_id = %participant_id,
+            mute = mute,
+            my_role = ?my_role,
+            "Muting participant"
+        );
+
+        // Update the participant's mute state
+        {
+            let mut state = self.state.write().await;
+            if let Some(ref mut call) = state.current_call
+                && let Some(p) = call
+                    .participants
+                    .iter_mut()
+                    .find(|p| p.id == participant_id)
+            {
+                p.is_muted = mute;
+                p.is_muted_by_host = mute;
+            }
+            if let Some(p) = state
+                .participants
+                .iter_mut()
+                .find(|p| p.id == participant_id)
+            {
+                p.is_muted = mute;
+                p.is_muted_by_host = mute;
+            }
+        }
+        self.broadcast().await;
+
+        Ok(())
+    }
+
+    /// Remove a participant from the call (host/co-host only).
+    ///
+    /// # Arguments
+    ///
+    /// * `participant_id` - The ID of the participant to remove.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CallError::NotInCall`] if not in a call.
+    /// Returns [`CallError::PermissionDenied`] if the caller lacks permission.
+    /// Returns [`CallError::ParticipantNotFound`] if the participant is not in the call.
+    #[instrument(
+        skip(self),
+        name = "ui.call.remove_participant",
+        fields(participant_id)
+    )]
+    pub async fn remove_participant(&self, participant_id: &str) -> Result<(), CallError> {
+        // Check permissions and find participant
+        {
+            let state = self.state.read().await;
+            if !state.call_state.is_active() {
+                return Err(CallError::NotInCall);
+            }
+            let call = state.current_call.as_ref().ok_or(CallError::NotInCall)?;
+
+            // Check if we have permission
+            let my_role = call.my_role();
+            if !my_role.can_remove_participants() {
+                return Err(CallError::PermissionDenied(
+                    "Only hosts and co-hosts can remove participants".to_string(),
+                ));
+            }
+
+            // Can't remove the host
+            if participant_id == call.host_id {
+                return Err(CallError::PermissionDenied(
+                    "Cannot remove the host".to_string(),
+                ));
+            }
+
+            // Check if participant exists
+            if !call.participants.iter().any(|p| p.id == participant_id) {
+                return Err(CallError::ParticipantNotFound(participant_id.to_string()));
+            }
+        }
+
+        // Remove the participant
+        {
+            let mut state = self.state.write().await;
+            if let Some(ref mut call) = state.current_call {
+                call.participants.retain(|p| p.id != participant_id);
+            }
+            state.participants.retain(|p| p.id != participant_id);
+        }
+        self.broadcast().await;
+
+        debug!(participant_id = %participant_id, "Removed participant from call");
+        Ok(())
+    }
+
+    /// Promote a participant to a higher role (host only).
+    ///
+    /// # Arguments
+    ///
+    /// * `participant_id` - The ID of the participant to promote.
+    /// * `new_role` - The new role for the participant.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CallError::NotInCall`] if not in a call.
+    /// Returns [`CallError::PermissionDenied`] if the caller is not the host.
+    /// Returns [`CallError::ParticipantNotFound`] if the participant is not in the call.
+    #[instrument(skip(self), name = "ui.call.promote_participant", fields(participant_id, ?new_role))]
+    pub async fn promote_participant(
+        &self,
+        participant_id: &str,
+        new_role: ParticipantRole,
+    ) -> Result<(), CallError> {
+        // Check permissions
+        {
+            let state = self.state.read().await;
+            if !state.call_state.is_active() {
+                return Err(CallError::NotInCall);
+            }
+            let call = state.current_call.as_ref().ok_or(CallError::NotInCall)?;
+
+            // Only host can promote
+            if !call.am_i_host() {
+                return Err(CallError::PermissionDenied(
+                    "Only the host can promote participants".to_string(),
+                ));
+            }
+
+            // Check if participant exists
+            if !call.participants.iter().any(|p| p.id == participant_id) {
+                return Err(CallError::ParticipantNotFound(participant_id.to_string()));
+            }
+        }
+
+        // Update the participant's role
+        {
+            let mut state = self.state.write().await;
+            if let Some(ref mut call) = state.current_call
+                && let Some(p) = call
+                    .participants
+                    .iter_mut()
+                    .find(|p| p.id == participant_id)
+            {
+                p.role = new_role;
+            }
+            if let Some(p) = state
+                .participants
+                .iter_mut()
+                .find(|p| p.id == participant_id)
+            {
+                p.role = new_role;
+            }
+        }
+        self.broadcast().await;
+
+        debug!(participant_id = %participant_id, role = ?new_role, "Promoted participant");
+        Ok(())
+    }
+
+    /// Lock or unlock the call (prevent new participants from joining).
+    ///
+    /// # Arguments
+    ///
+    /// * `locked` - Whether to lock (true) or unlock (false) the call.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CallError::NotInCall`] if not in a call.
+    /// Returns [`CallError::PermissionDenied`] if the caller is not host/co-host.
+    #[instrument(skip(self), name = "ui.call.set_call_locked", fields(locked))]
+    pub async fn set_call_locked(&self, locked: bool) -> Result<(), CallError> {
+        // Check permissions
+        {
+            let state = self.state.read().await;
+            if !state.call_state.is_active() {
+                return Err(CallError::NotInCall);
+            }
+            let call = state.current_call.as_ref().ok_or(CallError::NotInCall)?;
+
+            if !call.am_i_elevated() {
+                return Err(CallError::PermissionDenied(
+                    "Only hosts and co-hosts can lock/unlock the call".to_string(),
+                ));
+            }
+        }
+
+        // Update lock state
+        {
+            let mut state = self.state.write().await;
+            if let Some(ref mut call) = state.current_call {
+                call.is_locked = locked;
+            }
+        }
+        self.broadcast().await;
+
+        debug!(locked = locked, "Call lock state updated");
+        Ok(())
+    }
+
+    /// Raise or lower hand.
+    ///
+    /// # Arguments
+    ///
+    /// * `raised` - Whether to raise (true) or lower (false) hand.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CallError::NotInCall`] if not in a call.
+    #[instrument(skip(self), name = "ui.call.set_hand_raised", fields(raised))]
+    pub async fn set_hand_raised(&self, raised: bool) -> Result<(), CallError> {
+        let my_id = {
+            let state = self.state.read().await;
+            if !state.call_state.is_active() {
+                return Err(CallError::NotInCall);
+            }
+            let call = state.current_call.as_ref().ok_or(CallError::NotInCall)?;
+            call.my_participant_id.clone()
+        };
+
+        // Update hand raised state
+        self.update_my_participant(&my_id, |p| {
+            p.hand_raised = raised;
+        })
+        .await;
+        self.broadcast().await;
+
+        debug!(raised = raised, "Hand raised state updated");
+        Ok(())
+    }
+
+    /// Lower another participant's hand (host/co-host only).
+    ///
+    /// # Arguments
+    ///
+    /// * `participant_id` - The ID of the participant whose hand to lower.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CallError::NotInCall`] if not in a call.
+    /// Returns [`CallError::PermissionDenied`] if the caller lacks permission.
+    /// Returns [`CallError::ParticipantNotFound`] if the participant is not in the call.
+    #[instrument(skip(self), name = "ui.call.lower_hand", fields(participant_id))]
+    pub async fn lower_hand(&self, participant_id: &str) -> Result<(), CallError> {
+        // Check permissions
+        {
+            let state = self.state.read().await;
+            if !state.call_state.is_active() {
+                return Err(CallError::NotInCall);
+            }
+            let call = state.current_call.as_ref().ok_or(CallError::NotInCall)?;
+
+            if !call.am_i_elevated() {
+                return Err(CallError::PermissionDenied(
+                    "Only hosts and co-hosts can lower others' hands".to_string(),
+                ));
+            }
+
+            if !call.participants.iter().any(|p| p.id == participant_id) {
+                return Err(CallError::ParticipantNotFound(participant_id.to_string()));
+            }
+        }
+
+        // Update hand raised state
+        {
+            let mut state = self.state.write().await;
+            if let Some(ref mut call) = state.current_call
+                && let Some(p) = call
+                    .participants
+                    .iter_mut()
+                    .find(|p| p.id == participant_id)
+            {
+                p.hand_raised = false;
+            }
+            if let Some(p) = state
+                .participants
+                .iter_mut()
+                .find(|p| p.id == participant_id)
+            {
+                p.hand_raised = false;
+            }
+        }
+        self.broadcast().await;
+
+        debug!(participant_id = %participant_id, "Lowered participant's hand");
+        Ok(())
+    }
+
+    /// Get the current user's role in the call.
+    pub fn get_my_role(&self) -> ParticipantRole {
+        self.rx
+            .borrow()
+            .call_info
+            .as_ref()
+            .map(|c| c.my_role())
+            .unwrap_or(ParticipantRole::Participant)
+    }
+
+    /// Check if the current user has elevated privileges (host or co-host).
+    pub fn am_i_elevated(&self) -> bool {
+        self.rx
+            .borrow()
+            .call_info
+            .as_ref()
+            .map(|c| c.am_i_elevated())
+            .unwrap_or(false)
+    }
+
+    /// Check if the current user is the host.
+    pub fn am_i_host(&self) -> bool {
+        self.rx
+            .borrow()
+            .call_info
+            .as_ref()
+            .map(|c| c.am_i_host())
+            .unwrap_or(false)
+    }
+
+    /// Get the current call type.
+    pub fn get_call_type(&self) -> Option<CallType> {
+        self.rx.borrow().call_info.as_ref().map(|c| c.call_type)
+    }
+
+    /// Check if this is a group call.
+    pub fn is_group_call(&self) -> bool {
+        self.rx
+            .borrow()
+            .call_info
+            .as_ref()
+            .map(|c| c.is_group_call())
+            .unwrap_or(false)
+    }
+
     /// Get the current call info.
     pub fn get_current_call(&self) -> Option<CallInfo> {
         self.rx.borrow().call_info.clone()
@@ -2415,5 +2870,284 @@ mod tests {
         let info = info.unwrap();
         assert_eq!(info.file_size_bytes, 1024 * 1024);
         assert!(info.duration_ms >= 5000); // At least 5 seconds
+    }
+
+    // ===== Group Call Tests =====
+
+    #[tokio::test]
+    async fn mute_participant_requires_call() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        let result = service.mute_participant("participant-1", true).await;
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), CallError::NotInCall));
+    }
+
+    #[tokio::test]
+    async fn remove_participant_requires_call() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        let result = service.remove_participant("participant-1").await;
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), CallError::NotInCall));
+    }
+
+    #[tokio::test]
+    async fn set_hand_raised_requires_call() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        let result = service.set_hand_raised(true).await;
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), CallError::NotInCall));
+    }
+
+    #[tokio::test]
+    async fn set_call_locked_requires_call() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        let result = service.set_call_locked(true).await;
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), CallError::NotInCall));
+    }
+
+    #[tokio::test]
+    async fn get_my_role_returns_participant_by_default() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        assert_eq!(service.get_my_role(), ParticipantRole::Participant);
+        assert!(!service.am_i_elevated());
+        assert!(!service.am_i_host());
+    }
+
+    #[tokio::test]
+    async fn get_call_type_returns_none_when_not_in_call() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        assert!(service.get_call_type().is_none());
+        assert!(!service.is_group_call());
+    }
+
+    #[tokio::test]
+    async fn promote_participant_requires_call() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        let result = service
+            .promote_participant("participant-1", ParticipantRole::CoHost)
+            .await;
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), CallError::NotInCall));
+    }
+
+    #[tokio::test]
+    async fn lower_hand_requires_call() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        let result = service.lower_hand("participant-1").await;
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), CallError::NotInCall));
+    }
+
+    #[tokio::test]
+    async fn mute_participant_permission_check() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        // Set up a group call state where we are NOT the host
+        {
+            let mut state = service.state.write().await;
+            state.call_state = CallState::InCall;
+            state.current_call = Some(CallInfo {
+                call_id: "test-call".to_string(),
+                entity_id: "entity-1".to_string(),
+                entity_name: "Test Group".to_string(),
+                call_type: CallType::Group,
+                participants: vec![
+                    Participant {
+                        id: "me".to_string(),
+                        display_name: "Me".to_string(),
+                        four_words: "a-b-c-d".to_string(),
+                        role: ParticipantRole::Participant, // Not elevated
+                        is_muted: false,
+                        is_muted_by_host: false,
+                        is_video_enabled: false,
+                        is_speaking: false,
+                        is_screen_sharing: false,
+                        hand_raised: false,
+                        audio_level: 0.0,
+                        joined_at: 0,
+                    },
+                    Participant {
+                        id: "other".to_string(),
+                        display_name: "Other".to_string(),
+                        four_words: "e-f-g-h".to_string(),
+                        role: ParticipantRole::Host,
+                        is_muted: false,
+                        is_muted_by_host: false,
+                        is_video_enabled: false,
+                        is_speaking: false,
+                        is_screen_sharing: false,
+                        hand_raised: false,
+                        audio_level: 0.0,
+                        joined_at: 0,
+                    },
+                ],
+                started_at: 0,
+                duration_seconds: 0,
+                my_participant_id: "me".to_string(),
+                host_id: "other".to_string(),
+                max_participants: 25,
+                is_locked: false,
+                mute_on_entry: false,
+            });
+            state.participants = state.current_call.as_ref().unwrap().participants.clone();
+        }
+
+        // Try to mute - should fail with permission denied
+        let result = service.mute_participant("other", true).await;
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            CallError::PermissionDenied(_)
+        ));
+    }
+
+    #[tokio::test]
+    async fn host_can_mute_participant() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        // Set up a group call state where we ARE the host
+        {
+            let mut state = service.state.write().await;
+            state.call_state = CallState::InCall;
+            state.current_call = Some(CallInfo {
+                call_id: "test-call".to_string(),
+                entity_id: "entity-1".to_string(),
+                entity_name: "Test Group".to_string(),
+                call_type: CallType::Group,
+                participants: vec![
+                    Participant {
+                        id: "me".to_string(),
+                        display_name: "Me".to_string(),
+                        four_words: "a-b-c-d".to_string(),
+                        role: ParticipantRole::Host,
+                        is_muted: false,
+                        is_muted_by_host: false,
+                        is_video_enabled: false,
+                        is_speaking: false,
+                        is_screen_sharing: false,
+                        hand_raised: false,
+                        audio_level: 0.0,
+                        joined_at: 0,
+                    },
+                    Participant {
+                        id: "other".to_string(),
+                        display_name: "Other".to_string(),
+                        four_words: "e-f-g-h".to_string(),
+                        role: ParticipantRole::Participant,
+                        is_muted: false,
+                        is_muted_by_host: false,
+                        is_video_enabled: false,
+                        is_speaking: false,
+                        is_screen_sharing: false,
+                        hand_raised: false,
+                        audio_level: 0.0,
+                        joined_at: 0,
+                    },
+                ],
+                started_at: 0,
+                duration_seconds: 0,
+                my_participant_id: "me".to_string(),
+                host_id: "me".to_string(),
+                max_participants: 25,
+                is_locked: false,
+                mute_on_entry: false,
+            });
+            state.participants = state.current_call.as_ref().unwrap().participants.clone();
+        }
+
+        // Host can mute others
+        let result = service.mute_participant("other", true).await;
+        assert!(result.is_ok());
+
+        // Verify participant is now muted by host
+        let snap = service.current_snapshot();
+        let other = snap.participants.iter().find(|p| p.id == "other");
+        assert!(other.is_some());
+        let other = other.unwrap();
+        assert!(other.is_muted);
+        assert!(other.is_muted_by_host);
+    }
+
+    #[tokio::test]
+    async fn cannot_remove_host() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        // Set up a group call where we are co-host trying to remove host
+        {
+            let mut state = service.state.write().await;
+            state.call_state = CallState::InCall;
+            state.current_call = Some(CallInfo {
+                call_id: "test-call".to_string(),
+                entity_id: "entity-1".to_string(),
+                entity_name: "Test Group".to_string(),
+                call_type: CallType::Group,
+                participants: vec![
+                    Participant {
+                        id: "me".to_string(),
+                        display_name: "Me".to_string(),
+                        four_words: "a-b-c-d".to_string(),
+                        role: ParticipantRole::CoHost,
+                        is_muted: false,
+                        is_muted_by_host: false,
+                        is_video_enabled: false,
+                        is_speaking: false,
+                        is_screen_sharing: false,
+                        hand_raised: false,
+                        audio_level: 0.0,
+                        joined_at: 0,
+                    },
+                    Participant {
+                        id: "host".to_string(),
+                        display_name: "Host".to_string(),
+                        four_words: "e-f-g-h".to_string(),
+                        role: ParticipantRole::Host,
+                        is_muted: false,
+                        is_muted_by_host: false,
+                        is_video_enabled: false,
+                        is_speaking: false,
+                        is_screen_sharing: false,
+                        hand_raised: false,
+                        audio_level: 0.0,
+                        joined_at: 0,
+                    },
+                ],
+                started_at: 0,
+                duration_seconds: 0,
+                my_participant_id: "me".to_string(),
+                host_id: "host".to_string(),
+                max_participants: 25,
+                is_locked: false,
+                mute_on_entry: false,
+            });
+            state.participants = state.current_call.as_ref().unwrap().participants.clone();
+        }
+
+        // Try to remove host - should fail
+        let result = service.remove_participant("host").await;
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            CallError::PermissionDenied(_)
+        ));
     }
 }

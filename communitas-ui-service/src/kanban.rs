@@ -215,7 +215,9 @@ impl KanbanService {
                 drop(core_guard);
 
                 // Clear the board list on logout
-                let _ = tx.send(KanbanSnapshot::default());
+                if tx.send(KanbanSnapshot::default()).is_err() {
+                    warn!("Failed to send logout snapshot: no active subscribers");
+                }
                 trace!("Boards cleared on logout");
             }
             AuthStateSnapshot::Authenticating => {
@@ -357,7 +359,9 @@ impl KanbanService {
         let mut snap = tx.borrow().clone();
         snap.boards = boards;
         snap.loading = false;
-        let _ = tx.send(snap);
+        if tx.send(snap).is_err() {
+            warn!("Failed to send refresh snapshot: no active subscribers");
+        }
     }
 
     /// Get a reference to the underlying CommunitasApp.
@@ -381,7 +385,7 @@ impl KanbanService {
     pub fn set_swimlane_mode(&self, mode: SwimlaneMode) {
         let mut snap = self.rx.borrow().clone();
         snap.swimlane_mode = mode;
-        let _ = self.tx.send(snap);
+        self.send_snapshot(snap);
         debug!(swimlane_mode = ?mode, "Swimlane mode updated");
     }
     /// Load boards for an entity, setting loading state and subscribing to events.
@@ -408,7 +412,7 @@ impl KanbanService {
             let mut snap = self.rx.borrow().clone();
             snap.loading = true;
             snap.boards.clear(); // Clear previous entity's boards
-            let _ = self.tx.send(snap);
+            self.send_snapshot(snap);
         }
 
         debug!(entity_id = %entity_id, "Loading boards for entity");
@@ -489,7 +493,7 @@ impl KanbanService {
         let mut snap = self.rx.borrow().clone();
         snap.boards = summaries.clone();
         snap.loading = false;
-        let _ = self.tx.send(snap);
+        self.send_snapshot(snap);
 
         Ok(summaries)
     }
@@ -886,7 +890,7 @@ impl KanbanService {
         let mut snap = self.rx.borrow().clone();
         snap.boards.push(summary.clone());
         snap.loading = false;
-        let _ = self.tx.send(snap);
+        self.send_snapshot(snap);
 
         info!(board_id = %summary.id, "Board created successfully");
         Ok(summary)
@@ -1410,7 +1414,7 @@ impl KanbanService {
         // Update watch channel to remove the deleted board
         let mut snap = self.rx.borrow().clone();
         snap.boards.retain(|b| b.id != board_id);
-        let _ = self.tx.send(snap);
+        self.send_snapshot(snap);
 
         Ok(())
     }
@@ -1499,7 +1503,7 @@ impl KanbanService {
     pub fn set_loading(&self, loading: bool) {
         let mut snap = self.rx.borrow().clone();
         snap.loading = loading;
-        let _ = self.tx.send(snap);
+        self.send_snapshot(snap);
     }
 
     /// Internal: update the board list (called by core events).
@@ -1507,10 +1511,17 @@ impl KanbanService {
         let mut snap = self.rx.borrow().clone();
         snap.boards = boards;
         snap.loading = false;
-        let _ = self.tx.send(snap);
+        self.send_snapshot(snap);
     }
 
     // ===== Helper Methods =====
+
+    /// Send a snapshot to subscribers, logging a warning if no subscribers exist.
+    fn send_snapshot(&self, snap: KanbanSnapshot) {
+        if self.tx.send(snap).is_err() {
+            warn!("Failed to send KanbanSnapshot: no active subscribers");
+        }
+    }
 
     fn is_authenticated(&self) -> bool {
         matches!(
@@ -1807,5 +1818,40 @@ mod tests {
             Err(KanbanError::NotAuthenticated) => {}
             other => panic!("expected NotAuthenticated, got {other:?}"),
         }
+    }
+
+    #[tokio::test]
+    async fn set_swimlane_mode_updates_subscribers() {
+        let temp = TempDir::new().unwrap();
+        let service = make_service(&temp).await;
+
+        // Subscribe to watch channel before changing mode
+        let rx = service.subscribe();
+
+        // Verify initial state is None
+        let initial = rx.borrow().clone();
+        assert_eq!(initial.swimlane_mode, SwimlaneMode::None);
+
+        // Change swimlane mode
+        service.set_swimlane_mode(SwimlaneMode::ByAssignee);
+
+        // Verify subscriber received the update
+        let updated = rx.borrow().clone();
+        assert_eq!(updated.swimlane_mode, SwimlaneMode::ByAssignee);
+
+        // Change again to verify multiple updates work
+        service.set_swimlane_mode(SwimlaneMode::ByTag);
+        let updated2 = rx.borrow().clone();
+        assert_eq!(updated2.swimlane_mode, SwimlaneMode::ByTag);
+
+        // Verify ByState mode also works
+        service.set_swimlane_mode(SwimlaneMode::ByState);
+        let updated3 = rx.borrow().clone();
+        assert_eq!(updated3.swimlane_mode, SwimlaneMode::ByState);
+
+        // Reset to None
+        service.set_swimlane_mode(SwimlaneMode::None);
+        let updated4 = rx.borrow().clone();
+        assert_eq!(updated4.swimlane_mode, SwimlaneMode::None);
     }
 }

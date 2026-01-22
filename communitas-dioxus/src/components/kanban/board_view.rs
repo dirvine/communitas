@@ -5,7 +5,34 @@ use communitas_ui_service::UiServices;
 use dioxus::prelude::*;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::info;
+use tracing::{info, warn};
+
+/// Default fallback color for invalid/missing colors.
+const DEFAULT_SWIMLANE_COLOR: &str = "#64748b";
+
+/// Validate that a color string is a safe hex color.
+/// Returns true for valid hex colors like "#fff", "#FFF", "#ffffff", "#FFFFFF".
+/// Returns false for any other format to prevent CSS injection.
+fn validate_hex_color(color: &str) -> bool {
+    if !color.starts_with('#') {
+        return false;
+    }
+    let hex_part = &color[1..];
+    let valid_length = hex_part.len() == 3 || hex_part.len() == 6 || hex_part.len() == 8;
+    valid_length && hex_part.chars().all(|c| c.is_ascii_hexdigit())
+}
+
+/// Get a safe color, falling back to default if validation fails.
+fn safe_color(color: Option<&str>) -> &str {
+    match color {
+        Some(c) if validate_hex_color(c) => c,
+        Some(invalid) => {
+            warn!(color = %invalid, "Invalid color format, using default");
+            DEFAULT_SWIMLANE_COLOR
+        }
+        None => DEFAULT_SWIMLANE_COLOR,
+    }
+}
 
 use super::card::KanbanCard;
 use super::column::KanbanColumn;
@@ -169,12 +196,14 @@ pub fn BoardView(props: BoardViewProps) -> Element {
                                                         show_add_column.set(false);
                                                         new_column_name.set(String::new());
                                                         // Refresh board data
-                                                        if let Ok(updated) = services.kanban().get_board(&board_id).await {
-                                                            board_data.set(Some(updated));
+                                                        match services.kanban().get_board(&board_id).await {
+                                                            Ok(updated) => board_data.set(Some(updated)),
+                                                            Err(e) => warn!(target = "ui.kanban", "Failed to refresh board after column creation: {e}"),
                                                         }
                                                     }
                                                     Err(err) => {
                                                         tracing::error!(target = "ui.kanban", "failed to create column: {err}");
+                                                        error.set(Some(format!("Failed to create column: {err}")));
                                                     }
                                                 }
                                                 adding_column.set(false);
@@ -441,7 +470,7 @@ impl Clone for Swimlane {
 fn SwimlaneRow(props: SwimlaneRowProps) -> Element {
     let mut collapsed = use_signal(|| false);
     let card_count = props.swimlane.cards.len();
-    let header_color = props.swimlane.color.as_deref().unwrap_or("#64748b");
+    let header_color = safe_color(props.swimlane.color.as_deref());
 
     // Find the column each card belongs to (for drag-drop context)
     let find_column_for_card = |card_id: &str| -> Option<String> {
@@ -494,7 +523,10 @@ fn SwimlaneRow(props: SwimlaneRowProps) -> Element {
                         {props.swimlane.cards.iter().map(|card| {
                             let card_id = card.id.clone();
                             let column_id = find_column_for_card(&card.id)
-                                .unwrap_or_default();
+                                .unwrap_or_else(|| {
+                                    warn!(card_id = %card_id, "Card not found in any column - data inconsistency");
+                                    String::new()
+                                });
                             rsx! {
                                 div {
                                     key: "{card_id}",
@@ -802,11 +834,235 @@ mod tests {
         assert!(by_tag.is_empty());
     }
 
+    // =========================================================================
+    // Color Validation Tests (Security)
+    // =========================================================================
+
     #[test]
-    fn board_header_renders_name() {
-        let name = "Test Board".to_string();
-        let desc = Some("A test description".to_string());
-        assert_eq!(name, "Test Board");
-        assert_eq!(desc, Some("A test description".to_string()));
+    fn validate_hex_color_accepts_valid_short_hex() {
+        assert!(validate_hex_color("#fff"));
+        assert!(validate_hex_color("#FFF"));
+        assert!(validate_hex_color("#abc"));
+        assert!(validate_hex_color("#123"));
+    }
+
+    #[test]
+    fn validate_hex_color_accepts_valid_long_hex() {
+        assert!(validate_hex_color("#ffffff"));
+        assert!(validate_hex_color("#FFFFFF"));
+        assert!(validate_hex_color("#aabbcc"));
+        assert!(validate_hex_color("#123456"));
+    }
+
+    #[test]
+    fn validate_hex_color_accepts_rgba_hex() {
+        assert!(validate_hex_color("#ffffffff"));
+        assert!(validate_hex_color("#00000080"));
+    }
+
+    #[test]
+    fn validate_hex_color_rejects_invalid_formats() {
+        // Missing #
+        assert!(!validate_hex_color("ffffff"));
+        // Wrong length
+        assert!(!validate_hex_color("#ff"));
+        assert!(!validate_hex_color("#fffff"));
+        assert!(!validate_hex_color("#fffffff"));
+        assert!(!validate_hex_color("#fffffffff"));
+        // Invalid characters
+        assert!(!validate_hex_color("#gggggg"));
+        assert!(!validate_hex_color("#zzz"));
+    }
+
+    #[test]
+    fn validate_hex_color_rejects_css_injection_attempts() {
+        // CSS injection attempts
+        assert!(!validate_hex_color("#fff; position: fixed"));
+        assert!(!validate_hex_color("#fff; --var: value"));
+        assert!(!validate_hex_color("red"));
+        assert!(!validate_hex_color("rgb(255,0,0)"));
+        assert!(!validate_hex_color("url(evil.com)"));
+        assert!(!validate_hex_color(""));
+    }
+
+    #[test]
+    fn safe_color_returns_valid_color() {
+        assert_eq!(safe_color(Some("#ff0000")), "#ff0000");
+        assert_eq!(safe_color(Some("#fff")), "#fff");
+    }
+
+    #[test]
+    fn safe_color_returns_default_for_invalid() {
+        assert_eq!(safe_color(Some("invalid")), DEFAULT_SWIMLANE_COLOR);
+        assert_eq!(safe_color(Some("#fff; malicious")), DEFAULT_SWIMLANE_COLOR);
+    }
+
+    #[test]
+    fn safe_color_returns_default_for_none() {
+        assert_eq!(safe_color(None), DEFAULT_SWIMLANE_COLOR);
+    }
+
+    // =========================================================================
+    // Multi-Assignee Tests (Critical Test Gap)
+    // =========================================================================
+
+    #[test]
+    fn group_by_assignee_card_with_multiple_assignees_appears_in_all() {
+        let mut card = make_test_card("card-1", "Shared Card", CardState::Todo);
+        card.assignees = vec!["alice".to_string(), "bob".to_string()];
+        let cards = vec![card];
+
+        let swimlanes = group_by_assignee(&cards);
+
+        // Card should appear in both alice's and bob's swimlanes
+        assert_eq!(swimlanes.len(), 2);
+        assert!(swimlanes.iter().any(|s| s.label == "alice" && s.cards.len() == 1));
+        assert!(swimlanes.iter().any(|s| s.label == "bob" && s.cards.len() == 1));
+    }
+
+    #[test]
+    fn group_by_assignee_mixed_single_and_multiple_assignees() {
+        let cards = vec![
+            {
+                let mut card = make_test_card("card-1", "Single Assignee", CardState::Todo);
+                card.assignees = vec!["alice".to_string()];
+                card
+            },
+            {
+                let mut card = make_test_card("card-2", "Two Assignees", CardState::Todo);
+                card.assignees = vec!["bob".to_string(), "charlie".to_string()];
+                card
+            },
+            make_test_card("card-3", "Unassigned", CardState::Todo),
+        ];
+
+        let swimlanes = group_by_assignee(&cards);
+
+        // Should have 4 swimlanes: alice, bob, charlie, Unassigned
+        assert_eq!(swimlanes.len(), 4);
+        assert!(swimlanes.iter().any(|s| s.label == "alice" && s.cards.len() == 1));
+        assert!(swimlanes.iter().any(|s| s.label == "bob" && s.cards.len() == 1));
+        assert!(swimlanes.iter().any(|s| s.label == "charlie" && s.cards.len() == 1));
+        assert!(swimlanes.iter().any(|s| s.label == "Unassigned" && s.cards.len() == 1));
+    }
+
+    // =========================================================================
+    // Multi-Tag Tests (Critical Test Gap)
+    // =========================================================================
+
+    #[test]
+    fn group_by_tag_card_with_multiple_tags_appears_in_all() {
+        let mut card = make_test_card("card-1", "Multi-tag Card", CardState::Todo);
+        card.tags = vec![
+            TagView {
+                id: "tag-1".to_string(),
+                name: "Bug".to_string(),
+                color: "#ff0000".to_string(),
+            },
+            TagView {
+                id: "tag-2".to_string(),
+                name: "Urgent".to_string(),
+                color: "#ff6600".to_string(),
+            },
+        ];
+        let cards = vec![card];
+
+        let swimlanes = group_by_tag(&cards);
+
+        // Card should appear in both Bug and Urgent swimlanes
+        assert_eq!(swimlanes.len(), 2);
+        assert!(swimlanes.iter().any(|s| s.label == "Bug" && s.cards.len() == 1));
+        assert!(swimlanes.iter().any(|s| s.label == "Urgent" && s.cards.len() == 1));
+    }
+
+    #[test]
+    fn group_by_tag_mixed_single_and_multiple_tags() {
+        let cards = vec![
+            {
+                let mut card = make_test_card("card-1", "Single Tag", CardState::Todo);
+                card.tags = vec![TagView {
+                    id: "tag-1".to_string(),
+                    name: "Feature".to_string(),
+                    color: "#00ff00".to_string(),
+                }];
+                card
+            },
+            {
+                let mut card = make_test_card("card-2", "Two Tags", CardState::Todo);
+                card.tags = vec![
+                    TagView {
+                        id: "tag-2".to_string(),
+                        name: "Bug".to_string(),
+                        color: "#ff0000".to_string(),
+                    },
+                    TagView {
+                        id: "tag-3".to_string(),
+                        name: "Priority".to_string(),
+                        color: "#0000ff".to_string(),
+                    },
+                ];
+                card
+            },
+            make_test_card("card-3", "No Tags", CardState::Todo),
+        ];
+
+        let swimlanes = group_by_tag(&cards);
+
+        // Should have 4 swimlanes: Bug, Feature, No Tag, Priority (alphabetical, No Tag at end)
+        assert_eq!(swimlanes.len(), 4);
+        assert!(swimlanes.iter().any(|s| s.label == "Feature" && s.cards.len() == 1));
+        assert!(swimlanes.iter().any(|s| s.label == "Bug" && s.cards.len() == 1));
+        assert!(swimlanes.iter().any(|s| s.label == "Priority" && s.cards.len() == 1));
+        assert!(swimlanes.iter().any(|s| s.label == "No Tag" && s.cards.len() == 1));
+    }
+
+    // =========================================================================
+    // Swimlane Sorting Tests
+    // =========================================================================
+
+    #[test]
+    fn group_by_assignee_sorts_alphabetically() {
+        let cards = vec![
+            {
+                let mut card = make_test_card("card-1", "Card 1", CardState::Todo);
+                card.assignees = vec!["zoe".to_string()];
+                card
+            },
+            {
+                let mut card = make_test_card("card-2", "Card 2", CardState::Todo);
+                card.assignees = vec!["alice".to_string()];
+                card
+            },
+            {
+                let mut card = make_test_card("card-3", "Card 3", CardState::Todo);
+                card.assignees = vec!["bob".to_string()];
+                card
+            },
+        ];
+
+        let swimlanes = group_by_assignee(&cards);
+
+        // Should be sorted: alice, bob, zoe (Unassigned excluded as no unassigned cards)
+        assert_eq!(swimlanes.len(), 3);
+        assert_eq!(swimlanes[0].label, "alice");
+        assert_eq!(swimlanes[1].label, "bob");
+        assert_eq!(swimlanes[2].label, "zoe");
+    }
+
+    #[test]
+    fn group_by_state_preserves_workflow_order() {
+        let cards = vec![
+            make_test_card("card-1", "Done Card", CardState::Done),
+            make_test_card("card-2", "Todo Card", CardState::Todo),
+            make_test_card("card-3", "InProgress Card", CardState::InProgress),
+        ];
+
+        let swimlanes = group_by_state(&cards);
+
+        // Order should be: To Do, In Progress, Done (workflow order, not alphabetical)
+        assert_eq!(swimlanes.len(), 3);
+        assert_eq!(swimlanes[0].label, "To Do");
+        assert_eq!(swimlanes[1].label, "In Progress");
+        assert_eq!(swimlanes[2].label, "Done");
     }
 }

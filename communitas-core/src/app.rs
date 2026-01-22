@@ -1783,6 +1783,7 @@ impl CommunitasApp {
                     is_draft: None,
                     is_golden: None,
                     due_date: None,
+                    priority: None,
                 };
                 ctx.kanban_service
                     .update_card(&board_id, &card_id, updates)

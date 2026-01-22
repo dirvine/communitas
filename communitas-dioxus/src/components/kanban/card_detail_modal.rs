@@ -1,7 +1,7 @@
 //! Card detail modal for viewing and editing card contents.
 
 use communitas_ui_api::kanban::{
-    ActivityEntry, CardDetail, CardState, CommentView, StepView, TagView,
+    ActivityEntry, CardDetail, CardState, CommentView, PriorityView, StepView, TagView,
 };
 use communitas_ui_service::UiServices;
 use communitas_ui_service::kanban::CardUpdate;
@@ -73,18 +73,21 @@ pub fn CardDetailModal(props: CardDetailModalProps) -> Element {
     // Clone values for use in multiple closures
     let services_for_title = services.clone();
     let services_for_desc = services.clone();
+    let services_for_priority = services.clone();
     let services_for_add_step = services.clone();
     let services_for_toggle_step = services.clone();
     let services_for_comments = services.clone();
 
     let board_id_for_title = props.board_id.clone();
     let board_id_for_desc = props.board_id.clone();
+    let board_id_for_priority = props.board_id.clone();
     let board_id_for_add_step = props.board_id.clone();
     let board_id_for_toggle_step = props.board_id.clone();
     let board_id_for_comments = props.board_id.clone();
 
     let card_id_for_title = props.card_id.clone();
     let card_id_for_desc = props.card_id.clone();
+    let card_id_for_priority = props.card_id.clone();
     let card_id_for_add_step = props.card_id.clone();
     let card_id_for_toggle_step = props.card_id.clone();
     let card_id_for_comments = props.card_id.clone();
@@ -222,6 +225,29 @@ pub fn CardDetailModal(props: CardDetailModalProps) -> Element {
                             due_date: card.due_date,
                             on_change: move |_date| {
                                 info!(target = "ui.kanban", event = "due_date_changed");
+                            },
+                        }
+                        // Priority section
+                        PrioritySection {
+                            priority: card.priority,
+                            on_change: move |new_priority: Option<PriorityView>| {
+                                let services = services_for_priority.clone();
+                                let board_id = board_id_for_priority.clone();
+                                let card_id = card_id_for_priority.clone();
+                                spawn(async move {
+                                    match services.kanban().set_priority(&board_id, &card_id, new_priority).await {
+                                        Ok(_) => {
+                                            info!(target = "ui.kanban", event = "priority_changed", ?new_priority);
+                                            // Refresh card data
+                                            if let Ok(updated) = services.kanban().get_card(&board_id, &card_id).await {
+                                                card_data.set(Some(updated));
+                                            }
+                                        }
+                                        Err(err) => {
+                                            tracing::error!(target = "ui.kanban", "failed to set priority: {err}");
+                                        }
+                                    }
+                                });
                             },
                         }
                         // Checklist section
@@ -628,6 +654,94 @@ fn DueDateSection(props: DueDateSectionProps) -> Element {
                             props.on_change.call(Some(chrono::Utc::now().timestamp_millis()));
                         },
                         "Set due date"
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Priority section for selecting card priority.
+#[derive(Props, Clone, PartialEq)]
+struct PrioritySectionProps {
+    priority: Option<PriorityView>,
+    on_change: EventHandler<Option<PriorityView>>,
+}
+
+#[component]
+fn PrioritySection(props: PrioritySectionProps) -> Element {
+    let mut show_dropdown = use_signal(|| false);
+
+    let priorities = [
+        (
+            Some(PriorityView::Urgent),
+            "Urgent",
+            "bg-red-500/20",
+            "text-red-400",
+        ),
+        (
+            Some(PriorityView::High),
+            "High",
+            "bg-orange-500/20",
+            "text-orange-400",
+        ),
+        (
+            Some(PriorityView::Normal),
+            "Normal",
+            "bg-blue-500/20",
+            "text-blue-400",
+        ),
+        (
+            Some(PriorityView::Low),
+            "Low",
+            "bg-slate-500/20",
+            "text-slate-400",
+        ),
+        (None, "None", "bg-slate-700", "text-slate-400"),
+    ];
+
+    let current = props.priority;
+    let (current_label, current_bg, current_text) = priorities
+        .iter()
+        .find(|(p, _, _, _)| *p == current)
+        .map(|(_, l, bg, txt)| (*l, *bg, *txt))
+        .unwrap_or(("None", "bg-slate-700", "text-slate-400"));
+
+    rsx! {
+        div {
+            class: "space-y-2",
+            h3 {
+                class: "text-sm font-medium text-slate-400 uppercase tracking-wide",
+                "Priority"
+            }
+            div {
+                class: "relative inline-block",
+                button {
+                    class: format!("rounded px-3 py-1 text-sm font-medium {current_bg} {current_text}"),
+                    onclick: move |_| show_dropdown.set(!show_dropdown()),
+                    "{current_label}"
+                }
+                if show_dropdown() {
+                    div {
+                        class: "absolute top-full left-0 mt-1 rounded border border-slate-700 bg-slate-800 shadow-lg z-10 min-w-[120px]",
+                        {priorities.iter().map(|(priority, label, bg, txt)| {
+                            let priority = *priority;
+                            let on_change = props.on_change;
+                            rsx! {
+                                button {
+                                    key: "{label}",
+                                    class: "w-full px-3 py-1.5 text-left text-sm hover:bg-slate-700 flex items-center gap-2",
+                                    onclick: move |_| {
+                                        on_change.call(priority);
+                                        show_dropdown.set(false);
+                                    },
+                                    span {
+                                        class: format!("px-1.5 py-0.5 rounded text-xs font-medium {bg} {txt}"),
+                                        "{label}"
+                                    }
+                                }
+                            }
+                        })}
                     }
                 }
             }

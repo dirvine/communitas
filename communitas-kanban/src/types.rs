@@ -9,8 +9,84 @@
 //! - [`Tag`]: Categorization labels for cards
 
 use serde::{Deserialize, Serialize};
+use std::fmt;
 
 use crate::state_machine::CardState;
+
+/// Priority level for a card.
+///
+/// Cards can have an optional priority to help users focus on what matters most.
+/// Priority levels determine visual indicators and can be used for filtering/sorting.
+///
+/// # Colors
+/// - Urgent: Red (#DC2626)
+/// - High: Orange (#EA580C)
+/// - Normal: Blue (#2563EB)
+/// - Low: Gray (#6B7280)
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, Default)]
+pub enum Priority {
+    /// Highest priority - requires immediate attention
+    Urgent,
+    /// High priority - should be addressed soon
+    High,
+    /// Normal priority - standard work items
+    #[default]
+    Normal,
+    /// Low priority - can be deferred
+    Low,
+}
+
+impl Priority {
+    /// Get a human-readable label for the priority.
+    #[must_use]
+    pub fn label(&self) -> &'static str {
+        match self {
+            Priority::Urgent => "Urgent",
+            Priority::High => "High",
+            Priority::Normal => "Normal",
+            Priority::Low => "Low",
+        }
+    }
+
+    /// Get the hex color code for visual indicators.
+    #[must_use]
+    pub fn color(&self) -> &'static str {
+        match self {
+            Priority::Urgent => "#DC2626",
+            Priority::High => "#EA580C",
+            Priority::Normal => "#2563EB",
+            Priority::Low => "#6B7280",
+        }
+    }
+
+    /// Get the sort order (lower value = higher priority).
+    #[must_use]
+    pub fn sort_order(&self) -> u8 {
+        match self {
+            Priority::Urgent => 0,
+            Priority::High => 1,
+            Priority::Normal => 2,
+            Priority::Low => 3,
+        }
+    }
+
+    /// Get all priority levels in order.
+    #[must_use]
+    pub fn all() -> &'static [Priority] {
+        &[
+            Priority::Urgent,
+            Priority::High,
+            Priority::Normal,
+            Priority::Low,
+        ]
+    }
+}
+
+impl fmt::Display for Priority {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.label())
+    }
+}
 
 /// A Kanban board owned by a Project.
 ///
@@ -147,6 +223,8 @@ pub struct Card {
     // State
     /// Current state of the card
     pub state: CardState,
+    /// Priority level for the card
+    pub priority: Option<Priority>,
     /// Whether this is a draft (not yet published)
     pub is_draft: bool,
     /// Whether this card is starred/highlighted
@@ -186,6 +264,8 @@ pub struct CardUpdate {
     pub title: Option<String>,
     /// New description for the card
     pub description: Option<String>,
+    /// New priority level (None to clear)
+    pub priority: Option<Option<Priority>>,
     /// New draft status
     pub is_draft: Option<bool>,
     /// New golden/starred status

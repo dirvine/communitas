@@ -267,6 +267,7 @@ mod tests {
             description: "A test card description".to_string(),
             position: 0,
             state: CardState::Open,
+            priority: None,
             is_draft: false,
             is_golden: false,
             created_by: "user-1".to_string(),

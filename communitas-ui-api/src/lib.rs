@@ -21,7 +21,8 @@ pub use drive::{
 };
 pub use kanban::{
     ActivityEntry, AttachmentView, BoardSettings, BoardSummary, BoardView, CardDetail, CardState,
-    CardView, ChecklistProgress, ColumnView, CommentView, StepView, SwimlaneMode, TagView,
+    CardView, ChecklistProgress, ColumnView, CommentView, PriorityView, StepView, SwimlaneMode,
+    TagView,
 };
 pub use messaging::{
     ContactWithPresence, Message, MessageReaction, MessageSendStatus, PendingMessage,

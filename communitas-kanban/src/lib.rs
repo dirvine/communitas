@@ -58,5 +58,6 @@ pub use filter::CardFilter;
 pub use service::KanbanService;
 pub use state_machine::CardState;
 pub use types::{
-    Board, BoardSettings, BoardUpdate, Card, CardUpdate, Column, ColumnUpdate, Comment, Step, Tag,
+    Board, BoardSettings, BoardUpdate, Card, CardUpdate, Column, ColumnUpdate, Comment, Priority,
+    Step, Tag,
 };

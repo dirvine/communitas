@@ -1,6 +1,6 @@
 //! Kanban card component with drag-and-drop support.
 
-use communitas_ui_api::kanban::{CardState, CardView, ChecklistProgress, TagView};
+use communitas_ui_api::kanban::{CardState, CardView, ChecklistProgress, PriorityView, TagView};
 use communitas_ui_service::UiServices;
 use communitas_ui_service::kanban::MoveDirection;
 use dioxus::prelude::*;
@@ -252,9 +252,13 @@ pub fn KanbanCard(props: KanbanCardProps) -> Element {
                             }
                         }
                     }
-                    // Right side: due date and checklist progress
+                    // Right side: priority, due date and checklist progress
                     div {
                         class: "flex items-center gap-2",
+                        // Priority badge
+                        if let Some(priority) = &card.priority {
+                            PriorityBadge { priority: *priority }
+                        }
                         // Due date badge
                         if let Some((label, classes)) = due_date_display {
                             span {
@@ -340,6 +344,31 @@ fn ChecklistProgressBadge(props: ChecklistProgressBadgeProps) -> Element {
             span {
                 "{progress.completed}/{progress.total}"
             }
+        }
+    }
+}
+
+/// Priority badge component for displaying card priority.
+#[derive(Props, Clone, PartialEq)]
+struct PriorityBadgeProps {
+    priority: PriorityView,
+}
+
+#[component]
+fn PriorityBadge(props: PriorityBadgeProps) -> Element {
+    let priority = props.priority;
+    let (label, bg_color, text_color) = match priority {
+        PriorityView::Urgent => ("Urgent", "bg-red-500/20", "text-red-400"),
+        PriorityView::High => ("High", "bg-orange-500/20", "text-orange-400"),
+        PriorityView::Normal => ("Normal", "bg-blue-500/20", "text-blue-400"),
+        PriorityView::Low => ("Low", "bg-slate-500/20", "text-slate-400"),
+    };
+
+    rsx! {
+        span {
+            class: format!("text-xs px-1.5 py-0.5 rounded font-medium {bg_color} {text_color}"),
+            title: format!("Priority: {}", label),
+            "{label}"
         }
     }
 }
@@ -472,5 +501,45 @@ mod tests {
             String::new()
         };
         assert!(describedby.is_empty());
+    }
+
+    #[test]
+    fn priority_badge_colors() {
+        // Test priority color mapping
+        let urgent = match PriorityView::Urgent {
+            PriorityView::Urgent => ("Urgent", "bg-red-500/20", "text-red-400"),
+            _ => ("", "", ""),
+        };
+        assert_eq!(urgent.0, "Urgent");
+        assert!(urgent.1.contains("red"));
+
+        let high = match PriorityView::High {
+            PriorityView::High => ("High", "bg-orange-500/20", "text-orange-400"),
+            _ => ("", "", ""),
+        };
+        assert_eq!(high.0, "High");
+        assert!(high.1.contains("orange"));
+
+        let normal = match PriorityView::Normal {
+            PriorityView::Normal => ("Normal", "bg-blue-500/20", "text-blue-400"),
+            _ => ("", "", ""),
+        };
+        assert_eq!(normal.0, "Normal");
+        assert!(normal.1.contains("blue"));
+
+        let low = match PriorityView::Low {
+            PriorityView::Low => ("Low", "bg-slate-500/20", "text-slate-400"),
+            _ => ("", "", ""),
+        };
+        assert_eq!(low.0, "Low");
+        assert!(low.1.contains("slate"));
+    }
+
+    #[test]
+    fn priority_sort_order() {
+        // Urgent should sort before High, etc.
+        assert!(PriorityView::Urgent.sort_order() < PriorityView::High.sort_order());
+        assert!(PriorityView::High.sort_order() < PriorityView::Normal.sort_order());
+        assert!(PriorityView::Normal.sort_order() < PriorityView::Low.sort_order());
     }
 }

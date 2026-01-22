@@ -727,6 +727,7 @@ mod tests {
             title: title.to_string(),
             description: None,
             state,
+            priority: None,
             assignees: vec![],
             tags: vec![],
             due_date: None,
@@ -916,8 +917,16 @@ mod tests {
 
         // Card should appear in both alice's and bob's swimlanes
         assert_eq!(swimlanes.len(), 2);
-        assert!(swimlanes.iter().any(|s| s.label == "alice" && s.cards.len() == 1));
-        assert!(swimlanes.iter().any(|s| s.label == "bob" && s.cards.len() == 1));
+        assert!(
+            swimlanes
+                .iter()
+                .any(|s| s.label == "alice" && s.cards.len() == 1)
+        );
+        assert!(
+            swimlanes
+                .iter()
+                .any(|s| s.label == "bob" && s.cards.len() == 1)
+        );
     }
 
     #[test]
@@ -940,10 +949,26 @@ mod tests {
 
         // Should have 4 swimlanes: alice, bob, charlie, Unassigned
         assert_eq!(swimlanes.len(), 4);
-        assert!(swimlanes.iter().any(|s| s.label == "alice" && s.cards.len() == 1));
-        assert!(swimlanes.iter().any(|s| s.label == "bob" && s.cards.len() == 1));
-        assert!(swimlanes.iter().any(|s| s.label == "charlie" && s.cards.len() == 1));
-        assert!(swimlanes.iter().any(|s| s.label == "Unassigned" && s.cards.len() == 1));
+        assert!(
+            swimlanes
+                .iter()
+                .any(|s| s.label == "alice" && s.cards.len() == 1)
+        );
+        assert!(
+            swimlanes
+                .iter()
+                .any(|s| s.label == "bob" && s.cards.len() == 1)
+        );
+        assert!(
+            swimlanes
+                .iter()
+                .any(|s| s.label == "charlie" && s.cards.len() == 1)
+        );
+        assert!(
+            swimlanes
+                .iter()
+                .any(|s| s.label == "Unassigned" && s.cards.len() == 1)
+        );
     }
 
     // =========================================================================
@@ -971,8 +996,16 @@ mod tests {
 
         // Card should appear in both Bug and Urgent swimlanes
         assert_eq!(swimlanes.len(), 2);
-        assert!(swimlanes.iter().any(|s| s.label == "Bug" && s.cards.len() == 1));
-        assert!(swimlanes.iter().any(|s| s.label == "Urgent" && s.cards.len() == 1));
+        assert!(
+            swimlanes
+                .iter()
+                .any(|s| s.label == "Bug" && s.cards.len() == 1)
+        );
+        assert!(
+            swimlanes
+                .iter()
+                .any(|s| s.label == "Urgent" && s.cards.len() == 1)
+        );
     }
 
     #[test]
@@ -1010,10 +1043,26 @@ mod tests {
 
         // Should have 4 swimlanes: Bug, Feature, No Tag, Priority (alphabetical, No Tag at end)
         assert_eq!(swimlanes.len(), 4);
-        assert!(swimlanes.iter().any(|s| s.label == "Feature" && s.cards.len() == 1));
-        assert!(swimlanes.iter().any(|s| s.label == "Bug" && s.cards.len() == 1));
-        assert!(swimlanes.iter().any(|s| s.label == "Priority" && s.cards.len() == 1));
-        assert!(swimlanes.iter().any(|s| s.label == "No Tag" && s.cards.len() == 1));
+        assert!(
+            swimlanes
+                .iter()
+                .any(|s| s.label == "Feature" && s.cards.len() == 1)
+        );
+        assert!(
+            swimlanes
+                .iter()
+                .any(|s| s.label == "Bug" && s.cards.len() == 1)
+        );
+        assert!(
+            swimlanes
+                .iter()
+                .any(|s| s.label == "Priority" && s.cards.len() == 1)
+        );
+        assert!(
+            swimlanes
+                .iter()
+                .any(|s| s.label == "No Tag" && s.cards.len() == 1)
+        );
     }
 
     // =========================================================================

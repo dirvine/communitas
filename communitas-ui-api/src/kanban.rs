@@ -69,6 +69,8 @@ pub struct CardView {
     pub description: Option<String>,
     /// Current workflow state.
     pub state: CardState,
+    /// Priority level for the card.
+    pub priority: Option<PriorityView>,
     /// Four-word identities of assigned users.
     pub assignees: Vec<String>,
     /// Tags attached to this card.
@@ -94,6 +96,8 @@ pub struct CardDetail {
     pub description: Option<String>,
     /// Current workflow state.
     pub state: CardState,
+    /// Priority level for the card.
+    pub priority: Option<PriorityView>,
     /// Four-word identities of assigned users.
     pub assignees: Vec<String>,
     /// Tags attached to this card.
@@ -158,6 +162,74 @@ pub struct ChecklistProgress {
     pub completed: u32,
     /// Total number of steps.
     pub total: u32,
+}
+
+/// Priority level for a card.
+///
+/// Used by UI layers to display visual indicators and support filtering/sorting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum PriorityView {
+    /// Highest priority - requires immediate attention.
+    Urgent,
+    /// High priority - should be addressed soon.
+    High,
+    /// Normal priority - standard work items.
+    #[default]
+    Normal,
+    /// Low priority - can be deferred.
+    Low,
+}
+
+impl PriorityView {
+    /// Get a human-readable label for the priority.
+    #[must_use]
+    pub fn label(&self) -> &'static str {
+        match self {
+            PriorityView::Urgent => "Urgent",
+            PriorityView::High => "High",
+            PriorityView::Normal => "Normal",
+            PriorityView::Low => "Low",
+        }
+    }
+
+    /// Get the hex color code for the priority.
+    #[must_use]
+    pub fn color(&self) -> &'static str {
+        match self {
+            PriorityView::Urgent => "#DC2626",
+            PriorityView::High => "#EA580C",
+            PriorityView::Normal => "#2563EB",
+            PriorityView::Low => "#6B7280",
+        }
+    }
+
+    /// Get sort order (lower = higher priority).
+    #[must_use]
+    pub fn sort_order(&self) -> u8 {
+        match self {
+            PriorityView::Urgent => 0,
+            PriorityView::High => 1,
+            PriorityView::Normal => 2,
+            PriorityView::Low => 3,
+        }
+    }
+
+    /// Returns all priority levels in order of importance.
+    #[must_use]
+    pub fn all() -> &'static [PriorityView] {
+        &[
+            PriorityView::Urgent,
+            PriorityView::High,
+            PriorityView::Normal,
+            PriorityView::Low,
+        ]
+    }
+}
+
+impl std::fmt::Display for PriorityView {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.label())
+    }
 }
 
 /// Card workflow state.
@@ -292,6 +364,7 @@ mod tests {
             title: "Implement feature".to_string(),
             description: Some("Add the new feature".to_string()),
             state: CardState::InProgress,
+            priority: Some(PriorityView::High),
             assignees: vec!["alice-beta-charlie-delta".to_string()],
             tags: vec![TagView {
                 id: "tag-1".to_string(),
@@ -307,6 +380,7 @@ mod tests {
         };
         assert_eq!(card.tags.len(), 1);
         assert_eq!(card.tags[0].name, "urgent");
+        assert_eq!(card.priority, Some(PriorityView::High));
     }
 
     #[test]
@@ -396,5 +470,55 @@ mod swimlane_tests {
         assert_eq!(SwimlaneMode::None, SwimlaneMode::None);
         assert_ne!(SwimlaneMode::None, SwimlaneMode::ByAssignee);
         assert_ne!(SwimlaneMode::ByAssignee, SwimlaneMode::ByTag);
+    }
+}
+
+#[cfg(test)]
+mod priority_tests {
+    use super::*;
+
+    #[test]
+    fn priority_default() {
+        let priority = PriorityView::default();
+        assert_eq!(priority, PriorityView::Normal);
+    }
+
+    #[test]
+    fn priority_labels() {
+        assert_eq!(PriorityView::Urgent.label(), "Urgent");
+        assert_eq!(PriorityView::High.label(), "High");
+        assert_eq!(PriorityView::Normal.label(), "Normal");
+        assert_eq!(PriorityView::Low.label(), "Low");
+    }
+
+    #[test]
+    fn priority_colors() {
+        assert_eq!(PriorityView::Urgent.color(), "#DC2626");
+        assert_eq!(PriorityView::High.color(), "#EA580C");
+        assert_eq!(PriorityView::Normal.color(), "#2563EB");
+        assert_eq!(PriorityView::Low.color(), "#6B7280");
+    }
+
+    #[test]
+    fn priority_sort_order() {
+        assert!(PriorityView::Urgent.sort_order() < PriorityView::High.sort_order());
+        assert!(PriorityView::High.sort_order() < PriorityView::Normal.sort_order());
+        assert!(PriorityView::Normal.sort_order() < PriorityView::Low.sort_order());
+    }
+
+    #[test]
+    fn priority_all() {
+        let all = PriorityView::all();
+        assert_eq!(all.len(), 4);
+        assert_eq!(all[0], PriorityView::Urgent);
+        assert_eq!(all[3], PriorityView::Low);
+    }
+
+    #[test]
+    fn priority_display() {
+        assert_eq!(format!("{}", PriorityView::Urgent), "Urgent");
+        assert_eq!(format!("{}", PriorityView::High), "High");
+        assert_eq!(format!("{}", PriorityView::Normal), "Normal");
+        assert_eq!(format!("{}", PriorityView::Low), "Low");
     }
 }

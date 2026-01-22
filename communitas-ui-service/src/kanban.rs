@@ -6,11 +6,11 @@ use communitas_core::app::CommunitasApp;
 use communitas_core::command::{Command, Event, Query, QueryError, QueryResponse, Subscription};
 use communitas_kanban::{
     BoardUpdate as CoreBoardUpdate, CardState as CoreCardState, CardUpdate as CoreCardUpdate,
-    KanbanService as CoreKanbanService,
+    KanbanService as CoreKanbanService, Priority as CorePriority,
 };
 use communitas_ui_api::{
-    BoardSettings, BoardSummary, BoardView, CardDetail, CardState, CardView, ChecklistProgress,
-    ColumnView, CommentView, StepView, SwimlaneMode, TagView,
+    ActivityEntry, BoardSettings, BoardSummary, BoardView, CardDetail, CardState, CardView,
+    ChecklistProgress, ColumnView, CommentView, PriorityView, StepView, SwimlaneMode, TagView,
 };
 use thiserror::Error;
 use tokio::sync::{RwLock, broadcast, watch};
@@ -45,6 +45,7 @@ pub struct CardMoveResult {
 }
 
 use crate::auth::{AuthController, AuthService, AuthStateSnapshot};
+use crate::directory::DirectoryService;
 
 /// Errors returned by the kanban service.
 #[derive(Debug, Error)]
@@ -114,6 +115,8 @@ pub struct CardUpdate {
 pub struct KanbanService {
     auth: Arc<AuthController>,
     app: Arc<CommunitasApp>,
+    /// Directory service for resolving author names.
+    directory: Arc<DirectoryService>,
     /// CRDT backend wrapped in RwLock to allow reinitialization on auth changes.
     core: Arc<RwLock<CoreKanbanService>>,
     tx: watch::Sender<KanbanSnapshot>,
@@ -130,7 +133,11 @@ impl KanbanService {
     /// When the user logs out, the backend resets to anonymous and boards are cleared.
     ///
     /// Also subscribes to kanban CRDT events for reactive updates when an entity is loaded.
-    pub fn new(auth: Arc<AuthController>, app: Arc<CommunitasApp>) -> Self {
+    pub fn new(
+        auth: Arc<AuthController>,
+        app: Arc<CommunitasApp>,
+        directory: Arc<DirectoryService>,
+    ) -> Self {
         let (tx, rx) = watch::channel(KanbanSnapshot::default());
         // Initialize core service with a default peer_id; will be updated on auth
         let core = Arc::new(RwLock::new(CoreKanbanService::new("anonymous")));
@@ -139,6 +146,7 @@ impl KanbanService {
         let service = Self {
             auth,
             app,
+            directory,
             core,
             tx,
             rx,
@@ -629,6 +637,7 @@ impl KanbanService {
                 title: card.title,
                 description: card.description,
                 state: CardState::default(),
+                priority: None,
                 assignees: card.assignee.into_iter().collect(),
                 tags: Vec::new(),
                 due_date: None,
@@ -760,6 +769,7 @@ impl KanbanService {
         let card = core.get_card(board_id, card_id)?;
         let tags = core.list_tags(board_id)?;
         let comments = core.list_comments(board_id, card_id)?;
+        let core_steps = core.list_steps(board_id, card_id)?;
         drop(core);
 
         // Build tag lookup
@@ -777,12 +787,18 @@ impl KanbanService {
             })
             .collect();
 
-        // Get steps (checklist items) - need to count them for progress
-        // Steps are part of the card in the core, but we need to fetch via get_step
-        // For now, we'll return empty steps and activity as the core doesn't expose list_steps
-        let steps: Vec<StepView> = Vec::new(); // TODO: Wire when list_steps is available
-        let step_count = 0u32;
-        let completed_count = 0u32;
+        // Convert core steps to StepView and calculate checklist progress
+        let steps: Vec<StepView> = core_steps
+            .iter()
+            .map(|s| StepView {
+                id: s.id.clone(),
+                title: s.text.clone(),
+                completed: s.completed,
+            })
+            .collect();
+
+        let step_count = steps.len() as u32;
+        let completed_count = core_steps.iter().filter(|s| s.completed).count() as u32;
 
         let checklist_progress = if step_count > 0 {
             Some(ChecklistProgress {
@@ -793,32 +809,66 @@ impl KanbanService {
             None
         };
 
-        let comment_views: Vec<CommentView> = comments
-            .into_iter()
-            .map(|c| CommentView {
-                id: c.id,
-                author_id: c.author_id.clone(),
-                author_name: c.author_id, // TODO: Resolve to display name
-                text: c.content,
-                created_at: c.created_at * 1000,
-            })
-            .collect();
-
         let tag_views: Vec<TagView> = card
             .tag_ids
             .iter()
             .filter_map(|id| tag_lookup.get(id).cloned())
             .collect();
 
+        // Build activity log from available data (card creation + comments)
+        // NOTE: Build activity BEFORE consuming comments with into_iter()
+        let mut activity: Vec<ActivityEntry> = Vec::new();
+
+        // Card creation event
+        let creator_name = self.resolve_author_name(&card.created_by).await;
+        activity.push(ActivityEntry {
+            id: format!("activity-created-{}", card.id),
+            action_type: "created".to_string(),
+            actor_id: card.created_by.clone(),
+            actor_name: creator_name,
+            description: format!("Created card \"{}\"", card.title),
+            timestamp: card.created_at * 1000,
+        });
+
+        // Comment events (iterate before consuming for comment_views)
+        for comment in &comments {
+            let commenter_name = self.resolve_author_name(&comment.author_id).await;
+            activity.push(ActivityEntry {
+                id: format!("activity-comment-{}", comment.id),
+                action_type: "commented".to_string(),
+                actor_id: comment.author_id.clone(),
+                actor_name: commenter_name,
+                description: "Added a comment".to_string(),
+                timestamp: comment.created_at * 1000,
+            });
+        }
+
+        // Sort by timestamp (most recent first)
+        activity.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+
+        // Build comment views (resolve names via loop since map can't be async)
+        let mut comment_views: Vec<CommentView> = Vec::with_capacity(comments.len());
+        for c in comments {
+            let author_name = self.resolve_author_name(&c.author_id).await;
+            comment_views.push(CommentView {
+                id: c.id,
+                author_id: c.author_id,
+                author_name,
+                text: c.content,
+                created_at: c.created_at * 1000,
+            });
+        }
+
         Ok(CardDetail {
-            id: card.id,
-            title: card.title,
+            id: card.id.clone(),
+            title: card.title.clone(),
             description: if card.description.is_empty() {
                 None
             } else {
                 Some(card.description)
             },
             state: self.core_state_to_ui(card.state),
+            priority: self.core_priority_to_ui(card.priority),
             assignees: card.assignee_ids,
             tags: tag_views,
             due_date: card.due_date.map(|d| d * 1000),
@@ -827,7 +877,7 @@ impl KanbanService {
             steps,
             comments: comment_views,
             attachments: Vec::new(), // TODO: Wire when attachments are available
-            activity: Vec::new(),    // TODO: Wire activity log
+            activity,
         })
     }
 
@@ -1007,6 +1057,7 @@ impl KanbanService {
                 Some(card_description)
             },
             state: self.core_state_to_ui(card_state),
+            priority: None, // New cards start with no priority
             assignees: card_assignees,
             tags: Vec::new(),
             due_date: card_due_date.map(|d| d * 1000),
@@ -1471,6 +1522,49 @@ impl KanbanService {
         })
     }
 
+    /// Set the priority for a card.
+    ///
+    /// Updates the card's priority both locally via CRDT and persists via CommunitasApp command.
+    #[instrument(
+        skip(self),
+        name = "ui.kanban.set_priority",
+        fields(board_id, card_id, ?priority)
+    )]
+    pub async fn set_priority(
+        &self,
+        board_id: &str,
+        card_id: &str,
+        priority: Option<PriorityView>,
+    ) -> Result<(), KanbanError> {
+        if !self.is_authenticated() {
+            return Err(KanbanError::NotAuthenticated);
+        }
+
+        // Convert PriorityView to CorePriority
+        let core_priority = priority.map(|p| match p {
+            PriorityView::Urgent => CorePriority::Urgent,
+            PriorityView::High => CorePriority::High,
+            PriorityView::Normal => CorePriority::Normal,
+            PriorityView::Low => CorePriority::Low,
+        });
+
+        // Update priority locally via CRDT
+        let core = self.core.read().await;
+        let core_update = CoreCardUpdate {
+            priority: Some(core_priority),
+            ..Default::default()
+        };
+        core.update_card(board_id, card_id, core_update)?;
+        drop(core);
+
+        // Note: CommunitasApp doesn't currently have a dedicated priority command,
+        // so we rely on CRDT sync. When network priority support is added,
+        // we'll execute a command here.
+        debug!(card_id = %card_id, ?priority, "Card priority updated via CRDT");
+
+        Ok(())
+    }
+
     /// Add a comment to a card.
     #[instrument(
         skip(self, text),
@@ -1489,11 +1583,13 @@ impl KanbanService {
 
         let core = self.core.read().await;
         let comment = core.add_comment(board_id, card_id, text.to_string(), None)?;
+        drop(core);
 
+        let author_name = self.resolve_author_name(&comment.author_id).await;
         Ok(CommentView {
             id: comment.id,
-            author_id: comment.author_id.clone(),
-            author_name: comment.author_id, // TODO: Resolve to display name
+            author_id: comment.author_id,
+            author_name,
             text: comment.content,
             created_at: comment.created_at * 1000,
         })
@@ -1539,6 +1635,15 @@ impl KanbanService {
         }
     }
 
+    fn core_priority_to_ui(&self, priority: Option<CorePriority>) -> Option<PriorityView> {
+        priority.map(|p| match p {
+            CorePriority::Urgent => PriorityView::Urgent,
+            CorePriority::High => PriorityView::High,
+            CorePriority::Normal => PriorityView::Normal,
+            CorePriority::Low => PriorityView::Low,
+        })
+    }
+
     fn card_to_view(
         &self,
         card: &communitas_kanban::Card,
@@ -1559,6 +1664,7 @@ impl KanbanService {
                 Some(card.description.clone())
             },
             state: self.core_state_to_ui(card.state),
+            priority: self.core_priority_to_ui(card.priority),
             assignees: card.assignee_ids.clone(),
             tags: tag_views,
             due_date: card.due_date.map(|d| d * 1000),
@@ -1575,6 +1681,20 @@ impl KanbanService {
             default_column_id: settings.default_column_id.clone(),
         }
     }
+
+    /// Resolve a four-word ID to a display name via DirectoryService.
+    ///
+    /// Falls back to the four-word ID if not found in the directory.
+    async fn resolve_author_name(&self, author_id: &str) -> String {
+        let snapshot = self.directory.snapshot().await;
+        // Look for the author in the directory contacts
+        snapshot
+            .contacts
+            .iter()
+            .find(|c| c.id == author_id)
+            .map(|c| c.display_name.clone())
+            .unwrap_or_else(|| author_id.to_string())
+    }
 }
 
 #[cfg(test)]
@@ -1586,6 +1706,7 @@ mod tests {
     async fn make_service(temp: &TempDir) -> KanbanService {
         let storage = UiStorage::from_path(temp.path()).unwrap();
         let auth = Arc::new(AuthController::new(storage).unwrap());
+        let directory = Arc::new(DirectoryService::new(auth.clone()));
         let app = Arc::new(
             CommunitasApp::new(
                 "ocean-forest-moon-star".to_string(),
@@ -1599,7 +1720,7 @@ mod tests {
             .await
             .unwrap(),
         );
-        KanbanService::new(auth, app)
+        KanbanService::new(auth, app, directory)
     }
 
     #[tokio::test]
@@ -1712,6 +1833,20 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let service = make_service(&temp).await;
         let result = service.add_comment("board-1", "card-1", "Hello").await;
+        assert!(result.is_err());
+        match result {
+            Err(KanbanError::NotAuthenticated) => {}
+            other => panic!("expected NotAuthenticated, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn set_priority_fails_when_not_authenticated() {
+        let temp = TempDir::new().unwrap();
+        let service = make_service(&temp).await;
+        let result = service
+            .set_priority("board-1", "card-1", Some(PriorityView::High))
+            .await;
         assert!(result.is_err());
         match result {
             Err(KanbanError::NotAuthenticated) => {}

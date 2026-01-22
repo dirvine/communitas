@@ -1,6 +1,6 @@
 //! Filter panel for Kanban board swimlane and card filtering.
 
-use communitas_ui_api::kanban::{CardState, SwimlaneMode};
+use communitas_ui_api::kanban::{CardState, PriorityView, SwimlaneMode};
 use dioxus::prelude::*;
 
 /// Represents the active filters for a board.
@@ -14,6 +14,8 @@ pub struct BoardFilters {
     pub due_date: Option<DueDateFilter>,
     /// Filter by card state.
     pub states: Vec<CardState>,
+    /// Filter by priority levels.
+    pub priorities: Vec<PriorityView>,
     /// Search text filter.
     pub search: Option<String>,
 }
@@ -33,6 +35,7 @@ impl BoardFilters {
             || !self.tags.is_empty()
             || self.due_date.is_some()
             || !self.states.is_empty()
+            || !self.priorities.is_empty()
             || self.search.is_some()
     }
 
@@ -49,6 +52,9 @@ impl BoardFilters {
             count += 1;
         }
         if !self.states.is_empty() {
+            count += 1;
+        }
+        if !self.priorities.is_empty() {
             count += 1;
         }
         if self.search.is_some() {
@@ -221,6 +227,20 @@ pub fn FilterPanel(props: FilterPanelProps) -> Element {
                                 f.states.retain(|s| s != &state);
                             } else {
                                 f.states.push(state);
+                            }
+                        });
+                        notify_change(filters());
+                    },
+                }
+                // Priority filter
+                PriorityFilterGroup {
+                    selected: filters().priorities.clone(),
+                    on_toggle: move |priority: PriorityView| {
+                        filters.with_mut(|f| {
+                            if f.priorities.contains(&priority) {
+                                f.priorities.retain(|p| p != &priority);
+                            } else {
+                                f.priorities.push(priority);
                             }
                         });
                         notify_change(filters());
@@ -527,6 +547,90 @@ fn StateFilterGroup(props: StateFilterGroupProps) -> Element {
     }
 }
 
+/// Priority filter group.
+#[derive(Props, Clone, PartialEq)]
+struct PriorityFilterGroupProps {
+    selected: Vec<PriorityView>,
+    on_toggle: EventHandler<PriorityView>,
+}
+
+#[component]
+fn PriorityFilterGroup(props: PriorityFilterGroupProps) -> Element {
+    let mut expanded = use_signal(|| false);
+    let selected_count = props.selected.len();
+
+    let priorities = [
+        (PriorityView::Urgent, "Urgent", "bg-red-500"),
+        (PriorityView::High, "High", "bg-orange-500"),
+        (PriorityView::Normal, "Normal", "bg-blue-500"),
+        (PriorityView::Low, "Low", "bg-slate-500"),
+    ];
+
+    rsx! {
+        div {
+            class: "relative",
+            button {
+                class: format!(
+                    "flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm transition {}",
+                    if selected_count > 0 {
+                        "bg-emerald-500/20 text-emerald-400 border border-emerald-500/50"
+                    } else {
+                        "bg-slate-800 text-slate-400 hover:bg-slate-700"
+                    }
+                ),
+                onclick: move |_| expanded.set(!expanded()),
+                "Priority"
+                if selected_count > 0 {
+                    span {
+                        class: "ml-1 text-xs",
+                        "({selected_count})"
+                    }
+                }
+                span {
+                    class: "text-xs ml-1",
+                    if expanded() { "^" } else { "v" }
+                }
+            }
+            if expanded() {
+                div {
+                    class: "absolute top-full left-0 mt-1 min-w-32 rounded-lg border border-slate-700 bg-slate-800 shadow-lg z-20",
+                    div {
+                        class: "py-1",
+                        {priorities.iter().map(|(priority, label, color)| {
+                            let is_selected = props.selected.contains(priority);
+                            let priority = *priority;
+                            let on_toggle = props.on_toggle;
+                            rsx! {
+                                button {
+                                    key: "{label}",
+                                    class: format!(
+                                        "w-full px-3 py-1.5 text-left text-sm flex items-center gap-2 {}",
+                                        if is_selected { "bg-slate-700 text-white" } else { "text-slate-300 hover:bg-slate-700" }
+                                    ),
+                                    onclick: move |_| on_toggle.call(priority),
+                                    span {
+                                        class: format!(
+                                            "w-4 h-4 rounded border flex items-center justify-center {}",
+                                            if is_selected { "bg-emerald-500 border-emerald-500" } else { "border-slate-600" }
+                                        ),
+                                        if is_selected {
+                                            span { class: "text-xs text-white", "Y" }
+                                        }
+                                    }
+                                    span {
+                                        class: format!("w-2 h-2 rounded-full {color}"),
+                                    }
+                                    "{label}"
+                                }
+                            }
+                        })}
+                    }
+                }
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -550,6 +654,7 @@ mod tests {
             tags: vec!["tag-1".to_string()],
             due_date: Some(DueDateFilter::Overdue),
             states: vec![],
+            priorities: vec![],
             search: None,
         };
         assert_eq!(filters.active_count(), 3);
@@ -575,7 +680,19 @@ mod tests {
         assert!(filters.assignees.is_empty());
         assert!(filters.tags.is_empty());
         assert!(filters.states.is_empty());
+        assert!(filters.priorities.is_empty());
         assert!(filters.due_date.is_none());
         assert!(filters.search.is_none());
+    }
+
+    #[test]
+    fn board_filters_with_priorities() {
+        let filters = BoardFilters {
+            priorities: vec![PriorityView::Urgent, PriorityView::High],
+            ..Default::default()
+        };
+        assert!(filters.has_active_filters());
+        assert_eq!(filters.active_count(), 1);
+        assert_eq!(filters.priorities.len(), 2);
     }
 }

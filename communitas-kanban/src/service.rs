@@ -24,7 +24,8 @@ use crate::operations::{
 };
 use crate::state_machine::CardState;
 use crate::types::{
-    Board, BoardSettings, BoardUpdate, Card, CardUpdate, Column, ColumnUpdate, Comment, Step, Tag,
+    Board, BoardSettings, BoardUpdate, Card, CardUpdate, Column, ColumnUpdate, Comment, Priority,
+    Step, Tag,
 };
 
 /// High-level service for Kanban operations.
@@ -741,6 +742,7 @@ impl KanbanService {
             description: description.unwrap_or_default(),
             position,
             state: CardState::Open,
+            priority: None,
             is_draft: false,
             is_golden: false,
             created_by: self.peer_id.clone(),
@@ -807,6 +809,15 @@ impl KanbanService {
             Vec::new()
         };
 
+        // Read priority from stored string
+        let priority = get_optional_string(card, txn, "priority").and_then(|s| match s.as_str() {
+            "Urgent" => Some(Priority::Urgent),
+            "High" => Some(Priority::High),
+            "Normal" => Some(Priority::Normal),
+            "Low" => Some(Priority::Low),
+            _ => None,
+        });
+
         Ok(Card {
             id: get_string(card, txn, "id")?,
             board_id: get_string(card, txn, "board_id")?,
@@ -815,6 +826,7 @@ impl KanbanService {
             description,
             position: get_i64(card, txn, "position")? as u32,
             state,
+            priority,
             is_draft: get_bool(card, txn, "is_draft").unwrap_or(false),
             is_golden: get_bool(card, txn, "is_golden").unwrap_or(false),
             created_by: get_string(card, txn, "created_by")?,
@@ -865,6 +877,16 @@ impl KanbanService {
             if let Some(is_golden) = updates.is_golden {
                 card.insert(&mut txn, "is_golden", Any::Bool(is_golden));
             }
+            if let Some(priority) = updates.priority {
+                match priority {
+                    Some(p) => {
+                        card.insert(&mut txn, "priority", Any::String(p.label().into()));
+                    }
+                    None => {
+                        let _ = card.remove(&mut txn, "priority");
+                    }
+                }
+            }
             if let Some(due_date) = updates.due_date {
                 match due_date {
                     Some(date) => {
@@ -873,6 +895,48 @@ impl KanbanService {
                     None => {
                         let _ = card.remove(&mut txn, "due_date");
                     }
+                }
+            }
+            card.insert(&mut txn, "updated_at", Any::BigInt(now));
+
+            // Update board timestamp
+            let metadata: MapRef = root.get_or_init(&mut txn, keys::METADATA);
+            metadata.insert(&mut txn, "updated_at", Any::BigInt(now));
+        }
+
+        self.get_card(board_id, card_id)
+    }
+
+    /// Set the priority of a card.
+    ///
+    /// Pass `None` to clear the priority.
+    #[instrument(skip(self))]
+    pub fn set_card_priority(
+        &self,
+        board_id: &str,
+        card_id: &str,
+        priority: Option<Priority>,
+    ) -> KanbanResult<Card> {
+        let doc = self.get_doc(board_id)?;
+        let now = Self::now();
+
+        {
+            let mut txn = doc.transact_mut();
+            let root = txn.get_or_insert_map("root");
+            let cards: MapRef = root.get_or_init(&mut txn, keys::CARDS);
+            let card = match cards.get(&txn, card_id) {
+                Some(Out::YMap(m)) => m,
+                _ => return Err(KanbanError::CardNotFound(card_id.to_string())),
+            };
+
+            match priority {
+                Some(p) => {
+                    card.insert(&mut txn, "priority", Any::String(p.label().into()));
+                    debug!(board_id = %board_id, card_id = %card_id, priority = %p, "Set card priority");
+                }
+                None => {
+                    let _ = card.remove(&mut txn, "priority");
+                    debug!(board_id = %board_id, card_id = %card_id, "Cleared card priority");
                 }
             }
             card.insert(&mut txn, "updated_at", Any::BigInt(now));
@@ -1446,6 +1510,73 @@ impl KanbanService {
             created_at: get_i64(&step, &txn, "created_at")?,
             deleted: get_bool(&step, &txn, "deleted").unwrap_or(false),
         })
+    }
+
+    /// List all steps for a card in position order.
+    pub fn list_steps(&self, board_id: &str, card_id: &str) -> KanbanResult<Vec<Step>> {
+        let doc = self.get_doc(board_id)?;
+        let txn = doc.transact();
+        let root = txn
+            .get_map("root")
+            .ok_or_else(|| KanbanError::InvalidData("Missing root map".to_string()))?;
+        let cards = match root.get(&txn, keys::CARDS) {
+            Some(Out::YMap(m)) => m,
+            _ => return Err(KanbanError::InvalidData("Missing cards".to_string())),
+        };
+        let card = match cards.get(&txn, card_id) {
+            Some(Out::YMap(m)) => m,
+            _ => return Err(KanbanError::CardNotFound(card_id.to_string())),
+        };
+
+        let steps = match card.get(&txn, keys::STEPS) {
+            Some(Out::YMap(m)) => Some(m),
+            _ => None,
+        };
+
+        let step_order = match card.get(&txn, keys::STEP_ORDER) {
+            Some(Out::YArray(a)) => Some(a),
+            _ => None,
+        };
+
+        let mut result = Vec::new();
+        if let (Some(steps), Some(step_order)) = (steps, step_order) {
+            for value in step_order.iter(&txn) {
+                let Out::Any(Any::String(step_id)) = value else {
+                    continue;
+                };
+                let Some(Out::YMap(step_map)) = steps.get(&txn, step_id.as_ref()) else {
+                    continue;
+                };
+                let deleted = get_bool(&step_map, &txn, "deleted").unwrap_or(false);
+                if deleted {
+                    continue;
+                }
+                let (Ok(id), Ok(c_id), Ok(text), Ok(position), Ok(created_at)) = (
+                    get_string(&step_map, &txn, "id"),
+                    get_string(&step_map, &txn, "card_id"),
+                    get_string(&step_map, &txn, "text"),
+                    get_i64(&step_map, &txn, "position"),
+                    get_i64(&step_map, &txn, "created_at"),
+                ) else {
+                    continue;
+                };
+                result.push(Step {
+                    id,
+                    card_id: c_id,
+                    text,
+                    completed: get_bool(&step_map, &txn, "completed").unwrap_or(false),
+                    completed_by: get_optional_string(&step_map, &txn, "completed_by"),
+                    completed_at: get_optional_i64(&step_map, &txn, "completed_at"),
+                    position: position as u32,
+                    created_at,
+                    deleted: false,
+                });
+            }
+        }
+
+        // Sort by position to ensure consistent order
+        result.sort_by_key(|s| s.position);
+        Ok(result)
     }
 
     /// Delete a step.

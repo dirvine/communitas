@@ -16,6 +16,13 @@ use crate::auth::{AuthController, AuthService, AuthStateSnapshot};
 use communitas_core::app::CommunitasApp;
 use communitas_core::command::{Command, Query, QueryResponse};
 use communitas_ui_api::canvas::{HistoryActionType, HistoryEntry};
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+use communitas_core::legacy_crdt::{
+    CanvasOperation, CanvasOperationType, CanvasStateRequest, CanvasStateResponse,
+    GossipMessageType, VectorClock,
+};
 
 /// Errors that can occur during canvas operations.
 #[derive(Debug, Error)]
@@ -296,6 +303,12 @@ pub struct CanvasService {
     max_history_depth: usize,
     /// Current entity ID for canvas operations (used by persist methods).
     current_entity_id: std::sync::RwLock<Option<String>>,
+    /// Local vector clock for CRDT operations (peer_id -> timestamp).
+    vector_clock: std::sync::RwLock<VectorClock>,
+    /// Local Lamport clock for total ordering of operations.
+    lamport_clock: AtomicU64,
+    /// Per-element timestamp for LWW conflict resolution (element_id -> lamport_ts).
+    element_timestamps: std::sync::RwLock<HashMap<String, u64>>,
 }
 
 impl CanvasService {
@@ -317,6 +330,9 @@ impl CanvasService {
             history: std::sync::RwLock::new(Vec::new()),
             max_history_depth: DEFAULT_MAX_HISTORY_DEPTH,
             current_entity_id: std::sync::RwLock::new(None),
+            vector_clock: std::sync::RwLock::new(VectorClock::new()),
+            lamport_clock: AtomicU64::new(0),
+            element_timestamps: std::sync::RwLock::new(HashMap::new()),
         }
     }
 
@@ -1828,6 +1844,564 @@ impl CanvasService {
             let snapshot = Self::scene_to_snapshot(&scene, loading);
             let _ = self.tx.send(snapshot);
         }
+    }
+
+    // ==========================================================================
+    // Gossip Integration - Real-time CRDT Synchronization
+    // ==========================================================================
+
+    /// Broadcast a canvas operation to all peers in the current entity.
+    ///
+    /// Uses the gossip overlay to publish the operation. If gossip is unavailable
+    /// or no entity is set, the operation is logged but not sent (offline-first).
+    #[instrument(skip(self, element_data))]
+    pub async fn broadcast_operation(
+        &self,
+        op_type: CanvasOperationType,
+        element_id: &str,
+        element_data: Option<serde_json::Value>,
+    ) -> Result<(), CanvasError> {
+        // Get current entity ID - if none, we're in local-only mode
+        let entity_id = match self.get_current_entity() {
+            Some(id) => id,
+            None => {
+                tracing::debug!("no current entity; skipping broadcast");
+                return Ok(());
+            }
+        };
+
+        // Get our peer ID from auth state
+        let origin_peer = self.current_user_id();
+
+        // Increment clocks
+        let lamport = self.lamport_clock.fetch_add(1, Ordering::SeqCst) + 1;
+        let vector_clock = {
+            let mut vc = self
+                .vector_clock
+                .write()
+                .map_err(|_| CanvasError::Canvas("failed to acquire vector clock lock".into()))?;
+            vc.increment(&origin_peer);
+            vc.clone()
+        };
+
+        // Create the canvas operation
+        let op = match op_type {
+            CanvasOperationType::Add => CanvasOperation::add(
+                entity_id.clone(),
+                element_id.to_string(),
+                element_data.unwrap_or(serde_json::Value::Null),
+                vector_clock,
+                lamport,
+                origin_peer,
+            ),
+            CanvasOperationType::Update => CanvasOperation::update(
+                entity_id.clone(),
+                element_id.to_string(),
+                element_data.unwrap_or(serde_json::Value::Null),
+                vector_clock,
+                lamport,
+                origin_peer,
+            ),
+            CanvasOperationType::Remove => CanvasOperation::remove(
+                entity_id.clone(),
+                element_id.to_string(),
+                vector_clock,
+                lamport,
+                origin_peer,
+            ),
+        };
+
+        // Record the element timestamp for LWW
+        if let Ok(mut ts_map) = self.element_timestamps.write() {
+            ts_map.insert(element_id.to_string(), lamport);
+        }
+
+        // Serialize as gossip message
+        let msg = GossipMessageType::CanvasOperation(op);
+        let bytes =
+            serde_json::to_vec(&msg).map_err(|e| CanvasError::Serialization(e.to_string()))?;
+
+        // Access gossip context and publish
+        let context_arc = self.app.context();
+        let ctx = context_arc.read().await;
+        if let Some(gossip) = ctx.gossip.as_ref() {
+            if let Err(e) = gossip.publish_to_entity(&entity_id, bytes).await {
+                tracing::warn!(
+                    entity_id = %entity_id,
+                    error = %e,
+                    "failed to broadcast canvas operation; continuing locally"
+                );
+            } else {
+                tracing::debug!(
+                    entity_id = %entity_id,
+                    element_id = %element_id,
+                    op_type = ?op_type,
+                    "broadcast canvas operation"
+                );
+            }
+        } else {
+            tracing::debug!("gossip not available; operation remains local-only");
+        }
+
+        Ok(())
+    }
+
+    /// Handle a remote canvas operation received from gossip.
+    ///
+    /// Applies LWW (Last-Write-Wins) conflict resolution:
+    /// - If remote timestamp > local timestamp for the element, apply the operation
+    /// - If remote timestamp <= local timestamp, skip (our version wins)
+    #[instrument(skip(self, op))]
+    pub async fn handle_remote_operation(&self, op: CanvasOperation) -> Result<(), CanvasError> {
+        // Skip if this operation originated from us
+        let our_id = self.current_user_id();
+        if op.origin_peer == our_id {
+            tracing::trace!(
+                element_id = %op.element_id,
+                "skipping self-originated operation"
+            );
+            return Ok(());
+        }
+
+        // Update our clocks with the remote operation's clocks
+        {
+            let mut vc = self
+                .vector_clock
+                .write()
+                .map_err(|_| CanvasError::Canvas("failed to acquire vector clock lock".into()))?;
+            vc.merge(&op.vector_clock);
+        }
+
+        // Update Lamport clock (max of local and remote + 1)
+        let remote_lamport = op.lamport_clock;
+        loop {
+            let current = self.lamport_clock.load(Ordering::SeqCst);
+            let new_val = current.max(remote_lamport) + 1;
+            if self
+                .lamport_clock
+                .compare_exchange(current, new_val, Ordering::SeqCst, Ordering::SeqCst)
+                .is_ok()
+            {
+                break;
+            }
+        }
+
+        // LWW conflict resolution: check if remote timestamp > local timestamp
+        let should_apply = {
+            let ts_map = self
+                .element_timestamps
+                .read()
+                .map_err(|_| CanvasError::Canvas("failed to acquire timestamps lock".into()))?;
+            match ts_map.get(&op.element_id) {
+                Some(&local_ts) => remote_lamport > local_ts,
+                None => true, // No local record, accept remote
+            }
+        };
+
+        if !should_apply {
+            tracing::debug!(
+                element_id = %op.element_id,
+                remote_ts = remote_lamport,
+                "skipping stale remote operation (LWW)"
+            );
+            return Ok(());
+        }
+
+        // Record the new timestamp
+        if let Ok(mut ts_map) = self.element_timestamps.write() {
+            ts_map.insert(op.element_id.clone(), remote_lamport);
+        }
+
+        // Apply the operation to our local scene
+        match op.operation_type {
+            CanvasOperationType::Add => {
+                if let Some(data) = op.element_data {
+                    self.apply_remote_add(&op.element_id, data)?;
+                }
+            }
+            CanvasOperationType::Update => {
+                if let Some(data) = op.element_data {
+                    self.apply_remote_update(&op.element_id, data)?;
+                }
+            }
+            CanvasOperationType::Remove => {
+                self.apply_remote_remove(&op.element_id)?;
+            }
+        }
+
+        // Notify watchers of the change
+        self.publish_snapshot(false);
+
+        tracing::debug!(
+            element_id = %op.element_id,
+            op_type = ?op.operation_type,
+            origin_peer = %op.origin_peer,
+            "applied remote canvas operation"
+        );
+
+        Ok(())
+    }
+
+    /// Apply a remote Add operation to the local scene.
+    fn apply_remote_add(
+        &self,
+        element_id: &str,
+        data: serde_json::Value,
+    ) -> Result<(), CanvasError> {
+        // Parse the element data
+        let kind: ElementKind = serde_json::from_value(data.clone())
+            .map_err(|e| CanvasError::Serialization(e.to_string()))?;
+
+        // Get transform from data if present, otherwise use defaults
+        let transform = if let Some(t) = data.get("transform") {
+            serde_json::from_value::<Transform>(t.clone()).unwrap_or_default()
+        } else {
+            Transform::default()
+        };
+
+        let element = Element::new(kind).with_transform(transform);
+
+        // Check if element already exists
+        {
+            let scene = self
+                .scene
+                .read()
+                .map_err(|_| CanvasError::Canvas("failed to acquire scene lock".into()))?;
+            if let Ok(id) = ElementId::parse(element_id)
+                && scene.get_element(id).is_some()
+            {
+                tracing::debug!(
+                    element_id = %element_id,
+                    "element already exists; treating as update"
+                );
+                drop(scene);
+                return self.apply_remote_update(element_id, data);
+            }
+        }
+
+        // Add the element
+        let mut scene = self
+            .scene
+            .write()
+            .map_err(|_| CanvasError::Canvas("failed to acquire scene lock".into()))?;
+        scene.add_element(element);
+
+        Ok(())
+    }
+
+    /// Apply a remote Update operation to the local scene.
+    fn apply_remote_update(
+        &self,
+        element_id: &str,
+        data: serde_json::Value,
+    ) -> Result<(), CanvasError> {
+        let id = ElementId::parse(element_id)
+            .map_err(|e| CanvasError::ElementNotFound(e.to_string()))?;
+
+        let mut scene = self
+            .scene
+            .write()
+            .map_err(|_| CanvasError::Canvas("failed to acquire scene lock".into()))?;
+
+        let elem = scene
+            .get_element_mut(id)
+            .ok_or_else(|| CanvasError::ElementNotFound(element_id.to_string()))?;
+
+        // Update transform if present
+        if let Some(t) = data.get("transform")
+            && let Ok(transform) = serde_json::from_value::<Transform>(t.clone())
+        {
+            elem.transform = transform;
+        }
+
+        // Update kind if present (for content changes)
+        if let Ok(kind) = serde_json::from_value::<ElementKind>(data.clone()) {
+            elem.kind = kind;
+        }
+
+        Ok(())
+    }
+
+    /// Apply a remote Remove operation to the local scene.
+    fn apply_remote_remove(&self, element_id: &str) -> Result<(), CanvasError> {
+        let id = ElementId::parse(element_id)
+            .map_err(|e| CanvasError::ElementNotFound(e.to_string()))?;
+
+        let mut scene = self
+            .scene
+            .write()
+            .map_err(|_| CanvasError::Canvas("failed to acquire scene lock".into()))?;
+
+        // Ignore errors if element doesn't exist (may have been removed already)
+        let _ = scene.remove_element(&id);
+
+        Ok(())
+    }
+
+    /// Subscribe to canvas messages for the current entity.
+    ///
+    /// Sets up a message handler on the gossip context to receive canvas operations,
+    /// state requests, and state responses from other peers.
+    #[instrument(skip(self))]
+    pub async fn subscribe_canvas_messages(&self) -> Result<(), CanvasError> {
+        let entity_id = match self.get_current_entity() {
+            Some(id) => id,
+            None => {
+                tracing::debug!("no current entity; cannot subscribe to canvas messages");
+                return Ok(());
+            }
+        };
+
+        // Note: The actual handler is set via GossipContext::set_entity_message_handler.
+        // The CanvasService needs to be wired into the message routing at the app level.
+        // For now, we join the entity topic to receive messages.
+        let context_arc = self.app.context();
+        let ctx = context_arc.read().await;
+        if let Some(gossip) = ctx.gossip.as_ref() {
+            if let Err(e) = gossip.join_entity(&entity_id, "canvas").await {
+                tracing::warn!(
+                    entity_id = %entity_id,
+                    error = %e,
+                    "failed to join canvas entity; continuing in local-only mode"
+                );
+            } else {
+                tracing::info!(entity_id = %entity_id, "subscribed to canvas messages");
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Request full canvas state from peers.
+    ///
+    /// Sends a `CanvasStateRequest` to all peers in the current entity.
+    /// The response will be handled by `handle_state_response`.
+    #[instrument(skip(self))]
+    pub async fn request_canvas_state(&self) -> Result<(), CanvasError> {
+        let entity_id = match self.get_current_entity() {
+            Some(id) => id,
+            None => {
+                tracing::debug!("no current entity; cannot request canvas state");
+                return Ok(());
+            }
+        };
+
+        let requester_peer_id = self.current_user_id();
+        let request = CanvasStateRequest::full(entity_id.clone(), requester_peer_id);
+        let msg = GossipMessageType::CanvasStateRequest(request);
+        let bytes =
+            serde_json::to_vec(&msg).map_err(|e| CanvasError::Serialization(e.to_string()))?;
+
+        let context_arc = self.app.context();
+        let ctx = context_arc.read().await;
+        if let Some(gossip) = ctx.gossip.as_ref() {
+            if let Err(e) = gossip.publish_to_entity(&entity_id, bytes).await {
+                tracing::warn!(
+                    entity_id = %entity_id,
+                    error = %e,
+                    "failed to request canvas state"
+                );
+            } else {
+                tracing::debug!(entity_id = %entity_id, "sent canvas state request");
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Handle a canvas state request from a peer.
+    ///
+    /// Responds with the current canvas state snapshot.
+    #[instrument(skip(self, request))]
+    pub async fn handle_state_request(
+        &self,
+        request: CanvasStateRequest,
+    ) -> Result<(), CanvasError> {
+        // Don't respond to our own requests
+        let our_id = self.current_user_id();
+        if request.requester_peer_id == our_id {
+            return Ok(());
+        }
+
+        let entity_id = match self.get_current_entity() {
+            Some(id) => id,
+            None => return Ok(()),
+        };
+
+        // Only respond if the request is for our canvas
+        if request.canvas_id != entity_id {
+            return Ok(());
+        }
+
+        // Serialize current scene state
+        let elements_json: Vec<serde_json::Value> = {
+            let scene = self
+                .scene
+                .read()
+                .map_err(|_| CanvasError::Canvas("failed to acquire scene lock".into()))?;
+            let elements: Vec<ElementView> = scene.elements().map(ElementView::from).collect();
+            elements
+                .iter()
+                .map(|e| serde_json::to_value(e).unwrap_or(serde_json::Value::Null))
+                .collect()
+        };
+
+        let vector_clock = {
+            let vc = self
+                .vector_clock
+                .read()
+                .map_err(|_| CanvasError::Canvas("failed to acquire vector clock lock".into()))?;
+            vc.clone()
+        };
+
+        let response =
+            CanvasStateResponse::full(entity_id.clone(), our_id, elements_json, vector_clock);
+
+        let msg = GossipMessageType::CanvasStateResponse(response);
+        let bytes =
+            serde_json::to_vec(&msg).map_err(|e| CanvasError::Serialization(e.to_string()))?;
+
+        let context_arc = self.app.context();
+        let ctx = context_arc.read().await;
+        if let Some(gossip) = ctx.gossip.as_ref() {
+            if let Err(e) = gossip.publish_to_entity(&entity_id, bytes).await {
+                tracing::warn!(
+                    entity_id = %entity_id,
+                    error = %e,
+                    "failed to send canvas state response"
+                );
+            } else {
+                tracing::debug!(
+                    entity_id = %entity_id,
+                    requester = %request.requester_peer_id,
+                    "sent canvas state response"
+                );
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Handle a canvas state response from a peer.
+    ///
+    /// Applies the received state using LWW conflict resolution.
+    #[instrument(skip(self, response))]
+    pub async fn handle_state_response(
+        &self,
+        response: CanvasStateResponse,
+    ) -> Result<(), CanvasError> {
+        // Don't process our own responses
+        let our_id = self.current_user_id();
+        if response.responder_peer_id == our_id {
+            return Ok(());
+        }
+
+        let entity_id = match self.get_current_entity() {
+            Some(id) => id,
+            None => return Ok(()),
+        };
+
+        // Only process if this is for our canvas
+        if response.canvas_id != entity_id {
+            return Ok(());
+        }
+
+        // Merge the vector clock
+        {
+            let mut vc = self
+                .vector_clock
+                .write()
+                .map_err(|_| CanvasError::Canvas("failed to acquire vector clock lock".into()))?;
+            vc.merge(&response.vector_clock);
+        }
+
+        // Parse and apply the elements
+        let elements: Vec<ElementView> =
+            serde_json::from_value(serde_json::Value::Array(response.elements))
+                .map_err(|e| CanvasError::Serialization(e.to_string()))?;
+
+        for elem_view in elements {
+            // Use the highest Lamport timestamp from the vector clock as the element's timestamp
+            let remote_ts = response.vector_clock.0.values().copied().max().unwrap_or(0);
+
+            // LWW check
+            let should_apply = {
+                let ts_map = self
+                    .element_timestamps
+                    .read()
+                    .map_err(|_| CanvasError::Canvas("failed to acquire timestamps lock".into()))?;
+                match ts_map.get(&elem_view.id) {
+                    Some(&local_ts) => remote_ts > local_ts,
+                    None => true,
+                }
+            };
+
+            if should_apply {
+                // Record the timestamp
+                if let Ok(mut ts_map) = self.element_timestamps.write() {
+                    ts_map.insert(elem_view.id.clone(), remote_ts);
+                }
+
+                // Convert ElementView back to data and apply
+                let data = serde_json::to_value(&elem_view.kind)
+                    .map_err(|e| CanvasError::Serialization(e.to_string()))?;
+
+                // Check if element exists
+                let exists = {
+                    let scene = self
+                        .scene
+                        .read()
+                        .map_err(|_| CanvasError::Canvas("failed to acquire scene lock".into()))?;
+                    if let Ok(id) = ElementId::parse(&elem_view.id) {
+                        scene.get_element(id).is_some()
+                    } else {
+                        false
+                    }
+                };
+
+                if exists {
+                    let _ = self.apply_remote_update(&elem_view.id, data);
+                } else {
+                    let _ = self.apply_remote_add(&elem_view.id, data);
+                }
+            }
+        }
+
+        self.publish_snapshot(false);
+        tracing::info!(
+            entity_id = %entity_id,
+            responder = %response.responder_peer_id,
+            "applied canvas state from peer"
+        );
+
+        Ok(())
+    }
+
+    /// Process an incoming gossip message for this canvas.
+    ///
+    /// Routes the message to the appropriate handler based on its type.
+    /// This method should be called from the entity message handler.
+    #[instrument(skip(self, message_bytes))]
+    pub async fn process_gossip_message(&self, message_bytes: &[u8]) -> Result<(), CanvasError> {
+        let msg: GossipMessageType = serde_json::from_slice(message_bytes)
+            .map_err(|e| CanvasError::Serialization(e.to_string()))?;
+
+        match msg {
+            GossipMessageType::CanvasOperation(op) => {
+                self.handle_remote_operation(op).await?;
+            }
+            GossipMessageType::CanvasStateRequest(req) => {
+                self.handle_state_request(req).await?;
+            }
+            GossipMessageType::CanvasStateResponse(resp) => {
+                self.handle_state_response(resp).await?;
+            }
+            _ => {
+                tracing::trace!("ignoring non-canvas gossip message");
+            }
+        }
+
+        Ok(())
     }
 }
 

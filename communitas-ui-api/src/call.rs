@@ -206,6 +206,162 @@ impl MediaError {
     }
 }
 
+/// Overall quality level for connection health display.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum ConnectionQuality {
+    /// Quality is unknown or not yet measured.
+    #[default]
+    Unknown,
+    /// Excellent quality (< 50ms latency, < 1% packet loss).
+    Excellent,
+    /// Good quality (< 150ms latency, < 2% packet loss).
+    Good,
+    /// Fair quality (< 300ms latency, < 5% packet loss).
+    Fair,
+    /// Poor quality (> 300ms latency or > 5% packet loss).
+    Poor,
+    /// Very poor / failing connection.
+    Critical,
+}
+
+impl ConnectionQuality {
+    /// Returns a human-readable label for the quality level.
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Unknown => "Unknown",
+            Self::Excellent => "Excellent",
+            Self::Good => "Good",
+            Self::Fair => "Fair",
+            Self::Poor => "Poor",
+            Self::Critical => "Critical",
+        }
+    }
+
+    /// Returns a color class for UI rendering (Tailwind style).
+    pub fn color_class(&self) -> &'static str {
+        match self {
+            Self::Unknown => "text-slate-400",
+            Self::Excellent => "text-emerald-400",
+            Self::Good => "text-emerald-500",
+            Self::Fair => "text-amber-400",
+            Self::Poor => "text-orange-500",
+            Self::Critical => "text-red-500",
+        }
+    }
+
+    /// Returns number of "bars" to display (0-5).
+    pub fn signal_bars(&self) -> u8 {
+        match self {
+            Self::Unknown => 0,
+            Self::Critical => 1,
+            Self::Poor => 2,
+            Self::Fair => 3,
+            Self::Good => 4,
+            Self::Excellent => 5,
+        }
+    }
+
+    /// Determines quality level from latency and packet loss.
+    pub fn from_metrics(latency_ms: u32, packet_loss_percent: f32) -> Self {
+        if packet_loss_percent > 10.0 || latency_ms > 500 {
+            Self::Critical
+        } else if packet_loss_percent > 5.0 || latency_ms > 300 {
+            Self::Poor
+        } else if packet_loss_percent > 2.0 || latency_ms > 150 {
+            Self::Fair
+        } else if packet_loss_percent > 1.0 || latency_ms > 50 {
+            Self::Good
+        } else {
+            Self::Excellent
+        }
+    }
+}
+
+/// Real-time WebRTC quality metrics for a connection.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct QualityMetrics {
+    /// Round-trip time in milliseconds.
+    pub latency_ms: u32,
+    /// Packet loss percentage (0.0 to 100.0).
+    pub packet_loss_percent: f32,
+    /// Jitter in milliseconds.
+    pub jitter_ms: u32,
+    /// Current audio bitrate in kbps.
+    pub audio_bitrate_kbps: u32,
+    /// Current video bitrate in kbps (0 if no video).
+    pub video_bitrate_kbps: u32,
+    /// Video resolution width (0 if no video).
+    pub video_width: u32,
+    /// Video resolution height (0 if no video).
+    pub video_height: u32,
+    /// Video framerate (0 if no video).
+    pub video_fps: u32,
+    /// Total bytes sent in this session.
+    pub bytes_sent: u64,
+    /// Total bytes received in this session.
+    pub bytes_received: u64,
+    /// Overall connection quality assessment.
+    pub quality: ConnectionQuality,
+    /// Timestamp when these metrics were collected (Unix ms).
+    pub timestamp: u64,
+}
+
+impl Default for QualityMetrics {
+    fn default() -> Self {
+        Self {
+            latency_ms: 0,
+            packet_loss_percent: 0.0,
+            jitter_ms: 0,
+            audio_bitrate_kbps: 0,
+            video_bitrate_kbps: 0,
+            video_width: 0,
+            video_height: 0,
+            video_fps: 0,
+            bytes_sent: 0,
+            bytes_received: 0,
+            quality: ConnectionQuality::Unknown,
+            timestamp: 0,
+        }
+    }
+}
+
+impl QualityMetrics {
+    /// Returns true if video is active (has resolution).
+    pub fn has_video(&self) -> bool {
+        self.video_width > 0 && self.video_height > 0
+    }
+
+    /// Returns the video resolution as a string (e.g., "1280x720").
+    pub fn video_resolution(&self) -> String {
+        if self.has_video() {
+            format!("{}x{}", self.video_width, self.video_height)
+        } else {
+            "None".to_string()
+        }
+    }
+
+    /// Returns total bandwidth usage in kbps.
+    pub fn total_bitrate_kbps(&self) -> u32 {
+        self.audio_bitrate_kbps + self.video_bitrate_kbps
+    }
+
+    /// Recalculates the quality assessment from current metrics.
+    pub fn recalculate_quality(&mut self) {
+        self.quality = ConnectionQuality::from_metrics(self.latency_ms, self.packet_loss_percent);
+    }
+}
+
+/// Quality metrics for a specific participant in a call.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ParticipantQuality {
+    /// Participant ID this applies to.
+    pub participant_id: String,
+    /// Incoming stream quality (receiving from this participant).
+    pub incoming: QualityMetrics,
+    /// Outgoing stream quality (sending to this participant, if measured).
+    pub outgoing: Option<QualityMetrics>,
+}
+
 /// User's call settings and preferences.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct CallSettings {
@@ -240,6 +396,10 @@ pub struct CallSnapshot {
     pub listen_only_mode: bool,
     /// Whether the current user is screen sharing.
     pub is_screen_sharing: bool,
+    /// Overall connection quality metrics.
+    pub quality_metrics: QualityMetrics,
+    /// Per-participant quality metrics.
+    pub participant_quality: Vec<ParticipantQuality>,
 }
 
 impl CallSnapshot {
@@ -251,6 +411,26 @@ impl CallSnapshot {
     /// Returns true if there are unrecoverable media errors.
     pub fn has_critical_errors(&self) -> bool {
         self.media_errors.iter().any(|e| !e.recoverable)
+    }
+
+    /// Returns quality metrics for a specific participant.
+    pub fn get_participant_quality(&self, participant_id: &str) -> Option<&ParticipantQuality> {
+        self.participant_quality
+            .iter()
+            .find(|q| q.participant_id == participant_id)
+    }
+
+    /// Returns the overall connection quality level.
+    pub fn connection_quality(&self) -> ConnectionQuality {
+        self.quality_metrics.quality
+    }
+
+    /// Returns true if connection quality is poor or worse.
+    pub fn has_quality_issues(&self) -> bool {
+        matches!(
+            self.quality_metrics.quality,
+            ConnectionQuality::Poor | ConnectionQuality::Critical
+        )
     }
 }
 
@@ -424,5 +604,137 @@ mod tests {
         assert!(settings.selected_camera.is_none());
         assert!(!settings.auto_mute_on_join);
         assert!(!settings.noise_suppression);
+    }
+
+    #[test]
+    fn connection_quality_labels() {
+        assert_eq!(ConnectionQuality::Unknown.label(), "Unknown");
+        assert_eq!(ConnectionQuality::Excellent.label(), "Excellent");
+        assert_eq!(ConnectionQuality::Good.label(), "Good");
+        assert_eq!(ConnectionQuality::Fair.label(), "Fair");
+        assert_eq!(ConnectionQuality::Poor.label(), "Poor");
+        assert_eq!(ConnectionQuality::Critical.label(), "Critical");
+    }
+
+    #[test]
+    fn connection_quality_signal_bars() {
+        assert_eq!(ConnectionQuality::Unknown.signal_bars(), 0);
+        assert_eq!(ConnectionQuality::Critical.signal_bars(), 1);
+        assert_eq!(ConnectionQuality::Poor.signal_bars(), 2);
+        assert_eq!(ConnectionQuality::Fair.signal_bars(), 3);
+        assert_eq!(ConnectionQuality::Good.signal_bars(), 4);
+        assert_eq!(ConnectionQuality::Excellent.signal_bars(), 5);
+    }
+
+    #[test]
+    fn connection_quality_from_metrics() {
+        // Excellent: low latency, low packet loss
+        assert_eq!(
+            ConnectionQuality::from_metrics(30, 0.5),
+            ConnectionQuality::Excellent
+        );
+
+        // Good: moderate latency
+        assert_eq!(
+            ConnectionQuality::from_metrics(80, 0.8),
+            ConnectionQuality::Good
+        );
+
+        // Fair: higher latency or packet loss
+        assert_eq!(
+            ConnectionQuality::from_metrics(200, 1.5),
+            ConnectionQuality::Fair
+        );
+
+        // Poor: significant issues
+        assert_eq!(
+            ConnectionQuality::from_metrics(350, 3.0),
+            ConnectionQuality::Poor
+        );
+
+        // Critical: severe issues
+        assert_eq!(
+            ConnectionQuality::from_metrics(600, 2.0),
+            ConnectionQuality::Critical
+        );
+        assert_eq!(
+            ConnectionQuality::from_metrics(100, 15.0),
+            ConnectionQuality::Critical
+        );
+    }
+
+    #[test]
+    fn quality_metrics_default() {
+        let metrics = QualityMetrics::default();
+        assert_eq!(metrics.latency_ms, 0);
+        assert_eq!(metrics.packet_loss_percent, 0.0);
+        assert_eq!(metrics.quality, ConnectionQuality::Unknown);
+        assert!(!metrics.has_video());
+    }
+
+    #[test]
+    fn quality_metrics_video_detection() {
+        let mut metrics = QualityMetrics::default();
+        assert!(!metrics.has_video());
+        assert_eq!(metrics.video_resolution(), "None");
+
+        metrics.video_width = 1920;
+        metrics.video_height = 1080;
+        assert!(metrics.has_video());
+        assert_eq!(metrics.video_resolution(), "1920x1080");
+    }
+
+    #[test]
+    fn quality_metrics_total_bitrate() {
+        let mut metrics = QualityMetrics::default();
+        metrics.audio_bitrate_kbps = 32;
+        metrics.video_bitrate_kbps = 1500;
+        assert_eq!(metrics.total_bitrate_kbps(), 1532);
+    }
+
+    #[test]
+    fn quality_metrics_recalculate() {
+        let mut metrics = QualityMetrics::default();
+        metrics.latency_ms = 200;
+        metrics.packet_loss_percent = 3.0;
+        metrics.recalculate_quality();
+        assert_eq!(metrics.quality, ConnectionQuality::Fair);
+    }
+
+    #[test]
+    fn call_snapshot_quality_helpers() {
+        let mut snapshot = CallSnapshot::default();
+        assert_eq!(snapshot.connection_quality(), ConnectionQuality::Unknown);
+        assert!(!snapshot.has_quality_issues());
+
+        snapshot.quality_metrics.quality = ConnectionQuality::Poor;
+        assert!(snapshot.has_quality_issues());
+
+        snapshot.quality_metrics.quality = ConnectionQuality::Critical;
+        assert!(snapshot.has_quality_issues());
+
+        snapshot.quality_metrics.quality = ConnectionQuality::Good;
+        assert!(!snapshot.has_quality_issues());
+    }
+
+    #[test]
+    fn call_snapshot_participant_quality() {
+        let mut snapshot = CallSnapshot::default();
+        snapshot.participant_quality.push(ParticipantQuality {
+            participant_id: "alice".to_string(),
+            incoming: QualityMetrics {
+                latency_ms: 50,
+                packet_loss_percent: 0.5,
+                quality: ConnectionQuality::Excellent,
+                ..Default::default()
+            },
+            outgoing: None,
+        });
+
+        assert!(snapshot.get_participant_quality("alice").is_some());
+        assert!(snapshot.get_participant_quality("bob").is_none());
+
+        let quality = snapshot.get_participant_quality("alice").unwrap();
+        assert_eq!(quality.incoming.quality, ConnectionQuality::Excellent);
     }
 }

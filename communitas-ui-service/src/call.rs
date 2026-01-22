@@ -22,8 +22,8 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use communitas_ui_api::call::{
-    CallInfo, CallSettings, CallSnapshot, CallState, DeviceType, MediaDevice, MediaError,
-    MediaErrorKind, Participant,
+    CallInfo, CallSettings, CallSnapshot, CallState, ConnectionQuality, DeviceType, MediaDevice,
+    MediaError, MediaErrorKind, Participant, ParticipantQuality, QualityMetrics,
 };
 use thiserror::Error;
 use tokio::sync::{RwLock, watch};
@@ -225,6 +225,8 @@ struct CallServiceState {
     available_devices: Vec<MediaDevice>,
     listen_only_mode: bool,
     is_screen_sharing: bool,
+    quality_metrics: QualityMetrics,
+    participant_quality: Vec<ParticipantQuality>,
 }
 
 impl Default for CallServiceState {
@@ -238,6 +240,8 @@ impl Default for CallServiceState {
             available_devices: Vec::new(),
             listen_only_mode: false,
             is_screen_sharing: false,
+            quality_metrics: QualityMetrics::default(),
+            participant_quality: Vec::new(),
         }
     }
 }
@@ -437,6 +441,8 @@ impl CallService {
             settings: state.settings.clone(),
             listen_only_mode: state.listen_only_mode,
             is_screen_sharing: state.is_screen_sharing,
+            quality_metrics: state.quality_metrics.clone(),
+            participant_quality: state.participant_quality.clone(),
         };
         // Ignore send error if no receivers
         let _ = self.tx.send(snapshot);
@@ -1410,6 +1416,139 @@ impl CallService {
         self.broadcast().await;
         Ok(())
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Quality Metrics
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// Get current overall quality metrics.
+    pub fn get_quality_metrics(&self) -> QualityMetrics {
+        self.rx.borrow().quality_metrics.clone()
+    }
+
+    /// Get current connection quality level.
+    pub fn get_connection_quality(&self) -> ConnectionQuality {
+        self.rx.borrow().quality_metrics.quality
+    }
+
+    /// Update overall quality metrics (called by WebRTC stats collector).
+    #[instrument(skip(self, metrics), name = "ui.call.update_quality_metrics")]
+    pub async fn update_quality_metrics(&self, metrics: QualityMetrics) {
+        let mut state = self.state.write().await;
+        state.quality_metrics = metrics;
+        drop(state);
+        self.broadcast().await;
+    }
+
+    /// Update quality metrics from raw values (convenience method).
+    #[instrument(skip(self), name = "ui.call.update_quality_from_stats")]
+    pub async fn update_quality_from_stats(
+        &self,
+        latency_ms: u32,
+        packet_loss_percent: f32,
+        jitter_ms: u32,
+        audio_bitrate_kbps: u32,
+        video_bitrate_kbps: u32,
+    ) {
+        let quality = ConnectionQuality::from_metrics(latency_ms, packet_loss_percent);
+        let timestamp = current_timestamp_millis() as u64;
+
+        let metrics = QualityMetrics {
+            latency_ms,
+            packet_loss_percent,
+            jitter_ms,
+            audio_bitrate_kbps,
+            video_bitrate_kbps,
+            quality,
+            timestamp,
+            ..Default::default()
+        };
+
+        self.update_quality_metrics(metrics).await;
+    }
+
+    /// Update video quality metrics.
+    #[instrument(skip(self), name = "ui.call.update_video_quality")]
+    pub async fn update_video_quality(&self, width: u32, height: u32, fps: u32, bitrate_kbps: u32) {
+        let mut state = self.state.write().await;
+        state.quality_metrics.video_width = width;
+        state.quality_metrics.video_height = height;
+        state.quality_metrics.video_fps = fps;
+        state.quality_metrics.video_bitrate_kbps = bitrate_kbps;
+        state.quality_metrics.timestamp = current_timestamp_millis() as u64;
+        drop(state);
+        self.broadcast().await;
+    }
+
+    /// Update participant-specific quality metrics.
+    #[instrument(skip(self, incoming), name = "ui.call.update_participant_quality")]
+    pub async fn update_participant_quality(
+        &self,
+        participant_id: &str,
+        incoming: QualityMetrics,
+        outgoing: Option<QualityMetrics>,
+    ) {
+        let mut state = self.state.write().await;
+
+        // Find and update or insert participant quality
+        if let Some(pq) = state
+            .participant_quality
+            .iter_mut()
+            .find(|q| q.participant_id == participant_id)
+        {
+            pq.incoming = incoming;
+            pq.outgoing = outgoing;
+        } else {
+            state.participant_quality.push(ParticipantQuality {
+                participant_id: participant_id.to_string(),
+                incoming,
+                outgoing,
+            });
+        }
+
+        drop(state);
+        self.broadcast().await;
+    }
+
+    /// Get quality metrics for a specific participant.
+    pub fn get_participant_quality(&self, participant_id: &str) -> Option<ParticipantQuality> {
+        self.rx
+            .borrow()
+            .participant_quality
+            .iter()
+            .find(|q| q.participant_id == participant_id)
+            .cloned()
+    }
+
+    /// Clear all quality metrics (e.g., when leaving a call).
+    #[instrument(skip(self), name = "ui.call.clear_quality_metrics")]
+    pub async fn clear_quality_metrics(&self) {
+        let mut state = self.state.write().await;
+        state.quality_metrics = QualityMetrics::default();
+        state.participant_quality.clear();
+        drop(state);
+        self.broadcast().await;
+    }
+
+    /// Update bandwidth usage statistics.
+    #[instrument(skip(self), name = "ui.call.update_bandwidth_stats")]
+    pub async fn update_bandwidth_stats(&self, bytes_sent: u64, bytes_received: u64) {
+        let mut state = self.state.write().await;
+        state.quality_metrics.bytes_sent = bytes_sent;
+        state.quality_metrics.bytes_received = bytes_received;
+        state.quality_metrics.timestamp = current_timestamp_millis() as u64;
+        drop(state);
+        self.broadcast().await;
+    }
+
+    /// Check if quality issues should trigger an alert.
+    pub fn should_show_quality_warning(&self) -> bool {
+        let snap = self.rx.borrow();
+        matches!(
+            snap.quality_metrics.quality,
+            ConnectionQuality::Poor | ConnectionQuality::Critical
+        )
+    }
 }
 
 #[cfg(test)]
@@ -1867,5 +2006,148 @@ mod tests {
 
         // Should be in listen-only mode
         assert!(service.is_listen_only());
+    }
+
+    // ===== Quality Metrics Tests =====
+
+    #[tokio::test]
+    async fn quality_metrics_default() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        let metrics = service.get_quality_metrics();
+        assert_eq!(metrics.latency_ms, 0);
+        assert_eq!(metrics.quality, ConnectionQuality::Unknown);
+    }
+
+    #[tokio::test]
+    async fn update_quality_metrics_broadcasts() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+        let mut rx = service.subscribe();
+
+        let metrics = QualityMetrics {
+            latency_ms: 50,
+            packet_loss_percent: 0.5,
+            jitter_ms: 10,
+            audio_bitrate_kbps: 32,
+            quality: ConnectionQuality::Excellent,
+            timestamp: 12345,
+            ..Default::default()
+        };
+
+        service.update_quality_metrics(metrics).await;
+        rx.changed().await.expect("should receive update");
+
+        let snap = rx.borrow().clone();
+        assert_eq!(snap.quality_metrics.latency_ms, 50);
+        assert_eq!(snap.quality_metrics.quality, ConnectionQuality::Excellent);
+    }
+
+    #[tokio::test]
+    async fn update_quality_from_stats_calculates_quality() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        // Poor quality stats
+        service.update_quality_from_stats(350, 4.0, 30, 32, 0).await;
+
+        let metrics = service.get_quality_metrics();
+        assert_eq!(metrics.latency_ms, 350);
+        assert_eq!(metrics.packet_loss_percent, 4.0);
+        assert_eq!(metrics.quality, ConnectionQuality::Poor);
+    }
+
+    #[tokio::test]
+    async fn update_video_quality() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        service.update_video_quality(1920, 1080, 30, 1500).await;
+
+        let metrics = service.get_quality_metrics();
+        assert_eq!(metrics.video_width, 1920);
+        assert_eq!(metrics.video_height, 1080);
+        assert_eq!(metrics.video_fps, 30);
+        assert_eq!(metrics.video_bitrate_kbps, 1500);
+        assert!(metrics.has_video());
+    }
+
+    #[tokio::test]
+    async fn participant_quality_tracking() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        let incoming = QualityMetrics {
+            latency_ms: 80,
+            quality: ConnectionQuality::Good,
+            ..Default::default()
+        };
+
+        service
+            .update_participant_quality("alice", incoming.clone(), None)
+            .await;
+
+        let pq = service.get_participant_quality("alice");
+        assert!(pq.is_some());
+        assert_eq!(pq.unwrap().incoming.latency_ms, 80);
+
+        // Non-existent participant
+        assert!(service.get_participant_quality("bob").is_none());
+    }
+
+    #[tokio::test]
+    async fn clear_quality_metrics() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        // Set some metrics
+        let metrics = QualityMetrics {
+            latency_ms: 100,
+            quality: ConnectionQuality::Good,
+            ..Default::default()
+        };
+        service.update_quality_metrics(metrics).await;
+        service
+            .update_participant_quality("alice", QualityMetrics::default(), None)
+            .await;
+
+        // Clear
+        service.clear_quality_metrics().await;
+
+        let snap = service.current_snapshot();
+        assert_eq!(snap.quality_metrics.latency_ms, 0);
+        assert_eq!(snap.quality_metrics.quality, ConnectionQuality::Unknown);
+        assert!(snap.participant_quality.is_empty());
+    }
+
+    #[tokio::test]
+    async fn quality_warning_detection() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        assert!(!service.should_show_quality_warning());
+
+        let poor_metrics = QualityMetrics {
+            latency_ms: 400,
+            packet_loss_percent: 6.0,
+            quality: ConnectionQuality::Poor,
+            ..Default::default()
+        };
+        service.update_quality_metrics(poor_metrics).await;
+
+        assert!(service.should_show_quality_warning());
+    }
+
+    #[tokio::test]
+    async fn bandwidth_stats_update() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        service.update_bandwidth_stats(1_000_000, 2_500_000).await;
+
+        let metrics = service.get_quality_metrics();
+        assert_eq!(metrics.bytes_sent, 1_000_000);
+        assert_eq!(metrics.bytes_received, 2_500_000);
     }
 }

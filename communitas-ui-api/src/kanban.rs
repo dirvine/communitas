@@ -331,3 +331,70 @@ mod tests {
         assert_eq!(entry.action_type, "moved");
     }
 }
+
+/// Swimlane view modes for grouping cards.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum SwimlaneMode {
+    /// Standard column view (no swimlanes).
+    #[default]
+    None,
+    /// Group cards by assignee.
+    ByAssignee,
+    /// Group cards by tag.
+    ByTag,
+    /// Group cards by state.
+    ByState,
+}
+
+impl SwimlaneMode {
+    /// Returns a human-readable label for the mode.
+    #[must_use]
+    pub fn label(&self) -> &'static str {
+        match self {
+            SwimlaneMode::None => "Standard",
+            SwimlaneMode::ByAssignee => "By Assignee",
+            SwimlaneMode::ByTag => "By Tag",
+            SwimlaneMode::ByState => "By State",
+        }
+    }
+}
+
+impl std::fmt::Display for SwimlaneMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.label())
+    }
+}
+
+#[cfg(test)]
+mod swimlane_tests {
+    use super::*;
+
+    #[test]
+    fn swimlane_mode_default() {
+        let mode = SwimlaneMode::default();
+        assert_eq!(mode, SwimlaneMode::None);
+    }
+
+    #[test]
+    fn swimlane_mode_labels() {
+        assert_eq!(SwimlaneMode::None.label(), "Standard");
+        assert_eq!(SwimlaneMode::ByAssignee.label(), "By Assignee");
+        assert_eq!(SwimlaneMode::ByTag.label(), "By Tag");
+        assert_eq!(SwimlaneMode::ByState.label(), "By State");
+    }
+
+    #[test]
+    fn swimlane_mode_display() {
+        assert_eq!(format!("{}", SwimlaneMode::None), "Standard");
+        assert_eq!(format!("{}", SwimlaneMode::ByAssignee), "By Assignee");
+        assert_eq!(format!("{}", SwimlaneMode::ByTag), "By Tag");
+        assert_eq!(format!("{}", SwimlaneMode::ByState), "By State");
+    }
+
+    #[test]
+    fn swimlane_mode_equality() {
+        assert_eq!(SwimlaneMode::None, SwimlaneMode::None);
+        assert_ne!(SwimlaneMode::None, SwimlaneMode::ByAssignee);
+        assert_ne!(SwimlaneMode::ByAssignee, SwimlaneMode::ByTag);
+    }
+}

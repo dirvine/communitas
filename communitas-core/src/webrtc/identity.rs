@@ -35,6 +35,23 @@ impl CommunitasIdentity {
         Ok(Self { four_words })
     }
 
+    /// Creates a placeholder identity for group calls.
+    ///
+    /// Used when starting a group call where there's no initial target peer.
+    /// The placeholder value is a valid four-word address but serves as a
+    /// sentinel value until real peers join.
+    pub fn placeholder() -> Self {
+        // Use a well-known placeholder that's a valid four-word format
+        Self {
+            four_words: "group-call-room-host".to_string(),
+        }
+    }
+
+    /// Returns true if this is a placeholder identity.
+    pub fn is_placeholder(&self) -> bool {
+        self.four_words == "group-call-room-host"
+    }
+
     /// Get the four-word address
     pub fn four_words(&self) -> &str {
         &self.four_words
@@ -103,5 +120,21 @@ mod tests {
         let json = serde_json::to_string(&identity).expect("serialize");
         let deserialized: CommunitasIdentity = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(identity, deserialized);
+    }
+
+    #[test]
+    fn test_placeholder_identity() {
+        let placeholder = CommunitasIdentity::placeholder();
+
+        assert!(placeholder.is_placeholder());
+        assert_eq!(placeholder.four_words(), "group-call-room-host");
+    }
+
+    #[test]
+    fn test_non_placeholder_identity() {
+        let identity =
+            CommunitasIdentity::new("ocean-forest-moon-star".to_string()).expect("valid identity");
+
+        assert!(!identity.is_placeholder());
     }
 }

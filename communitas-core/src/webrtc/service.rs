@@ -14,6 +14,7 @@ use super::identity::CommunitasIdentity;
 use crate::gossip::GossipContext;
 use anyhow::{Result, anyhow};
 use saorsa_webrtc_core::call::{CallManager, CallManagerConfig};
+use saorsa_webrtc_core::identity::PeerIdentity;
 use saorsa_webrtc_core::signaling::{SignalingHandler, SignalingMessage};
 use saorsa_webrtc_core::types::{CallEvent, CallId, MediaConstraints};
 use std::collections::HashMap;
@@ -21,13 +22,45 @@ use std::sync::Arc;
 use tokio::sync::{RwLock, broadcast};
 use tracing::{debug, info, warn};
 
+/// Type of call topology.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CallTopology {
+    /// Direct 1:1 call with single peer connection.
+    #[default]
+    Direct,
+    /// Mesh topology for small group calls (≤4 participants).
+    /// Each participant maintains N-1 peer connections.
+    Mesh,
+}
+
+/// State of a peer connection within a group call.
+#[derive(Debug, Clone)]
+pub struct PeerConnectionState {
+    /// The remote peer identity.
+    pub peer: CommunitasIdentity,
+    /// Whether the connection is established.
+    pub is_connected: bool,
+    /// When the connection was established.
+    pub connected_at: Option<std::time::SystemTime>,
+}
+
 /// Active call state
 #[derive(Debug, Clone)]
 pub struct CallState {
     /// Call ID
     pub call_id: CallId,
-    /// Target peer identity
+    /// Entity ID this call is associated with (for entity-based call rooms).
+    pub entity_id: Option<String>,
+    /// Call topology.
+    pub topology: CallTopology,
+    /// For direct calls: the single target peer.
+    /// For group calls: the first peer (call initiator or first participant joined).
     pub target: CommunitasIdentity,
+    /// For group calls: all peer connections in the mesh.
+    /// Empty for direct calls.
+    pub peer_connections: Vec<PeerConnectionState>,
+    /// Maximum participants allowed (for group calls).
+    pub max_participants: u32,
     /// Media constraints
     pub constraints: MediaConstraints,
     /// Is video currently enabled
@@ -38,6 +71,121 @@ pub struct CallState {
     pub is_screen_sharing: bool,
     /// Call start time
     pub started_at: std::time::SystemTime,
+}
+
+impl CallState {
+    /// Creates a new direct call state.
+    pub fn new_direct(
+        call_id: CallId,
+        target: CommunitasIdentity,
+        constraints: MediaConstraints,
+    ) -> Self {
+        Self {
+            call_id,
+            entity_id: None,
+            topology: CallTopology::Direct,
+            target,
+            peer_connections: Vec::new(),
+            max_participants: 2,
+            constraints: constraints.clone(),
+            is_video_enabled: constraints.has_video(),
+            is_audio_enabled: constraints.has_audio(),
+            is_screen_sharing: false,
+            started_at: std::time::SystemTime::now(),
+        }
+    }
+
+    /// Creates a new group call state with mesh topology.
+    pub fn new_group(
+        call_id: CallId,
+        entity_id: String,
+        constraints: MediaConstraints,
+        max_participants: u32,
+    ) -> Self {
+        Self {
+            call_id,
+            entity_id: Some(entity_id),
+            topology: CallTopology::Mesh,
+            target: CommunitasIdentity::placeholder(),
+            peer_connections: Vec::new(),
+            max_participants: max_participants.min(4), // Mesh topology limited to 4
+            constraints: constraints.clone(),
+            is_video_enabled: constraints.has_video(),
+            is_audio_enabled: constraints.has_audio(),
+            is_screen_sharing: false,
+            started_at: std::time::SystemTime::now(),
+        }
+    }
+
+    /// Returns true if this is a group call with mesh topology.
+    pub fn is_group_call(&self) -> bool {
+        matches!(self.topology, CallTopology::Mesh)
+    }
+
+    /// Returns the number of active peer connections.
+    pub fn peer_count(&self) -> usize {
+        if self.is_group_call() {
+            self.peer_connections.len()
+        } else {
+            1 // Direct call always has one peer
+        }
+    }
+
+    /// Returns true if the call can accept more participants.
+    pub fn can_add_participant(&self) -> bool {
+        if self.is_group_call() {
+            // +1 for self
+            (self.peer_connections.len() + 1) < self.max_participants as usize
+        } else {
+            false // Direct calls are always 1:1
+        }
+    }
+
+    /// Adds a peer to the group call mesh.
+    pub fn add_peer(&mut self, peer: CommunitasIdentity) -> bool {
+        if !self.can_add_participant() {
+            return false;
+        }
+
+        // Don't add duplicates
+        if self.peer_connections.iter().any(|p| p.peer == peer) {
+            return false;
+        }
+
+        self.peer_connections.push(PeerConnectionState {
+            peer,
+            is_connected: false,
+            connected_at: None,
+        });
+        true
+    }
+
+    /// Marks a peer connection as established.
+    pub fn mark_peer_connected(&mut self, peer: &CommunitasIdentity) {
+        if let Some(state) = self.peer_connections.iter_mut().find(|p| &p.peer == peer) {
+            state.is_connected = true;
+            state.connected_at = Some(std::time::SystemTime::now());
+        }
+    }
+
+    /// Removes a peer from the group call mesh.
+    pub fn remove_peer(&mut self, peer: &CommunitasIdentity) -> bool {
+        let initial_len = self.peer_connections.len();
+        self.peer_connections.retain(|p| &p.peer != peer);
+        self.peer_connections.len() < initial_len
+    }
+
+    /// Gets all peers in the call.
+    pub fn get_all_peers(&self) -> Vec<CommunitasIdentity> {
+        if self.is_group_call() {
+            self.peer_connections
+                .iter()
+                .map(|p| p.peer.clone())
+                .collect()
+        } else {
+            vec![self.target.clone()]
+        }
+    }
 }
 
 /// Media device information
@@ -202,16 +350,8 @@ impl CommunitasWebRtcService {
 
         info!("Sent SDP offer to {} for call {}", target, call_id);
 
-        // Create call state for tracking
-        let call_state = CallState {
-            call_id,
-            target: target.clone(),
-            constraints: constraints.clone(),
-            is_video_enabled: constraints.has_video(),
-            is_audio_enabled: constraints.has_audio(),
-            is_screen_sharing: false,
-            started_at: std::time::SystemTime::now(),
-        };
+        // Create call state for tracking (direct 1:1 call)
+        let call_state = CallState::new_direct(call_id, target.clone(), constraints.clone());
 
         // Store call state
         {
@@ -230,6 +370,227 @@ impl CommunitasWebRtcService {
         let _ = self.event_tx.send(event);
 
         Ok(call_id)
+    }
+
+    /// Initiate a group call on an entity (channel, group, etc.)
+    ///
+    /// Creates a new call with mesh topology where each participant maintains
+    /// N-1 peer connections directly with other participants (up to 4 total).
+    ///
+    /// # Arguments
+    /// * `entity_id` - The entity ID (channel/group) to start the call on
+    /// * `constraints` - Media constraints (audio, video)
+    /// * `max_participants` - Maximum participants allowed (capped at 4 for mesh)
+    ///
+    /// # Returns
+    /// The call ID for the initiated group call
+    pub async fn initiate_group_call(
+        &self,
+        entity_id: &str,
+        constraints: MediaConstraints,
+        max_participants: u32,
+    ) -> Result<CallId> {
+        info!(
+            "Initiating group call on entity {} with max {} participants",
+            entity_id, max_participants
+        );
+
+        // For mesh topology, limit to 4 participants
+        let max_participants = max_participants.min(4);
+
+        // Generate call ID (not tied to a specific peer in group calls)
+        let call_id = CallId::new();
+
+        debug!("Created group call {} on entity {}", call_id, entity_id);
+
+        // Create group call state
+        let call_state = CallState::new_group(
+            call_id,
+            entity_id.to_string(),
+            constraints.clone(),
+            max_participants,
+        );
+
+        // Store call state
+        {
+            let mut calls = self.active_calls.write().await;
+            calls.insert(call_id, call_state);
+        }
+
+        info!(
+            "Group call {} initialized on entity {} (max {} participants, mesh topology)",
+            call_id, entity_id, max_participants
+        );
+
+        Ok(call_id)
+    }
+
+    /// Join an existing group call
+    ///
+    /// Establishes peer connections with all existing participants in the call
+    /// using mesh topology.
+    ///
+    /// # Arguments
+    /// * `call_id` - The ID of the group call to join
+    /// * `constraints` - Media constraints for the local side (used when creating peer connections)
+    ///
+    /// # Errors
+    /// Returns error if call is full or doesn't exist
+    pub async fn join_group_call(
+        &self,
+        call_id: CallId,
+        _constraints: MediaConstraints,
+    ) -> Result<()> {
+        // Note: constraints will be used when creating actual peer connections
+        // Currently peer connection creation is a placeholder
+        info!("Joining group call {}", call_id);
+
+        // Check if call exists and can accept participants
+        let (can_join, existing_peers) = {
+            let calls = self.active_calls.read().await;
+            if let Some(call) = calls.get(&call_id) {
+                if !call.is_group_call() {
+                    return Err(anyhow!("Call {} is not a group call", call_id));
+                }
+                (call.can_add_participant(), call.get_all_peers())
+            } else {
+                return Err(anyhow!("Group call {} not found", call_id));
+            }
+        };
+
+        if !can_join {
+            return Err(anyhow!("Group call {} is full", call_id));
+        }
+
+        // Establish peer connections with all existing participants
+        for peer in &existing_peers {
+            if peer.is_placeholder() {
+                continue;
+            }
+
+            debug!(
+                "Establishing peer connection with {} for group call {}",
+                peer, call_id
+            );
+
+            // Create SDP offer for this peer
+            // In a full implementation, this would create an actual peer connection
+            let session_id = format!("{}:{}", call_id, peer.unique_id());
+
+            let offer_message = SignalingMessage::Offer {
+                session_id: session_id.clone(),
+                sdp: "group-call-offer".to_string(), // Placeholder SDP
+                quic_endpoint: None,
+            };
+
+            if let Err(e) = self
+                .signaling_handler
+                .send_message(peer, offer_message)
+                .await
+            {
+                warn!(
+                    "Failed to send offer to peer {} for group call {}: {}",
+                    peer, call_id, e
+                );
+            }
+        }
+
+        info!(
+            "Initiated peer connections with {} existing participants in group call {}",
+            existing_peers.len(),
+            call_id
+        );
+
+        Ok(())
+    }
+
+    /// Add a participant to a group call
+    ///
+    /// Called when a remote participant joins the group call.
+    /// Establishes a new peer connection and notifies existing participants.
+    ///
+    /// # Arguments
+    /// * `call_id` - The group call ID
+    /// * `participant` - The identity of the joining participant
+    pub async fn add_group_participant(
+        &self,
+        call_id: CallId,
+        participant: CommunitasIdentity,
+    ) -> Result<()> {
+        info!(
+            "Adding participant {} to group call {}",
+            participant, call_id
+        );
+
+        // Add participant to call state
+        {
+            let mut calls = self.active_calls.write().await;
+            let call = calls
+                .get_mut(&call_id)
+                .ok_or_else(|| anyhow!("Group call {} not found", call_id))?;
+
+            if !call.is_group_call() {
+                return Err(anyhow!("Call {} is not a group call", call_id));
+            }
+
+            if !call.add_peer(participant.clone()) {
+                return Err(anyhow!(
+                    "Cannot add participant to group call {} (full or duplicate)",
+                    call_id
+                ));
+            }
+        }
+
+        debug!(
+            "Participant {} added to group call {}",
+            participant, call_id
+        );
+
+        Ok(())
+    }
+
+    /// Remove a participant from a group call
+    ///
+    /// Called when a participant leaves or disconnects from the group call.
+    ///
+    /// # Arguments
+    /// * `call_id` - The group call ID
+    /// * `participant` - The identity of the leaving participant
+    pub async fn remove_group_participant(
+        &self,
+        call_id: CallId,
+        participant: &CommunitasIdentity,
+    ) -> Result<()> {
+        info!(
+            "Removing participant {} from group call {}",
+            participant, call_id
+        );
+
+        // Remove participant from call state
+        {
+            let mut calls = self.active_calls.write().await;
+            let call = calls
+                .get_mut(&call_id)
+                .ok_or_else(|| anyhow!("Group call {} not found", call_id))?;
+
+            if !call.is_group_call() {
+                return Err(anyhow!("Call {} is not a group call", call_id));
+            }
+
+            if !call.remove_peer(participant) {
+                warn!(
+                    "Participant {} not found in group call {}",
+                    participant, call_id
+                );
+            }
+        }
+
+        debug!(
+            "Participant {} removed from group call {}",
+            participant, call_id
+        );
+
+        Ok(())
     }
 
     /// Accept an incoming call
@@ -269,16 +630,9 @@ impl CommunitasWebRtcService {
                 .await
                 .map_err(|e| anyhow!("Failed to send SDP answer: {}", e))?;
 
-            // Create and store call state
-            let call_state = CallState {
-                call_id,
-                target: info.caller.clone(),
-                constraints: constraints.clone(),
-                is_video_enabled: constraints.has_video(),
-                is_audio_enabled: constraints.has_audio(),
-                is_screen_sharing: false,
-                started_at: std::time::SystemTime::now(),
-            };
+            // Create and store call state (direct 1:1 call)
+            let call_state =
+                CallState::new_direct(call_id, info.caller.clone(), constraints.clone());
 
             {
                 let mut calls = self.active_calls.write().await;
@@ -593,14 +947,49 @@ impl CommunitasWebRtcService {
         calls.values().cloned().collect()
     }
 
-    /// Get call participants for an active call
+    /// Get call participants for an active call.
+    ///
+    /// For direct calls, returns the local user and the target.
+    /// For group calls, returns the local user and all connected peers.
     pub async fn get_call_participants(&self, call_id: CallId) -> Result<Vec<CommunitasIdentity>> {
         let calls = self.active_calls.read().await;
         let call = calls
             .get(&call_id)
             .ok_or_else(|| anyhow!("Call not found"))?;
 
-        Ok(vec![self.local_identity.clone(), call.target.clone()])
+        let mut participants = vec![self.local_identity.clone()];
+
+        if call.is_group_call() {
+            // For group calls, add all peer connections
+            for peer in call.get_all_peers() {
+                if !peer.is_placeholder() {
+                    participants.push(peer);
+                }
+            }
+        } else {
+            // For direct calls, add the single target
+            participants.push(call.target.clone());
+        }
+
+        Ok(participants)
+    }
+
+    /// Check if a call is a group call.
+    pub async fn is_group_call(&self, call_id: CallId) -> Result<bool> {
+        let calls = self.active_calls.read().await;
+        let call = calls
+            .get(&call_id)
+            .ok_or_else(|| anyhow!("Call not found"))?;
+
+        Ok(call.is_group_call())
+    }
+
+    /// Get the entity ID for a group call.
+    ///
+    /// Returns None if the call is not a group call or doesn't have an entity ID.
+    pub async fn get_call_entity(&self, call_id: CallId) -> Option<String> {
+        let calls = self.active_calls.read().await;
+        calls.get(&call_id).and_then(|call| call.entity_id.clone())
     }
 
     /// Subscribe to call events
@@ -640,5 +1029,156 @@ mod tests {
         let video = MediaConstraints::video_call();
         assert!(video.has_audio());
         assert!(video.has_video());
+    }
+
+    #[test]
+    fn test_call_topology() {
+        assert_eq!(CallTopology::default(), CallTopology::Direct);
+        assert_ne!(CallTopology::Direct, CallTopology::Mesh);
+    }
+
+    #[test]
+    fn test_direct_call_state() {
+        let call_id = CallId::new();
+        let target = CommunitasIdentity::placeholder();
+        let constraints = MediaConstraints::audio_only();
+
+        let state = CallState::new_direct(call_id, target.clone(), constraints);
+
+        assert_eq!(state.call_id, call_id);
+        assert_eq!(state.target, target);
+        assert!(!state.is_group_call());
+        assert_eq!(state.peer_count(), 1);
+        assert!(!state.can_add_participant());
+        assert!(state.entity_id.is_none());
+        assert_eq!(state.max_participants, 2);
+    }
+
+    #[test]
+    fn test_group_call_state() {
+        let call_id = CallId::new();
+        let entity_id = "test-channel".to_string();
+        let constraints = MediaConstraints::audio_only();
+
+        let state = CallState::new_group(call_id, entity_id.clone(), constraints, 4);
+
+        assert_eq!(state.call_id, call_id);
+        assert!(state.is_group_call());
+        assert_eq!(state.peer_count(), 0); // No peers yet
+        assert!(state.can_add_participant());
+        assert_eq!(state.entity_id, Some(entity_id));
+        assert_eq!(state.max_participants, 4);
+        assert!(state.target.is_placeholder());
+    }
+
+    #[test]
+    fn test_group_call_max_participants_capped() {
+        let call_id = CallId::new();
+        let constraints = MediaConstraints::audio_only();
+
+        // Request 100 participants, but should be capped at 4 for mesh
+        let state = CallState::new_group(call_id, "test".to_string(), constraints, 100);
+
+        assert_eq!(state.max_participants, 4);
+    }
+
+    #[test]
+    fn test_add_peer_to_group_call() {
+        let call_id = CallId::new();
+        let constraints = MediaConstraints::audio_only();
+        let mut state = CallState::new_group(call_id, "test".to_string(), constraints, 4);
+
+        let peer1 = CommunitasIdentity::placeholder(); // Using placeholder for testing
+
+        // First add should succeed (can have 3 peers + self = 4)
+        assert!(state.add_peer(peer1.clone()));
+        assert_eq!(state.peer_count(), 1);
+
+        // Adding same peer again should fail (duplicate detection)
+        assert!(!state.add_peer(peer1.clone()));
+        assert_eq!(state.peer_count(), 1);
+    }
+
+    #[test]
+    fn test_remove_peer_from_group_call() {
+        let call_id = CallId::new();
+        let constraints = MediaConstraints::audio_only();
+        let mut state = CallState::new_group(call_id, "test".to_string(), constraints, 4);
+
+        let peer = CommunitasIdentity::placeholder();
+
+        state.add_peer(peer.clone());
+        assert_eq!(state.peer_count(), 1);
+
+        assert!(state.remove_peer(&peer));
+        assert_eq!(state.peer_count(), 0);
+
+        // Removing again should return false
+        assert!(!state.remove_peer(&peer));
+    }
+
+    #[test]
+    fn test_mark_peer_connected() {
+        let call_id = CallId::new();
+        let constraints = MediaConstraints::audio_only();
+        let mut state = CallState::new_group(call_id, "test".to_string(), constraints, 4);
+
+        let peer = CommunitasIdentity::placeholder();
+        state.add_peer(peer.clone());
+
+        // Initially not connected
+        assert!(!state.peer_connections[0].is_connected);
+        assert!(state.peer_connections[0].connected_at.is_none());
+
+        // Mark connected
+        state.mark_peer_connected(&peer);
+
+        assert!(state.peer_connections[0].is_connected);
+        assert!(state.peer_connections[0].connected_at.is_some());
+    }
+
+    #[test]
+    fn test_get_all_peers() {
+        let call_id = CallId::new();
+        let constraints = MediaConstraints::audio_only();
+
+        // Direct call
+        let target = CommunitasIdentity::placeholder();
+        let direct_state = CallState::new_direct(call_id, target.clone(), constraints.clone());
+        let peers = direct_state.get_all_peers();
+        assert_eq!(peers.len(), 1);
+        assert_eq!(peers[0], target);
+
+        // Group call
+        let mut group_state =
+            CallState::new_group(CallId::new(), "test".to_string(), constraints, 4);
+        let peer = CommunitasIdentity::placeholder();
+        group_state.add_peer(peer.clone());
+
+        let peers = group_state.get_all_peers();
+        assert_eq!(peers.len(), 1);
+        assert_eq!(peers[0], peer);
+    }
+
+    #[test]
+    fn test_peer_connection_state() {
+        let peer = CommunitasIdentity::placeholder();
+
+        let state = PeerConnectionState {
+            peer: peer.clone(),
+            is_connected: false,
+            connected_at: None,
+        };
+
+        assert!(!state.is_connected);
+        assert!(state.connected_at.is_none());
+    }
+
+    #[test]
+    fn test_placeholder_identity() {
+        let placeholder = CommunitasIdentity::placeholder();
+
+        assert!(placeholder.is_placeholder());
+        assert_eq!(placeholder.four_words(), "group-call-room-host");
     }
 }

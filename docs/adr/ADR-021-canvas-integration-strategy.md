@@ -1,7 +1,7 @@
 # ADR-021: Canvas Integration Strategy (Saorsa Canvas)
 
 ## Status
-Accepted (2026-01-19)
+Implemented (Phase 4 completed 2026-01-22)
 
 ## Context
 - Milestone 3 of the Dioxus prototype plan includes "Advanced Surfaces" with canvas/whiteboard capabilities for collaborative drawing, AI-rendered visuals, and real-time annotation.
@@ -131,26 +131,36 @@ Future enhancement: Bridge canvas sessions to gossip for collaborative whiteboar
 
 ## Implementation Plan
 
-### Phase 1: Foundation
-1. Add canvas-core and canvas-renderer as workspace dependencies
-2. Create `communitas-ui-service/src/canvas.rs` with `CanvasService`
-3. Implement core methods: `add_element`, `remove_element`, `get_scene`, `subscribe`
-4. Add unit tests (minimum 15)
+### Phase 1: Foundation (Completed)
+1. ✅ Add canvas-core and canvas-renderer as workspace dependencies
+2. ✅ Create `communitas-ui-service/src/canvas.rs` with `CanvasService`
+3. ✅ Implement core methods: `add_element`, `remove_element`, `get_scene`, `subscribe`
+4. ✅ Add unit tests (49 canvas lib tests + 20 integration tests)
 
-### Phase 2: MCP Integration
-1. Add canvas tools to communitas-mcp (`canvas_render`, `canvas_interact`, `canvas_export`)
-2. Wire tools to `CanvasService` methods
-3. Add `communitas://canvas/` resource URIs
+### Phase 2: MCP Integration (Completed)
+1. ✅ Add canvas tools to communitas-mcp
+2. ✅ Wire tools to `CanvasService` methods
+3. ✅ Add `communitas://canvas/` resource URIs
 
-### Phase 3: Dioxus Integration
-1. Create canvas component in communitas-dioxus
-2. Wire to `CanvasService` via UiServices
-3. Implement touch/mouse input handling via `InputFusion`
+### Phase 3: Dioxus Integration (Completed)
+1. ✅ Create canvas component in communitas-dioxus
+2. ✅ Wire to `CanvasService` via UiServices
+3. ✅ Implement touch/mouse input handling via `InputFusion`
 
-### Phase 4: Advanced Features (Post-Milestone 3)
-1. Collaborative canvas via gossip bridge
-2. AI-driven chart/diagram generation
-3. Export to virtual disk storage
+### Phase 4: Canvas Sync (Completed - Phase 6.5 PLAN-40)
+Implemented collaborative canvas sync with the following features:
+1. ✅ **Undo/Redo History System** - Full operation timeline with entity-scoped history
+2. ✅ **Offline Queue Persistence** - Commands queue when offline, flush on reconnection
+3. ✅ **Canvas Gossip Message Types** - `CanvasOperation`, `CanvasCursorUpdate`, `CanvasStateRequest`, `CanvasStateResponse`
+4. ✅ **Bidirectional CRDT Sync** - Yrs-based scene synchronization via gossip overlay
+5. ✅ **Shared Cursors** - Real-time cursor position sharing (throttled to 10 Hz)
+6. ✅ **MCP Canvas Sync Tools** - `canvas_undo`, `canvas_redo`, `canvas_get_history`, `canvas_broadcast_cursor`, `canvas_get_remote_cursors`, `canvas_flush_offline_queue`
+7. ✅ **UI Enhancements** - History scrubber, sync status badge, remote cursor display
+
+**Note on sync strategy**: While the original ADR recommended LWW for canvas, Phase 6.5 implemented Yrs CRDT integration to maintain consistency with the broader Communitas sync architecture. The Yrs-based approach provides:
+- Automatic conflict resolution for concurrent edits
+- Efficient delta-based updates via gossip
+- Unified sync model across the application
 
 ## References
 - ADR-019: Shared Rust UI Service Layer

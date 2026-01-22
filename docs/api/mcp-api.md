@@ -231,6 +231,8 @@ Route through `KanbanService` for MCP-UI parity.
 
 Route through `CanvasService` for MCP-UI parity.
 
+#### Element Management
+
 | Tool | Description |
 |------|-------------|
 | `canvas_get_snapshot` | Get current canvas state |
@@ -248,6 +250,17 @@ Route through `CanvasService` for MCP-UI parity.
 | `canvas_import` | Import canvas from JSON |
 | `canvas_element_at` | Get element at coordinates |
 
+#### History & Sync
+
+| Tool | Description |
+|------|-------------|
+| `canvas_undo` | Undo the last canvas operation |
+| `canvas_redo` | Redo the last undone operation |
+| `canvas_get_history` | Get the operation history timeline |
+| `canvas_broadcast_cursor` | Broadcast cursor position to collaborators |
+| `canvas_get_remote_cursors` | Get all visible remote cursors |
+| `canvas_flush_offline_queue` | Flush pending offline operations to network |
+
 #### Example: Add Text to Canvas
 
 ```json
@@ -264,6 +277,63 @@ Route through `CanvasService` for MCP-UI parity.
     }
   },
   "id": 5
+}
+```
+
+#### Example: Undo/Redo
+
+```json
+// Undo last operation
+{
+  "jsonrpc": "2.0",
+  "method": "tools/call",
+  "params": {
+    "name": "canvas_undo",
+    "arguments": {
+      "entity_id": "whiteboard-123"
+    }
+  },
+  "id": 6
+}
+
+// Response
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "content": [{
+      "type": "text",
+      "text": "{\"undone\": true, \"operation\": {\"id\": \"op-123\", \"description\": \"Add text element\", \"timestamp_ms\": 1706000000}}"
+    }]
+  },
+  "id": 6
+}
+```
+
+#### Example: Get Remote Cursors
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "tools/call",
+  "params": {
+    "name": "canvas_get_remote_cursors",
+    "arguments": {
+      "entity_id": "whiteboard-123"
+    }
+  },
+  "id": 7
+}
+
+// Response
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "content": [{
+      "type": "text",
+      "text": "{\"cursors\": [{\"user_id\": \"alice-123\", \"user_name\": \"Alice\", \"x\": 250.5, \"y\": 180.0, \"color\": \"#FF5722\", \"tool\": \"select\", \"last_active_ms\": 1706000000}], \"count\": 1}"
+    }]
+  },
+  "id": 7
 }
 ```
 
@@ -508,10 +578,18 @@ MCP operations trigger the same watch channel updates as UI operations:
 1. **MessagingService**: Thread list, message list updates
 2. **DriveService**: File list, disk stats updates
 3. **KanbanService**: Board/column/card snapshot updates
-4. **CanvasService**: Element updates, selection changes
+4. **CanvasService**: Element updates, selection changes, history updates, remote cursors
 5. **CallService**: Call status, participant updates
 
 This means UI components automatically reflect MCP changes via reactive signals, enabling real-time collaboration between AI agents and human users.
+
+### Canvas Sync Details
+
+Canvas operations support collaborative editing with:
+- **CRDT-based sync**: Operations merge without conflicts using Yrs
+- **Undo/redo history**: Full operation timeline with entity-scoped history
+- **Remote cursors**: Real-time cursor position sharing (throttled to 10 Hz)
+- **Offline queue**: Operations queued when offline, flushed on reconnection
 
 ## Behavioral Notes
 

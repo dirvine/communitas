@@ -1603,6 +1603,15 @@ pub fn list_tools(authenticated: bool) -> Vec<Tool> {
                 "required": ["call_id"]
             }),
         },
+        Tool {
+            name: "list_active_calls".to_string(),
+            description: "List all currently active calls across entities".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {},
+                "required": []
+            }),
+        },
         // Call history tools
         Tool {
             name: "get_call_history".to_string(),
@@ -2264,6 +2273,77 @@ pub fn list_tools(authenticated: bool) -> Vec<Tool> {
                 "required": ["entity_id", "x", "y"]
             }),
         },
+        // ========== Canvas Sync Tools ==========
+        Tool {
+            name: "canvas_undo".to_string(),
+            description: "Undo the last canvas operation. Returns the operation that was undone.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string", "description": "Entity ID for the canvas context"}
+                },
+                "required": ["entity_id"]
+            }),
+        },
+        Tool {
+            name: "canvas_redo".to_string(),
+            description: "Redo the last undone canvas operation. Returns the operation that was redone.".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string", "description": "Entity ID for the canvas context"}
+                },
+                "required": ["entity_id"]
+            }),
+        },
+        Tool {
+            name: "canvas_get_history".to_string(),
+            description: "Get the canvas operation history for timeline display".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string", "description": "Entity ID for the canvas context"},
+                    "limit": {"type": "integer", "description": "Maximum number of history entries to return", "default": 100}
+                },
+                "required": ["entity_id"]
+            }),
+        },
+        Tool {
+            name: "canvas_broadcast_cursor".to_string(),
+            description: "Broadcast cursor position to other collaborators on the canvas".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string", "description": "Entity ID for the canvas context"},
+                    "x": {"type": "number", "description": "Cursor X position in canvas coordinates"},
+                    "y": {"type": "number", "description": "Cursor Y position in canvas coordinates"},
+                    "tool": {"type": "string", "description": "Currently active tool (optional)"}
+                },
+                "required": ["entity_id", "x", "y"]
+            }),
+        },
+        Tool {
+            name: "canvas_get_remote_cursors".to_string(),
+            description: "Get all remote cursors currently visible on the canvas".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string", "description": "Entity ID for the canvas context"}
+                },
+                "required": ["entity_id"]
+            }),
+        },
+        Tool {
+            name: "canvas_flush_offline_queue".to_string(),
+            description: "Flush pending offline operations to sync with the network".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "entity_id": {"type": "string", "description": "Entity ID for the canvas context"}
+                },
+                "required": ["entity_id"]
+            }),
+        },
     ]);
 
     tools
@@ -2499,6 +2579,19 @@ async fn dispatch_canvas_tools(
         "canvas_export" => Some(execute_canvas_export(services, args.clone()).await),
         "canvas_import" => Some(execute_canvas_import(services, args.clone()).await),
         "canvas_element_at" => Some(execute_canvas_element_at(services, args.clone()).await),
+        // Canvas sync tools (Phase 6.5 PLAN-40)
+        "canvas_undo" => Some(execute_canvas_undo(services, args.clone()).await),
+        "canvas_redo" => Some(execute_canvas_redo(services, args.clone()).await),
+        "canvas_get_history" => Some(execute_canvas_get_history(services, args.clone()).await),
+        "canvas_broadcast_cursor" => {
+            Some(execute_canvas_broadcast_cursor(services, args.clone()).await)
+        }
+        "canvas_get_remote_cursors" => {
+            Some(execute_canvas_get_remote_cursors(services, args.clone()).await)
+        }
+        "canvas_flush_offline_queue" => {
+            Some(execute_canvas_flush_offline_queue(services, args.clone()).await)
+        }
         _ => None,
     }
 }
@@ -2635,6 +2728,7 @@ async fn dispatch_social_tools(
         "get_call_participants" => {
             Some(execute_get_call_participants(services, args.clone()).await)
         }
+        "list_active_calls" => Some(execute_list_active_calls(services).await),
         // Call history and notifications
         "get_call_history" => Some(execute_get_call_history(services, args.clone()).await),
         "get_missed_calls" => Some(execute_get_missed_calls(services, args.clone()).await),
@@ -6246,6 +6340,143 @@ async fn execute_canvas_element_at(services: &UiServices, args: Value) -> ToolCa
 }
 
 // ============================================================================
+// Canvas Sync MCP Executor Functions (Phase 6.5 PLAN-40)
+// ============================================================================
+
+async fn execute_canvas_undo(services: &UiServices, args: Value) -> ToolCallResult {
+    let _entity_id = require_str!(args, "entity_id");
+
+    match services.canvas().undo().await {
+        Ok(Some(entry)) => json_result(&json!({
+            "undone": true,
+            "operation": {
+                "id": entry.id,
+                "description": entry.description,
+                "timestamp_ms": entry.timestamp
+            }
+        })),
+        Ok(None) => json_result(&json!({
+            "undone": false,
+            "message": "Nothing to undo"
+        })),
+        Err(e) => error_result(&format!("Failed to undo: {e}")),
+    }
+}
+
+async fn execute_canvas_redo(services: &UiServices, args: Value) -> ToolCallResult {
+    let _entity_id = require_str!(args, "entity_id");
+
+    match services.canvas().redo().await {
+        Ok(Some(entry)) => json_result(&json!({
+            "redone": true,
+            "operation": {
+                "id": entry.id,
+                "description": entry.description,
+                "timestamp_ms": entry.timestamp
+            }
+        })),
+        Ok(None) => json_result(&json!({
+            "redone": false,
+            "message": "Nothing to redo"
+        })),
+        Err(e) => error_result(&format!("Failed to redo: {e}")),
+    }
+}
+
+async fn execute_canvas_get_history(services: &UiServices, args: Value) -> ToolCallResult {
+    let _entity_id = require_str!(args, "entity_id");
+    let limit = args
+        .get("limit")
+        .and_then(|v| v.as_u64())
+        .map(|n| n as usize);
+
+    let history = services.canvas().get_history();
+    let can_undo = services.canvas().can_undo();
+    let can_redo = services.canvas().can_redo();
+
+    let entries: Vec<_> = if let Some(limit) = limit {
+        history.into_iter().take(limit).collect()
+    } else {
+        history
+    };
+
+    let entries_json: Vec<_> = entries
+        .iter()
+        .map(|e| {
+            json!({
+                "id": e.id,
+                "description": e.description,
+                "timestamp_ms": e.timestamp
+            })
+        })
+        .collect();
+
+    json_result(&json!({
+        "entries": entries_json,
+        "count": entries_json.len(),
+        "can_undo": can_undo,
+        "can_redo": can_redo
+    }))
+}
+
+async fn execute_canvas_broadcast_cursor(services: &UiServices, args: Value) -> ToolCallResult {
+    let entity_id = require_str!(args, "entity_id");
+    let x = args.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0);
+    let y = args.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0);
+    let tool = args.get("tool").and_then(|v| v.as_str()).map(String::from);
+
+    match services
+        .canvas()
+        .update_local_cursor(&entity_id, x, y, tool)
+        .await
+    {
+        Ok(broadcast) => json_result(&json!({
+            "broadcast": broadcast,
+            "message": if broadcast { "Cursor position broadcast successfully" } else { "Cursor update throttled" }
+        })),
+        Err(e) => error_result(&format!("Failed to broadcast cursor: {e}")),
+    }
+}
+
+async fn execute_canvas_get_remote_cursors(services: &UiServices, args: Value) -> ToolCallResult {
+    let _entity_id = require_str!(args, "entity_id");
+
+    let cursors = services.canvas().get_remote_cursors();
+
+    let cursors_json: Vec<_> = cursors
+        .iter()
+        .map(|c| {
+            json!({
+                "user_id": c.user_id,
+                "user_name": c.user_name,
+                "x": c.x,
+                "y": c.y,
+                "tool": c.tool,
+                "color": c.color,
+                "last_active_ms": c.last_active
+            })
+        })
+        .collect();
+
+    json_result(&json!({
+        "cursors": cursors_json,
+        "count": cursors_json.len()
+    }))
+}
+
+async fn execute_canvas_flush_offline_queue(services: &UiServices, args: Value) -> ToolCallResult {
+    let _entity_id = require_str!(args, "entity_id");
+
+    match services.canvas().flush_queue().await {
+        Ok(flushed) => json_result(&json!({
+            "flushed": flushed,
+            "message": format!("Flushed {} pending operations", flushed)
+        })),
+        Err(e) => error_result(&format!("Failed to flush offline queue: {e}")),
+    }
+}
+
+// ============================================================================
 // Drive MCP Executor Functions
 // ============================================================================
 
@@ -6953,6 +7184,29 @@ async fn execute_get_call_participants(services: &UiServices, args: Value) -> To
             "participants": participants
         })),
         Err(e) => error_result(&format!("Failed to get call participants: {e}")),
+    }
+}
+
+async fn execute_list_active_calls(services: &UiServices) -> ToolCallResult {
+    match services.call().list_active_calls().await {
+        Ok(calls) => {
+            let call_list: Vec<_> = calls
+                .iter()
+                .map(|c| {
+                    json!({
+                        "id": c.id,
+                        "entity_id": c.entity_id,
+                        "participant_count": c.participant_count,
+                        "started_at": c.started_at
+                    })
+                })
+                .collect();
+            json_result(&json!({
+                "total": calls.len(),
+                "calls": call_list
+            }))
+        }
+        Err(e) => error_result(&format!("Failed to list active calls: {e}")),
     }
 }
 

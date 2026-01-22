@@ -1,14 +1,16 @@
-//! Board view component with columns and cards.
+//! Board view component with columns, cards, and swimlane support.
 
-use communitas_ui_api::kanban::BoardView as BoardViewData;
+use communitas_ui_api::kanban::{BoardView as BoardViewData, CardState, CardView, SwimlaneMode};
 use communitas_ui_service::UiServices;
 use dioxus::prelude::*;
+use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::info;
 
+use super::card::KanbanCard;
 use super::column::KanbanColumn;
 
-/// Board view showing columns with cards.
+/// Board view showing columns with cards or swimlane groupings.
 #[derive(Props, Clone, PartialEq)]
 pub struct BoardViewProps {
     /// The board ID to display.
@@ -27,6 +29,9 @@ pub fn BoardView(props: BoardViewProps) -> Element {
 
     // Conflict banner state
     let mut show_conflict_banner = use_signal(|| false);
+
+    // Swimlane mode state (synced with service)
+    let mut swimlane_mode = use_signal(|| SwimlaneMode::None);
 
     // Fetch board data
     let board_id = props.board_id.clone();
@@ -59,6 +64,7 @@ pub fn BoardView(props: BoardViewProps) -> Element {
     let mut announcement = use_signal(String::new);
 
     let board_id_for_add = props.board_id.clone();
+    let board_id_for_swimlane = props.board_id.clone();
 
     rsx! {
         div {
@@ -107,75 +113,405 @@ pub fn BoardView(props: BoardViewProps) -> Element {
                 if show_filters() {
                     super::filters::FilterPanel {
                         on_filter_change: move |_filters| {
-                            // TODO: Apply filters to visible cards
                             info!(target = "ui.kanban", event = "filters_changed");
+                        },
+                        on_swimlane_change: {
+                            let services = services.clone();
+                            move |mode: SwimlaneMode| {
+                                swimlane_mode.set(mode);
+                                services.kanban().set_swimlane_mode(mode);
+                                info!(target = "ui.kanban", event = "swimlane_mode_changed", mode = ?mode);
+                            }
+                        },
+                        current_swimlane: swimlane_mode(),
+                    }
+                }
+                // Render either swimlane view or standard column view
+                if swimlane_mode() == SwimlaneMode::None {
+                    // Standard column view
+                    div {
+                        class: "flex-1 overflow-x-auto overflow-y-hidden",
+                        div {
+                            class: "flex gap-4 h-full p-4 min-w-max",
+                            role: "list",
+                            aria_label: "Board columns",
+                            {board.columns.iter().map(|column| {
+                                let col_id = column.id.clone();
+                                rsx! {
+                                    KanbanColumn {
+                                        key: "{col_id}",
+                                        column: column.clone(),
+                                        board_id: props.board_id.clone(),
+                                        on_move_announce: move |msg: String| {
+                                            announcement.set(msg);
+                                        },
+                                    }
+                                }
+                            })}
+                            // Add column button
+                            div {
+                                class: "flex-shrink-0 w-72",
+                                if show_add_column() {
+                                    AddColumnForm {
+                                        name: new_column_name(),
+                                        adding: adding_column(),
+                                        on_name_change: move |name: String| new_column_name.set(name),
+                                        on_submit: move |_| {
+                                            let services = services.clone();
+                                            let name = new_column_name();
+                                            let board_id = board_id_for_add.clone();
+                                            adding_column.set(true);
+                                            spawn(async move {
+                                                let position = board_data().map(|b| b.columns.len() as u32).unwrap_or(0);
+                                                match services.kanban().create_column(&board_id, &name, position).await {
+                                                    Ok(col) => {
+                                                        info!(target = "ui.kanban", event = "column_created", column_id = %col.id);
+                                                        show_add_column.set(false);
+                                                        new_column_name.set(String::new());
+                                                        // Refresh board data
+                                                        if let Ok(updated) = services.kanban().get_board(&board_id).await {
+                                                            board_data.set(Some(updated));
+                                                        }
+                                                    }
+                                                    Err(err) => {
+                                                        tracing::error!(target = "ui.kanban", "failed to create column: {err}");
+                                                    }
+                                                }
+                                                adding_column.set(false);
+                                            });
+                                        },
+                                        on_cancel: move |_| {
+                                            show_add_column.set(false);
+                                            new_column_name.set(String::new());
+                                        },
+                                    }
+                                } else {
+                                    button {
+                                        class: "w-full h-12 rounded-lg border-2 border-dashed border-slate-700 text-slate-400 hover:border-emerald-400 hover:text-emerald-400 transition flex items-center justify-center gap-2",
+                                        onclick: move |_| show_add_column.set(true),
+                                        span { "+" }
+                                        "Add Column"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // Swimlane view
+                    SwimlaneView {
+                        board: board.clone(),
+                        board_id: board_id_for_swimlane.clone(),
+                        mode: swimlane_mode(),
+                        on_announce: move |msg: String| {
+                            announcement.set(msg);
                         },
                     }
                 }
-                // Columns container with horizontal scroll
+            }
+        }
+    }
+}
+
+/// A single swimlane containing grouped cards.
+#[derive(Debug)]
+struct Swimlane {
+    /// Unique key for this swimlane.
+    key: String,
+    /// Display label for the swimlane header.
+    label: String,
+    /// Optional color for visual distinction.
+    color: Option<String>,
+    /// Cards in this swimlane.
+    cards: Vec<CardView>,
+}
+
+/// Group cards into swimlanes based on the specified mode.
+fn group_cards_into_swimlanes(board: &BoardViewData, mode: SwimlaneMode) -> Vec<Swimlane> {
+    // Collect all cards from all columns
+    let all_cards: Vec<CardView> = board
+        .columns
+        .iter()
+        .flat_map(|col| col.cards.clone())
+        .collect();
+
+    match mode {
+        SwimlaneMode::None => vec![], // Should not happen, handled by caller
+        SwimlaneMode::ByAssignee => group_by_assignee(&all_cards),
+        SwimlaneMode::ByTag => group_by_tag(&all_cards),
+        SwimlaneMode::ByState => group_by_state(&all_cards),
+    }
+}
+
+/// Group cards by assignee.
+fn group_by_assignee(cards: &[CardView]) -> Vec<Swimlane> {
+    let mut groups: HashMap<String, Vec<CardView>> = HashMap::new();
+    let mut unassigned: Vec<CardView> = Vec::new();
+
+    for card in cards {
+        if card.assignees.is_empty() {
+            unassigned.push(card.clone());
+        } else {
+            // Card appears in each assignee's swimlane
+            for assignee in &card.assignees {
+                groups
+                    .entry(assignee.clone())
+                    .or_default()
+                    .push(card.clone());
+            }
+        }
+    }
+
+    let mut swimlanes: Vec<Swimlane> = groups
+        .into_iter()
+        .map(|(assignee, cards)| Swimlane {
+            key: assignee.clone(),
+            label: assignee,
+            color: None,
+            cards,
+        })
+        .collect();
+
+    // Sort by label
+    swimlanes.sort_by(|a, b| a.label.cmp(&b.label));
+
+    // Add unassigned at the end
+    if !unassigned.is_empty() {
+        swimlanes.push(Swimlane {
+            key: "_unassigned".to_string(),
+            label: "Unassigned".to_string(),
+            color: Some("#64748b".to_string()), // slate-500
+            cards: unassigned,
+        });
+    }
+
+    swimlanes
+}
+
+/// Group cards by tag.
+fn group_by_tag(cards: &[CardView]) -> Vec<Swimlane> {
+    let mut groups: HashMap<String, (String, Option<String>, Vec<CardView>)> = HashMap::new();
+    let mut no_tag: Vec<CardView> = Vec::new();
+
+    for card in cards {
+        if card.tags.is_empty() {
+            no_tag.push(card.clone());
+        } else {
+            // Card appears in each tag's swimlane
+            for tag in &card.tags {
+                let entry = groups
+                    .entry(tag.id.clone())
+                    .or_insert_with(|| (tag.name.clone(), Some(tag.color.clone()), Vec::new()));
+                entry.2.push(card.clone());
+            }
+        }
+    }
+
+    let mut swimlanes: Vec<Swimlane> = groups
+        .into_iter()
+        .map(|(id, (name, color, cards))| Swimlane {
+            key: id,
+            label: name,
+            color,
+            cards,
+        })
+        .collect();
+
+    // Sort by label
+    swimlanes.sort_by(|a, b| a.label.cmp(&b.label));
+
+    // Add "No Tag" at the end
+    if !no_tag.is_empty() {
+        swimlanes.push(Swimlane {
+            key: "_no_tag".to_string(),
+            label: "No Tag".to_string(),
+            color: Some("#64748b".to_string()), // slate-500
+            cards: no_tag,
+        });
+    }
+
+    swimlanes
+}
+
+/// Group cards by state.
+fn group_by_state(cards: &[CardView]) -> Vec<Swimlane> {
+    let state_order = [
+        (CardState::Todo, "To Do", "#64748b"),             // slate-500
+        (CardState::InProgress, "In Progress", "#3b82f6"), // blue-500
+        (CardState::InReview, "In Review", "#f59e0b"),     // amber-500
+        (CardState::Done, "Done", "#22c55e"),              // emerald-500
+        (CardState::Archived, "Archived", "#475569"),      // slate-600
+    ];
+
+    state_order
+        .iter()
+        .map(|(state, label, color)| {
+            let state_cards: Vec<CardView> = cards
+                .iter()
+                .filter(|c| c.state == *state)
+                .cloned()
+                .collect();
+
+            Swimlane {
+                key: format!("{state:?}"),
+                label: (*label).to_string(),
+                color: Some((*color).to_string()),
+                cards: state_cards,
+            }
+        })
+        .filter(|s| !s.cards.is_empty()) // Only show swimlanes with cards
+        .collect()
+}
+
+/// Swimlane view component showing cards grouped horizontally.
+#[derive(Props, Clone, PartialEq)]
+struct SwimlaneViewProps {
+    board: BoardViewData,
+    board_id: String,
+    mode: SwimlaneMode,
+    on_announce: EventHandler<String>,
+}
+
+#[component]
+fn SwimlaneView(props: SwimlaneViewProps) -> Element {
+    let swimlanes = group_cards_into_swimlanes(&props.board, props.mode);
+
+    if swimlanes.is_empty() {
+        return rsx! {
+            div {
+                class: "flex-1 flex items-center justify-center text-slate-400",
+                p { "No cards to display in swimlane view" }
+            }
+        };
+    }
+
+    rsx! {
+        div {
+            class: "flex-1 overflow-y-auto p-4",
+            div {
+                class: "flex flex-col gap-4",
+                role: "list",
+                aria_label: "Swimlanes",
+                {swimlanes.iter().map(|swimlane| {
+                    let key = swimlane.key.clone();
+                    rsx! {
+                        SwimlaneRow {
+                            key: "{key}",
+                            swimlane: swimlane.clone(),
+                            board_id: props.board_id.clone(),
+                            columns: props.board.columns.clone(),
+                            on_announce: props.on_announce,
+                        }
+                    }
+                })}
+            }
+        }
+    }
+}
+
+/// A single swimlane row with its cards displayed horizontally.
+#[derive(Props, Clone, PartialEq)]
+struct SwimlaneRowProps {
+    swimlane: Swimlane,
+    board_id: String,
+    columns: Vec<communitas_ui_api::kanban::ColumnView>,
+    on_announce: EventHandler<String>,
+}
+
+impl PartialEq for Swimlane {
+    fn eq(&self, other: &Self) -> bool {
+        self.key == other.key
+            && self.label == other.label
+            && self.color == other.color
+            && self.cards == other.cards
+    }
+}
+
+impl Clone for Swimlane {
+    fn clone(&self) -> Self {
+        Self {
+            key: self.key.clone(),
+            label: self.label.clone(),
+            color: self.color.clone(),
+            cards: self.cards.clone(),
+        }
+    }
+}
+
+#[component]
+fn SwimlaneRow(props: SwimlaneRowProps) -> Element {
+    let mut collapsed = use_signal(|| false);
+    let card_count = props.swimlane.cards.len();
+    let header_color = props.swimlane.color.as_deref().unwrap_or("#64748b");
+
+    // Find the column each card belongs to (for drag-drop context)
+    let find_column_for_card = |card_id: &str| -> Option<String> {
+        for col in &props.columns {
+            if col.cards.iter().any(|c| c.id == card_id) {
+                return Some(col.id.clone());
+            }
+        }
+        None
+    };
+
+    rsx! {
+        div {
+            class: "swimlane-row rounded-lg border border-slate-800 bg-slate-900/50",
+            role: "listitem",
+            // Swimlane header
+            button {
+                class: "w-full flex items-center gap-3 p-3 hover:bg-slate-800/50 transition rounded-t-lg",
+                onclick: move |_| collapsed.set(!collapsed()),
+                aria_expanded: if collapsed() { "false" } else { "true" },
+                // Color indicator
+                span {
+                    class: "w-3 h-3 rounded-full flex-shrink-0",
+                    style: "background-color: {header_color}",
+                }
+                // Label
+                span {
+                    class: "font-medium text-slate-200 flex-1 text-left",
+                    "{props.swimlane.label}"
+                }
+                // Card count badge
+                span {
+                    class: "text-xs px-2 py-0.5 rounded-full bg-slate-700 text-slate-400",
+                    "{card_count}"
+                }
+                // Collapse indicator
+                span {
+                    class: "text-slate-500 text-sm",
+                    if collapsed() { "+" } else { "-" }
+                }
+            }
+            // Cards container (horizontal scroll)
+            if !collapsed() {
                 div {
-                    class: "flex-1 overflow-x-auto overflow-y-hidden",
+                    class: "overflow-x-auto border-t border-slate-800",
                     div {
-                        class: "flex gap-4 h-full p-4 min-w-max",
+                        class: "flex gap-3 p-3 min-w-max",
                         role: "list",
-                        aria_label: "Board columns",
-                        {board.columns.iter().map(|column| {
-                            let col_id = column.id.clone();
+                        aria_label: format!("Cards in {}", props.swimlane.label),
+                        {props.swimlane.cards.iter().map(|card| {
+                            let card_id = card.id.clone();
+                            let column_id = find_column_for_card(&card.id)
+                                .unwrap_or_default();
                             rsx! {
-                                KanbanColumn {
-                                    key: "{col_id}",
-                                    column: column.clone(),
-                                    board_id: props.board_id.clone(),
-                                    on_move_announce: move |msg: String| {
-                                        announcement.set(msg);
-                                    },
+                                div {
+                                    key: "{card_id}",
+                                    class: "w-72 flex-shrink-0",
+                                    KanbanCard {
+                                        card: card.clone(),
+                                        board_id: props.board_id.clone(),
+                                        column_id: column_id,
+                                        on_move_announce: props.on_announce,
+                                    }
                                 }
                             }
                         })}
-                        // Add column button
-                        div {
-                            class: "flex-shrink-0 w-72",
-                            if show_add_column() {
-                                AddColumnForm {
-                                    name: new_column_name(),
-                                    adding: adding_column(),
-                                    on_name_change: move |name: String| new_column_name.set(name),
-                                    on_submit: move |_| {
-                                        let services = services.clone();
-                                        let name = new_column_name();
-                                        let board_id = board_id_for_add.clone();
-                                        adding_column.set(true);
-                                        spawn(async move {
-                                            let position = board_data().map(|b| b.columns.len() as u32).unwrap_or(0);
-                                            match services.kanban().create_column(&board_id, &name, position).await {
-                                                Ok(col) => {
-                                                    info!(target = "ui.kanban", event = "column_created", column_id = %col.id);
-                                                    show_add_column.set(false);
-                                                    new_column_name.set(String::new());
-                                                    // Refresh board data
-                                                    if let Ok(updated) = services.kanban().get_board(&board_id).await {
-                                                        board_data.set(Some(updated));
-                                                    }
-                                                }
-                                                Err(err) => {
-                                                    tracing::error!(target = "ui.kanban", "failed to create column: {err}");
-                                                }
-                                            }
-                                            adding_column.set(false);
-                                        });
-                                    },
-                                    on_cancel: move |_| {
-                                        show_add_column.set(false);
-                                        new_column_name.set(String::new());
-                                    },
-                                }
-                            } else {
-                                button {
-                                    class: "w-full h-12 rounded-lg border-2 border-dashed border-slate-700 text-slate-400 hover:border-emerald-400 hover:text-emerald-400 transition flex items-center justify-center gap-2",
-                                    onclick: move |_| show_add_column.set(true),
-                                    span { "+" }
-                                    "Add Column"
-                                }
+                        if props.swimlane.cards.is_empty() {
+                            div {
+                                class: "text-slate-500 text-sm italic py-4 px-2",
+                                "No cards"
                             }
                         }
                     }
@@ -248,7 +584,7 @@ fn ConflictBanner(props: ConflictBannerProps) -> Element {
             role: "alert",
             div {
                 class: "flex items-center gap-2",
-                span { class: "text-amber-400", "⚠️" }
+                span { class: "text-amber-400", "!" }
                 span { class: "text-amber-200 text-sm",
                     "Changes from another device detected. Syncing..."
                 }
@@ -350,9 +686,124 @@ fn AddColumnForm(props: AddColumnFormProps) -> Element {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use communitas_ui_api::kanban::{BoardSettings, ColumnView, TagView};
+
+    fn make_test_card(id: &str, title: &str, state: CardState) -> CardView {
+        CardView {
+            id: id.to_string(),
+            title: title.to_string(),
+            description: None,
+            state,
+            assignees: vec![],
+            tags: vec![],
+            due_date: None,
+            checklist_progress: None,
+            position: 0,
+        }
+    }
+
+    fn make_test_board() -> BoardViewData {
+        BoardViewData {
+            id: "board-1".to_string(),
+            name: "Test Board".to_string(),
+            entity_id: "entity-1".to_string(),
+            description: None,
+            columns: vec![
+                ColumnView {
+                    id: "col-1".to_string(),
+                    name: "To Do".to_string(),
+                    position: 0,
+                    cards: vec![
+                        make_test_card("card-1", "Card 1", CardState::Todo),
+                        make_test_card("card-2", "Card 2", CardState::Todo),
+                    ],
+                    wip_limit: None,
+                },
+                ColumnView {
+                    id: "col-2".to_string(),
+                    name: "In Progress".to_string(),
+                    position: 1,
+                    cards: vec![make_test_card("card-3", "Card 3", CardState::InProgress)],
+                    wip_limit: None,
+                },
+            ],
+            settings: BoardSettings::default(),
+            created_at: 0,
+            updated_at: 0,
+        }
+    }
+
+    #[test]
+    fn group_by_state_creates_correct_swimlanes() {
+        let board = make_test_board();
+        let all_cards: Vec<CardView> = board.columns.iter().flat_map(|c| c.cards.clone()).collect();
+
+        let swimlanes = group_by_state(&all_cards);
+
+        assert_eq!(swimlanes.len(), 2); // Todo and InProgress
+        assert_eq!(swimlanes[0].label, "To Do");
+        assert_eq!(swimlanes[0].cards.len(), 2);
+        assert_eq!(swimlanes[1].label, "In Progress");
+        assert_eq!(swimlanes[1].cards.len(), 1);
+    }
+
+    #[test]
+    fn group_by_assignee_handles_unassigned() {
+        let cards = vec![
+            make_test_card("card-1", "Unassigned Card", CardState::Todo),
+            {
+                let mut card = make_test_card("card-2", "Assigned Card", CardState::Todo);
+                card.assignees = vec!["alice".to_string()];
+                card
+            },
+        ];
+
+        let swimlanes = group_by_assignee(&cards);
+
+        assert_eq!(swimlanes.len(), 2);
+        assert_eq!(swimlanes[0].label, "alice");
+        assert_eq!(swimlanes[0].cards.len(), 1);
+        assert_eq!(swimlanes[1].label, "Unassigned");
+        assert_eq!(swimlanes[1].cards.len(), 1);
+    }
+
+    #[test]
+    fn group_by_tag_handles_no_tag() {
+        let cards = vec![make_test_card("card-1", "No Tag Card", CardState::Todo), {
+            let mut card = make_test_card("card-2", "Tagged Card", CardState::Todo);
+            card.tags = vec![TagView {
+                id: "tag-1".to_string(),
+                name: "Bug".to_string(),
+                color: "#ff0000".to_string(),
+            }];
+            card
+        }];
+
+        let swimlanes = group_by_tag(&cards);
+
+        assert_eq!(swimlanes.len(), 2);
+        assert_eq!(swimlanes[0].label, "Bug");
+        assert_eq!(swimlanes[0].cards.len(), 1);
+        assert_eq!(swimlanes[1].label, "No Tag");
+        assert_eq!(swimlanes[1].cards.len(), 1);
+    }
+
+    #[test]
+    fn empty_cards_return_empty_swimlanes() {
+        let cards: Vec<CardView> = vec![];
+
+        let by_state = group_by_state(&cards);
+        let by_assignee = group_by_assignee(&cards);
+        let by_tag = group_by_tag(&cards);
+
+        assert!(by_state.is_empty());
+        assert!(by_assignee.is_empty());
+        assert!(by_tag.is_empty());
+    }
+
     #[test]
     fn board_header_renders_name() {
-        // Test that header props work correctly
         let name = "Test Board".to_string();
         let desc = Some("A test description".to_string());
         assert_eq!(name, "Test Board");

@@ -15,8 +15,10 @@ mod thread_list;
 #[allow(unused_imports)]
 pub use call::{
     CallButton, CallControls, CallLobby, CallStatusBar, CallView, DeviceSelector,
-    InlineCallControls, MediaErrorBanner, MediaErrorIndicator, MiniCallView, ParticipantGrid,
-    ParticipantTile,
+    IncomingCallBanner, InlineCallControls, MediaErrorBanner, MediaErrorIndicator, MiniCallView,
+    MissedCallBadge, MissedCallsPanel, ParticipantGrid, ParticipantTile, QualityDetailsPanel,
+    QualityDot, QualityIndicator, ReactiveMissedCallBadge, RecordingControls, RecordingDot,
+    RecordingIndicator,
 };
 // Re-export canvas components (will be used when canvas UI is integrated into routes)
 #[allow(unused_imports)]
@@ -34,6 +36,7 @@ pub use message_list::MessageList;
 #[allow(unused_imports)]
 pub use presence_badge::{
     InCallBadge, InCallDot, PresenceBadge, PresenceDot, PresenceOrCallDot, PresenceWithCallBadge,
+    PresentingBadge, PresentingDot,
 };
 // Re-export search components (will be integrated into messaging UI)
 #[allow(unused_imports)]

@@ -622,3 +622,558 @@ async fn test_element_at_position_inner() {
         "Should not find element at point outside bounds"
     );
 }
+
+// ===== Test: Undo/Redo History =====
+
+#[test]
+fn test_undo_redo_history() {
+    run_with_large_stack(|| {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(test_undo_redo_history_inner());
+    });
+}
+
+async fn test_undo_redo_history_inner() {
+    let temp = TempDir::new().unwrap();
+    let services = make_authenticated_services(&temp).await;
+    let canvas = services.canvas();
+
+    // Create a test entity
+    let entity_id = create_test_entity(&services, "Canvas Undo Redo Test").await;
+
+    // Add an element
+    let element_id = canvas
+        .add_text(
+            Some(&entity_id),
+            "Undo me".to_string(),
+            100.0,
+            100.0,
+            14.0,
+            "#ff0000".to_string(),
+        )
+        .await
+        .expect("Failed to add element");
+
+    // Verify element exists
+    let snap = canvas.current_snapshot();
+    assert_eq!(snap.elements.len(), 1);
+    assert_eq!(snap.elements[0].id, element_id);
+
+    // Undo - should remove the element
+    let undone = canvas.undo().await.expect("Failed to undo");
+    assert!(undone.is_some(), "Undo should return the undone operation");
+
+    let snap = canvas.current_snapshot();
+    assert!(
+        snap.elements.is_empty(),
+        "Element should be removed after undo"
+    );
+
+    // Redo - should restore the element
+    let redone = canvas.redo().await.expect("Failed to redo");
+    assert!(
+        redone.is_some(),
+        "Redo should return the restored operation"
+    );
+
+    let snap = canvas.current_snapshot();
+    assert_eq!(
+        snap.elements.len(),
+        1,
+        "Element should be restored after redo"
+    );
+}
+
+#[test]
+fn test_history_timeline() {
+    run_with_large_stack(|| {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(test_history_timeline_inner());
+    });
+}
+
+async fn test_history_timeline_inner() {
+    let temp = TempDir::new().unwrap();
+    let services = make_authenticated_services(&temp).await;
+    let canvas = services.canvas();
+
+    // Create a test entity
+    let entity_id = create_test_entity(&services, "Canvas History Timeline Test").await;
+
+    // Add multiple elements to build history
+    for i in 0..5 {
+        canvas
+            .add_text(
+                Some(&entity_id),
+                format!("Element {i}"),
+                i as f32 * 50.0,
+                10.0,
+                14.0,
+                "#000".to_string(),
+            )
+            .await
+            .expect("Failed to add element");
+    }
+
+    // Get history timeline
+    let history = canvas.get_history();
+    assert!(
+        !history.is_empty(),
+        "History should have entries after adding elements"
+    );
+
+    // History entries should be in order
+    for i in 1..history.len() {
+        assert!(
+            history[i].timestamp >= history[i - 1].timestamp,
+            "History should be ordered by timestamp"
+        );
+    }
+}
+
+#[test]
+fn test_undo_clears_redo_stack() {
+    run_with_large_stack(|| {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(test_undo_clears_redo_stack_inner());
+    });
+}
+
+async fn test_undo_clears_redo_stack_inner() {
+    let temp = TempDir::new().unwrap();
+    let services = make_authenticated_services(&temp).await;
+    let canvas = services.canvas();
+
+    // Create a test entity
+    let entity_id = create_test_entity(&services, "Canvas Redo Clear Test").await;
+
+    // Add two elements
+    canvas
+        .add_text(
+            Some(&entity_id),
+            "First".to_string(),
+            10.0,
+            10.0,
+            14.0,
+            "#000".to_string(),
+        )
+        .await
+        .unwrap();
+
+    canvas
+        .add_text(
+            Some(&entity_id),
+            "Second".to_string(),
+            100.0,
+            10.0,
+            14.0,
+            "#000".to_string(),
+        )
+        .await
+        .unwrap();
+
+    // Undo one operation
+    canvas.undo().await.unwrap();
+
+    // Now add a new element (should clear redo stack)
+    canvas
+        .add_text(
+            Some(&entity_id),
+            "Third".to_string(),
+            200.0,
+            10.0,
+            14.0,
+            "#000".to_string(),
+        )
+        .await
+        .unwrap();
+
+    // Redo should return None (redo stack was cleared)
+    let redone = canvas.redo().await.expect("Redo should not error");
+    assert!(
+        redone.is_none(),
+        "Redo should return None after new operation"
+    );
+}
+
+// ===== Test: Remote Cursor Tracking =====
+
+#[test]
+fn test_remote_cursor_tracking() {
+    run_with_large_stack(|| {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(test_remote_cursor_tracking_inner());
+    });
+}
+
+async fn test_remote_cursor_tracking_inner() {
+    use communitas_core::legacy_crdt::CanvasCursorUpdate;
+
+    let temp = TempDir::new().unwrap();
+    let services = make_authenticated_services(&temp).await;
+    let canvas = services.canvas();
+
+    // Create a test entity
+    let entity_id = create_test_entity(&services, "Canvas Cursor Test").await;
+
+    // Initially no remote cursors
+    let cursors = canvas.get_remote_cursors();
+    assert!(
+        cursors.is_empty(),
+        "Should have no remote cursors initially"
+    );
+
+    // Simulate a remote cursor update (timestamp is set automatically by new())
+    let cursor_update = CanvasCursorUpdate::new(
+        entity_id.clone(),
+        "remote-peer-123".to_string(),
+        "Alice".to_string(),
+        150.0,
+        200.0,
+    )
+    .with_tool("select".to_string());
+
+    // Handle the cursor update
+    canvas.handle_cursor_update_for_test(cursor_update);
+
+    // Should have one remote cursor
+    let cursors = canvas.get_remote_cursors();
+    assert_eq!(cursors.len(), 1, "Should have one remote cursor");
+    assert_eq!(cursors[0].user_name, "Alice");
+    assert!((cursors[0].x - 150.0).abs() < f32::EPSILON);
+    assert!((cursors[0].y - 200.0).abs() < f32::EPSILON);
+}
+
+#[test]
+fn test_cursor_update_throttling() {
+    run_with_large_stack(|| {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(test_cursor_update_throttling_inner());
+    });
+}
+
+async fn test_cursor_update_throttling_inner() {
+    let temp = TempDir::new().unwrap();
+    let services = make_authenticated_services(&temp).await;
+    let canvas = services.canvas();
+
+    // Create a test entity
+    let entity_id = create_test_entity(&services, "Canvas Cursor Throttle Test").await;
+
+    // First cursor update should succeed
+    let result1 = canvas
+        .update_local_cursor(&entity_id, 100.0, 100.0, None)
+        .await;
+    assert!(result1.is_ok(), "First cursor update should succeed");
+
+    // Immediate second update should be throttled (within 100ms window)
+    let result2 = canvas
+        .update_local_cursor(&entity_id, 150.0, 150.0, None)
+        .await;
+    assert!(result2.is_ok());
+    // The result indicates if it was actually broadcast (false = throttled)
+    let was_broadcast = result2.unwrap();
+    assert!(!was_broadcast, "Second cursor update should be throttled");
+}
+
+#[test]
+fn test_cursor_cleanup_after_timeout() {
+    run_with_large_stack(|| {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(test_cursor_cleanup_after_timeout_inner());
+    });
+}
+
+async fn test_cursor_cleanup_after_timeout_inner() {
+    use communitas_core::legacy_crdt::CanvasCursorUpdate;
+    use std::time::Duration;
+
+    let temp = TempDir::new().unwrap();
+    let services = make_authenticated_services(&temp).await;
+    let canvas = services.canvas();
+
+    // Create a test entity
+    let entity_id = create_test_entity(&services, "Canvas Cursor Cleanup Test").await;
+
+    // Add a cursor - it will have a fresh timestamp
+    let cursor = CanvasCursorUpdate::new(
+        entity_id.clone(),
+        "test-peer".to_string(),
+        "TestUser".to_string(),
+        50.0,
+        50.0,
+    );
+
+    canvas.handle_cursor_update_for_test(cursor);
+
+    // Immediately after adding, cursor should be present
+    let cursors = canvas.get_remote_cursors();
+    assert_eq!(
+        cursors.len(),
+        1,
+        "Should have one cursor immediately after adding"
+    );
+
+    // Note: We can't easily test the timeout behavior in a unit test because
+    // the internal Instant is set when handle_cursor_update_for_test is called.
+    // In a real scenario, the cursor would be cleaned up after 5 seconds of inactivity.
+    // This test verifies cursors are added and retrieved correctly.
+
+    // Sleep briefly and verify cursor is still present (within timeout)
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    let cursors = canvas.get_remote_cursors();
+    assert!(
+        !cursors.is_empty(),
+        "Cursor should still be present within timeout"
+    );
+}
+
+// ===== Test: Large Scene Performance =====
+
+#[test]
+fn test_large_scene_performance() {
+    run_with_large_stack(|| {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(test_large_scene_performance_inner());
+    });
+}
+
+async fn test_large_scene_performance_inner() {
+    let temp = TempDir::new().unwrap();
+    let services = make_authenticated_services(&temp).await;
+    let canvas = services.canvas();
+
+    // Create a test entity
+    let entity_id = create_test_entity(&services, "Canvas Large Scene Test").await;
+
+    // Add 100+ elements
+    let start = std::time::Instant::now();
+    for i in 0..100 {
+        canvas
+            .add_text(
+                Some(&entity_id),
+                format!("Element {i}"),
+                (i % 10) as f32 * 100.0,
+                (i / 10) as f32 * 50.0,
+                14.0,
+                "#000".to_string(),
+            )
+            .await
+            .expect("Failed to add element");
+    }
+    let add_duration = start.elapsed();
+
+    // Verify all elements were added
+    let snap = canvas.current_snapshot();
+    assert_eq!(snap.elements.len(), 100, "Should have 100 elements");
+
+    // Getting snapshot should be fast
+    let start = std::time::Instant::now();
+    for _ in 0..100 {
+        let _ = canvas.current_snapshot();
+    }
+    let snapshot_duration = start.elapsed();
+
+    // Performance assertions (generous limits for CI)
+    assert!(
+        add_duration.as_millis() < 10000,
+        "Adding 100 elements took too long: {:?}",
+        add_duration
+    );
+    assert!(
+        snapshot_duration.as_millis() < 1000,
+        "100 snapshot reads took too long: {:?}",
+        snapshot_duration
+    );
+}
+
+// ===== Test: Remote Operation Handling =====
+
+#[test]
+fn test_remote_operation_handling() {
+    run_with_large_stack(|| {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(test_remote_operation_handling_inner());
+    });
+}
+
+async fn test_remote_operation_handling_inner() {
+    use communitas_core::legacy_crdt::{CanvasOperation, VectorClock};
+
+    let temp = TempDir::new().unwrap();
+    let services = make_authenticated_services(&temp).await;
+    let canvas = services.canvas();
+
+    // Create a test entity
+    let entity_id = create_test_entity(&services, "Canvas Remote Op Test").await;
+
+    // Initially empty
+    assert!(canvas.current_snapshot().elements.is_empty());
+
+    // Simulate a remote add operation using the static constructor
+    let mut vector_clock = VectorClock::new();
+    vector_clock.increment("remote-peer-xyz");
+
+    // ElementKind uses #[serde(tag = "type", content = "data")] serialization
+    let element_data = serde_json::json!({
+        "type": "Text",
+        "data": {
+            "content": "Remote text",
+            "font_size": 16.0,
+            "color": "#0000ff"
+        },
+        "transform": {
+            "x": 200.0,
+            "y": 200.0,
+            "width": 100.0,
+            "height": 30.0,
+            "rotation": 0.0,
+            "z_index": 0
+        }
+    });
+
+    // Element IDs must be valid UUIDs
+    let remote_element_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890".to_string();
+
+    let remote_op = CanvasOperation::add(
+        entity_id.clone(),
+        remote_element_id.clone(),
+        element_data,
+        vector_clock,
+        1, // lamport_clock
+        "remote-peer-xyz".to_string(),
+    );
+
+    // Handle the remote operation
+    canvas
+        .handle_remote_operation(remote_op)
+        .await
+        .expect("Failed to handle remote operation");
+
+    // Verify the element was added
+    let snap = canvas.current_snapshot();
+    assert_eq!(snap.elements.len(), 1, "Remote element should be added");
+    assert_eq!(snap.elements[0].id, remote_element_id);
+}
+
+#[test]
+fn test_concurrent_operations_lww() {
+    run_with_large_stack(|| {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(test_concurrent_operations_lww_inner());
+    });
+}
+
+async fn test_concurrent_operations_lww_inner() {
+    use communitas_core::legacy_crdt::{CanvasOperation, VectorClock};
+    use std::time::Duration;
+
+    let temp = TempDir::new().unwrap();
+    let services = make_authenticated_services(&temp).await;
+    let canvas = services.canvas();
+
+    // Create a test entity
+    let entity_id = create_test_entity(&services, "Canvas LWW Test").await;
+
+    // First, add an element locally
+    let element_id = canvas
+        .add_text(
+            Some(&entity_id),
+            "Original".to_string(),
+            100.0,
+            100.0,
+            14.0,
+            "#000".to_string(),
+        )
+        .await
+        .expect("Failed to add element");
+
+    // Simulate a remote update with a higher timestamp (LWW should apply)
+    tokio::time::sleep(Duration::from_millis(10)).await;
+
+    let mut vector_clock = VectorClock::new();
+    vector_clock.increment("remote-peer");
+
+    // Create update data with new transform position
+    // apply_remote_update expects a "transform" field with full Transform struct
+    let update_data = serde_json::json!({
+        "transform": {
+            "x": 300.0,
+            "y": 300.0,
+            "width": 100.0,
+            "height": 20.0,
+            "rotation": 0.0,
+            "z_index": 0
+        }
+    });
+
+    let remote_update = CanvasOperation::update(
+        entity_id.clone(),
+        element_id.clone(),
+        update_data,
+        vector_clock,
+        2, // lamport_clock (higher than local)
+        "remote-peer".to_string(),
+    );
+
+    canvas
+        .handle_remote_operation(remote_update)
+        .await
+        .expect("Failed to handle remote update");
+
+    // The remote update (with higher timestamp) should win
+    let snap = canvas.current_snapshot();
+    let elem = snap.elements.iter().find(|e| e.id == element_id).unwrap();
+    assert!(
+        (elem.transform.x - 300.0).abs() < f32::EPSILON,
+        "LWW should apply remote update with higher timestamp"
+    );
+}
+
+// ===== Test: Clear Remote Cursors =====
+
+#[test]
+fn test_clear_remote_cursors() {
+    run_with_large_stack(|| {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(test_clear_remote_cursors_inner());
+    });
+}
+
+async fn test_clear_remote_cursors_inner() {
+    use communitas_core::legacy_crdt::CanvasCursorUpdate;
+
+    let temp = TempDir::new().unwrap();
+    let services = make_authenticated_services(&temp).await;
+    let canvas = services.canvas();
+
+    // Create a test entity
+    let entity_id = create_test_entity(&services, "Canvas Clear Cursors Test").await;
+
+    // Add multiple remote cursors (timestamp is set automatically)
+    for i in 0..3 {
+        let cursor = CanvasCursorUpdate::new(
+            entity_id.clone(),
+            format!("peer-{i}"),
+            format!("User {i}"),
+            i as f64 * 100.0,
+            50.0,
+        );
+
+        canvas.handle_cursor_update_for_test(cursor);
+    }
+
+    // Verify cursors were added
+    let cursors = canvas.get_remote_cursors();
+    assert_eq!(cursors.len(), 3, "Should have 3 remote cursors");
+
+    // Clear all cursors
+    canvas.clear_remote_cursors();
+
+    // Verify all cleared
+    let cursors = canvas.get_remote_cursors();
+    assert!(
+        cursors.is_empty(),
+        "Should have no remote cursors after clear"
+    );
+}

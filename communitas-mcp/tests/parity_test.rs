@@ -4443,7 +4443,7 @@ fn test_all_call_tools_registered() {
     let tools = list_tools(true);
     let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
 
-    // Complete list of all 8 call tools
+    // Complete list of all 9 call tools
     let call_tools = [
         // Call lifecycle (3)
         "start_voice_call",
@@ -4453,9 +4453,10 @@ fn test_all_call_tools_registered() {
         "share_screen",
         "toggle_mute",
         "toggle_video",
-        // Query operations (2)
+        // Query operations (3)
         "get_call_status",
         "get_call_participants",
+        "list_active_calls",
     ];
 
     for tool in &call_tools {
@@ -5427,6 +5428,26 @@ fn test_call_query_operations_parity() {
             !participants_result.content.is_empty(),
             "Expected response from get_call_participants"
         );
+    });
+}
+
+/// Test list_active_calls parity between MCP tool and UiServices.
+#[test]
+fn test_list_active_calls_parity() {
+    run_async_test!(async {
+        let temp = TempDir::new().unwrap();
+        let (app, services) = make_test_services(&temp).await;
+
+        // Call the MCP tool - should route correctly and return a response
+        let result = call_tool(&app, &services, "list_active_calls", None).await;
+        assert!(
+            !result.content.is_empty(),
+            "Expected response from list_active_calls"
+        );
+
+        // Tool should return some text response (either success or auth error)
+        let text = result.content.first().and_then(extract_text).unwrap_or("");
+        assert!(!text.is_empty(), "Expected non-empty text response");
     });
 }
 

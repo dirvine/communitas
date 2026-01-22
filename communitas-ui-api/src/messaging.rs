@@ -96,6 +96,8 @@ pub struct ContactWithPresence {
     pub is_in_call: bool,
     /// Entity name of the call (channel/group name) if in a call.
     pub call_entity_name: Option<String>,
+    /// Whether the contact is currently screen sharing (presenting).
+    pub is_screen_sharing: bool,
 }
 
 /// Search result containing a matching message with context.
@@ -250,11 +252,13 @@ mod tests {
             last_seen: None,
             is_in_call: false,
             call_entity_name: None,
+            is_screen_sharing: false,
         };
         assert_eq!(cwp.contact.id, "alice");
         assert_eq!(cwp.presence, PresenceStatus::Online);
         assert!(!cwp.is_in_call);
         assert!(cwp.call_entity_name.is_none());
+        assert!(!cwp.is_screen_sharing);
     }
 
     #[test]
@@ -270,9 +274,11 @@ mod tests {
             last_seen: None,
             is_in_call: true,
             call_entity_name: Some("Team Standup".to_string()),
+            is_screen_sharing: false,
         };
         assert!(cwp.is_in_call);
         assert_eq!(cwp.call_entity_name, Some("Team Standup".to_string()));
+        assert!(!cwp.is_screen_sharing);
     }
 
     #[test]

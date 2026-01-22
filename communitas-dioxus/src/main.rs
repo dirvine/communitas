@@ -63,6 +63,8 @@ fn main() {
             eprintln!("failed to initialize UI services: {err}");
             std::process::exit(1);
         });
+    // Start call-to-presence sync so call/screen share status updates presence
+    services.start_call_presence_sync();
     if UI_SERVICES.set(Arc::new(services)).is_err() {
         eprintln!("UI services already initialized");
         std::process::exit(1);
@@ -1829,10 +1831,20 @@ fn AppShell(props: AppShellProps) -> Element {
                     span { class: "text-xs uppercase tracking-[0.5em] text-emerald-400", "Communitas" }
                     h1 { class: "text-3xl font-semibold tracking-tight", "{props.title}" }
                 }
-                // Identity switcher with dropdown for quick switching
+                // Notification area with missed call badge
                 if session.is_some() {
-                    components::IdentitySwitcher {
-                        on_logout: move |_| logout_action.send(()),
+                    div {
+                        class: "flex items-center gap-4",
+                        // Missed call badge indicator
+                        div {
+                            class: "relative",
+                            title: "Missed calls",
+                            components::ReactiveMissedCallBadge {}
+                        }
+                        // Identity switcher with dropdown for quick switching
+                        components::IdentitySwitcher {
+                            on_logout: move |_| logout_action.send(()),
+                        }
                     }
                 }
                 button {

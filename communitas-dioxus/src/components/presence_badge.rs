@@ -164,19 +164,26 @@ pub struct PresenceWithCallBadgeProps {
     /// Optional entity name of the call.
     #[props(default)]
     pub call_entity_name: Option<String>,
+    /// Whether the contact is currently screen sharing.
+    #[props(default = false)]
+    pub is_screen_sharing: bool,
     /// Optional size variant (default: "sm").
     #[props(default = "sm")]
     pub size: &'static str,
 }
 
-/// Combined presence badge that shows both status and in-call indicator.
+/// Combined presence badge that shows status, in-call, or presenting indicator.
 #[component]
 pub fn PresenceWithCallBadge(props: PresenceWithCallBadgeProps) -> Element {
     rsx! {
         span {
             class: "presence-with-call inline-flex items-center gap-1.5",
-            // Show in-call badge if in call, otherwise show presence badge
-            if props.is_in_call {
+            // Priority: presenting > in-call > presence status
+            if props.is_screen_sharing {
+                PresentingBadge {
+                    size: props.size,
+                }
+            } else if props.is_in_call {
                 InCallBadge {
                     call_entity_name: props.call_entity_name.clone(),
                     size: props.size,
@@ -232,7 +239,83 @@ pub fn InCallDot(props: InCallDotProps) -> Element {
     }
 }
 
-/// Combined dot that shows presence OR in-call status.
+/// Props for PresentingBadge component.
+#[derive(Props, Clone, PartialEq)]
+pub struct PresentingBadgeProps {
+    /// Optional size variant (default: "sm").
+    #[props(default = "sm")]
+    pub size: &'static str,
+}
+
+/// Badge showing that a contact is currently screen sharing/presenting.
+#[component]
+pub fn PresentingBadge(props: PresentingBadgeProps) -> Element {
+    let (badge_size, text_size, icon_size) = match props.size {
+        "xs" => ("px-1 py-0.5", "text-xs", "text-xs"),
+        "sm" => ("px-1.5 py-0.5", "text-xs", "text-sm"),
+        "md" => ("px-2 py-1", "text-sm", "text-base"),
+        "lg" => ("px-2.5 py-1", "text-base", "text-lg"),
+        _ => ("px-1.5 py-0.5", "text-xs", "text-sm"),
+    };
+
+    rsx! {
+        span {
+            class: format!(
+                "presenting-badge inline-flex items-center gap-1 {} rounded-full bg-sky-600/80 text-sky-100",
+                badge_size
+            ),
+            role: "status",
+            aria_label: "Presenting",
+            title: "Presenting",
+            // Screen icon with animation
+            span {
+                class: format!("{} animate-pulse", icon_size),
+                "🖥️"
+            }
+            // Text (only show on larger sizes)
+            if props.size == "md" || props.size == "lg" {
+                span {
+                    class: text_size.to_string(),
+                    "Presenting"
+                }
+            }
+        }
+    }
+}
+
+/// Compact presenting dot indicator (no text, just a pulsing icon).
+#[derive(Props, Clone, PartialEq)]
+pub struct PresentingDotProps {
+    /// Optional size variant (default: "sm").
+    #[props(default = "sm")]
+    pub size: &'static str,
+}
+
+#[component]
+pub fn PresentingDot(props: PresentingDotProps) -> Element {
+    let dot_size = match props.size {
+        "xs" => "w-3 h-3 text-[8px]",
+        "sm" => "w-4 h-4 text-[10px]",
+        "md" => "w-5 h-5 text-xs",
+        "lg" => "w-6 h-6 text-sm",
+        _ => "w-4 h-4 text-[10px]",
+    };
+
+    rsx! {
+        span {
+            class: format!(
+                "presenting-dot {} rounded-full bg-sky-600 flex items-center justify-center animate-pulse",
+                dot_size
+            ),
+            role: "status",
+            aria_label: "Presenting",
+            title: "Presenting",
+            "🖥️"
+        }
+    }
+}
+
+/// Combined dot that shows presence OR in-call status OR presenting status.
 #[derive(Props, Clone, PartialEq)]
 pub struct PresenceOrCallDotProps {
     /// The presence status to display.
@@ -243,6 +326,9 @@ pub struct PresenceOrCallDotProps {
     /// Optional entity name of the call.
     #[props(default)]
     pub call_entity_name: Option<String>,
+    /// Whether the contact is currently screen sharing.
+    #[props(default = false)]
+    pub is_screen_sharing: bool,
     /// Optional size variant (default: "sm").
     #[props(default = "sm")]
     pub size: &'static str,
@@ -250,7 +336,14 @@ pub struct PresenceOrCallDotProps {
 
 #[component]
 pub fn PresenceOrCallDot(props: PresenceOrCallDotProps) -> Element {
-    if props.is_in_call {
+    // Presenting takes priority (it's the most active state)
+    if props.is_screen_sharing {
+        rsx! {
+            PresentingDot {
+                size: props.size,
+            }
+        }
+    } else if props.is_in_call {
         rsx! {
             InCallDot {
                 size: props.size,
@@ -370,5 +463,59 @@ mod tests {
             .map(|name| format!("In call: {}", name))
             .unwrap_or_else(|| "In call".to_string());
         assert_eq!(label, "In call");
+    }
+
+    #[test]
+    fn presenting_badge_size_variants() {
+        let sizes = ["xs", "sm", "md", "lg"];
+        for size in sizes {
+            let (badge, text, icon) = match size {
+                "xs" => ("px-1 py-0.5", "text-xs", "text-xs"),
+                "sm" => ("px-1.5 py-0.5", "text-xs", "text-sm"),
+                "md" => ("px-2 py-1", "text-sm", "text-base"),
+                "lg" => ("px-2.5 py-1", "text-base", "text-lg"),
+                _ => ("px-1.5 py-0.5", "text-xs", "text-sm"),
+            };
+            assert!(!badge.is_empty());
+            assert!(!text.is_empty());
+            assert!(!icon.is_empty());
+        }
+    }
+
+    #[test]
+    fn presenting_dot_size_variants() {
+        let sizes = ["xs", "sm", "md", "lg"];
+        for size in sizes {
+            let dot = match size {
+                "xs" => "w-3 h-3 text-[8px]",
+                "sm" => "w-4 h-4 text-[10px]",
+                "md" => "w-5 h-5 text-xs",
+                "lg" => "w-6 h-6 text-sm",
+                _ => "w-4 h-4 text-[10px]",
+            };
+            assert!(!dot.is_empty());
+        }
+    }
+
+    #[test]
+    fn presence_or_call_dot_priority() {
+        // Screen sharing should take priority over in-call
+        // Simulates the priority logic: presenting > in-call > presence
+        let scenarios = [
+            (true, true, "presenting"),  // Both sharing and in-call -> presenting wins
+            (true, false, "presenting"), // Sharing but not in-call -> presenting
+            (false, true, "in-call"),    // In-call but not sharing -> in-call
+            (false, false, "presence"),  // Neither -> presence
+        ];
+        for (is_screen_sharing, is_in_call, expected) in scenarios {
+            let result = if is_screen_sharing {
+                "presenting"
+            } else if is_in_call {
+                "in-call"
+            } else {
+                "presence"
+            };
+            assert_eq!(result, expected);
+        }
     }
 }

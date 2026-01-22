@@ -20,9 +20,11 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use communitas_core::legacy_crdt::{
-    CanvasOperation, CanvasOperationType, CanvasStateRequest, CanvasStateResponse,
-    GossipMessageType, VectorClock,
+    CanvasCursorUpdate, CanvasOperation, CanvasOperationType, CanvasStateRequest,
+    CanvasStateResponse, GossipMessageType, VectorClock,
 };
+use communitas_ui_api::canvas::RemoteCursor;
+use std::time::Instant;
 
 /// Errors that can occur during canvas operations.
 #[derive(Debug, Error)]
@@ -240,6 +242,16 @@ pub struct CanvasSnapshot {
     pub pan_y: f32,
     /// Whether a canvas operation is in progress.
     pub loading: bool,
+    /// Remote cursors from other users.
+    pub remote_cursors: Vec<RemoteCursor>,
+    /// History entries for timeline display.
+    pub history: Vec<HistoryEntry>,
+    /// Number of pending offline operations.
+    pub offline_queue_count: usize,
+    /// Whether sync has errors.
+    pub sync_has_errors: bool,
+    /// Whether currently syncing.
+    pub sync_is_active: bool,
 }
 
 impl Default for CanvasSnapshot {
@@ -253,6 +265,11 @@ impl Default for CanvasSnapshot {
             pan_x: 0.0,
             pan_y: 0.0,
             loading: false,
+            remote_cursors: Vec::new(),
+            history: Vec::new(),
+            offline_queue_count: 0,
+            sync_has_errors: false,
+            sync_is_active: false,
         }
     }
 }
@@ -309,6 +326,29 @@ pub struct CanvasService {
     lamport_clock: AtomicU64,
     /// Per-element timestamp for LWW conflict resolution (element_id -> lamport_ts).
     element_timestamps: std::sync::RwLock<HashMap<String, u64>>,
+    /// Remote cursors from other users (user_id -> cursor state).
+    remote_cursors: std::sync::RwLock<HashMap<String, RemoteCursorState>>,
+    /// Last time we broadcast our local cursor (for throttling to 10 Hz).
+    last_cursor_broadcast: std::sync::RwLock<Option<Instant>>,
+}
+
+/// Internal state for tracking a remote cursor.
+#[derive(Debug, Clone)]
+pub struct RemoteCursorState {
+    /// User ID of the cursor owner.
+    pub user_id: String,
+    /// User's display name.
+    pub display_name: String,
+    /// X position on canvas.
+    pub x: f64,
+    /// Y position on canvas.
+    pub y: f64,
+    /// User's assigned color.
+    pub color: String,
+    /// Currently selected tool.
+    pub tool: Option<String>,
+    /// When this cursor was last updated (for stale detection).
+    pub last_updated: Instant,
 }
 
 impl CanvasService {
@@ -333,6 +373,8 @@ impl CanvasService {
             vector_clock: std::sync::RwLock::new(VectorClock::new()),
             lamport_clock: AtomicU64::new(0),
             element_timestamps: std::sync::RwLock::new(HashMap::new()),
+            remote_cursors: std::sync::RwLock::new(HashMap::new()),
+            last_cursor_broadcast: std::sync::RwLock::new(None),
         }
     }
 
@@ -1836,12 +1878,31 @@ impl CanvasService {
             pan_x: scene.pan_x,
             pan_y: scene.pan_y,
             loading,
+            remote_cursors: Vec::new(), // Populated by publish_snapshot
+            history: Vec::new(),        // Populated by publish_snapshot
+            offline_queue_count: 0,     // Populated by publish_snapshot
+            sync_has_errors: false,     // Populated by publish_snapshot
+            sync_is_active: false,      // Populated by publish_snapshot
         }
     }
 
     fn publish_snapshot(&self, loading: bool) {
         if let Ok(scene) = self.scene.read() {
-            let snapshot = Self::scene_to_snapshot(&scene, loading);
+            let mut snapshot = Self::scene_to_snapshot(&scene, loading);
+            // Add remote cursors (also cleans up stale ones)
+            snapshot.remote_cursors = self.get_remote_cursors();
+            // Add history entries
+            if let Ok(history) = self.history.read() {
+                snapshot.history = history.clone();
+            }
+            // Add offline queue info
+            if let Ok(queue) = self.offline_queue.read() {
+                snapshot.offline_queue_count = queue.len();
+                // Currently OfflineQueue doesn't track failures explicitly;
+                // sync_has_errors would need to be set during flush_queue on errors
+            }
+            // sync_is_active is set to true during flush_queue, but we don't have
+            // a persistent flag for it here. It defaults to false.
             let _ = self.tx.send(snapshot);
         }
     }
@@ -2059,7 +2120,13 @@ impl CanvasService {
             Transform::default()
         };
 
-        let element = Element::new(kind).with_transform(transform);
+        let mut element = Element::new(kind).with_transform(transform);
+
+        // Set the element ID to match the remote operation's ID
+        // This is critical for CRDT synchronization
+        let parsed_id = ElementId::parse(element_id)
+            .map_err(|e| CanvasError::ElementNotFound(e.to_string()))?;
+        element.id = parsed_id;
 
         // Check if element already exists
         {
@@ -2390,6 +2457,9 @@ impl CanvasService {
             GossipMessageType::CanvasOperation(op) => {
                 self.handle_remote_operation(op).await?;
             }
+            GossipMessageType::CanvasCursorUpdate(cursor) => {
+                self.handle_cursor_update(cursor);
+            }
             GossipMessageType::CanvasStateRequest(req) => {
                 self.handle_state_request(req).await?;
             }
@@ -2402,6 +2472,224 @@ impl CanvasService {
         }
 
         Ok(())
+    }
+
+    // =========================================================================
+    // Shared Cursor Methods
+    // =========================================================================
+
+    /// Update local cursor position and broadcast to other peers.
+    ///
+    /// Throttled to 10 Hz maximum (100ms between broadcasts) to avoid flooding.
+    /// Returns `Ok(true)` if the cursor update was broadcast, `Ok(false)` if throttled.
+    #[instrument(skip(self))]
+    pub async fn update_local_cursor(
+        &self,
+        entity_id: &str,
+        x: f64,
+        y: f64,
+        tool: Option<String>,
+    ) -> Result<bool, CanvasError> {
+        // Check throttle (10 Hz = 100ms minimum between broadcasts)
+        const CURSOR_THROTTLE_MS: u128 = 100;
+
+        let should_broadcast = {
+            let guard = self
+                .last_cursor_broadcast
+                .read()
+                .map_err(|_| CanvasError::Canvas("failed to acquire cursor lock".to_string()))?;
+            match *guard {
+                Some(last) => last.elapsed().as_millis() >= CURSOR_THROTTLE_MS,
+                None => true,
+            }
+        };
+
+        if !should_broadcast {
+            return Ok(false);
+        }
+
+        // Update last broadcast time
+        {
+            let mut guard = self
+                .last_cursor_broadcast
+                .write()
+                .map_err(|_| CanvasError::Canvas("failed to acquire cursor lock".to_string()))?;
+            *guard = Some(Instant::now());
+        }
+
+        // Get current user info from auth
+        let (peer_id, display_name, color) = match &*self.auth.subscribe().borrow() {
+            AuthStateSnapshot::Authenticated { session, .. } => {
+                let peer_id = session.four_words.clone();
+                let display_name = session.display_name.clone();
+                // Generate a deterministic color from peer_id hash
+                let color = Self::user_color_from_id(&peer_id);
+                (peer_id, display_name, color)
+            }
+            _ => {
+                return Err(CanvasError::NotAuthenticated);
+            }
+        };
+
+        // Create cursor update message
+        let cursor_update =
+            CanvasCursorUpdate::new(entity_id.to_string(), peer_id, display_name, x, y);
+
+        // Set tool if provided
+        let cursor_update = if let Some(t) = tool {
+            cursor_update.with_tool(t)
+        } else {
+            cursor_update
+        };
+
+        // Set the user's color
+        let cursor_update = cursor_update.with_color(color);
+
+        // Serialize and broadcast via gossip
+        let msg = GossipMessageType::CanvasCursorUpdate(cursor_update);
+        let bytes =
+            serde_json::to_vec(&msg).map_err(|e| CanvasError::Serialization(e.to_string()))?;
+
+        // Access gossip context and publish
+        let context_arc = self.app.context();
+        let ctx = context_arc.read().await;
+        if let Some(gossip) = ctx.gossip.as_ref()
+            && let Err(e) = gossip.publish_to_entity(entity_id, bytes).await
+        {
+            tracing::warn!(error = %e, "failed to broadcast cursor update");
+        }
+
+        tracing::trace!(entity_id, x, y, "broadcast cursor update");
+        Ok(true)
+    }
+
+    /// Handle an incoming cursor update from a remote peer.
+    fn handle_cursor_update(&self, update: CanvasCursorUpdate) {
+        // Don't process our own cursor updates
+        let our_id = self.current_user_id();
+        if update.peer_id == our_id {
+            return;
+        }
+
+        // Update the remote cursor state
+        if let Ok(mut guard) = self.remote_cursors.write() {
+            let cursor_state = RemoteCursorState {
+                user_id: update.peer_id.clone(),
+                display_name: update.display_name.clone(),
+                x: update.x,
+                y: update.y,
+                color: Self::user_color_from_id(&update.peer_id),
+                tool: update.tool.clone(),
+                last_updated: Instant::now(),
+            };
+            guard.insert(update.peer_id.clone(), cursor_state);
+        }
+
+        tracing::trace!(
+            peer_id = %update.peer_id,
+            x = update.x,
+            y = update.y,
+            "received cursor update"
+        );
+
+        // Publish updated snapshot with new cursor
+        self.publish_snapshot(false);
+    }
+
+    /// Get current remote cursors (cleaned of stale entries).
+    ///
+    /// Cursors older than 5 seconds are automatically removed.
+    pub fn get_remote_cursors(&self) -> Vec<RemoteCursor> {
+        const STALE_CURSOR_THRESHOLD_SECS: u64 = 5;
+
+        let mut cursors = Vec::new();
+
+        if let Ok(mut guard) = self.remote_cursors.write() {
+            // Remove stale cursors
+            guard.retain(|_, cursor| {
+                cursor.last_updated.elapsed().as_secs() < STALE_CURSOR_THRESHOLD_SECS
+            });
+
+            // Convert to API type
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis() as i64)
+                .unwrap_or(0);
+
+            for cursor in guard.values() {
+                cursors.push(RemoteCursor {
+                    user_id: cursor.user_id.clone(),
+                    user_name: cursor.display_name.clone(),
+                    x: cursor.x as f32,
+                    y: cursor.y as f32,
+                    color: cursor.color.clone(),
+                    last_active: now - (cursor.last_updated.elapsed().as_millis() as i64),
+                    tool: cursor.tool.clone(),
+                });
+            }
+        }
+
+        cursors
+    }
+
+    /// Remove all remote cursors (e.g., when leaving a canvas session).
+    pub fn clear_remote_cursors(&self) {
+        if let Ok(mut guard) = self.remote_cursors.write() {
+            guard.clear();
+        }
+        self.publish_snapshot(false);
+    }
+
+    /// Handle a cursor update for testing purposes.
+    ///
+    /// This method bypasses the "own cursor" check to allow testing cursor state
+    /// management without requiring a real gossip network.
+    ///
+    /// # Note
+    /// This is intended for integration tests only. In production, use the gossip-based
+    /// cursor updates via `process_gossip_message`.
+    pub fn handle_cursor_update_for_test(&self, update: CanvasCursorUpdate) {
+        // Update the remote cursor state (skip the own-cursor check for testing)
+        if let Ok(mut guard) = self.remote_cursors.write() {
+            let cursor_state = RemoteCursorState {
+                user_id: update.peer_id.clone(),
+                display_name: update.display_name.clone(),
+                x: update.x,
+                y: update.y,
+                color: update
+                    .color
+                    .clone()
+                    .unwrap_or_else(|| Self::user_color_from_id(&update.peer_id)),
+                tool: update.tool.clone(),
+                last_updated: Instant::now(),
+            };
+            guard.insert(update.peer_id.clone(), cursor_state);
+        }
+        self.publish_snapshot(false);
+    }
+
+    /// Generate a deterministic color from a user/peer ID.
+    ///
+    /// Uses the ID hash to pick from a palette of distinct colors.
+    fn user_color_from_id(peer_id: &str) -> String {
+        const COLORS: &[&str] = &[
+            "#EF4444", // red
+            "#F97316", // orange
+            "#EAB308", // yellow
+            "#22C55E", // green
+            "#06B6D4", // cyan
+            "#3B82F6", // blue
+            "#8B5CF6", // violet
+            "#EC4899", // pink
+            "#14B8A6", // teal
+            "#A855F7", // purple
+        ];
+
+        // Simple hash to pick a color
+        let hash: usize = peer_id
+            .bytes()
+            .fold(0usize, |acc, b| acc.wrapping_add(b as usize));
+        COLORS[hash % COLORS.len()].to_string()
     }
 }
 

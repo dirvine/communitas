@@ -1,6 +1,6 @@
 # Communitas Roadmap
 
-_Last updated: 2026-01-21_
+_Last updated: 2026-01-22_
 
 ## Current Milestone: M6 Beta-Ready (Apple Desktop)
 
@@ -21,9 +21,9 @@ _Last updated: 2026-01-21_
 | **6.1** | Auth Hardening | Complete |
 | **6.2** | Messaging & Contacts | Complete |
 | **6.3** | Drive & Attachments | Complete |
-| **6.4** | Calls & Presence | In Progress |
-| **6.5** | Canvas Integration | Pending |
-| **6.6** | Kanban Polish | Pending |
+| **6.4** | Calls & Presence | Complete |
+| **6.5** | Canvas Integration | Complete |
+| **6.6** | Kanban Polish | In Progress |
 | **6.7** | UX & Accessibility | Pending |
 | **6.8** | Testing & Tooling | Pending |
 | **6.9** | Apple Beta Packaging | Pending |

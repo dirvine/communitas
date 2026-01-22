@@ -49,11 +49,15 @@
 
 pub mod gossip_signaling;
 pub mod identity;
+pub mod recorder;
 pub mod service;
 
 // Re-export key types
 pub use gossip_signaling::GossipSignalingTransport;
 pub use identity::CommunitasIdentity;
+pub use recorder::{
+    AudioQuality, RecordingConfig, RecordingError, RecordingResult, RecordingSession, VideoQuality,
+};
 pub use service::{CallState as CommunitasCallState, CommunitasWebRtcService, MediaDevice};
 
 // Re-export saorsa-webrtc-core types for convenience

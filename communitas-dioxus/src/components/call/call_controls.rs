@@ -9,6 +9,7 @@ use std::sync::Arc;
 use tracing::warn;
 
 use super::media_error_banner::MediaErrorIndicator;
+use super::screen_share_picker::ScreenSharePicker;
 
 /// Props for the CallControls component.
 #[derive(Props, Clone, PartialEq)]
@@ -65,6 +66,9 @@ pub fn CallControls(props: CallControlsProps) -> Element {
     let has_media_errors = !snapshot.media_errors.is_empty();
     let has_critical_errors = snapshot.media_errors.iter().any(|e| !e.recoverable);
 
+    // Screen share picker state
+    let mut show_picker = use_signal(|| false);
+
     // Mute toggle handler
     let call_for_mute = call_service.clone();
     let on_mute_click = move |_| {
@@ -90,18 +94,20 @@ pub fn CallControls(props: CallControlsProps) -> Element {
     // Screen share toggle handler
     let call_for_screen = call_service.clone();
     let on_screen_share_click = move |_| {
+        // Read fresh state to avoid TOCTOU race condition
         let call = call_for_screen.clone();
-        spawn(async move {
-            // Read fresh state from service to avoid TOCTOU race condition
-            let snapshot = call.current_snapshot();
-            if snapshot.is_screen_sharing {
+        let snapshot = call.current_snapshot();
+        if snapshot.is_screen_sharing {
+            // Already sharing - stop it
+            spawn(async move {
                 if let Err(e) = call.stop_screen_share().await {
                     warn!("Failed to stop screen share: {e}");
                 }
-            } else if let Err(e) = call.start_screen_share().await {
-                warn!("Failed to start screen share: {e}");
-            }
-        });
+            });
+        } else {
+            // Not sharing - show picker to let user choose what to share
+            show_picker.set(true);
+        }
     };
 
     // End call handler
@@ -236,6 +242,14 @@ pub fn CallControls(props: CallControlsProps) -> Element {
                         class: "text-xl text-white",
                         "📞"
                     }
+                }
+            }
+
+            // Screen share picker modal
+            if show_picker() {
+                ScreenSharePicker {
+                    on_close: move |_| show_picker.set(false),
+                    on_started: move |_| show_picker.set(false),
                 }
             }
         }

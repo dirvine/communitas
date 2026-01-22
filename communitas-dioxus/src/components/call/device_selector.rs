@@ -77,7 +77,10 @@ pub fn DeviceSelector(props: DeviceSelectorProps) -> Element {
                 DeviceType::Camera => call.select_camera(&value_for_spawn).await,
             };
             if let Err(e) = result {
-                warn!("Failed to select {:?} device {value_for_spawn}: {e}", device_type);
+                warn!(
+                    "Failed to select {:?} device {value_for_spawn}: {e}",
+                    device_type
+                );
             }
         });
 

@@ -763,6 +763,12 @@ pub struct CallSettings {
     pub auto_mute_on_join: bool,
     /// Whether noise suppression is enabled.
     pub noise_suppression: bool,
+    /// Whether to automatically record calls.
+    pub recording_enabled: bool,
+    /// Whether to include video in recordings (if recording is enabled).
+    pub recording_include_video: bool,
+    /// Directory path for saving recordings (None uses default drive location).
+    pub recording_directory: Option<String>,
 }
 
 /// Snapshot of the current call state for UI updates.
@@ -1531,6 +1537,9 @@ mod tests {
         assert!(settings.selected_camera.is_none());
         assert!(!settings.auto_mute_on_join);
         assert!(!settings.noise_suppression);
+        assert!(!settings.recording_enabled);
+        assert!(!settings.recording_include_video);
+        assert!(settings.recording_directory.is_none());
     }
 
     #[test]

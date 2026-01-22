@@ -1,6 +1,6 @@
 //! Filter panel for Kanban board swimlane and card filtering.
 
-use communitas_ui_api::kanban::CardState;
+use communitas_ui_api::kanban::{CardState, SwimlaneMode};
 use dioxus::prelude::*;
 
 /// Represents the active filters for a board.
@@ -64,6 +64,12 @@ pub struct FilterPanelProps {
     /// Callback when filters change.
     #[props(optional)]
     pub on_filter_change: Option<EventHandler<BoardFilters>>,
+    /// Callback when swimlane mode changes.
+    #[props(optional)]
+    pub on_swimlane_change: Option<EventHandler<SwimlaneMode>>,
+    /// Current swimlane mode.
+    #[props(optional, default = SwimlaneMode::None)]
+    pub current_swimlane: SwimlaneMode,
 }
 
 #[component]
@@ -86,9 +92,6 @@ pub fn FilterPanel(props: FilterPanelProps) -> Element {
     // Search input state
     let mut search_input = use_signal(String::new);
 
-    // Swimlane view state
-    let mut swimlane_mode = use_signal(|| SwimlaneMode::None);
-
     let notify_change = {
         let on_filter_change = props.on_filter_change;
         move |new_filters: BoardFilters| {
@@ -97,6 +100,8 @@ pub fn FilterPanel(props: FilterPanelProps) -> Element {
             }
         }
     };
+
+    let on_swimlane_change = props.on_swimlane_change;
 
     rsx! {
         div {
@@ -129,8 +134,12 @@ pub fn FilterPanel(props: FilterPanelProps) -> Element {
                     class: "flex items-center gap-2",
                     span { class: "text-sm text-slate-400", "View:" }
                     SwimlaneSelector {
-                        current: swimlane_mode(),
-                        on_change: move |mode| swimlane_mode.set(mode),
+                        current: props.current_swimlane,
+                        on_change: move |mode| {
+                            if let Some(handler) = &on_swimlane_change {
+                                handler.call(mode);
+                            }
+                        },
                     }
                 }
                 // Clear all button
@@ -222,16 +231,6 @@ pub fn FilterPanel(props: FilterPanelProps) -> Element {
     }
 }
 
-/// Swimlane view modes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum SwimlaneMode {
-    #[default]
-    None,
-    ByAssignee,
-    ByTag,
-    ByState,
-}
-
 /// Swimlane view selector.
 #[derive(Props, Clone, PartialEq)]
 struct SwimlaneSelectorProps {
@@ -320,7 +319,7 @@ fn FilterGroup(props: FilterGroupProps) -> Element {
                 }
                 span {
                     class: "text-xs ml-1",
-                    if expanded() { "▲" } else { "▼" }
+                    if expanded() { "^" } else { "v" }
                 }
             }
             // Dropdown
@@ -348,7 +347,7 @@ fn FilterGroup(props: FilterGroupProps) -> Element {
                                             if is_selected { "bg-emerald-500 border-emerald-500" } else { "border-slate-600" }
                                         ),
                                         if is_selected {
-                                            span { class: "text-xs text-white", "✓" }
+                                            span { class: "text-xs text-white", "Y" }
                                         }
                                     }
                                     // Color dot if present
@@ -409,7 +408,7 @@ fn DueDateFilterGroup(props: DueDateFilterGroupProps) -> Element {
                 "{current_label}"
                 span {
                     class: "text-xs ml-1",
-                    if expanded() { "▲" } else { "▼" }
+                    if expanded() { "^" } else { "v" }
                 }
             }
             if expanded() {
@@ -485,7 +484,7 @@ fn StateFilterGroup(props: StateFilterGroupProps) -> Element {
                 }
                 span {
                     class: "text-xs ml-1",
-                    if expanded() { "▲" } else { "▼" }
+                    if expanded() { "^" } else { "v" }
                 }
             }
             if expanded() {
@@ -511,7 +510,7 @@ fn StateFilterGroup(props: StateFilterGroupProps) -> Element {
                                             if is_selected { "bg-emerald-500 border-emerald-500" } else { "border-slate-600" }
                                         ),
                                         if is_selected {
-                                            span { class: "text-xs text-white", "✓" }
+                                            span { class: "text-xs text-white", "Y" }
                                         }
                                     }
                                     span {

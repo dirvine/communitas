@@ -49,6 +49,62 @@ pub struct UiServices {
 }
 
 impl UiServices {
+    /// Start a background task that syncs call state to presence.
+    ///
+    /// This should be called after UiServices is constructed to enable
+    /// automatic presence updates when users join/leave calls or start
+    /// screen sharing.
+    pub fn start_call_presence_sync(&self) {
+        let call = self.call.clone();
+        let presence = self.presence.clone();
+
+        tokio::spawn(async move {
+            let mut rx = call.subscribe();
+            loop {
+                if rx.changed().await.is_err() {
+                    break;
+                }
+                let snapshot = rx.borrow().clone();
+
+                // Update presence for each participant in the call
+                let updates: Vec<(String, bool, Option<String>)> = snapshot
+                    .participants
+                    .iter()
+                    .map(|p| {
+                        let call_name = snapshot
+                            .call_info
+                            .as_ref()
+                            .map(|c| c.entity_id.clone())
+                            .unwrap_or_default();
+                        (p.id.clone(), true, Some(call_name))
+                    })
+                    .collect();
+
+                if !updates.is_empty() {
+                    presence.batch_update_call_status(updates);
+                }
+
+                // Update screen sharing status for participants
+                let screen_updates: Vec<(String, bool)> = snapshot
+                    .participants
+                    .iter()
+                    .map(|p| (p.id.clone(), p.is_screen_sharing))
+                    .collect();
+
+                if !screen_updates.is_empty() {
+                    presence.batch_update_screen_sharing(screen_updates);
+                }
+
+                // If no longer in a call, clear all call statuses
+                if !snapshot.state.is_active() {
+                    presence.clear_all_call_status();
+                }
+            }
+        });
+    }
+}
+
+impl UiServices {
     /// Bootstrap UiServices with auto-discovered storage and a generated identity.
     ///
     /// This is a convenience method for applications that need to start without
@@ -303,7 +359,12 @@ impl UiServices {
             })
             .map_err(|e| UiServiceInitError::AppInit(e.to_string()))?;
 
-        Self::new_with_enumerators(storage, Arc::new(app), device_enumerator, screen_source_enumerator)
+        Self::new_with_enumerators(
+            storage,
+            Arc::new(app),
+            device_enumerator,
+            screen_source_enumerator,
+        )
     }
 
     /// Access the storage configuration.

@@ -551,6 +551,12 @@ pub struct CanvasCursorUpdate {
     /// Optional selection state (element IDs currently selected)
     pub selected_elements: Vec<String>,
 
+    /// Currently active tool (e.g., "pen", "select", "eraser")
+    pub tool: Option<String>,
+
+    /// User's assigned color for cursor rendering
+    pub color: Option<String>,
+
     /// Unix timestamp (milliseconds) - for expiring stale cursors
     pub timestamp_ms: u64,
 }
@@ -566,6 +572,8 @@ impl CanvasCursorUpdate {
             y,
             hovered_element_id: None,
             selected_elements: Vec::new(),
+            tool: None,
+            color: None,
             timestamp_ms: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_millis() as u64)
@@ -582,6 +590,18 @@ impl CanvasCursorUpdate {
     /// Set selected elements
     pub fn with_selection(mut self, elements: Vec<String>) -> Self {
         self.selected_elements = elements;
+        self
+    }
+
+    /// Set the current tool
+    pub fn with_tool(mut self, tool: String) -> Self {
+        self.tool = Some(tool);
+        self
+    }
+
+    /// Set the user's cursor color
+    pub fn with_color(mut self, color: String) -> Self {
+        self.color = Some(color);
         self
     }
 }

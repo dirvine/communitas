@@ -29,7 +29,7 @@ use communitas_ui_api::call::{
     ScreenShareSource,
 };
 use thiserror::Error;
-use tokio::sync::{broadcast, RwLock, watch};
+use tokio::sync::{RwLock, broadcast, watch};
 use tracing::{debug, error, instrument, trace, warn};
 
 use crate::auth::{AuthController, AuthService, AuthStateSnapshot};
@@ -994,13 +994,26 @@ impl CallService {
         };
 
         // Update state to InCall
+        let should_auto_record;
+        let include_video;
         {
             let mut state = self.state.write().await;
             state.call_state = CallState::InCall;
             state.current_call = Some(call_info.clone());
             state.participants = vec![participant];
+            should_auto_record = state.settings.recording_enabled;
+            include_video = state.settings.recording_include_video;
         }
         self.broadcast().await;
+
+        // Start auto-recording if enabled in settings
+        if should_auto_record {
+            if let Err(e) = self.start_recording(include_video).await {
+                warn!("Failed to auto-start recording: {}", e);
+            } else {
+                debug!("Auto-recording started for call");
+            }
+        }
 
         // Add to call history
         let history_entry = CallHistoryEntry::new_outgoing(
@@ -1133,13 +1146,26 @@ impl CallService {
         };
 
         // Update state to InCall
+        let should_auto_record;
+        let include_video;
         {
             let mut state = self.state.write().await;
             state.call_state = CallState::InCall;
             state.current_call = Some(call_info.clone());
             state.participants = vec![participant];
+            should_auto_record = state.settings.recording_enabled;
+            include_video = state.settings.recording_include_video;
         }
         self.broadcast().await;
+
+        // Start auto-recording if enabled in settings
+        if should_auto_record {
+            if let Err(e) = self.start_recording(include_video).await {
+                warn!("Failed to auto-start recording: {}", e);
+            } else {
+                debug!("Auto-recording started for joined call");
+            }
+        }
 
         Ok(call_info)
     }
@@ -2192,10 +2218,7 @@ impl CallService {
     /// Returns [`CallError::ScreenShareError`] if refresh fails.
     #[instrument(skip(self), name = "ui.call.refresh_screen_sources")]
     pub async fn refresh_screen_sources(&self) -> Result<Vec<ScreenShareSource>, CallError> {
-        let sources = self
-            .screen_source_enumerator
-            .refresh_thumbnails()
-            .await?;
+        let sources = self.screen_source_enumerator.refresh_thumbnails().await?;
 
         // Update cached sources
         {
@@ -2204,7 +2227,10 @@ impl CallService {
         }
         self.broadcast().await;
 
-        debug!(count = sources.len(), "Refreshed screen share source thumbnails");
+        debug!(
+            count = sources.len(),
+            "Refreshed screen share source thumbnails"
+        );
         Ok(sources)
     }
 
@@ -2225,7 +2251,11 @@ impl CallService {
     /// Returns [`CallError::NotInCall`] if the user is not currently in a call.
     /// Returns [`CallError::ScreenShareError`] if the source is not found.
     /// Returns [`CallError::CoreError`] if the core command execution fails.
-    #[instrument(skip(self), name = "ui.call.start_screen_share_with_source", fields(source_id))]
+    #[instrument(
+        skip(self),
+        name = "ui.call.start_screen_share_with_source",
+        fields(source_id)
+    )]
     pub async fn start_screen_share_with_source(
         &self,
         source_id: &str,
@@ -2685,7 +2715,8 @@ impl CallService {
 
     /// Start recording the current call.
     ///
-    /// Returns an error if not currently in a call or if recording is already active.
+    /// Returns an error if not currently in a call, if recording is already active,
+    /// or if the current user doesn't have permission to manage recordings.
     #[instrument(skip(self), name = "ui.call.start_recording")]
     pub async fn start_recording(&self, include_video: bool) -> Result<(), CallError> {
         let state = self.state.read().await;
@@ -2695,6 +2726,15 @@ impl CallService {
         if state.is_recording {
             return Err(CallError::MediaError(
                 "Recording already active".to_string(),
+            ));
+        }
+
+        // Verify recording permission
+        let call = state.current_call.as_ref().ok_or(CallError::NotInCall)?;
+        let my_role = call.my_role();
+        if !my_role.can_manage_recording() {
+            return Err(CallError::PermissionDenied(
+                "Only hosts and co-hosts can manage recordings".to_string(),
             ));
         }
         drop(state);
@@ -2730,11 +2770,23 @@ impl CallService {
     }
 
     /// Stop recording and finalize the file.
+    ///
+    /// Returns an error if not recording or if the current user doesn't have
+    /// permission to manage recordings.
     #[instrument(skip(self), name = "ui.call.stop_recording")]
     pub async fn stop_recording(&self) -> Result<Option<RecordingInfo>, CallError> {
         let state = self.state.read().await;
         if !state.is_recording {
             return Err(CallError::MediaError("Not recording".to_string()));
+        }
+
+        // Verify recording permission
+        let call = state.current_call.as_ref().ok_or(CallError::NotInCall)?;
+        let my_role = call.my_role();
+        if !my_role.can_manage_recording() {
+            return Err(CallError::PermissionDenied(
+                "Only hosts and co-hosts can manage recordings".to_string(),
+            ));
         }
         drop(state);
 
@@ -2763,13 +2815,28 @@ impl CallService {
     }
 
     /// Pause an active recording.
+    ///
+    /// Returns an error if not recording, if recording is not active,
+    /// or if the current user doesn't have permission to manage recordings.
     #[instrument(skip(self), name = "ui.call.pause_recording")]
     pub async fn pause_recording(&self) -> Result<(), CallError> {
-        let mut state = self.state.write().await;
-        if !state.is_recording {
-            return Err(CallError::MediaError("Not recording".to_string()));
+        // First verify permission with a read lock
+        {
+            let state = self.state.read().await;
+            if !state.is_recording {
+                return Err(CallError::MediaError("Not recording".to_string()));
+            }
+            let call = state.current_call.as_ref().ok_or(CallError::NotInCall)?;
+            let my_role = call.my_role();
+            if !my_role.can_manage_recording() {
+                return Err(CallError::PermissionDenied(
+                    "Only hosts and co-hosts can manage recordings".to_string(),
+                ));
+            }
         }
 
+        // Now update with write lock
+        let mut state = self.state.write().await;
         if let Some(ref mut info) = state.recording_info {
             if info.state != RecordingState::Recording {
                 return Err(CallError::MediaError("Recording not active".to_string()));
@@ -2784,13 +2851,28 @@ impl CallService {
     }
 
     /// Resume a paused recording.
+    ///
+    /// Returns an error if not recording, if recording is not paused,
+    /// or if the current user doesn't have permission to manage recordings.
     #[instrument(skip(self), name = "ui.call.resume_recording")]
     pub async fn resume_recording(&self) -> Result<(), CallError> {
-        let mut state = self.state.write().await;
-        if !state.is_recording {
-            return Err(CallError::MediaError("Not recording".to_string()));
+        // First verify permission with a read lock
+        {
+            let state = self.state.read().await;
+            if !state.is_recording {
+                return Err(CallError::MediaError("Not recording".to_string()));
+            }
+            let call = state.current_call.as_ref().ok_or(CallError::NotInCall)?;
+            let my_role = call.my_role();
+            if !my_role.can_manage_recording() {
+                return Err(CallError::PermissionDenied(
+                    "Only hosts and co-hosts can manage recordings".to_string(),
+                ));
+            }
         }
 
+        // Now update with write lock
+        let mut state = self.state.write().await;
         if let Some(ref mut info) = state.recording_info {
             if info.state != RecordingState::Paused {
                 return Err(CallError::MediaError("Recording not paused".to_string()));
@@ -2910,7 +2992,9 @@ impl CallService {
                             listen_only_mode: current_state.listen_only_mode,
                             is_screen_sharing: current_state.is_screen_sharing,
                             screen_share_info: current_state.screen_share_info.clone(),
-                            available_screen_sources: current_state.available_screen_sources.clone(),
+                            available_screen_sources: current_state
+                                .available_screen_sources
+                                .clone(),
                             quality_metrics: current_state.quality_metrics.clone(),
                             participant_quality: current_state.participant_quality.clone(),
                             is_recording: current_state.is_recording,
@@ -3035,7 +3119,10 @@ impl CallService {
                 if let Some(ref mut call) = state_guard.current_call
                     && call.call_id == *call_id
                 {
-                    if let Some(p) = call.participants.iter_mut().find(|p| p.id == *participant_id)
+                    if let Some(p) = call
+                        .participants
+                        .iter_mut()
+                        .find(|p| p.id == *participant_id)
                     {
                         p.is_muted = *is_muted;
                     }
@@ -3069,7 +3156,10 @@ impl CallService {
                 if let Some(ref mut call) = state_guard.current_call
                     && call.call_id == *call_id
                 {
-                    if let Some(p) = call.participants.iter_mut().find(|p| p.id == *participant_id)
+                    if let Some(p) = call
+                        .participants
+                        .iter_mut()
+                        .find(|p| p.id == *participant_id)
                     {
                         p.is_video_enabled = *is_video_enabled;
                     }
@@ -3103,7 +3193,10 @@ impl CallService {
                 if let Some(ref mut call) = state_guard.current_call
                     && call.call_id == *call_id
                 {
-                    if let Some(p) = call.participants.iter_mut().find(|p| p.id == *participant_id)
+                    if let Some(p) = call
+                        .participants
+                        .iter_mut()
+                        .find(|p| p.id == *participant_id)
                     {
                         p.is_screen_sharing = *is_screen_sharing;
                     }
@@ -3155,7 +3248,9 @@ impl CallService {
                     // Keep local participant info intact in both participant lists.
                     let local_participant_id = call.my_participant_id.clone();
                     call.participants.retain(|p| p.id == local_participant_id);
-                    state_guard.participants.retain(|p| p.id == local_participant_id);
+                    state_guard
+                        .participants
+                        .retain(|p| p.id == local_participant_id);
 
                     // Clear any stale media errors
                     state_guard.media_errors.clear();
@@ -3254,8 +3349,8 @@ impl CallService {
 mod tests {
     use super::*;
     use crate::storage::UiStorage;
-    use communitas_ui_api::call::ScreenShareSourceType;
     use communitas_ui_api::MediaErrorKind;
+    use communitas_ui_api::call::ScreenShareSourceType;
     use tempfile::TempDir;
 
     async fn make_service(temp: &TempDir) -> CallService {
@@ -3501,7 +3596,10 @@ mod tests {
             .await;
 
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), CallError::ScreenShareError(_)));
+        assert!(matches!(
+            result.unwrap_err(),
+            CallError::ScreenShareError(_)
+        ));
     }
 
     #[tokio::test]

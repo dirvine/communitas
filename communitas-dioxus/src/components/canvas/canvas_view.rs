@@ -1,9 +1,13 @@
 //! Main canvas view component for rendering and interacting with the canvas.
 
+use super::history_scrubber::HistoryIndicator;
+use super::offline_indicator::SyncStatusBadge;
+use super::remote_cursors::RemoteCursors;
 use communitas_ui_service::UiServices;
 use communitas_ui_service::canvas::{ElementKindView, ElementView, TransformView};
 use dioxus::prelude::*;
 use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Props for the CanvasView component.
 #[derive(Props, Clone, PartialEq)]
@@ -14,12 +18,24 @@ pub struct CanvasViewProps {
     /// Whether to show grid overlay.
     #[props(default = false)]
     pub show_grid: bool,
+    /// Whether to show the history panel.
+    #[props(default = false)]
+    pub show_history: bool,
+    /// Whether to show sync status badge.
+    #[props(default = true)]
+    pub show_sync_status: bool,
     /// Callback when element is clicked.
     #[props(default)]
     pub on_element_click: Option<EventHandler<String>>,
     /// Callback when canvas background is clicked.
     #[props(default)]
     pub on_canvas_click: Option<EventHandler<(f32, f32)>>,
+    /// Callback when undo is triggered (Cmd/Ctrl+Z).
+    #[props(default)]
+    pub on_undo: Option<EventHandler<()>>,
+    /// Callback when redo is triggered (Cmd/Ctrl+Shift+Z or Cmd/Ctrl+Y).
+    #[props(default)]
+    pub on_redo: Option<EventHandler<()>>,
 }
 
 /// Main canvas view for rendering elements and handling interactions.
@@ -30,6 +46,9 @@ pub fn CanvasView(props: CanvasViewProps) -> Element {
 
     // Subscribe to canvas state
     let mut canvas_snapshot = use_signal(|| canvas_service.current_snapshot());
+
+    // Track recently conflicted elements for flash animation (TODO: implement conflict UI)
+    let _conflict_flash_ids = use_signal(Vec::<String>::new);
 
     // Update signal when snapshot changes
     let _updater = use_resource(move || {
@@ -46,6 +65,33 @@ pub fn CanvasView(props: CanvasViewProps) -> Element {
     });
 
     let snapshot = canvas_snapshot();
+
+    // Keyboard handler for undo/redo shortcuts
+    let on_undo = props.on_undo;
+    let on_redo = props.on_redo;
+    let handle_keydown = move |evt: KeyboardEvent| {
+        let key = evt.key();
+        let ctrl_or_meta = evt.modifiers().ctrl() || evt.modifiers().meta();
+        let shift = evt.modifiers().shift();
+
+        // Cmd/Ctrl+Z = Undo
+        if ctrl_or_meta && !shift && key == Key::Character("z".to_string()) {
+            evt.prevent_default();
+            if let Some(handler) = &on_undo {
+                handler.call(());
+            }
+        }
+        // Cmd/Ctrl+Shift+Z or Cmd/Ctrl+Y = Redo
+        else if ctrl_or_meta
+            && ((shift && key == Key::Character("z".to_string()))
+                || (!shift && key == Key::Character("y".to_string())))
+        {
+            evt.prevent_default();
+            if let Some(handler) = &on_redo {
+                handler.call(());
+            }
+        }
+    };
 
     // Calculate SVG viewBox from viewport and pan/zoom
     let view_box = format!(
@@ -70,11 +116,19 @@ pub fn CanvasView(props: CanvasViewProps) -> Element {
         format!("{} elements on canvas", snapshot.elements.len())
     };
 
+    // Prepare history indicator data
+    let history_len = snapshot.history.len();
+    let can_undo = !snapshot.history.is_empty();
+    let can_redo = false; // TODO: Track redo stack size when implemented
+    let current_history_index = if history_len > 0 { history_len - 1 } else { 0 };
+
     rsx! {
         div {
-            class: "canvas-view relative w-full h-full bg-slate-900 overflow-hidden",
+            class: "canvas-view relative w-full h-full bg-slate-900 overflow-hidden focus:outline-none focus:ring-2 focus:ring-blue-500",
             role: "application",
             aria_label: "Canvas drawing area",
+            tabindex: "0",
+            onkeydown: handle_keydown,
             // Aria-live region for status announcements
             div {
                 role: "status",
@@ -140,11 +194,61 @@ pub fn CanvasView(props: CanvasViewProps) -> Element {
                     }
                 }
             }
-            // Zoom indicator
+            // Top-left: Sync status and history indicators
+            div {
+                class: "absolute top-2 left-2 flex items-center gap-2",
+                // Sync status badge
+                if props.show_sync_status {
+                    SyncStatusBadge {
+                        pending_count: snapshot.offline_queue_count,
+                        is_syncing: snapshot.sync_is_active,
+                        has_errors: snapshot.sync_has_errors,
+                    }
+                }
+                // History indicator
+                if props.show_history {
+                    HistoryIndicator {
+                        total_entries: history_len,
+                        current_index: current_history_index,
+                        can_undo: can_undo,
+                        can_redo: can_redo,
+                    }
+                }
+            }
+            // Bottom-right: Zoom indicator
             div {
                 class: "absolute bottom-2 right-2 px-2 py-1 bg-slate-800/80 rounded text-xs text-slate-400",
                 "{(snapshot.zoom * 100.0) as i32}%"
             }
+            // Remote cursors overlay
+            {render_remote_cursors(&snapshot.remote_cursors, snapshot.viewport_width, snapshot.viewport_height)}
+        }
+    }
+}
+
+/// Render remote cursors overlay if any are present.
+#[allow(dead_code)]
+fn render_remote_cursors(
+    cursors: &[communitas_ui_api::canvas::RemoteCursor],
+    viewport_width: f32,
+    viewport_height: f32,
+) -> Element {
+    if cursors.is_empty() {
+        return rsx! {};
+    }
+
+    // Get current time for activity-based fading
+    let current_time = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0);
+
+    rsx! {
+        RemoteCursors {
+            cursors: cursors.to_vec(),
+            viewport_width: viewport_width,
+            viewport_height: viewport_height,
+            current_time: current_time,
         }
     }
 }

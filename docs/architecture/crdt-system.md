@@ -268,7 +268,63 @@ CardData = Map {
 - Drag-and-drop task organization
 - Same tombstone pruning for archived cards
 
-#### 4. Issues Document (Projects Only)
+#### 4. Canvas Document (All Entities)
+
+**Document ID**: `{entity_type}:{entity_id}:canvas`
+
+**Schema**:
+```rust
+Doc {
+    "elements": Map<element_id, ElementData>,
+    "metadata": Map {
+        "width": f64,
+        "height": f64,
+        "background_color": String,
+    },
+}
+
+ElementData = Map {
+    "id": String,
+    "element_type": String,            // "text" | "image" | "chart" | "shape"
+    "x": f64,
+    "y": f64,
+    "width": f64,
+    "height": f64,
+    "rotation": f64,
+    "z_index": i64,
+    "data": Map { ... },               // Type-specific data
+    "created_at": i64,
+    "updated_at": i64,                 // LWW for edits
+    "deleted": bool,                   // Tombstone flag
+    "deleted_at": i64,
+}
+```
+
+**Size Limit**: 5MB
+**Fallback**: None (canvas state is bounded by element count limits)
+
+**Purpose**:
+- Collaborative whiteboard and canvas editing
+- Real-time synchronization via gossip overlay
+- CRDT-based conflict resolution for concurrent edits
+
+**Sync Features**:
+- **Bidirectional sync**: Operations broadcast via gossip pubsub
+- **Undo/redo history**: Entity-scoped operation timeline
+- **Remote cursors**: Real-time cursor position sharing (throttled to 10 Hz)
+- **Offline queue**: Operations queued when offline, flushed on reconnection
+
+**Message Types**:
+```rust
+enum CanvasGossipMessage {
+    Operation(CanvasOperation),        // Element add/update/delete
+    CursorUpdate(CanvasCursorUpdate),  // Cursor position broadcast
+    StateRequest(CanvasStateRequest),  // Request current state from peers
+    StateResponse(CanvasStateResponse),// Full state response for new peers
+}
+```
+
+#### 5. Issues Document (Projects Only)
 
 **Document ID**: `project:{entity_id}:issues`
 

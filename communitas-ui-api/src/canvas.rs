@@ -337,6 +337,20 @@ impl OfflineStatus {
     }
 }
 
+/// High-level sync state for UI display.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum SyncState {
+    /// All changes synced to network.
+    #[default]
+    Synced,
+    /// Currently syncing changes.
+    Syncing,
+    /// Changes pending sync (offline).
+    Pending,
+    /// Sync failed with errors.
+    Error,
+}
+
 /// An operation queued for offline sync.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct OfflineOperation {

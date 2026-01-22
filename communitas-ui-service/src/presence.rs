@@ -33,6 +33,8 @@ pub struct PresenceSnapshot {
     pub in_call: HashMap<String, bool>,
     /// Mapping from contact_id to call entity name (channel/group name).
     pub call_entity_names: HashMap<String, String>,
+    /// Set of contact_ids that are currently screen sharing (presenting).
+    pub is_screen_sharing: HashMap<String, bool>,
 }
 
 /// Service for tracking contact presence status.
@@ -94,12 +96,18 @@ impl PresenceService {
                 let last_seen = pres_snap.last_seen.get(&contact.id).copied();
                 let is_in_call = pres_snap.in_call.get(&contact.id).copied().unwrap_or(false);
                 let call_entity_name = pres_snap.call_entity_names.get(&contact.id).cloned();
+                let is_screen_sharing = pres_snap
+                    .is_screen_sharing
+                    .get(&contact.id)
+                    .copied()
+                    .unwrap_or(false);
                 ContactWithPresence {
                     contact,
                     presence,
                     last_seen,
                     is_in_call,
                     call_entity_name,
+                    is_screen_sharing,
                 }
             })
             .collect()
@@ -211,6 +219,41 @@ impl PresenceService {
         let mut snap = self.rx.borrow().clone();
         snap.in_call.clear();
         snap.call_entity_names.clear();
+        snap.is_screen_sharing.clear();
+        let _ = self.tx.send(snap);
+    }
+
+    /// Update screen sharing status for a contact.
+    #[instrument(
+        skip(self),
+        name = "ui.presence.update_screen_sharing",
+        fields(contact_id, is_sharing)
+    )]
+    pub fn update_screen_sharing(&self, contact_id: &str, is_sharing: bool) {
+        let mut snap = self.rx.borrow().clone();
+
+        if is_sharing {
+            snap.is_screen_sharing.insert(contact_id.to_string(), true);
+        } else {
+            snap.is_screen_sharing.remove(contact_id);
+        }
+
+        let _ = self.tx.send(snap);
+    }
+
+    /// Batch update screen sharing status for multiple contacts.
+    #[instrument(skip(self, updates), name = "ui.presence.batch_update_screen_sharing", fields(count = updates.len()))]
+    pub fn batch_update_screen_sharing(&self, updates: Vec<(String, bool)>) {
+        let mut snap = self.rx.borrow().clone();
+
+        for (contact_id, is_sharing) in updates {
+            if is_sharing {
+                snap.is_screen_sharing.insert(contact_id, true);
+            } else {
+                snap.is_screen_sharing.remove(&contact_id);
+            }
+        }
+
         let _ = self.tx.send(snap);
     }
 }

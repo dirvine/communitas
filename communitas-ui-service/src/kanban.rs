@@ -10,7 +10,7 @@ use communitas_kanban::{
 };
 use communitas_ui_api::{
     BoardSettings, BoardSummary, BoardView, CardDetail, CardState, CardView, ChecklistProgress,
-    ColumnView, CommentView, StepView, TagView,
+    ColumnView, CommentView, StepView, SwimlaneMode, TagView,
 };
 use thiserror::Error;
 use tokio::sync::{RwLock, broadcast, watch};
@@ -84,6 +84,8 @@ pub struct KanbanSnapshot {
     pub boards: Vec<BoardSummary>,
     /// Whether boards are currently being loaded.
     pub loading: bool,
+    /// Current swimlane view mode.
+    pub swimlane_mode: SwimlaneMode,
 }
 
 /// Update payload for card modifications.
@@ -373,6 +375,15 @@ impl KanbanService {
         self.rx.borrow().clone()
     }
 
+    /// Set the swimlane view mode.
+    ///
+    /// Updates the snapshot with the new mode, triggering UI updates.
+    pub fn set_swimlane_mode(&self, mode: SwimlaneMode) {
+        let mut snap = self.rx.borrow().clone();
+        snap.swimlane_mode = mode;
+        let _ = self.tx.send(snap);
+        debug!(swimlane_mode = ?mode, "Swimlane mode updated");
+    }
     /// Load boards for an entity, setting loading state and subscribing to events.
     ///
     /// This is the primary method for UI integration when an entity is selected.

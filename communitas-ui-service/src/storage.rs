@@ -66,6 +66,11 @@ impl UiStorage {
     pub fn pending_messages_file(&self) -> PathBuf {
         self.root.join("pending_messages.json")
     }
+
+    /// Disk location for call history persistence.
+    pub fn call_history_file(&self) -> PathBuf {
+        self.root.join("call_history.json")
+    }
 }
 
 /// Shared storage error type.

@@ -160,6 +160,7 @@ impl UiServices {
             auth.clone(),
             app.clone(),
             device_enumerator,
+            Some(storage.call_history_file()),
         ));
         let audit = Arc::new(AuditService::new(storage.root().join("audit_logs")));
         Ok(Self {

@@ -22,9 +22,10 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use communitas_ui_api::call::{
-    CallInfo, CallSettings, CallSnapshot, CallState, CallType, ConnectionQuality, DeviceType,
-    MediaDevice, MediaError, MediaErrorKind, Participant, ParticipantQuality, ParticipantRole,
-    QualityMetrics, RecordingInfo, RecordingState,
+    CallHistory, CallHistoryEntry, CallInfo, CallOutcome, CallSettings, CallSnapshot, CallState,
+    CallType, ConnectionQuality, DeviceType, HistoryParticipant, MediaDevice, MediaError,
+    MediaErrorKind, Participant, ParticipantQuality, ParticipantRole, QualityMetrics,
+    RecordingInfo, RecordingState,
 };
 use thiserror::Error;
 use tokio::sync::{RwLock, watch};
@@ -226,6 +227,12 @@ pub struct CallService {
     rx: watch::Receiver<CallSnapshot>,
     state: Arc<RwLock<CallServiceState>>,
     device_enumerator: Arc<dyn DeviceEnumerator>,
+    /// Call history with persistence
+    history: Arc<RwLock<CallHistory>>,
+    /// Watch channel for history updates
+    history_tx: watch::Sender<CallHistory>,
+    /// Storage path for call history (None = no persistence)
+    storage_path: Option<std::path::PathBuf>,
 }
 
 /// Internal state for the call service.
@@ -263,6 +270,9 @@ impl Default for CallServiceState {
     }
 }
 
+/// Default maximum call history entries.
+const DEFAULT_HISTORY_MAX_ENTRIES: usize = 500;
+
 #[allow(unused_variables)] // Mock implementation - params used for tracing but not actual logic
 impl CallService {
     /// Create a new call service with the default mock device enumerator.
@@ -270,7 +280,7 @@ impl CallService {
     /// For production use with real devices, use [`CallService::with_device_enumerator`]
     /// and provide a platform-specific [`DeviceEnumerator`] implementation.
     pub fn new(auth: Arc<AuthController>, app: Arc<CommunitasApp>) -> Self {
-        Self::with_device_enumerator(auth, app, Arc::new(MockDeviceEnumerator))
+        Self::with_device_enumerator(auth, app, Arc::new(MockDeviceEnumerator), None)
     }
 
     /// Create a new call service with a custom device enumerator.
@@ -280,19 +290,34 @@ impl CallService {
     /// * `auth` - Authentication controller for user identity
     /// * `app` - Communitas application context
     /// * `device_enumerator` - Platform-specific device enumerator implementation
+    /// * `storage_path` - Optional path to persist call history
     ///
     /// # Example
     ///
     /// ```ignore
     /// let enumerator = Arc::new(TauriDeviceEnumerator::new());
-    /// let call_service = CallService::with_device_enumerator(auth, app, enumerator);
+    /// let call_service = CallService::with_device_enumerator(auth, app, enumerator, Some(path));
     /// ```
     pub fn with_device_enumerator(
         auth: Arc<AuthController>,
         app: Arc<CommunitasApp>,
         device_enumerator: Arc<dyn DeviceEnumerator>,
+        storage_path: Option<std::path::PathBuf>,
     ) -> Self {
         let (tx, rx) = watch::channel(CallSnapshot::default());
+
+        // Load history from storage if path provided
+        let history = if let Some(ref path) = storage_path {
+            Self::load_history(path).unwrap_or_else(|e| {
+                warn!("Failed to load call history: {}", e);
+                CallHistory::new(DEFAULT_HISTORY_MAX_ENTRIES)
+            })
+        } else {
+            CallHistory::new(DEFAULT_HISTORY_MAX_ENTRIES)
+        };
+
+        let (history_tx, _history_rx) = watch::channel(history.clone());
+
         Self {
             auth,
             app,
@@ -300,6 +325,9 @@ impl CallService {
             rx,
             state: Arc::new(RwLock::new(CallServiceState::default())),
             device_enumerator,
+            history: Arc::new(RwLock::new(history)),
+            history_tx,
+            storage_path,
         }
     }
 
@@ -307,7 +335,42 @@ impl CallService {
     ///
     /// Use this in server-side or CI environments where no media devices are available.
     pub fn headless(auth: Arc<AuthController>, app: Arc<CommunitasApp>) -> Self {
-        Self::with_device_enumerator(auth, app, Arc::new(NoDeviceEnumerator))
+        Self::with_device_enumerator(auth, app, Arc::new(NoDeviceEnumerator), None)
+    }
+
+    /// Load call history from disk.
+    fn load_history(path: &std::path::Path) -> Result<CallHistory, std::io::Error> {
+        match std::fs::read_to_string(path) {
+            Ok(contents) => serde_json::from_str(&contents)
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e)),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                Ok(CallHistory::new(DEFAULT_HISTORY_MAX_ENTRIES))
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Save call history to disk.
+    async fn save_history(&self) {
+        if let Some(ref path) = self.storage_path {
+            let history = self.history.read().await;
+            if let Err(e) = Self::save_history_to_file(path, &history) {
+                error!("Failed to save call history: {}", e);
+            }
+        }
+    }
+
+    /// Save history to a specific file path.
+    fn save_history_to_file(
+        path: &std::path::Path,
+        history: &CallHistory,
+    ) -> Result<(), std::io::Error> {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let json = serde_json::to_string_pretty(history)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+        std::fs::write(path, json)
     }
 
     /// Subscribe to call state updates.
@@ -323,6 +386,11 @@ impl CallService {
     /// Subscribe to participant updates (returns same channel, filter in UI).
     pub fn subscribe_participants(&self) -> watch::Receiver<CallSnapshot> {
         self.subscribe()
+    }
+
+    /// Subscribe to call history updates.
+    pub fn subscribe_history(&self) -> watch::Receiver<CallHistory> {
+        self.history_tx.subscribe()
     }
 
     /// Get a reference to the Communitas app.
@@ -751,6 +819,15 @@ impl CallService {
         }
         self.broadcast().await;
 
+        // Add to call history
+        let history_entry = CallHistoryEntry::new_outgoing(
+            call_info.call_id.clone(),
+            call_info.entity_id.clone(),
+            call_info.entity_name.clone(),
+            call_info.call_type,
+        );
+        self.add_to_history(history_entry).await;
+
         Ok(call_info)
     }
 
@@ -896,17 +973,37 @@ impl CallService {
     /// Returns [`CallError::CoreError`] if the core command execution fails.
     #[instrument(skip(self), name = "ui.call.leave")]
     pub async fn leave_call(&self) -> Result<(), CallError> {
-        // Get current call_id from state
-        let call_id = {
+        // Get current call details from state before leaving
+        let (call_id, had_video, had_screen_share, was_recorded, participants) = {
             let state = self.state.read().await;
             if !state.call_state.is_active() {
                 return Err(CallError::NotInCall);
             }
-            state
-                .current_call
-                .as_ref()
-                .map(|c| c.call_id.clone())
-                .ok_or(CallError::NotInCall)?
+            let call = state.current_call.as_ref().ok_or(CallError::NotInCall)?;
+            let had_video = state.participants.iter().any(|p| p.is_video_enabled);
+            let had_screen_share = state.is_screen_sharing;
+            let was_recorded = state.is_recording || state.recording_info.is_some();
+
+            // Collect participant info for history
+            let history_participants: Vec<HistoryParticipant> = state
+                .participants
+                .iter()
+                .map(|p| HistoryParticipant {
+                    id: p.id.clone(),
+                    display_name: p.display_name.clone(),
+                    four_words: p.four_words.clone(),
+                    duration_seconds: ((current_timestamp_millis() - p.joined_at) / 1000) as u64,
+                    partial_participation: false, // Would need tracking to detect
+                })
+                .collect();
+
+            (
+                call.call_id.clone(),
+                had_video,
+                had_screen_share,
+                was_recorded,
+                history_participants,
+            )
         };
 
         // Transition to disconnecting state
@@ -917,7 +1014,9 @@ impl CallService {
         self.broadcast().await;
 
         // Build and execute the LeaveCall command
-        let cmd = Command::LeaveCall { call_id };
+        let cmd = Command::LeaveCall {
+            call_id: call_id.clone(),
+        };
 
         let events = match self.app.execute(cmd).await {
             Ok(events) => events,
@@ -952,6 +1051,16 @@ impl CallService {
             state.is_screen_sharing = false;
         }
         self.broadcast().await;
+
+        // Finalize call history entry
+        self.update_history(&call_id, |entry| {
+            entry.finalize(CallOutcome::Completed);
+            entry.had_video = had_video;
+            entry.had_screen_share = had_screen_share;
+            entry.was_recorded = was_recorded;
+            entry.participants = participants;
+        })
+        .await;
 
         debug!("Left call successfully");
         Ok(())
@@ -1386,6 +1495,122 @@ impl CallService {
     /// Get the current call info.
     pub fn get_current_call(&self) -> Option<CallInfo> {
         self.rx.borrow().call_info.clone()
+    }
+
+    // ===== Call History =====
+
+    /// Get the current call history.
+    pub async fn get_call_history(&self) -> CallHistory {
+        self.history.read().await.clone()
+    }
+
+    /// Get recent call history entries.
+    #[instrument(skip(self), name = "ui.call.get_recent_history")]
+    pub async fn get_recent_history(&self, limit: usize) -> Vec<CallHistoryEntry> {
+        let history = self.history.read().await;
+        history.recent(limit).into_iter().cloned().collect()
+    }
+
+    /// Get call history for a specific entity.
+    #[instrument(skip(self), name = "ui.call.get_history_for_entity", fields(entity_id))]
+    pub async fn get_history_for_entity(&self, entity_id: &str) -> Vec<CallHistoryEntry> {
+        let history = self.history.read().await;
+        history.for_entity(entity_id).into_iter().cloned().collect()
+    }
+
+    /// Get a specific call history entry.
+    #[instrument(skip(self), name = "ui.call.get_history_entry", fields(call_id))]
+    pub async fn get_history_entry(&self, call_id: &str) -> Option<CallHistoryEntry> {
+        let history = self.history.read().await;
+        history.get(call_id).cloned()
+    }
+
+    /// Get the count of unread missed calls.
+    pub async fn get_unread_missed_count(&self) -> usize {
+        let history = self.history.read().await;
+        history.unread_missed_count()
+    }
+
+    /// Get all unread missed calls.
+    #[instrument(skip(self), name = "ui.call.get_unread_missed_calls")]
+    pub async fn get_unread_missed_calls(&self) -> Vec<CallHistoryEntry> {
+        let history = self.history.read().await;
+        history.unread_missed_calls().into_iter().cloned().collect()
+    }
+
+    /// Mark a call history entry as read.
+    #[instrument(skip(self), name = "ui.call.mark_call_read", fields(call_id))]
+    pub async fn mark_call_read(&self, call_id: &str) {
+        {
+            let mut history = self.history.write().await;
+            if let Some(entry) = history.get_mut(call_id) {
+                entry.mark_read();
+            }
+        }
+        self.broadcast_history().await;
+        self.save_history().await;
+    }
+
+    /// Mark all missed calls as read.
+    #[instrument(skip(self), name = "ui.call.mark_all_calls_read")]
+    pub async fn mark_all_calls_read(&self) {
+        {
+            let mut history = self.history.write().await;
+            history.mark_all_read();
+        }
+        self.broadcast_history().await;
+        self.save_history().await;
+    }
+
+    /// Delete a call history entry.
+    #[instrument(skip(self), name = "ui.call.delete_history_entry", fields(call_id))]
+    pub async fn delete_history_entry(&self, call_id: &str) -> bool {
+        let removed = {
+            let mut history = self.history.write().await;
+            history.remove(call_id).is_some()
+        };
+        if removed {
+            self.broadcast_history().await;
+            self.save_history().await;
+        }
+        removed
+    }
+
+    /// Clear all call history.
+    #[instrument(skip(self), name = "ui.call.clear_call_history")]
+    pub async fn clear_call_history(&self) {
+        {
+            let mut history = self.history.write().await;
+            history.clear();
+        }
+        self.broadcast_history().await;
+        self.save_history().await;
+    }
+
+    /// Add a call to history (internal helper).
+    async fn add_to_history(&self, entry: CallHistoryEntry) {
+        {
+            let mut history = self.history.write().await;
+            history.add(entry);
+        }
+        self.broadcast_history().await;
+        self.save_history().await;
+    }
+
+    /// Update a call in history (internal helper).
+    async fn update_history(&self, call_id: &str, updater: impl FnOnce(&mut CallHistoryEntry)) {
+        {
+            let mut history = self.history.write().await;
+            history.update(call_id, updater);
+        }
+        self.broadcast_history().await;
+        self.save_history().await;
+    }
+
+    /// Broadcast history changes.
+    async fn broadcast_history(&self) {
+        let history = self.history.read().await;
+        let _ = self.history_tx.send(history.clone());
     }
 
     // ===== Call Controls =====
@@ -2204,6 +2429,7 @@ mod tests {
 
     async fn make_service(temp: &TempDir) -> CallService {
         let storage = UiStorage::from_path(temp.path()).expect("storage should init");
+        let history_path = storage.call_history_file();
         let auth = Arc::new(AuthController::new(storage).expect("auth should init"));
         let app = Arc::new(
             CommunitasApp::new(
@@ -2218,7 +2444,12 @@ mod tests {
             .await
             .expect("app should init"),
         );
-        CallService::new(auth, app)
+        CallService::with_device_enumerator(
+            auth,
+            app,
+            Arc::new(MockDeviceEnumerator),
+            Some(history_path),
+        )
     }
 
     #[tokio::test]
@@ -3149,5 +3380,257 @@ mod tests {
             result.unwrap_err(),
             CallError::PermissionDenied(_)
         ));
+    }
+
+    // ===== Call History Tests =====
+
+    #[tokio::test]
+    async fn call_history_starts_empty() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        let history = service.get_call_history().await;
+        assert!(history.is_empty());
+        assert_eq!(service.get_unread_missed_count().await, 0);
+    }
+
+    #[tokio::test]
+    async fn call_history_subscribe() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        let rx = service.subscribe_history();
+        let history = rx.borrow().clone();
+        assert!(history.is_empty());
+    }
+
+    #[tokio::test]
+    async fn call_history_add_and_get() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        // Manually add a history entry via internal method
+        let entry = CallHistoryEntry::new_outgoing(
+            "call-1".to_string(),
+            "entity-1".to_string(),
+            "Test Entity".to_string(),
+            CallType::Direct,
+        );
+        service.add_to_history(entry.clone()).await;
+
+        let history = service.get_call_history().await;
+        assert_eq!(history.len(), 1);
+
+        let retrieved = service.get_history_entry("call-1").await;
+        assert!(retrieved.is_some());
+        assert_eq!(retrieved.unwrap().call_id, "call-1");
+    }
+
+    #[tokio::test]
+    async fn call_history_get_recent() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        // Add multiple entries
+        for i in 0..5 {
+            let entry = CallHistoryEntry::new_outgoing(
+                format!("call-{}", i),
+                "entity-1".to_string(),
+                "Test Entity".to_string(),
+                CallType::Direct,
+            );
+            service.add_to_history(entry).await;
+        }
+
+        let recent = service.get_recent_history(3).await;
+        assert_eq!(recent.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn call_history_for_entity() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        // Add entries for different entities
+        let entry1 = CallHistoryEntry::new_outgoing(
+            "call-1".to_string(),
+            "entity-1".to_string(),
+            "Entity 1".to_string(),
+            CallType::Direct,
+        );
+        let entry2 = CallHistoryEntry::new_outgoing(
+            "call-2".to_string(),
+            "entity-2".to_string(),
+            "Entity 2".to_string(),
+            CallType::Direct,
+        );
+        let entry3 = CallHistoryEntry::new_outgoing(
+            "call-3".to_string(),
+            "entity-1".to_string(),
+            "Entity 1".to_string(),
+            CallType::Direct,
+        );
+        service.add_to_history(entry1).await;
+        service.add_to_history(entry2).await;
+        service.add_to_history(entry3).await;
+
+        let entity1_calls = service.get_history_for_entity("entity-1").await;
+        assert_eq!(entity1_calls.len(), 2);
+
+        let entity2_calls = service.get_history_for_entity("entity-2").await;
+        assert_eq!(entity2_calls.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn call_history_missed_calls() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        // Add a missed call
+        let mut entry = CallHistoryEntry::new_incoming(
+            "call-1".to_string(),
+            "entity-1".to_string(),
+            "Caller".to_string(),
+            CallType::Direct,
+        );
+        entry.outcome = CallOutcome::Missed;
+        service.add_to_history(entry).await;
+
+        // Add a completed call
+        let mut entry2 = CallHistoryEntry::new_incoming(
+            "call-2".to_string(),
+            "entity-1".to_string(),
+            "Caller".to_string(),
+            CallType::Direct,
+        );
+        entry2.outcome = CallOutcome::Completed;
+        entry2.is_read = true;
+        service.add_to_history(entry2).await;
+
+        // Should have 1 unread missed call
+        assert_eq!(service.get_unread_missed_count().await, 1);
+
+        let missed = service.get_unread_missed_calls().await;
+        assert_eq!(missed.len(), 1);
+        assert_eq!(missed[0].call_id, "call-1");
+    }
+
+    #[tokio::test]
+    async fn call_history_mark_read() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        // Add a missed call
+        let mut entry = CallHistoryEntry::new_incoming(
+            "call-1".to_string(),
+            "entity-1".to_string(),
+            "Caller".to_string(),
+            CallType::Direct,
+        );
+        entry.outcome = CallOutcome::Missed;
+        service.add_to_history(entry).await;
+
+        assert_eq!(service.get_unread_missed_count().await, 1);
+
+        // Mark as read
+        service.mark_call_read("call-1").await;
+
+        assert_eq!(service.get_unread_missed_count().await, 0);
+    }
+
+    #[tokio::test]
+    async fn call_history_mark_all_read() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        // Add multiple missed calls
+        for i in 0..3 {
+            let mut entry = CallHistoryEntry::new_incoming(
+                format!("call-{}", i),
+                "entity-1".to_string(),
+                "Caller".to_string(),
+                CallType::Direct,
+            );
+            entry.outcome = CallOutcome::Missed;
+            service.add_to_history(entry).await;
+        }
+
+        assert_eq!(service.get_unread_missed_count().await, 3);
+
+        // Mark all as read
+        service.mark_all_calls_read().await;
+
+        assert_eq!(service.get_unread_missed_count().await, 0);
+    }
+
+    #[tokio::test]
+    async fn call_history_delete_entry() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        let entry = CallHistoryEntry::new_outgoing(
+            "call-1".to_string(),
+            "entity-1".to_string(),
+            "Test".to_string(),
+            CallType::Direct,
+        );
+        service.add_to_history(entry).await;
+
+        assert_eq!(service.get_call_history().await.len(), 1);
+
+        service.delete_history_entry("call-1").await;
+
+        assert_eq!(service.get_call_history().await.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn call_history_clear() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        // Add multiple entries
+        for i in 0..5 {
+            let entry = CallHistoryEntry::new_outgoing(
+                format!("call-{}", i),
+                "entity-1".to_string(),
+                "Test".to_string(),
+                CallType::Direct,
+            );
+            service.add_to_history(entry).await;
+        }
+
+        assert_eq!(service.get_call_history().await.len(), 5);
+
+        service.clear_call_history().await;
+
+        assert_eq!(service.get_call_history().await.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn call_history_persistence() {
+        let temp = TempDir::new().expect("temp dir");
+
+        // First service instance - add some history
+        {
+            let service = make_service(&temp).await;
+            let entry = CallHistoryEntry::new_outgoing(
+                "call-persist".to_string(),
+                "entity-1".to_string(),
+                "Test".to_string(),
+                CallType::Direct,
+            );
+            service.add_to_history(entry).await;
+
+            // Force save
+            service.save_history().await;
+        }
+
+        // Second service instance - should load persisted history
+        {
+            let service = make_service(&temp).await;
+            let history = service.get_call_history().await;
+            assert_eq!(history.len(), 1);
+            assert_eq!(history.entries[0].call_id, "call-persist");
+        }
     }
 }

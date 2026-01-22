@@ -729,6 +729,398 @@ impl CallSnapshot {
     }
 }
 
+// =============================================================================
+// Call History Types
+// =============================================================================
+
+/// Outcome of a call (for history entries).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum CallOutcome {
+    /// Call completed successfully.
+    Completed,
+    /// Outgoing call that wasn't answered.
+    NoAnswer,
+    /// Incoming call that was declined.
+    Declined,
+    /// Incoming call that was missed (not answered).
+    Missed,
+    /// Call failed due to technical issues.
+    Failed,
+    /// Call was cancelled before connecting.
+    Cancelled,
+    /// Call is ongoing (shouldn't appear in history, but useful for transitions).
+    #[default]
+    InProgress,
+}
+
+impl CallOutcome {
+    /// Returns a human-readable label for the outcome.
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Completed => "Completed",
+            Self::NoAnswer => "No Answer",
+            Self::Declined => "Declined",
+            Self::Missed => "Missed",
+            Self::Failed => "Failed",
+            Self::Cancelled => "Cancelled",
+            Self::InProgress => "In Progress",
+        }
+    }
+
+    /// Returns true if this represents a missed call (incoming, not answered).
+    pub fn is_missed(&self) -> bool {
+        matches!(self, Self::Missed)
+    }
+
+    /// Returns true if this represents a successful connection.
+    pub fn was_connected(&self) -> bool {
+        matches!(self, Self::Completed | Self::InProgress)
+    }
+
+    /// Returns a CSS class hint for styling this outcome.
+    pub fn status_class(&self) -> &'static str {
+        match self {
+            Self::Completed => "text-emerald-500",
+            Self::NoAnswer => "text-amber-500",
+            Self::Declined => "text-slate-500",
+            Self::Missed => "text-red-500",
+            Self::Failed => "text-red-600",
+            Self::Cancelled => "text-slate-400",
+            Self::InProgress => "text-blue-500",
+        }
+    }
+}
+
+/// Direction of a call (for history entries).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum CallDirection {
+    /// Outgoing call (we initiated it).
+    #[default]
+    Outgoing,
+    /// Incoming call (they called us).
+    Incoming,
+}
+
+impl CallDirection {
+    /// Returns a human-readable label for the direction.
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Outgoing => "Outgoing",
+            Self::Incoming => "Incoming",
+        }
+    }
+
+    /// Returns an icon hint for the direction.
+    pub fn icon(&self) -> &'static str {
+        match self {
+            Self::Outgoing => "↗️",
+            Self::Incoming => "↙️",
+        }
+    }
+}
+
+/// Summary of a participant in a historical call.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct HistoryParticipant {
+    /// Unique identifier of the participant.
+    pub id: String,
+    /// Display name at the time of the call.
+    pub display_name: String,
+    /// Four-word identifier at the time of the call.
+    pub four_words: String,
+    /// How long they were in the call (seconds).
+    pub duration_seconds: u64,
+    /// Whether they joined late or left early.
+    pub partial_participation: bool,
+}
+
+/// A single call history entry.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CallHistoryEntry {
+    /// Unique ID of this call (same as CallInfo.call_id).
+    pub call_id: String,
+    /// Entity ID the call was associated with (contact, group, channel).
+    pub entity_id: String,
+    /// Entity name at the time of the call.
+    pub entity_name: String,
+    /// Type of call.
+    pub call_type: CallType,
+    /// Direction of the call.
+    pub direction: CallDirection,
+    /// Outcome of the call.
+    pub outcome: CallOutcome,
+    /// When the call started (Unix ms).
+    pub started_at: i64,
+    /// When the call ended (Unix ms, 0 if still in progress).
+    pub ended_at: i64,
+    /// Total duration in seconds (0 if not connected).
+    pub duration_seconds: u64,
+    /// List of participants who were in the call.
+    pub participants: Vec<HistoryParticipant>,
+    /// Whether video was used during the call.
+    pub had_video: bool,
+    /// Whether screen sharing was used during the call.
+    pub had_screen_share: bool,
+    /// Whether the call was recorded.
+    pub was_recorded: bool,
+    /// Path to recording file, if recorded and available.
+    pub recording_path: Option<String>,
+    /// Whether this entry has been marked as read/seen.
+    pub is_read: bool,
+}
+
+impl CallHistoryEntry {
+    /// Create a new history entry for an outgoing call.
+    pub fn new_outgoing(
+        call_id: String,
+        entity_id: String,
+        entity_name: String,
+        call_type: CallType,
+    ) -> Self {
+        let started_at = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as i64)
+            .unwrap_or(0);
+
+        Self {
+            call_id,
+            entity_id,
+            entity_name,
+            call_type,
+            direction: CallDirection::Outgoing,
+            outcome: CallOutcome::InProgress,
+            started_at,
+            ended_at: 0,
+            duration_seconds: 0,
+            participants: Vec::new(),
+            had_video: false,
+            had_screen_share: false,
+            was_recorded: false,
+            recording_path: None,
+            is_read: true, // Outgoing calls are always "read"
+        }
+    }
+
+    /// Create a new history entry for an incoming call.
+    pub fn new_incoming(
+        call_id: String,
+        entity_id: String,
+        entity_name: String,
+        call_type: CallType,
+    ) -> Self {
+        let started_at = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as i64)
+            .unwrap_or(0);
+
+        Self {
+            call_id,
+            entity_id,
+            entity_name,
+            call_type,
+            direction: CallDirection::Incoming,
+            outcome: CallOutcome::InProgress,
+            started_at,
+            ended_at: 0,
+            duration_seconds: 0,
+            participants: Vec::new(),
+            had_video: false,
+            had_screen_share: false,
+            was_recorded: false,
+            recording_path: None,
+            is_read: false, // Incoming calls start as unread
+        }
+    }
+
+    /// Finalize the call entry with ending details.
+    pub fn finalize(&mut self, outcome: CallOutcome) {
+        let ended_at = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as i64)
+            .unwrap_or(0);
+
+        self.ended_at = ended_at;
+        self.outcome = outcome;
+
+        // Calculate duration if connected
+        if outcome.was_connected() && self.started_at > 0 && ended_at > self.started_at {
+            self.duration_seconds = ((ended_at - self.started_at) / 1000) as u64;
+        }
+    }
+
+    /// Returns the formatted duration (e.g., "1:23:45" or "0:00").
+    pub fn formatted_duration(&self) -> String {
+        let hours = self.duration_seconds / 3600;
+        let minutes = (self.duration_seconds % 3600) / 60;
+        let seconds = self.duration_seconds % 60;
+
+        if hours > 0 {
+            format!("{}:{:02}:{:02}", hours, minutes, seconds)
+        } else {
+            format!("{}:{:02}", minutes, seconds)
+        }
+    }
+
+    /// Returns the number of participants (excluding self).
+    pub fn participant_count(&self) -> usize {
+        self.participants.len()
+    }
+
+    /// Returns a display string for the participants.
+    pub fn participants_display(&self) -> String {
+        match self.participants.len() {
+            0 => self.entity_name.clone(),
+            1 => self.participants[0].display_name.clone(),
+            2 => format!(
+                "{} and {}",
+                self.participants[0].display_name, self.participants[1].display_name
+            ),
+            n => format!("{} and {} others", self.participants[0].display_name, n - 1),
+        }
+    }
+
+    /// Returns true if this is a missed call that hasn't been seen.
+    pub fn is_unread_missed(&self) -> bool {
+        self.outcome.is_missed() && !self.is_read
+    }
+
+    /// Mark this entry as read.
+    pub fn mark_read(&mut self) {
+        self.is_read = true;
+    }
+
+    /// Returns an icon/emoji hint for the call direction and outcome.
+    pub fn icon(&self) -> &'static str {
+        match (&self.direction, &self.outcome) {
+            (_, CallOutcome::Missed) => "📵",
+            (_, CallOutcome::Failed) => "❌",
+            (CallDirection::Outgoing, CallOutcome::NoAnswer) => "📤",
+            (CallDirection::Incoming, _) => "📲",
+            (CallDirection::Outgoing, _) => "📱",
+        }
+    }
+}
+
+/// Collection of call history entries with utility methods.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct CallHistory {
+    /// All history entries, newest first.
+    pub entries: Vec<CallHistoryEntry>,
+    /// Maximum entries to keep (0 = unlimited).
+    pub max_entries: usize,
+}
+
+impl CallHistory {
+    /// Create a new empty call history with a max entry limit.
+    pub fn new(max_entries: usize) -> Self {
+        Self {
+            entries: Vec::new(),
+            max_entries,
+        }
+    }
+
+    /// Add a new entry to the history.
+    pub fn add(&mut self, entry: CallHistoryEntry) {
+        // Insert at the beginning (newest first)
+        self.entries.insert(0, entry);
+
+        // Trim if over limit
+        if self.max_entries > 0 && self.entries.len() > self.max_entries {
+            self.entries.truncate(self.max_entries);
+        }
+    }
+
+    /// Update an existing entry (e.g., when call ends).
+    pub fn update(&mut self, call_id: &str, updater: impl FnOnce(&mut CallHistoryEntry)) {
+        if let Some(entry) = self.entries.iter_mut().find(|e| e.call_id == call_id) {
+            updater(entry);
+        }
+    }
+
+    /// Get an entry by call ID.
+    pub fn get(&self, call_id: &str) -> Option<&CallHistoryEntry> {
+        self.entries.iter().find(|e| e.call_id == call_id)
+    }
+
+    /// Get a mutable entry by call ID.
+    pub fn get_mut(&mut self, call_id: &str) -> Option<&mut CallHistoryEntry> {
+        self.entries.iter_mut().find(|e| e.call_id == call_id)
+    }
+
+    /// Remove an entry by call ID.
+    pub fn remove(&mut self, call_id: &str) -> Option<CallHistoryEntry> {
+        if let Some(pos) = self.entries.iter().position(|e| e.call_id == call_id) {
+            Some(self.entries.remove(pos))
+        } else {
+            None
+        }
+    }
+
+    /// Clear all history entries.
+    pub fn clear(&mut self) {
+        self.entries.clear();
+    }
+
+    /// Returns the number of entries.
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    /// Returns true if there are no entries.
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    /// Returns all missed calls.
+    pub fn missed_calls(&self) -> Vec<&CallHistoryEntry> {
+        self.entries
+            .iter()
+            .filter(|e| e.outcome.is_missed())
+            .collect()
+    }
+
+    /// Returns all unread missed calls.
+    pub fn unread_missed_calls(&self) -> Vec<&CallHistoryEntry> {
+        self.entries
+            .iter()
+            .filter(|e| e.is_unread_missed())
+            .collect()
+    }
+
+    /// Returns the count of unread missed calls.
+    pub fn unread_missed_count(&self) -> usize {
+        self.entries.iter().filter(|e| e.is_unread_missed()).count()
+    }
+
+    /// Mark all missed calls as read.
+    pub fn mark_all_read(&mut self) {
+        for entry in &mut self.entries {
+            entry.is_read = true;
+        }
+    }
+
+    /// Get history filtered by entity ID.
+    pub fn for_entity(&self, entity_id: &str) -> Vec<&CallHistoryEntry> {
+        self.entries
+            .iter()
+            .filter(|e| e.entity_id == entity_id)
+            .collect()
+    }
+
+    /// Get history filtered by call type.
+    pub fn by_type(&self, call_type: CallType) -> Vec<&CallHistoryEntry> {
+        self.entries
+            .iter()
+            .filter(|e| e.call_type == call_type)
+            .collect()
+    }
+
+    /// Get recent entries (up to limit).
+    pub fn recent(&self, limit: usize) -> Vec<&CallHistoryEntry> {
+        self.entries.iter().take(limit).collect()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1367,5 +1759,340 @@ mod tests {
             ..call
         };
         assert!(!locked_call.can_accept_more_participants());
+    }
+
+    #[test]
+    fn call_outcome_labels() {
+        assert_eq!(CallOutcome::Completed.label(), "Completed");
+        assert_eq!(CallOutcome::NoAnswer.label(), "No Answer");
+        assert_eq!(CallOutcome::Declined.label(), "Declined");
+        assert_eq!(CallOutcome::Missed.label(), "Missed");
+        assert_eq!(CallOutcome::Failed.label(), "Failed");
+        assert_eq!(CallOutcome::Cancelled.label(), "Cancelled");
+        assert_eq!(CallOutcome::InProgress.label(), "In Progress");
+    }
+
+    #[test]
+    fn call_outcome_is_missed() {
+        assert!(CallOutcome::Missed.is_missed());
+        assert!(!CallOutcome::Completed.is_missed());
+        assert!(!CallOutcome::NoAnswer.is_missed());
+    }
+
+    #[test]
+    fn call_outcome_was_connected() {
+        assert!(CallOutcome::Completed.was_connected());
+        assert!(CallOutcome::InProgress.was_connected());
+        assert!(!CallOutcome::Missed.was_connected());
+        assert!(!CallOutcome::NoAnswer.was_connected());
+        assert!(!CallOutcome::Failed.was_connected());
+    }
+
+    #[test]
+    fn call_direction_labels() {
+        assert_eq!(CallDirection::Outgoing.label(), "Outgoing");
+        assert_eq!(CallDirection::Incoming.label(), "Incoming");
+    }
+
+    #[test]
+    fn call_history_entry_new_outgoing() {
+        let entry = CallHistoryEntry::new_outgoing(
+            "call1".to_string(),
+            "ent1".to_string(),
+            "Test Entity".to_string(),
+            CallType::Direct,
+        );
+
+        assert_eq!(entry.call_id, "call1");
+        assert_eq!(entry.direction, CallDirection::Outgoing);
+        assert_eq!(entry.outcome, CallOutcome::InProgress);
+        assert!(entry.is_read); // Outgoing calls are always read
+        assert!(entry.started_at > 0);
+    }
+
+    #[test]
+    fn call_history_entry_new_incoming() {
+        let entry = CallHistoryEntry::new_incoming(
+            "call1".to_string(),
+            "ent1".to_string(),
+            "Test Entity".to_string(),
+            CallType::Direct,
+        );
+
+        assert_eq!(entry.direction, CallDirection::Incoming);
+        assert!(!entry.is_read); // Incoming calls start as unread
+    }
+
+    #[test]
+    fn call_history_entry_finalize() {
+        let mut entry = CallHistoryEntry::new_outgoing(
+            "call1".to_string(),
+            "ent1".to_string(),
+            "Test".to_string(),
+            CallType::Direct,
+        );
+
+        // Simulate some time passing
+        entry.started_at = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as i64
+            - 5000; // 5 seconds ago
+
+        entry.finalize(CallOutcome::Completed);
+
+        assert_eq!(entry.outcome, CallOutcome::Completed);
+        assert!(entry.ended_at > entry.started_at);
+        assert!(entry.duration_seconds >= 4); // At least 4 seconds
+    }
+
+    #[test]
+    fn call_history_entry_formatted_duration() {
+        let mut entry = CallHistoryEntry::new_outgoing(
+            "call1".to_string(),
+            "ent1".to_string(),
+            "Test".to_string(),
+            CallType::Direct,
+        );
+
+        entry.duration_seconds = 0;
+        assert_eq!(entry.formatted_duration(), "0:00");
+
+        entry.duration_seconds = 65;
+        assert_eq!(entry.formatted_duration(), "1:05");
+
+        entry.duration_seconds = 3723; // 1 hour, 2 minutes, 3 seconds
+        assert_eq!(entry.formatted_duration(), "1:02:03");
+    }
+
+    #[test]
+    fn call_history_entry_participants_display() {
+        let mut entry = CallHistoryEntry::new_outgoing(
+            "call1".to_string(),
+            "ent1".to_string(),
+            "Group Chat".to_string(),
+            CallType::Group,
+        );
+
+        // No participants
+        assert_eq!(entry.participants_display(), "Group Chat");
+
+        // One participant
+        entry.participants.push(HistoryParticipant {
+            id: "p1".to_string(),
+            display_name: "Alice".to_string(),
+            four_words: "a-b-c-d".to_string(),
+            duration_seconds: 60,
+            partial_participation: false,
+        });
+        assert_eq!(entry.participants_display(), "Alice");
+
+        // Two participants
+        entry.participants.push(HistoryParticipant {
+            id: "p2".to_string(),
+            display_name: "Bob".to_string(),
+            four_words: "e-f-g-h".to_string(),
+            duration_seconds: 60,
+            partial_participation: false,
+        });
+        assert_eq!(entry.participants_display(), "Alice and Bob");
+
+        // Three participants
+        entry.participants.push(HistoryParticipant {
+            id: "p3".to_string(),
+            display_name: "Charlie".to_string(),
+            four_words: "i-j-k-l".to_string(),
+            duration_seconds: 60,
+            partial_participation: false,
+        });
+        assert_eq!(entry.participants_display(), "Alice and 2 others");
+    }
+
+    #[test]
+    fn call_history_entry_is_unread_missed() {
+        let mut entry = CallHistoryEntry::new_incoming(
+            "call1".to_string(),
+            "ent1".to_string(),
+            "Test".to_string(),
+            CallType::Direct,
+        );
+
+        entry.outcome = CallOutcome::Missed;
+        entry.is_read = false;
+        assert!(entry.is_unread_missed());
+
+        entry.mark_read();
+        assert!(!entry.is_unread_missed());
+    }
+
+    #[test]
+    fn call_history_add_and_get() {
+        let mut history = CallHistory::new(100);
+        assert!(history.is_empty());
+
+        let entry1 = CallHistoryEntry::new_outgoing(
+            "call1".to_string(),
+            "ent1".to_string(),
+            "Test 1".to_string(),
+            CallType::Direct,
+        );
+        let entry2 = CallHistoryEntry::new_outgoing(
+            "call2".to_string(),
+            "ent2".to_string(),
+            "Test 2".to_string(),
+            CallType::Direct,
+        );
+
+        history.add(entry1);
+        history.add(entry2);
+
+        assert_eq!(history.len(), 2);
+        assert_eq!(history.entries[0].call_id, "call2"); // Newest first
+        assert_eq!(history.entries[1].call_id, "call1");
+
+        assert!(history.get("call1").is_some());
+        assert!(history.get("nonexistent").is_none());
+    }
+
+    #[test]
+    fn call_history_max_entries() {
+        let mut history = CallHistory::new(2);
+
+        for i in 0..5 {
+            let entry = CallHistoryEntry::new_outgoing(
+                format!("call{}", i),
+                "ent".to_string(),
+                "Test".to_string(),
+                CallType::Direct,
+            );
+            history.add(entry);
+        }
+
+        // Should only have 2 entries (newest)
+        assert_eq!(history.len(), 2);
+        assert_eq!(history.entries[0].call_id, "call4");
+        assert_eq!(history.entries[1].call_id, "call3");
+    }
+
+    #[test]
+    fn call_history_update() {
+        let mut history = CallHistory::new(100);
+
+        let entry = CallHistoryEntry::new_outgoing(
+            "call1".to_string(),
+            "ent1".to_string(),
+            "Test".to_string(),
+            CallType::Direct,
+        );
+        history.add(entry);
+
+        history.update("call1", |e| {
+            e.outcome = CallOutcome::Completed;
+            e.duration_seconds = 120;
+        });
+
+        let updated = history.get("call1").unwrap();
+        assert_eq!(updated.outcome, CallOutcome::Completed);
+        assert_eq!(updated.duration_seconds, 120);
+    }
+
+    #[test]
+    fn call_history_remove() {
+        let mut history = CallHistory::new(100);
+
+        let entry = CallHistoryEntry::new_outgoing(
+            "call1".to_string(),
+            "ent1".to_string(),
+            "Test".to_string(),
+            CallType::Direct,
+        );
+        history.add(entry);
+
+        let removed = history.remove("call1");
+        assert!(removed.is_some());
+        assert!(history.is_empty());
+
+        let not_found = history.remove("nonexistent");
+        assert!(not_found.is_none());
+    }
+
+    #[test]
+    fn call_history_missed_calls() {
+        let mut history = CallHistory::new(100);
+
+        let mut missed = CallHistoryEntry::new_incoming(
+            "call1".to_string(),
+            "ent1".to_string(),
+            "Missed".to_string(),
+            CallType::Direct,
+        );
+        missed.outcome = CallOutcome::Missed;
+        missed.is_read = false;
+
+        let completed = CallHistoryEntry::new_outgoing(
+            "call2".to_string(),
+            "ent1".to_string(),
+            "Completed".to_string(),
+            CallType::Direct,
+        );
+
+        history.add(missed);
+        history.add(completed);
+
+        assert_eq!(history.missed_calls().len(), 1);
+        assert_eq!(history.unread_missed_count(), 1);
+
+        history.mark_all_read();
+        assert_eq!(history.unread_missed_count(), 0);
+    }
+
+    #[test]
+    fn call_history_for_entity() {
+        let mut history = CallHistory::new(100);
+
+        let entry1 = CallHistoryEntry::new_outgoing(
+            "call1".to_string(),
+            "ent1".to_string(),
+            "Entity 1".to_string(),
+            CallType::Direct,
+        );
+        let entry2 = CallHistoryEntry::new_outgoing(
+            "call2".to_string(),
+            "ent2".to_string(),
+            "Entity 2".to_string(),
+            CallType::Direct,
+        );
+        let entry3 = CallHistoryEntry::new_outgoing(
+            "call3".to_string(),
+            "ent1".to_string(),
+            "Entity 1 Again".to_string(),
+            CallType::Direct,
+        );
+
+        history.add(entry1);
+        history.add(entry2);
+        history.add(entry3);
+
+        let ent1_calls = history.for_entity("ent1");
+        assert_eq!(ent1_calls.len(), 2);
+    }
+
+    #[test]
+    fn call_history_recent() {
+        let mut history = CallHistory::new(100);
+
+        for i in 0..10 {
+            let entry = CallHistoryEntry::new_outgoing(
+                format!("call{}", i),
+                "ent".to_string(),
+                "Test".to_string(),
+                CallType::Direct,
+            );
+            history.add(entry);
+        }
+
+        let recent = history.recent(3);
+        assert_eq!(recent.len(), 3);
+        assert_eq!(recent[0].call_id, "call9"); // Newest
     }
 }

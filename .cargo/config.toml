@@ -1,2 +1,6 @@
-[net]
-git-fetch-with-cli = true
+# Cargo configuration for communitas workspace
+
+[env]
+# Increase stack size for tests to handle large Element clones in history operations
+# This is needed because debug builds have larger stack frames
+RUST_MIN_STACK = "8388608"

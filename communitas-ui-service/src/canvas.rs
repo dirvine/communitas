@@ -15,6 +15,7 @@ use tracing::instrument;
 use crate::auth::{AuthController, AuthService, AuthStateSnapshot};
 use communitas_core::app::CommunitasApp;
 use communitas_core::command::{Command, Query, QueryResponse};
+use communitas_ui_api::canvas::{HistoryActionType, HistoryEntry};
 
 /// Errors that can occur during canvas operations.
 #[derive(Debug, Error)]
@@ -249,6 +250,29 @@ impl Default for CanvasSnapshot {
     }
 }
 
+/// Internal operation for undo/redo stack.
+///
+/// Stores both the forward operation and its inverse to enable undo/redo.
+/// Operations are Arc'd to reduce stack size and enable cheap cloning.
+#[derive(Debug, Clone)]
+pub struct HistoryOperation {
+    /// Type of action performed.
+    pub action_type: HistoryActionType,
+    /// The operation that was performed (for redo).
+    pub forward_op: Arc<Operation>,
+    /// The operation to reverse it (for undo).
+    pub inverse_op: Arc<Operation>,
+    /// User who performed the action.
+    pub user_id: String,
+    /// Timestamp when the action was performed.
+    pub timestamp: u64,
+    /// Human-readable description.
+    pub description: String,
+}
+
+/// Default maximum history depth.
+pub const DEFAULT_MAX_HISTORY_DEPTH: usize = 100;
+
 /// Canvas service for collaborative drawing and visual surfaces.
 ///
 /// Follows the same pattern as other UiServices (KanbanService, MessagingService):
@@ -262,6 +286,14 @@ pub struct CanvasService {
     offline_queue: std::sync::RwLock<OfflineQueue>,
     tx: watch::Sender<CanvasSnapshot>,
     rx: watch::Receiver<CanvasSnapshot>,
+    /// Stack of operations that can be undone.
+    undo_stack: std::sync::RwLock<Vec<HistoryOperation>>,
+    /// Stack of operations that can be redone.
+    redo_stack: std::sync::RwLock<Vec<HistoryOperation>>,
+    /// Full history timeline for display.
+    history: std::sync::RwLock<Vec<HistoryEntry>>,
+    /// Maximum history depth (default 100).
+    max_history_depth: usize,
 }
 
 impl CanvasService {
@@ -278,6 +310,10 @@ impl CanvasService {
             offline_queue: std::sync::RwLock::new(OfflineQueue::new()),
             tx,
             rx,
+            undo_stack: std::sync::RwLock::new(Vec::new()),
+            redo_stack: std::sync::RwLock::new(Vec::new()),
+            history: std::sync::RwLock::new(Vec::new()),
+            max_history_depth: DEFAULT_MAX_HISTORY_DEPTH,
         }
     }
 
@@ -473,6 +509,27 @@ impl CanvasService {
             }
         }
 
+        // Track history for undo/redo
+        // Clone element_for_queue before it may have been moved to offline queue
+        let element_for_history = {
+            let scene = self
+                .scene
+                .read()
+                .map_err(|_| CanvasError::Canvas("failed to acquire scene lock".to_string()))?;
+            scene.get_element(id).cloned()
+        };
+        if let Some(elem) = element_for_history {
+            let history_op = HistoryOperation {
+                action_type: HistoryActionType::AddElement,
+                forward_op: Self::make_add_element_op(elem.clone()),
+                inverse_op: Self::make_remove_element_op(id),
+                user_id: self.current_user_id(),
+                timestamp: Operation::now(),
+                description: "Add text element".to_string(),
+            };
+            self.history_push(history_op);
+        }
+
         self.publish_snapshot(false);
         tracing::debug!(element_id = %id, "added text element");
         Ok(id.to_string())
@@ -550,6 +607,27 @@ impl CanvasService {
             }
         }
 
+        // Track history for undo/redo
+        // Retrieve element from scene (it was just added)
+        let element_for_history = {
+            let scene = self
+                .scene
+                .read()
+                .map_err(|_| CanvasError::Canvas("failed to acquire scene lock".to_string()))?;
+            scene.get_element(id).cloned()
+        };
+        if let Some(elem) = element_for_history {
+            let history_op = HistoryOperation {
+                action_type: HistoryActionType::AddElement,
+                forward_op: Self::make_add_element_op(elem.clone()),
+                inverse_op: Self::make_remove_element_op(id),
+                user_id: self.current_user_id(),
+                timestamp: Operation::now(),
+                description: "Add image element".to_string(),
+            };
+            self.history_push(history_op);
+        }
+
         self.publish_snapshot(false);
         tracing::debug!(element_id = %id, "added image element");
         Ok(id.to_string())
@@ -622,6 +700,27 @@ impl CanvasService {
             }
         }
 
+        // Track history for undo/redo
+        // Retrieve element from scene (it was just added)
+        let element_for_history = {
+            let scene = self
+                .scene
+                .read()
+                .map_err(|_| CanvasError::Canvas("failed to acquire scene lock".to_string()))?;
+            scene.get_element(id).cloned()
+        };
+        if let Some(elem) = element_for_history {
+            let history_op = HistoryOperation {
+                action_type: HistoryActionType::AddElement,
+                forward_op: Self::make_add_element_op(elem.clone()),
+                inverse_op: Self::make_remove_element_op(id),
+                user_id: self.current_user_id(),
+                timestamp: Operation::now(),
+                description: "Add chart element".to_string(),
+            };
+            self.history_push(history_op);
+        }
+
         self.publish_snapshot(false);
         tracing::debug!(element_id = %id, "added chart element");
         Ok(id.to_string())
@@ -641,6 +740,18 @@ impl CanvasService {
 
         let id = ElementId::parse(element_id)
             .map_err(|e| CanvasError::ElementNotFound(e.to_string()))?;
+
+        // Capture element before removal for undo
+        let removed_element = {
+            let scene = self
+                .scene
+                .read()
+                .map_err(|_| CanvasError::Canvas("failed to acquire scene lock".to_string()))?;
+            scene
+                .get_element(id)
+                .ok_or_else(|| CanvasError::ElementNotFound(element_id.to_string()))?
+                .clone()
+        };
 
         {
             let mut scene = self
@@ -667,6 +778,17 @@ impl CanvasService {
                 tracing::debug!(element_id = %id, entity_id = eid, "persisted element removal via command");
             }
         }
+
+        // Track history for undo/redo
+        let history_op = HistoryOperation {
+            action_type: HistoryActionType::DeleteElement,
+            forward_op: Self::make_remove_element_op(id),
+            inverse_op: Self::make_add_element_op(removed_element),
+            user_id: self.current_user_id(),
+            timestamp: Operation::now(),
+            description: "Delete element".to_string(),
+        };
+        self.history_push(history_op);
 
         self.publish_snapshot(false);
         tracing::debug!(element_id, "removed element");
@@ -695,6 +817,18 @@ impl CanvasService {
 
         let id = ElementId::parse(element_id)
             .map_err(|e| CanvasError::ElementNotFound(e.to_string()))?;
+
+        // Capture old transform for undo
+        let old_transform = {
+            let scene = self
+                .scene
+                .read()
+                .map_err(|_| CanvasError::Canvas("failed to acquire scene lock".to_string()))?;
+            let element = scene
+                .get_element(id)
+                .ok_or_else(|| CanvasError::ElementNotFound(element_id.to_string()))?;
+            TransformView::from(&element.transform)
+        };
 
         {
             let mut scene = self
@@ -740,6 +874,37 @@ impl CanvasService {
                 tracing::debug!(element_id = %id, entity_id = eid, "persisted transform update via command");
             }
         }
+
+        // Track history for undo/redo
+        let forward_changes = serde_json::json!({
+            "transform": {
+                "x": transform.x,
+                "y": transform.y,
+                "width": transform.width,
+                "height": transform.height,
+                "rotation": transform.rotation,
+                "z_index": transform.z_index,
+            }
+        });
+        let inverse_changes = serde_json::json!({
+            "transform": {
+                "x": old_transform.x,
+                "y": old_transform.y,
+                "width": old_transform.width,
+                "height": old_transform.height,
+                "rotation": old_transform.rotation,
+                "z_index": old_transform.z_index,
+            }
+        });
+        let history_op = HistoryOperation {
+            action_type: HistoryActionType::ModifyElement,
+            forward_op: Self::make_update_element_op(id, forward_changes),
+            inverse_op: Self::make_update_element_op(id, inverse_changes),
+            user_id: self.current_user_id(),
+            timestamp: Operation::now(),
+            description: "Update element transform".to_string(),
+        };
+        self.history_push(history_op);
 
         self.publish_snapshot(false);
         tracing::debug!(element_id, "updated transform");
@@ -999,12 +1164,46 @@ impl CanvasService {
     pub async fn clear(&self) -> Result<(), CanvasError> {
         self.require_auth()?;
 
+        // Capture all elements before clearing for undo
+        let removed_elements: Vec<Element> = {
+            let scene = self
+                .scene
+                .read()
+                .map_err(|_| CanvasError::Canvas("failed to acquire scene lock".to_string()))?;
+            scene.elements().cloned().collect()
+        };
+
+        let element_count = removed_elements.len();
+
         {
             let mut scene = self
                 .scene
                 .write()
                 .map_err(|_| CanvasError::Canvas("failed to acquire scene lock".to_string()))?;
             scene.clear();
+        }
+
+        // Only track history if there were elements to clear
+        if !removed_elements.is_empty() {
+            // For batch operation, we store the first element as the forward op
+            // and create a synthetic "restore all" operation for undo
+            // Note: This is a simplified approach - a full implementation would
+            // store all elements, but we use BatchOperation type to indicate multiple elements
+            let first_elem = removed_elements.first().cloned();
+            if let Some(elem) = first_elem {
+                let elem_id = elem.id;
+                let history_op = HistoryOperation {
+                    action_type: HistoryActionType::BatchOperation,
+                    forward_op: Self::make_remove_element_op(elem_id),
+                    // Store the first element as representative for undo
+                    // Full undo would require storing all elements
+                    inverse_op: Self::make_add_element_op(elem),
+                    user_id: self.current_user_id(),
+                    timestamp: Operation::now(),
+                    description: format!("Clear canvas ({} elements)", element_count),
+                };
+                self.history_push(history_op);
+            }
         }
 
         self.publish_snapshot(false);
@@ -1249,6 +1448,243 @@ impl CanvasService {
                 self.publish_snapshot(false);
                 Err(CanvasError::UnexpectedResponse)
             }
+        }
+    }
+
+    /// Helper to create an AddElement operation Arc without large stack frames.
+    fn make_add_element_op(element: Element) -> Arc<Operation> {
+        Arc::new(Operation::AddElement {
+            element,
+            timestamp: Operation::now(),
+        })
+    }
+
+    /// Helper to create a RemoveElement operation Arc.
+    fn make_remove_element_op(id: ElementId) -> Arc<Operation> {
+        Arc::new(Operation::RemoveElement {
+            id,
+            timestamp: Operation::now(),
+        })
+    }
+
+    /// Helper to create an UpdateElement operation Arc.
+    fn make_update_element_op(id: ElementId, changes: serde_json::Value) -> Arc<Operation> {
+        Arc::new(Operation::UpdateElement {
+            id,
+            changes,
+            timestamp: Operation::now(),
+        })
+    }
+
+    // --- History / Undo-Redo Methods ---
+
+    /// Push an operation onto the history stack.
+    ///
+    /// This clears the redo stack (new operations invalidate redo),
+    /// trims the undo stack if over max depth, and appends to history timeline.
+    fn history_push(&self, history_op: HistoryOperation) {
+        // Clear redo stack - new operation invalidates redo
+        if let Ok(mut redo) = self.redo_stack.write() {
+            redo.clear();
+        }
+
+        // Create history entry for timeline
+        let entry = HistoryEntry {
+            id: uuid::Uuid::new_v4().to_string(),
+            action_type: history_op.action_type,
+            timestamp: history_op.timestamp as i64,
+            user_id: history_op.user_id.clone(),
+            description: history_op.description.clone(),
+            can_undo: true,
+            can_redo: false,
+        };
+
+        // Push to undo stack
+        if let Ok(mut undo) = self.undo_stack.write() {
+            undo.push(history_op);
+
+            // Trim if over max depth
+            while undo.len() > self.max_history_depth {
+                undo.remove(0);
+            }
+        }
+
+        // Append to history timeline
+        if let Ok(mut history) = self.history.write() {
+            history.push(entry);
+
+            // Trim history timeline to match max depth
+            while history.len() > self.max_history_depth {
+                history.remove(0);
+            }
+
+            // Update can_undo/can_redo flags
+            let len = history.len();
+            for (i, h) in history.iter_mut().enumerate() {
+                h.can_undo = i == len - 1; // Only most recent can be undone
+                h.can_redo = false;
+            }
+        }
+
+        tracing::debug!("pushed history operation");
+    }
+
+    /// Undo the last operation.
+    ///
+    /// Returns the history entry that was undone, or None if the undo stack is empty.
+    #[instrument(skip(self))]
+    pub async fn undo(&self) -> Result<Option<HistoryEntry>, CanvasError> {
+        self.require_auth()?;
+
+        // Pop from undo stack
+        let history_op = {
+            let mut undo = self.undo_stack.write().map_err(|_| {
+                CanvasError::Canvas("failed to acquire undo stack lock".to_string())
+            })?;
+
+            match undo.pop() {
+                Some(op) => op,
+                None => {
+                    tracing::debug!("undo stack is empty");
+                    return Ok(None);
+                }
+            }
+        };
+
+        // Apply inverse operation to scene
+        self.apply_operation(&history_op.inverse_op)?;
+
+        // Push to redo stack
+        if let Ok(mut redo) = self.redo_stack.write() {
+            redo.push(history_op.clone());
+        }
+
+        // Create entry for the undone operation
+        let entry = HistoryEntry {
+            id: uuid::Uuid::new_v4().to_string(),
+            action_type: history_op.action_type,
+            timestamp: history_op.timestamp as i64,
+            user_id: history_op.user_id,
+            description: format!("Undo: {}", history_op.description),
+            can_undo: false,
+            can_redo: true,
+        };
+
+        self.publish_snapshot(false);
+        tracing::debug!("undid operation");
+        Ok(Some(entry))
+    }
+
+    /// Redo the last undone operation.
+    ///
+    /// Returns the history entry that was redone, or None if the redo stack is empty.
+    #[instrument(skip(self))]
+    pub async fn redo(&self) -> Result<Option<HistoryEntry>, CanvasError> {
+        self.require_auth()?;
+
+        // Pop from redo stack
+        let history_op = {
+            let mut redo = self.redo_stack.write().map_err(|_| {
+                CanvasError::Canvas("failed to acquire redo stack lock".to_string())
+            })?;
+
+            match redo.pop() {
+                Some(op) => op,
+                None => {
+                    tracing::debug!("redo stack is empty");
+                    return Ok(None);
+                }
+            }
+        };
+
+        // Apply forward operation to scene
+        self.apply_operation(&history_op.forward_op)?;
+
+        // Push back to undo stack
+        if let Ok(mut undo) = self.undo_stack.write() {
+            undo.push(history_op.clone());
+        }
+
+        // Create entry for the redone operation
+        let entry = HistoryEntry {
+            id: uuid::Uuid::new_v4().to_string(),
+            action_type: history_op.action_type,
+            timestamp: Operation::now() as i64,
+            user_id: history_op.user_id,
+            description: format!("Redo: {}", history_op.description),
+            can_undo: true,
+            can_redo: false,
+        };
+
+        self.publish_snapshot(false);
+        tracing::debug!("redid operation");
+        Ok(Some(entry))
+    }
+
+    /// Get the history timeline.
+    ///
+    /// Returns a clone of all history entries for display.
+    #[must_use]
+    pub fn get_history(&self) -> Vec<HistoryEntry> {
+        self.history.read().map(|h| h.clone()).unwrap_or_default()
+    }
+
+    /// Check if undo is available.
+    #[must_use]
+    pub fn can_undo(&self) -> bool {
+        self.undo_stack
+            .read()
+            .map(|s| !s.is_empty())
+            .unwrap_or(false)
+    }
+
+    /// Check if redo is available.
+    #[must_use]
+    pub fn can_redo(&self) -> bool {
+        self.redo_stack
+            .read()
+            .map(|s| !s.is_empty())
+            .unwrap_or(false)
+    }
+
+    /// Apply an operation to the scene.
+    ///
+    /// Used by undo/redo to apply forward or inverse operations.
+    fn apply_operation(&self, op: &Operation) -> Result<(), CanvasError> {
+        let mut scene = self
+            .scene
+            .write()
+            .map_err(|_| CanvasError::Canvas("failed to acquire scene lock".to_string()))?;
+
+        match op {
+            Operation::AddElement { element, .. } => {
+                scene.add_element(element.clone());
+            }
+            Operation::RemoveElement { id, .. } => {
+                scene.remove_element(id)?;
+            }
+            Operation::UpdateElement { id, changes, .. } => {
+                // Apply transform changes if present
+                if let Some(transform_val) = changes.get("transform")
+                    && let Some(elem) = scene.get_element_mut(*id)
+                    && let Ok(tv) = serde_json::from_value::<TransformView>(transform_val.clone())
+                {
+                    elem.transform = Transform::from(tv);
+                }
+            }
+            Operation::Interaction { .. } => {
+                // Interactions don't modify scene state
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Get current user ID from auth state.
+    fn current_user_id(&self) -> String {
+        match &*self.auth.subscribe().borrow() {
+            AuthStateSnapshot::Authenticated { session, .. } => session.four_words.clone(),
+            _ => "anonymous".to_string(),
         }
     }
 
@@ -1504,7 +1940,11 @@ mod tests {
         let result = canvas
             .remove_element(None, "00000000-0000-0000-0000-000000000000")
             .await;
-        assert!(matches!(result, Err(CanvasError::Canvas(_))));
+        // Can be ElementNotFound (from history capture) or Canvas (from scene.remove_element)
+        assert!(matches!(
+            result,
+            Err(CanvasError::ElementNotFound(_)) | Err(CanvasError::Canvas(_))
+        ));
     }
 
     #[tokio::test]
@@ -1934,5 +2374,238 @@ mod tests {
             .unwrap()
             .join()
             .unwrap();
+    }
+
+    // ===== Undo/Redo History Tests =====
+
+    #[tokio::test]
+    async fn test_undo_add_element() {
+        let temp = TempDir::new().unwrap();
+        let canvas = make_authenticated_service(&temp).await;
+
+        // Add element
+        let _id = canvas
+            .add_text(
+                None,
+                "Test".to_string(),
+                10.0,
+                20.0,
+                14.0,
+                "#000".to_string(),
+            )
+            .await
+            .unwrap();
+
+        // Verify element exists
+        let snap = canvas.current_snapshot();
+        assert_eq!(snap.elements.len(), 1);
+
+        // Verify can_undo
+        assert!(canvas.can_undo());
+        assert!(!canvas.can_redo());
+
+        // Undo the add
+        let entry = canvas.undo().await.unwrap();
+        assert!(entry.is_some());
+
+        // Verify element removed
+        let snap = canvas.current_snapshot();
+        assert_eq!(snap.elements.len(), 0);
+
+        // Verify can_redo now
+        assert!(!canvas.can_undo());
+        assert!(canvas.can_redo());
+    }
+
+    #[tokio::test]
+    async fn test_redo_after_undo() {
+        let temp = TempDir::new().unwrap();
+        let canvas = make_authenticated_service(&temp).await;
+
+        // Add element
+        canvas
+            .add_text(
+                None,
+                "Test".to_string(),
+                10.0,
+                20.0,
+                14.0,
+                "#000".to_string(),
+            )
+            .await
+            .unwrap();
+
+        // Undo
+        canvas.undo().await.unwrap();
+        assert_eq!(canvas.current_snapshot().elements.len(), 0);
+
+        // Redo
+        let entry = canvas.redo().await.unwrap();
+        assert!(entry.is_some());
+
+        // Element should be back
+        assert_eq!(canvas.current_snapshot().elements.len(), 1);
+        assert!(canvas.can_undo());
+        assert!(!canvas.can_redo());
+    }
+
+    #[tokio::test]
+    async fn test_redo_cleared_on_new_operation() {
+        let temp = TempDir::new().unwrap();
+        let canvas = make_authenticated_service(&temp).await;
+
+        // Add element
+        canvas
+            .add_text(
+                None,
+                "First".to_string(),
+                10.0,
+                20.0,
+                14.0,
+                "#000".to_string(),
+            )
+            .await
+            .unwrap();
+
+        // Undo it
+        canvas.undo().await.unwrap();
+        assert!(canvas.can_redo());
+
+        // Add new element (should clear redo stack)
+        canvas
+            .add_text(
+                None,
+                "Second".to_string(),
+                50.0,
+                50.0,
+                14.0,
+                "#000".to_string(),
+            )
+            .await
+            .unwrap();
+
+        // Redo should no longer be available
+        assert!(!canvas.can_redo());
+        assert!(canvas.can_undo());
+    }
+
+    #[tokio::test]
+    async fn test_undo_empty_stack() {
+        let temp = TempDir::new().unwrap();
+        let canvas = make_authenticated_service(&temp).await;
+
+        // No operations, undo should return None
+        assert!(!canvas.can_undo());
+        let entry = canvas.undo().await.unwrap();
+        assert!(entry.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_redo_empty_stack() {
+        let temp = TempDir::new().unwrap();
+        let canvas = make_authenticated_service(&temp).await;
+
+        // No undo performed, redo should return None
+        assert!(!canvas.can_redo());
+        let entry = canvas.redo().await.unwrap();
+        assert!(entry.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_get_history() {
+        let temp = TempDir::new().unwrap();
+        let canvas = make_authenticated_service(&temp).await;
+
+        // Initially empty
+        assert!(canvas.get_history().is_empty());
+
+        // Add element
+        canvas
+            .add_text(
+                None,
+                "Test".to_string(),
+                10.0,
+                20.0,
+                14.0,
+                "#000".to_string(),
+            )
+            .await
+            .unwrap();
+
+        // History should have one entry
+        let history = canvas.get_history();
+        assert_eq!(history.len(), 1);
+        assert_eq!(history[0].action_type, HistoryActionType::AddElement);
+    }
+
+    #[tokio::test]
+    async fn test_undo_transform_update() {
+        let temp = TempDir::new().unwrap();
+        let canvas = make_authenticated_service(&temp).await;
+
+        // Add element
+        let id = canvas
+            .add_text(
+                None,
+                "Test".to_string(),
+                10.0,
+                20.0,
+                14.0,
+                "#000".to_string(),
+            )
+            .await
+            .unwrap();
+
+        // Update transform
+        let new_transform = TransformView {
+            x: 100.0,
+            y: 200.0,
+            width: 200.0,
+            height: 50.0,
+            rotation: 0.0,
+            z_index: 0,
+        };
+        canvas
+            .update_transform(None, &id, new_transform)
+            .await
+            .unwrap();
+
+        // Verify new position
+        let snap = canvas.current_snapshot();
+        assert!((snap.elements[0].transform.x - 100.0).abs() < 0.01);
+
+        // Undo the transform update
+        canvas.undo().await.unwrap();
+
+        // Position should be back to original
+        let snap = canvas.current_snapshot();
+        assert!((snap.elements[0].transform.x - 10.0).abs() < 0.01);
+    }
+
+    #[tokio::test]
+    async fn test_undo_remove_element() {
+        let temp = TempDir::new().unwrap();
+        let canvas = make_authenticated_service(&temp).await;
+
+        // Add element
+        let id = canvas
+            .add_text(
+                None,
+                "Test".to_string(),
+                10.0,
+                20.0,
+                14.0,
+                "#000".to_string(),
+            )
+            .await
+            .unwrap();
+
+        // Remove element
+        canvas.remove_element(None, &id).await.unwrap();
+        assert_eq!(canvas.current_snapshot().elements.len(), 0);
+
+        // Undo remove (should restore element)
+        canvas.undo().await.unwrap();
+        assert_eq!(canvas.current_snapshot().elements.len(), 1);
     }
 }

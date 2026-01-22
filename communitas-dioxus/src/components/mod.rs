@@ -13,7 +13,11 @@ mod thread_list;
 
 // Re-export call components (will be used when call UI is integrated into routes)
 #[allow(unused_imports)]
-pub use call::{CallButton, CallLobby, DeviceSelector, MediaErrorBanner, ParticipantTile};
+pub use call::{
+    CallButton, CallControls, CallLobby, CallStatusBar, CallView, DeviceSelector,
+    InlineCallControls, MediaErrorBanner, MediaErrorIndicator, MiniCallView, ParticipantGrid,
+    ParticipantTile,
+};
 // Re-export canvas components (will be used when canvas UI is integrated into routes)
 #[allow(unused_imports)]
 pub use canvas::{

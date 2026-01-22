@@ -2673,6 +2673,35 @@ impl CommunitasApp {
                 Ok(vec![event])
             }
 
+            Command::CanvasAddElement {
+                entity_id,
+                element_type,
+                content: _,
+                transform: _,
+            } => {
+                // Generate new element ID for the replayed operation
+                let element_id = uuid::Uuid::new_v4().to_string();
+                let event = Event::CanvasElementAdded {
+                    entity_id,
+                    element_id,
+                    element_type,
+                };
+                self.broadcast_event(event.clone());
+                Ok(vec![event])
+            }
+
+            Command::CanvasUpdateElement {
+                entity_id,
+                element_id,
+                changes: _,
+            } => {
+                let event = Event::CanvasElementUpdated {
+                    entity_id,
+                    element_id,
+                };
+                self.broadcast_event(event.clone());
+                Ok(vec![event])
+            }
             Command::CanvasRemoveElement {
                 entity_id,
                 element_id,

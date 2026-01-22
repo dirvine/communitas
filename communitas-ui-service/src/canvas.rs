@@ -294,6 +294,8 @@ pub struct CanvasService {
     history: std::sync::RwLock<Vec<HistoryEntry>>,
     /// Maximum history depth (default 100).
     max_history_depth: usize,
+    /// Current entity ID for canvas operations (used by persist methods).
+    current_entity_id: std::sync::RwLock<Option<String>>,
 }
 
 impl CanvasService {
@@ -314,6 +316,7 @@ impl CanvasService {
             redo_stack: std::sync::RwLock::new(Vec::new()),
             history: std::sync::RwLock::new(Vec::new()),
             max_history_depth: DEFAULT_MAX_HISTORY_DEPTH,
+            current_entity_id: std::sync::RwLock::new(None),
         }
     }
 
@@ -327,6 +330,21 @@ impl CanvasService {
     #[must_use]
     pub fn subscribe(&self) -> watch::Receiver<CanvasSnapshot> {
         self.rx.clone()
+    }
+
+    /// Set the current entity ID for canvas operations.
+    ///
+    /// This entity ID is used by the persist methods when replaying offline operations.
+    pub fn set_current_entity(&self, entity_id: Option<String>) {
+        if let Ok(mut guard) = self.current_entity_id.write() {
+            *guard = entity_id;
+        }
+    }
+
+    /// Get the current entity ID for canvas operations.
+    #[must_use]
+    pub fn get_current_entity(&self) -> Option<String> {
+        self.current_entity_id.read().ok().and_then(|g| g.clone())
     }
 
     /// Get the current canvas snapshot.
@@ -420,33 +438,115 @@ impl CanvasService {
     }
 
     /// Persist an element add to CommunitasApp (used by flush_queue).
-    async fn persist_element_add(&self, _element: &Element) -> Result<(), CanvasError> {
-        // Element additions are persisted via specific Commands (CanvasAddText, etc.)
-        // For generic elements from the queue, we'd need a CanvasAddElement command.
-        // For now, we accept that the local state is authoritative and log.
-        tracing::debug!("element add queued for sync (awaiting CanvasAddElement command)");
+    ///
+    /// Serializes the element and calls the `CanvasAddElement` command.
+    /// If no current entity ID is set, the operation is skipped (local-only mode).
+    async fn persist_element_add(&self, element: &Element) -> Result<(), CanvasError> {
+        let entity_id = match self.get_current_entity() {
+            Some(id) => id,
+            None => {
+                tracing::debug!("no current entity; element add remains local-only");
+                return Ok(());
+            }
+        };
+
+        // Map ElementKind to type string
+        let element_type = match &element.kind {
+            ElementKind::Text { .. } => "text",
+            ElementKind::Image { .. } => "image",
+            ElementKind::Chart { .. } => "chart",
+            ElementKind::Video { .. } => "video",
+            ElementKind::Model3D { .. } => "model3d",
+            ElementKind::OverlayLayer { .. } => "overlay_layer",
+            ElementKind::Group { .. } => "group",
+        }
+        .to_string();
+
+        // Serialize element content
+        let content = serde_json::to_string(&element.kind)
+            .map_err(|e| CanvasError::Serialization(e.to_string()))?;
+
+        // Serialize transform
+        let transform = serde_json::to_string(&element.transform)
+            .map_err(|e| CanvasError::Serialization(e.to_string()))?;
+
+        let cmd = Command::CanvasAddElement {
+            entity_id,
+            element_type,
+            content,
+            transform,
+        };
+
+        if let Err(e) = self.app.execute(cmd).await {
+            tracing::warn!(error = %e, "failed to persist element add; will retry on next flush");
+            return Err(CanvasError::CommandFailed(e.to_string()));
+        }
+
+        tracing::debug!(element_id = %element.id, "element add persisted via CanvasAddElement");
         Ok(())
     }
 
     /// Persist an element update to CommunitasApp (used by flush_queue).
+    ///
+    /// Serializes the changes and calls the `CanvasUpdateElement` command.
+    /// If no current entity ID is set, the operation is skipped (local-only mode).
     async fn persist_element_update(
         &self,
-        _id: &ElementId,
-        _changes: &serde_json::Value,
+        id: &ElementId,
+        changes: &serde_json::Value,
     ) -> Result<(), CanvasError> {
-        // Updates would need a generic CanvasUpdateElement command.
-        tracing::debug!("element update queued for sync (awaiting CanvasUpdateElement command)");
+        let entity_id = match self.get_current_entity() {
+            Some(id) => id,
+            None => {
+                tracing::debug!("no current entity; element update remains local-only");
+                return Ok(());
+            }
+        };
+
+        let changes_str = serde_json::to_string(changes)
+            .map_err(|e| CanvasError::Serialization(e.to_string()))?;
+
+        let cmd = Command::CanvasUpdateElement {
+            entity_id,
+            element_id: id.to_string(),
+            changes: changes_str,
+        };
+
+        if let Err(e) = self.app.execute(cmd).await {
+            tracing::warn!(error = %e, "failed to persist element update; will retry on next flush");
+            return Err(CanvasError::CommandFailed(e.to_string()));
+        }
+
+        tracing::debug!(element_id = %id, "element update persisted via CanvasUpdateElement");
         Ok(())
     }
 
     /// Persist an element removal to CommunitasApp (used by flush_queue).
-    async fn persist_element_remove(&self, _id: &ElementId) -> Result<(), CanvasError> {
-        // Removals would need a CanvasRemoveElement command.
-        tracing::debug!("element removal queued for sync (awaiting CanvasRemoveElement command)");
+    ///
+    /// Calls the `CanvasRemoveElement` command.
+    /// If no current entity ID is set, the operation is skipped (local-only mode).
+    async fn persist_element_remove(&self, id: &ElementId) -> Result<(), CanvasError> {
+        let entity_id = match self.get_current_entity() {
+            Some(id) => id,
+            None => {
+                tracing::debug!("no current entity; element removal remains local-only");
+                return Ok(());
+            }
+        };
+
+        let cmd = Command::CanvasRemoveElement {
+            entity_id,
+            element_id: id.to_string(),
+        };
+
+        if let Err(e) = self.app.execute(cmd).await {
+            tracing::warn!(error = %e, "failed to persist element removal; will retry on next flush");
+            return Err(CanvasError::CommandFailed(e.to_string()));
+        }
+
+        tracing::debug!(element_id = %id, "element removal persisted via CanvasRemoveElement");
         Ok(())
     }
-
-    /// Add a text element to the canvas.
     ///
     /// If `entity_id` is provided, the element is also persisted via CommunitasApp.
     /// If persistence fails, the operation is queued for later sync (offline-first).

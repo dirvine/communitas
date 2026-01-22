@@ -560,6 +560,30 @@ pub enum Command {
         height: f32,
     },
 
+    /// Add a generic element to the canvas (used for queue replay)
+    ///
+    /// This command supports all element types via JSON-serialized content.
+    /// It is primarily used when replaying offline operations.
+    CanvasAddElement {
+        entity_id: String,
+        /// Element type: "text", "image", "chart", "video", "model3d", "overlay_layer", "group"
+        element_type: String,
+        /// JSON-serialized element data specific to the element type
+        content: String,
+        /// JSON-serialized transform data
+        transform: String,
+    },
+
+    /// Update an element on the canvas (used for queue replay)
+    ///
+    /// This command supports partial updates via JSON-serialized changes.
+    CanvasUpdateElement {
+        entity_id: String,
+        element_id: String,
+        /// JSON-serialized changes to apply
+        changes: String,
+    },
+
     /// Remove an element from the canvas
     CanvasRemoveElement {
         entity_id: String,
@@ -1165,6 +1189,19 @@ pub enum Event {
         entity_id: String,
         element_id: String,
         chart_type: String,
+    },
+
+    /// Canvas generic element was added (from queue replay)
+    CanvasElementAdded {
+        entity_id: String,
+        element_id: String,
+        element_type: String,
+    },
+
+    /// Canvas element was updated (from queue replay)
+    CanvasElementUpdated {
+        entity_id: String,
+        element_id: String,
     },
 
     /// Canvas element was removed

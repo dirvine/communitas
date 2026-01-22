@@ -1603,6 +1603,89 @@ pub fn list_tools(authenticated: bool) -> Vec<Tool> {
                 "required": ["call_id"]
             }),
         },
+        // Call history tools
+        Tool {
+            name: "get_call_history".to_string(),
+            description: "Get call history with optional filtering".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "limit": {"type": "integer", "description": "Maximum number of entries to return (default: 20)"},
+                    "entity_id": {"type": "string", "description": "Filter by entity ID (optional)"},
+                    "call_type": {"type": "string", "enum": ["direct", "group", "channel"], "description": "Filter by call type (optional)"}
+                },
+                "required": []
+            }),
+        },
+        Tool {
+            name: "get_missed_calls".to_string(),
+            description: "Get missed call notifications".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "unread_only": {"type": "boolean", "description": "Only return unacknowledged missed calls (default: false)"}
+                },
+                "required": []
+            }),
+        },
+        Tool {
+            name: "acknowledge_missed_call".to_string(),
+            description: "Acknowledge a missed call notification".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "call_id": {"type": "string", "description": "Call ID to acknowledge, or 'all' to acknowledge all"}
+                },
+                "required": ["call_id"]
+            }),
+        },
+        Tool {
+            name: "get_call_quality".to_string(),
+            description: "Get quality metrics for the current call".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {},
+                "required": []
+            }),
+        },
+        Tool {
+            name: "list_media_devices".to_string(),
+            description: "List available media devices (microphones, speakers, cameras)".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "device_type": {"type": "string", "enum": ["microphone", "speaker", "camera", "all"], "description": "Filter by device type (default: all)"}
+                },
+                "required": []
+            }),
+        },
+        Tool {
+            name: "get_call_recording".to_string(),
+            description: "Get recording status and info for the current call".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {},
+                "required": []
+            }),
+        },
+        Tool {
+            name: "start_call_recording".to_string(),
+            description: "Start recording the current call".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {},
+                "required": []
+            }),
+        },
+        Tool {
+            name: "stop_call_recording".to_string(),
+            description: "Stop recording the current call".to_string(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {},
+                "required": []
+            }),
+        },
         // Presence tools
         Tool {
             name: "set_presence".to_string(),
@@ -2552,6 +2635,17 @@ async fn dispatch_social_tools(
         "get_call_participants" => {
             Some(execute_get_call_participants(services, args.clone()).await)
         }
+        // Call history and notifications
+        "get_call_history" => Some(execute_get_call_history(services, args.clone()).await),
+        "get_missed_calls" => Some(execute_get_missed_calls(services, args.clone()).await),
+        "acknowledge_missed_call" => {
+            Some(execute_acknowledge_missed_call(services, args.clone()).await)
+        }
+        "get_call_quality" => Some(execute_get_call_quality(services).await),
+        "list_media_devices" => Some(execute_list_media_devices(services, args.clone()).await),
+        "get_call_recording" => Some(execute_get_call_recording(services).await),
+        "start_call_recording" => Some(execute_start_call_recording(services, args.clone()).await),
+        "stop_call_recording" => Some(execute_stop_call_recording(services).await),
         _ => None,
     }
 }
@@ -6859,6 +6953,261 @@ async fn execute_get_call_participants(services: &UiServices, args: Value) -> To
             "participants": participants
         })),
         Err(e) => error_result(&format!("Failed to get call participants: {e}")),
+    }
+}
+
+async fn execute_get_call_history(services: &UiServices, args: Value) -> ToolCallResult {
+    let limit = args["limit"].as_u64().unwrap_or(20) as usize;
+    let entity_id = opt_str(&args, "entity_id");
+    let call_type_filter = opt_str(&args, "call_type");
+
+    let history = services.call().get_call_history().await;
+
+    // Apply filtering
+    let entries: Vec<_> = history
+        .entries
+        .iter()
+        .filter(|e| {
+            // Filter by entity_id if provided
+            if let Some(ref eid) = entity_id
+                && e.entity_id != *eid
+            {
+                return false;
+            }
+            // Filter by call_type if provided
+            if let Some(ref ct) = call_type_filter {
+                let entry_type = match e.call_type {
+                    communitas_ui_api::call::CallType::Direct => "direct",
+                    communitas_ui_api::call::CallType::Group => "group",
+                    communitas_ui_api::call::CallType::Channel => "channel",
+                };
+                if entry_type != ct.to_lowercase() {
+                    return false;
+                }
+            }
+            true
+        })
+        .take(limit)
+        .map(|e| {
+            json!({
+                "call_id": e.call_id,
+                "entity_id": e.entity_id,
+                "entity_name": e.entity_name,
+                "call_type": format!("{:?}", e.call_type),
+                "direction": format!("{:?}", e.direction),
+                "outcome": format!("{:?}", e.outcome),
+                "started_at": e.started_at,
+                "ended_at": e.ended_at,
+                "duration_seconds": e.duration_seconds,
+                "had_video": e.had_video,
+                "had_screen_share": e.had_screen_share,
+                "was_recorded": e.was_recorded,
+                "is_read": e.is_read,
+                "has_called_back": e.has_called_back
+            })
+        })
+        .collect();
+
+    json_result(&json!({
+        "total": history.len(),
+        "returned": entries.len(),
+        "entries": entries
+    }))
+}
+
+async fn execute_get_missed_calls(services: &UiServices, args: Value) -> ToolCallResult {
+    let unread_only = bool_or(&args, "unread_only", false);
+
+    let snapshot = services.call().get_missed_calls_snapshot().await;
+
+    let notifications: Vec<_> = if unread_only {
+        snapshot
+            .notifications
+            .iter()
+            .filter(|n| !n.is_acknowledged)
+            .map(|n| {
+                json!({
+                    "id": n.id,
+                    "call_id": n.call_id,
+                    "caller_id": n.caller_id,
+                    "caller_name": n.caller_name,
+                    "call_type": format!("{:?}", n.call_type),
+                    "timestamp": n.timestamp,
+                    "is_acknowledged": n.is_acknowledged,
+                    "has_called_back": n.has_called_back,
+                    "time_ago": n.time_ago()
+                })
+            })
+            .collect()
+    } else {
+        snapshot
+            .notifications
+            .iter()
+            .map(|n| {
+                json!({
+                    "id": n.id,
+                    "call_id": n.call_id,
+                    "caller_id": n.caller_id,
+                    "caller_name": n.caller_name,
+                    "call_type": format!("{:?}", n.call_type),
+                    "timestamp": n.timestamp,
+                    "is_acknowledged": n.is_acknowledged,
+                    "has_called_back": n.has_called_back,
+                    "time_ago": n.time_ago()
+                })
+            })
+            .collect()
+    };
+
+    json_result(&json!({
+        "total": snapshot.notifications.len(),
+        "unread_count": snapshot.unread_count,
+        "notifications": notifications,
+        "last_updated": snapshot.last_updated
+    }))
+}
+
+async fn execute_acknowledge_missed_call(services: &UiServices, args: Value) -> ToolCallResult {
+    let call_id = require_str!(args, "call_id");
+
+    if call_id == "all" {
+        services.call().acknowledge_all_missed_calls().await;
+        success_result("All missed calls acknowledged")
+    } else {
+        services.call().acknowledge_missed_call(&call_id).await;
+        json_result(&json!({
+            "success": true,
+            "call_id": call_id,
+            "message": "Missed call acknowledged"
+        }))
+    }
+}
+
+async fn execute_get_call_quality(services: &UiServices) -> ToolCallResult {
+    let snapshot = services.call().current_snapshot();
+    let metrics = &snapshot.quality_metrics;
+
+    let quality_info = json!({
+        "quality": format!("{:?}", metrics.quality),
+        "latency_ms": metrics.latency_ms,
+        "packet_loss_percent": metrics.packet_loss_percent,
+        "jitter_ms": metrics.jitter_ms,
+        "audio_bitrate_kbps": metrics.audio_bitrate_kbps,
+        "video_bitrate_kbps": metrics.video_bitrate_kbps,
+        "video_resolution": metrics.video_resolution(),
+        "video_fps": metrics.video_fps,
+        "bytes_sent": metrics.bytes_sent,
+        "bytes_received": metrics.bytes_received,
+        "is_in_call": snapshot.state == communitas_ui_api::call::CallState::InCall
+    });
+
+    json_result(&quality_info)
+}
+
+async fn execute_list_media_devices(services: &UiServices, args: Value) -> ToolCallResult {
+    let device_type_filter = opt_str(&args, "device_type").unwrap_or_else(|| "all".to_string());
+
+    match services.call().list_devices().await {
+        Ok(devices) => {
+            let filtered: Vec<_> = devices
+                .iter()
+                .filter(|d| {
+                    if device_type_filter == "all" {
+                        return true;
+                    }
+                    let dt = match d.device_type {
+                        communitas_ui_api::call::DeviceType::Microphone => "microphone",
+                        communitas_ui_api::call::DeviceType::Speaker => "speaker",
+                        communitas_ui_api::call::DeviceType::Camera => "camera",
+                    };
+                    dt == device_type_filter.to_lowercase()
+                })
+                .map(|d| {
+                    json!({
+                        "id": d.id,
+                        "name": d.name,
+                        "device_type": format!("{:?}", d.device_type),
+                        "is_default": d.is_default
+                    })
+                })
+                .collect();
+
+            json_result(&json!({
+                "devices": filtered,
+                "count": filtered.len()
+            }))
+        }
+        Err(e) => error_result(&format!("Failed to list devices: {e}")),
+    }
+}
+
+async fn execute_get_call_recording(services: &UiServices) -> ToolCallResult {
+    let snapshot = services.call().current_snapshot();
+
+    let recording_info = if let Some(ref info) = snapshot.recording_info {
+        let is_paused = info.state == communitas_ui_api::call::RecordingState::Paused;
+        json!({
+            "is_recording": snapshot.is_recording,
+            "state": format!("{:?}", info.state),
+            "is_paused": is_paused,
+            "duration_ms": info.duration_ms,
+            "duration_formatted": info.formatted_duration(),
+            "file_size_bytes": info.file_size_bytes,
+            "file_size_formatted": info.formatted_size(),
+            "file_path": info.file_path,
+            "includes_audio": info.includes_audio,
+            "includes_video": info.includes_video,
+            "includes_screen": info.includes_screen,
+            "started_by": info.started_by,
+            "is_in_call": snapshot.state == communitas_ui_api::call::CallState::InCall
+        })
+    } else {
+        json!({
+            "is_recording": false,
+            "state": "NotRecording",
+            "is_paused": false,
+            "duration_ms": 0,
+            "file_size_bytes": 0,
+            "file_path": null,
+            "is_in_call": snapshot.state == communitas_ui_api::call::CallState::InCall
+        })
+    };
+
+    json_result(&recording_info)
+}
+
+async fn execute_start_call_recording(services: &UiServices, args: Value) -> ToolCallResult {
+    let include_video = args
+        .get("include_video")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    match services.call().start_recording(include_video).await {
+        Ok(()) => json_result(&json!({
+            "success": true,
+            "message": "Recording started",
+            "include_video": include_video
+        })),
+        Err(e) => error_result(&format!("Failed to start recording: {e}")),
+    }
+}
+
+async fn execute_stop_call_recording(services: &UiServices) -> ToolCallResult {
+    match services.call().stop_recording().await {
+        Ok(Some(info)) => json_result(&json!({
+            "success": true,
+            "message": "Recording stopped",
+            "duration_ms": info.duration_ms,
+            "duration_formatted": info.formatted_duration(),
+            "file_size_bytes": info.file_size_bytes,
+            "file_size_formatted": info.formatted_size(),
+            "file_path": info.file_path
+        })),
+        Ok(None) => json_result(&json!({
+            "success": true,
+            "message": "Recording stopped (no recording info available)"
+        })),
+        Err(e) => error_result(&format!("Failed to stop recording: {e}")),
     }
 }
 

@@ -20,8 +20,8 @@ _Last updated: 2026-01-21_
 |-------|-------------|--------|
 | **6.1** | Auth Hardening | Complete |
 | **6.2** | Messaging & Contacts | Complete |
-| **6.3** | Drive & Attachments | In Progress |
-| **6.4** | Calls & Presence | Pending |
+| **6.3** | Drive & Attachments | Complete |
+| **6.4** | Calls & Presence | In Progress |
 | **6.5** | Canvas Integration | Pending |
 | **6.6** | Kanban Polish | Pending |
 | **6.7** | UX & Accessibility | Pending |

@@ -56,10 +56,13 @@ fn main() {
             .show_alert();
         std::process::exit(1);
     }
-    let services = UiServices::bootstrap().unwrap_or_else(|err| {
-        eprintln!("failed to initialize UI services: {err}");
-        std::process::exit(1);
-    });
+    // Create platform device enumerator for real audio device discovery
+    let device_enumerator = platform::create_device_enumerator();
+    let services =
+        UiServices::bootstrap_with_device_enumerator(device_enumerator).unwrap_or_else(|err| {
+            eprintln!("failed to initialize UI services: {err}");
+            std::process::exit(1);
+        });
     if UI_SERVICES.set(Arc::new(services)).is_err() {
         eprintln!("UI services already initialized");
         std::process::exit(1);

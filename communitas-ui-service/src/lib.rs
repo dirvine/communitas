@@ -19,7 +19,7 @@ use std::sync::Arc;
 
 use audit::AuditService;
 use auth::AuthController;
-use call::CallService;
+use call::{CallService, DeviceEnumerator};
 use canvas::CanvasService;
 use communitas_core::app::CommunitasApp;
 use communitas_core::generate_id_words;
@@ -120,6 +120,96 @@ impl UiServices {
             call,
             audit,
         })
+    }
+
+    /// Create services with a custom device enumerator for call functionality.
+    ///
+    /// Use this method when you have a platform-specific device enumerator
+    /// (e.g., using `cpal` for audio devices) to enable real media device
+    /// discovery.
+    ///
+    /// # Arguments
+    ///
+    /// * `storage` - The storage configuration
+    /// * `app` - The Communitas core application instance
+    /// * `device_enumerator` - Platform-specific device enumerator implementation
+    ///
+    /// # Errors
+    /// Returns [`UiServiceInitError`] if the auth controller or navigation store
+    /// cannot be initialized from the provided storage.
+    pub fn new_with_device_enumerator(
+        storage: UiStorage,
+        app: Arc<CommunitasApp>,
+        device_enumerator: Arc<dyn DeviceEnumerator>,
+    ) -> Result<Self, UiServiceInitError> {
+        let auth = Arc::new(AuthController::new(storage.clone())?);
+        let navigation = Arc::new(NavigationStore::new(storage.clone())?);
+        let directory = Arc::new(DirectoryService::new(auth.clone()));
+        let storage_arc = Arc::new(storage.clone());
+        let presence = Arc::new(PresenceService::new(auth.clone(), directory.clone()));
+        let messaging = Arc::new(MessagingService::new(
+            auth.clone(),
+            app.clone(),
+            storage_arc,
+            presence.subscribe(),
+        ));
+        let kanban = Arc::new(KanbanService::new(auth.clone(), app.clone()));
+        let canvas = Arc::new(CanvasService::new(auth.clone(), app.clone()));
+        let drive = Arc::new(DriveService::new(auth.clone(), app.clone()));
+        let call = Arc::new(CallService::with_device_enumerator(
+            auth.clone(),
+            app.clone(),
+            device_enumerator,
+        ));
+        let audit = Arc::new(AuditService::new(storage.root().join("audit_logs")));
+        Ok(Self {
+            storage,
+            auth,
+            navigation,
+            directory,
+            messaging,
+            presence,
+            kanban,
+            canvas,
+            drive,
+            call,
+            audit,
+        })
+    }
+
+    /// Bootstrap with a custom device enumerator.
+    ///
+    /// This is the recommended way to initialize UiServices when you have
+    /// platform-specific device enumeration. It combines the auto-discovery
+    /// of storage and bootstrap identity with real device support.
+    ///
+    /// # Errors
+    /// Returns an error if storage discovery fails or the app cannot be initialized.
+    pub fn bootstrap_with_device_enumerator(
+        device_enumerator: Arc<dyn DeviceEnumerator>,
+    ) -> Result<Self, UiServiceInitError> {
+        let storage = UiStorage::discover()?;
+        let storage_path = storage.root_string()?;
+
+        let id_words =
+            generate_id_words().map_err(|e| UiServiceInitError::AppInit(e.to_string()))?;
+
+        let rt = tokio::runtime::Runtime::new()
+            .map_err(|e| UiServiceInitError::AppInit(format!("failed to create runtime: {e}")))?;
+
+        let app = rt
+            .block_on(async {
+                CommunitasApp::new(
+                    id_words,
+                    "Bootstrap User".to_string(),
+                    "Desktop".to_string(),
+                    storage_path,
+                )
+                .await
+            })
+            .map_err(|e| UiServiceInitError::AppInit(e.to_string()))?;
+
+        Self::new_with_device_enumerator(storage, Arc::new(app), device_enumerator)
     }
 
     /// Access the storage configuration.

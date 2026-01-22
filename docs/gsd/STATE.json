@@ -7,18 +7,18 @@
     "name": "M6 Beta-Ready (Apple Desktop)"
   },
   "phase": {
-    "number": "6.1",
-    "name": "Auth Hardening",
-    "plans": ["PLAN-36"],
+    "number": "6.6",
+    "name": "Kanban Polish",
+    "plans": ["PLAN-38"],
     "status": "executing"
   },
   "progress": {
-    "total_tasks": 11,
-    "completed_tasks": 4,
-    "current_task": 5
+    "total_tasks": 13,
+    "completed_tasks": 3,
+    "current_task": 4
   },
-  "status": "reviewing",
-  "last_review": "2026-01-21T11:00:00Z",
-  "last_updated": "2026-01-21T14:30:00Z",
-  "notes": "Task 4 complete: Session Persistence Encryption with ChaCha20-Poly1305, Zeroizing keys, migration support."
+  "status": "ready",
+  "last_review": "2026-01-22T12:00:00Z",
+  "last_updated": "2026-01-22T12:30:00Z",
+  "notes": "Tasks 1-3 complete (Swimlanes, Priority, Wired Features). Starting Task 4: Due Date UI Components."
 }

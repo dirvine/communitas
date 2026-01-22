@@ -3144,13 +3144,17 @@ impl CallService {
 
                 let mut state_guard = state.write().await;
 
-                if let Some(ref call) = state_guard.current_call
+                // Check call_state before pattern match to avoid borrow conflict
+                let is_reconnecting = state_guard.call_state == CallState::Reconnecting;
+
+                if let Some(ref mut call) = state_guard.current_call
                     && call.call_id == *call_id
-                    && state_guard.call_state == CallState::Reconnecting
+                    && is_reconnecting
                 {
                     // Clear remote participant state to allow clean rebuild from events.
-                    // Keep local participant info intact.
+                    // Keep local participant info intact in both participant lists.
                     let local_participant_id = call.my_participant_id.clone();
+                    call.participants.retain(|p| p.id == local_participant_id);
                     state_guard.participants.retain(|p| p.id == local_participant_id);
 
                     // Clear any stale media errors

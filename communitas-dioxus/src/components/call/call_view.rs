@@ -6,6 +6,7 @@ use communitas_ui_api::CallState;
 use communitas_ui_service::UiServices;
 use dioxus::prelude::*;
 use std::sync::Arc;
+use tracing::warn;
 
 use super::call_controls::CallControls;
 use super::media_error_banner::MediaErrorBanner;
@@ -324,7 +325,9 @@ pub fn MiniCallView(props: MiniCallViewProps) -> Element {
     let on_mute_click = move |_| {
         let call = call_for_mute.clone();
         spawn(async move {
-            let _ = call.toggle_mute().await;
+            if let Err(e) = call.toggle_mute().await {
+                warn!("Failed to toggle mute: {e}");
+            }
         });
     };
 
@@ -332,7 +335,9 @@ pub fn MiniCallView(props: MiniCallViewProps) -> Element {
     let on_end_click = move |_| {
         let call = call_for_end.clone();
         spawn(async move {
-            let _ = call.leave_call().await;
+            if let Err(e) = call.leave_call().await {
+                warn!("Failed to leave call: {e}");
+            }
         });
     };
 

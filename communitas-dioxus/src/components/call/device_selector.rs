@@ -4,6 +4,7 @@ use communitas_ui_api::{DeviceType, MediaDevice};
 use communitas_ui_service::UiServices;
 use dioxus::prelude::*;
 use std::sync::Arc;
+use tracing::warn;
 
 /// Props for the DeviceSelector component.
 #[derive(Props, Clone, PartialEq)]
@@ -70,11 +71,14 @@ pub fn DeviceSelector(props: DeviceSelectorProps) -> Element {
         let value_for_spawn = value.clone();
         let call = call_service.clone();
         spawn(async move {
-            let _ = match device_type {
+            let result = match device_type {
                 DeviceType::Microphone => call.select_microphone(&value_for_spawn).await,
                 DeviceType::Speaker => call.select_speaker(&value_for_spawn).await,
                 DeviceType::Camera => call.select_camera(&value_for_spawn).await,
             };
+            if let Err(e) = result {
+                warn!("Failed to select {:?} device {value_for_spawn}: {e}", device_type);
+            }
         });
 
         if let Some(on_change) = &props.on_change {

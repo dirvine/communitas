@@ -6,6 +6,7 @@ use communitas_ui_api::CallState;
 use communitas_ui_service::UiServices;
 use dioxus::prelude::*;
 use std::sync::Arc;
+use tracing::warn;
 
 use super::media_error_banner::MediaErrorIndicator;
 
@@ -69,7 +70,9 @@ pub fn CallControls(props: CallControlsProps) -> Element {
     let on_mute_click = move |_| {
         let call = call_for_mute.clone();
         spawn(async move {
-            let _ = call.toggle_mute().await;
+            if let Err(e) = call.toggle_mute().await {
+                warn!("Failed to toggle mute: {e}");
+            }
         });
     };
 
@@ -78,7 +81,9 @@ pub fn CallControls(props: CallControlsProps) -> Element {
     let on_video_click = move |_| {
         let call = call_for_video.clone();
         spawn(async move {
-            let _ = call.toggle_video().await;
+            if let Err(e) = call.toggle_video().await {
+                warn!("Failed to toggle video: {e}");
+            }
         });
     };
 
@@ -90,9 +95,11 @@ pub fn CallControls(props: CallControlsProps) -> Element {
             // Read fresh state from service to avoid TOCTOU race condition
             let snapshot = call.current_snapshot();
             if snapshot.is_screen_sharing {
-                let _ = call.stop_screen_share().await;
-            } else {
-                let _ = call.start_screen_share().await;
+                if let Err(e) = call.stop_screen_share().await {
+                    warn!("Failed to stop screen share: {e}");
+                }
+            } else if let Err(e) = call.start_screen_share().await {
+                warn!("Failed to start screen share: {e}");
             }
         });
     };
@@ -102,7 +109,9 @@ pub fn CallControls(props: CallControlsProps) -> Element {
     let on_end_click = move |_| {
         let call = call_for_end.clone();
         spawn(async move {
-            let _ = call.leave_call().await;
+            if let Err(e) = call.leave_call().await {
+                warn!("Failed to leave call: {e}");
+            }
         });
         if let Some(handler) = &props.on_end_call {
             handler.call(());
@@ -284,7 +293,9 @@ pub fn InlineCallControls(props: InlineCallControlsProps) -> Element {
     let on_mute_click = move |_| {
         let call = call_for_mute.clone();
         spawn(async move {
-            let _ = call.toggle_mute().await;
+            if let Err(e) = call.toggle_mute().await {
+                warn!("Failed to toggle mute: {e}");
+            }
         });
     };
 
@@ -292,7 +303,9 @@ pub fn InlineCallControls(props: InlineCallControlsProps) -> Element {
     let on_end_click = move |_| {
         let call = call_for_end.clone();
         spawn(async move {
-            let _ = call.leave_call().await;
+            if let Err(e) = call.leave_call().await {
+                warn!("Failed to leave call: {e}");
+            }
         });
     };
 

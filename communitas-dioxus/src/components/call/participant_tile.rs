@@ -165,10 +165,13 @@ mod tests {
             id: "p1".to_string(),
             display_name: "Alice Smith".to_string(),
             four_words: "ocean-forest-moon-star".to_string(),
+            role: Default::default(),
             is_muted: false,
+            is_muted_by_host: false,
             is_video_enabled: false,
             is_speaking: false,
             is_screen_sharing: false,
+            hand_raised: false,
             audio_level: 0.0,
             joined_at: 0,
         }

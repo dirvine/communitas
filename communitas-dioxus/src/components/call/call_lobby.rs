@@ -4,6 +4,7 @@ use communitas_ui_api::{CallState, DeviceType};
 use communitas_ui_service::UiServices;
 use dioxus::prelude::*;
 use std::sync::Arc;
+use tracing::warn;
 
 use super::device_selector::DeviceSelector;
 use super::media_error_banner::MediaErrorBanner;
@@ -49,7 +50,9 @@ pub fn CallLobby(props: CallLobbyProps) -> Element {
     use_effect(move || {
         let call = call_for_effect.clone();
         spawn(async move {
-            let _ = call.list_devices().await;
+            if let Err(e) = call.list_devices().await {
+                warn!("Failed to load devices: {e}");
+            }
         });
     });
 
@@ -63,10 +66,12 @@ pub fn CallLobby(props: CallLobbyProps) -> Element {
     let on_join_click = move |_| {
         let entity = entity_id.clone();
         let call = call_for_join.clone();
-        spawn(async move {
-            let _ = call.join_call(&entity).await;
-        });
         props.on_join.call(());
+        spawn(async move {
+            if let Err(e) = call.join_call(&entity).await {
+                warn!("Failed to join call for entity {entity}: {e}");
+            }
+        });
     };
 
     rsx! {

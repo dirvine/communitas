@@ -4,6 +4,7 @@ use communitas_ui_api::CallState;
 use communitas_ui_service::UiServices;
 use dioxus::prelude::*;
 use std::sync::Arc;
+use tracing::warn;
 
 /// Props for the CallButton component.
 #[derive(Props, Clone, PartialEq)]
@@ -65,9 +66,11 @@ pub fn CallButton(props: CallButtonProps) -> Element {
         let call = call_service.clone();
         spawn(async move {
             if is_active {
-                let _ = call.leave_call().await;
-            } else {
-                let _ = call.join_call(&entity).await;
+                if let Err(e) = call.leave_call().await {
+                    warn!("Failed to leave call: {e}");
+                }
+            } else if let Err(e) = call.join_call(&entity).await {
+                warn!("Failed to join call for entity {entity}: {e}");
             }
         });
     };

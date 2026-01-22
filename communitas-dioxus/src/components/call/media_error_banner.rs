@@ -4,6 +4,7 @@ use communitas_ui_api::{DeviceType, MediaError};
 use communitas_ui_service::UiServices;
 use dioxus::prelude::*;
 use std::sync::Arc;
+use tracing::warn;
 
 /// Props for the MediaErrorBanner component.
 #[derive(Props, Clone, PartialEq)]
@@ -94,7 +95,9 @@ fn MediaErrorItem(props: MediaErrorItemProps) -> Element {
     let on_retry = move |_| {
         let call = call_service.clone();
         spawn(async move {
-            let _ = call.retry_media(device_type).await;
+            if let Err(e) = call.retry_media(device_type).await {
+                warn!("Failed to retry {:?} media: {e}", device_type);
+            }
         });
     };
 

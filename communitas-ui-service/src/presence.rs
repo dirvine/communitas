@@ -29,6 +29,10 @@ pub struct PresenceSnapshot {
     pub statuses: HashMap<String, PresenceStatus>,
     /// Mapping from contact_id to last seen timestamp (Unix millis).
     pub last_seen: HashMap<String, u64>,
+    /// Set of contact_ids that are currently in a call.
+    pub in_call: HashMap<String, bool>,
+    /// Mapping from contact_id to call entity name (channel/group name).
+    pub call_entity_names: HashMap<String, String>,
 }
 
 /// Service for tracking contact presence status.
@@ -88,10 +92,14 @@ impl PresenceService {
                     .copied()
                     .unwrap_or_default();
                 let last_seen = pres_snap.last_seen.get(&contact.id).copied();
+                let is_in_call = pres_snap.in_call.get(&contact.id).copied().unwrap_or(false);
+                let call_entity_name = pres_snap.call_entity_names.get(&contact.id).cloned();
                 ContactWithPresence {
                     contact,
                     presence,
                     last_seen,
+                    is_in_call,
+                    call_entity_name,
                 }
             })
             .collect()
@@ -148,6 +156,62 @@ impl PresenceService {
             &*self.auth.subscribe().borrow(),
             AuthStateSnapshot::Authenticated { .. }
         )
+    }
+
+    /// Update call status for a contact.
+    #[instrument(
+        skip(self),
+        name = "ui.presence.update_call_status",
+        fields(contact_id, is_in_call)
+    )]
+    pub fn update_call_status(
+        &self,
+        contact_id: &str,
+        is_in_call: bool,
+        call_entity_name: Option<String>,
+    ) {
+        let mut snap = self.rx.borrow().clone();
+
+        if is_in_call {
+            snap.in_call.insert(contact_id.to_string(), true);
+            if let Some(name) = call_entity_name {
+                snap.call_entity_names.insert(contact_id.to_string(), name);
+            }
+        } else {
+            snap.in_call.remove(contact_id);
+            snap.call_entity_names.remove(contact_id);
+        }
+
+        let _ = self.tx.send(snap);
+    }
+
+    /// Batch update call status for multiple contacts (e.g., when call participants change).
+    #[instrument(skip(self, updates), name = "ui.presence.batch_update_call_status", fields(count = updates.len()))]
+    pub fn batch_update_call_status(&self, updates: Vec<(String, bool, Option<String>)>) {
+        let mut snap = self.rx.borrow().clone();
+
+        for (contact_id, is_in_call, call_entity_name) in updates {
+            if is_in_call {
+                snap.in_call.insert(contact_id.clone(), true);
+                if let Some(name) = call_entity_name {
+                    snap.call_entity_names.insert(contact_id, name);
+                }
+            } else {
+                snap.in_call.remove(&contact_id);
+                snap.call_entity_names.remove(&contact_id);
+            }
+        }
+
+        let _ = self.tx.send(snap);
+    }
+
+    /// Clear call status for all contacts (e.g., when leaving a call).
+    #[instrument(skip(self), name = "ui.presence.clear_all_call_status")]
+    pub fn clear_all_call_status(&self) {
+        let mut snap = self.rx.borrow().clone();
+        snap.in_call.clear();
+        snap.call_entity_names.clear();
+        let _ = self.tx.send(snap);
     }
 }
 
@@ -271,5 +335,91 @@ mod tests {
         let rx = service.subscribe();
         let snap = rx.borrow().clone();
         assert!(snap.statuses.is_empty());
+    }
+
+    #[test]
+    fn update_call_status_sets_in_call() {
+        let temp = TempDir::new().unwrap();
+        let service = make_service(&temp);
+        let rx = service.subscribe();
+
+        service.update_call_status("alice", true, Some("Team Standup".to_string()));
+
+        let snap = rx.borrow().clone();
+        assert_eq!(snap.in_call.get("alice"), Some(&true));
+        assert_eq!(
+            snap.call_entity_names.get("alice"),
+            Some(&"Team Standup".to_string())
+        );
+    }
+
+    #[test]
+    fn update_call_status_clears_when_leaving_call() {
+        let temp = TempDir::new().unwrap();
+        let service = make_service(&temp);
+        let rx = service.subscribe();
+
+        // Join call
+        service.update_call_status("alice", true, Some("Team Standup".to_string()));
+        assert!(rx.borrow().in_call.contains_key("alice"));
+
+        // Leave call
+        service.update_call_status("alice", false, None);
+
+        let snap = rx.borrow().clone();
+        assert!(!snap.in_call.contains_key("alice"));
+        assert!(!snap.call_entity_names.contains_key("alice"));
+    }
+
+    #[test]
+    fn batch_update_call_status_updates_multiple() {
+        let temp = TempDir::new().unwrap();
+        let service = make_service(&temp);
+        let rx = service.subscribe();
+
+        service.batch_update_call_status(vec![
+            ("alice".to_string(), true, Some("Call A".to_string())),
+            ("bob".to_string(), true, Some("Call B".to_string())),
+            ("charlie".to_string(), false, None),
+        ]);
+
+        let snap = rx.borrow().clone();
+        assert!(snap.in_call.get("alice").copied().unwrap_or(false));
+        assert!(snap.in_call.get("bob").copied().unwrap_or(false));
+        assert!(!snap.in_call.contains_key("charlie"));
+        assert_eq!(
+            snap.call_entity_names.get("alice"),
+            Some(&"Call A".to_string())
+        );
+        assert_eq!(
+            snap.call_entity_names.get("bob"),
+            Some(&"Call B".to_string())
+        );
+    }
+
+    #[test]
+    fn clear_all_call_status_removes_all() {
+        let temp = TempDir::new().unwrap();
+        let service = make_service(&temp);
+        let rx = service.subscribe();
+
+        // Add some call status
+        service.update_call_status("alice", true, Some("Call A".to_string()));
+        service.update_call_status("bob", true, Some("Call B".to_string()));
+        assert!(!rx.borrow().in_call.is_empty());
+
+        // Clear all
+        service.clear_all_call_status();
+
+        let snap = rx.borrow().clone();
+        assert!(snap.in_call.is_empty());
+        assert!(snap.call_entity_names.is_empty());
+    }
+
+    #[test]
+    fn presence_snapshot_default_includes_empty_call_fields() {
+        let snap = PresenceSnapshot::default();
+        assert!(snap.in_call.is_empty());
+        assert!(snap.call_entity_names.is_empty());
     }
 }

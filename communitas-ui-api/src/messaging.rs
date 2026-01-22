@@ -92,6 +92,10 @@ pub struct ContactWithPresence {
     pub presence: PresenceStatus,
     /// Last seen timestamp in Unix milliseconds (if offline).
     pub last_seen: Option<u64>,
+    /// Whether the contact is currently in a call.
+    pub is_in_call: bool,
+    /// Entity name of the call (channel/group name) if in a call.
+    pub call_entity_name: Option<String>,
 }
 
 /// Search result containing a matching message with context.
@@ -244,9 +248,31 @@ mod tests {
             contact: contact.clone(),
             presence: PresenceStatus::Online,
             last_seen: None,
+            is_in_call: false,
+            call_entity_name: None,
         };
         assert_eq!(cwp.contact.id, "alice");
         assert_eq!(cwp.presence, PresenceStatus::Online);
+        assert!(!cwp.is_in_call);
+        assert!(cwp.call_entity_name.is_none());
+    }
+
+    #[test]
+    fn contact_with_presence_in_call() {
+        let contact = UnifiedContact {
+            id: "bob".to_string(),
+            display_name: "Bob".to_string(),
+            status: "in_call".to_string(),
+        };
+        let cwp = ContactWithPresence {
+            contact,
+            presence: PresenceStatus::Busy,
+            last_seen: None,
+            is_in_call: true,
+            call_entity_name: Some("Team Standup".to_string()),
+        };
+        assert!(cwp.is_in_call);
+        assert_eq!(cwp.call_entity_name, Some("Team Standup".to_string()));
     }
 
     #[test]

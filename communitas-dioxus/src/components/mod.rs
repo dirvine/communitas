@@ -30,7 +30,11 @@ pub use identity_switcher::IdentitySwitcher;
 // Re-export main kanban components for external use
 // Note: BoardListPage and BoardView are used in main.rs routes
 pub use message_list::MessageList;
-pub use presence_badge::{PresenceBadge, PresenceDot};
+// Re-export presence components (InCall variants will be used when presence UI is enhanced)
+#[allow(unused_imports)]
+pub use presence_badge::{
+    InCallBadge, InCallDot, PresenceBadge, PresenceDot, PresenceOrCallDot, PresenceWithCallBadge,
+};
 // Re-export search components (will be integrated into messaging UI)
 #[allow(unused_imports)]
 pub use search_bar::{SearchBar, SearchResultSelection};

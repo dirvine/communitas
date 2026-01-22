@@ -867,6 +867,9 @@ pub struct CallHistoryEntry {
     pub recording_path: Option<String>,
     /// Whether this entry has been marked as read/seen.
     pub is_read: bool,
+    /// Whether the user has called back after missing this call.
+    #[serde(default)]
+    pub has_called_back: bool,
 }
 
 impl CallHistoryEntry {
@@ -898,6 +901,7 @@ impl CallHistoryEntry {
             was_recorded: false,
             recording_path: None,
             is_read: true, // Outgoing calls are always "read"
+            has_called_back: false,
         }
     }
 
@@ -929,6 +933,7 @@ impl CallHistoryEntry {
             was_recorded: false,
             recording_path: None,
             is_read: false, // Incoming calls start as unread
+            has_called_back: false,
         }
     }
 
@@ -1118,6 +1123,108 @@ impl CallHistory {
     /// Get recent entries (up to limit).
     pub fn recent(&self, limit: usize) -> Vec<&CallHistoryEntry> {
         self.entries.iter().take(limit).collect()
+    }
+}
+
+// ===== Missed Call Notification Types =====
+
+/// A missed call notification for display in the UI.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MissedCallNotification {
+    /// Unique notification ID.
+    pub id: String,
+    /// Call ID from history.
+    pub call_id: String,
+    /// Entity that called (contact, group, channel).
+    pub caller_id: String,
+    /// Display name of the caller.
+    pub caller_name: String,
+    /// Type of call that was missed.
+    pub call_type: CallType,
+    /// When the call was missed (Unix ms).
+    pub timestamp: i64,
+    /// Whether this notification has been seen/acknowledged.
+    pub is_acknowledged: bool,
+    /// Whether the user has called back.
+    pub has_called_back: bool,
+}
+
+impl MissedCallNotification {
+    /// Create a new missed call notification from a history entry.
+    pub fn from_history_entry(entry: &CallHistoryEntry) -> Self {
+        Self {
+            id: format!("missed-{}", entry.call_id),
+            call_id: entry.call_id.clone(),
+            caller_id: entry.entity_id.clone(),
+            caller_name: entry.entity_name.clone(),
+            call_type: entry.call_type,
+            timestamp: entry.started_at,
+            is_acknowledged: entry.is_read,
+            has_called_back: entry.has_called_back,
+        }
+    }
+
+    /// Returns true if this notification should be shown prominently.
+    pub fn is_urgent(&self) -> bool {
+        !self.is_acknowledged && !self.has_called_back
+    }
+
+    /// Returns a human-readable time description.
+    pub fn time_ago(&self) -> String {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as i64)
+            .unwrap_or(0);
+
+        let diff_ms = now - self.timestamp;
+        let diff_secs = diff_ms / 1000;
+        let diff_mins = diff_secs / 60;
+        let diff_hours = diff_mins / 60;
+        let diff_days = diff_hours / 24;
+
+        if diff_days > 0 {
+            format!("{}d ago", diff_days)
+        } else if diff_hours > 0 {
+            format!("{}h ago", diff_hours)
+        } else if diff_mins > 0 {
+            format!("{}m ago", diff_mins)
+        } else {
+            "Just now".to_string()
+        }
+    }
+}
+
+/// Snapshot of missed call notifications for reactive UI updates.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct MissedCallsSnapshot {
+    /// Active missed call notifications, newest first.
+    pub notifications: Vec<MissedCallNotification>,
+    /// Total unread/unacknowledged count.
+    pub unread_count: usize,
+    /// Last time the notification list was updated (Unix ms).
+    pub last_updated: i64,
+}
+
+impl MissedCallsSnapshot {
+    /// Returns true if there are any unacknowledged missed calls.
+    pub fn has_unread(&self) -> bool {
+        self.unread_count > 0
+    }
+
+    /// Get notifications for a specific caller.
+    pub fn for_caller(&self, caller_id: &str) -> Vec<&MissedCallNotification> {
+        self.notifications
+            .iter()
+            .filter(|n| n.caller_id == caller_id)
+            .collect()
+    }
+
+    /// Get only unacknowledged notifications.
+    pub fn unread(&self) -> Vec<&MissedCallNotification> {
+        self.notifications
+            .iter()
+            .filter(|n| !n.is_acknowledged)
+            .collect()
     }
 }
 

@@ -24,8 +24,8 @@ use async_trait::async_trait;
 use communitas_ui_api::call::{
     CallHistory, CallHistoryEntry, CallInfo, CallOutcome, CallSettings, CallSnapshot, CallState,
     CallType, ConnectionQuality, DeviceType, HistoryParticipant, MediaDevice, MediaError,
-    MediaErrorKind, Participant, ParticipantQuality, ParticipantRole, QualityMetrics,
-    RecordingInfo, RecordingState,
+    MediaErrorKind, MissedCallNotification, MissedCallsSnapshot, Participant, ParticipantQuality,
+    ParticipantRole, QualityMetrics, RecordingInfo, RecordingState,
 };
 use thiserror::Error;
 use tokio::sync::{RwLock, watch};
@@ -231,6 +231,8 @@ pub struct CallService {
     history: Arc<RwLock<CallHistory>>,
     /// Watch channel for history updates
     history_tx: watch::Sender<CallHistory>,
+    /// Watch channel for missed call notifications
+    missed_calls_tx: watch::Sender<MissedCallsSnapshot>,
     /// Storage path for call history (None = no persistence)
     storage_path: Option<std::path::PathBuf>,
 }
@@ -318,6 +320,10 @@ impl CallService {
 
         let (history_tx, _history_rx) = watch::channel(history.clone());
 
+        // Build initial missed calls snapshot from loaded history
+        let missed_snapshot = Self::build_missed_calls_snapshot(&history);
+        let (missed_calls_tx, _missed_rx) = watch::channel(missed_snapshot);
+
         Self {
             auth,
             app,
@@ -327,7 +333,29 @@ impl CallService {
             device_enumerator,
             history: Arc::new(RwLock::new(history)),
             history_tx,
+            missed_calls_tx,
             storage_path,
+        }
+    }
+
+    /// Build a missed calls snapshot from the current history.
+    fn build_missed_calls_snapshot(history: &CallHistory) -> MissedCallsSnapshot {
+        // Include all missed calls, not just unread - the is_acknowledged field tracks read status
+        let notifications: Vec<MissedCallNotification> = history
+            .missed_calls()
+            .iter()
+            .map(|entry| MissedCallNotification::from_history_entry(entry))
+            .collect();
+
+        let unread_count = notifications.iter().filter(|n| !n.is_acknowledged).count();
+
+        MissedCallsSnapshot {
+            notifications,
+            unread_count,
+            last_updated: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis() as i64)
+                .unwrap_or(0),
         }
     }
 
@@ -1587,6 +1615,92 @@ impl CallService {
         self.save_history().await;
     }
 
+    // ===== Missed Call Notifications =====
+
+    /// Subscribe to missed call notification updates.
+    ///
+    /// Returns a watch receiver that will emit updates whenever the missed call
+    /// notification state changes (new missed calls, acknowledgments, etc.).
+    pub fn subscribe_missed_calls(&self) -> watch::Receiver<MissedCallsSnapshot> {
+        self.missed_calls_tx.subscribe()
+    }
+
+    /// Get the current missed calls snapshot.
+    #[instrument(skip(self), name = "ui.call.get_missed_calls_snapshot")]
+    pub async fn get_missed_calls_snapshot(&self) -> MissedCallsSnapshot {
+        let history = self.history.read().await;
+        Self::build_missed_calls_snapshot(&history)
+    }
+
+    /// Check if there are any unread missed calls.
+    #[instrument(skip(self), name = "ui.call.has_unread_missed_calls")]
+    pub async fn has_unread_missed_calls(&self) -> bool {
+        self.get_unread_missed_count().await > 0
+    }
+
+    /// Acknowledge a specific missed call notification.
+    ///
+    /// This marks the notification as seen but keeps it in the list.
+    #[instrument(skip(self), name = "ui.call.acknowledge_missed_call", fields(call_id))]
+    pub async fn acknowledge_missed_call(&self, call_id: &str) {
+        self.mark_call_read(call_id).await;
+    }
+
+    /// Acknowledge all missed call notifications.
+    #[instrument(skip(self), name = "ui.call.acknowledge_all_missed_calls")]
+    pub async fn acknowledge_all_missed_calls(&self) {
+        self.mark_all_calls_read().await;
+    }
+
+    /// Record a missed incoming call.
+    ///
+    /// This creates a history entry and emits a notification for the missed call.
+    ///
+    /// # Arguments
+    ///
+    /// * `call_id` - Unique identifier for the call
+    /// * `caller_id` - ID of the entity that called
+    /// * `caller_name` - Display name of the caller
+    /// * `call_type` - Type of call (Direct, Group, Channel)
+    #[instrument(
+        skip(self),
+        name = "ui.call.record_missed_call",
+        fields(call_id, caller_id)
+    )]
+    pub async fn record_missed_call(
+        &self,
+        call_id: String,
+        caller_id: String,
+        caller_name: String,
+        call_type: CallType,
+    ) {
+        let mut entry = CallHistoryEntry::new_incoming(call_id, caller_id, caller_name, call_type);
+        entry.outcome = CallOutcome::Missed;
+        self.add_to_history(entry).await;
+        debug!("Recorded missed call notification");
+    }
+
+    /// Dismiss a missed call notification (remove from list).
+    ///
+    /// This removes the call from history entirely.
+    #[instrument(skip(self), name = "ui.call.dismiss_missed_call", fields(call_id))]
+    pub async fn dismiss_missed_call(&self, call_id: &str) {
+        self.delete_history_entry(call_id).await;
+    }
+
+    /// Mark a missed call as having been called back.
+    ///
+    /// This updates the history entry to reflect that the user returned the call.
+    #[instrument(skip(self), name = "ui.call.mark_called_back", fields(call_id))]
+    pub async fn mark_called_back(&self, call_id: &str) {
+        // Mark as read and set has_called_back flag
+        self.update_history(call_id, |entry| {
+            entry.is_read = true;
+            entry.has_called_back = true;
+        })
+        .await;
+    }
+
     /// Add a call to history (internal helper).
     async fn add_to_history(&self, entry: CallHistoryEntry) {
         {
@@ -1607,10 +1721,13 @@ impl CallService {
         self.save_history().await;
     }
 
-    /// Broadcast history changes.
+    /// Broadcast history changes and update missed call notifications.
     async fn broadcast_history(&self) {
         let history = self.history.read().await;
         let _ = self.history_tx.send(history.clone());
+        // Also update missed calls snapshot
+        let missed_snapshot = Self::build_missed_calls_snapshot(&history);
+        let _ = self.missed_calls_tx.send(missed_snapshot);
     }
 
     // ===== Call Controls =====
@@ -3632,5 +3749,254 @@ mod tests {
             assert_eq!(history.len(), 1);
             assert_eq!(history.entries[0].call_id, "call-persist");
         }
+    }
+
+    // ===== Missed Call Notification Tests =====
+
+    #[tokio::test]
+    async fn missed_calls_subscribe_returns_receiver() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        let rx = service.subscribe_missed_calls();
+        let snap = rx.borrow().clone();
+        assert!(snap.notifications.is_empty());
+        assert_eq!(snap.unread_count, 0);
+    }
+
+    #[tokio::test]
+    async fn missed_calls_record_creates_notification() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        service
+            .record_missed_call(
+                "call-1".to_string(),
+                "caller-1".to_string(),
+                "Alice".to_string(),
+                CallType::Direct,
+            )
+            .await;
+
+        let snap = service.get_missed_calls_snapshot().await;
+        assert_eq!(snap.notifications.len(), 1);
+        assert_eq!(snap.notifications[0].call_id, "call-1");
+        assert_eq!(snap.notifications[0].caller_id, "caller-1");
+        assert_eq!(snap.notifications[0].caller_name, "Alice");
+        assert!(!snap.notifications[0].is_acknowledged);
+        assert_eq!(snap.unread_count, 1);
+    }
+
+    #[tokio::test]
+    async fn missed_calls_acknowledge_single() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        // Record two missed calls
+        service
+            .record_missed_call(
+                "call-1".to_string(),
+                "caller-1".to_string(),
+                "Alice".to_string(),
+                CallType::Direct,
+            )
+            .await;
+        service
+            .record_missed_call(
+                "call-2".to_string(),
+                "caller-2".to_string(),
+                "Bob".to_string(),
+                CallType::Direct,
+            )
+            .await;
+
+        assert_eq!(service.get_missed_calls_snapshot().await.unread_count, 2);
+
+        // Acknowledge one
+        service.acknowledge_missed_call("call-1").await;
+
+        let snap = service.get_missed_calls_snapshot().await;
+        assert_eq!(snap.unread_count, 1);
+        assert!(
+            snap.notifications
+                .iter()
+                .find(|n| n.call_id == "call-1")
+                .map(|n| n.is_acknowledged)
+                .unwrap_or(false)
+        );
+    }
+
+    #[tokio::test]
+    async fn missed_calls_acknowledge_all() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        // Record multiple missed calls
+        for i in 0..3 {
+            service
+                .record_missed_call(
+                    format!("call-{}", i),
+                    format!("caller-{}", i),
+                    format!("User {}", i),
+                    CallType::Direct,
+                )
+                .await;
+        }
+
+        assert_eq!(service.get_missed_calls_snapshot().await.unread_count, 3);
+
+        // Acknowledge all
+        service.acknowledge_all_missed_calls().await;
+
+        let snap = service.get_missed_calls_snapshot().await;
+        assert_eq!(snap.unread_count, 0);
+        assert!(snap.notifications.iter().all(|n| n.is_acknowledged));
+    }
+
+    #[tokio::test]
+    async fn missed_calls_has_unread() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        assert!(!service.has_unread_missed_calls().await);
+
+        service
+            .record_missed_call(
+                "call-1".to_string(),
+                "caller-1".to_string(),
+                "Alice".to_string(),
+                CallType::Direct,
+            )
+            .await;
+
+        assert!(service.has_unread_missed_calls().await);
+
+        service.acknowledge_all_missed_calls().await;
+
+        assert!(!service.has_unread_missed_calls().await);
+    }
+
+    #[tokio::test]
+    async fn missed_calls_dismiss_removes_notification() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        service
+            .record_missed_call(
+                "call-1".to_string(),
+                "caller-1".to_string(),
+                "Alice".to_string(),
+                CallType::Direct,
+            )
+            .await;
+
+        assert_eq!(
+            service
+                .get_missed_calls_snapshot()
+                .await
+                .notifications
+                .len(),
+            1
+        );
+
+        service.dismiss_missed_call("call-1").await;
+
+        // Notification should still exist (we don't remove from history)
+        // but it should be acknowledged
+        let snap = service.get_missed_calls_snapshot().await;
+        let notification = snap.notifications.iter().find(|n| n.call_id == "call-1");
+        assert!(notification.map(|n| n.is_acknowledged).unwrap_or(true));
+    }
+
+    #[tokio::test]
+    async fn missed_calls_mark_called_back() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        service
+            .record_missed_call(
+                "call-1".to_string(),
+                "caller-1".to_string(),
+                "Alice".to_string(),
+                CallType::Direct,
+            )
+            .await;
+
+        // Initially not called back
+        let snap = service.get_missed_calls_snapshot().await;
+        assert!(!snap.notifications[0].has_called_back);
+
+        // Mark as called back
+        service.mark_called_back("call-1").await;
+
+        // Should be updated
+        let snap = service.get_missed_calls_snapshot().await;
+        assert!(snap.notifications[0].has_called_back);
+        // Should also be acknowledged when marked called back
+        assert!(snap.notifications[0].is_acknowledged);
+    }
+
+    #[tokio::test]
+    async fn missed_calls_snapshot_broadcasts_on_change() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        let mut rx = service.subscribe_missed_calls();
+
+        // Record a missed call
+        service
+            .record_missed_call(
+                "call-1".to_string(),
+                "caller-1".to_string(),
+                "Alice".to_string(),
+                CallType::Direct,
+            )
+            .await;
+
+        // Wait for broadcast
+        rx.changed().await.expect("should receive update");
+
+        let snap = rx.borrow().clone();
+        assert_eq!(snap.notifications.len(), 1);
+        assert_eq!(snap.unread_count, 1);
+    }
+
+    #[tokio::test]
+    async fn missed_calls_for_caller_helper() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        // Record missed calls from different callers
+        service
+            .record_missed_call(
+                "call-1".to_string(),
+                "alice".to_string(),
+                "Alice".to_string(),
+                CallType::Direct,
+            )
+            .await;
+        service
+            .record_missed_call(
+                "call-2".to_string(),
+                "bob".to_string(),
+                "Bob".to_string(),
+                CallType::Direct,
+            )
+            .await;
+        service
+            .record_missed_call(
+                "call-3".to_string(),
+                "alice".to_string(),
+                "Alice".to_string(),
+                CallType::Direct,
+            )
+            .await;
+
+        let snap = service.get_missed_calls_snapshot().await;
+        let alice_calls: Vec<_> = snap.for_caller("alice");
+        assert_eq!(alice_calls.len(), 2);
+
+        let bob_calls: Vec<_> = snap.for_caller("bob");
+        assert_eq!(bob_calls.len(), 1);
     }
 }

@@ -32,6 +32,115 @@ impl CallState {
     }
 }
 
+/// State of call recording.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum RecordingState {
+    /// Not recording.
+    #[default]
+    NotRecording,
+    /// Recording in progress.
+    Recording,
+    /// Recording paused.
+    Paused,
+    /// Recording stopped, file being finalized.
+    Finalizing,
+}
+
+impl RecordingState {
+    /// Returns true if recording is active (recording or paused).
+    pub fn is_active(&self) -> bool {
+        matches!(self, Self::Recording | Self::Paused | Self::Finalizing)
+    }
+
+    /// Returns a human-readable label for the recording state.
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::NotRecording => "Not Recording",
+            Self::Recording => "Recording",
+            Self::Paused => "Paused",
+            Self::Finalizing => "Saving...",
+        }
+    }
+
+    /// Returns a CSS class for UI styling.
+    pub fn status_class(&self) -> &'static str {
+        match self {
+            Self::NotRecording => "text-slate-400",
+            Self::Recording => "text-red-500 animate-pulse",
+            Self::Paused => "text-amber-500",
+            Self::Finalizing => "text-blue-500",
+        }
+    }
+}
+
+/// Information about an ongoing or completed recording.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RecordingInfo {
+    /// Unique recording identifier.
+    pub id: String,
+    /// Start timestamp (ms since epoch).
+    pub started_at: u64,
+    /// Total duration recorded (ms), excluding paused time.
+    pub duration_ms: u64,
+    /// Current recording state.
+    pub state: RecordingState,
+    /// File path where recording will be saved (if known).
+    pub file_path: Option<String>,
+    /// Estimated file size in bytes.
+    pub file_size_bytes: u64,
+    /// Whether audio is being recorded.
+    pub includes_audio: bool,
+    /// Whether video is being recorded.
+    pub includes_video: bool,
+    /// Whether screen share is being recorded.
+    pub includes_screen: bool,
+    /// Participant who started the recording.
+    pub started_by: String,
+}
+
+impl Default for RecordingInfo {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            started_at: 0,
+            duration_ms: 0,
+            state: RecordingState::NotRecording,
+            file_path: None,
+            file_size_bytes: 0,
+            includes_audio: true,
+            includes_video: false,
+            includes_screen: false,
+            started_by: String::new(),
+        }
+    }
+}
+
+impl RecordingInfo {
+    /// Returns the formatted duration as MM:SS.
+    pub fn formatted_duration(&self) -> String {
+        let total_seconds = self.duration_ms / 1000;
+        let minutes = total_seconds / 60;
+        let seconds = total_seconds % 60;
+        format!("{:02}:{:02}", minutes, seconds)
+    }
+
+    /// Returns the formatted file size (KB, MB, etc.).
+    pub fn formatted_size(&self) -> String {
+        if self.file_size_bytes < 1024 {
+            format!("{} B", self.file_size_bytes)
+        } else if self.file_size_bytes < 1024 * 1024 {
+            format!("{:.1} KB", self.file_size_bytes as f64 / 1024.0)
+        } else if self.file_size_bytes < 1024 * 1024 * 1024 {
+            format!("{:.1} MB", self.file_size_bytes as f64 / (1024.0 * 1024.0))
+        } else {
+            format!(
+                "{:.2} GB",
+                self.file_size_bytes as f64 / (1024.0 * 1024.0 * 1024.0)
+            )
+        }
+    }
+}
+
 /// Type of media device.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum DeviceType {
@@ -400,6 +509,10 @@ pub struct CallSnapshot {
     pub quality_metrics: QualityMetrics,
     /// Per-participant quality metrics.
     pub participant_quality: Vec<ParticipantQuality>,
+    /// Whether the call is being recorded.
+    pub is_recording: bool,
+    /// Recording information (if recording is active or recently stopped).
+    pub recording_info: Option<RecordingInfo>,
 }
 
 impl CallSnapshot {
@@ -431,6 +544,24 @@ impl CallSnapshot {
             self.quality_metrics.quality,
             ConnectionQuality::Poor | ConnectionQuality::Critical
         )
+    }
+
+    /// Returns the current recording state.
+    pub fn recording_state(&self) -> RecordingState {
+        self.recording_info
+            .as_ref()
+            .map(|r| r.state)
+            .unwrap_or(RecordingState::NotRecording)
+    }
+
+    /// Returns true if recording is currently active (recording or paused).
+    pub fn is_recording_active(&self) -> bool {
+        self.recording_state().is_active()
+    }
+
+    /// Returns the formatted recording duration, if recording.
+    pub fn recording_duration(&self) -> Option<String> {
+        self.recording_info.as_ref().map(|r| r.formatted_duration())
     }
 }
 
@@ -736,5 +867,113 @@ mod tests {
 
         let quality = snapshot.get_participant_quality("alice").unwrap();
         assert_eq!(quality.incoming.quality, ConnectionQuality::Excellent);
+    }
+
+    #[test]
+    fn recording_state_is_active() {
+        assert!(!RecordingState::NotRecording.is_active());
+        assert!(RecordingState::Recording.is_active());
+        assert!(RecordingState::Paused.is_active());
+        assert!(RecordingState::Finalizing.is_active());
+    }
+
+    #[test]
+    fn recording_state_labels() {
+        assert_eq!(RecordingState::NotRecording.label(), "Not Recording");
+        assert_eq!(RecordingState::Recording.label(), "Recording");
+        assert_eq!(RecordingState::Paused.label(), "Paused");
+        assert_eq!(RecordingState::Finalizing.label(), "Saving...");
+    }
+
+    #[test]
+    fn recording_state_status_class() {
+        assert_eq!(
+            RecordingState::NotRecording.status_class(),
+            "text-slate-400"
+        );
+        assert_eq!(
+            RecordingState::Recording.status_class(),
+            "text-red-500 animate-pulse"
+        );
+        assert_eq!(RecordingState::Paused.status_class(), "text-amber-500");
+        assert_eq!(RecordingState::Finalizing.status_class(), "text-blue-500");
+    }
+
+    #[test]
+    fn recording_info_formatted_duration() {
+        let info = RecordingInfo {
+            duration_ms: 65_000, // 1 minute 5 seconds
+            ..Default::default()
+        };
+        assert_eq!(info.formatted_duration(), "01:05");
+
+        let info2 = RecordingInfo {
+            duration_ms: 3_661_000, // 61 minutes 1 second
+            ..Default::default()
+        };
+        assert_eq!(info2.formatted_duration(), "61:01");
+    }
+
+    #[test]
+    fn recording_info_formatted_size() {
+        let bytes_info = RecordingInfo {
+            file_size_bytes: 500,
+            ..Default::default()
+        };
+        assert_eq!(bytes_info.formatted_size(), "500 B");
+
+        let kb_info = RecordingInfo {
+            file_size_bytes: 2048,
+            ..Default::default()
+        };
+        assert_eq!(kb_info.formatted_size(), "2.0 KB");
+
+        let mb_info = RecordingInfo {
+            file_size_bytes: 5 * 1024 * 1024,
+            ..Default::default()
+        };
+        assert_eq!(mb_info.formatted_size(), "5.0 MB");
+
+        let gb_info = RecordingInfo {
+            file_size_bytes: 2 * 1024 * 1024 * 1024,
+            ..Default::default()
+        };
+        assert_eq!(gb_info.formatted_size(), "2.00 GB");
+    }
+
+    #[test]
+    fn recording_info_default() {
+        let info = RecordingInfo::default();
+        assert_eq!(info.state, RecordingState::NotRecording);
+        assert!(info.includes_audio);
+        assert!(!info.includes_video);
+        assert!(!info.includes_screen);
+    }
+
+    #[test]
+    fn call_snapshot_recording_helpers() {
+        let mut snapshot = CallSnapshot::default();
+
+        // No recording
+        assert_eq!(snapshot.recording_state(), RecordingState::NotRecording);
+        assert!(!snapshot.is_recording_active());
+        assert!(snapshot.recording_duration().is_none());
+
+        // With active recording
+        snapshot.is_recording = true;
+        snapshot.recording_info = Some(RecordingInfo {
+            state: RecordingState::Recording,
+            duration_ms: 30_000,
+            ..Default::default()
+        });
+
+        assert_eq!(snapshot.recording_state(), RecordingState::Recording);
+        assert!(snapshot.is_recording_active());
+        assert_eq!(snapshot.recording_duration(), Some("00:30".to_string()));
+
+        // Paused recording
+        snapshot.recording_info.as_mut().unwrap().state = RecordingState::Paused;
+        assert_eq!(snapshot.recording_state(), RecordingState::Paused);
+        assert!(snapshot.is_recording_active());
     }
 }

@@ -23,7 +23,8 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use communitas_ui_api::call::{
     CallInfo, CallSettings, CallSnapshot, CallState, ConnectionQuality, DeviceType, MediaDevice,
-    MediaError, MediaErrorKind, Participant, ParticipantQuality, QualityMetrics,
+    MediaError, MediaErrorKind, Participant, ParticipantQuality, QualityMetrics, RecordingInfo,
+    RecordingState,
 };
 use thiserror::Error;
 use tokio::sync::{RwLock, watch};
@@ -227,6 +228,8 @@ struct CallServiceState {
     is_screen_sharing: bool,
     quality_metrics: QualityMetrics,
     participant_quality: Vec<ParticipantQuality>,
+    is_recording: bool,
+    recording_info: Option<RecordingInfo>,
 }
 
 impl Default for CallServiceState {
@@ -242,6 +245,8 @@ impl Default for CallServiceState {
             is_screen_sharing: false,
             quality_metrics: QualityMetrics::default(),
             participant_quality: Vec::new(),
+            is_recording: false,
+            recording_info: None,
         }
     }
 }
@@ -443,6 +448,8 @@ impl CallService {
             is_screen_sharing: state.is_screen_sharing,
             quality_metrics: state.quality_metrics.clone(),
             participant_quality: state.participant_quality.clone(),
+            is_recording: state.is_recording,
+            recording_info: state.recording_info.clone(),
         };
         // Ignore send error if no receivers
         let _ = self.tx.send(snapshot);
@@ -1549,6 +1556,188 @@ impl CallService {
             ConnectionQuality::Poor | ConnectionQuality::Critical
         )
     }
+
+    // ===== Recording Management =====
+
+    /// Start recording the current call.
+    ///
+    /// Returns an error if not currently in a call or if recording is already active.
+    #[instrument(skip(self), name = "ui.call.start_recording")]
+    pub async fn start_recording(&self, include_video: bool) -> Result<(), CallError> {
+        let state = self.state.read().await;
+        if state.call_state != CallState::InCall {
+            return Err(CallError::NotInCall);
+        }
+        if state.is_recording {
+            return Err(CallError::MediaError(
+                "Recording already active".to_string(),
+            ));
+        }
+        drop(state);
+
+        // Get the current user identity for the recording info
+        let started_by = self.get_my_identity().await.unwrap_or_default();
+
+        // Generate recording ID
+        let recording_id = format!("rec-{}", current_timestamp_millis());
+        let started_at = current_timestamp_millis() as u64;
+
+        let recording_info = RecordingInfo {
+            id: recording_id,
+            started_at,
+            duration_ms: 0,
+            state: RecordingState::Recording,
+            file_path: None,
+            file_size_bytes: 0,
+            includes_audio: true,
+            includes_video: include_video,
+            includes_screen: false,
+            started_by,
+        };
+
+        let mut state = self.state.write().await;
+        state.is_recording = true;
+        state.recording_info = Some(recording_info);
+        drop(state);
+
+        self.broadcast().await;
+        debug!("Recording started");
+        Ok(())
+    }
+
+    /// Stop recording and finalize the file.
+    #[instrument(skip(self), name = "ui.call.stop_recording")]
+    pub async fn stop_recording(&self) -> Result<Option<RecordingInfo>, CallError> {
+        let state = self.state.read().await;
+        if !state.is_recording {
+            return Err(CallError::MediaError("Not recording".to_string()));
+        }
+        drop(state);
+
+        // Set state to finalizing
+        let mut state = self.state.write().await;
+        if let Some(ref mut info) = state.recording_info {
+            info.state = RecordingState::Finalizing;
+            // Calculate final duration
+            let now = current_timestamp_millis() as u64;
+            info.duration_ms = now.saturating_sub(info.started_at);
+        }
+        drop(state);
+        self.broadcast().await;
+
+        // In a real implementation, we would finalize the recording file here
+        // For now, we just update the state
+
+        let mut state = self.state.write().await;
+        let final_info = state.recording_info.take();
+        state.is_recording = false;
+        drop(state);
+
+        self.broadcast().await;
+        debug!("Recording stopped");
+        Ok(final_info)
+    }
+
+    /// Pause an active recording.
+    #[instrument(skip(self), name = "ui.call.pause_recording")]
+    pub async fn pause_recording(&self) -> Result<(), CallError> {
+        let mut state = self.state.write().await;
+        if !state.is_recording {
+            return Err(CallError::MediaError("Not recording".to_string()));
+        }
+
+        if let Some(ref mut info) = state.recording_info {
+            if info.state != RecordingState::Recording {
+                return Err(CallError::MediaError("Recording not active".to_string()));
+            }
+            info.state = RecordingState::Paused;
+        }
+        drop(state);
+
+        self.broadcast().await;
+        debug!("Recording paused");
+        Ok(())
+    }
+
+    /// Resume a paused recording.
+    #[instrument(skip(self), name = "ui.call.resume_recording")]
+    pub async fn resume_recording(&self) -> Result<(), CallError> {
+        let mut state = self.state.write().await;
+        if !state.is_recording {
+            return Err(CallError::MediaError("Not recording".to_string()));
+        }
+
+        if let Some(ref mut info) = state.recording_info {
+            if info.state != RecordingState::Paused {
+                return Err(CallError::MediaError("Recording not paused".to_string()));
+            }
+            info.state = RecordingState::Recording;
+        }
+        drop(state);
+
+        self.broadcast().await;
+        debug!("Recording resumed");
+        Ok(())
+    }
+
+    /// Update recording duration and file size.
+    ///
+    /// Called periodically during recording to update stats.
+    #[instrument(skip(self), name = "ui.call.update_recording_stats")]
+    pub async fn update_recording_stats(&self, file_size_bytes: u64) {
+        let mut state = self.state.write().await;
+        if let Some(ref mut info) = state.recording_info {
+            let now = current_timestamp_millis() as u64;
+            info.duration_ms = now.saturating_sub(info.started_at);
+            info.file_size_bytes = file_size_bytes;
+        }
+        drop(state);
+        self.broadcast().await;
+    }
+
+    /// Get the current recording state.
+    pub fn get_recording_state(&self) -> RecordingState {
+        self.rx
+            .borrow()
+            .recording_info
+            .as_ref()
+            .map(|r| r.state)
+            .unwrap_or(RecordingState::NotRecording)
+    }
+
+    /// Check if recording is active.
+    pub fn is_recording(&self) -> bool {
+        self.rx.borrow().is_recording
+    }
+
+    /// Get the current recording info if available.
+    pub fn get_recording_info(&self) -> Option<RecordingInfo> {
+        self.rx.borrow().recording_info.clone()
+    }
+
+    /// Get the current user's identity (four_words) from the call info or auth state.
+    async fn get_my_identity(&self) -> Option<String> {
+        // First try to get from current call
+        let state = self.state.read().await;
+        if let Some(ref call) = state.current_call {
+            // Find the participant that matches the current user
+            if let Some(participant) = call
+                .participants
+                .iter()
+                .find(|p| p.id == call.my_participant_id)
+            {
+                return Some(participant.four_words.clone());
+            }
+        }
+        drop(state);
+
+        // Otherwise get from auth state
+        let auth_snap = self.auth.subscribe().borrow().clone();
+        if let AuthStateSnapshot::Authenticated { session, .. } = auth_snap {
+            return Some(session.four_words);
+        }
+        None
+    }
 }
 
 #[cfg(test)]
@@ -2149,5 +2338,82 @@ mod tests {
         let metrics = service.get_quality_metrics();
         assert_eq!(metrics.bytes_sent, 1_000_000);
         assert_eq!(metrics.bytes_received, 2_500_000);
+    }
+
+    // ===== Recording Tests =====
+
+    #[tokio::test]
+    async fn start_recording_requires_active_call() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        let result = service.start_recording(false).await;
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), CallError::NotInCall));
+    }
+
+    #[tokio::test]
+    async fn stop_recording_requires_active_recording() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        let result = service.stop_recording().await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn pause_recording_requires_active_recording() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        let result = service.pause_recording().await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn resume_recording_requires_paused_recording() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        let result = service.resume_recording().await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn recording_state_default() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        assert!(!service.is_recording());
+        assert_eq!(service.get_recording_state(), RecordingState::NotRecording);
+        assert!(service.get_recording_info().is_none());
+    }
+
+    #[tokio::test]
+    async fn update_recording_stats() {
+        let temp = TempDir::new().expect("temp dir");
+        let service = make_service(&temp).await;
+
+        // Manually set recording state for testing (simulating active recording)
+        {
+            let mut state = service.state.write().await;
+            state.is_recording = true;
+            state.recording_info = Some(RecordingInfo {
+                id: "test-recording".to_string(),
+                started_at: current_timestamp_millis() as u64 - 5000, // Started 5 seconds ago
+                state: RecordingState::Recording,
+                ..Default::default()
+            });
+        }
+        service.broadcast().await;
+
+        // Update stats
+        service.update_recording_stats(1024 * 1024).await;
+
+        let info = service.get_recording_info();
+        assert!(info.is_some());
+        let info = info.unwrap();
+        assert_eq!(info.file_size_bytes, 1024 * 1024);
+        assert!(info.duration_ms >= 5000); // At least 5 seconds
     }
 }

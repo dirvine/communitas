@@ -4,6 +4,79 @@ All notable changes to the Communitas app will be documented in this file.
 
 > Note: entries prior to the all-Rust pivot refer to the retired thin-client FFI integrations retained in the archive.
 
+## [1.0.0-beta.1] - 2026-01-23
+
+### 🎉 First Beta Release - M6 Beta-Ready (Apple Desktop)
+
+This is the first public beta release of Communitas, featuring a complete local-first collaboration platform with end-to-end encryption.
+
+### Added
+- **Authentication & Security** (Phase 6.1)
+  - Post-quantum cryptography (ML-DSA/ML-KEM)
+  - Secure session management with auto-refresh
+  - Rate limiting and input validation
+
+- **Messaging & Contacts** (Phase 6.2)
+  - End-to-end encrypted messaging
+  - Thread-based conversations
+  - Contact management with four-word addresses
+  - Message reactions and editing
+
+- **Drive & Attachments** (Phase 6.3)
+  - Virtual disk system (Private/Public/Shared)
+  - File upload/download with progress
+  - Attachment support in messages
+  - CRDT-based file synchronization
+
+- **Calls & Presence** (Phase 6.4)
+  - WebRTC-based voice/video calls
+  - Online/offline presence indicators
+  - Device discovery and selection
+
+- **Canvas Integration** (Phase 6.5)
+  - Collaborative whiteboard with CRDT sync
+  - Drawing tools and shapes
+  - Real-time multi-user editing
+
+- **Kanban Project Management** (Phase 6.6)
+  - CRDT-based boards and cards
+  - Swimlane organization
+  - Due dates and labels
+  - Drag-and-drop interface
+
+- **UX & Accessibility** (Phase 6.7)
+  - Full keyboard navigation
+  - Screen reader support (ARIA)
+  - High contrast mode
+  - Focus management
+
+- **Onboarding Tour** (Phase 6.10)
+  - 8-step interactive tour for new users
+  - Skip/previous/next navigation
+  - Keyboard shortcuts (Escape to skip)
+
+- **Auto-Update System** (Phase 6.10)
+  - Automatic update checking
+  - Background download and install
+  - Version display in Settings
+
+### Performance (Phase 6.8)
+- Lazy device enumeration
+- LRU cache for board documents
+- Debounced auto-login
+- Optimized CRDT synchronization
+
+### Testing (Phase 6.9)
+- Comprehensive E2E test suite
+- Property-based tests (proptest)
+- Stress tests for concurrent operations
+- 80%+ code coverage
+
+### Platform Support
+- macOS (Universal Binary - Intel & Apple Silicon)
+- Signed and notarized by Apple
+- Auto-updater enabled
+
 ## [0.2.8] - 2025-08-13
 
 ### Added

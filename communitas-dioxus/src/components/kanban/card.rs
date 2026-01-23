@@ -9,6 +9,29 @@ use tracing::info;
 
 use super::{DragState, DraggingCard};
 
+/// Consolidated interaction state for a Kanban card.
+///
+/// Replaces 5 separate boolean signals with a single enum for:
+/// - Fewer signal subscriptions per card
+/// - Enforced mutual exclusivity (only one active state at a time)
+/// - Cleaner state transitions
+#[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
+enum CardInteractionState {
+    /// No interaction in progress
+    #[default]
+    Idle,
+    /// Card is being dragged
+    Dragging,
+    /// Card is being moved (keyboard navigation)
+    Moving,
+    /// Card detail modal is shown
+    ShowingDetailModal,
+    /// Move menu is shown
+    ShowingMoveMenu,
+    /// Help tooltip is shown
+    ShowingHelpTooltip,
+}
+
 /// Kanban card component that can be dragged between columns.
 #[derive(Props, Clone, PartialEq)]
 pub struct KanbanCardProps {
@@ -29,20 +52,8 @@ pub fn KanbanCard(props: KanbanCardProps) -> Element {
     // Clone card to avoid lifetime issues in closures
     let card = props.card.clone();
 
-    // Drag state (local)
-    let mut is_dragging = use_signal(|| false);
-
-    // Modal state
-    let mut show_detail_modal = use_signal(|| false);
-
-    // Move menu state (accessible via 'm' key)
-    let mut show_move_menu = use_signal(|| false);
-
-    // Help tooltip state (accessible via '?' key)
-    let mut show_help_tooltip = use_signal(|| false);
-
-    // Moving state (for visual feedback)
-    let mut is_moving = use_signal(|| false);
+    // Consolidated interaction state - replaces 5 separate boolean signals
+    let mut interaction_state = use_signal(CardInteractionState::default);
 
     let card_id = card.id.clone();
     let card_title = card.title.clone();
@@ -93,23 +104,27 @@ pub fn KanbanCard(props: KanbanCardProps) -> Element {
     let desc_id = format!("card-desc-{}", card.id);
     let has_description = card.description.as_ref().is_some_and(|d| !d.is_empty());
 
+    // Extract booleans from interaction state for rendering
+    let is_dragging = matches!(interaction_state(), CardInteractionState::Dragging);
+    let is_moving = matches!(interaction_state(), CardInteractionState::Moving);
+
     rsx! {
         div {
             class: format!(
                 "kanban-card rounded-lg border border-l-4 bg-slate-800 p-3 cursor-pointer transition hover:bg-slate-750 {} {} {}",
                 state_color,
-                if is_dragging() { "opacity-50 border-slate-600" } else { "border-slate-700" },
-                if is_moving() { "ring-2 ring-emerald-400 ring-offset-2 ring-offset-slate-900" } else { "" }
+                if is_dragging { "opacity-50 border-slate-600" } else { "border-slate-700" },
+                if is_moving { "ring-2 ring-emerald-400 ring-offset-2 ring-offset-slate-900" } else { "" }
             ),
             role: "listitem",
             aria_label: format!("Card: {}", card.title),
             aria_describedby: if has_description { desc_id.clone() } else { String::new() },
-            aria_grabbed: if is_dragging() { "true" } else { "false" },
+            aria_grabbed: if is_dragging { "true" } else { "false" },
             tabindex: "0",
             draggable: "true",
             // Drag handlers
             ondragstart: move |_evt| {
-                is_dragging.set(true);
+                interaction_state.set(CardInteractionState::Dragging);
                 // Set drag data in shared context for column drop handlers
                 drag_state.set(DragState {
                     dragging_card: Some(DraggingCard {
@@ -121,40 +136,44 @@ pub fn KanbanCard(props: KanbanCardProps) -> Element {
                 info!(target = "ui.kanban", event = "card_drag_start", card_id = %card_id_for_drag_start);
             },
             ondragend: move |_| {
-                is_dragging.set(false);
+                interaction_state.set(CardInteractionState::Idle);
                 // Clear drag data
                 drag_state.set(DragState::default());
                 info!(target = "ui.kanban", event = "card_drag_end", card_id = %card_id_for_drag_end);
             },
             // Click to open detail
             onclick: move |_| {
-                show_detail_modal.set(true);
+                interaction_state.set(CardInteractionState::ShowingDetailModal);
             },
             // Keyboard support (Enter to open detail, Ctrl+Arrow to move, m for menu, ? for help)
             onkeydown: move |evt| {
                 if evt.key() == Key::Enter {
-                    show_detail_modal.set(true);
+                    interaction_state.set(CardInteractionState::ShowingDetailModal);
                     return;
                 }
 
                 // 'm' key opens move menu
                 if evt.key() == Key::Character("m".to_string()) || evt.key() == Key::Character("M".to_string()) {
                     evt.prevent_default();
-                    show_move_menu.set(true);
+                    interaction_state.set(CardInteractionState::ShowingMoveMenu);
                     return;
                 }
 
-                // '?' key shows keyboard shortcuts help
+                // '?' key toggles keyboard shortcuts help
                 if evt.key() == Key::Character("?".to_string()) {
                     evt.prevent_default();
-                    show_help_tooltip.set(!show_help_tooltip());
+                    let current = interaction_state();
+                    if matches!(current, CardInteractionState::ShowingHelpTooltip) {
+                        interaction_state.set(CardInteractionState::Idle);
+                    } else {
+                        interaction_state.set(CardInteractionState::ShowingHelpTooltip);
+                    }
                     return;
                 }
 
-                // Escape closes menus
+                // Escape closes menus/modals
                 if evt.key() == Key::Escape {
-                    show_move_menu.set(false);
-                    show_help_tooltip.set(false);
+                    interaction_state.set(CardInteractionState::Idle);
                     return;
                 }
 
@@ -176,7 +195,7 @@ pub fn KanbanCard(props: KanbanCardProps) -> Element {
                         let column_id = column_id.clone();
                         let on_announce = on_move_announce;
 
-                        is_moving.set(true);
+                        interaction_state.set(CardInteractionState::Moving);
 
                         spawn(async move {
                             match services
@@ -217,7 +236,7 @@ pub fn KanbanCard(props: KanbanCardProps) -> Element {
                                     );
                                 }
                             }
-                            is_moving.set(false);
+                            interaction_state.set(CardInteractionState::Idle);
                         });
                     }
                 }
@@ -328,21 +347,21 @@ pub fn KanbanCard(props: KanbanCardProps) -> Element {
             }
         }
         // Detail modal
-        if show_detail_modal() {
+        if matches!(interaction_state(), CardInteractionState::ShowingDetailModal) {
             super::card_detail_modal::CardDetailModal {
                 board_id: board_id.clone(),
                 card_id: card.id.clone(),
-                on_close: move |_| show_detail_modal.set(false),
+                on_close: move |_| interaction_state.set(CardInteractionState::Idle),
             }
         }
         // Move menu (accessible via 'm' key)
-        if show_move_menu() {
+        if matches!(interaction_state(), CardInteractionState::ShowingMoveMenu) {
             CardMoveMenu {
                 board_id: board_id_for_move_menu.clone(),
                 card_id: card_id_for_move_menu.clone(),
                 current_column_id: column_id_for_move_menu.clone(),
                 on_move: move |target_col: String| {
-                    show_move_menu.set(false);
+                    interaction_state.set(CardInteractionState::Idle);
                     let services = services_for_move.clone();
                     let board_id = board_id_for_move_menu.clone();
                     let card_id = card_id_for_move_menu.clone();
@@ -355,13 +374,13 @@ pub fn KanbanCard(props: KanbanCardProps) -> Element {
                         }
                     });
                 },
-                on_close: move |_| show_move_menu.set(false),
+                on_close: move |_| interaction_state.set(CardInteractionState::Idle),
             }
         }
         // Keyboard shortcuts help tooltip
-        if show_help_tooltip() {
+        if matches!(interaction_state(), CardInteractionState::ShowingHelpTooltip) {
             KeyboardHelpTooltip {
-                on_close: move |_| show_help_tooltip.set(false),
+                on_close: move |_| interaction_state.set(CardInteractionState::Idle),
             }
         }
     }

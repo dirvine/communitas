@@ -12,6 +12,8 @@ use super::call_controls::CallControls;
 use super::media_error_banner::MediaErrorBanner;
 use super::participant_tile::ParticipantGrid;
 
+use crate::components::skeleton::SkeletonGrid;
+
 /// Props for the CallView component.
 #[derive(Props, Clone, PartialEq)]
 pub struct CallViewProps {
@@ -191,11 +193,21 @@ pub fn CallView(props: CallViewProps) -> Element {
             div {
                 class: "flex-1 overflow-auto p-4",
                 if is_connecting {
-                    // Connecting state
+                    // Connecting state - use skeleton grid for visual consistency
                     div {
                         class: "flex flex-col items-center justify-center h-full",
+                        role: "status",
+                        aria_live: "polite",
+                        aria_label: "Connecting to call",
+                        // Skeleton participant grid placeholder
                         div {
-                            class: "w-16 h-16 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4",
+                            class: "w-full max-w-xl mb-6",
+                            SkeletonGrid {
+                                count: 4,
+                                columns: "grid-cols-2".to_string(),
+                                gap: "gap-4".to_string(),
+                                aria_label: "Loading participants".to_string(),
+                            }
                         }
                         p {
                             class: "text-slate-400 text-lg",
@@ -206,8 +218,11 @@ pub fn CallView(props: CallViewProps) -> Element {
                     // Reconnecting state
                     div {
                         class: "flex flex-col items-center justify-center h-full",
+                        role: "alert",
+                        aria_live: "assertive",
                         div {
                             class: "w-16 h-16 border-4 border-amber-500 border-t-transparent rounded-full animate-spin mb-4",
+                            "aria-hidden": "true",
                         }
                         p {
                             class: "text-amber-400 text-lg",
@@ -218,8 +233,10 @@ pub fn CallView(props: CallViewProps) -> Element {
                     // Idle state (no active call)
                     div {
                         class: "flex flex-col items-center justify-center h-full",
+                        role: "status",
                         span {
                             class: "text-6xl mb-4",
+                            "aria-hidden": "true",
                             "📞"
                         }
                         p {
@@ -231,8 +248,11 @@ pub fn CallView(props: CallViewProps) -> Element {
                     // In call but no participants yet
                     div {
                         class: "flex flex-col items-center justify-center h-full",
+                        role: "status",
+                        aria_live: "polite",
                         span {
                             class: "text-6xl mb-4",
+                            "aria-hidden": "true",
                             "👤"
                         }
                         p {

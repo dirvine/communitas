@@ -9,6 +9,8 @@ use dioxus::prelude::*;
 use std::sync::Arc;
 use tracing::info;
 
+use crate::hooks::focus::{FocusTrapConfig, use_focus_trap, use_return_focus};
+
 /// Modal for viewing and editing card details.
 #[derive(Props, Clone, PartialEq)]
 pub struct CardDetailModalProps {
@@ -24,6 +26,15 @@ pub struct CardDetailModalProps {
 pub fn CardDetailModal(props: CardDetailModalProps) -> Element {
     let services = use_context::<Arc<UiServices>>();
     let kanban = services.kanban();
+
+    // Focus management for accessibility
+    let on_close = props.on_close;
+    let focus_trap = use_focus_trap(FocusTrapConfig {
+        on_escape: Some(EventHandler::new(move |_| on_close.call(()))),
+        auto_focus_first: true,
+        allow_outside_focus: false,
+    });
+    let return_focus = use_return_focus();
 
     // Card data state
     let mut card_data = use_signal(|| Option::<CardDetail>::None);
@@ -102,27 +113,44 @@ pub fn CardDetailModal(props: CardDetailModalProps) -> Element {
     let card_id_for_thread_link = props.card_id.clone();
     let card_id_for_thread_unlink = props.card_id.clone();
 
+    // Return focus when modal closes
+    let return_focus_handle = return_focus;
+    use_effect(move || {
+        // This effect runs on mount; cleanup would return focus
+        // For now, we rely on explicit return_focus calls
+    });
+
     rsx! {
         div {
             class: "fixed inset-0 z-50 flex items-center justify-center bg-black/70",
             role: "dialog",
             aria_modal: "true",
             aria_label: "Card details",
-            onclick: move |_| props.on_close.call(()),
-            // Modal content
+            onclick: move |_| {
+                return_focus_handle.return_focus();
+                props.on_close.call(());
+            },
+            // Modal content with focus trap
             div {
+                id: focus_trap.id(),
                 class: "w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-xl border border-slate-700 bg-slate-900 shadow-2xl",
                 onclick: move |evt| evt.stop_propagation(),
+                onkeydown: move |evt| focus_trap.handle_keydown(evt),
                 // Loading state
                 if loading() {
                     CardDetailSkeleton {}
                 } else if let Some(err) = error() {
                     div {
                         class: "p-6 text-center",
+                        role: "alert",
                         p { class: "text-red-400 mb-4", "Failed to load card: {err}" }
                         button {
+                            r#type: "button",
                             class: "rounded-lg bg-slate-700 px-4 py-2 text-slate-200",
-                            onclick: move |_| props.on_close.call(()),
+                            onclick: move |_| {
+                                return_focus_handle.return_focus();
+                                props.on_close.call(());
+                            },
                             "Close"
                         }
                     }
@@ -179,8 +207,13 @@ pub fn CardDetailModal(props: CardDetailModalProps) -> Element {
                         }
                         // Close button
                         button {
+                            r#type: "button",
                             class: "p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800",
-                            onclick: move |_| props.on_close.call(()),
+                            aria_label: "Close card details",
+                            onclick: move |_| {
+                                return_focus_handle.return_focus();
+                                props.on_close.call(());
+                            },
                             "✕"
                         }
                     }

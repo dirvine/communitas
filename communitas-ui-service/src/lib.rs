@@ -114,23 +114,45 @@ impl UiServices {
     /// Returns an error if storage discovery fails or the app cannot be initialized.
     #[tracing::instrument(name = "bootstrap_async", skip_all)]
     pub async fn bootstrap_async() -> Result<Self, UiServiceInitError> {
-        let storage = UiStorage::discover()?;
+        let start = std::time::Instant::now();
+
+        let storage = {
+            let _span = tracing::info_span!("storage_discovery").entered();
+            UiStorage::discover()?
+        };
         let storage_path = storage.root_string()?;
 
-        let id_words =
-            generate_id_words().map_err(|e| UiServiceInitError::AppInit(e.to_string()))?;
+        let id_words = {
+            let _span = tracing::info_span!("identity_generation").entered();
+            generate_id_words().map_err(|e| UiServiceInitError::AppInit(e.to_string()))?
+        };
 
-        tracing::info!("Creating CommunitasApp");
-        let app = CommunitasApp::new(
-            id_words,
-            "Bootstrap User".to_string(),
-            "Desktop".to_string(),
-            storage_path,
-        )
-        .await
-        .map_err(|e| UiServiceInitError::AppInit(e.to_string()))?;
+        let app = {
+            let _span = tracing::info_span!("core_app_init").entered();
+            tracing::info!("Creating CommunitasApp");
+            CommunitasApp::new(
+                id_words,
+                "Bootstrap User".to_string(),
+                "Desktop".to_string(),
+                storage_path,
+            )
+            .await
+            .map_err(|e| UiServiceInitError::AppInit(e.to_string()))?
+        };
 
-        Self::new(storage, Arc::new(app))
+        let services = {
+            let _span = tracing::info_span!("services_init").entered();
+            Self::new(storage, Arc::new(app))?
+        };
+
+        let elapsed = start.elapsed();
+        tracing::info!(
+            elapsed_ms = elapsed.as_millis(),
+            "Bootstrap complete in {:.1}ms",
+            elapsed.as_secs_f64() * 1000.0
+        );
+
+        Ok(services)
     }
 
     /// Bootstrap UiServices with auto-discovered storage and a generated identity.
@@ -177,24 +199,37 @@ impl UiServices {
     /// # Errors
     /// Returns [`UiServiceInitError`] if the auth controller or navigation store
     /// cannot be initialized from the provided storage.
+    #[tracing::instrument(name = "services_new", skip_all)]
     pub fn new(storage: UiStorage, app: Arc<CommunitasApp>) -> Result<Self, UiServiceInitError> {
-        let auth = Arc::new(AuthController::new(storage.clone())?);
-        let navigation = Arc::new(NavigationStore::new(storage.clone())?);
+        let auth = {
+            let _span = tracing::debug_span!("auth_init").entered();
+            Arc::new(AuthController::new(storage.clone())?)
+        };
+        let navigation = {
+            let _span = tracing::debug_span!("navigation_init").entered();
+            Arc::new(NavigationStore::new(storage.clone())?)
+        };
         let directory = Arc::new(DirectoryService::new(auth.clone()));
         let storage_arc = Arc::new(storage.clone());
         // Create presence first so messaging can use it for DM thread presence
         let presence = Arc::new(PresenceService::new(auth.clone(), directory.clone()));
-        let messaging = Arc::new(MessagingService::new(
-            auth.clone(),
-            app.clone(),
-            storage_arc,
-            presence.subscribe(),
-        ));
-        let kanban = Arc::new(KanbanService::new(
-            auth.clone(),
-            app.clone(),
-            directory.clone(),
-        ));
+        let messaging = {
+            let _span = tracing::debug_span!("messaging_init").entered();
+            Arc::new(MessagingService::new(
+                auth.clone(),
+                app.clone(),
+                storage_arc,
+                presence.subscribe(),
+            ))
+        };
+        let kanban = {
+            let _span = tracing::debug_span!("kanban_init").entered();
+            Arc::new(KanbanService::new(
+                auth.clone(),
+                app.clone(),
+                directory.clone(),
+            ))
+        };
         let canvas = Arc::new(CanvasService::new(auth.clone(), app.clone()));
         let drive = Arc::new(DriveService::new(auth.clone(), app.clone()));
         let call = Arc::new(CallService::new(auth.clone(), app.clone()));

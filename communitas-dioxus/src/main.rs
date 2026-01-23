@@ -26,12 +26,14 @@ use native_dialog::{MessageDialog, MessageType};
 use std::{
     borrow::Cow,
     sync::{Arc, OnceLock},
+    time::Instant,
 };
 use styles::{button, input};
 use tokens::colors;
 use tracing::{error, info};
 
 static UI_SERVICES: OnceLock<Arc<UiServices>> = OnceLock::new();
+static STARTUP_TIME: OnceLock<Instant> = OnceLock::new();
 
 #[allow(clippy::expect_used)] // OnceLock guaranteed initialized in main() before UI renders
 fn ui_services() -> Arc<UiServices> {
@@ -48,6 +50,9 @@ fn ui_services() -> Arc<UiServices> {
 /// Tokio runtime for better startup performance.
 #[tokio::main]
 async fn main() {
+    // Record startup time for metrics (first thing we do)
+    let _ = STARTUP_TIME.set(Instant::now());
+
     if let Err(err) = dioxus_logger::init(Level::INFO) {
         eprintln!("failed to init logger: {err}");
     }
@@ -260,6 +265,19 @@ fn App() -> Element {
     let services_clone = services.clone();
     use_context_provider(|| services_clone);
     use_context_provider(|| Signal::new(AuthState::default()));
+
+    // Log startup timing on first render (runs once)
+    use_effect(|| {
+        if let Some(start) = STARTUP_TIME.get() {
+            let elapsed = start.elapsed();
+            info!(
+                elapsed_ms = elapsed.as_millis(),
+                "First render complete, total startup: {:.1}ms",
+                elapsed.as_secs_f64() * 1000.0
+            );
+        }
+    });
+
     rsx! {
         AppLifecycleManager {}
         RouteObserver {}

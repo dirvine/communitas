@@ -4,6 +4,7 @@
 mod components;
 pub mod contrast;
 pub mod hooks;
+pub mod onboarding;
 mod platform;
 pub mod styles;
 pub mod tokens;

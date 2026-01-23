@@ -13,6 +13,7 @@ pub mod messaging_convert;
 pub mod navigation;
 pub mod presence;
 pub mod storage;
+pub mod update;
 pub mod util;
 
 use std::sync::Arc;

@@ -13,6 +13,7 @@ mod message_list;
 pub mod offline;
 mod presence_badge;
 mod search_bar;
+pub mod settings;
 pub mod skeleton;
 mod thread_list;
 
@@ -79,3 +80,15 @@ pub use offline::{
     ConnectionBadge, ConnectionState, OfflineBanner, SyncState, SyncStatusIndicator,
     use_connection_state,
 };
+// Re-export settings components for application preferences
+// Note: These will be used when settings UI is integrated
+#[allow(unused_imports)]
+pub use settings::UpdateCard;
+#[allow(unused_imports)]
+pub use settings::UpdateAvailableModal;
+#[allow(unused_imports)]
+pub use settings::UpdateProgressBar;
+#[allow(unused_imports)]
+pub use settings::UpdateStatusBadge;
+#[allow(unused_imports)]
+pub use settings::UpdateBadgeStatus;

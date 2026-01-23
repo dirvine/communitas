@@ -1,0 +1,339 @@
+name: Release Beta (macOS)
+
+# Trigger on beta tags or manual dispatch
+on:
+  push:
+    tags:
+      - 'v*-beta*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Beta version (e.g., 1.0.0-beta.1)'
+        required: true
+        default: '1.0.0-beta.1'
+
+concurrency:
+  group: release-beta-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-macos:
+    name: Build & Sign macOS Beta
+    runs-on: macos-latest
+    outputs:
+      dmg_name: ${{ steps.bundle.outputs.dmg_name }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get version
+        id: version
+        run: |
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/v}
+          else
+            VERSION="${{ github.event.inputs.version }}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Building beta version: $VERSION"
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@1.88.0
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Install dx CLI
+        run: |
+          cargo install dioxus-cli --locked --version 0.7.3
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: macos-beta-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            macos-beta-
+
+      # ─────────────────────────────────────────────────────────────────────────
+      # Build Universal Binary
+      # ─────────────────────────────────────────────────────────────────────────
+
+      - name: Set build environment
+        run: |
+          echo "GIT_HASH=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+          echo "BUILD_DATE=$(date +%Y-%m-%d)" >> $GITHUB_ENV
+          echo "TARGET=universal-apple-darwin" >> $GITHUB_ENV
+
+      - name: Build x86_64 binary
+        run: |
+          cd communitas-dioxus
+          cargo build --release --target x86_64-apple-darwin
+
+      - name: Build aarch64 binary
+        run: |
+          cd communitas-dioxus
+          cargo build --release --target aarch64-apple-darwin
+
+      - name: Create universal binary
+        run: |
+          mkdir -p target/universal-apple-darwin/release
+          lipo \
+            target/x86_64-apple-darwin/release/communitas-dioxus \
+            target/aarch64-apple-darwin/release/communitas-dioxus \
+            -create -output target/universal-apple-darwin/release/communitas-dioxus
+
+      # ─────────────────────────────────────────────────────────────────────────
+      # Bundle App
+      # ─────────────────────────────────────────────────────────────────────────
+
+      - name: Bundle desktop app
+        id: bundle
+        run: |
+          cd communitas-dioxus
+          dx bundle --platform desktop --release
+
+          # Find the generated .app
+          APP_PATH=$(find dist/bundle -name "*.app" -type d | head -1)
+          echo "app_path=$APP_PATH" >> $GITHUB_OUTPUT
+
+          # Replace binary with universal one
+          APP_NAME=$(basename "$APP_PATH" .app)
+          cp ../target/universal-apple-darwin/release/communitas-dioxus "$APP_PATH/Contents/MacOS/$APP_NAME"
+
+          VERSION="${{ steps.version.outputs.version }}"
+          echo "Bundled app: $APP_PATH"
+          echo "dmg_name=Communitas-${VERSION}-universal.dmg" >> $GITHUB_OUTPUT
+
+      # ─────────────────────────────────────────────────────────────────────────
+      # Code Signing
+      # ─────────────────────────────────────────────────────────────────────────
+
+      - name: Import certificates
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          # Create variables
+          CERTIFICATE_PATH=$RUNNER_TEMP/certificate.p12
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+
+          # Decode certificate
+          echo "$MACOS_CERTIFICATE" | base64 --decode > "$CERTIFICATE_PATH"
+
+          # Create temporary keychain
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Import certificate
+          security import "$CERTIFICATE_PATH" -P "$MACOS_CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: \
+            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Add to keychain search list
+          security list-keychain -d user -s "$KEYCHAIN_PATH" login.keychain
+
+          echo "Certificate imported successfully"
+
+      - name: Sign app bundle
+        env:
+          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+        run: |
+          APP_PATH="${{ steps.bundle.outputs.app_path }}"
+
+          echo "Signing app bundle: $APP_PATH"
+
+          # Sign with hardened runtime and entitlements
+          codesign --deep --force --verify --verbose \
+            --options runtime \
+            --entitlements communitas-dioxus/entitlements.plist \
+            --sign "$MACOS_SIGNING_IDENTITY" \
+            "$APP_PATH"
+
+          echo "Verifying signature..."
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+
+      # ─────────────────────────────────────────────────────────────────────────
+      # Create DMG
+      # ─────────────────────────────────────────────────────────────────────────
+
+      - name: Create DMG
+        run: |
+          APP_PATH="${{ steps.bundle.outputs.app_path }}"
+          DMG_NAME="${{ steps.bundle.outputs.dmg_name }}"
+
+          # Create DMG staging directory
+          DMG_STAGING=$RUNNER_TEMP/dmg-staging
+          mkdir -p "$DMG_STAGING"
+
+          # Copy app to staging
+          cp -R "$APP_PATH" "$DMG_STAGING/"
+
+          # Create symlink to Applications
+          ln -s /Applications "$DMG_STAGING/Applications"
+
+          # Create DMG
+          hdiutil create -volname "Communitas Beta" \
+            -srcfolder "$DMG_STAGING" \
+            -ov -format UDZO \
+            "communitas-dioxus/dist/$DMG_NAME"
+
+          echo "Created DMG: communitas-dioxus/dist/$DMG_NAME"
+
+      - name: Sign DMG
+        env:
+          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+        run: |
+          DMG_PATH="communitas-dioxus/dist/${{ steps.bundle.outputs.dmg_name }}"
+
+          codesign --force --verify --verbose \
+            --sign "$MACOS_SIGNING_IDENTITY" \
+            "$DMG_PATH"
+
+          echo "DMG signed successfully"
+
+      # ─────────────────────────────────────────────────────────────────────────
+      # Notarization
+      # ─────────────────────────────────────────────────────────────────────────
+
+      - name: Notarize DMG
+        env:
+          MACOS_NOTARIZATION_APPLE_ID: ${{ secrets.MACOS_NOTARIZATION_APPLE_ID }}
+          MACOS_NOTARIZATION_PASSWORD: ${{ secrets.MACOS_NOTARIZATION_PASSWORD }}
+          MACOS_NOTARIZATION_TEAM_ID: ${{ secrets.MACOS_NOTARIZATION_TEAM_ID }}
+        run: |
+          DMG_PATH="communitas-dioxus/dist/${{ steps.bundle.outputs.dmg_name }}"
+
+          echo "Submitting for notarization..."
+          xcrun notarytool submit "$DMG_PATH" \
+            --apple-id "$MACOS_NOTARIZATION_APPLE_ID" \
+            --password "$MACOS_NOTARIZATION_PASSWORD" \
+            --team-id "$MACOS_NOTARIZATION_TEAM_ID" \
+            --wait
+
+          echo "Stapling notarization ticket..."
+          xcrun stapler staple "$DMG_PATH"
+
+          echo "Notarization complete!"
+
+      - name: Verify notarization
+        run: |
+          DMG_PATH="communitas-dioxus/dist/${{ steps.bundle.outputs.dmg_name }}"
+
+          echo "Verifying notarization..."
+          spctl --assess --type open --context context:primary-signature --verbose=2 "$DMG_PATH"
+
+          echo "Checking staple..."
+          xcrun stapler validate "$DMG_PATH"
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.bundle.outputs.dmg_name }}
+          path: communitas-dioxus/dist/${{ steps.bundle.outputs.dmg_name }}
+          retention-days: 90
+
+      - name: Cleanup keychain
+        if: always()
+        run: |
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          if [ -f "$KEYCHAIN_PATH" ]; then
+            security delete-keychain "$KEYCHAIN_PATH" || true
+          fi
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Release Job
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  release:
+    name: Create Beta Release
+    needs: build-macos
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download DMG
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build-macos.outputs.dmg_name }}
+          path: ./release
+
+      - name: Generate update manifest
+        run: |
+          VERSION="${{ needs.build-macos.outputs.version }}"
+          DMG_NAME="${{ needs.build-macos.outputs.dmg_name }}"
+          REPO="${{ github.repository }}"
+          PUB_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+          # Generate update.json for Tauri updater
+          cat > ./release/update.json << EOF
+          {
+            "version": "${VERSION}",
+            "notes": "Beta release ${VERSION}. See https://github.com/${REPO}/releases/tag/v${VERSION} for details.",
+            "pub_date": "${PUB_DATE}",
+            "platforms": {
+              "darwin-x86_64": {
+                "signature": "",
+                "url": "https://github.com/${REPO}/releases/download/v${VERSION}/${DMG_NAME}"
+              },
+              "darwin-aarch64": {
+                "signature": "",
+                "url": "https://github.com/${REPO}/releases/download/v${VERSION}/${DMG_NAME}"
+              }
+            }
+          }
+          EOF
+
+          echo "Generated update.json:"
+          cat ./release/update.json
+
+      - name: Create pre-release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ needs.build-macos.outputs.version }}
+          name: Communitas Beta ${{ needs.build-macos.outputs.version }}
+          body: |
+            ## Communitas Beta ${{ needs.build-macos.outputs.version }}
+
+            ⚠️ **This is a pre-release beta version for testing purposes.**
+
+            ### Downloads
+            - **macOS (Universal)**: `${{ needs.build-macos.outputs.dmg_name }}`
+              - Supports both Intel (x86_64) and Apple Silicon (M1/M2/M3)
+              - Signed and notarized by Apple
+
+            ### Installation
+            1. Download the DMG file
+            2. Open the DMG
+            3. Drag Communitas to your Applications folder
+            4. Launch from Applications
+            5. If prompted, allow the app in System Preferences > Security & Privacy
+
+            ### Requirements
+            - macOS 11.0 (Big Sur) or later
+
+            ### Reporting Issues
+            Please report any issues at https://github.com/${{ github.repository }}/issues
+
+            ### Changelog
+            See [CHANGELOG](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.
+          files: |
+            ./release/${{ needs.build-macos.outputs.dmg_name }}
+            ./release/update.json
+          draft: false
+          prerelease: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

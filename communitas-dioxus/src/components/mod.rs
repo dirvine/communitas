@@ -10,6 +10,7 @@ mod identity_switcher;
 pub mod kanban;
 pub mod layout;
 mod message_list;
+pub mod offline;
 mod presence_badge;
 mod search_bar;
 pub mod skeleton;
@@ -71,4 +72,10 @@ pub use announcer::{
 #[allow(unused_imports)]
 pub use layout::{
     AspectRatio, Breakpoint, Center, Container, Direction, Divider, Grid, Row, Spacer, Stack,
+};
+// Re-export global offline state components (distinct from canvas-specific OfflineIndicator)
+#[allow(unused_imports)]
+pub use offline::{
+    ConnectionBadge, ConnectionState, OfflineBanner, SyncState, SyncStatusIndicator,
+    use_connection_state,
 };

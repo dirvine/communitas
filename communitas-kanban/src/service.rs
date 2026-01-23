@@ -7,8 +7,10 @@
 use std::sync::Arc;
 
 use chrono::Utc;
-use tracing::{debug, instrument};
+use tokio::sync::mpsc;
+use tracing::{debug, instrument, warn};
 use uuid::Uuid;
+use yrs::observer::Subscription;
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::Encode;
 use yrs::{
@@ -24,9 +26,19 @@ use crate::operations::{
 };
 use crate::state_machine::CardState;
 use crate::types::{
-    Board, BoardSettings, BoardUpdate, Card, CardUpdate, Column, ColumnUpdate, Comment, Priority,
-    Step, Tag,
+    Board, BoardSettings, BoardUpdate, Card, CardUpdate, Column, ColumnUpdate, Comment,
+    KanbanEvent, Priority, Step, Tag,
 };
+
+/// Holds the Yrs subscription for a board's CRDT observer.
+struct BoardSubscription {
+    /// The Yrs subscription handle. Dropping this unsubscribes.
+    _subscription: Subscription,
+    /// Channel sender to forward events to subscribers.
+    /// Kept alive so the receiver stays open; prefixed with underscore
+    /// since we send via a cloned sender in the observer closure.
+    _sender: mpsc::Sender<KanbanEvent>,
+}
 
 /// High-level service for Kanban operations.
 ///
@@ -51,12 +63,20 @@ use crate::types::{
 /// // Create and manage cards
 /// let card = service.create_card(&board.id, &todo.id, "Task 1".to_string(), None)?;
 /// service.move_card(&board.id, &card.id, &done.id, 0)?;
+///
+/// // Subscribe to CRDT changes
+/// let mut rx = service.subscribe_to_changes(&board.id)?;
+/// while let Some(event) = rx.recv().await {
+///     println!("Board changed: {:?}", event);
+/// }
 /// ```
 pub struct KanbanService {
     /// Current user's four-word identity
     peer_id: String,
     /// In-memory documents by board ID (in production, would use CrdtManager)
     documents: std::sync::RwLock<std::collections::HashMap<String, Arc<Doc>>>,
+    /// Active subscriptions per board ID
+    subscriptions: std::sync::RwLock<std::collections::HashMap<String, BoardSubscription>>,
 }
 
 impl KanbanService {
@@ -70,6 +90,7 @@ impl KanbanService {
         Self {
             peer_id: peer_id.into(),
             documents: std::sync::RwLock::new(std::collections::HashMap::new()),
+            subscriptions: std::sync::RwLock::new(std::collections::HashMap::new()),
         }
     }
 
@@ -1839,6 +1860,107 @@ impl KanbanService {
         docs.entry(board_id.to_string())
             .or_insert_with(|| Arc::new(Doc::new()))
             .clone()
+    }
+
+    // ===== CRDT Event Subscription =====
+
+    /// Subscribe to CRDT changes for a board.
+    ///
+    /// Returns a channel receiver that will emit [`KanbanEvent`]s whenever
+    /// the board's CRDT document changes (from local operations or remote sync).
+    ///
+    /// The subscription uses `observe_after_transaction` to detect changes
+    /// after each transaction commits. Events are simplified to `BoardChanged`
+    /// to allow the subscriber to refresh the entire board state.
+    ///
+    /// # Arguments
+    ///
+    /// * `board_id` - ID of the board to subscribe to
+    ///
+    /// # Returns
+    ///
+    /// A channel receiver for `KanbanEvent`s. The channel has a buffer of 64
+    /// events to handle burst updates.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the board doesn't exist.
+    #[instrument(skip(self))]
+    pub fn subscribe_to_changes(
+        &self,
+        board_id: &str,
+    ) -> KanbanResult<mpsc::Receiver<KanbanEvent>> {
+        let doc = self.get_doc(board_id)?;
+
+        // Create channel with buffer for bursts
+        let (tx, rx) = mpsc::channel(64);
+
+        // Clone board_id for the closure
+        let board_id_owned = board_id.to_string();
+        let sender = tx.clone();
+
+        // Subscribe to after-transaction events
+        let subscription = doc
+            .observe_after_transaction(move |_txn| {
+                // Emit a generic BoardChanged event
+                // The subscriber can decide to refresh the full board state
+                let event = KanbanEvent::BoardChanged {
+                    board_id: board_id_owned.clone(),
+                };
+
+                // Use try_send to avoid blocking if the receiver is slow
+                if sender.try_send(event).is_err() {
+                    warn!(
+                        target = "kanban.crdt",
+                        board_id = %board_id_owned,
+                        "Failed to send CRDT event - channel full or closed"
+                    );
+                }
+            })
+            .map_err(|e| {
+                KanbanError::Crdt(format!("Failed to subscribe to board changes: {:?}", e))
+            })?;
+
+        // Store the subscription to keep it alive
+        let board_sub = BoardSubscription {
+            _subscription: subscription,
+            _sender: tx,
+        };
+
+        let mut subs = self
+            .subscriptions
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
+        subs.insert(board_id.to_string(), board_sub);
+
+        debug!(board_id = %board_id, "Subscribed to CRDT changes");
+        Ok(rx)
+    }
+
+    /// Unsubscribe from CRDT changes for a board.
+    ///
+    /// This removes the active subscription and drops the Yrs observer.
+    /// The channel receiver will stop receiving events after this is called.
+    ///
+    /// # Arguments
+    ///
+    /// * `board_id` - ID of the board to unsubscribe from
+    #[instrument(skip(self))]
+    pub fn unsubscribe(&self, board_id: &str) {
+        let mut subs = self
+            .subscriptions
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
+        if subs.remove(board_id).is_some() {
+            debug!(board_id = %board_id, "Unsubscribed from CRDT changes");
+        }
+    }
+
+    /// Check if a board has an active subscription.
+    #[must_use]
+    pub fn has_subscription(&self, board_id: &str) -> bool {
+        let subs = self.subscriptions.read().unwrap_or_else(|e| e.into_inner());
+        subs.contains_key(board_id)
     }
 }
 

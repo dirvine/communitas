@@ -6,14 +6,15 @@ use communitas_core::app::CommunitasApp;
 use communitas_core::command::{Command, Event, Query, QueryError, QueryResponse, Subscription};
 use communitas_kanban::{
     BoardUpdate as CoreBoardUpdate, CardState as CoreCardState, CardUpdate as CoreCardUpdate,
-    KanbanService as CoreKanbanService, Priority as CorePriority,
+    KanbanEvent, KanbanService as CoreKanbanService, Priority as CorePriority,
 };
 use communitas_ui_api::{
     ActivityEntry, BoardSettings, BoardSummary, BoardView, CardDetail, CardState, CardView,
     ChecklistProgress, ColumnView, CommentView, PriorityView, StepView, SwimlaneMode, TagView,
 };
+use std::time::Duration;
 use thiserror::Error;
-use tokio::sync::{RwLock, broadcast, watch};
+use tokio::sync::{RwLock, broadcast, mpsc, watch};
 use tracing::{debug, info, instrument, trace, warn};
 
 /// Direction for keyboard-based card movement.
@@ -112,6 +113,8 @@ pub struct CardUpdate {
 ///
 /// Subscribes to CRDT events for the currently loaded entity, providing reactive
 /// updates when boards, columns, or cards are modified (locally or remotely).
+///
+/// CRDT live updates are debounced (50ms) to batch rapid changes and reduce UI update frequency.
 pub struct KanbanService {
     auth: Arc<AuthController>,
     app: Arc<CommunitasApp>,
@@ -123,6 +126,8 @@ pub struct KanbanService {
     rx: watch::Receiver<KanbanSnapshot>,
     /// Currently loaded entity ID (for event subscription).
     current_entity_id: Arc<RwLock<Option<String>>>,
+    /// Currently subscribed board ID for CRDT live updates.
+    current_board_id: Arc<RwLock<Option<String>>>,
 }
 
 impl KanbanService {
@@ -142,6 +147,7 @@ impl KanbanService {
         // Initialize core service with a default peer_id; will be updated on auth
         let core = Arc::new(RwLock::new(CoreKanbanService::new("anonymous")));
         let current_entity_id = Arc::new(RwLock::new(None));
+        let current_board_id = Arc::new(RwLock::new(None));
 
         let service = Self {
             auth,
@@ -151,6 +157,7 @@ impl KanbanService {
             tx,
             rx,
             current_entity_id,
+            current_board_id,
         };
 
         // Spawn auth state watcher using a weak reference to avoid reference cycles
@@ -252,6 +259,163 @@ impl KanbanService {
         tokio::spawn(async move {
             Self::kanban_event_loop(event_rx, tx, app, auth, entity_id_for_loop).await;
         });
+    }
+
+    /// Subscribe to CRDT live updates for a specific board.
+    ///
+    /// This method sets up a subscription to the board's Yrs document using
+    /// `observe_after_transaction`. Events are debounced (50ms) to batch rapid
+    /// changes and reduce UI update frequency.
+    ///
+    /// When the board changes (locally or via remote sync), a `BoardChanged` event
+    /// is emitted, triggering a board refresh in the UI.
+    ///
+    /// # Arguments
+    ///
+    /// * `board_id` - ID of the board to subscribe to
+    ///
+    /// Calling this method with a different board_id will unsubscribe from the
+    /// previous board and subscribe to the new one.
+    async fn subscribe_to_board_crdt(&self, board_id: &str) {
+        // Check if we're already subscribed to this board
+        {
+            let current = self.current_board_id.read().await;
+            if current.as_deref() == Some(board_id) {
+                trace!(board_id = %board_id, "Already subscribed to CRDT updates");
+                return;
+            }
+        }
+
+        // Unsubscribe from previous board
+        {
+            let mut current = self.current_board_id.write().await;
+            if let Some(old_board_id) = current.take() {
+                let core = self.core.read().await;
+                core.unsubscribe(&old_board_id);
+                debug!(board_id = %old_board_id, "Unsubscribed from previous board CRDT");
+            }
+            *current = Some(board_id.to_string());
+        }
+
+        // Subscribe to CRDT changes for the new board
+        let core = self.core.read().await;
+        let event_rx = match core.subscribe_to_changes(board_id) {
+            Ok(rx) => rx,
+            Err(e) => {
+                warn!(board_id = %board_id, error = %e, "Failed to subscribe to CRDT changes");
+                return;
+            }
+        };
+        drop(core);
+
+        debug!(board_id = %board_id, "Subscribed to CRDT live updates");
+
+        // Spawn debounced event processor
+        let tx = self.tx.clone();
+        let app = Arc::clone(&self.app);
+        let auth = Arc::clone(&self.auth);
+        let core_weak = Arc::downgrade(&self.core);
+        let board_id_owned = board_id.to_string();
+
+        tokio::spawn(async move {
+            Self::crdt_event_loop(event_rx, tx, app, auth, core_weak, board_id_owned).await;
+        });
+    }
+
+    /// Background event loop that processes CRDT events with debouncing.
+    ///
+    /// Events are batched within a 50ms window to reduce UI update frequency
+    /// during rapid changes (e.g., drag-drop repositioning).
+    async fn crdt_event_loop(
+        mut event_rx: mpsc::Receiver<KanbanEvent>,
+        tx: watch::Sender<KanbanSnapshot>,
+        app: Arc<CommunitasApp>,
+        auth: Arc<AuthController>,
+        core_weak: std::sync::Weak<RwLock<CoreKanbanService>>,
+        board_id: String,
+    ) {
+        const DEBOUNCE_MS: u64 = 50;
+        let mut pending_refresh = false;
+        let debounce_duration = Duration::from_millis(DEBOUNCE_MS);
+
+        loop {
+            // Wait for an event or timeout (for debounce)
+            let event = if pending_refresh {
+                // Use timeout to debounce
+                match tokio::time::timeout(debounce_duration, event_rx.recv()).await {
+                    Ok(Some(event)) => {
+                        // Got another event within debounce window, continue batching
+                        trace!(board_id = %board_id, ?event, "Batching CRDT event");
+                        continue;
+                    }
+                    Ok(None) => {
+                        // Channel closed
+                        debug!(board_id = %board_id, "CRDT event channel closed");
+                        break;
+                    }
+                    Err(_) => {
+                        // Timeout - process the batched events
+                        pending_refresh = false;
+                        None
+                    }
+                }
+            } else {
+                // Wait for first event
+                match event_rx.recv().await {
+                    Some(event) => Some(event),
+                    None => {
+                        debug!(board_id = %board_id, "CRDT event channel closed");
+                        break;
+                    }
+                }
+            };
+
+            // If we got a new event, mark pending refresh and continue batching
+            if event.is_some() {
+                pending_refresh = true;
+                trace!(board_id = %board_id, "CRDT event received, starting debounce");
+                continue;
+            }
+
+            // Debounce timeout fired - refresh the board
+            let Some(core) = core_weak.upgrade() else {
+                debug!(board_id = %board_id, "KanbanService dropped, stopping CRDT event loop");
+                break;
+            };
+
+            // Get the current entity_id to refresh boards
+            let entity_id = {
+                let core_guard = core.read().await;
+                match core_guard.get_board(&board_id) {
+                    Ok(board) => board.project_id,
+                    Err(e) => {
+                        warn!(board_id = %board_id, error = %e, "Failed to get board for refresh");
+                        continue;
+                    }
+                }
+            };
+
+            debug!(
+                board_id = %board_id,
+                entity_id = %entity_id,
+                "Refreshing board after CRDT changes (debounced)"
+            );
+
+            // Trigger board refresh
+            Self::refresh_boards_internal(&tx, &app, &auth, &entity_id).await;
+        }
+    }
+
+    /// Unsubscribe from CRDT updates for the current board.
+    ///
+    /// Called when closing a board view or switching to a different board.
+    pub async fn unsubscribe_from_board_crdt(&self) {
+        let mut current = self.current_board_id.write().await;
+        if let Some(board_id) = current.take() {
+            let core = self.core.read().await;
+            core.unsubscribe(&board_id);
+            debug!(board_id = %board_id, "Unsubscribed from CRDT updates");
+        }
     }
 
     /// Background event loop that processes kanban events and updates the watch channel.
@@ -551,11 +715,15 @@ impl KanbanService {
     /// Get a full board view with columns and cards.
     ///
     /// Tries CommunitasApp queries first for network-synced data, falls back to local CRDT.
+    /// Automatically subscribes to CRDT live updates for the board.
     #[instrument(skip(self), name = "ui.kanban.get_board", fields(board_id))]
     pub async fn get_board(&self, board_id: &str) -> Result<BoardView, KanbanError> {
         if !self.is_authenticated() {
             return Err(KanbanError::NotAuthenticated);
         }
+
+        // Subscribe to CRDT live updates for real-time board changes
+        self.subscribe_to_board_crdt(board_id).await;
 
         // Try to fetch board metadata from CommunitasApp for consistency verification
         let app_board = self

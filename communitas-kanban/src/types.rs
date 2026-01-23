@@ -341,3 +341,65 @@ pub struct Tag {
     /// Soft delete flag
     pub deleted: bool,
 }
+
+/// Events emitted when the CRDT document changes.
+///
+/// These events are fired after each transaction commits, enabling
+/// real-time UI updates when local or remote changes occur.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum KanbanEvent {
+    /// A card was created.
+    CardCreated {
+        /// ID of the board containing the card.
+        board_id: String,
+        /// ID of the column containing the card.
+        column_id: String,
+        /// ID of the newly created card.
+        card_id: String,
+    },
+    /// A card was updated (title, description, priority, due date, etc.).
+    CardUpdated {
+        /// ID of the board containing the card.
+        board_id: String,
+        /// ID of the updated card.
+        card_id: String,
+    },
+    /// A card was moved to a different column or position.
+    CardMoved {
+        /// ID of the board containing the card.
+        board_id: String,
+        /// ID of the moved card.
+        card_id: String,
+        /// ID of the source column.
+        from_column_id: String,
+        /// ID of the target column.
+        to_column_id: String,
+    },
+    /// A card was deleted.
+    CardDeleted {
+        /// ID of the board containing the card.
+        board_id: String,
+        /// ID of the deleted card.
+        card_id: String,
+    },
+    /// A column was created, updated, or deleted.
+    ColumnChanged {
+        /// ID of the board containing the column.
+        board_id: String,
+        /// ID of the affected column.
+        column_id: String,
+    },
+    /// Board metadata was updated.
+    BoardUpdated {
+        /// ID of the updated board.
+        board_id: String,
+    },
+    /// Generic change notification (used for batched/debounced updates).
+    ///
+    /// When multiple changes occur rapidly, they may be coalesced into
+    /// a single `BoardChanged` event to reduce UI update frequency.
+    BoardChanged {
+        /// ID of the changed board.
+        board_id: String,
+    },
+}

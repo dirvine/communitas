@@ -9,6 +9,7 @@ pub mod kanban;
 mod message_list;
 mod presence_badge;
 mod search_bar;
+pub mod skeleton;
 mod thread_list;
 
 // Re-export call components (will be used when call UI is integrated into routes)
@@ -45,3 +46,9 @@ pub use thread_list::ThreadListSidebar;
 // Re-export TypingIndicator for external use (can be used in other message views)
 #[allow(unused_imports)]
 pub use thread_list::TypingIndicator;
+// Re-export skeleton components for loading states (will be used when refactoring existing skeletons)
+#[allow(unused_imports)]
+pub use skeleton::{
+    SkeletonCard, SkeletonCircle, SkeletonGrid, SkeletonLine, SkeletonList, SkeletonTable,
+    SkeletonText,
+};

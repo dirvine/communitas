@@ -122,6 +122,75 @@ pub mod transition {
     pub const SLOW: &str = "300ms ease-in-out";
 }
 
+/// Responsive breakpoint tokens following Tailwind's naming convention.
+///
+/// These breakpoints define the screen widths at which layouts change.
+/// Use with CSS media queries: `@media (min-width: {breakpoint})`.
+pub mod breakpoints {
+    /// Small screens (640px) - Mobile landscape
+    pub const SM: &str = "640px";
+    /// Small screens value in pixels
+    pub const SM_PX: u32 = 640;
+
+    /// Medium screens (768px) - Tablets
+    pub const MD: &str = "768px";
+    /// Medium screens value in pixels
+    pub const MD_PX: u32 = 768;
+
+    /// Large screens (1024px) - Small laptops
+    pub const LG: &str = "1024px";
+    /// Large screens value in pixels
+    pub const LG_PX: u32 = 1024;
+
+    /// Extra large screens (1280px) - Desktops
+    pub const XL: &str = "1280px";
+    /// Extra large screens value in pixels
+    pub const XL_PX: u32 = 1280;
+
+    /// 2x Extra large screens (1536px) - Large desktops
+    pub const XXL: &str = "1536px";
+    /// 2x Extra large screens value in pixels
+    pub const XXL_PX: u32 = 1536;
+
+    /// Container max-widths for each breakpoint.
+    pub mod container {
+        /// Max-width at SM breakpoint
+        pub const SM: &str = "640px";
+        /// Max-width at MD breakpoint
+        pub const MD: &str = "768px";
+        /// Max-width at LG breakpoint
+        pub const LG: &str = "1024px";
+        /// Max-width at XL breakpoint
+        pub const XL: &str = "1280px";
+        /// Max-width at XXL breakpoint
+        pub const XXL: &str = "1536px";
+    }
+
+    /// Generate a min-width media query for a breakpoint.
+    #[must_use]
+    pub fn media_min(breakpoint: &str) -> String {
+        format!("@media (min-width: {})", breakpoint)
+    }
+
+    /// Generate a max-width media query for a breakpoint.
+    #[must_use]
+    pub fn media_max(breakpoint: &str) -> String {
+        format!("@media (max-width: {})", breakpoint)
+    }
+
+    /// Check if a width (in pixels) is at or above a breakpoint.
+    #[must_use]
+    pub fn is_above(width: u32, breakpoint_px: u32) -> bool {
+        width >= breakpoint_px
+    }
+
+    /// Check if a width (in pixels) is below a breakpoint.
+    #[must_use]
+    pub fn is_below(width: u32, breakpoint_px: u32) -> bool {
+        width < breakpoint_px
+    }
+}
+
 /// Motion preference utilities for accessibility.
 ///
 /// These utilities help respect the user's `prefers-reduced-motion` setting.
@@ -541,5 +610,55 @@ mod tests {
         // Non-animation classes should NOT have prefix
         assert!(!output.contains("motion-safe:flex"));
         assert!(!output.contains("motion-safe:p-4"));
+    }
+
+    // Breakpoint tests
+    #[test]
+    fn breakpoints_are_valid_px_values() {
+        assert!(breakpoints::SM.ends_with("px"));
+        assert!(breakpoints::MD.ends_with("px"));
+        assert!(breakpoints::LG.ends_with("px"));
+        assert!(breakpoints::XL.ends_with("px"));
+        assert!(breakpoints::XXL.ends_with("px"));
+    }
+
+    #[test]
+    fn breakpoint_px_values_match() {
+        assert_eq!(breakpoints::SM, format!("{}px", breakpoints::SM_PX));
+        assert_eq!(breakpoints::MD, format!("{}px", breakpoints::MD_PX));
+        assert_eq!(breakpoints::LG, format!("{}px", breakpoints::LG_PX));
+        assert_eq!(breakpoints::XL, format!("{}px", breakpoints::XL_PX));
+        assert_eq!(breakpoints::XXL, format!("{}px", breakpoints::XXL_PX));
+    }
+
+    #[test]
+    fn breakpoint_media_query_generates_correctly() {
+        let media = breakpoints::media_min(breakpoints::MD);
+        assert_eq!(media, "@media (min-width: 768px)");
+
+        let media_max = breakpoints::media_max(breakpoints::SM);
+        assert_eq!(media_max, "@media (max-width: 640px)");
+    }
+
+    #[test]
+    fn breakpoint_is_above_works() {
+        assert!(breakpoints::is_above(800, breakpoints::SM_PX));
+        assert!(breakpoints::is_above(768, breakpoints::MD_PX));
+        assert!(!breakpoints::is_above(600, breakpoints::MD_PX));
+    }
+
+    #[test]
+    fn breakpoint_is_below_works() {
+        assert!(breakpoints::is_below(600, breakpoints::MD_PX));
+        assert!(!breakpoints::is_below(800, breakpoints::MD_PX));
+    }
+
+    #[test]
+    fn container_max_widths_are_valid() {
+        assert!(breakpoints::container::SM.ends_with("px"));
+        assert!(breakpoints::container::MD.ends_with("px"));
+        assert!(breakpoints::container::LG.ends_with("px"));
+        assert!(breakpoints::container::XL.ends_with("px"));
+        assert!(breakpoints::container::XXL.ends_with("px"));
     }
 }

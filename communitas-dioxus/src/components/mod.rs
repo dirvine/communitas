@@ -8,6 +8,7 @@ pub mod drive;
 pub mod error_boundary;
 mod identity_switcher;
 pub mod kanban;
+pub mod layout;
 mod message_list;
 mod presence_badge;
 mod search_bar;
@@ -65,4 +66,9 @@ pub use announcer::{
     AnnouncementMode, Announcer, AnnouncerContext, announce_action, announce_assertive,
     announce_count, announce_error, announce_loaded, announce_loading, announce_navigation,
     announce_polite, announce_success, use_announcer,
+};
+// Re-export layout components for responsive layouts
+#[allow(unused_imports)]
+pub use layout::{
+    AspectRatio, Breakpoint, Center, Container, Direction, Divider, Grid, Row, Spacer, Stack,
 };

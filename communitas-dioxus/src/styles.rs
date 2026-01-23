@@ -4,7 +4,7 @@
 //! These presets ensure consistency across components while allowing
 //! customization through token values.
 
-use crate::tokens::{colors, radius, shadow, spacing, transition};
+use crate::tokens::{breakpoints, colors, radius, shadow, spacing, transition};
 
 /// Button style presets.
 pub mod button {
@@ -362,6 +362,212 @@ pub mod badge {
     }
 }
 
+/// Responsive layout style presets.
+///
+/// These utilities help create responsive layouts that adapt to different
+/// screen sizes using CSS flexbox and grid.
+pub mod responsive {
+    use super::*;
+
+    /// Container style - centered with max-width.
+    ///
+    /// Creates a centered container that constrains content width
+    /// on larger screens while allowing full width on mobile.
+    #[must_use]
+    pub fn container() -> String {
+        format!(
+            "width: 100%; margin-left: auto; margin-right: auto; padding-left: {}; padding-right: {};",
+            spacing::MD,
+            spacing::MD
+        )
+    }
+
+    /// Container with specific max-width at a breakpoint.
+    #[must_use]
+    pub fn container_max(max_width: &str) -> String {
+        format!(
+            "width: 100%; max-width: {}; margin-left: auto; margin-right: auto; padding-left: {}; padding-right: {};",
+            max_width,
+            spacing::MD,
+            spacing::MD
+        )
+    }
+
+    /// Vertical stack layout.
+    ///
+    /// Creates a vertical flex container with consistent gap.
+    #[must_use]
+    pub fn stack() -> String {
+        format!(
+            "display: flex; flex-direction: column; gap: {};",
+            spacing::MD
+        )
+    }
+
+    /// Vertical stack with custom gap.
+    #[must_use]
+    pub fn stack_gap(gap: &str) -> String {
+        format!("display: flex; flex-direction: column; gap: {};", gap)
+    }
+
+    /// Horizontal row layout.
+    ///
+    /// Creates a horizontal flex container with consistent gap.
+    #[must_use]
+    pub fn row() -> String {
+        format!("display: flex; flex-direction: row; gap: {};", spacing::MD)
+    }
+
+    /// Horizontal row with custom gap.
+    #[must_use]
+    pub fn row_gap(gap: &str) -> String {
+        format!("display: flex; flex-direction: row; gap: {};", gap)
+    }
+
+    /// Row that wraps to column on small screens (via Tailwind).
+    ///
+    /// Returns Tailwind classes for a row that becomes a column on mobile.
+    #[must_use]
+    pub fn stack_to_row() -> &'static str {
+        "flex flex-col md:flex-row gap-4"
+    }
+
+    /// Row that wraps to column on small screens (inline CSS).
+    #[must_use]
+    pub fn stack_to_row_css() -> String {
+        format!(
+            "display: flex; flex-direction: column; gap: {};",
+            spacing::MD
+        )
+    }
+
+    /// CSS grid with specified columns.
+    ///
+    /// Creates a CSS grid layout with the specified number of columns.
+    #[must_use]
+    pub fn grid(cols: usize) -> String {
+        format!(
+            "display: grid; grid-template-columns: repeat({}, minmax(0, 1fr)); gap: {};",
+            cols,
+            spacing::MD
+        )
+    }
+
+    /// CSS grid with custom gap.
+    #[must_use]
+    pub fn grid_gap(cols: usize, gap: &str) -> String {
+        format!(
+            "display: grid; grid-template-columns: repeat({}, minmax(0, 1fr)); gap: {};",
+            cols, gap
+        )
+    }
+
+    /// Auto-fit grid that adapts to available space.
+    ///
+    /// Creates a grid where items automatically adjust based on
+    /// the minimum item width specified.
+    #[must_use]
+    pub fn grid_auto(min_item_width: &str) -> String {
+        format!(
+            "display: grid; grid-template-columns: repeat(auto-fit, minmax({}, 1fr)); gap: {};",
+            min_item_width,
+            spacing::MD
+        )
+    }
+
+    /// Flex spacer - fills available space.
+    #[must_use]
+    pub fn spacer() -> &'static str {
+        "flex: 1 1 auto;"
+    }
+
+    /// Divider - horizontal line separator.
+    #[must_use]
+    pub fn divider_horizontal() -> String {
+        format!(
+            "height: 1px; width: 100%; background-color: {}; margin: {} 0;",
+            colors::BORDER_DEFAULT,
+            spacing::MD
+        )
+    }
+
+    /// Divider - vertical line separator.
+    #[must_use]
+    pub fn divider_vertical() -> String {
+        format!(
+            "width: 1px; height: 100%; background-color: {}; margin: 0 {};",
+            colors::BORDER_DEFAULT,
+            spacing::MD
+        )
+    }
+
+    /// Hide element below a breakpoint (CSS).
+    ///
+    /// Returns CSS that hides the element on screens smaller than the breakpoint.
+    #[must_use]
+    pub fn hide_below(breakpoint: &str) -> String {
+        format!("@media (max-width: {}) {{ display: none; }}", breakpoint)
+    }
+
+    /// Hide element above a breakpoint (CSS).
+    ///
+    /// Returns CSS that hides the element on screens larger than the breakpoint.
+    #[must_use]
+    pub fn hide_above(breakpoint: &str) -> String {
+        format!("@media (min-width: {}) {{ display: none; }}", breakpoint)
+    }
+
+    /// Tailwind classes for hiding below medium screens.
+    #[must_use]
+    pub fn hide_mobile() -> &'static str {
+        "hidden md:block"
+    }
+
+    /// Tailwind classes for showing only on mobile.
+    #[must_use]
+    pub fn show_mobile_only() -> &'static str {
+        "block md:hidden"
+    }
+
+    /// Centered flex container.
+    #[must_use]
+    pub fn center() -> &'static str {
+        "display: flex; align-items: center; justify-content: center;"
+    }
+
+    /// Centered flex container with column direction.
+    #[must_use]
+    pub fn center_column() -> &'static str {
+        "display: flex; flex-direction: column; align-items: center; justify-content: center;"
+    }
+
+    /// Space between items in a row.
+    #[must_use]
+    pub fn space_between() -> &'static str {
+        "display: flex; justify-content: space-between; align-items: center;"
+    }
+
+    /// Get container max-width for a breakpoint.
+    ///
+    /// Returns the appropriate max-width for responsive containers.
+    #[must_use]
+    pub fn container_max_width(width: u32) -> &'static str {
+        if width >= breakpoints::XXL_PX {
+            breakpoints::container::XXL
+        } else if width >= breakpoints::XL_PX {
+            breakpoints::container::XL
+        } else if width >= breakpoints::LG_PX {
+            breakpoints::container::LG
+        } else if width >= breakpoints::MD_PX {
+            breakpoints::container::MD
+        } else if width >= breakpoints::SM_PX {
+            breakpoints::container::SM
+        } else {
+            "100%"
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -437,5 +643,93 @@ mod tests {
         assert!(panel::sidebar().ends_with(';'));
         assert!(text::body().ends_with(';'));
         assert!(badge::default().ends_with(';'));
+    }
+
+    // Responsive module tests
+    #[test]
+    fn responsive_container_has_margin_auto() {
+        let style = responsive::container();
+        assert!(style.contains("margin-left: auto"));
+        assert!(style.contains("margin-right: auto"));
+    }
+
+    #[test]
+    fn responsive_container_max_has_max_width() {
+        let style = responsive::container_max("1024px");
+        assert!(style.contains("max-width: 1024px"));
+    }
+
+    #[test]
+    fn responsive_stack_is_column() {
+        let style = responsive::stack();
+        assert!(style.contains("flex-direction: column"));
+        assert!(style.contains("gap:"));
+    }
+
+    #[test]
+    fn responsive_row_is_row() {
+        let style = responsive::row();
+        assert!(style.contains("flex-direction: row"));
+    }
+
+    #[test]
+    fn responsive_grid_has_columns() {
+        let style = responsive::grid(3);
+        assert!(style.contains("grid-template-columns: repeat(3"));
+    }
+
+    #[test]
+    fn responsive_grid_auto_has_auto_fit() {
+        let style = responsive::grid_auto("200px");
+        assert!(style.contains("auto-fit"));
+        assert!(style.contains("200px"));
+    }
+
+    #[test]
+    fn responsive_divider_horizontal_has_height() {
+        let style = responsive::divider_horizontal();
+        assert!(style.contains("height: 1px"));
+        assert!(style.contains("width: 100%"));
+    }
+
+    #[test]
+    fn responsive_divider_vertical_has_width() {
+        let style = responsive::divider_vertical();
+        assert!(style.contains("width: 1px"));
+        assert!(style.contains("height: 100%"));
+    }
+
+    #[test]
+    fn responsive_hide_below_generates_media_query() {
+        let style = responsive::hide_below("768px");
+        assert!(style.contains("@media"));
+        assert!(style.contains("max-width: 768px"));
+        assert!(style.contains("display: none"));
+    }
+
+    #[test]
+    fn responsive_hide_above_generates_media_query() {
+        let style = responsive::hide_above("1024px");
+        assert!(style.contains("@media"));
+        assert!(style.contains("min-width: 1024px"));
+        assert!(style.contains("display: none"));
+    }
+
+    #[test]
+    fn responsive_container_max_width_returns_correct_width() {
+        assert_eq!(responsive::container_max_width(1600), "1536px");
+        assert_eq!(responsive::container_max_width(1400), "1280px");
+        assert_eq!(responsive::container_max_width(1100), "1024px");
+        assert_eq!(responsive::container_max_width(800), "768px");
+        assert_eq!(responsive::container_max_width(700), "640px");
+        assert_eq!(responsive::container_max_width(400), "100%");
+    }
+
+    #[test]
+    fn responsive_center_has_flex_center() {
+        let style = responsive::center();
+        assert!(style.contains("display: flex"));
+        assert!(style.contains("align-items: center"));
+        assert!(style.contains("justify-content: center"));
     }
 }

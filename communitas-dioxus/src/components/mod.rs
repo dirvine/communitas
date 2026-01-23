@@ -4,6 +4,7 @@ pub mod call;
 pub mod canvas;
 mod composer;
 pub mod drive;
+pub mod error_boundary;
 mod identity_switcher;
 pub mod kanban;
 mod message_list;
@@ -51,4 +52,9 @@ pub use thread_list::TypingIndicator;
 pub use skeleton::{
     SkeletonCard, SkeletonCircle, SkeletonGrid, SkeletonLine, SkeletonList, SkeletonTable,
     SkeletonText,
+};
+// Re-export error boundary components for consistent error handling
+#[allow(unused_imports)]
+pub use error_boundary::{
+    ErrorBanner, ErrorCard, ErrorPage, NetworkError, WarningBanner, user_friendly_error,
 };

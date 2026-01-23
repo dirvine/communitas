@@ -260,12 +260,13 @@ fn AppLifecycleManager() -> Element {
         }
     });
 
-    // Refresh directory when authenticated
+    // Refresh directory when authenticated (debounced to prevent network cascades
+    // when auth state flickers during startup or reconnection)
     use_future(move || {
         let services = services_for_directory.clone();
         async move {
             if matches!(phase, AuthPhase::Authenticated)
-                && let Err(err) = services.directory().refresh_all().await
+                && let Err(err) = services.directory().refresh_debounced().await
             {
                 error!("failed to refresh directory snapshot: {err}");
             }

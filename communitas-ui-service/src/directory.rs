@@ -1,4 +1,6 @@
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
 
 use communitas_core::ui_core::{CommunitasApi, UiContact, UiEntity, UiEntityType};
 use communitas_ui_api::{
@@ -6,9 +8,12 @@ use communitas_ui_api::{
 };
 use thiserror::Error;
 use tokio::sync::{RwLock, watch};
-use tracing::instrument;
+use tracing::{debug, instrument};
 
 use crate::auth::{AuthController, AuthError};
+
+/// Default debounce duration for directory refresh operations.
+const REFRESH_DEBOUNCE_MS: u64 = 200;
 
 /// Aggregate snapshot for identity, entities, and contacts.
 #[derive(Debug, Clone, Default)]
@@ -35,10 +40,15 @@ impl From<String> for DirectoryError {
 }
 
 /// Directory service backed by Communitas core.
+///
+/// Supports debounced refresh to prevent network cascades when auth state flickers.
 pub struct DirectoryService {
     auth: Arc<AuthController>,
     inner: RwLock<DirectorySnapshot>,
     tx: watch::Sender<DirectorySnapshot>,
+    /// Monotonically increasing counter for refresh requests.
+    /// Used to cancel pending debounced refreshes when a new request arrives.
+    refresh_generation: AtomicU64,
 }
 
 impl DirectoryService {
@@ -49,6 +59,7 @@ impl DirectoryService {
             auth,
             inner: RwLock::new(initial),
             tx,
+            refresh_generation: AtomicU64::new(0),
         }
     }
 
@@ -150,6 +161,56 @@ impl DirectoryService {
         }
         let _ = self.tx.send(snapshot);
         Ok(())
+    }
+
+    /// Request a debounced directory refresh.
+    ///
+    /// This method waits for the debounce period before executing the refresh.
+    /// If another refresh is requested during the debounce period, this request
+    /// is cancelled (returns Ok without doing work).
+    ///
+    /// Use this instead of [`refresh_all`] when responding to events that may
+    /// fire rapidly (e.g., auth state changes, network reconnection).
+    #[instrument(name = "ui.directory.refresh_debounced", skip(self))]
+    pub async fn refresh_debounced(&self) -> Result<(), DirectoryError> {
+        self.refresh_debounced_with_delay(Duration::from_millis(REFRESH_DEBOUNCE_MS))
+            .await
+    }
+
+    /// Request a debounced directory refresh with a custom delay.
+    ///
+    /// Internal method that allows specifying the debounce duration.
+    async fn refresh_debounced_with_delay(
+        &self,
+        debounce_duration: Duration,
+    ) -> Result<(), DirectoryError> {
+        // Increment generation and capture our value
+        let my_generation = self.refresh_generation.fetch_add(1, Ordering::SeqCst) + 1;
+
+        debug!(
+            generation = my_generation,
+            debounce_ms = debounce_duration.as_millis(),
+            "debounced refresh requested, waiting"
+        );
+
+        // Wait for debounce period
+        tokio::time::sleep(debounce_duration).await;
+
+        // Check if we're still the latest request
+        let current_generation = self.refresh_generation.load(Ordering::SeqCst);
+        if my_generation != current_generation {
+            debug!(
+                my_generation,
+                current_generation, "refresh cancelled, newer request pending"
+            );
+            return Ok(());
+        }
+
+        debug!(
+            generation = my_generation,
+            "debounce complete, executing refresh"
+        );
+        self.refresh_all().await
     }
 
     pub fn subscribe(&self) -> watch::Receiver<DirectorySnapshot> {
@@ -428,5 +489,98 @@ mod tests {
 
         // AuthController.api() should return None when not authenticated
         assert!(auth.api().is_none());
+    }
+
+    // Phase 6.8: Debounced refresh tests
+
+    #[test]
+    fn refresh_generation_starts_at_zero() {
+        let temp = TempDir::new().unwrap();
+        let service = make_directory_service(&temp);
+
+        // Initial generation should be 0
+        let generation = service.refresh_generation.load(Ordering::SeqCst);
+        assert_eq!(generation, 0);
+    }
+
+    #[tokio::test]
+    async fn debounced_refresh_increments_generation() {
+        let temp = TempDir::new().unwrap();
+        let service = Arc::new(make_directory_service(&temp));
+
+        // Start a debounced refresh with a short delay
+        let service_clone = service.clone();
+        let handle = tokio::spawn(async move {
+            // Use a very short debounce for testing
+            service_clone
+                .refresh_debounced_with_delay(Duration::from_millis(10))
+                .await
+        });
+
+        // Generation should have incremented
+        tokio::time::sleep(Duration::from_millis(1)).await;
+        let generation = service.refresh_generation.load(Ordering::SeqCst);
+        assert_eq!(generation, 1);
+
+        // Wait for the task to complete
+        let _ = handle.await;
+    }
+
+    #[tokio::test]
+    async fn rapid_debounced_refreshes_cancel_earlier_ones() {
+        let temp = TempDir::new().unwrap();
+        let service = Arc::new(make_directory_service(&temp));
+
+        // Start multiple rapid debounced refreshes
+        let mut handles = Vec::new();
+        for _ in 0..5 {
+            let svc = service.clone();
+            handles.push(tokio::spawn(async move {
+                svc.refresh_debounced_with_delay(Duration::from_millis(20))
+                    .await
+            }));
+            // Small delay to ensure ordering
+            tokio::time::sleep(Duration::from_millis(2)).await;
+        }
+
+        // Wait for all to complete
+        for handle in handles {
+            let _ = handle.await;
+        }
+
+        // Generation should be 5 (one increment per request)
+        let final_gen = service.refresh_generation.load(Ordering::SeqCst);
+        assert_eq!(final_gen, 5);
+    }
+
+    #[tokio::test]
+    async fn debounced_refresh_returns_ok_when_cancelled() {
+        let temp = TempDir::new().unwrap();
+        let service = Arc::new(make_directory_service(&temp));
+
+        // Start first debounced refresh with longer delay
+        let svc1 = service.clone();
+        let handle1 = tokio::spawn(async move {
+            svc1.refresh_debounced_with_delay(Duration::from_millis(50))
+                .await
+        });
+
+        // Wait a bit then start another (which will cancel the first)
+        tokio::time::sleep(Duration::from_millis(10)).await;
+        let svc2 = service.clone();
+        let handle2 = tokio::spawn(async move {
+            svc2.refresh_debounced_with_delay(Duration::from_millis(10))
+                .await
+        });
+
+        // Both should return Ok - first was cancelled, second ran
+        let result1 = handle1.await.unwrap();
+        let result2 = handle2.await.unwrap();
+
+        // First one was cancelled, so it returns Ok (no-op)
+        assert!(result1.is_ok());
+        // Second one actually tried to refresh but fails due to no auth
+        // It will return NotAuthenticated error since we're not logged in
+        assert!(result2.is_err());
     }
 }

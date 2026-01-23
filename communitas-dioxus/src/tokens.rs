@@ -122,6 +122,195 @@ pub mod transition {
     pub const SLOW: &str = "300ms ease-in-out";
 }
 
+/// Motion preference utilities for accessibility.
+///
+/// These utilities help respect the user's `prefers-reduced-motion` setting.
+/// Use `motion_safe_class()` to conditionally apply animation classes,
+/// and `transition_safe()` to conditionally apply transitions.
+///
+/// # Example
+/// ```rust
+/// use communitas_dioxus::tokens::motion;
+///
+/// // Returns "animate-pulse" if motion allowed, "" otherwise
+/// let class = motion::animation_class("animate-pulse");
+///
+/// // Returns full transition CSS or "transition: none" if reduced motion
+/// let style = motion::transition_safe(transition::DEFAULT);
+/// ```
+pub mod motion {
+    use super::transition;
+
+    /// CSS media query for prefers-reduced-motion.
+    pub const MEDIA_REDUCE_MOTION: &str = "@media (prefers-reduced-motion: reduce)";
+
+    /// CSS custom property for transition duration (use in stylesheets).
+    pub const CSS_VAR_TRANSITION_DURATION: &str = "--transition-duration";
+
+    /// CSS custom property value for normal motion.
+    pub const CSS_VAR_DURATION_NORMAL: &str = "200ms";
+
+    /// CSS custom property value for reduced motion.
+    pub const CSS_VAR_DURATION_REDUCED: &str = "0ms";
+
+    /// Returns a CSS transition property that respects reduce-motion.
+    ///
+    /// This generates CSS using a CSS custom property that can be overridden
+    /// via media query for users who prefer reduced motion.
+    ///
+    /// # Arguments
+    /// * `property` - The CSS property to transition (e.g., "all", "opacity", "transform")
+    /// * `duration` - The transition duration from `transition` module (e.g., `transition::DEFAULT`)
+    ///
+    /// # Returns
+    /// CSS string with transition using custom property.
+    #[must_use]
+    pub fn transition_safe(property: &str, duration: &str) -> String {
+        format!(
+            "transition: {} {}; transition: {} var({}, {});",
+            property, duration, property, CSS_VAR_TRANSITION_DURATION, duration
+        )
+    }
+
+    /// Returns a CSS transition for 'all' properties that respects reduce-motion.
+    ///
+    /// Convenience wrapper around `transition_safe("all", duration)`.
+    #[must_use]
+    pub fn transition_all_safe(duration: &str) -> String {
+        transition_safe("all", duration)
+    }
+
+    /// Returns the default transition with reduce-motion support.
+    #[must_use]
+    pub fn transition_default_safe() -> String {
+        transition_all_safe(transition::DEFAULT)
+    }
+
+    /// Returns CSS animation property that respects reduce-motion.
+    ///
+    /// Uses CSS custom property for animation duration that can be set to 0
+    /// when user prefers reduced motion.
+    ///
+    /// # Arguments
+    /// * `animation_name` - Name of the keyframe animation
+    /// * `duration` - Animation duration (e.g., "1s", "200ms")
+    /// * `timing` - Timing function (e.g., "ease-in-out", "linear")
+    /// * `iteration` - Iteration count (e.g., "infinite", "1")
+    #[must_use]
+    pub fn animation_safe(
+        animation_name: &str,
+        duration: &str,
+        timing: &str,
+        iteration: &str,
+    ) -> String {
+        format!(
+            "animation: {} {} {} {}; animation: {} var(--animation-duration, {}) {} {};",
+            animation_name,
+            duration,
+            timing,
+            iteration,
+            animation_name,
+            duration,
+            timing,
+            iteration
+        )
+    }
+
+    /// Returns the Tailwind class for animation, or empty string if motion should be reduced.
+    ///
+    /// This is useful for conditionally applying Tailwind animation classes.
+    /// The actual motion preference detection happens via CSS media queries,
+    /// so this function returns the class and CSS handles the reduction.
+    ///
+    /// For Tailwind, use `motion-safe:` and `motion-reduce:` prefixes instead:
+    /// - `motion-safe:animate-pulse` - Only animate when motion is allowed
+    /// - `motion-reduce:animate-none` - Disable animation when motion is reduced
+    ///
+    /// # Arguments
+    /// * `normal_class` - The Tailwind class to apply when motion is allowed
+    ///
+    /// # Returns
+    /// CSS class string with motion-safe prefix.
+    #[must_use]
+    pub fn animation_class(normal_class: &str) -> String {
+        format!("motion-safe:{}", normal_class)
+    }
+
+    /// Returns CSS classes for both motion states.
+    ///
+    /// # Arguments
+    /// * `normal_class` - Class when motion is allowed
+    /// * `reduced_class` - Class when motion is reduced (can be empty)
+    ///
+    /// # Returns
+    /// Combined CSS class string with appropriate motion prefixes.
+    #[must_use]
+    pub fn motion_class(normal_class: &str, reduced_class: &str) -> String {
+        if reduced_class.is_empty() {
+            format!("motion-safe:{}", normal_class)
+        } else {
+            format!(
+                "motion-safe:{} motion-reduce:{}",
+                normal_class, reduced_class
+            )
+        }
+    }
+
+    /// Generates CSS custom property declarations for motion preferences.
+    ///
+    /// Include this in your root stylesheet to enable motion-safe transitions
+    /// throughout the application.
+    ///
+    /// # Returns
+    /// CSS string with custom property declarations and media query.
+    #[must_use]
+    pub fn css_custom_properties() -> String {
+        format!(
+            r#":root {{
+  {}: {};
+  --animation-duration: 1s;
+}}
+
+{} {{
+  :root {{
+    {}: {};
+    --animation-duration: 0.01ms;
+  }}
+}}"#,
+            CSS_VAR_TRANSITION_DURATION,
+            CSS_VAR_DURATION_NORMAL,
+            MEDIA_REDUCE_MOTION,
+            CSS_VAR_TRANSITION_DURATION,
+            CSS_VAR_DURATION_REDUCED
+        )
+    }
+
+    /// Check if a given Tailwind class is an animation class.
+    #[must_use]
+    pub fn is_animation_class(class: &str) -> bool {
+        class.starts_with("animate-") || class.contains("transition")
+    }
+
+    /// Wrap animation classes with motion-safe prefix.
+    ///
+    /// Scans a class string and wraps any animation-related classes
+    /// with the `motion-safe:` Tailwind prefix.
+    #[must_use]
+    pub fn wrap_animation_classes(classes: &str) -> String {
+        classes
+            .split_whitespace()
+            .map(|class| {
+                if is_animation_class(class) {
+                    format!("motion-safe:{}", class)
+                } else {
+                    class.to_string()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+}
+
 // Style builder helpers
 
 /// Generate background-color CSS property.
@@ -275,5 +464,82 @@ mod tests {
     fn styles_combines_parts() {
         let css = styles(&["color: red;", "background: blue;"]);
         assert_eq!(css, "color: red; background: blue;");
+    }
+
+    // Motion module tests
+    #[test]
+    fn motion_transition_safe_generates_css() {
+        let css = motion::transition_safe("opacity", transition::DEFAULT);
+        assert!(css.contains("transition: opacity 200ms ease-in-out"));
+        assert!(css.contains("var(--transition-duration"));
+    }
+
+    #[test]
+    fn motion_transition_all_safe_generates_css() {
+        let css = motion::transition_all_safe(transition::FAST);
+        assert!(css.contains("transition: all 150ms ease-in-out"));
+    }
+
+    #[test]
+    fn motion_transition_default_safe_uses_default_duration() {
+        let css = motion::transition_default_safe();
+        assert!(css.contains("200ms"));
+    }
+
+    #[test]
+    fn motion_animation_safe_generates_css() {
+        let css = motion::animation_safe("pulse", "2s", "ease-in-out", "infinite");
+        assert!(css.contains("animation: pulse 2s ease-in-out infinite"));
+        assert!(css.contains("--animation-duration"));
+    }
+
+    #[test]
+    fn motion_animation_class_adds_prefix() {
+        let class = motion::animation_class("animate-pulse");
+        assert_eq!(class, "motion-safe:animate-pulse");
+    }
+
+    #[test]
+    fn motion_class_with_both_states() {
+        let class = motion::motion_class("animate-pulse", "opacity-100");
+        assert_eq!(class, "motion-safe:animate-pulse motion-reduce:opacity-100");
+    }
+
+    #[test]
+    fn motion_class_with_empty_reduced() {
+        let class = motion::motion_class("animate-spin", "");
+        assert_eq!(class, "motion-safe:animate-spin");
+    }
+
+    #[test]
+    fn motion_css_custom_properties_includes_media_query() {
+        let css = motion::css_custom_properties();
+        assert!(css.contains(":root"));
+        assert!(css.contains("--transition-duration"));
+        assert!(css.contains("@media (prefers-reduced-motion: reduce)"));
+    }
+
+    #[test]
+    fn motion_is_animation_class_detects_animate() {
+        assert!(motion::is_animation_class("animate-pulse"));
+        assert!(motion::is_animation_class("animate-spin"));
+        assert!(motion::is_animation_class("transition"));
+        assert!(motion::is_animation_class("transition-colors"));
+        assert!(!motion::is_animation_class("flex"));
+        assert!(!motion::is_animation_class("p-4"));
+    }
+
+    #[test]
+    fn motion_wrap_animation_classes_wraps_correctly() {
+        let input = "flex animate-pulse p-4 transition-colors bg-slate-800";
+        let output = motion::wrap_animation_classes(input);
+        assert!(output.contains("motion-safe:animate-pulse"));
+        assert!(output.contains("motion-safe:transition-colors"));
+        assert!(output.contains("flex"));
+        assert!(output.contains("p-4"));
+        assert!(output.contains("bg-slate-800"));
+        // Non-animation classes should NOT have prefix
+        assert!(!output.contains("motion-safe:flex"));
+        assert!(!output.contains("motion-safe:p-4"));
     }
 }

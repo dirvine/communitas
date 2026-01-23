@@ -32,3 +32,8 @@ dioxus-ssr = "0.7"
 dioxus-history = "0.7"
 tempfile = "3.10"
 tokio-test = { version = "0.4" }
+criterion = { version = "0.5", features = ["async_tokio"] }
+
+[[bench]]
+name = "startup"
+harness = false

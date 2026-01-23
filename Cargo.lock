@@ -1411,6 +1411,7 @@ dependencies = [
  "communitas-ui-api",
  "communitas-ui-service",
  "cpal",
+ "criterion",
  "dioxus",
  "dioxus-history",
  "dioxus-logger 0.5.1",

@@ -1556,6 +1556,7 @@ dependencies = [
  "communitas-ui-api",
  "dirs 5.0.1",
  "hex",
+ "proptest",
  "saorsa-webrtc-core",
  "serde",
  "serde_json",

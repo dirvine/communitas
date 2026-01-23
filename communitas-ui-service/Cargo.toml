@@ -32,5 +32,6 @@ default = []
 test-utils = []
 
 [dev-dependencies]
+proptest = "1.5"
 tempfile = "3"
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

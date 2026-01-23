@@ -8,6 +8,11 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tokio::fs;
 
+/// Default for auto_update_enabled field
+fn default_auto_update_enabled() -> bool {
+    true
+}
+
 /// Application-level configuration (unencrypted)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
@@ -35,6 +40,27 @@ pub struct AppConfig {
 
     /// Configuration version for migration
     pub version: u32,
+
+    // Beta features
+    /// Whether the onboarding tour has been completed
+    #[serde(default)]
+    pub onboarding_completed: bool,
+
+    /// Version when onboarding tour was last shown/completed
+    #[serde(default)]
+    pub onboarding_version: Option<String>,
+
+    /// Whether to automatically check for updates (defaults to true)
+    #[serde(default = "default_auto_update_enabled")]
+    pub auto_update_enabled: bool,
+
+    /// ISO 8601 timestamp of last update check
+    #[serde(default)]
+    pub last_update_check: Option<String>,
+
+    /// Version to skip update prompts for
+    #[serde(default)]
+    pub skip_version: Option<String>,
 }
 
 /// Information about a recently used identity
@@ -72,7 +98,67 @@ impl Default for AppConfig {
             pinned_threads: Vec::new(),
             ui_preferences: UiPreferences::default(),
             version: 1,
+            onboarding_completed: false,
+            onboarding_version: None,
+            auto_update_enabled: true,
+            last_update_check: None,
+            skip_version: None,
         }
+    }
+}
+
+impl AppConfig {
+    /// Determines if onboarding should be shown based on completion status and version.
+    ///
+    /// Returns true if:
+    /// - Onboarding has never been completed, OR
+    /// - Onboarding was completed for a different version
+    pub fn should_show_onboarding(&self, current_version: &str) -> bool {
+        if !self.onboarding_completed {
+            return true;
+        }
+        match &self.onboarding_version {
+            Some(v) => v != current_version,
+            None => true,
+        }
+    }
+
+    /// Marks onboarding as completed for the given version.
+    pub fn mark_onboarding_completed(&mut self, version: &str) {
+        self.onboarding_completed = true;
+        self.onboarding_version = Some(version.to_string());
+    }
+
+    /// Determines if an update check should be performed.
+    ///
+    /// Returns true if:
+    /// - auto_update_enabled is true, AND
+    /// - Either no previous check exists, or enough time has passed
+    ///
+    /// Note: Time comparison is the caller's responsibility. This method returns
+    /// true if auto-update is enabled and there's no previous check timestamp.
+    pub fn should_check_update(&self) -> bool {
+        self.auto_update_enabled && self.last_update_check.is_none()
+    }
+
+    /// Records that an update check was performed at the given ISO 8601 timestamp.
+    pub fn record_update_check(&mut self, timestamp: &str) {
+        self.last_update_check = Some(timestamp.to_string());
+    }
+
+    /// Sets a version to skip update prompts for.
+    pub fn set_skip_version(&mut self, version: &str) {
+        self.skip_version = Some(version.to_string());
+    }
+
+    /// Checks if the given version should be skipped.
+    pub fn should_skip_version(&self, version: &str) -> bool {
+        self.skip_version.as_deref() == Some(version)
+    }
+
+    /// Clears the skip version setting.
+    pub fn clear_skip_version(&mut self) {
+        self.skip_version = None;
     }
 }
 
@@ -520,5 +606,107 @@ mod tests {
         assert!(manager.is_thread_pinned("thread-a"));
         assert!(manager.is_thread_pinned("thread-b"));
         assert_eq!(manager.get_pinned_threads().len(), 2);
+    }
+
+    // Beta feature tests
+
+    #[test]
+    fn test_should_show_onboarding_first_run() {
+        let config = AppConfig::default();
+        assert!(
+            config.should_show_onboarding("1.0.0"),
+            "Onboarding should show on first run"
+        );
+    }
+
+    #[test]
+    fn test_should_show_onboarding_after_version_upgrade() {
+        let mut config = AppConfig::default();
+        config.mark_onboarding_completed("1.0.0");
+
+        assert!(
+            !config.should_show_onboarding("1.0.0"),
+            "Onboarding should not show for same version"
+        );
+        assert!(
+            config.should_show_onboarding("1.1.0"),
+            "Onboarding should show for new version"
+        );
+    }
+
+    #[test]
+    fn test_mark_onboarding_completed() {
+        let mut config = AppConfig::default();
+        config.mark_onboarding_completed("2.0.0");
+
+        assert!(config.onboarding_completed);
+        assert_eq!(config.onboarding_version, Some("2.0.0".to_string()));
+    }
+
+    #[test]
+    fn test_should_check_update_default() {
+        let config = AppConfig::default();
+        assert!(
+            config.should_check_update(),
+            "Should check update when enabled and no previous check"
+        );
+    }
+
+    #[test]
+    fn test_should_check_update_disabled() {
+        let mut config = AppConfig::default();
+        config.auto_update_enabled = false;
+        assert!(
+            !config.should_check_update(),
+            "Should not check when disabled"
+        );
+    }
+
+    #[test]
+    fn test_should_check_update_has_previous() {
+        let mut config = AppConfig::default();
+        config.record_update_check("2026-01-23T12:00:00Z");
+        assert!(
+            !config.should_check_update(),
+            "Should not immediately check again after recent check"
+        );
+    }
+
+    #[test]
+    fn test_skip_version() {
+        let mut config = AppConfig::default();
+        assert!(!config.should_skip_version("1.5.0"));
+
+        config.set_skip_version("1.5.0");
+        assert!(config.should_skip_version("1.5.0"));
+        assert!(!config.should_skip_version("1.6.0"));
+
+        config.clear_skip_version();
+        assert!(!config.should_skip_version("1.5.0"));
+    }
+
+    #[test]
+    fn test_backward_compat_deserialize() {
+        // Old config without new fields should deserialize with defaults
+        let json = r#"{
+            "last_identity": "test-words",
+            "auto_login_enabled": true,
+            "keyring_enabled": true,
+            "biometric_enabled": false,
+            "recent_identities": [],
+            "pinned_threads": [],
+            "ui_preferences": {
+                "theme": "System",
+                "language": "en",
+                "show_identity_picker_on_startup": true
+            },
+            "version": 1
+        }"#;
+
+        let config: AppConfig = serde_json::from_str(json).expect("Should deserialize old config");
+        assert!(!config.onboarding_completed);
+        assert!(config.auto_update_enabled);
+        assert!(config.last_update_check.is_none());
+        assert!(config.skip_version.is_none());
     }
 }

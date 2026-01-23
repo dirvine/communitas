@@ -41,7 +41,13 @@ fn ui_services() -> Arc<UiServices> {
         .clone()
 }
 
-fn main() {
+/// Main entry point for the Dioxus application.
+///
+/// Uses `#[tokio::main]` to provide an async runtime, allowing the use of
+/// `bootstrap_with_device_enumerator_async()` which avoids creating a nested
+/// Tokio runtime for better startup performance.
+#[tokio::main]
+async fn main() {
     if let Err(err) = dioxus_logger::init(Level::INFO) {
         eprintln!("failed to init logger: {err}");
     }
@@ -60,11 +66,15 @@ fn main() {
     }
     // Create platform device enumerator for real audio device discovery
     let device_enumerator = platform::create_device_enumerator();
-    let services =
-        UiServices::bootstrap_with_device_enumerator(device_enumerator).unwrap_or_else(|err| {
+
+    // Use async bootstrap to avoid nested runtime overhead
+    let services = UiServices::bootstrap_with_device_enumerator_async(device_enumerator)
+        .await
+        .unwrap_or_else(|err| {
             eprintln!("failed to initialize UI services: {err}");
             std::process::exit(1);
         });
+
     // Start call-to-presence sync so call/screen share status updates presence
     services.start_call_presence_sync();
     if UI_SERVICES.set(Arc::new(services)).is_err() {

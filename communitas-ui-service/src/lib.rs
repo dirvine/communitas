@@ -105,14 +105,46 @@ impl UiServices {
 }
 
 impl UiServices {
+    /// Bootstrap UiServices with auto-discovered storage and a generated identity (async).
+    ///
+    /// This is the recommended method for applications running in an async context.
+    /// Use this when you already have a Tokio runtime (e.g., `#[tokio::main]`).
+    ///
+    /// # Errors
+    /// Returns an error if storage discovery fails or the app cannot be initialized.
+    #[tracing::instrument(name = "bootstrap_async", skip_all)]
+    pub async fn bootstrap_async() -> Result<Self, UiServiceInitError> {
+        let storage = UiStorage::discover()?;
+        let storage_path = storage.root_string()?;
+
+        let id_words =
+            generate_id_words().map_err(|e| UiServiceInitError::AppInit(e.to_string()))?;
+
+        tracing::info!("Creating CommunitasApp");
+        let app = CommunitasApp::new(
+            id_words,
+            "Bootstrap User".to_string(),
+            "Desktop".to_string(),
+            storage_path,
+        )
+        .await
+        .map_err(|e| UiServiceInitError::AppInit(e.to_string()))?;
+
+        Self::new(storage, Arc::new(app))
+    }
+
     /// Bootstrap UiServices with auto-discovered storage and a generated identity.
     ///
     /// This is a convenience method for applications that need to start without
     /// prior authentication. A temporary identity is created, and the user can
     /// log in or create a new identity through the auth service later.
     ///
+    /// **Note**: Prefer `bootstrap_async()` when running in an async context to
+    /// avoid creating a nested Tokio runtime.
+    ///
     /// # Errors
     /// Returns an error if storage discovery fails or the app cannot be initialized.
+    #[tracing::instrument(name = "bootstrap_sync", skip_all)]
     pub fn bootstrap() -> Result<Self, UiServiceInitError> {
         let storage = UiStorage::discover()?;
         let storage_path = storage.root_string()?;
@@ -304,14 +336,48 @@ impl UiServices {
         })
     }
 
+    /// Bootstrap with a custom device enumerator (async).
+    ///
+    /// This is the recommended way to initialize UiServices when you have
+    /// platform-specific device enumeration and are running in an async context.
+    ///
+    /// # Errors
+    /// Returns an error if storage discovery fails or the app cannot be initialized.
+    #[tracing::instrument(name = "bootstrap_with_device_enumerator_async", skip_all)]
+    pub async fn bootstrap_with_device_enumerator_async(
+        device_enumerator: Arc<dyn DeviceEnumerator>,
+    ) -> Result<Self, UiServiceInitError> {
+        let storage = UiStorage::discover()?;
+        let storage_path = storage.root_string()?;
+
+        let id_words =
+            generate_id_words().map_err(|e| UiServiceInitError::AppInit(e.to_string()))?;
+
+        tracing::info!("Creating CommunitasApp with device enumerator");
+        let app = CommunitasApp::new(
+            id_words,
+            "Bootstrap User".to_string(),
+            "Desktop".to_string(),
+            storage_path,
+        )
+        .await
+        .map_err(|e| UiServiceInitError::AppInit(e.to_string()))?;
+
+        Self::new_with_device_enumerator(storage, Arc::new(app), device_enumerator)
+    }
+
     /// Bootstrap with a custom device enumerator.
     ///
     /// This is the recommended way to initialize UiServices when you have
     /// platform-specific device enumeration. It combines the auto-discovery
     /// of storage and bootstrap identity with real device support.
     ///
+    /// **Note**: Prefer `bootstrap_with_device_enumerator_async()` when running
+    /// in an async context to avoid creating a nested Tokio runtime.
+    ///
     /// # Errors
     /// Returns an error if storage discovery fails or the app cannot be initialized.
+    #[tracing::instrument(name = "bootstrap_with_device_enumerator_sync", skip_all)]
     pub fn bootstrap_with_device_enumerator(
         device_enumerator: Arc<dyn DeviceEnumerator>,
     ) -> Result<Self, UiServiceInitError> {
@@ -339,13 +405,53 @@ impl UiServices {
         Self::new_with_device_enumerator(storage, Arc::new(app), device_enumerator)
     }
 
+    /// Bootstrap with custom device and screen source enumerators (async).
+    ///
+    /// This is the most flexible bootstrap for production use with platform-specific
+    /// device and screen capture enumeration when running in an async context.
+    ///
+    /// # Errors
+    /// Returns an error if storage discovery fails or the app cannot be initialized.
+    #[tracing::instrument(name = "bootstrap_with_enumerators_async", skip_all)]
+    pub async fn bootstrap_with_enumerators_async(
+        device_enumerator: Arc<dyn DeviceEnumerator>,
+        screen_source_enumerator: Arc<dyn ScreenSourceEnumerator>,
+    ) -> Result<Self, UiServiceInitError> {
+        let storage = UiStorage::discover()?;
+        let storage_path = storage.root_string()?;
+
+        let id_words =
+            generate_id_words().map_err(|e| UiServiceInitError::AppInit(e.to_string()))?;
+
+        tracing::info!("Creating CommunitasApp with device and screen enumerators");
+        let app = CommunitasApp::new(
+            id_words,
+            "Bootstrap User".to_string(),
+            "Desktop".to_string(),
+            storage_path,
+        )
+        .await
+        .map_err(|e| UiServiceInitError::AppInit(e.to_string()))?;
+
+        Self::new_with_enumerators(
+            storage,
+            Arc::new(app),
+            device_enumerator,
+            screen_source_enumerator,
+        )
+    }
+
     /// Bootstrap with custom device and screen source enumerators.
     ///
     /// This is the most flexible bootstrap for production use with platform-specific
     /// device and screen capture enumeration.
     ///
+    /// **Note**: Prefer `bootstrap_with_enumerators_async()` when running
+    /// in an async context to avoid creating a nested Tokio runtime.
+    ///
     /// # Errors
     /// Returns an error if storage discovery fails or the app cannot be initialized.
+    #[tracing::instrument(name = "bootstrap_with_enumerators_sync", skip_all)]
     pub fn bootstrap_with_enumerators(
         device_enumerator: Arc<dyn DeviceEnumerator>,
         screen_source_enumerator: Arc<dyn ScreenSourceEnumerator>,

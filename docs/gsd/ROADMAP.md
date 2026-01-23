@@ -24,9 +24,10 @@ _Last updated: 2026-01-22_
 | **6.4** | Calls & Presence | Complete |
 | **6.5** | Canvas Integration | Complete |
 | **6.6** | Kanban Polish | Complete |
-| **6.7** | UX & Accessibility | Pending |
-| **6.8** | Testing & Tooling | Pending |
-| **6.9** | Apple Beta Packaging | Pending |
+| **6.7** | UX & Accessibility | Complete |
+| **6.8** | Performance & Optimization | Complete |
+| **6.9** | Testing & Tooling | Pending |
+| **6.10** | Apple Beta Packaging | Pending |
 
 ---
 
@@ -142,7 +143,25 @@ _Last updated: 2026-01-22_
 
 ---
 
-## Phase 6.8: Testing & Tooling
+## Phase 6.8: Performance & Optimization (Complete)
+
+**Goal**: Optimize startup, memory, and runtime performance.
+
+**Completed Tasks**:
+- Remove nested Tokio runtime (async bootstrap)
+- Lazy device enumeration
+- LRU cache for CRDT documents
+- Debounced operations (auto-login, directory refresh, CRDT subscriptions)
+- Single-pass entity categorization
+- Parallel file I/O for CRDT persistence
+- Signal consolidation (CardInteractionState enum)
+- Iterator-based swimlane grouping
+- Startup timing instrumentation
+- Performance documentation and benchmarks
+
+---
+
+## Phase 6.9: Testing & Tooling
 
 **Goal**: Comprehensive test coverage for beta confidence.
 
@@ -166,7 +185,7 @@ _Last updated: 2026-01-22_
 
 ---
 
-## Phase 6.9: Apple Beta Packaging
+## Phase 6.10: Apple Beta Packaging
 
 **Goal**: Ship internal beta.
 

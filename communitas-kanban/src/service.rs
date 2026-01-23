@@ -6,11 +6,13 @@
 
 use std::num::NonZeroUsize;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
 use chrono::Utc;
 use lru::LruCache;
 use tokio::sync::mpsc;
-use tracing::{debug, info, instrument, warn};
+use tracing::{debug, info, instrument, trace, warn};
 use uuid::Uuid;
 use yrs::observer::Subscription;
 use yrs::updates::decoder::Decode;
@@ -19,6 +21,10 @@ use yrs::{
     Any, Array, ArrayRef, Doc, GetString, Map, MapRef, Out, ReadTxn, Text, TextRef, Transact,
     WriteTxn,
 };
+
+/// Default debounce duration for CRDT subscription events.
+/// Events within this window are collapsed into a single notification.
+const SUBSCRIPTION_DEBOUNCE_MS: u64 = 50;
 
 /// Maximum number of board documents to keep in the LRU cache.
 /// Documents for boards accessed least recently will be evicted when
@@ -46,6 +52,9 @@ struct BoardSubscription {
     /// Kept alive so the receiver stays open; prefixed with underscore
     /// since we send via a cloned sender in the observer closure.
     _sender: mpsc::Sender<KanbanEvent>,
+    /// Flag indicating an event is pending debounce.
+    /// Used by the debounce task to know when to send an event.
+    _pending_event: Arc<AtomicBool>,
 }
 
 /// High-level service for Kanban operations.
@@ -2000,30 +2009,51 @@ impl KanbanService {
         &self,
         board_id: &str,
     ) -> KanbanResult<mpsc::Receiver<KanbanEvent>> {
+        self.subscribe_to_changes_with_debounce(board_id, SUBSCRIPTION_DEBOUNCE_MS)
+    }
+
+    /// Subscribe to board changes with a custom debounce duration.
+    ///
+    /// Events are debounced by collapsing rapid updates into a single notification.
+    /// This reduces UI re-renders during rapid typing or bulk operations.
+    ///
+    /// # Arguments
+    ///
+    /// * `board_id` - ID of the board to subscribe to
+    /// * `debounce_ms` - Debounce duration in milliseconds (0 to disable)
+    ///
+    /// # Returns
+    ///
+    /// A channel receiver for debounced `KanbanEvent`s.
+    #[instrument(skip(self))]
+    pub fn subscribe_to_changes_with_debounce(
+        &self,
+        board_id: &str,
+        debounce_ms: u64,
+    ) -> KanbanResult<mpsc::Receiver<KanbanEvent>> {
         let doc = self.get_doc(board_id)?;
 
-        // Create channel with buffer for bursts
+        // Create the output channel for debounced events
         let (tx, rx) = mpsc::channel(64);
 
-        // Clone board_id for the closure
+        // Atomic flag for debounce coordination
+        let pending_event = Arc::new(AtomicBool::new(false));
+        let pending_for_callback = pending_event.clone();
+
+        // Clone board_id for the closure and task
         let board_id_owned = board_id.to_string();
-        let sender = tx.clone();
+        let board_id_for_task = board_id.to_string();
 
         // Subscribe to after-transaction events
         let subscription = doc
             .observe_after_transaction(move |_txn| {
-                // Emit a generic BoardChanged event
-                // The subscriber can decide to refresh the full board state
-                let event = KanbanEvent::BoardChanged {
-                    board_id: board_id_owned.clone(),
-                };
-
-                // Use try_send to avoid blocking if the receiver is slow
-                if sender.try_send(event).is_err() {
-                    warn!(
+                // Set the pending flag - the debounce task will pick this up
+                let was_pending = pending_for_callback.swap(true, Ordering::SeqCst);
+                if !was_pending {
+                    trace!(
                         target = "kanban.crdt",
                         board_id = %board_id_owned,
-                        "Failed to send CRDT event - channel full or closed"
+                        "CRDT event triggered, starting debounce"
                     );
                 }
             })
@@ -2031,10 +2061,56 @@ impl KanbanService {
                 KanbanError::Crdt(format!("Failed to subscribe to board changes: {:?}", e))
             })?;
 
+        // Spawn debounce task
+        let sender = tx.clone();
+        let pending_for_task = pending_event.clone();
+        let debounce_duration = Duration::from_millis(debounce_ms);
+
+        tokio::spawn(async move {
+            loop {
+                // Wait a bit before checking for pending events
+                tokio::time::sleep(debounce_duration).await;
+
+                // Check if there's a pending event
+                if pending_for_task.swap(false, Ordering::SeqCst) {
+                    let event = KanbanEvent::BoardChanged {
+                        board_id: board_id_for_task.clone(),
+                    };
+
+                    trace!(
+                        target = "kanban.crdt",
+                        board_id = %board_id_for_task,
+                        "Sending debounced CRDT event"
+                    );
+
+                    // Send the debounced event
+                    if sender.send(event).await.is_err() {
+                        debug!(
+                            target = "kanban.crdt",
+                            board_id = %board_id_for_task,
+                            "Debounce task stopping - channel closed"
+                        );
+                        break;
+                    }
+                }
+
+                // Check if sender is closed (receiver dropped)
+                if sender.is_closed() {
+                    debug!(
+                        target = "kanban.crdt",
+                        board_id = %board_id_for_task,
+                        "Debounce task stopping - sender closed"
+                    );
+                    break;
+                }
+            }
+        });
+
         // Store the subscription to keep it alive
         let board_sub = BoardSubscription {
             _subscription: subscription,
             _sender: tx,
+            _pending_event: pending_event,
         };
 
         let mut subs = self
@@ -2043,7 +2119,11 @@ impl KanbanService {
             .unwrap_or_else(|e| e.into_inner());
         subs.insert(board_id.to_string(), board_sub);
 
-        debug!(board_id = %board_id, "Subscribed to CRDT changes");
+        debug!(
+            board_id = %board_id,
+            debounce_ms,
+            "Subscribed to debounced CRDT changes"
+        );
         Ok(rx)
     }
 
@@ -2862,8 +2942,8 @@ mod tests {
         assert!(service.get_board(&new_board.id).is_ok());
     }
 
-    #[test]
-    fn test_eviction_cleans_up_subscriptions() {
+    #[tokio::test]
+    async fn test_eviction_cleans_up_subscriptions() {
         let service = KanbanService::new("user-1");
 
         // Create a board and subscribe to it
@@ -2884,5 +2964,35 @@ mod tests {
 
         // The original board should be evicted and its subscription cleaned up
         assert!(!service.has_subscription(&board.id));
+    }
+
+    #[tokio::test]
+    async fn test_debounced_subscription_collapses_events() {
+        let service = KanbanService::new("user-1");
+
+        // Create a board
+        let board = service
+            .create_board("project", "Test Board".to_string(), None)
+            .unwrap();
+
+        // Subscribe with very short debounce
+        let mut rx = service
+            .subscribe_to_changes_with_debounce(&board.id, 10)
+            .unwrap();
+
+        // Add a column to trigger events
+        service
+            .add_column(&board.id, "To Do".to_string(), None)
+            .unwrap();
+
+        // Wait a bit longer than debounce period
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        // Should receive exactly one debounced event
+        let event = rx.try_recv();
+        assert!(
+            event.is_ok(),
+            "Expected to receive debounced event after column creation"
+        );
     }
 }

@@ -1,6 +1,7 @@
 //! Filter panel for Kanban board swimlane and card filtering.
 
-use communitas_ui_api::kanban::{CardState, PriorityView, SwimlaneMode};
+use chrono::Timelike;
+use communitas_ui_api::kanban::{CardState, CardView, PriorityView, SwimlaneMode};
 use dioxus::prelude::*;
 
 /// Represents the active filters for a board.
@@ -23,9 +24,46 @@ pub struct BoardFilters {
 /// Due date filter options.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DueDateFilter {
+    /// Cards that are past due
     Overdue,
+    /// Cards due today
+    DueToday,
+    /// Cards due within the next 7 days
+    DueThisWeek,
+    /// Cards due within the next 3 days
     DueSoon,
+    /// Cards that have a due date set
+    HasDueDate,
+    /// Cards that have no due date
     NoDate,
+}
+
+impl DueDateFilter {
+    /// Get the label for display in UI.
+    #[must_use]
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Overdue => "Overdue",
+            Self::DueToday => "Due today",
+            Self::DueThisWeek => "Due this week",
+            Self::DueSoon => "Due soon",
+            Self::HasDueDate => "Has due date",
+            Self::NoDate => "No date",
+        }
+    }
+
+    /// Get the color class for display.
+    #[must_use]
+    pub fn color_class(&self) -> &'static str {
+        match self {
+            Self::Overdue => "text-red-400",
+            Self::DueToday => "text-amber-400",
+            Self::DueThisWeek => "text-blue-400",
+            Self::DueSoon => "text-amber-400",
+            Self::HasDueDate => "text-slate-400",
+            Self::NoDate => "text-slate-500",
+        }
+    }
 }
 
 impl BoardFilters {
@@ -61,6 +99,95 @@ impl BoardFilters {
             count += 1;
         }
         count
+    }
+
+    /// Check if a card matches all active filters.
+    pub fn matches_card(&self, card: &CardView) -> bool {
+        // Search filter (case-insensitive on title and description)
+        if let Some(ref search) = self.search {
+            let search_lower = search.to_lowercase();
+            let title_match = card.title.to_lowercase().contains(&search_lower);
+            let desc_match = card
+                .description
+                .as_ref()
+                .map(|d| d.to_lowercase().contains(&search_lower))
+                .unwrap_or(false);
+            if !title_match && !desc_match {
+                return false;
+            }
+        }
+
+        // Assignee filter (any match)
+        if !self.assignees.is_empty() {
+            let has_match = card.assignees.iter().any(|a| self.assignees.contains(a));
+            if !has_match {
+                return false;
+            }
+        }
+
+        // Tag filter (any match)
+        if !self.tags.is_empty() {
+            let has_match = card.tags.iter().any(|t| self.tags.contains(&t.id));
+            if !has_match {
+                return false;
+            }
+        }
+
+        // State filter (any match)
+        if !self.states.is_empty() && !self.states.contains(&card.state) {
+            return false;
+        }
+
+        // Priority filter (any match)
+        if !self.priorities.is_empty() {
+            match &card.priority {
+                Some(p) if self.priorities.contains(p) => {}
+                Some(_) => return false,
+                None => return false, // Card has no priority, filter requires one
+            }
+        }
+
+        // Due date filter
+        if let Some(filter) = self.due_date
+            && !self.matches_due_date_filter(card.due_date, filter)
+        {
+            return false;
+        }
+
+        true
+    }
+
+    /// Check if a due date matches the filter.
+    fn matches_due_date_filter(&self, due_date: Option<i64>, filter: DueDateFilter) -> bool {
+        let now = chrono::Utc::now().timestamp_millis();
+        let today_end = Self::end_of_day_millis();
+        let week_end = today_end + 7 * 86_400_000; // 7 days
+        let soon_end = today_end + 3 * 86_400_000; // 3 days
+
+        match filter {
+            DueDateFilter::Overdue => due_date.map(|d| d < now).unwrap_or(false),
+            DueDateFilter::DueToday => due_date
+                .map(|d| d >= now && d <= today_end)
+                .unwrap_or(false),
+            DueDateFilter::DueThisWeek => {
+                due_date.map(|d| d >= now && d <= week_end).unwrap_or(false)
+            }
+            DueDateFilter::DueSoon => due_date.map(|d| d >= now && d <= soon_end).unwrap_or(false),
+            DueDateFilter::HasDueDate => due_date.is_some(),
+            DueDateFilter::NoDate => due_date.is_none(),
+        }
+    }
+
+    /// Get the timestamp for end of today in milliseconds.
+    fn end_of_day_millis() -> i64 {
+        use chrono::Utc;
+        let now = Utc::now();
+        let end_of_day = now
+            .with_hour(23)
+            .and_then(|d| d.with_minute(59))
+            .and_then(|d| d.with_second(59))
+            .unwrap_or(now);
+        end_of_day.timestamp_millis()
     }
 }
 
@@ -399,18 +526,18 @@ struct DueDateFilterGroupProps {
 fn DueDateFilterGroup(props: DueDateFilterGroupProps) -> Element {
     let mut expanded = use_signal(|| false);
 
+    // All available due date filter options
     let options = [
-        (Some(DueDateFilter::Overdue), "Overdue", "text-red-400"),
-        (Some(DueDateFilter::DueSoon), "Due soon", "text-amber-400"),
-        (Some(DueDateFilter::NoDate), "No date", "text-slate-400"),
-        (None, "Any", "text-slate-400"),
+        Some(DueDateFilter::Overdue),
+        Some(DueDateFilter::DueToday),
+        Some(DueDateFilter::DueThisWeek),
+        Some(DueDateFilter::DueSoon),
+        Some(DueDateFilter::HasDueDate),
+        Some(DueDateFilter::NoDate),
+        None, // "Any" - clear filter
     ];
 
-    let current_label = options
-        .iter()
-        .find(|(v, _, _)| *v == props.selected)
-        .map(|(_, l, _)| *l)
-        .unwrap_or("Due date");
+    let current_label = props.selected.map(|f| f.label()).unwrap_or("Due date");
 
     rsx! {
         div {
@@ -433,13 +560,17 @@ fn DueDateFilterGroup(props: DueDateFilterGroupProps) -> Element {
             }
             if expanded() {
                 div {
-                    class: "absolute top-full left-0 mt-1 min-w-32 rounded-lg border border-slate-700 bg-slate-800 shadow-lg z-20",
+                    class: "absolute top-full left-0 mt-1 min-w-36 rounded-lg border border-slate-700 bg-slate-800 shadow-lg z-20",
                     div {
                         class: "py-1",
-                        {options.iter().map(|(value, label, color)| {
+                        {options.iter().map(|value| {
                             let is_selected = *value == props.selected;
                             let value = *value;
                             let on_change = props.on_change;
+                            let (label, color) = match value {
+                                Some(f) => (f.label(), f.color_class()),
+                                None => ("Any", "text-slate-400"),
+                            };
                             rsx! {
                                 button {
                                     key: "{label}",
@@ -694,5 +825,141 @@ mod tests {
         assert!(filters.has_active_filters());
         assert_eq!(filters.active_count(), 1);
         assert_eq!(filters.priorities.len(), 2);
+    }
+
+    #[test]
+    fn due_date_filter_labels() {
+        assert_eq!(DueDateFilter::Overdue.label(), "Overdue");
+        assert_eq!(DueDateFilter::DueToday.label(), "Due today");
+        assert_eq!(DueDateFilter::DueThisWeek.label(), "Due this week");
+        assert_eq!(DueDateFilter::DueSoon.label(), "Due soon");
+        assert_eq!(DueDateFilter::HasDueDate.label(), "Has due date");
+        assert_eq!(DueDateFilter::NoDate.label(), "No date");
+    }
+
+    #[test]
+    fn due_date_filter_color_classes() {
+        assert!(DueDateFilter::Overdue.color_class().contains("red"));
+        assert!(DueDateFilter::DueToday.color_class().contains("amber"));
+        assert!(DueDateFilter::DueThisWeek.color_class().contains("blue"));
+    }
+
+    #[test]
+    fn board_filters_matches_card_no_filters() {
+        use communitas_ui_api::kanban::ChecklistProgress;
+
+        let filters = BoardFilters::default();
+        let card = CardView {
+            id: "card-1".to_string(),
+            title: "Test Card".to_string(),
+            description: Some("Description".to_string()),
+            position: 0,
+            state: CardState::Todo,
+            tags: vec![],
+            assignees: vec![],
+            due_date: None,
+            checklist_progress: Some(ChecklistProgress {
+                completed: 0,
+                total: 0,
+            }),
+            priority: None,
+        };
+        // Empty filter matches all cards
+        assert!(filters.matches_card(&card));
+    }
+
+    #[test]
+    fn board_filters_matches_card_search() {
+        use communitas_ui_api::kanban::ChecklistProgress;
+
+        let card = CardView {
+            id: "card-1".to_string(),
+            title: "Test Card".to_string(),
+            description: Some("A description with keyword".to_string()),
+            position: 0,
+            state: CardState::Todo,
+            tags: vec![],
+            assignees: vec![],
+            due_date: None,
+            checklist_progress: Some(ChecklistProgress {
+                completed: 0,
+                total: 0,
+            }),
+            priority: None,
+        };
+
+        // Match in title
+        let filters = BoardFilters {
+            search: Some("Test".to_string()),
+            ..Default::default()
+        };
+        assert!(filters.matches_card(&card));
+
+        // Match in description
+        let filters = BoardFilters {
+            search: Some("keyword".to_string()),
+            ..Default::default()
+        };
+        assert!(filters.matches_card(&card));
+
+        // No match
+        let filters = BoardFilters {
+            search: Some("nonexistent".to_string()),
+            ..Default::default()
+        };
+        assert!(!filters.matches_card(&card));
+    }
+
+    #[test]
+    fn board_filters_matches_card_due_date_no_date() {
+        use communitas_ui_api::kanban::ChecklistProgress;
+
+        let card_with_date = CardView {
+            id: "card-1".to_string(),
+            title: "Card with date".to_string(),
+            description: None,
+            position: 0,
+            state: CardState::Todo,
+            tags: vec![],
+            assignees: vec![],
+            due_date: Some(chrono::Utc::now().timestamp_millis() + 1000),
+            checklist_progress: Some(ChecklistProgress {
+                completed: 0,
+                total: 0,
+            }),
+            priority: None,
+        };
+
+        let card_without_date = CardView {
+            id: "card-2".to_string(),
+            title: "Card without date".to_string(),
+            description: None,
+            position: 0,
+            state: CardState::Todo,
+            tags: vec![],
+            assignees: vec![],
+            due_date: None,
+            checklist_progress: Some(ChecklistProgress {
+                completed: 0,
+                total: 0,
+            }),
+            priority: None,
+        };
+
+        // Filter for cards with no due date
+        let filters = BoardFilters {
+            due_date: Some(DueDateFilter::NoDate),
+            ..Default::default()
+        };
+        assert!(!filters.matches_card(&card_with_date));
+        assert!(filters.matches_card(&card_without_date));
+
+        // Filter for cards with due date
+        let filters = BoardFilters {
+            due_date: Some(DueDateFilter::HasDueDate),
+            ..Default::default()
+        };
+        assert!(filters.matches_card(&card_with_date));
+        assert!(!filters.matches_card(&card_without_date));
     }
 }

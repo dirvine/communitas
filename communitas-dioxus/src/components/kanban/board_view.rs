@@ -7,6 +7,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::{info, warn};
 
+use super::filters::BoardFilters;
+
 /// Default fallback color for invalid/missing colors.
 const DEFAULT_SWIMLANE_COLOR: &str = "#64748b";
 
@@ -81,6 +83,7 @@ pub fn BoardView(props: BoardViewProps) -> Element {
 
     // Filter state
     let mut show_filters = use_signal(|| false);
+    let mut active_filters = use_signal(BoardFilters::default);
 
     // Add column state
     let mut show_add_column = use_signal(|| false);
@@ -139,8 +142,9 @@ pub fn BoardView(props: BoardViewProps) -> Element {
                 // Filter panel (collapsible)
                 if show_filters() {
                     super::filters::FilterPanel {
-                        on_filter_change: move |_filters| {
-                            info!(target = "ui.kanban", event = "filters_changed");
+                        on_filter_change: move |filters: BoardFilters| {
+                            active_filters.set(filters.clone());
+                            info!(target = "ui.kanban", event = "filters_changed", count = filters.active_count());
                         },
                         on_swimlane_change: {
                             let services = services.clone();
@@ -164,6 +168,7 @@ pub fn BoardView(props: BoardViewProps) -> Element {
                             aria_label: "Board columns",
                             {board.columns.iter().map(|column| {
                                 let col_id = column.id.clone();
+                                let current_filters = active_filters();
                                 rsx! {
                                     KanbanColumn {
                                         key: "{col_id}",
@@ -171,6 +176,11 @@ pub fn BoardView(props: BoardViewProps) -> Element {
                                         board_id: props.board_id.clone(),
                                         on_move_announce: move |msg: String| {
                                             announcement.set(msg);
+                                        },
+                                        filters: if current_filters.has_active_filters() {
+                                            Some(current_filters.clone())
+                                        } else {
+                                            None
                                         },
                                     }
                                 }

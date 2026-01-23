@@ -7,6 +7,7 @@ use std::sync::Arc;
 use tracing::info;
 
 use super::card::KanbanCard;
+use super::filters::BoardFilters;
 
 /// Kanban column showing a list of cards.
 #[derive(Props, Clone, PartialEq)]
@@ -17,6 +18,9 @@ pub struct KanbanColumnProps {
     pub board_id: String,
     /// Callback to announce card moves for screen readers.
     pub on_move_announce: EventHandler<String>,
+    /// Optional filters to apply to cards.
+    #[props(optional)]
+    pub filters: Option<BoardFilters>,
 }
 
 #[component]
@@ -126,12 +130,19 @@ pub fn KanbanColumn(props: KanbanColumnProps) -> Element {
                     }
                 }
             }
-            // Cards list
+            // Cards list (filtered if filters are provided)
             div {
                 class: "flex-1 overflow-y-auto p-2 space-y-2",
                 role: "list",
                 aria_label: "Cards in column",
-                {column.cards.iter().map(|card| {
+                {column.cards.iter()
+                    .filter(|card| {
+                        match &props.filters {
+                            Some(f) if f.has_active_filters() => f.matches_card(card),
+                            _ => true,
+                        }
+                    })
+                    .map(|card| {
                     let card_id = card.id.clone();
                     rsx! {
                         KanbanCard {

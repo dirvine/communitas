@@ -7,6 +7,7 @@ pub mod hooks;
 mod platform;
 pub mod styles;
 pub mod tokens;
+pub mod version;
 
 use communitas_core::generate_id_words;
 use communitas_ui_api::{

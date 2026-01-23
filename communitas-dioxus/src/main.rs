@@ -163,6 +163,57 @@ impl PartialEq for AuthState {
     }
 }
 
+/// Entities categorized by type in a single pass.
+///
+/// Avoids O(n*k) filtering where k is the number of categories.
+/// Instead, categorizes all entities in O(n) time.
+#[derive(Default, Clone, PartialEq)]
+struct CategorizedEntities {
+    organizations: Vec<UnifiedEntity>,
+    communities: Vec<UnifiedEntity>,
+    projects: Vec<UnifiedEntity>,
+    groups: Vec<UnifiedEntity>,
+    channels: Vec<UnifiedEntity>,
+    /// Groups with no parent (personal groups)
+    personal_groups: Vec<UnifiedEntity>,
+}
+
+impl CategorizedEntities {
+    /// Categorize entities from a slice in a single pass.
+    fn from_entities(entities: &[UnifiedEntity]) -> Self {
+        let mut result = Self::default();
+
+        for entity in entities {
+            match entity.entity_type {
+                UnifiedEntityType::Organization => {
+                    if entity.category == Some(OrganizationCategory::Community) {
+                        result.communities.push(entity.clone());
+                    } else {
+                        result.organizations.push(entity.clone());
+                    }
+                }
+                UnifiedEntityType::Project => {
+                    result.projects.push(entity.clone());
+                }
+                UnifiedEntityType::Group => {
+                    result.groups.push(entity.clone());
+                    if entity.parent_id.is_none() {
+                        result.personal_groups.push(entity.clone());
+                    }
+                }
+                UnifiedEntityType::Channel => {
+                    result.channels.push(entity.clone());
+                }
+                UnifiedEntityType::Person => {
+                    // Persons are handled separately via contacts
+                }
+            }
+        }
+
+        result
+    }
+}
+
 fn use_auth() -> Signal<AuthState> {
     use_context::<Signal<AuthState>>()
 }
@@ -762,68 +813,29 @@ fn HomeOverview() -> Element {
         .filter(|name| !name.is_empty())
         .unwrap_or_else(|| "Explorer".to_string());
 
-    let organizations: Vec<_> = snapshot
-        .entities
-        .iter()
-        .filter(|entity| {
-            matches!(entity.entity_type, UnifiedEntityType::Organization)
-                && entity.category == Some(OrganizationCategory::Organization)
-        })
-        .cloned()
-        .collect();
-    let communities: Vec<_> = snapshot
-        .entities
-        .iter()
-        .filter(|entity| {
-            matches!(entity.entity_type, UnifiedEntityType::Organization)
-                && entity.category == Some(OrganizationCategory::Community)
-        })
-        .cloned()
-        .collect();
-    let projects: Vec<_> = snapshot
-        .entities
-        .iter()
-        .filter(|entity| matches!(entity.entity_type, UnifiedEntityType::Project))
-        .cloned()
-        .collect();
-    let groups: Vec<_> = snapshot
-        .entities
-        .iter()
-        .filter(|entity| matches!(entity.entity_type, UnifiedEntityType::Group))
-        .cloned()
-        .collect();
-    let channels: Vec<_> = snapshot
-        .entities
-        .iter()
-        .filter(|entity| matches!(entity.entity_type, UnifiedEntityType::Channel))
-        .cloned()
-        .collect();
-    let personal_groups: Vec<_> = groups
-        .iter()
-        .filter(|group| group.parent_id.is_none())
-        .cloned()
-        .collect();
+    // Single-pass entity categorization (O(n) instead of O(n*6))
+    let categorized = CategorizedEntities::from_entities(&snapshot.entities);
 
     let stats = vec![
         StatItem {
             label: "Organizations",
-            value: organizations.len(),
+            value: categorized.organizations.len(),
         },
         StatItem {
             label: "Communities",
-            value: communities.len(),
+            value: categorized.communities.len(),
         },
         StatItem {
             label: "Projects",
-            value: projects.len(),
+            value: categorized.projects.len(),
         },
         StatItem {
             label: "Groups",
-            value: groups.len(),
+            value: categorized.groups.len(),
         },
         StatItem {
             label: "Channels",
-            value: channels.len(),
+            value: categorized.channels.len(),
         },
         StatItem {
             label: "Contacts",
@@ -836,10 +848,10 @@ fn HomeOverview() -> Element {
             WelcomeCard { display_name }
             StatsGrid { stats }
             SpacesSection {
-                personal: personal_groups,
-                communities,
-                organizations,
-                projects,
+                personal: categorized.personal_groups,
+                communities: categorized.communities,
+                organizations: categorized.organizations,
+                projects: categorized.projects,
             }
         }
     }
